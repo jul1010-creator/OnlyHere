@@ -150,6 +150,8 @@ export default function OnlyHere() {
   const [search, setSearch] = useState("");
   const [mapCity, setMapCity] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // AI Guide
@@ -226,20 +228,25 @@ export default function OnlyHere() {
     setAiMessages(prev => [...prev, { role: "user", text: msg }]);
     setAiLoading(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          system: "You are Local Assist — OnlyHere's AI guide. Help travelers find exclusive local finds that exist nowhere else. Products: " + allProducts.map(p => p.name + " in " + p.city + " (" + p.price + ") - " + p.exclusive).join(", ") + ". Be warm and concise. Recommend specific products.",
-          messages: aiMessages.concat([{ role: "user", text: msg }]).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }))
-        })
-      });
+      const history = aiMessages.map(m => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.text }]
+      }));
+      const productList = allProducts.map(p => p.name + " in " + p.city + " (" + p.price + ") - " + p.exclusive).join(", ");
+      const res = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: "You are Local Assist — OnlyHere's AI guide. Help travelers find exclusive local finds that exist nowhere else. Be warm, concise and specific. Available products: " + productList }] },
+            contents: [...history, { role: "user", parts: [{ text: msg }] }]
+          })
+        }
+      );
       const data = await res.json();
-      const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("") || "Let me find something for you!";
-      const clean = text.replace(/\{"ids":\s*\[[\d,\s]*\]\}/, "").trim();
-      setAiMessages(prev => [...prev, { role: "assistant", text: clean }]);
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Let me find something for you!";
+      setAiMessages(prev => [...prev, { role: "assistant", text: reply }]);
     } catch {
       setAiMessages(prev => [...prev, { role: "assistant", text: "Something went wrong — try again!" }]);
     }
@@ -253,21 +260,26 @@ export default function OnlyHere() {
     setSupportMessages(prev => [...prev, { role: "user", text: msg }]);
     setSupportLoading(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 300,
-          system: "You are the support assistant for OnlyHere — an app where travelers discover things that exist nowhere else. Keep answers short and warm. Cities: Seoul, Tokyo, Marrakech, Copenhagen, Mexico City, Tirana. Free for travelers. Shops DM us to get listed.",
-          messages: supportMessages.concat([{ role: "user", text: msg }]).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }))
-        })
-      });
+      const history = supportMessages.map(m => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.text }]
+      }));
+      const res = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: "You are GoBot — the friendly support assistant for OnlyHere, an app where travelers discover exclusive things that exist nowhere else. Keep answers short and warm. Cities available: Seoul, Tokyo, Marrakech, Copenhagen, Mexico City, Tirana. The app is free for travelers. Shops can DM us to get listed. Users can save finds with the heart button. AI Guide tab gives recommendations. Map tab shows shop locations." }] },
+            contents: [...history, { role: "user", parts: [{ text: msg }] }]
+          })
+        }
+      );
       const data = await res.json();
-      const reply = data.content?.filter(b => b.type === "text").map(b => b.text).join("") || "Let me help!";
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Let me help!";
       setSupportMessages(prev => [...prev, { role: "assistant", text: reply }]);
     } catch {
-      setSupportMessages(prev => [...prev, { role: "assistant", text: "Something went wrong!" }]);
+      setSupportMessages(prev => [...prev, { role: "assistant", text: "Something went wrong — try again!" }]);
     }
     setSupportLoading(false);
   };
@@ -302,6 +314,37 @@ export default function OnlyHere() {
     window.addEventListener("touchmove", onMove, { passive: false });
     window.addEventListener("mouseup", onUp);
     window.addEventListener("touchend", onUp);
+  };
+
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const d = R * c;
+    return d < 1 ? Math.round(d * 1000) + "m" : d.toFixed(1) + "km";
+  };
+
+  const getDistanceRaw = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
+  const requestLocation = () => {
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocationLoading(false); },
+      () => { setLocationLoading(false); },
+      { enableHighAccuracy: true }
+    );
   };
 
   const ProductCard = ({ product }) => (
@@ -552,54 +595,137 @@ export default function OnlyHere() {
             ) : (
               <div style={{ flex: 1, margin: "8px 16px 0", borderRadius: 16, overflow: "hidden", border: "1px solid #2A1E10", display: "flex", flexDirection: "column" }}>
                 <div style={{ height: 220, position: "relative", flexShrink: 0, overflow: "hidden" }}>
-                  <iframe
-                    key={mapCity.name + (selectedPin?.id || "")}
-                    title="Google Map"
-                    width="100%"
-                    height="220"
-                    frameBorder="0"
-                    style={{ border: 0, display: "block" }}
-                    referrerPolicy="no-referrer-when-downgrade"
-                    src={selectedPin
-                      ? `https://www.google.com/maps/embed/v1/search?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.shop + " " + mapCity.name)}&zoom=16`
-                      : `https://www.google.com/maps/embed/v1/search?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=fashion+boutiques+in+${encodeURIComponent(mapCity.name)}&zoom=14`
-                    }
-                    allowFullScreen
-                  />
+                  {(() => {
+                    const COORDS = {
+                      1:[37.5563,126.9374], 2:[37.5247,127.0400], 3:[37.5563,126.9227],
+                      4:[37.5200,127.0420], 5:[37.5340,126.9940], 20:[37.5500,126.9200],
+                      6:[35.6654,139.7107], 7:[35.6702,139.7026], 8:[35.6488,139.7026], 9:[35.6654,139.7200],
+                      10:[31.6315,-7.9887], 11:[31.6290,-7.9900], 12:[31.6340,-7.9950],
+                      13:[55.6761,12.5683], 14:[55.6780,12.5700], 15:[55.6750,12.5760],
+                      16:[19.4284,-99.1276], 17:[19.4180,-99.1620], 18:[19.3980,-99.1200],
+                      19:[41.3275,19.8187],
+                    };
+                    const CITY_CENTER = {
+                      "Seoul":[37.5665,126.9780], "Tokyo":[35.6762,139.6503],
+                      "Marrakech":[31.6295,-7.9811], "Copenhagen":[55.6761,12.5683],
+                      "Mexico City":[19.4326,-99.1332], "Tirana":[41.3275,19.8187],
+                    };
+                    const pinCoords = selectedPin ? COORDS[selectedPin.id] : null;
+                    const cityCenter = CITY_CENTER[mapCity.name] || [37.5665,126.9780];
+                    const src = selectedPin && pinCoords
+                      ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.shop)}&center=${pinCoords[0]},${pinCoords[1]}&zoom=17`
+                      : userLocation
+                      ? `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=${userLocation.lat},${userLocation.lng}&zoom=14&maptype=roadmap`
+                      : `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=${cityCenter[0]},${cityCenter[1]}&zoom=14&maptype=roadmap`;
+                    return (
+                      <iframe
+                        key={mapCity.name + (selectedPin?.id || "overview")}
+                        title="Google Map"
+                        width="100%"
+                        height="220"
+                        frameBorder="0"
+                        style={{ border: 0, display: "block" }}
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={src}
+                        allowFullScreen
+                      />
+                    );
+                  })()}
                   <div style={{ position: "absolute", bottom: 8, left: 8, pointerEvents: "none" }}>
                     <span style={{ background: mapCity.color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100 }}>{mapCity.name} · {mapCity.products.length} finds</span>
                   </div>
-                  <a href={`https://www.google.com/maps/search/?api=1&query=boutiques+${encodeURIComponent(mapCity.name)}`} target="_blank" rel="noreferrer"
-                    style={{ position: "absolute", bottom: 8, right: 8, background: "#D4B483", color: "#16120A", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-                    Open ↗
-                  </a>
+                  {(() => {
+                    const COORDS = {
+                      1:[37.5563,126.9374], 2:[37.5247,127.0400], 3:[37.5563,126.9227],
+                      4:[37.5200,127.0420], 5:[37.5340,126.9940], 20:[37.5500,126.9200],
+                      6:[35.6654,139.7107], 7:[35.6702,139.7026], 8:[35.6488,139.7026], 9:[35.6654,139.7200],
+                      10:[31.6315,-7.9887], 11:[31.6290,-7.9900], 12:[31.6340,-7.9950],
+                      13:[55.6761,12.5683], 14:[55.6780,12.5700], 15:[55.6750,12.5760],
+                      16:[19.4284,-99.1276], 17:[19.4180,-99.1620], 18:[19.3980,-99.1200],
+                      19:[41.3275,19.8187],
+                    };
+                    const pinCoords = selectedPin ? COORDS[selectedPin.id] : null;
+                    const mapsUrl = selectedPin && pinCoords
+                      ? `https://www.google.com/maps/dir/?api=1&destination=${pinCoords[0]},${pinCoords[1]}&destination_place_id=${encodeURIComponent(selectedPin.shop)}`
+                      : `https://www.google.com/maps/search/?api=1&query=boutiques+${encodeURIComponent(mapCity.name)}`;
+                    return (
+                      <a href={mapsUrl} target="_blank" rel="noreferrer"
+                        style={{ position: "absolute", bottom: 8, right: 8, background: "#D4B483", color: "#16120A", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                        {selectedPin ? "Get Directions ↗" : "Open in Maps ↗"}
+                      </a>
+                    );
+                  })()}
                 </div>
                 <div style={{ flex: 1, overflowY: "auto" }}>
-                  {mapCity.products.map(p => (
-                    <div key={p.id}
-                      onClick={() => { setSelectedPin(selectedPin?.id === p.id ? null : p); }}
-                      onDoubleClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color })}
-                      style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", borderBottom: "1px solid #1E1610", cursor: "pointer", background: selectedPin?.id === p.id ? `${mapCity.color}15` : "transparent", transition: "background 0.2s" }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, overflow: "hidden", background: `${mapCity.color}22`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                        {p.photo ? <img src={p.photo} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.emoji}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#EDE0C4", fontFamily: "'Cormorant Garamond', serif" }}>{p.name}</div>
-                        <div style={{ fontSize: 10, color: "#8A7355", marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3 }}>{p.shop}</div>
-                      </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#D4B483", fontFamily: "'Cormorant Garamond', serif" }}>{p.price}</div>
-                        {selectedPin?.id === p.id ? (
-                          <button onClick={e => { e.stopPropagation(); setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color }); }}
-                            style={{ fontSize: 11, color: "#fff", background: mapCity.color, border: "none", borderRadius: 100, padding: "2px 8px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700 }}>
-                            Details ↗
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: 11, color: "#8A7355" }}>Tap to locate</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                  {/* Location button */}
+                  <div style={{ padding: "10px 14px", borderBottom: "1px solid #1E1610", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 11, color: "#8A7355" }}>
+                      {userLocation ? "● Sorted by distance" : "Sort by distance?"}
+                    </span>
+                    {!userLocation && (
+                      <button onClick={requestLocation} disabled={locationLoading}
+                        style={{ background: "#D4B483", border: "none", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#16120A", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {locationLoading ? "Locating..." : "Use my location ●"}
+                      </button>
+                    )}
+                    {userLocation && (
+                      <button onClick={() => setUserLocation(null)}
+                        style={{ background: "none", border: "1px solid #2A1E10", borderRadius: 100, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: "#8A7355", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {(() => {
+                    const COORDS = {
+                      1:[37.5563,126.9374], 2:[37.5247,127.0400], 3:[37.5563,126.9227],
+                      4:[37.5200,127.0420], 5:[37.5340,126.9940], 20:[37.5500,126.9200],
+                      6:[35.6654,139.7107], 7:[35.6702,139.7026], 8:[35.6488,139.7026], 9:[35.6654,139.7200],
+                      10:[31.6315,-7.9887], 11:[31.6290,-7.9900], 12:[31.6340,-7.9950],
+                      13:[55.6761,12.5683], 14:[55.6780,12.5700], 15:[55.6750,12.5760],
+                      16:[19.4284,-99.1276], 17:[19.4180,-99.1620], 18:[19.3980,-99.1200],
+                      19:[41.3275,19.8187],
+                    };
+                    const sorted = [...mapCity.products].sort((a, b) => {
+                      if (!userLocation) return 0;
+                      const ca = COORDS[a.id], cb = COORDS[b.id];
+                      if (!ca || !cb) return 0;
+                      return getDistanceRaw(userLocation.lat, userLocation.lng, ca[0], ca[1]) -
+                             getDistanceRaw(userLocation.lat, userLocation.lng, cb[0], cb[1]);
+                    });
+                    return sorted.map(p => {
+                      const c = COORDS[p.id];
+                      const dist = userLocation && c ? getDistance(userLocation.lat, userLocation.lng, c[0], c[1]) : null;
+                      return (
+                        <div key={p.id}
+                          onClick={() => setSelectedPin(selectedPin?.id === p.id ? null : p)}
+                          onDoubleClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color })}
+                          style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", borderBottom: "1px solid #1E1610", cursor: "pointer", background: selectedPin?.id === p.id ? `${mapCity.color}15` : "transparent", transition: "background 0.2s" }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 10, overflow: "hidden", background: `${mapCity.color}22`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                            {p.photo ? <img src={p.photo} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.emoji}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "#EDE0C4", fontFamily: "'Cormorant Garamond', serif" }}>{p.name}</div>
+                            <div style={{ fontSize: 10, color: "#8A7355", marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3 }}>{p.shop}</div>
+                            {dist && (
+                              <div style={{ fontSize: 11, color: "#D4B483", marginTop: 3, fontWeight: 700 }}>● {dist} away</div>
+                            )}
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "#D4B483", fontFamily: "'Cormorant Garamond', serif" }}>{p.price}</div>
+                            {selectedPin?.id === p.id ? (
+                              <button onClick={e => { e.stopPropagation(); setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color }); }}
+                                style={{ fontSize: 11, color: "#fff", background: mapCity.color, border: "none", borderRadius: 100, padding: "2px 8px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700 }}>
+                                Details ↗
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: 11, color: "#8A7355" }}>Tap to locate</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             )}
