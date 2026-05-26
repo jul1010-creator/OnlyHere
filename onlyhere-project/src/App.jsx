@@ -149,6 +149,7 @@ export default function OnlyHere() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [search, setSearch] = useState("");
   const [mapCity, setMapCity] = useState(null);
+  const [selectedPin, setSelectedPin] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // AI Guide
@@ -533,7 +534,7 @@ export default function OnlyHere() {
             <div style={{ padding: "8px 0 4px", flexShrink: 0 }}>
               <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16 }}>
                 {[...cities].sort((a,b) => a.name.localeCompare(b.name)).map(city => (
-                  <button key={city.id} onClick={() => setMapCity(city)}
+                  <button key={city.id} onClick={() => { setMapCity(city); setSelectedPin(null); }}
                     style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 100, background: mapCity?.id === city.id ? city.color : "#1E1610", color: mapCity?.id === city.id ? "#fff" : "#8A7355", border: `1px solid ${mapCity?.id === city.id ? city.color : "#2A1E10"}`, fontWeight: 600, fontSize: 12, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
                     <FlagImg flagCode={city.flagCode} />
                     {city.name}
@@ -552,14 +553,17 @@ export default function OnlyHere() {
               <div style={{ flex: 1, margin: "8px 16px 0", borderRadius: 16, overflow: "hidden", border: "1px solid #2A1E10", display: "flex", flexDirection: "column" }}>
                 <div style={{ height: 220, position: "relative", flexShrink: 0, overflow: "hidden" }}>
                   <iframe
-                    key={mapCity.name}
+                    key={mapCity.name + (selectedPin?.id || "")}
                     title="Google Map"
                     width="100%"
                     height="220"
                     frameBorder="0"
                     style={{ border: 0, display: "block" }}
                     referrerPolicy="no-referrer-when-downgrade"
-                    src={`https://www.google.com/maps/embed/v1/search?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=fashion+boutiques+in+${encodeURIComponent(mapCity.name)}&zoom=14`}
+                    src={selectedPin
+                      ? `https://www.google.com/maps/embed/v1/search?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.shop + " " + mapCity.name)}&zoom=16`
+                      : `https://www.google.com/maps/embed/v1/search?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=fashion+boutiques+in+${encodeURIComponent(mapCity.name)}&zoom=14`
+                    }
                     allowFullScreen
                   />
                   <div style={{ position: "absolute", bottom: 8, left: 8, pointerEvents: "none" }}>
@@ -572,8 +576,10 @@ export default function OnlyHere() {
                 </div>
                 <div style={{ flex: 1, overflowY: "auto" }}>
                   {mapCity.products.map(p => (
-                    <div key={p.id} onClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color })}
-                      style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", borderBottom: "1px solid #1E1610", cursor: "pointer" }}>
+                    <div key={p.id}
+                      onClick={() => { setSelectedPin(selectedPin?.id === p.id ? null : p); }}
+                      onDoubleClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color })}
+                      style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", borderBottom: "1px solid #1E1610", cursor: "pointer", background: selectedPin?.id === p.id ? `${mapCity.color}15` : "transparent", transition: "background 0.2s" }}>
                       <div style={{ width: 40, height: 40, borderRadius: 10, overflow: "hidden", background: `${mapCity.color}22`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
                         {p.photo ? <img src={p.photo} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.emoji}
                       </div>
@@ -583,8 +589,14 @@ export default function OnlyHere() {
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#D4B483", fontFamily: "'Cormorant Garamond', serif" }}>{p.price}</div>
-                        <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.shop + " " + mapCity.name)}`} target="_blank" rel="noreferrer"
-                          onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: mapCity.color, textDecoration: "none", fontWeight: 700 }}>↗ Map</a>
+                        {selectedPin?.id === p.id ? (
+                          <button onClick={e => { e.stopPropagation(); setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color }); }}
+                            style={{ fontSize: 11, color: "#fff", background: mapCity.color, border: "none", borderRadius: 100, padding: "2px 8px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700 }}>
+                            Details ↗
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: 11, color: "#8A7355" }}>Tap to locate</span>
+                        )}
                       </div>
                     </div>
                   ))}
