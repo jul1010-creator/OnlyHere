@@ -15,65 +15,65 @@ async function sbFetch(table, params = "") {
 
 const cities = [
   {
-    id: 1, name: "Seoul", photo: "https://picsum.photos/seed/seoul/800/400", country: "South Korea", emoji: "🇰🇷", color: "#FF3D9A", items: 124, tag: "K-Fashion Capital",
+    id: 1, name: "Seoul", photo: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=800&q=80", country: "South Korea", emoji: "🇰🇷", color: "#FF3D9A", items: 124, tag: "K-Fashion Capital",
     continent: "Asia", flagCode: "kr",
     vibe: "Bold neons meet minimalist structure",
     products: [
-      { id: 1, photo: "https://picsum.photos/seed/hoodie/400/400", name: "Ader Error Oversized Hoodie", shop: "Ader Error Flagship · Sinchon", price: "₩189,000", category: "Fashion", exclusive: "Seoul only", emoji: "👕", desc: "Concept-driven Seoul label known for deconstructed basics. Not sold internationally.", mapHint: "Sinchon-ro, Mapo-gu" },
-      { id: 2, photo: "https://picsum.photos/seed/sunglasses/400/400", name: "Gentle Monster Sunglasses", shop: "GM Haus Dosan · Gangnam", price: "₩380,000", category: "Accessories", exclusive: "Seoul exclusive drop", emoji: "🕶️", desc: "Avant-garde eyewear brand with installations you can only experience in Haus Dosan.", mapHint: "Dosan-daero, Gangnam-gu" },
-      { id: 3, photo: "https://picsum.photos/seed/denim/400/400", name: "Musinsa Standard Denim", shop: "Musinsa Store · Hongdae", price: "₩89,000", category: "Fashion", exclusive: "Korea only", emoji: "👖", desc: "Korea's biggest fashion platform's in-house label. Ships within Korea only.", mapHint: "Hongdae, Mapo-gu" },
-      { id: 4, photo: "https://picsum.photos/seed/shirt1/400/400", name: "Kuho Silk Wrap Dress", shop: "Kuho Flagship · Cheongdam", price: "₩420,000", category: "Fashion", exclusive: "Korea flagship only", emoji: "👗", desc: "Premium Korean womenswear. Flagship-exclusive colourways.", mapHint: "Cheongdam-dong, Gangnam-gu" },
-      { id: 5, photo: "https://picsum.photos/seed/cap1/400/400", name: "Stussy Seoul Collab Tee", shop: "Stussy Chapter · Itaewon", price: "₩98,000", category: "Fashion", exclusive: "Seoul Chapter exclusive", emoji: "👕", desc: "Seoul Chapter-exclusive graphic tee. Never restocked online.", mapHint: "Itaewon-ro, Yongsan-gu" },
-      { id: 20, photo: "https://picsum.photos/seed/tee1/400/400", name: "DS Company Oversized Shirt", shop: "DS Company · Seoul", price: "₩85,000", category: "Fashion", exclusive: "Made in Korea only", emoji: "👔", desc: "Small Korean label making oversized, open-collar shirts entirely in Korea. Barely any online presence — the kind of find you only stumble upon in person.", mapHint: "Seoul, South Korea" },
+      { id: 1, photo: "https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400&q=80", name: "Ader Error Oversized Hoodie", shop: "Ader Error Flagship · Sinchon", price: "₩189,000", category: "Fashion", exclusive: "Seoul only", emoji: "👕", desc: "Concept-driven Seoul label known for deconstructed basics. Not sold internationally.", mapHint: "Sinchon-ro, Mapo-gu" },
+      { id: 2, photo: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&q=80", name: "Gentle Monster Sunglasses", shop: "GM Haus Dosan · Gangnam", price: "₩380,000", category: "Accessories", exclusive: "Seoul exclusive drop", emoji: "🕶️", desc: "Avant-garde eyewear brand with installations you can only experience in Haus Dosan.", mapHint: "Dosan-daero, Gangnam-gu" },
+      { id: 3, photo: "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&q=80", name: "Musinsa Standard Denim", shop: "Musinsa Store · Hongdae", price: "₩89,000", category: "Fashion", exclusive: "Korea only", emoji: "👖", desc: "Korea's biggest fashion platform's in-house label. Ships within Korea only.", mapHint: "Hongdae, Mapo-gu" },
+      { id: 4, photo: "https://images.unsplash.com/photo-1607345366928-199ea26cfe3e?w=400&q=80", name: "Kuho Silk Wrap Dress", shop: "Kuho Flagship · Cheongdam", price: "₩420,000", category: "Fashion", exclusive: "Korea flagship only", emoji: "👗", desc: "Premium Korean womenswear. Flagship-exclusive colourways.", mapHint: "Cheongdam-dong, Gangnam-gu" },
+      { id: 5, photo: "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&q=80", name: "Stussy Seoul Collab Tee", shop: "Stussy Chapter · Itaewon", price: "₩98,000", category: "Fashion", exclusive: "Seoul Chapter exclusive", emoji: "👕", desc: "Seoul Chapter-exclusive graphic tee. Never restocked online.", mapHint: "Itaewon-ro, Yongsan-gu" },
+      { id: 20, photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80", name: "DS Company Oversized Shirt", shop: "DS Company · Seoul", price: "₩85,000", category: "Fashion", exclusive: "Made in Korea only", emoji: "👔", desc: "Small Korean label making oversized, open-collar shirts entirely in Korea. Barely any online presence — the kind of find you only stumble upon in person.", mapHint: "Seoul, South Korea" },
     ]
   },
   {
-    id: 2, name: "Tokyo", photo: "https://picsum.photos/seed/tokyo/800/400", country: "Japan", emoji: "🇯🇵", color: "#E8001D", items: 98, tag: "Streetwear Paradise",
+    id: 2, name: "Tokyo", photo: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80", country: "Japan", emoji: "🇯🇵", color: "#E8001D", items: 98, tag: "Streetwear Paradise",
     continent: "Asia", flagCode: "jp",
     vibe: "Precision craftsmanship meets underground cool",
     products: [
-      { id: 6, photo: "https://picsum.photos/seed/leather/400/400", name: "Visvim Hand-dyed Shirt", shop: "Visvim Aoyama · Minami-Aoyama", price: "¥68,000", category: "Fashion", exclusive: "Japan only", emoji: "👔", desc: "Hiroki Nakamura's cult label. Hand-crafted in Japan, never sold abroad.", mapHint: "Minami-Aoyama, Minato-ku" },
-      { id: 7, photo: "https://picsum.photos/seed/cap1/400/400", name: "Neighborhood Collab Cap", shop: "Neighborhood Harajuku", price: "¥12,000", category: "Accessories", exclusive: "Tokyo drop only", emoji: "🧢", desc: "Harajuku staple. Each drop sells out within hours. In-store only.", mapHint: "Harajuku, Shibuya-ku" },
-      { id: 8, photo: "https://picsum.photos/seed/jacket1/400/400", name: "Kapital Boro Jacket", shop: "Kapital Daikanyama", price: "¥89,000", category: "Fashion", exclusive: "Japan flagship", emoji: "🧥", desc: "Reconstructed denim using traditional Japanese Boro technique. Patchwork one-of-a-kind.", mapHint: "Daikanyama, Shibuya-ku" },
-      { id: 9, photo: "https://picsum.photos/seed/tee1/400/400", name: "Undercover Archive Tee", shop: "Undercover Lab · Minami-Aoyama", price: "¥18,000", category: "Fashion", exclusive: "Lab exclusive", emoji: "👕", desc: "Jun Takahashi archive reprints. Only available at the Lab store.", mapHint: "Minami-Aoyama, Minato-ku" },
+      { id: 6, photo: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=80", name: "Visvim Hand-dyed Shirt", shop: "Visvim Aoyama · Minami-Aoyama", price: "¥68,000", category: "Fashion", exclusive: "Japan only", emoji: "👔", desc: "Hiroki Nakamura's cult label. Hand-crafted in Japan, never sold abroad.", mapHint: "Minami-Aoyama, Minato-ku" },
+      { id: 7, photo: "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&q=80", name: "Neighborhood Collab Cap", shop: "Neighborhood Harajuku", price: "¥12,000", category: "Accessories", exclusive: "Tokyo drop only", emoji: "🧢", desc: "Harajuku staple. Each drop sells out within hours. In-store only.", mapHint: "Harajuku, Shibuya-ku" },
+      { id: 8, photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80", name: "Kapital Boro Jacket", shop: "Kapital Daikanyama", price: "¥89,000", category: "Fashion", exclusive: "Japan flagship", emoji: "🧥", desc: "Reconstructed denim using traditional Japanese Boro technique. Patchwork one-of-a-kind.", mapHint: "Daikanyama, Shibuya-ku" },
+      { id: 9, photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80", name: "Undercover Archive Tee", shop: "Undercover Lab · Minami-Aoyama", price: "¥18,000", category: "Fashion", exclusive: "Lab exclusive", emoji: "👕", desc: "Jun Takahashi archive reprints. Only available at the Lab store.", mapHint: "Minami-Aoyama, Minato-ku" },
     ]
   },
   {
-    id: 3, name: "Marrakech", photo: "https://picsum.photos/seed/marrakech/800/400", country: "Morocco", emoji: "🇲🇦", color: "#C1440E", items: 76, tag: "Craft & Colour",
+    id: 3, name: "Marrakech", photo: "https://images.unsplash.com/photo-1489749798305-4fea3ae63d43?w=800&q=80", country: "Morocco", emoji: "🇲🇦", color: "#C1440E", items: 76, tag: "Craft & Colour",
     continent: "Africa", flagCode: "ma",
     vibe: "Ancient craft meets vivid colour",
     products: [
-      { id: 10, photo: "https://picsum.photos/seed/leather/400/400", name: "Hand-tooled Leather Bag", shop: "Souk El Had · Medina", price: "MAD 850", category: "Bags", exclusive: "Made locally", emoji: "👜", desc: "Hand-carved by craftsmen in the Medina. Each piece unique, no two alike.", mapHint: "Souk El Had, Medina" },
-      { id: 11, photo: "https://picsum.photos/seed/slippers/400/400", name: "Babouche Slippers", shop: "Souk des Babouches · Medina", price: "MAD 180", category: "Accessories", exclusive: "Medina crafted", emoji: "🥿", desc: "Traditional Moroccan leather slippers, handmade in the tanneries of Marrakech.", mapHint: "Souk des Babouches, Medina" },
-      { id: 12, photo: "https://picsum.photos/seed/dress1/400/400", name: "Kaftan Robe", shop: "Atelier Nihal · Gueliz", price: "MAD 2,200", category: "Fashion", exclusive: "Atelier only", emoji: "👘", desc: "Contemporary Moroccan kaftan by designer Nihal. Embroidered by hand in Gueliz.", mapHint: "Gueliz, Marrakech" },
+      { id: 10, photo: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=80", name: "Hand-tooled Leather Bag", shop: "Souk El Had · Medina", price: "MAD 850", category: "Bags", exclusive: "Made locally", emoji: "👜", desc: "Hand-carved by craftsmen in the Medina. Each piece unique, no two alike.", mapHint: "Souk El Had, Medina" },
+      { id: 11, photo: "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400&q=80", name: "Babouche Slippers", shop: "Souk des Babouches · Medina", price: "MAD 180", category: "Accessories", exclusive: "Medina crafted", emoji: "🥿", desc: "Traditional Moroccan leather slippers, handmade in the tanneries of Marrakech.", mapHint: "Souk des Babouches, Medina" },
+      { id: 12, photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80", name: "Kaftan Robe", shop: "Atelier Nihal · Gueliz", price: "MAD 2,200", category: "Fashion", exclusive: "Atelier only", emoji: "👘", desc: "Contemporary Moroccan kaftan by designer Nihal. Embroidered by hand in Gueliz.", mapHint: "Gueliz, Marrakech" },
     ]
   },
   {
-    id: 4, name: "Copenhagen", photo: "https://picsum.photos/seed/copenhagen/800/400", country: "Denmark", emoji: "🇩🇰", color: "#C60C30", items: 54, tag: "Nordic Minimal",
+    id: 4, name: "Copenhagen", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=800&q=80", country: "Denmark", emoji: "🇩🇰", color: "#C60C30", items: 54, tag: "Nordic Minimal",
     continent: "Europe", flagCode: "dk",
     vibe: "Quiet luxury, built to last forever",
     products: [
-      { id: 13, photo: "https://picsum.photos/seed/jacket1/400/400", name: "Samsøe Samsøe Wool Coat", shop: "Flagship · Strøget", price: "DKK 3,200", category: "Fashion", exclusive: "DK exclusive", emoji: "🧥", desc: "Copenhagen's beloved label. Their flagship carries colourways never exported.", mapHint: "Strøget, Copenhagen" },
-      { id: 14, photo: "https://picsum.photos/seed/goretex/400/400", name: "Norse Projects Gore-Tex", shop: "Norse Projects · Pilestræde", price: "DKK 4,800", category: "Fashion", exclusive: "Flagship colourway", emoji: "🧥", desc: "Seasonal colourways exclusive to the Pilestræde flagship store.", mapHint: "Pilestræde, Copenhagen" },
-      { id: 15, photo: "https://picsum.photos/seed/dress1/400/400", name: "Ganni Archive Dress", shop: "Ganni Flagship · Amagertorv", price: "DKK 2,100", category: "Fashion", exclusive: "Archive collection", emoji: "👗", desc: "Ganni's archive collection — only at the Copenhagen flagship.", mapHint: "Amagertorv, Copenhagen" },
+      { id: 13, photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80", name: "Samsøe Samsøe Wool Coat", shop: "Flagship · Strøget", price: "DKK 3,200", category: "Fashion", exclusive: "DK exclusive", emoji: "🧥", desc: "Copenhagen's beloved label. Their flagship carries colourways never exported.", mapHint: "Strøget, Copenhagen" },
+      { id: 14, photo: "https://images.unsplash.com/photo-1547949003-9792a18a2601?w=400&q=80", name: "Norse Projects Gore-Tex", shop: "Norse Projects · Pilestræde", price: "DKK 4,800", category: "Fashion", exclusive: "Flagship colourway", emoji: "🧥", desc: "Seasonal colourways exclusive to the Pilestræde flagship store.", mapHint: "Pilestræde, Copenhagen" },
+      { id: 15, photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80", name: "Ganni Archive Dress", shop: "Ganni Flagship · Amagertorv", price: "DKK 2,100", category: "Fashion", exclusive: "Archive collection", emoji: "👗", desc: "Ganni's archive collection — only at the Copenhagen flagship.", mapHint: "Amagertorv, Copenhagen" },
     ]
   },
   {
-    id: 5, name: "Mexico City", photo: "https://picsum.photos/seed/mexico/800/400", country: "Mexico", emoji: "🇲🇽", color: "#006847", items: 89, tag: "Artisan Culture",
+    id: 5, name: "Mexico City", photo: "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?w=800&q=80", country: "Mexico", emoji: "🇲🇽", color: "#006847", items: 89, tag: "Artisan Culture",
     continent: "Americas", flagCode: "mx",
     vibe: "Vivid folk art meets modern design",
     products: [
-      { id: 16, photo: "https://picsum.photos/seed/dress1/400/400", name: "Hand-embroidered Blouse", shop: "Mercado de Artesanías · Centro", price: "MXN 680", category: "Fashion", exclusive: "Artisan made", emoji: "👗", desc: "Otomi embroidery from Tenango de Doria artisans. Sold only at the market.", mapHint: "Centro Histórico, CDMX" },
-      { id: 17, photo: "https://picsum.photos/seed/jacket1/400/400", name: "Carla Fernández Jacket", shop: "Carla Fernández · Roma Norte", price: "MXN 8,400", category: "Fashion", exclusive: "Mexico only", emoji: "🧥", desc: "Mexico's most celebrated fashion designer. Works with indigenous communities.", mapHint: "Roma Norte, CDMX" },
-      { id: 18, photo: "https://picsum.photos/seed/slippers/400/400", name: "Leather Huarache Sandals", shop: "Taller Flores · Mercado Jamaica", price: "MXN 450", category: "Accessories", exclusive: "Handmade locally", emoji: "🥿", desc: "Traditional huarache woven sandals, custom-made by the Flores family since 1963.", mapHint: "Mercado Jamaica, CDMX" },
+      { id: 16, photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80", name: "Hand-embroidered Blouse", shop: "Mercado de Artesanías · Centro", price: "MXN 680", category: "Fashion", exclusive: "Artisan made", emoji: "👗", desc: "Otomi embroidery from Tenango de Doria artisans. Sold only at the market.", mapHint: "Centro Histórico, CDMX" },
+      { id: 17, photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80", name: "Carla Fernández Jacket", shop: "Carla Fernández · Roma Norte", price: "MXN 8,400", category: "Fashion", exclusive: "Mexico only", emoji: "🧥", desc: "Mexico's most celebrated fashion designer. Works with indigenous communities.", mapHint: "Roma Norte, CDMX" },
+      { id: 18, photo: "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400&q=80", name: "Leather Huarache Sandals", shop: "Taller Flores · Mercado Jamaica", price: "MXN 450", category: "Accessories", exclusive: "Handmade locally", emoji: "🥿", desc: "Traditional huarache woven sandals, custom-made by the Flores family since 1963.", mapHint: "Mercado Jamaica, CDMX" },
     ]
   },
   {
-    id: 7, name: "Tirana", photo: "https://picsum.photos/seed/tirana/800/400", country: "Albania", emoji: "🇦🇱", color: "#E41E20", items: 1, tag: "Hidden Gem",
+    id: 7, name: "Tirana", photo: "https://images.unsplash.com/photo-1555990793-da11153b6c0e?w=800&q=80", country: "Albania", emoji: "🇦🇱", color: "#E41E20", items: 1, tag: "Hidden Gem",
     continent: "Europe", flagCode: "al",
     vibe: "Europe's best kept secret",
     products: [
-      { id: 19, photo: "https://picsum.photos/seed/perfume/400/400", name: "Pure Perfume Signature Scent", shop: "Pure Perfume · Bulevardi Bajram Curri", price: "ALL 3,500", category: "Accessories", exclusive: "Only in Tirana", emoji: "🧴", desc: "Albania's own luxury perfume house. Locally produced signature scents you won't find anywhere else in the world. No international shipping, no global retailers.", mapHint: "Bulevardi Bajram Curri, Pallatet Agimi, Tirana" },
+      { id: 19, photo: "https://images.unsplash.com/photo-1541643600914-78b084683702?w=400&q=80", name: "Pure Perfume Signature Scent", shop: "Pure Perfume · Bulevardi Bajram Curri", price: "ALL 3,500", category: "Accessories", exclusive: "Only in Tirana", emoji: "🧴", desc: "Albania's own luxury perfume house. Locally produced signature scents you won't find anywhere else in the world. No international shipping, no global retailers.", mapHint: "Bulevardi Bajram Curri, Pallatet Agimi, Tirana" },
     ]
   },
 ];
