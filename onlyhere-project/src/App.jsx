@@ -531,7 +531,7 @@ export default function OnlyHere() {
 
         {/* AI GUIDE */}
         {active === "ai" && (
-          <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 148px)", overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 148px - 72px)", overflow: "hidden" }}>
             <div style={{ padding: "8px 16px 6px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 14, color: "#D4B483" }}>◆</span>
