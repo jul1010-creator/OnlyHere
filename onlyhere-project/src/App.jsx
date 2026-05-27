@@ -228,29 +228,25 @@ export default function OnlyHere() {
     setAiMessages(prev => [...prev, { role: "user", text: msg }]);
     setAiLoading(true);
     try {
-      const history = aiMessages.map(m => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.text }]
-      }));
       const productList = allProducts.map(p => p.name + " in " + p.city + " (" + p.price + ") - " + p.exclusive).join(", ");
-      const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: "You are Local Assist — OnlyHere's AI guide. Help travelers find exclusive local finds that exist nowhere else. Be warm, concise and specific. Available products: " + productList }] },
-            contents: [...history, { role: "user", parts: [{ text: msg }] }]
-          })
-        }
-      );
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "You are Local Assist — OnlyHere's AI guide. Help travelers find exclusive local finds that exist nowhere else. Be warm, concise and specific. Available products: " + productList },
+            ...aiMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
+            { role: "user", content: msg }
+          ],
+          max_tokens: 400
+        })
+      });
       const data = await res.json();
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text
-        || data.error?.message
-        || "Something went wrong — try again!";
+      const reply = data.choices?.[0]?.message?.content || data.error?.message || "Something went wrong!";
       setAiMessages(prev => [...prev, { role: "assistant", text: reply }]);
     } catch (err) {
-      setAiMessages(prev => [...prev, { role: "assistant", text: "Connection error — check your internet and try again!" }]);
+      setAiMessages(prev => [...prev, { role: "assistant", text: "Connection error — try again!" }]);
     }
     setAiLoading(false);
   };
@@ -536,9 +532,12 @@ export default function OnlyHere() {
         {/* AI GUIDE */}
         {active === "ai" && (
           <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 148px)", overflow: "hidden" }}>
-            <div style={{ padding: "14px 16px 8px" }}>
-              <h2 style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>◆ Local Assist</h2>
-              <p style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Your local guide — powered by AI</p>
+            <div style={{ padding: "8px 16px 6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 14, color: "#D4B483" }}>◆</span>
+                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>Local Assist</span>
+                <span style={{ fontSize: 11, color: "#8A7355", marginLeft: 4 }}>— powered by AI</span>
+              </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px 8px", minHeight: 0 }}>
               {aiMessages.map((m, i) => (
@@ -559,7 +558,7 @@ export default function OnlyHere() {
               )}
               <div ref={aiBottomRef} />
             </div>
-            <div style={{ flexShrink: 0, padding: "8px 16px 10px", borderTop: "1px solid #2A1E10", background: "#16120A", marginBottom: 72 }}>
+            <div style={{ flexShrink: 0, padding: "6px 16px 8px", borderTop: "1px solid #2A1E10", background: "#16120A" }}>
               <div style={{ display: "flex", gap: 6, marginBottom: 8, overflowX: "auto" }}>
                 {["Edgy Seoul finds", "Tokyo under ¥20k", "Artisan bags", "Hidden gems"].map(s => (
                   <button key={s} onClick={() => setAiInput(s)} style={{ background: "#1E1610", border: "1px solid #2A1E10", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#8A7355", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s}</button>
