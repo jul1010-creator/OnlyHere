@@ -234,7 +234,7 @@ export default function OnlyHere() {
       }));
       const productList = allProducts.map(p => p.name + " in " + p.city + " (" + p.price + ") - " + p.exclusive).join(", ");
       const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -267,7 +267,7 @@ export default function OnlyHere() {
         parts: [{ text: m.text }]
       }));
       const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -535,12 +535,12 @@ export default function OnlyHere() {
 
         {/* AI GUIDE */}
         {active === "ai" && (
-          <div style={{ position: "relative", height: "calc(100vh - 148px)", overflow: "hidden" }}>
+          <div style={{ position: "relative", height: "calc(100vh - 220px)", overflow: "hidden" }}>
             <div style={{ padding: "14px 16px 8px" }}>
               <h2 style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>◆ Local Assist</h2>
               <p style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Your local guide — powered by AI</p>
             </div>
-            <div style={{ overflowY: "auto", padding: "8px 16px 120px", height: "calc(100% - 60px)" }}>
+            <div style={{ overflowY: "auto", padding: "8px 16px 8px", height: "calc(100% - 110px)" }}>
               {aiMessages.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                   {m.role === "assistant" && (
