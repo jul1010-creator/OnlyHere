@@ -415,7 +415,7 @@ export default function OnlyHere() {
       </div>
 
       {/* Content */}
-      <div style={{ height: "calc(100vh - 148px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 80 }}>
+      <div style={{ height: "calc(100vh - 148px - 72px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
 
         {/* SEARCH */}
         {active === "search" && (
@@ -531,7 +531,7 @@ export default function OnlyHere() {
 
         {/* AI GUIDE */}
         {active === "ai" && (
-          <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 148px - 72px)", overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
             <div style={{ padding: "8px 16px 6px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 14, color: "#D4B483" }}>◆</span>
