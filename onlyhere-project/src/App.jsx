@@ -245,10 +245,12 @@ export default function OnlyHere() {
         }
       );
       const data = await res.json();
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Let me find something for you!";
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text
+        || data.error?.message
+        || "Something went wrong — try again!";
       setAiMessages(prev => [...prev, { role: "assistant", text: reply }]);
-    } catch {
-      setAiMessages(prev => [...prev, { role: "assistant", text: "Something went wrong — try again!" }]);
+    } catch (err) {
+      setAiMessages(prev => [...prev, { role: "assistant", text: "Connection error — check your internet and try again!" }]);
     }
     setAiLoading(false);
   };
@@ -276,10 +278,12 @@ export default function OnlyHere() {
         }
       );
       const data = await res.json();
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Let me help!";
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text
+        || data.error?.message
+        || "Something went wrong — try again!";
       setSupportMessages(prev => [...prev, { role: "assistant", text: reply }]);
-    } catch {
-      setSupportMessages(prev => [...prev, { role: "assistant", text: "Something went wrong — try again!" }]);
+    } catch (err) {
+      setSupportMessages(prev => [...prev, { role: "assistant", text: "Connection error — try again!" }]);
     }
     setSupportLoading(false);
   };
@@ -531,12 +535,12 @@ export default function OnlyHere() {
 
         {/* AI GUIDE */}
         {active === "ai" && (
-          <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 148px)" }}>
+          <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 148px)", overflow: "hidden" }}>
             <div style={{ padding: "14px 16px 8px", flexShrink: 0 }}>
               <h2 style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>◆ Local Assist</h2>
               <p style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Your local guide — powered by AI</p>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px", minHeight: 0 }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px 8px", minHeight: 0, overscrollBehavior: "contain" }}>
               {aiMessages.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                   {m.role === "assistant" && (
@@ -555,7 +559,7 @@ export default function OnlyHere() {
               )}
               <div ref={aiBottomRef} />
             </div>
-            <div style={{ padding: "8px 16px 12px", borderTop: "1px solid #2A1E10", background: "#16120A", flexShrink: 0 }}>
+            <div style={{ padding: "8px 16px 20px", borderTop: "1px solid #2A1E10", background: "#16120A", flexShrink: 0, position: "sticky", bottom: 0, zIndex: 10 }}>
               <div style={{ display: "flex", gap: 6, marginBottom: 8, overflowX: "auto" }}>
                 {["Edgy Seoul finds", "Tokyo under ¥20k", "Artisan bags", "Hidden gems"].map(s => (
                   <button key={s} onClick={() => setAiInput(s)} style={{ background: "#1E1610", border: "1px solid #2A1E10", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#8A7355", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s}</button>
