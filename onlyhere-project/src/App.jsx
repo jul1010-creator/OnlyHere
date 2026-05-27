@@ -234,7 +234,7 @@ export default function OnlyHere() {
       }));
       const productList = allProducts.map(p => p.name + " in " + p.city + " (" + p.price + ") - " + p.exclusive).join(", ");
       const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -267,7 +267,7 @@ export default function OnlyHere() {
         parts: [{ text: m.text }]
       }));
       const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -535,12 +535,12 @@ export default function OnlyHere() {
 
         {/* AI GUIDE */}
         {active === "ai" && (
-          <div style={{ position: "relative", height: "calc(100vh - 220px)", overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 148px)", overflow: "hidden" }}>
             <div style={{ padding: "14px 16px 8px" }}>
               <h2 style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>◆ Local Assist</h2>
               <p style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Your local guide — powered by AI</p>
             </div>
-            <div style={{ overflowY: "auto", padding: "8px 16px 8px", height: "calc(100% - 110px)" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px 8px", minHeight: 0 }}>
               {aiMessages.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                   {m.role === "assistant" && (
@@ -559,7 +559,7 @@ export default function OnlyHere() {
               )}
               <div ref={aiBottomRef} />
             </div>
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 16px 16px", borderTop: "1px solid #2A1E10", background: "#16120A" }}>
+            <div style={{ flexShrink: 0, padding: "8px 16px 10px", borderTop: "1px solid #2A1E10", background: "#16120A", marginBottom: 72 }}>
               <div style={{ display: "flex", gap: 6, marginBottom: 8, overflowX: "auto" }}>
                 {["Edgy Seoul finds", "Tokyo under ¥20k", "Artisan bags", "Hidden gems"].map(s => (
                   <button key={s} onClick={() => setAiInput(s)} style={{ background: "#1E1610", border: "1px solid #2A1E10", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#8A7355", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s}</button>
@@ -617,7 +617,7 @@ export default function OnlyHere() {
                     const pinCoords = selectedPin ? COORDS[selectedPin.id] : null;
                     const cityCenter = CITY_CENTER[mapCity.name] || [37.5665,126.9780];
                     const src = selectedPin && pinCoords
-                      ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.shop)}&center=${pinCoords[0]},${pinCoords[1]}&zoom=17`
+                      ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.mapHint || selectedPin.shop)}&zoom=17`
                       : userLocation
                       ? `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=${userLocation.lat},${userLocation.lng}&zoom=14&maptype=roadmap`
                       : `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=${cityCenter[0]},${cityCenter[1]}&zoom=14&maptype=roadmap`;
