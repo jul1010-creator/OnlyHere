@@ -22,11 +22,11 @@ const COUNTRY_FLAGS = {
 const cities = [
   { id: 1, name: "Seoul", country: "South Korea", continent: "Asia", emoji: "🇰🇷", flagCode: "kr", color: "#FF3D9A", items: 124, tag: "K-Fashion Capital", vibe: "Bold neons meet minimalist structure", photo: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=800&q=80",
     products: [
-      { id: 1, name: "Ader Error Oversized Hoodie", shop: "Ader Error Flagship · Sinchon", price: "₩189,000", category: "Fashion", exclusive: "Seoul only", emoji: "👕", trending: false, isNew: false, desc: "Concept-driven Seoul label. Not sold internationally.", mapHint: "Sinchon-ro, Mapo-gu", photo: "https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400&q=80" },
-      { id: 2, name: "Gentle Monster Sunglasses", shop: "GM Haus Dosan · Gangnam", price: "₩380,000", category: "Accessories", exclusive: "Seoul exclusive drop", emoji: "🕶️", trending: true, isNew: false, desc: "Avant-garde eyewear. Only in Haus Dosan.", mapHint: "Dosan-daero, Gangnam-gu", photo: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&q=80" },
+      { id: 1, verified: "May 2026", locationType: "permanent", name: "Ader Error Oversized Hoodie", shop: "Ader Error Flagship · Sinchon", price: "₩189,000", category: "Fashion", exclusive: "Seoul only", emoji: "👕", trending: false, isNew: false, desc: "Concept-driven Seoul label. Not sold internationally.", mapHint: "Sinchon-ro, Mapo-gu", photo: "https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400&q=80" },
+      { id: 2, verified: "May 2026", locationType: "permanent", name: "Gentle Monster Sunglasses", shop: "GM Haus Dosan · Gangnam", price: "₩380,000", category: "Accessories", exclusive: "Seoul exclusive drop", emoji: "🕶️", trending: true, isNew: false, desc: "Avant-garde eyewear. Only in Haus Dosan.", mapHint: "Dosan-daero, Gangnam-gu", photo: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&q=80" },
       { id: 3, name: "Musinsa Standard Denim", shop: "Musinsa Store · Hongdae", price: "₩89,000", category: "Fashion", exclusive: "Korea only", emoji: "👖", trending: false, isNew: false, desc: "Korea's biggest fashion platform in-house label.", mapHint: "Hongdae, Mapo-gu", photo: "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&q=80" },
       { id: 4, name: "Kuho Silk Wrap Dress", shop: "Kuho Flagship · Cheongdam", price: "₩420,000", category: "Fashion", exclusive: "Korea flagship only", emoji: "👗", trending: false, isNew: false, desc: "Premium Korean womenswear. Flagship-exclusive colourways.", mapHint: "Cheongdam-dong, Gangnam-gu", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-      { id: 5, name: "Stussy Seoul Collab Tee", shop: "Stussy Chapter · Itaewon", price: "₩98,000", category: "Fashion", exclusive: "Seoul Chapter exclusive", emoji: "👕", trending: false, isNew: false, desc: "Seoul Chapter-exclusive graphic tee. Never restocked online.", mapHint: "Itaewon-ro, Yongsan-gu", photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80" },
+      { id: 5, verified: "May 2026", locationType: "seasonal", name: "Stussy Seoul Collab Tee", shop: "Stussy Chapter · Itaewon", price: "₩98,000", category: "Fashion", exclusive: "Seoul Chapter exclusive", emoji: "👕", trending: false, isNew: false, desc: "Seoul Chapter-exclusive graphic tee. Never restocked online.", mapHint: "Itaewon-ro, Yongsan-gu", photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80" },
       { id: 20, name: "DS Company Oversized Shirt", shop: "DS Company · Seoul", price: "₩85,000", category: "Fashion", exclusive: "Made in Korea only", emoji: "👔", trending: false, isNew: true, desc: "Small Korean label. Barely any online presence.", mapHint: "Seoul, South Korea", photo: "https://images.unsplash.com/photo-1607345366928-199ea26cfe3e?w=400&q=80" },
     ]
   },
@@ -40,8 +40,8 @@ const cities = [
   },
   { id: 3, name: "Marrakech", country: "Morocco", continent: "Africa", emoji: "🇲🇦", flagCode: "ma", color: "#C1440E", items: 76, tag: "Craft & Colour", vibe: "Ancient craft meets vivid colour", photo: "https://images.unsplash.com/photo-1489749798305-4fea3ae63d43?w=800&q=80",
     products: [
-      { id: 10, name: "Hand-tooled Leather Bag", shop: "Souk El Had · Medina", price: "MAD 850", category: "Bags", exclusive: "Made locally", emoji: "👜", trending: true, isNew: false, desc: "Hand-carved in the Medina. Each piece unique.", mapHint: "Souk El Had, Medina", photo: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=80" },
-      { id: 11, name: "Babouche Slippers", shop: "Souk des Babouches · Medina", price: "MAD 180", category: "Accessories", exclusive: "Medina crafted", emoji: "🥿", trending: false, isNew: false, desc: "Handmade in the tanneries of Marrakech.", mapHint: "Souk des Babouches, Medina", photo: "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400&q=80" },
+      { id: 10, verified: "Apr 2026", locationType: "popup", name: "Hand-tooled Leather Bag", shop: "Souk El Had · Medina", price: "MAD 850", category: "Bags", exclusive: "Made locally", emoji: "👜", trending: true, isNew: false, desc: "Hand-carved in the Medina. Each piece unique.", mapHint: "Souk El Had, Medina", photo: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=80" },
+      { id: 11, verified: "Apr 2026", locationType: "popup", name: "Babouche Slippers", shop: "Souk des Babouches · Medina", price: "MAD 180", category: "Accessories", exclusive: "Medina crafted", emoji: "🥿", trending: false, isNew: false, desc: "Handmade in the tanneries of Marrakech.", mapHint: "Souk des Babouches, Medina", photo: "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400&q=80" },
       { id: 12, name: "Kaftan Robe", shop: "Atelier Nihal · Gueliz", price: "MAD 2,200", category: "Fashion", exclusive: "Atelier only", emoji: "👘", trending: false, isNew: true, desc: "Embroidered by hand in Gueliz.", mapHint: "Gueliz, Marrakech", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
     ]
   },
@@ -61,7 +61,7 @@ const cities = [
   },
   { id: 7, name: "Tirana", country: "Albania", continent: "Europe", emoji: "🇦🇱", flagCode: "al", color: "#E41E20", items: 1, tag: "Hidden Gem", vibe: "Europe's best kept secret", photo: "https://images.unsplash.com/photo-1555990793-da11153b6c0e?w=800&q=80",
     products: [
-      { id: 19, name: "Pure Perfume Signature Scent", shop: "Pure Perfume · Bulevardi Bajram Curri", price: "ALL 3,500", category: "Accessories", exclusive: "Only in Tirana", emoji: "🧴", trending: true, isNew: true, desc: "Albania's own luxury perfume house. No international shipping.", mapHint: "Bulevardi Bajram Curri, Tirana", photo: "https://images.unsplash.com/photo-1541643600914-78b084683702?w=400&q=80" },
+      { id: 19, verified: "May 2026", locationType: "permanent", name: "Pure Perfume Signature Scent", shop: "Pure Perfume · Bulevardi Bajram Curri", price: "ALL 3,500", category: "Accessories", exclusive: "Only in Tirana", emoji: "🧴", trending: true, isNew: true, desc: "Albania's own luxury perfume house. No international shipping.", mapHint: "Bulevardi Bajram Curri, Tirana", photo: "https://images.unsplash.com/photo-1541643600914-78b084683702?w=400&q=80" },
     ]
   },
 ];
@@ -363,13 +363,18 @@ export default function OnlyHere() {
             <div style={{ fontSize: 10, color: product.color, marginTop: 2, fontWeight: 700 }}>◆ {product.city}</div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ background: `${product.color}18`, color: product.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>◆ {product.exclusive}</span>
               {product.trending && <span style={{ fontSize: 10, fontWeight: 700, color: "#D4B483" }}>↗ HOT</span>}
               {product.isNew && <span style={{ fontSize: 10, fontWeight: 700, color: product.color }}>◆ NEW</span>}
+              {product.locationType === "popup" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FF9966" }}>⚠ Pop-up</span>}
+              {product.locationType === "seasonal" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347" }}>◷ Seasonal</span>}
             </div>
             <span style={{ fontWeight: 700, fontSize: 15, color: "#D4B483", fontFamily: "'Cormorant Garamond', serif" }}>{product.price}</span>
           </div>
+          {product.verified && (
+            <div style={{ marginTop: 6, fontSize: 10, color: "#6B5442" }}>✓ Verified {product.verified}</div>
+          )}
         </div>
       </div>
     </div>
@@ -415,7 +420,7 @@ export default function OnlyHere() {
       </div>
 
       {/* Content */}
-      <div style={{ height: "calc(100vh - 148px - 80px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
+      <div style={{ height: "calc(100vh - 148px - 96px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
 
         {/* SEARCH */}
         {active === "search" && (
@@ -862,11 +867,16 @@ export default function OnlyHere() {
             <h2 style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4", lineHeight: 1.2 }}>{selectedProduct.name}</h2>
             <p style={{ fontSize: 12, color: "#8A7355", marginTop: 6, textTransform: "uppercase", letterSpacing: 0.3 }}>{selectedProduct.shop}</p>
             <p style={{ fontSize: 13, color: "#A08C6E", marginTop: 10, lineHeight: 1.6 }}>{selectedProduct.desc}</p>
-            <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ background: `${selectedProduct.color}20`, color: selectedProduct.color, fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100 }}>◆ {selectedProduct.exclusive}</span>
               {selectedProduct.trending && <span style={{ fontSize: 11, fontWeight: 700, color: "#D4B483" }}>↗ TRENDING</span>}
               {selectedProduct.isNew && <span style={{ fontSize: 11, fontWeight: 700, color: selectedProduct.color }}>◆ NEW</span>}
+              {selectedProduct.locationType === "popup" && <span style={{ fontSize: 11, fontWeight: 700, color: "#FF9966", background: "#FF996622", padding: "4px 10px", borderRadius: 100 }}>⚠ Pop-up — verify before visiting</span>}
+              {selectedProduct.locationType === "seasonal" && <span style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "4px 10px", borderRadius: 100 }}>◷ Seasonal — may not be available</span>}
             </div>
+            {selectedProduct.verified && (
+              <div style={{ marginTop: 8, fontSize: 11, color: "#6B5442" }}>✓ Last verified {selectedProduct.verified}</div>
+            )}
             {selectedProduct.mapHint && (
               <div style={{ marginTop: 10, background: "#1E1610", borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 14 }}>●</span>
