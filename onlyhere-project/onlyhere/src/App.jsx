@@ -420,7 +420,7 @@ export default function OnlyHere() {
       </div>
 
       {/* Content */}
-      <div style={{ height: "calc(100vh - 148px - 96px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
+      <div style={{ height: "calc(100vh - 148px - 72px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
 
         {/* SEARCH */}
         {active === "search" && (
