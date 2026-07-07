@@ -102,226 +102,182 @@ const events = [
     name: "Præstø Litteraturfestival",
     town: "Præstø",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "📚",
     date: "2026-06-20",
     dateEnd: "2026-06-21",
-    desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø. Meet Danish authors, enjoy live music and explore the cobblestone streets. Almost entirely unknown to international visitors.",
-    mapHint: "Præstø, Vordingborg Municipality, Zealand",
+    desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø. Meet Danish authors, enjoy live music and explore cobblestone streets. Almost entirely unknown to international visitors.",
+    mapHint: "Præstø Torv, 4720 Præstø, Denmark",
     verified: "Jun 2026",
     color: "#C60C30",
-    tags: ["Literature", "Music", "Culture", "Local"],
+    tags: ["Literature", "Music", "Culture"],
   },
   {
     id: 2,
     name: "Sommerdage i Præstø",
     town: "Præstø",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "🌿",
     date: "2026-07-04",
     dateEnd: "2026-07-06",
-    desc: "Nature and craft festival hidden in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky. Slow travel at its finest — nobody outside Denmark knows this exists.",
-    mapHint: "Præstø, Zealand, Denmark",
+    desc: "Nature and craft festival in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky. Slow travel at its finest.",
+    mapHint: "Præstø Havn, 4720 Præstø, Denmark",
     verified: "Jun 2026",
-    color: "#C60C30",
-    tags: ["Craft", "Nature", "Workshop", "Music"],
+    color: "#2E7D32",
+    tags: ["Craft", "Nature", "Workshop"],
   },
   {
     id: 3,
     name: "Gyldne Dage i Præstø",
     town: "Præstø",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "🏰",
     date: "2026-09-12",
     dateEnd: "2026-09-13",
-    desc: "Annual historical festival in Præstø. Period costumes, local food, craft stalls and a genuine small-town atmosphere. One of Zealand's best kept secrets.",
-    mapHint: "Præstø Town Centre, Zealand",
+    desc: "Annual historical festival in Præstø with period costumes, local food and craft stalls. One of Zealand's best kept secrets.",
+    mapHint: "Præstø Torv, 4720 Præstø, Denmark",
     verified: "Jun 2026",
     color: "#C60C30",
-    tags: ["History", "Culture", "Local", "Food"],
+    tags: ["History", "Culture", "Food"],
   },
   {
     id: 4,
+    name: "Bondemarked på Oremandsgaard",
+    town: "Præstø",
+    country: "Denmark",
+    type: "Market",
+    emoji: "🌾",
+    date: "2026-06-06",
+    dateEnd: null,
+    desc: "Farm market at the beautiful Oremandsgaard Estate. Local food producers, organic goods, handmade crafts and the award-winning Radius Distillery on site.",
+    mapHint: "Oremandsgaard, Jungshoved, 4720 Præstø, Denmark",
+    verified: "Jun 2026",
+    color: "#C60C30",
+    tags: ["Food", "Organic", "Market"],
+  },
+  {
+    id: 5,
     name: "Bakkefest",
     town: "Gilleleje",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "🎵",
     date: "2026-07-10",
     dateEnd: "2026-07-12",
-    desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors and a festive harbour atmosphere. Sunday is free entry with a legendary herring table.",
-    mapHint: "Gilleleje Hallen, Bøgebakken 19, Gilleleje",
+    desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors. Sunday is free entry with a legendary herring table.",
+    mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark",
     verified: "Jun 2026",
-    color: "#1A6B3C",
-    tags: ["Music", "Food", "Festival", "Seaside"],
+    color: "#1565C0",
+    tags: ["Music", "Food", "Seaside"],
   },
   {
-    id: 5,
+    id: 6,
     name: "Musik i Lejet",
     town: "Tisvildeleje",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "🌊",
     date: "2026-07-17",
     dateEnd: "2026-07-19",
-    desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje. Music, art and gastronomy in stunning natural surroundings. One of North Zealand's most loved summer events — completely off the international radar.",
-    mapHint: "Tisvildeleje, Gribskov Municipality, North Zealand",
+    desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje. Music, art and gastronomy in stunning natural surroundings.",
+    mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark",
     verified: "Jun 2026",
-    color: "#1A6B3C",
-    tags: ["Music", "Art", "Food", "Coastal"],
+    color: "#1565C0",
+    tags: ["Music", "Art", "Coastal"],
   },
   {
-    id: 6,
+    id: 7,
     name: "Folkely Festival",
     town: "Hundested",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "⚓",
     date: "2026-08-20",
     dateEnd: "2026-08-22",
-    desc: "Three days of music, art and inspiring talks across the harbour and town of Hundested. Culture and creativity in a charming fishing village most tourists have never heard of.",
-    mapHint: "Hundested Harbour, North Zealand",
+    desc: "Three days of music, art and inspiring talks across the harbour and town of Hundested. Culture in a charming fishing village most tourists never find.",
+    mapHint: "Hundested Havn, 3390 Hundested, Denmark",
     verified: "Jun 2026",
-    color: "#1A6B3C",
-    tags: ["Music", "Art", "Culture", "Harbour"],
+    color: "#1565C0",
+    tags: ["Music", "Art", "Harbour"],
   },
   {
-    id: 7,
+    id: 8,
     name: "Fjordlys Festival",
     town: "Frederiksværk",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "🎆",
     date: "2026-07-25",
     dateEnd: "2026-07-26",
     desc: "Summer festival by the fjord in Frederiksværk. Live music, local food and sunset views over Isefjord. A hidden gem on the North Zealand coast.",
-    mapHint: "Frederiksværk, Halsnæs Municipality, North Zealand",
+    mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark",
     verified: "Jun 2026",
-    color: "#1A6B3C",
-    tags: ["Music", "Food", "Fjord", "Local"],
+    color: "#1565C0",
+    tags: ["Music", "Food", "Fjord"],
   },
   {
-    id: 8,
+    id: 9,
     name: "Haveje Beach Bar Events",
     town: "Liseleje",
     country: "Denmark",
-    continent: "Europe",
     type: "Concert",
     emoji: "🏖",
     date: "2026-07-14",
     dateEnd: "2026-07-15",
-    desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches. Local acts, cold drinks and sea views. The kind of place you only find if someone tells you about it.",
-    mapHint: "Haveje Beach Bar, Liseleje Strand, North Zealand",
+    desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches. Local acts, cold drinks and sea views.",
+    mapHint: "Haveje, Liselejevej, 3360 Liseleje, Denmark",
     verified: "Jun 2026",
-    color: "#1A6B3C",
-    tags: ["Music", "Beach", "Local", "Drinks"],
+    color: "#1565C0",
+    tags: ["Music", "Beach", "Drinks"],
   },
   {
-    id: 9,
+    id: 10,
     name: "Samsø Music Festival",
     town: "Samsø",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "🎸",
     date: "2026-07-13",
     dateEnd: "2026-07-19",
-    desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø. Located in a forest close to the beach. Swim in the sea between concerts. Completely authentic Danish island experience.",
-    mapHint: "Samsø Island, Central Denmark",
+    desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø. Located in a forest close to the beach. Swim in the sea between concerts.",
+    mapHint: "Samsø Festival, Mårup Kildevej 8, 8305 Samsø, Denmark",
     verified: "Jun 2026",
-    color: "#C60C30",
-    tags: ["Music", "Island", "Nature", "Beach"],
+    color: "#6A1B9A",
+    tags: ["Music", "Island", "Nature"],
   },
   {
-    id: 10,
+    id: 11,
     name: "Maribo Jazz Festival",
     town: "Maribo",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "🎷",
     date: "2026-07-18",
     dateEnd: "2026-07-21",
-    desc: "Perhaps Denmark's friendliest jazz festival in the historic town of Maribo on Lolland-Falster. 120+ musicians across 18 venues. Classic jazz, New Orleans, swing and big band. 3,000 visitors — still feels like a secret.",
-    mapHint: "Maribo, Lolland-Falster, Denmark",
+    desc: "Denmark's friendliest jazz festival in the historic town of Maribo on Lolland-Falster. 120+ musicians across 18 venues. Classic jazz, New Orleans, swing and big band.",
+    mapHint: "Maribo Domkirke, Kirkepladsen, 4930 Maribo, Denmark",
     verified: "Jun 2026",
-    color: "#C60C30",
-    tags: ["Jazz", "Music", "Historic", "Local"],
+    color: "#E65100",
+    tags: ["Jazz", "Music", "Historic"],
   },
   {
-    id: 11,
+    id: 12,
     name: "KirsebærFestival",
     town: "Kerteminde",
     country: "Denmark",
-    continent: "Europe",
     type: "Festival",
     emoji: "🍒",
     date: "2026-07-17",
     dateEnd: "2026-07-19",
-    desc: "Cherry festival in Kerteminde, Northeast Funen — a region famous for its cherry orchards. A celebration of local produce, food and music. The most Danish thing you'll ever experience.",
-    mapHint: "Kerteminde, Funen, Denmark",
+    desc: "Cherry festival in Kerteminde, Northeast Funen. A region famous for cherry orchards. Local produce, food and music. The most Danish thing you'll ever experience.",
+    mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark",
     verified: "Jun 2026",
-    color: "#C60C30",
-    tags: ["Food", "Local", "Seasonal", "Culture"],
+    color: "#B71C1C",
+    tags: ["Food", "Local", "Seasonal"],
   },
-  {
-    id: 12,
-    name: "Hongdae Flea Market",
-    town: "Seoul",
-    country: "South Korea",
-    continent: "Asia",
-    type: "Market",
-    emoji: "🛍",
-    date: "2026-07-19",
-    dateEnd: null,
-    desc: "Every Saturday in Hongdae. Independent designers, vintage finds, handmade accessories. The most authentic street market in Seoul — locals only know about this.",
-    mapHint: "Hongdae Park, Mapo-gu, Seoul",
-    verified: "May 2026",
-    color: "#FF3D9A",
-    tags: ["Fashion", "Vintage", "Street", "Weekly"],
-  },
-  {
-    id: 13,
-    name: "Marrakech Craft Week",
-    town: "Marrakech",
-    country: "Morocco",
-    continent: "Africa",
-    type: "Festival",
-    emoji: "🏺",
-    date: "2026-09-15",
-    dateEnd: "2026-09-21",
-    desc: "Week-long celebration of Moroccan craft traditions. Master artisans open their workshops to visitors. Leather, ceramics, textiles — the real Marrakech.",
-    mapHint: "Medina, Marrakech",
-    verified: "Jun 2026",
-    color: "#C1440E",
-    tags: ["Craft", "Culture", "Artisan", "Workshop"],
-  },
-  {
-    id: 14,
-    name: "Bondemarked på Oremandsgaard",
-    town: "Præstø",
-    country: "Denmark",
-    continent: "Europe",
-    type: "Market",
-    emoji: "🌾",
-    date: "2026-06-06",
-    dateEnd: null,
-    desc: "Farm market at the beautiful Oremandsgaard Estate near Præstø. Local food producers, organic goods, handmade crafts and the award-winning Radius Distillery on site. A Saturday morning well spent.",
-    mapHint: "Oremandsgaard Gods, near Præstø, Zealand",
-    verified: "Jun 2026",
-    color: "#C60C30",
-    tags: ["Food", "Organic", "Local", "Market"],
-  },
-];
+]
 
 const getEventDate = (dateStr, dateEnd) => {
   const d = new Date(dateStr);
@@ -348,7 +304,8 @@ export default function Nomi() {
   const [stillHereMap, setStillHereMap] = useState({}); // productId -> {count, userConfirmed}
   const [search, setSearch] = useState("");
   const [mapCity, setMapCity] = useState(null);
-  const [eventFilter, setEventFilter] = useState("All");
+  const [eventMonth, setEventMonth] = useState(null);
+  const [eventType, setEventType] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -784,12 +741,12 @@ export default function Nomi() {
             </div>
 
             {/* Month filter */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Month</div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
-                {["All", "Jun", "Jul", "Aug", "Sep"].map(m => (
-                  <button key={m} onClick={() => setEventFilter(m)}
-                    style={{ background: eventFilter === m ? "#D4B483" : "#1E1610", color: eventFilter === m ? "#16120A" : "#8A7355", border: `1px solid ${eventFilter === m ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>When</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                {["Jun", "Jul", "Aug", "Sep"].map(m => (
+                  <button key={m} onClick={() => setEventMonth(eventMonth === m ? null : m)}
+                    style={{ background: eventMonth === m ? "#D4B483" : "#1E1610", color: eventMonth === m ? "#16120A" : "#8A7355", border: `1px solid ${eventMonth === m ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
                     {m}
                   </button>
                 ))}
@@ -800,9 +757,9 @@ export default function Nomi() {
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
               <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                {["All types", "Festival", "Market", "Concert", "North Zealand"].map(f => (
-                  <button key={f} onClick={() => setEventFilter(f)}
-                    style={{ background: eventFilter === f ? "#D4B483" : "#1E1610", color: eventFilter === f ? "#16120A" : "#8A7355", border: `1px solid ${eventFilter === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                {["Festival", "Market", "Concert", "North Zealand"].map(f => (
+                  <button key={f} onClick={() => setEventType(eventType === f ? null : f)}
+                    style={{ background: eventType === f ? "#D4B483" : "#1E1610", color: eventType === f ? "#16120A" : "#8A7355", border: `1px solid ${eventType === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
                     {f}
                   </button>
                 ))}
@@ -813,12 +770,10 @@ export default function Nomi() {
             {events
               .filter(e => isUpcoming(e.date))
               .filter(e => {
-                const months = {"Jan":0,"Feb":1,"Mar":2,"Apr":3,"May":4,"Jun":5,"Jul":6,"Aug":7,"Sep":8,"Oct":9,"Nov":10,"Dec":11};
-                const eventMonth = new Date(e.date).toLocaleString("en",{month:"short"});
-                if (eventFilter === "All" || eventFilter === "All types") return true;
-                if (eventFilter in months) return eventMonth === eventFilter;
-                if (eventFilter === "North Zealand") return ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town);
-                return e.type === eventFilter;
+                const em = new Date(e.date).toLocaleString("en",{month:"short"});
+                const monthOk = !eventMonth || em === eventMonth;
+                const typeOk = !eventType || e.type === eventType || (eventType === "North Zealand" && ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town));
+                return monthOk && typeOk;
               })
               .sort((a, b) => new Date(a.date) - new Date(b.date))
               .map(event => (
@@ -920,12 +875,10 @@ export default function Nomi() {
 
             {/* No events message */}
             {events.filter(e => isUpcoming(e.date)).filter(e => {
-                const months = {"Jan":0,"Feb":1,"Mar":2,"Apr":3,"May":4,"Jun":5,"Jul":6,"Aug":7,"Sep":8,"Oct":9,"Nov":10,"Dec":11};
-                const eventMonth = new Date(e.date).toLocaleString("en",{month:"short"});
-                if (eventFilter === "All" || eventFilter === "All types") return true;
-                if (eventFilter in months) return eventMonth === eventFilter;
-                if (eventFilter === "North Zealand") return ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town);
-                return e.type === eventFilter;
+                const em = new Date(e.date).toLocaleString("en",{month:"short"});
+                const monthOk = !eventMonth || em === eventMonth;
+                const typeOk = !eventType || e.type === eventType || (eventType === "North Zealand" && ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town));
+                return monthOk && typeOk;
               }).length === 0 && (
               <div style={{ textAlign: "center", padding: "40px 0", color: "#8A7355" }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>◈</div>
