@@ -410,9 +410,7 @@ export default function Nomi() {
   // Products to display
   const displayProducts = selectedCity
     ? (selectedCity.products || []).map(p => ({ ...p, city: selectedCity.name, color: selectedCity.color })).filter(p => category === "All" || p.category === category)
-    : country
-      ? cities.filter(c => c.country === country).flatMap(c => (c.products || []).map(p => ({ ...p, city: c.name, color: c.color }))).filter(p => category === "All" || p.category === category)
-      : [];
+    : allProducts.filter(p => category === "All" || p.category === category);
 
   const savedProducts = allProducts.filter(p => savedItems.includes(p.id));
   const searchResults = search ? allProducts.filter(p =>
@@ -704,45 +702,18 @@ export default function Nomi() {
         {/* EXPLORE */}
         {active === "explore" && (
           <div className="slide-up">
-            <div className="mobile-only" style={{ padding: "12px 0 6px" }}>
-              {/* Continents */}
-              <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16, marginBottom: 10 }}>
-                {continents.map(c => (
-                  <button key={c} className="cat-btn"
-                    onClick={() => { setContinent(continent === c ? null : c); setCountry(null); setSelectedCity(null); }}
-                    style={{ background: continent === c ? "#D4B483" : "#1E1610", color: continent === c ? "#16120A" : "#8A7355", border: `1px solid ${continent === c ? "#D4B483" : "#2A1E10"}` }}>
-                    {c === "Europe" ? "🇪🇺 " : c === "Asia" ? "🌏 " : c === "Africa" ? "🌍 " : "🌎 "}{c}
+            {/* Simple Denmark city selector */}
+            <div style={{ padding: "12px 16px 8px" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>🇩🇰 Cities in Denmark</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {cities.map(city => (
+                  <button key={city.id} onClick={() => setSelectedCity(selectedCity?.id === city.id ? null : city)}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 100, background: selectedCity?.id === city.id ? city.color : "#1E1610", color: selectedCity?.id === city.id ? "#fff" : "#8A7355", border: `2px solid ${selectedCity?.id === city.id ? city.color : "#2A1E10"}`, fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "all 0.2s" }}>
+                    <FlagImg flagCode={city.flagCode} />
+                    {city.name}
                   </button>
                 ))}
               </div>
-
-              {/* Countries */}
-              {continent && (
-                <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16, marginBottom: 10 }}>
-                  {getCountries(continent).map(c => (
-                    <button key={c} className="cat-btn"
-                      onClick={() => { setCountry(country === c ? null : c); setSelectedCity(null); }}
-                      style={{ background: country === c ? "#D4B483" : "#1E1610", color: country === c ? "#16120A" : "#8A7355", border: `1px solid ${country === c ? "#D4B483" : "#2A1E10"}`, display: "flex", alignItems: "center", gap: 6 }}>
-                      {COUNTRY_FLAGS[c] && <span style={{ fontSize: 14 }}>{COUNTRY_FLAGS[c]}</span>}
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Cities */}
-              {continent && country && (
-                <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16, marginBottom: 8 }}>
-                  {cities.filter(c => c.continent === continent && c.country === country).sort((a,b) => a.name.localeCompare(b.name)).map(city => (
-                    <button key={city.id}
-                      onClick={() => setSelectedCity(selectedCity?.id === city.id ? null : city)}
-                      style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 100, background: selectedCity?.id === city.id ? city.color : "#1E1610", color: selectedCity?.id === city.id ? "#fff" : "#8A7355", border: `2px solid ${selectedCity?.id === city.id ? city.color : "#2A1E10"}`, fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>
-                      <FlagImg flagCode={city.flagCode} />
-                      {city.name}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Hero */}
