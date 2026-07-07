@@ -28,7 +28,6 @@ const cities = [
 ];
 
 const allProducts = cities.flatMap(c => c.products.map(p => ({ ...p, city: c.name, color: c.color })));
- = cities.flatMap(c => c.products.map(p => ({ ...p, city: c.name, color: c.color })));
 const continents = ["Europe"];
 
 function getCountries(cont) {
