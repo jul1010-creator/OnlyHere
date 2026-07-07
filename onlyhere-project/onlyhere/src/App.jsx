@@ -80,6 +80,7 @@ function FlagImg({ flagCode }) {
 
 const navItems = [
   { id: "explore", label: "Explore", icon: "⊞" },
+  { id: "events", label: "Events", icon: "◈" },
   { id: "ai", label: "AI Guide", icon: "✦" },
   { id: "map", label: "Map", icon: "⊙" },
   { id: "saved", label: "Saved", icon: "♡" },
@@ -139,7 +140,248 @@ function MapEmbed({ city }) {
 }
 
 
-export default function OnlyHere() {
+const events = [
+  {
+    id: 1,
+    name: "Præstø Litteraturfestival",
+    town: "Præstø",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "📚",
+    date: "2026-06-20",
+    dateEnd: "2026-06-21",
+    desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø. Meet Danish authors, enjoy live music and explore the cobblestone streets. Almost entirely unknown to international visitors.",
+    mapHint: "Præstø, Vordingborg Municipality, Zealand",
+    verified: "Jun 2026",
+    color: "#C60C30",
+    tags: ["Literature", "Music", "Culture", "Local"],
+  },
+  {
+    id: 2,
+    name: "Sommerdage i Præstø",
+    town: "Præstø",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "🌿",
+    date: "2026-07-04",
+    dateEnd: "2026-07-06",
+    desc: "Nature and craft festival hidden in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky. Slow travel at its finest — nobody outside Denmark knows this exists.",
+    mapHint: "Præstø, Zealand, Denmark",
+    verified: "Jun 2026",
+    color: "#C60C30",
+    tags: ["Craft", "Nature", "Workshop", "Music"],
+  },
+  {
+    id: 3,
+    name: "Gyldne Dage i Præstø",
+    town: "Præstø",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "🏰",
+    date: "2026-09-12",
+    dateEnd: "2026-09-13",
+    desc: "Annual historical festival in Præstø. Period costumes, local food, craft stalls and a genuine small-town atmosphere. One of Zealand's best kept secrets.",
+    mapHint: "Præstø Town Centre, Zealand",
+    verified: "Jun 2026",
+    color: "#C60C30",
+    tags: ["History", "Culture", "Local", "Food"],
+  },
+  {
+    id: 4,
+    name: "Bakkefest",
+    town: "Gilleleje",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "🎵",
+    date: "2026-07-10",
+    dateEnd: "2026-07-12",
+    desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors and a festive harbour atmosphere. Sunday is free entry with a legendary herring table.",
+    mapHint: "Gilleleje Hallen, Bøgebakken 19, Gilleleje",
+    verified: "Jun 2026",
+    color: "#1A6B3C",
+    tags: ["Music", "Food", "Festival", "Seaside"],
+  },
+  {
+    id: 5,
+    name: "Musik i Lejet",
+    town: "Tisvildeleje",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "🌊",
+    date: "2026-07-17",
+    dateEnd: "2026-07-19",
+    desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje. Music, art and gastronomy in stunning natural surroundings. One of North Zealand's most loved summer events — completely off the international radar.",
+    mapHint: "Tisvildeleje, Gribskov Municipality, North Zealand",
+    verified: "Jun 2026",
+    color: "#1A6B3C",
+    tags: ["Music", "Art", "Food", "Coastal"],
+  },
+  {
+    id: 6,
+    name: "Folkely Festival",
+    town: "Hundested",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "⚓",
+    date: "2026-08-20",
+    dateEnd: "2026-08-22",
+    desc: "Three days of music, art and inspiring talks across the harbour and town of Hundested. Culture and creativity in a charming fishing village most tourists have never heard of.",
+    mapHint: "Hundested Harbour, North Zealand",
+    verified: "Jun 2026",
+    color: "#1A6B3C",
+    tags: ["Music", "Art", "Culture", "Harbour"],
+  },
+  {
+    id: 7,
+    name: "Fjordlys Festival",
+    town: "Frederiksværk",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "🎆",
+    date: "2026-07-25",
+    dateEnd: "2026-07-26",
+    desc: "Summer festival by the fjord in Frederiksværk. Live music, local food and sunset views over Isefjord. A hidden gem on the North Zealand coast.",
+    mapHint: "Frederiksværk, Halsnæs Municipality, North Zealand",
+    verified: "Jun 2026",
+    color: "#1A6B3C",
+    tags: ["Music", "Food", "Fjord", "Local"],
+  },
+  {
+    id: 8,
+    name: "Haveje Beach Bar Events",
+    town: "Liseleje",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Concert",
+    emoji: "🏖",
+    date: "2026-07-14",
+    dateEnd: "2026-07-15",
+    desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches. Local acts, cold drinks and sea views. The kind of place you only find if someone tells you about it.",
+    mapHint: "Haveje Beach Bar, Liseleje Strand, North Zealand",
+    verified: "Jun 2026",
+    color: "#1A6B3C",
+    tags: ["Music", "Beach", "Local", "Drinks"],
+  },
+  {
+    id: 9,
+    name: "Samsø Music Festival",
+    town: "Samsø",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "🎸",
+    date: "2026-07-13",
+    dateEnd: "2026-07-19",
+    desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø. Located in a forest close to the beach. Swim in the sea between concerts. Completely authentic Danish island experience.",
+    mapHint: "Samsø Island, Central Denmark",
+    verified: "Jun 2026",
+    color: "#C60C30",
+    tags: ["Music", "Island", "Nature", "Beach"],
+  },
+  {
+    id: 10,
+    name: "Maribo Jazz Festival",
+    town: "Maribo",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "🎷",
+    date: "2026-07-18",
+    dateEnd: "2026-07-21",
+    desc: "Perhaps Denmark's friendliest jazz festival in the historic town of Maribo on Lolland-Falster. 120+ musicians across 18 venues. Classic jazz, New Orleans, swing and big band. 3,000 visitors — still feels like a secret.",
+    mapHint: "Maribo, Lolland-Falster, Denmark",
+    verified: "Jun 2026",
+    color: "#C60C30",
+    tags: ["Jazz", "Music", "Historic", "Local"],
+  },
+  {
+    id: 11,
+    name: "KirsebærFestival",
+    town: "Kerteminde",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Festival",
+    emoji: "🍒",
+    date: "2026-07-17",
+    dateEnd: "2026-07-19",
+    desc: "Cherry festival in Kerteminde, Northeast Funen — a region famous for its cherry orchards. A celebration of local produce, food and music. The most Danish thing you'll ever experience.",
+    mapHint: "Kerteminde, Funen, Denmark",
+    verified: "Jun 2026",
+    color: "#C60C30",
+    tags: ["Food", "Local", "Seasonal", "Culture"],
+  },
+  {
+    id: 12,
+    name: "Hongdae Flea Market",
+    town: "Seoul",
+    country: "South Korea",
+    continent: "Asia",
+    type: "Market",
+    emoji: "🛍",
+    date: "2026-07-19",
+    dateEnd: null,
+    desc: "Every Saturday in Hongdae. Independent designers, vintage finds, handmade accessories. The most authentic street market in Seoul — locals only know about this.",
+    mapHint: "Hongdae Park, Mapo-gu, Seoul",
+    verified: "May 2026",
+    color: "#FF3D9A",
+    tags: ["Fashion", "Vintage", "Street", "Weekly"],
+  },
+  {
+    id: 13,
+    name: "Marrakech Craft Week",
+    town: "Marrakech",
+    country: "Morocco",
+    continent: "Africa",
+    type: "Festival",
+    emoji: "🏺",
+    date: "2026-09-15",
+    dateEnd: "2026-09-21",
+    desc: "Week-long celebration of Moroccan craft traditions. Master artisans open their workshops to visitors. Leather, ceramics, textiles — the real Marrakech.",
+    mapHint: "Medina, Marrakech",
+    verified: "Jun 2026",
+    color: "#C1440E",
+    tags: ["Craft", "Culture", "Artisan", "Workshop"],
+  },
+  {
+    id: 14,
+    name: "Bondemarked på Oremandsgaard",
+    town: "Præstø",
+    country: "Denmark",
+    continent: "Europe",
+    type: "Market",
+    emoji: "🌾",
+    date: "2026-06-06",
+    dateEnd: null,
+    desc: "Farm market at the beautiful Oremandsgaard Estate near Præstø. Local food producers, organic goods, handmade crafts and the award-winning Radius Distillery on site. A Saturday morning well spent.",
+    mapHint: "Oremandsgaard Gods, near Præstø, Zealand",
+    verified: "Jun 2026",
+    color: "#C60C30",
+    tags: ["Food", "Organic", "Local", "Market"],
+  },
+];
+
+const getEventDate = (dateStr, dateEnd) => {
+  const d = new Date(dateStr);
+  const opts = { day: "numeric", month: "short" };
+  if (dateEnd) {
+    const e = new Date(dateEnd);
+    return d.toLocaleDateString("en-GB", opts) + " – " + e.toLocaleDateString("en-GB", opts);
+  }
+  return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
+};
+
+const isUpcoming = (dateStr) => new Date(dateStr) >= new Date();
+const daysUntil = (dateStr) => Math.ceil((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24));
+
+
+export default function Nomi() {
   const [active, setActive] = useState("explore");
   const [continent, setContinent] = useState(null);
   const [country, setCountry] = useState(null);
@@ -147,8 +389,10 @@ export default function OnlyHere() {
   const [category, setCategory] = useState("All");
   const [savedItems, setSavedItems] = useState([2, 7, 19]);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [stillHereMap, setStillHereMap] = useState({}); // productId -> {count, userConfirmed}
   const [search, setSearch] = useState("");
   const [mapCity, setMapCity] = useState(null);
+  const [eventFilter, setEventFilter] = useState("All");
   const [selectedPin, setSelectedPin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -156,7 +400,7 @@ export default function OnlyHere() {
 
   // AI Guide
   const [aiMessages, setAiMessages] = useState([
-    { role: "assistant", text: "Hi! I'm your Local Assist ◆ Tell me where you're heading — or what you're after — and I'll find you something that exists nowhere else." }
+    { role: "assistant", text: "Hi! I'm your Local Assist ◆ Tell me where you're heading — or what you're after — and I'll find you something that exists nowhere else. Welcome to Nomi." }
   ]);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -167,7 +411,7 @@ export default function OnlyHere() {
   const [supportVisible, setSupportVisible] = useState(false);
   const [supportDismissed, setSupportDismissed] = useState(false);
   const [supportMessages, setSupportMessages] = useState([
-    { role: "assistant", text: "Hi! 👋 I'm the OnlyHere support assistant. Ask me anything!" }
+    { role: "assistant", text: "Hi! 👋 I'm the Nomi support assistant. Ask me anything!" }
   ]);
   const [supportInput, setSupportInput] = useState("");
   const [supportLoading, setSupportLoading] = useState(false);
@@ -235,7 +479,7 @@ export default function OnlyHere() {
         body: JSON.stringify({
           model: "gpt-4o-mini",
           messages: [
-            { role: "system", content: "You are Local Assist — OnlyHere's AI guide. Help travelers find exclusive local finds that exist nowhere else. Be warm, concise and specific. Available products: " + productList },
+            { role: "system", content: "You are Local Assist — Nomi's AI guide. Help travelers find exclusive local finds that exist nowhere else. Be warm, concise and specific. Available products: " + productList },
             ...aiMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
             { role: "user", content: msg }
           ],
@@ -268,7 +512,7 @@ export default function OnlyHere() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            system_instruction: { parts: [{ text: "You are GoBot — the friendly support assistant for OnlyHere, an app where travelers discover exclusive things that exist nowhere else. Keep answers short and warm. Cities available: Seoul, Tokyo, Marrakech, Copenhagen, Mexico City, Tirana. The app is free for travelers. Shops can DM us to get listed. Users can save finds with the heart button. AI Guide tab gives recommendations. Map tab shows shop locations." }] },
+            system_instruction: { parts: [{ text: "You are GoBot — the friendly support assistant for Nomi, an app where travelers discover exclusive things that exist nowhere else. Keep answers short and warm. Cities available: Seoul, Tokyo, Marrakech, Copenhagen, Mexico City, Tirana. The app is free for travelers. Shops can DM us to get listed. Users can save finds with the heart button. AI Guide tab gives recommendations. Map tab shows shop locations." }] },
             contents: [...history, { role: "user", parts: [{ text: msg }] }]
           })
         }
@@ -347,6 +591,27 @@ export default function OnlyHere() {
     );
   };
 
+  const confirmStillHere = (productId, shopLocation) => {
+    if (!navigator.geolocation) {
+      alert("Location not available on your device.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        // For now accept any location (in production check distance to shop)
+        setStillHereMap(prev => ({
+          ...prev,
+          [productId]: {
+            count: (prev[productId]?.count || 0) + (prev[productId]?.userConfirmed ? 0 : 1),
+            userConfirmed: true,
+            date: new Date().toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+          }
+        }));
+      },
+      () => alert("Please enable location to confirm this find.")
+    );
+  };
+
   const ProductCard = ({ product }) => (
     <div className="product-card" style={{ marginBottom: 10 }} onClick={() => setSelectedProduct(product)}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -372,9 +637,14 @@ export default function OnlyHere() {
             </div>
             <span style={{ fontWeight: 700, fontSize: 15, color: "#D4B483", fontFamily: "'Cormorant Garamond', serif" }}>{product.price}</span>
           </div>
-          {product.verified && (
-            <div style={{ marginTop: 6, fontSize: 10, color: "#6B5442" }}>✓ Verified {product.verified}</div>
-          )}
+          <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center" }}>
+            {product.verified && (
+              <span style={{ fontSize: 10, color: "#6B5442" }}>✓ Verified {product.verified}</span>
+            )}
+            {stillHereMap[product.id]?.count > 0 && (
+              <span style={{ fontSize: 10, color: "#4CAF50", fontWeight: 700 }}>● {stillHereMap[product.id].count} confirmed it</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -391,6 +661,17 @@ export default function OnlyHere() {
         @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
         @keyframes slideDown { from{transform:translateY(-20px);opacity:0} to{transform:translateY(0);opacity:1} }
         @keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.2)} 100%{transform:scale(1)} }
+        @media (min-width: 768px) {
+          .nomi-root { display: grid !important; grid-template-columns: 380px 1fr; grid-template-rows: auto 1fr; min-height: 100vh; max-width: 1200px; margin: 0 auto !important; }
+          .nomi-header { grid-column: 1 / -1; }
+          .nomi-sidebar { grid-column: 1; grid-row: 2; border-right: 1px solid #2A1E10; overflow-y: auto; height: calc(100vh - 148px); position: sticky; top: 148px; }
+          .nomi-content { grid-column: 2; grid-row: 2; overflow-y: auto; height: calc(100vh - 148px); }
+          .nomi-nav { grid-column: 1; grid-row: 3; position: sticky; bottom: 0; }
+          .mobile-only { display: none !important; }
+        }
+        @media (max-width: 767px) {
+          .desktop-only { display: none !important; }
+        }
         .slide-up { animation: slideUp 0.3s ease forwards; }
         .product-card { background:#1E1610;border-radius:16px;padding:14px;border:1px solid #2A1E10;cursor:pointer;transition:all 0.2s; }
         .product-card:active { transform:scale(0.98); }
@@ -402,10 +683,10 @@ export default function OnlyHere() {
       `}</style>
 
       {/* Header */}
-      <div style={{ background: "#16120A", borderBottom: "1px solid #2A1E10", padding: "44px 16px 10px" }}>
+      <div className="nomi-header" style={{ background: "#16120A", borderBottom: "1px solid #2A1E10", padding: "44px 16px 10px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div>
-            <div style={{ fontSize: 9, fontWeight: 700, color: "#D4B483", letterSpacing: 2, textTransform: "uppercase", marginBottom: 2 }}>◆ OnlyHere</div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: "#D4B483", letterSpacing: 2, textTransform: "uppercase", marginBottom: 2 }}>◆ Nomi</div>
             <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>Discover wonders.</div>
           </div>
 
@@ -419,8 +700,40 @@ export default function OnlyHere() {
         </div>
       </div>
 
+      {/* Desktop layout wrapper */}
+      <div style={{ display: "flex" }}>
+
+      {/* Desktop sidebar */}
+      <div className="desktop-only" style={{ width: 280, flexShrink: 0, borderRight: "1px solid #2A1E10", height: "calc(100vh - 148px)", overflowY: "auto", position: "sticky", top: 148 }}>
+        <div style={{ padding: "16px" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Cities</div>
+          {cities.map(city => (
+            <div key={city.id} onClick={() => { setContinent(city.continent); setCountry(city.country); setSelectedCity(city); setActive("explore"); }}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, marginBottom: 4, cursor: "pointer", background: selectedCity?.id === city.id ? `${city.color}20` : "transparent", border: `1px solid ${selectedCity?.id === city.id ? city.color : "transparent"}`, transition: "all 0.2s" }}>
+              <FlagImg flagCode={city.flagCode} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#EDE0C4" }}>{city.name}</div>
+                <div style={{ fontSize: 11, color: "#8A7355" }}>{city.country} · {city.products.length} finds</div>
+              </div>
+              {selectedCity?.id === city.id && <div style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: "50%", background: city.color }} />}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Navigate</div>
+          {navItems.map(item => (
+            <div key={item.id} onClick={() => setActive(item.id)}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, marginBottom: 4, cursor: "pointer", background: active === item.id ? "#D4B483" : "transparent", transition: "all 0.2s" }}>
+              <span style={{ fontSize: 14, color: active === item.id ? "#16120A" : "#8A7355" }}>{item.icon}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: active === item.id ? "#16120A" : "#8A7355" }}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Content */}
-      <div style={{ height: "calc(100vh - 148px - 72px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
+      <div style={{ flex: 1, height: "calc(100vh - 148px - 72px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
 
         {/* SEARCH */}
         {active === "search" && (
@@ -535,6 +848,95 @@ export default function OnlyHere() {
         )}
 
         {/* AI GUIDE */}
+        {active === "events" && (
+          <div className="slide-up" style={{ padding: "16px" }}>
+            {/* Header */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>◈ Local Events</div>
+              <div style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Markets, festivals & pop-ups — from cities to hidden towns</div>
+            </div>
+
+            {/* Filter chips */}
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+              {["All", "Festival", "Market", "Concert", "Denmark", "Asia", "Africa", "North Zealand"].map(f => (
+                <button key={f} onClick={() => setEventFilter(f)}
+                  style={{ background: eventFilter === f ? "#D4B483" : "#1E1610", color: eventFilter === f ? "#16120A" : "#8A7355", border: `1px solid ${eventFilter === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+
+            {/* Events list */}
+            {events
+              .filter(e => isUpcoming(e.date))
+              .filter(e => eventFilter === "All" || e.type === eventFilter || e.country === eventFilter || e.continent === eventFilter || (eventFilter === "North Zealand" && ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"].includes(e.town)))
+              .sort((a, b) => new Date(a.date) - new Date(b.date))
+              .map(event => (
+                <div key={event.id} style={{ background: "#1E1610", borderRadius: 18, padding: "16px", marginBottom: 12, border: `1px solid ${event.color}33`, position: "relative", overflow: "hidden" }}>
+                  {/* Color accent */}
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: event.color, borderRadius: "18px 0 0 18px" }} />
+
+                  <div style={{ paddingLeft: 8 }}>
+                    {/* Top row */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 18 }}>{event.emoji}</span>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: "#EDE0C4", fontFamily: "'Cormorant Garamond', serif" }}>{event.name}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: event.color, background: `${event.color}18`, padding: "3px 8px", borderRadius: 100 }}>{event.type}</span>
+                          <span style={{ fontSize: 11, color: "#8A7355" }}>{event.town} · {event.country}</span>
+                        </div>
+                      </div>
+                      {/* Days until */}
+                      <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#D4B483", fontFamily: "'Cormorant Garamond', serif" }}>
+                          {daysUntil(event.date) === 0 ? "Today!" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)}d`}
+                        </div>
+                        <div style={{ fontSize: 10, color: "#8A7355" }}>away</div>
+                      </div>
+                    </div>
+
+                    {/* Date */}
+                    <div style={{ fontSize: 12, color: "#D4B483", fontWeight: 600, marginBottom: 8 }}>
+                      📅 {getEventDate(event.date, event.dateEnd)}
+                    </div>
+
+                    {/* Description */}
+                    <div style={{ fontSize: 12, color: "#8A7355", lineHeight: 1.6, marginBottom: 10 }}>{event.desc}</div>
+
+                    {/* Tags */}
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                      {event.tags.map(tag => (
+                        <span key={tag} style={{ fontSize: 10, color: "#6B5442", background: "#2A1E10", padding: "3px 8px", borderRadius: 100 }}>{tag}</span>
+                      ))}
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.mapHint)}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ flex: 1, background: event.color, color: "#fff", borderRadius: 10, padding: "8px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center", display: "block" }}>
+                        ↗ Find on Map
+                      </a>
+                      <div style={{ fontSize: 10, color: "#6B5442", display: "flex", alignItems: "center" }}>✓ {event.verified}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+            {/* No events message */}
+            {events.filter(e => isUpcoming(e.date)).filter(e => eventFilter === "All" || e.type === eventFilter || e.country === eventFilter || e.continent === eventFilter || (eventFilter === "North Zealand" && ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"].includes(e.town))).length === 0 && (
+              <div style={{ textAlign: "center", padding: "40px 0", color: "#8A7355" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>◈</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#EDE0C4" }}>No upcoming events</div>
+                <div style={{ fontSize: 12, marginTop: 6 }}>Check back soon — we add new events weekly</div>
+              </div>
+            )}
+          </div>
+        )}
+
         {active === "ai" && (
           <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
             <div style={{ padding: "8px 16px 6px" }}>
@@ -758,8 +1160,10 @@ export default function OnlyHere() {
 
       </div>
 
+      </div>{/* end desktop layout wrapper */}
+
       {/* Bottom Nav */}
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "rgba(22,18,10,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid #2A1E10", padding: "6px 4px 20px", display: "flex", justifyContent: "space-around", zIndex: 50 }}>
+      <div className="nomi-nav" style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "rgba(22,18,10,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid #2A1E10", padding: "6px 4px 20px", display: "flex", justifyContent: "space-around", zIndex: 50 }}>
         {navItems.map(item => (
           <button key={item.id} onClick={() => setActive(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", padding: "0 8px" }}>
             <div style={{ background: active === item.id ? "#D4B483" : "transparent", borderRadius: 8, padding: "4px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, transition: "all 0.2s" }}>
@@ -884,6 +1288,39 @@ export default function OnlyHere() {
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#8A7355" }}>{selectedProduct.mapHint}</span>
               </div>
             )}
+
+            {/* Still Here confirmation */}
+            <div style={{ marginTop: 12, background: "#1E1610", borderRadius: 14, padding: "14px 16px", border: "1px solid #2A1E10" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#EDE0C4" }}>Still here?</div>
+                  <div style={{ fontSize: 11, color: "#8A7355", marginTop: 2 }}>
+                    {stillHereMap[selectedProduct.id]?.count
+                      ? `✓ Confirmed by ${stillHereMap[selectedProduct.id].count} traveler${stillHereMap[selectedProduct.id].count > 1 ? "s" : ""} · ${stillHereMap[selectedProduct.id].date}`
+                      : "Be the first to confirm this find is still there"}
+                  </div>
+                </div>
+                <button
+                  onClick={() => confirmStillHere(selectedProduct.id, selectedProduct.mapHint)}
+                  disabled={stillHereMap[selectedProduct.id]?.userConfirmed}
+                  style={{
+                    background: stillHereMap[selectedProduct.id]?.userConfirmed ? "#1A3320" : "#D4B483",
+                    color: stillHereMap[selectedProduct.id]?.userConfirmed ? "#4CAF50" : "#16120A",
+                    border: stillHereMap[selectedProduct.id]?.userConfirmed ? "1px solid #4CAF50" : "none",
+                    borderRadius: 100,
+                    padding: "8px 16px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: stillHereMap[selectedProduct.id]?.userConfirmed ? "default" : "pointer",
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                    marginLeft: 12,
+                  }}>
+                  {stillHereMap[selectedProduct.id]?.userConfirmed ? "✓ Confirmed!" : "📍 Still here!"}
+                </button>
+              </div>
+            </div>
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
               <button onClick={() => toggleSave(selectedProduct.id)} style={{ flex: 1, background: savedItems.includes(selectedProduct.id) ? `${selectedProduct.color}20` : "#1E1610", color: savedItems.includes(selectedProduct.id) ? selectedProduct.color : "#8A7355", border: `1px solid ${savedItems.includes(selectedProduct.id) ? selectedProduct.color : "#2A1E10"}`, borderRadius: 14, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 {savedItems.includes(selectedProduct.id) ? "♥ Saved" : "♡ Save"}
