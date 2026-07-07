@@ -306,6 +306,7 @@ export default function Nomi() {
   const [mapCity, setMapCity] = useState(null);
   const [eventMonth, setEventMonth] = useState(null);
   const [eventType, setEventType] = useState(null);
+  const [eventTab, setEventTab] = useState("local");
   const [selectedPin, setSelectedPin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -735,39 +736,69 @@ export default function Nomi() {
         {active === "events" && (
           <div className="slide-up" style={{ padding: "16px" }}>
             {/* Header */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>◈ Local Events</div>
-              <div style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Markets, festivals & pop-ups — from cities to hidden towns</div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>◈ Events</div>
+              <div style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Discover what's happening across Denmark</div>
             </div>
 
-            {/* Month filter */}
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>When</div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                {["Jun", "Jul", "Aug", "Sep"].map(m => (
-                  <button key={m} onClick={() => setEventMonth(eventMonth === m ? null : m)}
-                    style={{ background: eventMonth === m ? "#D4B483" : "#1E1610", color: eventMonth === m ? "#16120A" : "#8A7355", border: `1px solid ${eventMonth === m ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+            {/* Major / Local tabs */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <button onClick={() => setEventTab("local")}
+                style={{ flex: 1, background: eventTab === "local" ? "#D4B483" : "#1E1610", color: eventTab === "local" ? "#16120A" : "#8A7355", border: `1px solid ${eventTab === "local" ? "#D4B483" : "#2A1E10"}`, borderRadius: 12, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                🏘 Local Events
+              </button>
+              <button onClick={() => setEventTab("major")}
+                style={{ flex: 1, background: eventTab === "major" ? "#D4B483" : "#1E1610", color: eventTab === "major" ? "#16120A" : "#8A7355", border: `1px solid ${eventTab === "major" ? "#D4B483" : "#2A1E10"}`, borderRadius: 12, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                🌟 Major Events
+              </button>
+            </div>
+
+            {/* Filters - hierarchical like country/city */}
+            <div style={{ marginBottom: 16 }}>
+              {/* Date */}
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                {["All", "Jun", "Jul", "Aug", "Sep"].map(m => (
+                  <button key={m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))}
+                    style={{ background: (m === "All" && !eventMonth) || eventMonth === m ? "#D4B483" : "#1E1610", color: (m === "All" && !eventMonth) || eventMonth === m ? "#16120A" : "#8A7355", border: `1px solid ${(m === "All" && !eventMonth) || eventMonth === m ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
                     {m}
                   </button>
                 ))}
               </div>
-            </div>
 
-            {/* Type filter */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                {["Festival", "Market", "Concert", "North Zealand"].map(f => (
-                  <button key={f} onClick={() => setEventType(eventType === f ? null : f)}
-                    style={{ background: eventType === f ? "#D4B483" : "#1E1610", color: eventType === f ? "#16120A" : "#8A7355", border: `1px solid ${eventType === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-                    {f}
-                  </button>
-                ))}
-              </div>
+              {/* Type — only show if date selected */}
+              {eventTab === "local" && (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+                  <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                    {["All", "Festival", "Market", "Concert", "North Zealand"].map(f => (
+                      <button key={f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))}
+                        style={{ background: (f === "All" && !eventType) || eventType === f ? "#D4B483" : "#1E1610", color: (f === "All" && !eventType) || eventType === f ? "#16120A" : "#8A7355", border: `1px solid ${(f === "All" && !eventType) || eventType === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Major event type */}
+              {eventTab === "major" && (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+                  <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                    {["All", "Music", "Cultural"].map(f => (
+                      <button key={f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))}
+                        style={{ background: (f === "All" && !eventType) || eventType === f ? "#D4B483" : "#1E1610", color: (f === "All" && !eventType) || eventType === f ? "#16120A" : "#8A7355", border: `1px solid ${(f === "All" && !eventType) || eventType === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Events list */}
-            {events
+            {(eventTab === "local" ? events : majorEvents)
               .filter(e => isUpcoming(e.date))
               .filter(e => {
                 const em = new Date(e.date).toLocaleString("en",{month:"short"});
