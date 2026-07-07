@@ -657,10 +657,10 @@ export default function Nomi() {
       </div>
 
       {/* Desktop layout wrapper */}
-      <div style={{ display: "flex" }}>
+      <div style={{ display: "flex", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
 
       {/* Desktop sidebar */}
-      <div className="desktop-only" style={{ width: 280, flexShrink: 0, borderRight: "1px solid #2A1E10", height: "calc(100vh - 148px)", overflowY: "auto", position: "sticky", top: 148 }}>
+      <div className="desktop-only" style={{ width: 260, flexShrink: 0, borderRight: "1px solid #2A1E10", height: "calc(100vh - 148px)", overflowY: "auto", position: "sticky", top: 0 }}>
         <div style={{ padding: "16px" }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>🇩🇰 Denmark</div>
           {cities.map(city => (
@@ -689,7 +689,7 @@ export default function Nomi() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, height: "calc(100vh - 148px - 72px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
+      <div style={{ flex: 1, height: "calc(100vh - 148px - 72px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16, minWidth: 0 }}>
 
         {/* SEARCH */}
         {active === "search" && (
@@ -704,7 +704,7 @@ export default function Nomi() {
         {/* EXPLORE */}
         {active === "explore" && (
           <div className="slide-up">
-            <div style={{ padding: "12px 0 6px" }}>
+            <div className="mobile-only" style={{ padding: "12px 0 6px" }}>
               {/* Continents */}
               <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16, marginBottom: 10 }}>
                 {continents.map(c => (
@@ -869,12 +869,53 @@ export default function Nomi() {
                       ))}
                     </div>
 
+                    {/* Distance from user */}
+                    {userLocation && (() => {
+                      const eventCoords = {
+                        "Præstø Litteraturfestival": [55.1167, 12.0500],
+                        "Sommerdage i Præstø": [55.1167, 12.0500],
+                        "Gyldne Dage i Præstø": [55.1167, 12.0500],
+                        "Bondemarked på Oremandsgaard": [55.1200, 12.0600],
+                        "Bakkefest": [56.1167, 12.3000],
+                        "Musik i Lejet": [56.0500, 12.0667],
+                        "Folkely Festival": [55.9667, 11.8500],
+                        "Fjordlys Festival": [55.9667, 12.0167],
+                        "Haveje Beach Bar Events": [56.0167, 11.9833],
+                        "Samsø Music Festival": [55.8833, 10.6167],
+                        "Maribo Jazz Festival": [54.7667, 11.5000],
+                        "KirsebærFestival": [55.4500, 10.6500],
+                        "Hongdae Flea Market": [37.5563, 126.9374],
+                        "Marrakech Craft Week": [31.6295, -7.9811],
+                      };
+                      const ec = eventCoords[event.name];
+                      if (!ec) return null;
+                      const dist = getDistance(userLocation.lat, userLocation.lng, ec[0], ec[1]);
+                      return (
+                        <div style={{ fontSize: 12, color: "#D4B483", fontWeight: 700, marginBottom: 8 }}>
+                          ● {dist} from you
+                        </div>
+                      );
+                    })()}
+
+                    {/* Mini map */}
+                    <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 140 }}>
+                      <iframe
+                        title={event.name}
+                        width="100%"
+                        height="140"
+                        frameBorder="0"
+                        style={{ border: 0, display: "block" }}
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint)}&zoom=12`}
+                      />
+                    </div>
+
                     {/* Actions */}
                     <div style={{ display: "flex", gap: 8 }}>
-                      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.mapHint)}`}
+                      <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.mapHint)}`}
                         target="_blank" rel="noreferrer"
                         style={{ flex: 1, background: event.color, color: "#fff", borderRadius: 10, padding: "8px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center", display: "block" }}>
-                        ↗ Find on Map
+                        ↗ Get Directions
                       </a>
                       <div style={{ fontSize: 10, color: "#6B5442", display: "flex", alignItems: "center" }}>✓ {event.verified}</div>
                     </div>
