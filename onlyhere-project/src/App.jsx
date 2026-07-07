@@ -753,40 +753,29 @@ export default function Nomi() {
               </button>
             </div>
 
-            {/* Filters - hierarchical like country/city */}
+            {/* Sequential filters */}
             <div style={{ marginBottom: 16 }}>
-              {/* Date */}
+
+              {/* Step 1 — Date */}
               <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: eventMonth ? 14 : 0 }}>
                 {["All", "Jun", "Jul", "Aug", "Sep"].map(m => (
-                  <button key={m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))}
+                  <button key={m} onClick={() => { setEventMonth(m === "All" ? null : (eventMonth === m ? null : m)); setEventType(null); }}
                     style={{ background: (m === "All" && !eventMonth) || eventMonth === m ? "#D4B483" : "#1E1610", color: (m === "All" && !eventMonth) || eventMonth === m ? "#16120A" : "#8A7355", border: `1px solid ${(m === "All" && !eventMonth) || eventMonth === m ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
                     {m}
                   </button>
                 ))}
               </div>
 
-              {/* Type — only show if date selected */}
-              {eventTab === "local" && (
+              {/* Step 2 — Type (only after date picked) */}
+              {eventMonth && (
                 <>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
-                  <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
-                    {["All", "Festival", "Market", "Concert", "North Zealand"].map(f => (
-                      <button key={f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))}
-                        style={{ background: (f === "All" && !eventType) || eventType === f ? "#D4B483" : "#1E1610", color: (f === "All" && !eventType) || eventType === f ? "#16120A" : "#8A7355", border: `1px solid ${(f === "All" && !eventType) || eventType === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-                        {f}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Major event type */}
-              {eventTab === "major" && (
-                <>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
-                  <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
-                    {["All", "Music", "Cultural"].map(f => (
+                  <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                    {(eventTab === "local"
+                      ? ["All", "Festival", "Market", "Concert", "North Zealand"]
+                      : ["All", "Music", "Cultural"]
+                    ).map(f => (
                       <button key={f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))}
                         style={{ background: (f === "All" && !eventType) || eventType === f ? "#D4B483" : "#1E1610", color: (f === "All" && !eventType) || eventType === f ? "#16120A" : "#8A7355", border: `1px solid ${(f === "All" && !eventType) || eventType === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
                         {f}
