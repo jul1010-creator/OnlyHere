@@ -648,7 +648,7 @@ export default function Nomi() {
         <div style={{ background: "#1E1610", borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8, border: "1px solid #2A1E10" }}>
           <span style={{ fontSize: 13, color: "#8A7355" }}>◆</span>
           <input value={search} onChange={e => { setSearch(e.target.value); if (e.target.value) setActive("search"); else setActive("explore"); }}
-            placeholder="Search cities, shops, products..."
+            placeholder="Search cities, businesses, finds..."
             style={{ border: "none", outline: "none", fontSize: 13, flex: 1, background: "transparent", color: "#EDE0C4", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
           {search && <button onClick={() => { setSearch(""); setActive("explore"); }} style={{ border: "none", background: "none", cursor: "pointer", color: "#8A7355", fontSize: 14 }}>✕</button>}
         </div>
@@ -728,7 +728,7 @@ export default function Nomi() {
                     {selectedCity ? selectedCity.name : country ? country : "World's Merchandise"}
                   </div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginTop: 3 }}>
-                    {selectedCity ? `◆ ${displayProducts.length} finds in ${selectedCity.name}` : country ? `◆ ${displayProducts.length} finds across ${country}` : "Select a continent to start exploring"}
+                    {selectedCity ? `◆ ${displayProducts.length} businesses in ${selectedCity.name}` : country ? `◆ ${displayProducts.length} finds across ${country}` : "Select a continent to start exploring"}
                   </div>
                 </div>
                 {(selectedCity || country) && (
@@ -763,7 +763,7 @@ export default function Nomi() {
                 <>
                   {displayProducts.length > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase" }}>{displayProducts.length} Finds</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase" }}>{displayProducts.length} Businesses</span>
                       <span style={{ fontSize: 11, color: "#6B5442" }}>{selectedCity ? selectedCity.name : country || ""}</span>
                     </div>
                   )}
@@ -893,15 +893,15 @@ export default function Nomi() {
 
                     {/* Denmark overview map with pin */}
                     <div style={{ fontSize: 10, color: "#8A7355", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>📍 Location in Denmark</div>
-                    <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 200 }}>
+                    <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 320 }}>
                       <iframe
                         title={event.name}
                         width="100%"
-                        height="180"
+                        height="320"
                         frameBorder="0"
                         style={{ border: 0, display: "block" }}
                         referrerPolicy="no-referrer-when-downgrade"
-                        src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint + ", Denmark")}&zoom=7&maptype=roadmap`}
+                        src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint + ", Denmark")}&zoom=6&maptype=roadmap`}
                       />
                     </div>
 
@@ -1057,7 +1057,7 @@ export default function Nomi() {
                     const pinCoords = selectedPin ? COORDS[selectedPin.id] : null;
                     const mapsUrl = selectedPin && pinCoords
                       ? `https://www.google.com/maps/dir/?api=1&destination=${pinCoords[0]},${pinCoords[1]}&destination_place_id=${encodeURIComponent(selectedPin.shop)}`
-                      : `https://www.google.com/maps/search/?api=1&query=boutiques+${encodeURIComponent(mapCity.name)}`;
+                      : `https://www.google.com/maps/search/?api=1&query=businesses+${encodeURIComponent(mapCity.name)}`;
                     return (
                       <a href={mapsUrl} target="_blank" rel="noreferrer"
                         style={{ position: "absolute", bottom: 8, right: 8, background: "#D4B483", color: "#16120A", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
@@ -1146,12 +1146,12 @@ export default function Nomi() {
         {active === "saved" && (
           <div className="slide-up" style={{ padding: "16px" }}>
             <h2 style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4", marginBottom: 4 }}>♡ Saved</h2>
-            <p style={{ fontSize: 12, color: "#8A7355", marginBottom: 14 }}>{savedProducts.length} items saved</p>
+            <p style={{ fontSize: 12, color: "#8A7355", marginBottom: 14 }}>{savedProducts.length} businesses saved</p>
             {savedProducts.length === 0 ? (
               <div style={{ textAlign: "center", padding: "50px 0" }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>♡</div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#8A7355" }}>Nothing saved yet</div>
-                <div style={{ fontSize: 12, color: "#6B5442", marginTop: 8 }}>Tap ♡ on any find to save it</div>
+                <div style={{ fontSize: 12, color: "#6B5442", marginTop: 8 }}>Tap ♡ on any business to save it</div>
               </div>
             ) : savedProducts.map(p => <ProductCard key={p.id} product={p} />)}
           </div>
