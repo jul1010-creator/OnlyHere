@@ -657,10 +657,10 @@ export default function Nomi() {
       </div>
 
       {/* Desktop layout wrapper */}
-      <div style={{ display: "flex", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+      <div style={{ display: "flex", width: "100%" }}>
 
       {/* Desktop sidebar */}
-      <div className="desktop-only" style={{ width: 260, flexShrink: 0, borderRight: "1px solid #2A1E10", height: "calc(100vh - 148px)", overflowY: "auto", position: "sticky", top: 0 }}>
+      <div className="desktop-only" style={{ width: 300, flexShrink: 0, borderRight: "1px solid #2A1E10", height: "calc(100vh - 120px)", overflowY: "auto", position: "sticky", top: 120, background: "#16120A" }}>
         <div style={{ padding: "16px" }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>🇩🇰 Denmark</div>
           {cities.map(city => (
@@ -689,7 +689,7 @@ export default function Nomi() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, height: "calc(100vh - 148px - 72px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16, minWidth: 0 }}>
+      <div style={{ flex: 1, height: "calc(100vh - 120px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 80, minWidth: 0, maxWidth: 800 }}>
 
         {/* SEARCH */}
         {active === "search" && (
@@ -812,20 +812,43 @@ export default function Nomi() {
               <div style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Markets, festivals & pop-ups — from cities to hidden towns</div>
             </div>
 
-            {/* Filter chips */}
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
-              {["All", "Festival", "Market", "Concert", "Denmark", "Asia", "Africa", "North Zealand"].map(f => (
-                <button key={f} onClick={() => setEventFilter(f)}
-                  style={{ background: eventFilter === f ? "#D4B483" : "#1E1610", color: eventFilter === f ? "#16120A" : "#8A7355", border: `1px solid ${eventFilter === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-                  {f}
-                </button>
-              ))}
+            {/* Month filter */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Month</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                {["All", "Jun", "Jul", "Aug", "Sep"].map(m => (
+                  <button key={m} onClick={() => setEventFilter(m)}
+                    style={{ background: eventFilter === m ? "#D4B483" : "#1E1610", color: eventFilter === m ? "#16120A" : "#8A7355", border: `1px solid ${eventFilter === m ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Type filter */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                {["All types", "Festival", "Market", "Concert", "North Zealand"].map(f => (
+                  <button key={f} onClick={() => setEventFilter(f)}
+                    style={{ background: eventFilter === f ? "#D4B483" : "#1E1610", color: eventFilter === f ? "#16120A" : "#8A7355", border: `1px solid ${eventFilter === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    {f}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Events list */}
             {events
               .filter(e => isUpcoming(e.date))
-              .filter(e => eventFilter === "All" || e.type === eventFilter || e.country === eventFilter || e.continent === eventFilter || (eventFilter === "North Zealand" && ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"].includes(e.town)))
+              .filter(e => {
+                const months = {"Jan":0,"Feb":1,"Mar":2,"Apr":3,"May":4,"Jun":5,"Jul":6,"Aug":7,"Sep":8,"Oct":9,"Nov":10,"Dec":11};
+                const eventMonth = new Date(e.date).toLocaleString("en",{month:"short"});
+                if (eventFilter === "All" || eventFilter === "All types") return true;
+                if (eventFilter in months) return eventMonth === eventFilter;
+                if (eventFilter === "North Zealand") return ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town);
+                return e.type === eventFilter;
+              })
               .sort((a, b) => new Date(a.date) - new Date(b.date))
               .map(event => (
                 <div key={event.id} style={{ background: "#1E1610", borderRadius: 18, padding: "16px", marginBottom: 12, border: `1px solid ${event.color}33`, position: "relative", overflow: "hidden" }}>
@@ -897,16 +920,16 @@ export default function Nomi() {
                       );
                     })()}
 
-                    {/* Mini map */}
-                    <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 140 }}>
+                    {/* Denmark overview map with pin */}
+                    <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 180 }}>
                       <iframe
                         title={event.name}
                         width="100%"
-                        height="140"
+                        height="180"
                         frameBorder="0"
                         style={{ border: 0, display: "block" }}
                         referrerPolicy="no-referrer-when-downgrade"
-                        src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint)}&zoom=12`}
+                        src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint + ", Denmark")}&zoom=8`}
                       />
                     </div>
 
@@ -924,7 +947,14 @@ export default function Nomi() {
               ))}
 
             {/* No events message */}
-            {events.filter(e => isUpcoming(e.date)).filter(e => eventFilter === "All" || e.type === eventFilter || e.country === eventFilter || e.continent === eventFilter || (eventFilter === "North Zealand" && ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"].includes(e.town))).length === 0 && (
+            {events.filter(e => isUpcoming(e.date)).filter(e => {
+                const months = {"Jan":0,"Feb":1,"Mar":2,"Apr":3,"May":4,"Jun":5,"Jul":6,"Aug":7,"Sep":8,"Oct":9,"Nov":10,"Dec":11};
+                const eventMonth = new Date(e.date).toLocaleString("en",{month:"short"});
+                if (eventFilter === "All" || eventFilter === "All types") return true;
+                if (eventFilter in months) return eventMonth === eventFilter;
+                if (eventFilter === "North Zealand") return ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town);
+                return e.type === eventFilter;
+              }).length === 0 && (
               <div style={{ textAlign: "center", padding: "40px 0", color: "#8A7355" }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>◈</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#EDE0C4" }}>No upcoming events</div>
@@ -1160,7 +1190,7 @@ export default function Nomi() {
       </div>{/* end desktop layout wrapper */}
 
       {/* Bottom Nav */}
-      <div className="nomi-nav" style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "rgba(22,18,10,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid #2A1E10", padding: "6px 4px 20px", display: "flex", justifyContent: "space-around", zIndex: 50 }}>
+      <div className="mobile-only" style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "rgba(22,18,10,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid #2A1E10", padding: "6px 4px 20px", display: "flex", justifyContent: "space-around", zIndex: 50 }}>
         {navItems.map(item => (
           <button key={item.id} onClick={() => setActive(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", padding: "0 8px" }}>
             <div style={{ background: active === item.id ? "#D4B483" : "transparent", borderRadius: 8, padding: "4px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, transition: "all 0.2s" }}>
