@@ -689,7 +689,7 @@ export default function Nomi() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, height: "calc(100vh - 120px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 80, minWidth: 0, maxWidth: 800 }}>
+      <div style={{ flex: 1, height: "calc(100vh - 120px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 80, minWidth: 0 }}>
 
         {/* SEARCH */}
         {active === "search" && (
@@ -783,7 +783,7 @@ export default function Nomi() {
             )}
 
             {/* Products */}
-            <div style={{ padding: "0 16px" }}>
+            <div style={{ padding: "0 16px" }} className="products-area">
               {displayProducts.length === 0 && (continent || country) ? (
                 <div style={{ textAlign: "center", padding: "30px 0", color: "#8A7355" }}>
                   {continent && !country ? "Select a country to see finds" : continent && country && !selectedCity ? "Showing all finds in " + country : "No finds in this category"}
@@ -921,7 +921,8 @@ export default function Nomi() {
                     })()}
 
                     {/* Denmark overview map with pin */}
-                    <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 180 }}>
+                    <div style={{ fontSize: 10, color: "#8A7355", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>📍 Location in Denmark</div>
+                    <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 200 }}>
                       <iframe
                         title={event.name}
                         width="100%"
@@ -929,7 +930,7 @@ export default function Nomi() {
                         frameBorder="0"
                         style={{ border: 0, display: "block" }}
                         referrerPolicy="no-referrer-when-downgrade"
-                        src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint + ", Denmark")}&zoom=8`}
+                        src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint + ", Denmark")}&zoom=7&maptype=roadmap`}
                       />
                     </div>
 
