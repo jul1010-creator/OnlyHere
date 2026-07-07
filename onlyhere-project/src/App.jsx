@@ -11,63 +11,25 @@ async function sbFetch(table, params = "") {
 }
 
 const COUNTRY_FLAGS = {
-  "South Korea": "🇰🇷",
-  "Japan": "🇯🇵",
-  "Morocco": "🇲🇦",
   "Denmark": "🇩🇰",
-  "Mexico": "🇲🇽",
-  "Albania": "🇦🇱",
 };
 
 const cities = [
-  { id: 1, name: "Seoul", country: "South Korea", continent: "Asia", emoji: "🇰🇷", flagCode: "kr", color: "#FF3D9A", items: 124, tag: "K-Fashion Capital", vibe: "Bold neons meet minimalist structure", photo: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=800&q=80",
-    products: [
-      { id: 1, verified: "May 2026", locationType: "permanent", name: "Ader Error Oversized Hoodie", shop: "Ader Error Flagship · Sinchon", price: "₩189,000", category: "Fashion", exclusive: "Seoul only", emoji: "👕", trending: false, isNew: false, desc: "Concept-driven Seoul label. Not sold internationally.", mapHint: "Sinchon-ro, Mapo-gu", photo: "https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400&q=80" },
-      { id: 2, verified: "May 2026", locationType: "permanent", name: "Gentle Monster Sunglasses", shop: "GM Haus Dosan · Gangnam", price: "₩380,000", category: "Accessories", exclusive: "Seoul exclusive drop", emoji: "🕶️", trending: true, isNew: false, desc: "Avant-garde eyewear. Only in Haus Dosan.", mapHint: "Dosan-daero, Gangnam-gu", photo: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&q=80" },
-      { id: 3, name: "Musinsa Standard Denim", shop: "Musinsa Store · Hongdae", price: "₩89,000", category: "Fashion", exclusive: "Korea only", emoji: "👖", trending: false, isNew: false, desc: "Korea's biggest fashion platform in-house label.", mapHint: "Hongdae, Mapo-gu", photo: "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&q=80" },
-      { id: 4, name: "Kuho Silk Wrap Dress", shop: "Kuho Flagship · Cheongdam", price: "₩420,000", category: "Fashion", exclusive: "Korea flagship only", emoji: "👗", trending: false, isNew: false, desc: "Premium Korean womenswear. Flagship-exclusive colourways.", mapHint: "Cheongdam-dong, Gangnam-gu", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-      { id: 5, verified: "May 2026", locationType: "seasonal", name: "Stussy Seoul Collab Tee", shop: "Stussy Chapter · Itaewon", price: "₩98,000", category: "Fashion", exclusive: "Seoul Chapter exclusive", emoji: "👕", trending: false, isNew: false, desc: "Seoul Chapter-exclusive graphic tee. Never restocked online.", mapHint: "Itaewon-ro, Yongsan-gu", photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80" },
-      { id: 20, name: "DS Company Oversized Shirt", shop: "DS Company · Seoul", price: "₩85,000", category: "Fashion", exclusive: "Made in Korea only", emoji: "👔", trending: false, isNew: true, desc: "Small Korean label. Barely any online presence.", mapHint: "Seoul, South Korea", photo: "https://images.unsplash.com/photo-1607345366928-199ea26cfe3e?w=400&q=80" },
-    ]
-  },
-  { id: 2, name: "Tokyo", country: "Japan", continent: "Asia", emoji: "🇯🇵", flagCode: "jp", color: "#E8001D", items: 98, tag: "Streetwear Paradise", vibe: "Precision craftsmanship meets underground cool", photo: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80",
-    products: [
-      { id: 6, name: "Visvim Hand-dyed Shirt", shop: "Visvim Aoyama · Minami-Aoyama", price: "¥68,000", category: "Fashion", exclusive: "Japan only", emoji: "👔", trending: false, isNew: false, desc: "Hand-crafted in Japan, never sold abroad.", mapHint: "Minami-Aoyama, Minato-ku", photo: "https://images.unsplash.com/photo-1607345366928-199ea26cfe3e?w=400&q=80" },
-      { id: 7, name: "Neighborhood Collab Cap", shop: "Neighborhood Harajuku", price: "¥12,000", category: "Accessories", exclusive: "Tokyo drop only", emoji: "🧢", trending: true, isNew: false, desc: "Each drop sells out within hours. In-store only.", mapHint: "Harajuku, Shibuya-ku", photo: "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&q=80" },
-      { id: 8, name: "Kapital Boro Jacket", shop: "Kapital Daikanyama", price: "¥89,000", category: "Fashion", exclusive: "Japan flagship", emoji: "🧥", trending: false, isNew: false, desc: "Traditional Japanese Boro technique. Patchwork one-of-a-kind.", mapHint: "Daikanyama, Shibuya-ku", photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80" },
-      { id: 9, name: "Undercover Archive Tee", shop: "Undercover Lab · Minami-Aoyama", price: "¥18,000", category: "Fashion", exclusive: "Lab exclusive", emoji: "👕", trending: false, isNew: true, desc: "Archive reprints. Only available at the Lab store.", mapHint: "Minami-Aoyama, Minato-ku", photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80" },
-    ]
-  },
-  { id: 3, name: "Marrakech", country: "Morocco", continent: "Africa", emoji: "🇲🇦", flagCode: "ma", color: "#C1440E", items: 76, tag: "Craft & Colour", vibe: "Ancient craft meets vivid colour", photo: "https://images.unsplash.com/photo-1489749798305-4fea3ae63d43?w=800&q=80",
-    products: [
-      { id: 10, verified: "Apr 2026", locationType: "popup", name: "Hand-tooled Leather Bag", shop: "Souk El Had · Medina", price: "MAD 850", category: "Bags", exclusive: "Made locally", emoji: "👜", trending: true, isNew: false, desc: "Hand-carved in the Medina. Each piece unique.", mapHint: "Souk El Had, Medina", photo: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=80" },
-      { id: 11, verified: "Apr 2026", locationType: "popup", name: "Babouche Slippers", shop: "Souk des Babouches · Medina", price: "MAD 180", category: "Accessories", exclusive: "Medina crafted", emoji: "🥿", trending: false, isNew: false, desc: "Handmade in the tanneries of Marrakech.", mapHint: "Souk des Babouches, Medina", photo: "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400&q=80" },
-      { id: 12, name: "Kaftan Robe", shop: "Atelier Nihal · Gueliz", price: "MAD 2,200", category: "Fashion", exclusive: "Atelier only", emoji: "👘", trending: false, isNew: true, desc: "Embroidered by hand in Gueliz.", mapHint: "Gueliz, Marrakech", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-    ]
-  },
   { id: 4, name: "Copenhagen", country: "Denmark", continent: "Europe", emoji: "🇩🇰", flagCode: "dk", color: "#C60C30", items: 54, tag: "Nordic Minimal", vibe: "Quiet luxury, built to last forever", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=800&q=80",
     products: [
-      { id: 13, name: "Samsøe Samsøe Wool Coat", shop: "Flagship · Strøget", price: "DKK 3,200", category: "Fashion", exclusive: "DK exclusive", emoji: "🧥", trending: false, isNew: false, desc: "Flagship carries colourways never exported.", mapHint: "Strøget, Copenhagen", photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80" },
-      { id: 14, name: "Norse Projects Gore-Tex", shop: "Norse Projects · Pilestræde", price: "DKK 4,800", category: "Fashion", exclusive: "Flagship colourway", emoji: "🧥", trending: true, isNew: false, desc: "Seasonal colourways exclusive to Pilestræde.", mapHint: "Pilestræde, Copenhagen", photo: "https://images.unsplash.com/photo-1547949003-9792a18a2601?w=400&q=80" },
-      { id: 15, name: "Ganni Archive Dress", shop: "Ganni Flagship · Amagertorv", price: "DKK 2,100", category: "Fashion", exclusive: "Archive collection", emoji: "👗", trending: false, isNew: true, desc: "Archive collection only at the Copenhagen flagship.", mapHint: "Amagertorv, Copenhagen", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-    ]
-  },
-  { id: 5, name: "Mexico City", country: "Mexico", continent: "Americas", emoji: "🇲🇽", flagCode: "mx", color: "#006847", items: 89, tag: "Artisan Culture", vibe: "Vivid folk art meets modern design", photo: "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?w=800&q=80",
-    products: [
-      { id: 16, name: "Hand-embroidered Blouse", shop: "Mercado de Artesan\u00EDas · Centro", price: "MXN 680", category: "Fashion", exclusive: "Artisan made", emoji: "👗", trending: false, isNew: false, desc: "Otomi embroidery sold only at the market.", mapHint: "Centro Hist\u00F3rico, CDMX", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-      { id: 17, name: "Carla Fern\u00E1ndez Jacket", shop: "Carla Fern\u00E1ndez · Roma Norte", price: "MXN 8,400", category: "Fashion", exclusive: "Mexico only", emoji: "🧥", trending: true, isNew: false, desc: "Mexico's most celebrated fashion designer.", mapHint: "Roma Norte, CDMX", photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80" },
-      { id: 18, name: "Leather Huarache Sandals", shop: "Taller Flores · Mercado Jamaica", price: "MXN 450", category: "Accessories", exclusive: "Handmade locally", emoji: "🥿", trending: false, isNew: false, desc: "Custom-made by the Flores family since 1963.", mapHint: "Mercado Jamaica, CDMX", photo: "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400&q=80" },
-    ]
-  },
-  { id: 7, name: "Tirana", country: "Albania", continent: "Europe", emoji: "🇦🇱", flagCode: "al", color: "#E41E20", items: 1, tag: "Hidden Gem", vibe: "Europe's best kept secret", photo: "https://images.unsplash.com/photo-1555990793-da11153b6c0e?w=800&q=80",
-    products: [
-      { id: 19, verified: "May 2026", locationType: "permanent", name: "Pure Perfume Signature Scent", shop: "Pure Perfume · Bulevardi Bajram Curri", price: "ALL 3,500", category: "Accessories", exclusive: "Only in Tirana", emoji: "🧴", trending: true, isNew: true, desc: "Albania's own luxury perfume house. No international shipping.", mapHint: "Bulevardi Bajram Curri, Tirana", photo: "https://images.unsplash.com/photo-1541643600914-78b084683702?w=400&q=80" },
+      { id: 13, verified: "May 2026", locationType: "permanent", name: "Samsøe Samsøe Wool Coat", shop: "Flagship · Strøget", price: "DKK 3,200", category: "Fashion", exclusive: "DK exclusive", emoji: "🧥", trending: false, isNew: false, desc: "Flagship carries colourways never exported abroad. You won't find these online.", mapHint: "Strøget, Copenhagen", photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80" },
+      { id: 14, verified: "May 2026", locationType: "permanent", name: "Norse Projects Gore-Tex", shop: "Norse Projects · Pilestræde", price: "DKK 4,800", category: "Fashion", exclusive: "Flagship colourway", emoji: "🧥", trending: true, isNew: false, desc: "Seasonal colourways exclusive to Pilestræde. Never restocked online.", mapHint: "Pilestræde, Copenhagen", photo: "https://images.unsplash.com/photo-1547949003-9792a18a2601?w=400&q=80" },
+      { id: 15, verified: "May 2026", locationType: "permanent", name: "Ganni Archive Dress", shop: "Ganni Flagship · Amagertorv", price: "DKK 2,100", category: "Fashion", exclusive: "Archive collection", emoji: "👗", trending: false, isNew: true, desc: "Archive collection only at the Copenhagen flagship. Not available online.", mapHint: "Amagertorv, Copenhagen", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
+      { id: 21, verified: "Jun 2026", locationType: "permanent", name: "Wood Wood Collab Tee", shop: "Wood Wood · Grønnegade", price: "DKK 699", category: "Fashion", exclusive: "Copenhagen only", emoji: "👕", trending: true, isNew: false, desc: "Copenhagen's most respected streetwear label. Collaboration drops only in-store.", mapHint: "Grønnegade, Copenhagen", photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80" },
+      { id: 22, verified: "Jun 2026", locationType: "permanent", name: "HAY Ceramic Mug Set", shop: "HAY House · Østergade", price: "DKK 450", category: "Accessories", exclusive: "Flagship exclusive colourway", emoji: "🏺", trending: false, isNew: true, desc: "HAY's own flagship carries colourways and sets not sold elsewhere.", mapHint: "Østergade 61, Copenhagen", photo: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&q=80" },
+      { id: 23, verified: "Jun 2026", locationType: "permanent", name: "Nørr11 Leather Bag", shop: "Nørr11 · Nørrebro", price: "DKK 3,800", category: "Bags", exclusive: "Made in Copenhagen", emoji: "👜", trending: false, isNew: false, desc: "Small Copenhagen leather atelier. Every bag handmade locally. No webshop.", mapHint: "Nørrebrogade, Copenhagen", photo: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=80" },
     ]
   },
 ];
 
 const allProducts = cities.flatMap(c => c.products.map(p => ({ ...p, city: c.name, color: c.color })));
-const continents = ["Africa", "Americas", "Asia", "Europe"];
+ = cities.flatMap(c => c.products.map(p => ({ ...p, city: c.name, color: c.color })));
+const continents = ["Europe"];
 
 function getCountries(cont) {
   return [...new Set(cities.filter(c => c.continent === cont).map(c => c.country))].sort();
@@ -87,12 +49,7 @@ const navItems = [
 ];
 
 const CITY_COORDS = {
-  "Seoul": [37.5665, 126.9780],
-  "Tokyo": [35.6762, 139.6503],
-  "Marrakech": [31.6295, -7.9811],
   "Copenhagen": [55.6761, 12.5683],
-  "Mexico City": [19.4326, -99.1332],
-  "Tirana": [41.3275, 19.8187],
 };
 
 const PRODUCT_COORDS = {
@@ -479,7 +436,7 @@ export default function Nomi() {
         body: JSON.stringify({
           model: "gpt-4o-mini",
           messages: [
-            { role: "system", content: "You are Local Assist — Nomi's AI guide. Help travelers find exclusive local finds that exist nowhere else. Be warm, concise and specific. Available products: " + productList },
+            { role: "system", content: "You are Local Assist — Nomi's AI guide. Help travelers discover exclusive local finds in Denmark that exist nowhere else — from Copenhagen boutiques to small town events. Be warm, concise and specific. Available products: " + productList },
             ...aiMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
             { role: "user", content: msg }
           ],
@@ -706,7 +663,7 @@ export default function Nomi() {
       {/* Desktop sidebar */}
       <div className="desktop-only" style={{ width: 280, flexShrink: 0, borderRight: "1px solid #2A1E10", height: "calc(100vh - 148px)", overflowY: "auto", position: "sticky", top: 148 }}>
         <div style={{ padding: "16px" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Cities</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>🇩🇰 Denmark</div>
           {cities.map(city => (
             <div key={city.id} onClick={() => { setContinent(city.continent); setCountry(city.country); setSelectedCity(city); setActive("explore"); }}
               style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, marginBottom: 4, cursor: "pointer", background: selectedCity?.id === city.id ? `${city.color}20` : "transparent", border: `1px solid ${selectedCity?.id === city.id ? city.color : "transparent"}`, transition: "all 0.2s" }}>
