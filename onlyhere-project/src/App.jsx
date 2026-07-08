@@ -42,6 +42,8 @@ function FlagImg({ flagCode }) {
 const navItems = [
   { id: "explore", label: "Explore", icon: "⊞" },
   { id: "events", label: "Events", icon: "◈" },
+  { id: "visits", label: "Towns", icon: "◉" },
+  { id: "essentials", label: "Essentials", icon: "✓" },
   { id: "ai", label: "AI Guide", icon: "✦" },
   { id: "map", label: "Map", icon: "⊙" },
   { id: "saved", label: "Saved", icon: "♡" },
@@ -97,187 +99,33 @@ function MapEmbed({ city }) {
 
 
 const events = [
-  {
-    id: 1,
-    name: "Præstø Litteraturfestival",
-    town: "Præstø",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "📚",
-    date: "2026-06-20",
-    dateEnd: "2026-06-21",
-    desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø. Meet Danish authors, enjoy live music and explore cobblestone streets. Almost entirely unknown to international visitors.",
-    mapHint: "Præstø Torv, 4720 Præstø, Denmark",
-    verified: "Jun 2026",
-    color: "#C60C30",
-    tags: ["Literature", "Music", "Culture"],
-  },
-  {
-    id: 2,
-    name: "Sommerdage i Præstø",
-    town: "Præstø",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "🌿",
-    date: "2026-07-04",
-    dateEnd: "2026-07-06",
-    desc: "Nature and craft festival in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky. Slow travel at its finest.",
-    mapHint: "Præstø Havn, 4720 Præstø, Denmark",
-    verified: "Jun 2026",
-    color: "#2E7D32",
-    tags: ["Craft", "Nature", "Workshop"],
-  },
-  {
-    id: 3,
-    name: "Gyldne Dage i Præstø",
-    town: "Præstø",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "🏰",
-    date: "2026-09-12",
-    dateEnd: "2026-09-13",
-    desc: "Annual historical festival in Præstø with period costumes, local food and craft stalls. One of Zealand's best kept secrets.",
-    mapHint: "Præstø Torv, 4720 Præstø, Denmark",
-    verified: "Jun 2026",
-    color: "#C60C30",
-    tags: ["History", "Culture", "Food"],
-  },
-  {
-    id: 4,
-    name: "Bondemarked på Oremandsgaard",
-    town: "Præstø",
-    country: "Denmark",
-    type: "Market",
-    emoji: "🌾",
-    date: "2026-06-06",
-    dateEnd: null,
-    desc: "Farm market at the beautiful Oremandsgaard Estate. Local food producers, organic goods, handmade crafts and the award-winning Radius Distillery on site.",
-    mapHint: "Oremandsgaard, Jungshoved, 4720 Præstø, Denmark",
-    verified: "Jun 2026",
-    color: "#C60C30",
-    tags: ["Food", "Organic", "Market"],
-  },
-  {
-    id: 5,
-    name: "Bakkefest",
-    town: "Gilleleje",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "🎵",
-    date: "2026-07-10",
-    dateEnd: "2026-07-12",
-    desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors. Sunday is free entry with a legendary herring table.",
-    mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark",
-    verified: "Jun 2026",
-    color: "#1565C0",
-    tags: ["Music", "Food", "Seaside"],
-  },
-  {
-    id: 6,
-    name: "Musik i Lejet",
-    town: "Tisvildeleje",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "🌊",
-    date: "2026-07-17",
-    dateEnd: "2026-07-19",
-    desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje. Music, art and gastronomy in stunning natural surroundings.",
-    mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark",
-    verified: "Jun 2026",
-    color: "#1565C0",
-    tags: ["Music", "Art", "Coastal"],
-  },
-  {
-    id: 7,
-    name: "Folkely Festival",
-    town: "Hundested",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "⚓",
-    date: "2026-08-20",
-    dateEnd: "2026-08-22",
-    desc: "Three days of music, art and inspiring talks across the harbour and town of Hundested. Culture in a charming fishing village most tourists never find.",
-    mapHint: "Hundested Havn, 3390 Hundested, Denmark",
-    verified: "Jun 2026",
-    color: "#1565C0",
-    tags: ["Music", "Art", "Harbour"],
-  },
-  {
-    id: 8,
-    name: "Fjordlys Festival",
-    town: "Frederiksværk",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "🎆",
-    date: "2026-07-25",
-    dateEnd: "2026-07-26",
-    desc: "Summer festival by the fjord in Frederiksværk. Live music, local food and sunset views over Isefjord. A hidden gem on the North Zealand coast.",
-    mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark",
-    verified: "Jun 2026",
-    color: "#1565C0",
-    tags: ["Music", "Food", "Fjord"],
-  },
-  {
-    id: 9,
-    name: "Haveje Beach Bar Events",
-    town: "Liseleje",
-    country: "Denmark",
-    type: "Concert",
-    emoji: "🏖",
-    date: "2026-07-14",
-    dateEnd: "2026-07-15",
-    desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches. Local acts, cold drinks and sea views.",
-    mapHint: "Haveje, Liselejevej, 3360 Liseleje, Denmark",
-    verified: "Jun 2026",
-    color: "#1565C0",
-    tags: ["Music", "Beach", "Drinks"],
-  },
-  {
-    id: 10,
-    name: "Samsø Music Festival",
-    town: "Samsø",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "🎸",
-    date: "2026-07-13",
-    dateEnd: "2026-07-19",
-    desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø. Located in a forest close to the beach. Swim in the sea between concerts.",
-    mapHint: "Samsø Festival, Mårup Kildevej 8, 8305 Samsø, Denmark",
-    verified: "Jun 2026",
-    color: "#6A1B9A",
-    tags: ["Music", "Island", "Nature"],
-  },
-  {
-    id: 11,
-    name: "Maribo Jazz Festival",
-    town: "Maribo",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "🎷",
-    date: "2026-07-18",
-    dateEnd: "2026-07-21",
-    desc: "Denmark's friendliest jazz festival in the historic town of Maribo on Lolland-Falster. 120+ musicians across 18 venues. Classic jazz, New Orleans, swing and big band.",
-    mapHint: "Maribo Domkirke, Kirkepladsen, 4930 Maribo, Denmark",
-    verified: "Jun 2026",
-    color: "#E65100",
-    tags: ["Jazz", "Music", "Historic"],
-  },
-  {
-    id: 12,
-    name: "KirsebærFestival",
-    town: "Kerteminde",
-    country: "Denmark",
-    type: "Festival",
-    emoji: "🍒",
-    date: "2026-07-17",
-    dateEnd: "2026-07-19",
-    desc: "Cherry festival in Kerteminde, Northeast Funen. A region famous for cherry orchards. Local produce, food and music. The most Danish thing you'll ever experience.",
-    mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark",
-    verified: "Jun 2026",
-    color: "#B71C1C",
-    tags: ["Food", "Local", "Seasonal"],
-  },
-]
+  { id: 1, name: "Præstø Litteraturfestival", travelTime: "1h 10min 🚂", rating: 4.6, town: "Præstø", type: "Festival", emoji: "📚", date: "2026-06-20", dateEnd: "2026-06-21", desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø. Meet Danish authors, enjoy live music and explore cobblestone streets. Almost entirely unknown to international visitors.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#C60C30", tags: ["Literature", "Music", "Culture"] },
+  { id: 2, name: "Sommerdage i Præstø", travelTime: "1h 10min 🚂", rating: 4.4, town: "Præstø", type: "Festival", emoji: "🌿", date: "2026-07-04", dateEnd: "2026-07-06", desc: "Nature and craft festival in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky. Slow travel at its finest.", mapHint: "Præstø Havn, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Craft", "Nature", "Workshop"] },
+  { id: 3, name: "Gyldne Dage i Præstø", travelTime: "1h 10min 🚂", rating: 4.3, town: "Præstø", type: "Festival", emoji: "🏰", date: "2026-09-12", dateEnd: "2026-09-13", desc: "Annual historical festival in Præstø with period costumes, local food and craft stalls. One of Zealand's best kept secrets.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#C60C30", tags: ["History", "Culture", "Food"] },
+  { id: 4, name: "Bondemarked på Oremandsgaard", travelTime: "1h 10min 🚂", rating: 4.5, town: "Præstø", type: "Market", emoji: "🌾", date: "2026-06-06", dateEnd: null, desc: "Farm market at the beautiful Oremandsgaard Estate. Local food producers, organic goods, handmade crafts and the award-winning Radius Distillery on site.", mapHint: "Oremandsgaard, Jungshoved, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#C60C30", tags: ["Food", "Organic", "Market"] },
+  { id: 5, name: "Bakkefest", travelTime: "1h 15min 🚂", rating: 4.7, town: "Gilleleje", type: "Festival", emoji: "🎵", date: "2026-07-10", dateEnd: "2026-07-12", desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors. Sunday is free entry with a legendary herring table.", mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Food", "Seaside"] },
+  { id: 6, name: "Musik i Lejet", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje. Music, art and gastronomy in stunning natural surroundings.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Art", "Coastal"] },
+  { id: 7, name: "Folkely Festival", travelTime: "1h 30min 🚂", rating: 4.5, town: "Hundested", type: "Festival", emoji: "⚓", date: "2026-08-20", dateEnd: "2026-08-22", desc: "Three days of music, art and inspiring talks in Hundested harbour. Culture in a charming fishing village most tourists never find.", mapHint: "Hundested Havn, 3390 Hundested, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Art", "Harbour"] },
+  { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", desc: "Summer festival by the fjord in Frederiksværk. Live music, local food and sunset views over Isefjord. A hidden gem on the North Zealand coast.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Food", "Fjord"] },
+  { id: 9, name: "Haveje Beach Bar Events", travelTime: "1h 20min 🚂", rating: 4.4, town: "Liseleje", type: "Concert", emoji: "🏖", date: "2026-07-14", dateEnd: "2026-07-15", desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches. Local acts, cold drinks and sea views.", mapHint: "Liselejevej, 3360 Liseleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Beach", "Drinks"] },
+  { id: 10, name: "Samsø Music Festival", travelTime: "2h 30min 🚢", rating: 4.9, town: "Samsø", type: "Festival", emoji: "🎸", date: "2026-07-13", dateEnd: "2026-07-19", desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø. Located in a forest close to the beach. Swim in the sea between concerts.", mapHint: "Mårup Kildevej 8, 8305 Samsø, Denmark", verified: "Jun 2026", color: "#6A1B9A", tags: ["Music", "Island", "Nature"] },
+  { id: 11, name: "Maribo Jazz Festival", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", desc: "Denmark's friendliest jazz festival in the historic town of Maribo on Lolland-Falster. 120+ musicians across 18 venues. Classic jazz, New Orleans, swing and big band.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Music", "Historic"] },
+  { id: 12, name: "KirsebærFestival", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", desc: "Cherry festival in Kerteminde, Northeast Funen. A region famous for cherry orchards. Local produce, food and music. The most Danish thing you'll ever experience.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local", "Seasonal"] },
+];
+
+const majorEvents = [
+  { id: 101, name: "Roskilde Festival", travelTime: "25min 🚂", rating: 4.9, ticketStatus: "sold_out", town: "Roskilde", type: "Music", emoji: "🎸", date: "2026-06-27", dateEnd: "2026-07-04", desc: "Northern Europe's largest music festival. 130,000 attendees, 8 stages, 8 days. Running since 1971. 30 min from Copenhagen by train.", mapHint: "Roskilde Festival, Darupvej 35, 4000 Roskilde, Denmark", verified: "Jun 2026", color: "#E53935", tags: ["Music", "Camping", "International"] },
+  { id: 102, name: "Distortion", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods. Electronic music and 100,000+ people in the streets.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street", "Urban"] },
+  { id: 103, name: "Aalborg Karneval", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aalborg", type: "Cultural", emoji: "🎭", date: "2026-05-20", dateEnd: "2026-05-24", desc: "Scandinavia's largest carnival. 100,000+ participants in costumes parading through Aalborg. Samba, floats and street performances.", mapHint: "Aalborg Centrum, 9000 Aalborg, Denmark", verified: "Jun 2026", color: "#F57F17", tags: ["Carnival", "Parade", "Costume"] },
+  { id: 104, name: "Copenhagen Jazz Festival", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🎷", date: "2026-07-03", dateEnd: "2026-07-12", desc: "10 days of jazz across 100+ venues in Copenhagen. Free concerts in squares and parks. One of Europe's most important jazz festivals.", mapHint: "Copenhagen City Hall Square, Denmark", verified: "Jun 2026", color: "#00695C", tags: ["Jazz", "Free", "City-wide"] },
+  { id: 105, name: "Smukfest", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg. Rock, pop, folk, hip-hop. 50,000 attendees.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest", "Camping"] },
+  { id: 106, name: "NorthSide Festival", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aarhus", type: "Music", emoji: "🎪", date: "2026-06-05", dateEnd: "2026-06-07", desc: "Aarhus's biggest music festival with eco-friendly focus. International headliners and Denmark's most sustainable festival setup.", mapHint: "NorthSide Festival, Eskelundsvej, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Eco", "International"] },
+  { id: 107, name: "Aarhus Festuge", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", desc: "One of Scandinavia's largest cultural festivals. 10 days of music, theatre, art and gastronomy. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Art", "Free"] },
+  { id: 108, name: "Tønder Festival", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", desc: "Scandinavia's leading folk and roots festival near the German border. Running since 1975 with an international following.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots", "International"] },
+  { id: 110, name: "Odense Flower Festival", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", desc: "200,000+ flowers transform the entire city centre of Odense. Streets, alleys, parks and squares become a floral paradise themed around Hans Christian Andersen's fairy tales. Free entry. Running since 1999.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free", "Family", "Culture"], ticketStatus: "free", travelTime: "1h 30min 🚂", rating: 4.7 },
+  { id: 111, name: "H.C. Andersen Festivals", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", desc: "Denmark's largest cultural festival with 500+ events across 10 days in Hans Christian Andersen's hometown. Street theatre, concerts, light shows, puppet shows and the famous Flower Festival — most events completely free.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free", "Family", "Theatre"], ticketStatus: "free", travelTime: "1h 30min 🚂", rating: 4.8 },
+  { id: 109, name: "Triangle Folklore Festival", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform traditional dance and music in the streets of Vejle. Running since 1995 — completely unknown to most international travelers.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance", "International", "Culture"] },
+];
 
 const getEventDate = (dateStr, dateEnd) => {
   const d = new Date(dateStr);
@@ -291,6 +139,104 @@ const getEventDate = (dateStr, dateEnd) => {
 
 const isUpcoming = (dateStr) => new Date(dateStr) >= new Date();
 const daysUntil = (dateStr) => Math.ceil((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24));
+
+
+const majorEvents = [
+  { id: 101, name: "Roskilde Festival", travelTime: "25min 🚂", rating: 4.9, ticketStatus: "sold_out", town: "Roskilde", type: "Music", emoji: "🎸", date: "2026-06-27", dateEnd: "2026-07-04", desc: "Northern Europe's largest music festival. 130,000 attendees, 8 stages, 8 days. Running since 1971. 30 min from Copenhagen by train.", mapHint: "Roskilde Festival, Darupvej 35, 4000 Roskilde, Denmark", verified: "Jun 2026", color: "#E53935", tags: ["Music", "Camping", "International"] },
+  { id: 102, name: "Distortion", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "available", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods. Electronic music and 100,000+ people in the streets.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street", "Urban"] },
+  { id: 103, name: "Aalborg Karneval", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aalborg", type: "Cultural", emoji: "🎭", date: "2026-05-20", dateEnd: "2026-05-24", desc: "Scandinavia's largest carnival. 100,000+ participants in costumes parading through Aalborg. Samba, floats and street performances.", mapHint: "Aalborg Centrum, 9000 Aalborg, Denmark", verified: "Jun 2026", color: "#F57F17", tags: ["Carnival", "Parade", "Costume"] },
+  { id: 104, name: "Copenhagen Jazz Festival", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "available", town: "Copenhagen", type: "Music", emoji: "🎷", date: "2026-07-03", dateEnd: "2026-07-12", desc: "10 days of jazz across 100+ venues in Copenhagen. Free concerts in squares and parks. One of Europe's most important jazz festivals.", mapHint: "Copenhagen City Hall Square, Denmark", verified: "Jun 2026", color: "#00695C", tags: ["Jazz", "Free", "City-wide"] },
+  { id: 105, name: "Smukfest", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg. Rock, pop, folk, hip-hop. 50,000 attendees.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest", "Camping"] },
+  { id: 106, name: "NorthSide Festival", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aarhus", type: "Music", emoji: "🎪", date: "2026-06-05", dateEnd: "2026-06-07", desc: "Aarhus's biggest music festival with eco-friendly focus. International headliners and Denmark's most sustainable festival setup.", mapHint: "NorthSide Festival, Eskelundsvej, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Eco", "International"] },
+  { id: 107, name: "Aarhus Festuge", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "available", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", desc: "One of Scandinavia's largest cultural festivals. 10 days of music, theatre, art and gastronomy. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Art", "Free"] },
+  { id: 108, name: "Tønder Festival", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", desc: "Scandinavia's leading folk and roots festival near the German border. Running since 1975 with an international following.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots", "International"] },
+];
+
+const towns = [
+  { id: 1, name: "Ribe", region: "South Jutland", emoji: "⛪", tag: "Denmark's oldest town", desc: "Founded around 700 AD — the oldest town in Scandinavia. Medieval cathedral, Viking museum and cobblestone streets unchanged for centuries.", highlight: "Viking Center Ribe — artisans craft authentic Viking jewellery, leather and textiles on site. Buy directly from the maker.", travelTime: "3h 15min 🚂", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80", mapHint: "Ribe, 6760 Ribe, Denmark", nomiPotential: "High" },
+  { id: 2, name: "Dragør", region: "Copenhagen Area", emoji: "⚓", tag: "Fisherman's village", desc: "Just 12km from Copenhagen — yellow ochre houses, a working harbour, cobblestone streets and fishing boats. Feels like another era.", highlight: "The harbour fish stalls sell smoked fish caught the same morning. No menus, no TripAdvisor. Just walk up and point.", travelTime: "30min 🚌", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80", mapHint: "Dragør Havn, 2791 Dragør, Denmark", nomiPotential: "High" },
+  { id: 3, name: "Ærøskøbing", region: "Funen", emoji: "🏡", tag: "Denmark's fairy-tale town", desc: "750-year-old town on the island of Ærø. Half-timbered houses, flower-lined streets, no cars in the centre. One of Europe's best preserved small towns.", highlight: "The local bottle ship museum — a man spent decades making ships inside bottles. Completely unique, completely unknown internationally.", travelTime: "3h + ferry 🚢", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80", mapHint: "Ærøskøbing, 5970 Ærø, Denmark", nomiPotential: "Very High" },
+  { id: 4, name: "Skagen", region: "North Jutland", emoji: "🌊", tag: "Where two seas meet", desc: "Denmark's northernmost town. Where the North Sea and Baltic Sea collide at Grenen. Yellow houses, artist culture and the most dramatic light in Scandinavia.", highlight: "The local fish auction starts at 6am on weekdays. Fresh fish sold direct from boats. Tourists never find this.", travelTime: "4h 🚂", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80", mapHint: "Skagen, 9990 Skagen, Denmark", nomiPotential: "High" },
+  { id: 5, name: "Præstø", region: "Zealand", emoji: "🏘", tag: "Hidden countryside gem", desc: "South of Copenhagen — cobbled streets, old market square, preserved 18th century buildings. The kind of town that makes you wonder why nobody talks about it.", highlight: "Oremandsgaard Estate nearby sells locally produced goods from their own farm and distillery. Not on any tourist map.", travelTime: "1h 10min 🚂", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80", mapHint: "Præstø Torv, 4720 Præstø, Denmark", nomiPotential: "Very High" },
+  { id: 6, name: "Faaborg", region: "Funen", emoji: "🌿", tag: "Old-world harbour charm", desc: "Quiet harbour town on the south coast of Funen. 17th century merchant buildings, cobblestone alleys, local ceramics and a strong local food scene.", highlight: "The local ceramics workshop near the harbour sells pieces made on site. Cash only, no website, no shipping.", travelTime: "2h 30min 🚂", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80", mapHint: "Faaborg Havn, 5600 Faaborg, Denmark", nomiPotential: "High" },
+  { id: 7, name: "Gudhjem", region: "Bornholm", emoji: "🐟", tag: "Baltic island village", desc: "Atmospheric fishing village on Bornholm with half-timbered houses on steep winding streets. Home of the legendary Sol over Gudhjem smoked herring dish.", highlight: "Røgeriet — the old smokehouse. You can watch them smoke herring the traditional way and eat it right there on the harbour.", travelTime: "2h + ferry 🚢", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80", mapHint: "Gudhjem Havn, 3760 Gudhjem, Bornholm", nomiPotential: "Very High" },
+  { id: 8, name: "Sønderho", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island on the west coast. Thatched houses, winding lanes, seals in the Wadden Sea National Park. Almost no tourists.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts that have been made on the island for centuries. Tiny, intimate, extraordinary.", travelTime: "3h + ferry 🚢", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
+];
+
+const essentials = [
+  {
+    id: 1,
+    name: "Rejsekort",
+    category: "Transport",
+    emoji: "🚇",
+    desc: "Denmark's public transport card — works on trains, buses and metro across the entire country. Much cheaper than buying individual tickets. Pay as you go, just tap in and out.",
+    howTo: "Buy at any train station or DSB ticket machine. Costs 80 DKK deposit. Top up with cash or card.",
+    price: "80 DKK deposit + top-up",
+    link: "https://www.rejsekort.dk/en",
+    tip: "Always remember to check OUT when leaving transport — or you get charged max fare.",
+    icon: "🟦",
+  },
+  {
+    id: 2,
+    name: "Rent a Bike",
+    category: "Transport",
+    emoji: "🚲",
+    desc: "Denmark is the cycling capital of the world. Copenhagen has over 390km of dedicated cycle lanes. Renting a bike is the best way to see the city — and completely normal here.",
+    howTo: "Bycyklen electric city bikes are available across Copenhagen via the app. Or rent from local bike shops from around 100 DKK/day.",
+    price: "From 100 DKK/day",
+    link: "https://bycyklen.dk/en/",
+    tip: "Cycle on the right, signal with your arm, and always lock up. Bike theft is common in Copenhagen.",
+    icon: "🟩",
+  },
+  {
+    id: 3,
+    name: "MobilePay",
+    category: "Payments",
+    emoji: "📱",
+    desc: "Denmark's universal payment app. Almost every market stall, small shop and local vendor accepts MobilePay — even if they don't take cards. Essential for local markets and hidden shops.",
+    howTo: "Download the MobilePay app. Requires a Danish phone number or international setup. Link your credit card.",
+    price: "Free to use",
+    link: "https://www.mobilepay.dk/erhverv/international-customers",
+    tip: "Many small Nomi-style businesses ONLY accept MobilePay or cash. Download it before you go.",
+    icon: "🟣",
+  },
+  {
+    id: 4,
+    name: "DSB App",
+    category: "Transport",
+    emoji: "🚂",
+    desc: "The Danish national railway app. Book train tickets, check schedules and get real-time delays. Essential for getting around Denmark beyond Copenhagen.",
+    howTo: "Download the DSB app and create an account. Buy tickets in advance for cheaper prices.",
+    price: "Free app, tickets vary",
+    link: "https://www.dsb.dk/en/",
+    tip: "Buy Orange tickets (Orangebilletter) weeks in advance for up to 50% off standard prices.",
+    icon: "🔴",
+  },
+  {
+    id: 5,
+    name: "Copenhagen Card",
+    category: "Sightseeing",
+    emoji: "🎟",
+    desc: "All-in-one card covering free entry to 89 attractions, unlimited public transport and discounts across Copenhagen. Worth it if you're staying 2+ days and plan to visit museums.",
+    howTo: "Buy online at copenhagencard.com or at the airport. Available for 24h, 48h, 72h or 120h.",
+    price: "From 499 DKK (24h)",
+    link: "https://www.copenhagencard.com",
+    tip: "The Tivoli entry alone is 150 DKK — the card pays for itself quickly if you visit 3+ attractions.",
+    icon: "🟡",
+  },
+  {
+    id: 6,
+    name: "eSIM or Local SIM",
+    category: "Connectivity",
+    emoji: "📶",
+    desc: "EU roaming covers most European visitors in Denmark. If you're from outside the EU, get a local SIM or eSIM — essential for navigation, MobilePay and finding Nomi hidden spots.",
+    howTo: "Buy a SIM at 7-Eleven, Netto or any phone shop. Lebara and Lycamobile work well and are cheap.",
+    price: "From 49 DKK",
+    link: null,
+    tip: "Make sure your phone is unlocked before traveling. Most Danish SIMs work immediately.",
+    icon: "🟤",
+  },
+];
 
 
 export default function Nomi() {
@@ -307,6 +253,7 @@ export default function Nomi() {
   const [eventMonth, setEventMonth] = useState(null);
   const [eventType, setEventType] = useState(null);
   const [eventTab, setEventTab] = useState("local");
+  const [townFilter, setTownFilter] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -753,40 +700,31 @@ export default function Nomi() {
               </button>
             </div>
 
-            {/* Sequential filters */}
+                        {/* Filters */}
             <div style={{ marginBottom: 16 }}>
-
-              {/* Step 1 — Date */}
               <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: eventMonth ? 14 : 0 }}>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14 }}>
                 {["All", "Jun", "Jul", "Aug", "Sep"].map(m => (
-                  <button key={m} onClick={() => { setEventMonth(m === "All" ? null : (eventMonth === m ? null : m)); setEventType(null); }}
+                  <button key={m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))}
                     style={{ background: (m === "All" && !eventMonth) || eventMonth === m ? "#D4B483" : "#1E1610", color: (m === "All" && !eventMonth) || eventMonth === m ? "#16120A" : "#8A7355", border: `1px solid ${(m === "All" && !eventMonth) || eventMonth === m ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
                     {m}
                   </button>
                 ))}
               </div>
-
-              {/* Step 2 — Type (only after date picked) */}
-              {eventMonth && (
-                <>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
-                  <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                    {(eventTab === "local"
-                      ? ["All", "Festival", "Market", "Concert", "North Zealand"]
-                      : ["All", "Music", "Cultural"]
-                    ).map(f => (
-                      <button key={f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))}
-                        style={{ background: (f === "All" && !eventType) || eventType === f ? "#D4B483" : "#1E1610", color: (f === "All" && !eventType) || eventType === f ? "#16120A" : "#8A7355", border: `1px solid ${(f === "All" && !eventType) || eventType === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-                        {f}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                {(eventTab === "local"
+                  ? ["All", "Festival", "Market", "Concert", "North Zealand"]
+                  : ["All", "Music", "Cultural"]
+                ).map(f => (
+                  <button key={f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))}
+                    style={{ background: (f === "All" && !eventType) || eventType === f ? "#D4B483" : "#1E1610", color: (f === "All" && !eventType) || eventType === f ? "#16120A" : "#8A7355", border: `1px solid ${(f === "All" && !eventType) || eventType === f ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    {f}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Events list */}
             {(eventTab === "local" ? events : majorEvents)
               .filter(e => isUpcoming(e.date))
               .filter(e => {
@@ -809,9 +747,22 @@ export default function Nomi() {
                           <span style={{ fontSize: 18 }}>{event.emoji}</span>
                           <span style={{ fontSize: 15, fontWeight: 700, color: "#EDE0C4", fontFamily: "'Cormorant Garamond', serif" }}>{event.name}</span>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 10, fontWeight: 700, color: event.color, background: `${event.color}18`, padding: "3px 8px", borderRadius: 100 }}>{event.type}</span>
-                          <span style={{ fontSize: 11, color: "#8A7355" }}>{event.town} · {event.country}</span>
+                          <span style={{ fontSize: 11, color: "#8A7355" }}>{event.town}</span>
+                        </div>
+                        {/* Rating + Travel time */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                            <span style={{ color: "#D4B483", fontSize: 11 }}>★</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#EDE0C4" }}>{event.rating}</span>
+                          </div>
+                          <span style={{ fontSize: 10, color: "#6B5442" }}>·</span>
+                          <span style={{ fontSize: 11, color: "#8A7355" }}>{event.travelTime} from CPH</span>
+                          {event.ticketStatus === "sold_out" && <span style={{ fontSize: 10, fontWeight: 700, color: "#ff4444", background: "#ff444422", padding: "2px 8px", borderRadius: 100 }}>🔴 Sold out</span>}
+                          {event.ticketStatus === "selling_fast" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "2px 8px", borderRadius: 100 }}>🟡 Selling fast</span>}
+                          {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "2px 8px", borderRadius: 100 }}>🟢 Tickets available</span>}
+                          {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "2px 8px", borderRadius: 100 }}>✓ Free entry</span>}
                         </div>
                       </div>
                       {/* Days until */}
@@ -906,6 +857,111 @@ export default function Nomi() {
                 <div style={{ fontSize: 12, marginTop: 6 }}>Check back soon — we add new events weekly</div>
               </div>
             )}
+          </div>
+        )}
+
+        {active === "visits" && (
+          <div className="slide-up" style={{ padding: "16px" }}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>◉ Local Towns</div>
+              <div style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Denmark's most beautiful hidden towns — beyond the capital</div>
+            </div>
+
+            {/* Region filter */}
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+              {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "Bornholm", "Fanø Island"].map(r => (
+                <button key={r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))}
+                  style={{ background: (r === "All" && !townFilter) || townFilter === r ? "#D4B483" : "#1E1610", color: (r === "All" && !townFilter) || townFilter === r ? "#16120A" : "#8A7355", border: `1px solid ${(r === "All" && !townFilter) || townFilter === r ? "#D4B483" : "#2A1E10"}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            {towns.filter(t => !townFilter || t.region === townFilter).map(town => (
+              <div key={town.id} style={{ background: "#1E1610", borderRadius: 18, marginBottom: 12, overflow: "hidden", border: "1px solid #2A1E10" }}>
+                {/* Header */}
+                <div style={{ padding: "14px 16px 10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 20 }}>{town.emoji}</span>
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "#EDE0C4", fontFamily: "'Cormorant Garamond', serif" }}>{town.name}</div>
+                          <div style={{ fontSize: 10, color: "#8A7355", textTransform: "uppercase", letterSpacing: 0.5 }}>{town.region}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#D4B483", fontWeight: 700, marginBottom: 6 }}>{town.tag}</div>
+                      <div style={{ fontSize: 12, color: "#8A7355", lineHeight: 1.6, marginBottom: 10 }}>{town.desc}</div>
+
+                      {/* Nomi highlight */}
+                      <div style={{ background: "#2A1E10", borderRadius: 10, padding: "10px 12px", marginBottom: 10, borderLeft: "3px solid #D4B483" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#D4B483", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>◆ Nomi Find</div>
+                        <div style={{ fontSize: 12, color: "#EDE0C4", lineHeight: 1.5 }}>{town.highlight}</div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ fontSize: 11, color: "#8A7355" }}>{town.travelTime} from CPH</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: town.nomiPotential === "Very High" ? "#4CAF50" : "#D4B483", background: town.nomiPotential === "Very High" ? "#4CAF5022" : "#D4B48322", padding: "2px 8px", borderRadius: 100 }}>
+                          {town.nomiPotential === "Very High" ? "⭐ Top Nomi Pick" : "◆ Nomi Pick"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Map */}
+                <div style={{ height: 160 }}>
+                  <iframe title={town.name} width="100%" height="160" frameBorder="0" style={{ border: 0, display: "block" }}
+                    src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(town.mapHint)}&zoom=12`} />
+                </div>
+
+                {/* Actions */}
+                <div style={{ padding: "10px 16px 14px", display: "flex", gap: 8 }}>
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(town.mapHint)}`} target="_blank" rel="noreferrer"
+                    style={{ flex: 1, background: "#D4B483", color: "#16120A", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center", display: "block" }}>
+                    ↗ Get Directions
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {active === "essentials" && (
+          <div className="slide-up" style={{ padding: "16px" }}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>✓ Travel Essentials</div>
+              <div style={{ fontSize: 12, color: "#8A7355", marginTop: 3 }}>Everything you need to travel Denmark like a local</div>
+            </div>
+
+            {["Transport", "Payments", "Sightseeing", "Connectivity"].map(cat => (
+              <div key={cat} style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{cat}</div>
+                {essentials.filter(e => e.category === cat).map(item => (
+                  <div key={item.id} style={{ background: "#1E1610", borderRadius: 16, padding: "14px 16px", marginBottom: 10, border: "1px solid #2A1E10" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                      <span style={{ fontSize: 22 }}>{item.emoji}</span>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#EDE0C4", fontFamily: "'Cormorant Garamond', serif" }}>{item.name}</div>
+                        <div style={{ fontSize: 11, color: "#D4B483", fontWeight: 600 }}>{item.price}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#8A7355", lineHeight: 1.6, marginBottom: 8 }}>{item.desc}</div>
+                    <div style={{ background: "#2A1E10", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#D4B483", marginBottom: 3 }}>How to get it</div>
+                      <div style={{ fontSize: 11, color: "#EDE0C4", lineHeight: 1.5 }}>{item.howTo}</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#6B5442", fontStyle: "italic", marginBottom: item.link ? 8 : 0 }}>💡 {item.tip}</div>
+                    {item.link && (
+                      <a href={item.link} target="_blank" rel="noreferrer"
+                        style={{ display: "inline-block", background: "#D4B483", color: "#16120A", borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 4 }}>
+                        Learn more ↗
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         )}
 
