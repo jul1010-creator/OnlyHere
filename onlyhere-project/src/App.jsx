@@ -101,7 +101,7 @@ const PRODUCT_COORDS = {
   21: [55.6820, 12.5710], 22: [55.6795, 12.5830], 23: [55.6980, 12.5500],
 };
 
-const APP_VERSION = "v2.7 — single hero video loop";
+const APP_VERSION = "v2.10 — fused sticky nav";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -308,6 +308,14 @@ export default function Gemlyx() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.bg}; }
         ::-webkit-scrollbar { width: 0; }
+        @media (min-width: 900px) {
+          ::-webkit-scrollbar { width: 10px; }
+          ::-webkit-scrollbar-track { background: #0A0F1E; }
+          ::-webkit-scrollbar-thumb { background: #2A3A52; border-radius: 100px; }
+          ::-webkit-scrollbar-thumb:hover { background: #6B7A99; }
+        }
+        .hero-h { height: calc(100vh - 108px); }
+        @supports (height: 100dvh) { .hero-h { height: calc(100dvh - 108px); } }
         .slide-up { animation: slideUp 0.2s ease; }
         @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
         @keyframes nudge { 0%, 100% { transform: translateX(0); opacity: 0.6; } 50% { transform: translateX(4px); opacity: 1; } }
@@ -319,8 +327,9 @@ export default function Gemlyx() {
         @media (min-width: 900px) { .products-grid { grid-template-columns: 1fr 1fr 1fr 1fr; } }
       `}</style>
 
+      <div style={{ position: "sticky", top: 0, zIndex: 100 }}>
       {/* ── HEADER ─────────────────────────────────────────── */}
-      <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "44px 16px 10px", position: "sticky", top: 0, zIndex: 100 }}>
+      <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {/* Logo */}
           <div onClick={() => setActive("home")} style={{ cursor: "pointer" }}>
@@ -374,7 +383,7 @@ export default function Gemlyx() {
 
       {/* ── TOP NAV TABS ───────────────────────────────────── */}
       {(
-        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "sticky", top: 73, zIndex: 90 }}>
+        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "relative" }}>
           <div onScroll={e => setTabArrow(e.target.scrollLeft + e.target.clientWidth < e.target.scrollWidth - 8)}
             style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content" }}>
@@ -399,11 +408,12 @@ export default function Gemlyx() {
           )}
         </div>
       )}
+      </div>
 
       {/* ── DROPDOWN MENU ──────────────────────────────────── */}
       {showMenu && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
-          <div style={{ position: "absolute", top: 90, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
+          <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
             <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }`}</style>
             {[
               { id: "home", label: "🧭 Explore", action: "nav" },
@@ -431,7 +441,7 @@ export default function Gemlyx() {
       <div style={{ display: "flex", width: "100%" }}>
 
         {/* Desktop sidebar */}
-        <div className="desktop-only" style={{ width: 240, flexShrink: 0, borderRight: `1px solid ${C.border}`, height: "calc(100vh - 73px)", overflowY: "auto", position: "sticky", top: 73, background: C.bg, padding: "16px 12px" }}>
+        <div className="desktop-only" style={{ width: 240, flexShrink: 0, borderRight: `1px solid ${C.border}`, height: "calc(100vh - 108px)", overflowY: "auto", position: "sticky", top: 108, background: C.bg, padding: "16px 12px" }}>
           {[
             { id: "home", label: "Explore", icon: "🧭" },
             { id: "explore", label: "Merchandise", icon: "🏪" },
@@ -445,31 +455,21 @@ export default function Gemlyx() {
               {item.label}
             </button>
           ))}
-          <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 16, paddingTop: 16 }}>
-            <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>🇩🇰 Denmark</div>
-            {cities.map(city => (
-              <button key={city.id} onClick={() => { setSelectedCity(city); setActive("explore"); }}
-                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: selectedCity?.id === city.id ? `${city.color}22` : "transparent", color: selectedCity?.id === city.id ? city.color : C.muted, border: `1px solid ${selectedCity?.id === city.id ? city.color : "transparent"}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 4, textAlign: "left" }}>
-                🇩🇰 {city.name}
-                <span style={{ marginLeft: "auto", fontSize: 11 }}>{city.products.length}</span>
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Main content */}
-        <div style={{ flex: 1, height: "calc(100vh - 73px)", overflowY: "auto", paddingBottom: 20 }}>
+        <div style={{ flex: 1, minWidth: 0, paddingBottom: 20 }}>
 
 
           {/* ── HOME LANDING ─────────────────────────────────── */}
           {active === "home" && (
             <div className="slide-up" style={{ margin: "-0px -0px" }}>
               {/* Hero */}
-              <div style={{ height: "calc(100vh - 73px)", position: "relative", overflow: "hidden" }}>
+              <div className="hero-h" style={{ position: "relative", overflow: "hidden" }}>
                 {!videoError ? (
                   <video src="/video1.mp4" autoPlay muted loop playsInline poster="/picture3.png"
                     onError={() => setVideoError(true)}
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center" }} />
                 ) : (
                   <img src="/picture3.png" alt="Denmark" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 )}
@@ -562,7 +562,7 @@ export default function Gemlyx() {
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.7 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.10 — Jul 2026</div>
               </div>
             </div>
           )}
