@@ -101,7 +101,7 @@ const PRODUCT_COORDS = {
   21: [55.6820, 12.5710], 22: [55.6795, 12.5830], 23: [55.6980, 12.5500],
 };
 
-const APP_VERSION = "v2.5 — simpler AI + pro footer";
+const APP_VERSION = "v2.7 — single hero video loop";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -134,6 +134,8 @@ export default function Gemlyx() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiBottomRef = useRef(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const [tabArrow, setTabArrow] = useState(true);
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
@@ -308,6 +310,7 @@ export default function Gemlyx() {
         ::-webkit-scrollbar { width: 0; }
         .slide-up { animation: slideUp 0.2s ease; }
         @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes nudge { 0%, 100% { transform: translateX(0); opacity: 0.6; } 50% { transform: translateX(4px); opacity: 1; } }
         @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(6px); } }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }
@@ -371,7 +374,9 @@ export default function Gemlyx() {
 
       {/* ── TOP NAV TABS ───────────────────────────────────── */}
       {(
-        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "sticky", top: 73, zIndex: 90, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "sticky", top: 73, zIndex: 90 }}>
+          <div onScroll={e => setTabArrow(e.target.scrollLeft + e.target.clientWidth < e.target.scrollWidth - 8)}
+            style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content" }}>
             {[
               { id: "home", label: "🧭 Explore" },
@@ -386,6 +391,12 @@ export default function Gemlyx() {
               </button>
             ))}
           </div>
+          </div>
+          {tabArrow && (
+            <div className="mobile-only" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 56, background: `linear-gradient(to right, transparent, ${C.bg} 70%)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, pointerEvents: "none" }}>
+              <span style={{ color: C.light, fontSize: 18, fontWeight: 700, animation: "nudge 1.4s ease-in-out infinite" }}>›</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -455,7 +466,13 @@ export default function Gemlyx() {
             <div className="slide-up" style={{ margin: "-0px -0px" }}>
               {/* Hero */}
               <div style={{ height: "calc(100vh - 73px)", position: "relative", overflow: "hidden" }}>
-                <img src="/picture1.jpg" alt="Denmark" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                {!videoError ? (
+                  <video src="/video1.mp4" autoPlay muted loop playsInline poster="/picture3.png"
+                    onError={() => setVideoError(true)}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <img src="/picture3.png" alt="Denmark" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                )}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(10,15,30,0.3) 0%, rgba(10,15,30,0.7) 100%)" }} />
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 24px" }}>
                   <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#fff", marginBottom: 8, textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>◆ Gemlyx</div>
@@ -471,7 +488,7 @@ export default function Gemlyx() {
               {/* Navigation sections */}
               {[
                 { id: "explore", img: "/picture2.png", title: "Merchandise", sub: "Exclusive finds that exist nowhere else", icon: "🏪" },
-                { id: "events", img: "/picture3.png", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
+                { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
                 { id: "craft", img: "/picture5.jpg", title: "Local Craft", sub: "Commission something made by hand", icon: "🔨" },
               ].map((section, i) => (
@@ -545,7 +562,7 @@ export default function Gemlyx() {
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.5 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.7 — Jul 2026</div>
               </div>
             </div>
           )}
