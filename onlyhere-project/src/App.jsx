@@ -3,223 +3,185 @@ import { useState, useEffect, useRef } from "react";
 const SUPABASE_URL = "https://vpxfahjnerkkkoueovhl.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweGZhaGpuZXJra2tvdWVvdmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4OTYsImV4cCI6MjA5NTMxMDg5Nn0.-GgXeog0DufIz6WNXn_8pIzxmQfkHRK3Lz8V71O-v_c";
 
-async function sbFetch(table, params = "") {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  });
-  return res.json();
-}
-
-const COUNTRY_FLAGS = {
-  "South Korea": "🇰🇷",
-  "Japan": "🇯🇵",
-  "Morocco": "🇲🇦",
-  "Denmark": "🇩🇰",
-  "Mexico": "🇲🇽",
-  "Albania": "🇦🇱",
+// ─── COLORS ───────────────────────────────────────────────────
+const C = {
+  bg: "#0A0F1E",         // deep navy
+  surface: "#111827",    // card background
+  border: "#1E2A3A",     // border
+  accent: "#C8102E",     // Danish red
+  gold: "#D4AF37",       // gold accent
+  text: "#F0F4FF",       // primary text
+  muted: "#6B7A99",      // muted text
+  light: "#9AA5BE",      // light text
 };
 
 const cities = [
-  { id: 1, name: "Seoul", country: "South Korea", continent: "Asia", emoji: "🇰🇷", flagCode: "kr", color: "#FF3D9A", items: 124, tag: "K-Fashion Capital", vibe: "Bold neons meet minimalist structure", photo: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=800&q=80",
+  { id: 4, name: "Copenhagen", country: "Denmark", flagCode: "dk", color: C.accent, tag: "Nordic Minimal", vibe: "Quiet luxury, built to last forever", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=800&q=80",
     products: [
-      { id: 1, verified: "May 2026", locationType: "permanent", name: "Ader Error Oversized Hoodie", shop: "Ader Error Flagship · Sinchon", price: "₩189,000", category: "Fashion", exclusive: "Seoul only", emoji: "👕", trending: false, isNew: false, desc: "Concept-driven Seoul label. Not sold internationally.", mapHint: "Sinchon-ro, Mapo-gu", photo: "https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400&q=80" },
-      { id: 2, verified: "May 2026", locationType: "permanent", name: "Gentle Monster Sunglasses", shop: "GM Haus Dosan · Gangnam", price: "₩380,000", category: "Accessories", exclusive: "Seoul exclusive drop", emoji: "🕶️", trending: true, isNew: false, desc: "Avant-garde eyewear. Only in Haus Dosan.", mapHint: "Dosan-daero, Gangnam-gu", photo: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&q=80" },
-      { id: 3, name: "Musinsa Standard Denim", shop: "Musinsa Store · Hongdae", price: "₩89,000", category: "Fashion", exclusive: "Korea only", emoji: "👖", trending: false, isNew: false, desc: "Korea's biggest fashion platform in-house label.", mapHint: "Hongdae, Mapo-gu", photo: "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&q=80" },
-      { id: 4, name: "Kuho Silk Wrap Dress", shop: "Kuho Flagship · Cheongdam", price: "₩420,000", category: "Fashion", exclusive: "Korea flagship only", emoji: "👗", trending: false, isNew: false, desc: "Premium Korean womenswear. Flagship-exclusive colourways.", mapHint: "Cheongdam-dong, Gangnam-gu", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-      { id: 5, verified: "May 2026", locationType: "seasonal", name: "Stussy Seoul Collab Tee", shop: "Stussy Chapter · Itaewon", price: "₩98,000", category: "Fashion", exclusive: "Seoul Chapter exclusive", emoji: "👕", trending: false, isNew: false, desc: "Seoul Chapter-exclusive graphic tee. Never restocked online.", mapHint: "Itaewon-ro, Yongsan-gu", photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80" },
-      { id: 20, name: "DS Company Oversized Shirt", shop: "DS Company · Seoul", price: "₩85,000", category: "Fashion", exclusive: "Made in Korea only", emoji: "👔", trending: false, isNew: true, desc: "Small Korean label. Barely any online presence.", mapHint: "Seoul, South Korea", photo: "https://images.unsplash.com/photo-1607345366928-199ea26cfe3e?w=400&q=80" },
-    ]
-  },
-  { id: 2, name: "Tokyo", country: "Japan", continent: "Asia", emoji: "🇯🇵", flagCode: "jp", color: "#E8001D", items: 98, tag: "Streetwear Paradise", vibe: "Precision craftsmanship meets underground cool", photo: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80",
-    products: [
-      { id: 6, name: "Visvim Hand-dyed Shirt", shop: "Visvim Aoyama · Minami-Aoyama", price: "¥68,000", category: "Fashion", exclusive: "Japan only", emoji: "👔", trending: false, isNew: false, desc: "Hand-crafted in Japan, never sold abroad.", mapHint: "Minami-Aoyama, Minato-ku", photo: "https://images.unsplash.com/photo-1607345366928-199ea26cfe3e?w=400&q=80" },
-      { id: 7, name: "Neighborhood Collab Cap", shop: "Neighborhood Harajuku", price: "¥12,000", category: "Accessories", exclusive: "Tokyo drop only", emoji: "🧢", trending: true, isNew: false, desc: "Each drop sells out within hours. In-store only.", mapHint: "Harajuku, Shibuya-ku", photo: "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&q=80" },
-      { id: 8, name: "Kapital Boro Jacket", shop: "Kapital Daikanyama", price: "¥89,000", category: "Fashion", exclusive: "Japan flagship", emoji: "🧥", trending: false, isNew: false, desc: "Traditional Japanese Boro technique. Patchwork one-of-a-kind.", mapHint: "Daikanyama, Shibuya-ku", photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80" },
-      { id: 9, name: "Undercover Archive Tee", shop: "Undercover Lab · Minami-Aoyama", price: "¥18,000", category: "Fashion", exclusive: "Lab exclusive", emoji: "👕", trending: false, isNew: true, desc: "Archive reprints. Only available at the Lab store.", mapHint: "Minami-Aoyama, Minato-ku", photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80" },
-    ]
-  },
-  { id: 3, name: "Marrakech", country: "Morocco", continent: "Africa", emoji: "🇲🇦", flagCode: "ma", color: "#C1440E", items: 76, tag: "Craft & Colour", vibe: "Ancient craft meets vivid colour", photo: "https://images.unsplash.com/photo-1489749798305-4fea3ae63d43?w=800&q=80",
-    products: [
-      { id: 10, verified: "Apr 2026", locationType: "popup", name: "Hand-tooled Leather Bag", shop: "Souk El Had · Medina", price: "MAD 850", category: "Bags", exclusive: "Made locally", emoji: "👜", trending: true, isNew: false, desc: "Hand-carved in the Medina. Each piece unique.", mapHint: "Souk El Had, Medina", photo: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=80" },
-      { id: 11, verified: "Apr 2026", locationType: "popup", name: "Babouche Slippers", shop: "Souk des Babouches · Medina", price: "MAD 180", category: "Accessories", exclusive: "Medina crafted", emoji: "🥿", trending: false, isNew: false, desc: "Handmade in the tanneries of Marrakech.", mapHint: "Souk des Babouches, Medina", photo: "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400&q=80" },
-      { id: 12, name: "Kaftan Robe", shop: "Atelier Nihal · Gueliz", price: "MAD 2,200", category: "Fashion", exclusive: "Atelier only", emoji: "👘", trending: false, isNew: true, desc: "Embroidered by hand in Gueliz.", mapHint: "Gueliz, Marrakech", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-    ]
-  },
-  { id: 4, name: "Copenhagen", country: "Denmark", continent: "Europe", emoji: "🇩🇰", flagCode: "dk", color: "#C60C30", items: 54, tag: "Nordic Minimal", vibe: "Quiet luxury, built to last forever", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=800&q=80",
-    products: [
-      { id: 13, name: "Samsøe Samsøe Wool Coat", shop: "Flagship · Strøget", price: "DKK 3,200", category: "Fashion", exclusive: "DK exclusive", emoji: "🧥", trending: false, isNew: false, desc: "Flagship carries colourways never exported.", mapHint: "Strøget, Copenhagen", photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80" },
-      { id: 14, name: "Norse Projects Gore-Tex", shop: "Norse Projects · Pilestræde", price: "DKK 4,800", category: "Fashion", exclusive: "Flagship colourway", emoji: "🧥", trending: true, isNew: false, desc: "Seasonal colourways exclusive to Pilestræde.", mapHint: "Pilestræde, Copenhagen", photo: "https://images.unsplash.com/photo-1547949003-9792a18a2601?w=400&q=80" },
-      { id: 15, name: "Ganni Archive Dress", shop: "Ganni Flagship · Amagertorv", price: "DKK 2,100", category: "Fashion", exclusive: "Archive collection", emoji: "👗", trending: false, isNew: true, desc: "Archive collection only at the Copenhagen flagship.", mapHint: "Amagertorv, Copenhagen", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-    ]
-  },
-  { id: 5, name: "Mexico City", country: "Mexico", continent: "Americas", emoji: "🇲🇽", flagCode: "mx", color: "#006847", items: 89, tag: "Artisan Culture", vibe: "Vivid folk art meets modern design", photo: "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?w=800&q=80",
-    products: [
-      { id: 16, name: "Hand-embroidered Blouse", shop: "Mercado de Artesan\u00EDas · Centro", price: "MXN 680", category: "Fashion", exclusive: "Artisan made", emoji: "👗", trending: false, isNew: false, desc: "Otomi embroidery sold only at the market.", mapHint: "Centro Hist\u00F3rico, CDMX", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
-      { id: 17, name: "Carla Fern\u00E1ndez Jacket", shop: "Carla Fern\u00E1ndez · Roma Norte", price: "MXN 8,400", category: "Fashion", exclusive: "Mexico only", emoji: "🧥", trending: true, isNew: false, desc: "Mexico's most celebrated fashion designer.", mapHint: "Roma Norte, CDMX", photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80" },
-      { id: 18, name: "Leather Huarache Sandals", shop: "Taller Flores · Mercado Jamaica", price: "MXN 450", category: "Accessories", exclusive: "Handmade locally", emoji: "🥿", trending: false, isNew: false, desc: "Custom-made by the Flores family since 1963.", mapHint: "Mercado Jamaica, CDMX", photo: "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400&q=80" },
-    ]
-  },
-  { id: 7, name: "Tirana", country: "Albania", continent: "Europe", emoji: "🇦🇱", flagCode: "al", color: "#E41E20", items: 1, tag: "Hidden Gem", vibe: "Europe's best kept secret", photo: "https://images.unsplash.com/photo-1555990793-da11153b6c0e?w=800&q=80",
-    products: [
-      { id: 19, verified: "May 2026", locationType: "permanent", name: "Pure Perfume Signature Scent", shop: "Pure Perfume · Bulevardi Bajram Curri", price: "ALL 3,500", category: "Accessories", exclusive: "Only in Tirana", emoji: "🧴", trending: true, isNew: true, desc: "Albania's own luxury perfume house. No international shipping.", mapHint: "Bulevardi Bajram Curri, Tirana", photo: "https://images.unsplash.com/photo-1541643600914-78b084683702?w=400&q=80" },
+      { id: 13, verified: "May 2026", locationType: "permanent", name: "Samsøe Samsøe Wool Coat", shop: "Flagship · Strøget", price: "DKK 3,200", category: "Fashion", exclusive: "DK exclusive", emoji: "🧥", trending: false, isNew: false, desc: "Flagship carries colourways never exported abroad. You won't find these online.", mapHint: "Strøget, Copenhagen", photo: "https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=400&q=80" },
+      { id: 14, verified: "May 2026", locationType: "permanent", name: "Norse Projects Gore-Tex", shop: "Norse Projects · Pilestræde", price: "DKK 4,800", category: "Fashion", exclusive: "Flagship colourway", emoji: "🧥", trending: true, isNew: false, desc: "Seasonal colourways exclusive to Pilestræde. Never restocked online.", mapHint: "Pilestræde, Copenhagen", photo: "https://images.unsplash.com/photo-1547949003-9792a18a2601?w=400&q=80" },
+      { id: 15, verified: "May 2026", locationType: "permanent", name: "Ganni Archive Dress", shop: "Ganni Flagship · Amagertorv", price: "DKK 2,100", category: "Fashion", exclusive: "Archive collection", emoji: "👗", trending: false, isNew: true, desc: "Archive collection only at the Copenhagen flagship. Not available online.", mapHint: "Amagertorv, Copenhagen", photo: "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=400&q=80" },
+      { id: 21, verified: "Jun 2026", locationType: "permanent", name: "Wood Wood Collab Tee", shop: "Wood Wood · Grønnegade", price: "DKK 699", category: "Fashion", exclusive: "Copenhagen only", emoji: "👕", trending: true, isNew: false, desc: "Copenhagen's most respected streetwear label. Collaboration drops only in-store.", mapHint: "Grønnegade, Copenhagen", photo: "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80" },
+      { id: 22, verified: "Jun 2026", locationType: "permanent", name: "HAY Ceramic Mug Set", shop: "HAY House · Østergade", price: "DKK 450", category: "Accessories", exclusive: "Flagship colourway", emoji: "🏺", trending: false, isNew: true, desc: "HAY's own flagship carries colourways and sets not sold elsewhere.", mapHint: "Østergade 61, Copenhagen", photo: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&q=80" },
+      { id: 23, verified: "Jun 2026", locationType: "permanent", name: "Nørr11 Leather Bag", shop: "Nørr11 · Nørrebro", price: "DKK 3,800", category: "Bags", exclusive: "Made in Copenhagen", emoji: "👜", trending: false, isNew: false, desc: "Small Copenhagen leather atelier. Every bag handmade locally. No webshop.", mapHint: "Nørrebrogade, Copenhagen", photo: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&q=80" },
     ]
   },
 ];
 
 const allProducts = cities.flatMap(c => c.products.map(p => ({ ...p, city: c.name, color: c.color })));
-const continents = ["Africa", "Americas", "Asia", "Europe"];
 
-function getCountries(cont) {
-  return [...new Set(cities.filter(c => c.continent === cont).map(c => c.country))].sort();
-}
-
-function FlagImg({ flagCode }) {
-  const flags = { kr: "🇰🇷", jp: "🇯🇵", ma: "🇲🇦", dk: "🇩🇰", mx: "🇲🇽", al: "🇦🇱" };
-  return <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{flags[flagCode] || ""}</span>;
-}
-
-const navItems = [
-  { id: "explore", label: "Explore", icon: "⊞" },
-  { id: "ai", label: "AI Guide", icon: "✦" },
-  { id: "map", label: "Map", icon: "⊙" },
-  { id: "saved", label: "Saved", icon: "♡" },
+const craftItems = [
+  { id: 1, name: "Viking Ship Museum", location: "Roskilde", type: "Major", emoji: "⚓", travelTime: "25min 🚂", desc: "Watch boatbuilders reconstruct Viking ships using historic techniques. Try rope making, blacksmithing, textile crafts and woodcarving — daily June to September.", what: ["Rope making", "Blacksmithing", "Textile crafts", "Woodcarving"], color: "#1565C0", mapHint: "Vikingeskibsmuseet, Vindeboder 12, 4000 Roskilde, Denmark" },
+  { id: 2, name: "Moesgaard Viking Days", location: "Aarhus", type: "Major", emoji: "🛡", travelTime: "3h 🚂", desc: "Four days of hands-on Viking craft at Moesgaard Museum. Try blacksmithing, plant dyeing, felting, coin minting and bow shooting.", what: ["Blacksmithing", "Plant dyeing", "Felting", "Coin minting"], color: "#6A1B9A", mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark" },
+  { id: 3, name: "Viking Center Ribe", location: "Ribe", type: "Local", emoji: "🪖", travelTime: "3h 15min 🚂", desc: "Denmark's oldest town has on-site craftspeople making authentic Viking jewellery, leather goods and metalwork. Buy directly or commission something custom.", what: ["Jewellery", "Leather working", "Metalwork", "Textiles"], color: C.accent, mapHint: "Viking Center Ribe, 6760 Ribe, Denmark" },
+  { id: 4, name: "Bornholm Ceramics", location: "Bornholm", type: "Local", emoji: "🏺", travelTime: "2h + ferry 🚢", desc: "The island of Bornholm has more ceramics workshops per capita than anywhere in Denmark. Several potters take commissions.", what: ["Hand-thrown ceramics", "Glazed pottery", "Custom commissions"], color: "#E65100", mapHint: "Nexø, 3730 Bornholm, Denmark" },
+  { id: 5, name: "Sømods Bolcher", location: "Copenhagen", type: "Local", emoji: "🍬", travelTime: "In Copenhagen 🚇", desc: "Royal Court candy makers since 1891. Watch them pull traditional hard candy by hand at Nørregade 24 — a craft unchanged for 130 years.", what: ["Hand-pulled candy", "Traditional recipes", "Royal Court craft"], color: C.gold, mapHint: "Sømods Bolcher, Nørregade 24, 1165 Copenhagen, Denmark" },
 ];
 
-const CITY_COORDS = {
-  "Seoul": [37.5665, 126.9780],
-  "Tokyo": [35.6762, 139.6503],
-  "Marrakech": [31.6295, -7.9811],
-  "Copenhagen": [55.6761, 12.5683],
-  "Mexico City": [19.4326, -99.1332],
-  "Tirana": [41.3275, 19.8187],
+const events = [
+  { id: 1, name: "Præstø Litteraturfestival", travelTime: "1h 10min 🚂", rating: 4.6, town: "Præstø", type: "Festival", emoji: "📚", date: "2026-06-20", dateEnd: "2026-06-21", desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Literature", "Music"] },
+  { id: 2, name: "Sommerdage i Præstø", travelTime: "1h 10min 🚂", rating: 4.4, town: "Præstø", type: "Festival", emoji: "🌿", date: "2026-07-04", dateEnd: "2026-07-06", desc: "Nature and craft festival in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky.", mapHint: "Præstø Havn, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Craft", "Nature"] },
+  { id: 3, name: "Gyldne Dage i Præstø", travelTime: "1h 10min 🚂", rating: 4.3, town: "Præstø", type: "Festival", emoji: "🏰", date: "2026-09-12", dateEnd: "2026-09-13", desc: "Annual historical festival in Præstø with period costumes, local food and craft stalls.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["History", "Culture"] },
+  { id: 4, name: "Bondemarked på Oremandsgaard", travelTime: "1h 10min 🚂", rating: 4.5, town: "Præstø", type: "Market", emoji: "🌾", date: "2026-06-06", dateEnd: null, desc: "Farm market at the beautiful Oremandsgaard Estate. Local food, organic goods and handmade crafts.", mapHint: "Oremandsgaard, Jungshoved, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Food", "Market"] },
+  { id: 5, name: "Bakkefest", travelTime: "1h 15min 🚂", rating: 4.7, town: "Gilleleje", type: "Festival", emoji: "🎵", date: "2026-07-10", dateEnd: "2026-07-12", desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors.", mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Seaside"] },
+  { id: 6, name: "Musik i Lejet", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"] },
+  { id: 7, name: "Folkely Festival", travelTime: "1h 30min 🚂", rating: 4.5, town: "Hundested", type: "Festival", emoji: "⚓", date: "2026-08-20", dateEnd: "2026-08-22", desc: "Three days of music, art and talks in Hundested harbour.", mapHint: "Hundested Havn, 3390 Hundested, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Harbour"] },
+  { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"] },
+  { id: 9, name: "Haveje Beach Bar Events", travelTime: "1h 20min 🚂", rating: 4.4, town: "Liseleje", type: "Concert", emoji: "🏖", date: "2026-07-14", dateEnd: "2026-07-15", desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches.", mapHint: "Liselejevej, 3360 Liseleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Beach"] },
+  { id: 10, name: "Samsø Music Festival", travelTime: "2h 30min 🚢", rating: 4.9, town: "Samsø", type: "Festival", emoji: "🎸", date: "2026-07-13", dateEnd: "2026-07-19", desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø.", mapHint: "Mårup Kildevej 8, 8305 Samsø, Denmark", verified: "Jun 2026", color: "#6A1B9A", tags: ["Music", "Island"] },
+  { id: 11, name: "Maribo Jazz Festival", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", desc: "Denmark's friendliest jazz festival in historic Maribo. 120+ musicians across 18 venues.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Historic"] },
+  { id: 12, name: "KirsebærFestival", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", desc: "Cherry festival in Kerteminde, Northeast Funen.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local"] },
+];
+
+const majorEvents = [
+  { id: 101, name: "Roskilde Festival", travelTime: "25min 🚂", rating: 4.9, ticketStatus: "sold_out", town: "Roskilde", type: "Music", emoji: "🎸", date: "2026-06-27", dateEnd: "2026-07-04", desc: "Northern Europe's largest music festival. 130,000 attendees, 8 stages, 8 days.", mapHint: "Roskilde Festival, Darupvej 35, 4000 Roskilde, Denmark", verified: "Jun 2026", color: "#E53935", tags: ["Music", "Camping"] },
+  { id: 102, name: "Distortion", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street"] },
+  { id: 103, name: "Aalborg Karneval", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aalborg", type: "Cultural", emoji: "🎭", date: "2026-05-20", dateEnd: "2026-05-24", desc: "Scandinavia's largest carnival. 100,000+ participants in costumes.", mapHint: "Aalborg Centrum, 9000 Aalborg, Denmark", verified: "Jun 2026", color: "#F57F17", tags: ["Carnival", "Parade"] },
+  { id: 104, name: "Copenhagen Jazz Festival", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🎷", date: "2026-07-03", dateEnd: "2026-07-12", desc: "10 days of jazz across 100+ venues. Free concerts in squares and parks.", mapHint: "Copenhagen City Hall Square, Denmark", verified: "Jun 2026", color: "#00695C", tags: ["Jazz", "Free"] },
+  { id: 105, name: "Smukfest", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest"] },
+  { id: 106, name: "NorthSide Festival", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aarhus", type: "Music", emoji: "🎪", date: "2026-06-05", dateEnd: "2026-06-07", desc: "Aarhus's biggest music festival with eco-friendly focus.", mapHint: "NorthSide Festival, Eskelundsvej, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Eco"] },
+  { id: 107, name: "Aarhus Festuge", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", desc: "One of Scandinavia's largest cultural festivals. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Free"] },
+  { id: 108, name: "Tønder Festival", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", desc: "Scandinavia's leading folk and roots festival near the German border.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots"] },
+  { id: 109, name: "Triangle Folklore Festival", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform in the streets of Vejle.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance"] },
+  { id: 110, name: "Odense Flower Festival", travelTime: "1h 30min 🚂", rating: 4.7, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", desc: "200,000+ flowers transform the entire city centre of Odense.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free"] },
+  { id: 111, name: "H.C. Andersen Festivals", travelTime: "1h 30min 🚂", rating: 4.8, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", desc: "Denmark's largest cultural festival. 500+ events across 10 days in H.C. Andersen's hometown.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free"] },
+];
+
+const towns = [
+  { id: 1, name: "Ribe", region: "South Jutland", emoji: "⛪", tag: "Denmark's oldest town", desc: "Founded around 700 AD — the oldest town in Scandinavia. Medieval cathedral, Viking museum and cobblestone streets.", highlight: "Viking Center Ribe — artisans craft authentic Viking jewellery, leather and textiles on site.", travelTime: "3h 15min 🚂", mapHint: "Ribe, 6760 Ribe, Denmark", nomiPotential: "High" },
+  { id: 2, name: "Dragør", region: "Copenhagen Area", emoji: "⚓", tag: "Fisherman's village", desc: "Just 12km from Copenhagen — yellow ochre houses, a working harbour, cobblestone streets. Feels like another era.", highlight: "The harbour fish stalls sell smoked fish caught the same morning. No menus, no TripAdvisor.", travelTime: "30min 🚌", mapHint: "Dragør Havn, 2791 Dragør, Denmark", nomiPotential: "High" },
+  { id: 3, name: "Ærøskøbing", region: "Funen", emoji: "🏡", tag: "Denmark's fairy-tale town", desc: "750-year-old town on the island of Ærø. Half-timbered houses, flower-lined streets. One of Europe's best preserved small towns.", highlight: "The local bottle ship museum — a man spent decades making ships inside bottles.", travelTime: "3h + ferry 🚢", mapHint: "Ærøskøbing, 5970 Ærø, Denmark", nomiPotential: "Very High" },
+  { id: 4, name: "Skagen", region: "North Jutland", emoji: "🌊", tag: "Where two seas meet", desc: "Denmark's northernmost town. Where the North Sea and Baltic Sea collide. Yellow houses, artist culture.", highlight: "The local fish auction starts at 6am on weekdays. Fresh fish sold direct from boats.", travelTime: "4h 🚂", mapHint: "Skagen, 9990 Skagen, Denmark", nomiPotential: "High" },
+  { id: 5, name: "Præstø", region: "Zealand", emoji: "🏘", tag: "Hidden countryside gem", desc: "South of Copenhagen — cobbled streets, old market square. The kind of town that makes you wonder why nobody talks about it.", highlight: "Oremandsgaard Estate sells locally produced goods from their own farm and distillery.", travelTime: "1h 10min 🚂", mapHint: "Præstø Torv, 4720 Præstø, Denmark", nomiPotential: "Very High" },
+  { id: 6, name: "Faaborg", region: "Funen", emoji: "🌿", tag: "Old-world harbour charm", desc: "Quiet harbour town on the south coast of Funen. 17th century merchant buildings, cobblestone alleys.", highlight: "The local ceramics workshop near the harbour sells pieces made on site. Cash only, no website.", travelTime: "2h 30min 🚂", mapHint: "Faaborg Havn, 5600 Faaborg, Denmark", nomiPotential: "High" },
+  { id: 7, name: "Gudhjem", region: "Bornholm", emoji: "🐟", tag: "Baltic island village", desc: "Atmospheric fishing village on Bornholm. Home of the legendary Sol over Gudhjem smoked herring dish.", highlight: "Røgeriet — the old smokehouse. Watch them smoke herring the traditional way.", travelTime: "2h + ferry 🚢", mapHint: "Gudhjem Havn, 3760 Gudhjem, Bornholm", nomiPotential: "Very High" },
+  { id: 8, name: "Sønderho", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island. Thatched houses, winding lanes, seals in the Wadden Sea National Park.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts made on the island for centuries.", travelTime: "3h + ferry 🚢", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
+];
+
+const essentials = [
+  { id: 1, name: "Rejsekort", category: "Transport", emoji: "🚇", desc: "Denmark's public transport card — trains, buses and metro nationwide. Much cheaper than individual tickets.", howTo: "Buy at any train station. 80 DKK deposit. Top up with cash or card.", price: "80 DKK deposit + top-up", link: "https://www.rejsekort.dk/en", tip: "Always check OUT when leaving — or you get charged max fare." },
+  { id: 2, name: "Rent a Bike", category: "Transport", emoji: "🚲", desc: "Copenhagen has 390km of cycle lanes. Renting a bike is the best way to see the city.", howTo: "Bycyklen electric bikes available across Copenhagen via app. Or rent from shops from 100 DKK/day.", price: "From 100 DKK/day", link: "https://apps.apple.com/dk/app/bycyklen/id985075832", linkAndroid: "https://play.google.com/store/apps/details?id=dk.bycyklen.app", tip: "Cycle on the right, signal with your arm, always lock up." },
+  { id: 3, name: "MobilePay", category: "Payments", emoji: "📱", desc: "Denmark's universal payment app. Almost every market stall and local vendor accepts it.", howTo: "Download MobilePay app. Requires Danish phone number or international setup.", price: "Free", link: "https://apps.apple.com/dk/app/mobilepay/id624499138", linkAndroid: "https://play.google.com/store/apps/details?id=dk.danskebank.mobilepay", tip: "Many Gemlyx businesses ONLY accept MobilePay or cash." },
+  { id: 4, name: "DSB App", category: "Transport", emoji: "🚂", desc: "Danish national railway app. Book tickets, check schedules, get real-time delays.", howTo: "Download DSB app. Buy tickets in advance for cheaper prices.", price: "Free app", link: "https://apps.apple.com/dk/app/dsb/id531645423", linkAndroid: "https://play.google.com/store/apps/details?id=dk.dsb.rejseplanen", tip: "Buy Orange tickets weeks ahead for up to 50% off." },
+  { id: 5, name: "Copenhagen Card", category: "Sightseeing", emoji: "🎟", desc: "Free entry to 89 attractions + unlimited transport. Worth it for 2+ days.", howTo: "Buy at copenhagencard.com or airport. 24h, 48h, 72h or 120h options.", price: "From 499 DKK", link: "https://www.copenhagencard.com", tip: "Tivoli alone is 150 DKK — card pays for itself with 3+ attractions." },
+  { id: 6, name: "eSIM or Local SIM", category: "Connectivity", emoji: "📶", desc: "EU roaming covers most Europeans. Outside EU — get a local SIM for navigation and MobilePay.", howTo: "Buy at 7-Eleven, Netto or any phone shop. Lebara and Lycamobile work well.", price: "From 49 DKK", link: null, tip: "Make sure your phone is unlocked before traveling." },
+];
+
+const getEventDate = (dateStr, dateEnd) => {
+  const d = new Date(dateStr);
+  const opts = { day: "numeric", month: "short" };
+  if (dateEnd) return d.toLocaleDateString("en-GB", opts) + " – " + new Date(dateEnd).toLocaleDateString("en-GB", opts);
+  return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
 };
+const isUpcoming = (d) => new Date(d) >= new Date();
+const daysUntil = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
 
 const PRODUCT_COORDS = {
-  1: [37.5563, 126.9374], 2: [37.5247, 127.0400], 3: [37.5563, 126.9227],
-  4: [37.5200, 127.0420], 5: [37.5340, 126.9940], 20: [37.5500, 126.9200],
-  6: [35.6654, 139.7107], 7: [35.6702, 139.7026], 8: [35.6488, 139.7026], 9: [35.6654, 139.7200],
-  10: [31.6315, -7.9887], 11: [31.6290, -7.9900], 12: [31.6340, -7.9950],
   13: [55.6761, 12.5683], 14: [55.6780, 12.5700], 15: [55.6750, 12.5760],
-  16: [19.4284, -99.1276], 17: [19.4180, -99.1620], 18: [19.3980, -99.1200],
-  19: [41.3275, 19.8187],
+  21: [55.6820, 12.5710], 22: [55.6795, 12.5830], 23: [55.6980, 12.5500],
 };
 
-function MapEmbed({ city }) {
-  const coords = CITY_COORDS[city.name] || [37.5665, 126.9780];
-  const markerJS = city.products.map(p => {
-    const c = PRODUCT_COORDS[p.id];
-    if (!c) return "";
-    const n = p.name.replace(/['"]/g, "");
-    const s = p.shop.replace(/['"]/g, "");
-    return "L.marker([" + c[0] + "," + c[1] + "],{icon:L.divIcon({className:'',html:'<div style=\'background:" + city.color + ";color:#fff;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 6px rgba(0,0,0,0.4)\'>" + p.emoji + "</div>',iconSize:[34,34],iconAnchor:[17,17]})}).addTo(map).bindPopup('<b>" + n + "</b><br><small style=\'color:#666\'>" + s + "</small><br><b style=\'color:" + city.color + "\'>" + p.price + "</b>');";
-  }).join(" ");
+const APP_VERSION = "v2.5 — simpler AI + pro footer";
 
-  const parts = [
-    "<!DOCTYPE html><html><head>",
-    "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-    "<link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'/>",
-    "<script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'><" + "/script>",
-    "<style>*{margin:0;padding:0}html,body,#map{width:100%;height:100%;position:absolute;inset:0}</style>",
-    "</head><body><div id='map'></div><script>",
-    "var map=L.map('map',{zoomControl:true,dragging:true,touchZoom:true,scrollWheelZoom:false,tap:false}).setView([" + coords[0] + "," + coords[1] + "],14);",
-    "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM',maxZoom:19}).addTo(map);",
-    markerJS,
-    "<" + "/script></body></html>"
-  ];
-
-  return (
-    <iframe
-      key={city.name}
-      srcDoc={parts.join("")}
-      style={{ width: "100%", height: "220px", border: "none", display: "block" }}
-      title="map"
-      sandbox="allow-scripts allow-same-origin"
-    />
-  );
-}
-
-
-export default function OnlyHere() {
-  const [active, setActive] = useState("explore");
-  const [continent, setContinent] = useState(null);
-  const [country, setCountry] = useState(null);
-  const [selectedCity, setSelectedCity] = useState(null);
+export default function Gemlyx() {
+  useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
+  const [active, setActive] = useState("home");
+  const [shopTab, setShopTab] = useState("shops");
+  const [selectedCity, setSelectedCity] = useState(cities[0]);
   const [category, setCategory] = useState("All");
-  const [savedItems, setSavedItems] = useState([2, 7, 19]);
+  const [savedItems, setSavedItems] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [stillHereMap, setStillHereMap] = useState({});
   const [search, setSearch] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterCategories, setFilterCategories] = useState([]);
+  const [filterTypes, setFilterTypes] = useState([]);
   const [mapCity, setMapCity] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  // AI Guide
+  const [eventMonth, setEventMonth] = useState(null);
+  const [eventType, setEventType] = useState(null);
+  const [eventTab, setEventTab] = useState("local");
+  const [townFilter, setTownFilter] = useState(null);
+  const [emailSignup, setEmailSignup] = useState("");
+  const [emailSubmitted, setEmailSubmitted] = useState(false);
   const [aiMessages, setAiMessages] = useState([
     { role: "assistant", text: "Hi! I'm your Local Assist ◆ Tell me where you're heading — or what you're after — and I'll find you something that exists nowhere else." }
   ]);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const aiBottomRef = useRef(null);
-
-  // Support
-  const [supportOpen, setSupportOpen] = useState(false);
-  const [supportVisible, setSupportVisible] = useState(false);
-  const [supportDismissed, setSupportDismissed] = useState(false);
-  const [supportMessages, setSupportMessages] = useState([
-    { role: "assistant", text: "Hi! 👋 I'm the OnlyHere support assistant. Ask me anything!" }
-  ]);
-  const [supportInput, setSupportInput] = useState("");
-  const [supportLoading, setSupportLoading] = useState(false);
-  const [bubblePos, setBubblePos] = useState({ x: null, y: null });
-  const [dragging, setDragging] = useState(false);
-  const [dragText, setDragText] = useState("");
-  const dragOffset = useRef({ x: 0, y: 0 });
-  const hasMoved = useRef(false);
-  const dragTexts = ["Wii!", "Weee!", "Woop!", "Zoom!", "Yeet!"];
-
-  // Location alert
-  const [locationAlert, setLocationAlert] = useState(null);
-  const [alertVisible, setAlertVisible] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setSupportVisible(true), 8000);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    if (aiBottomRef.current) aiBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    if (aiMessages.length > 1 && aiBottomRef.current) aiBottomRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [aiMessages]);
 
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`);
-        const data = await res.json();
-        const userCountry = data.address?.country;
-        if (!userCountry) return;
-        const match = cities.find(c => userCountry.toLowerCase().includes(c.country.toLowerCase().split(" ")[0].toLowerCase()));
-        if (match) { setLocationAlert(match); setAlertVisible(true); setTimeout(() => setAlertVisible(false), 5000); }
-      } catch {}
-    }, () => {});
-  }, []);
-
   const toggleSave = (id) => setSavedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-
-  // Products to display
-  const displayProducts = selectedCity
-    ? (selectedCity.products || []).map(p => ({ ...p, city: selectedCity.name, color: selectedCity.color })).filter(p => category === "All" || p.category === category)
-    : country
-      ? cities.filter(c => c.country === country).flatMap(c => (c.products || []).map(p => ({ ...p, city: c.name, color: c.color }))).filter(p => category === "All" || p.category === category)
-      : [];
-
   const savedProducts = allProducts.filter(p => savedItems.includes(p.id));
-  const searchResults = search ? allProducts.filter(p =>
-    [p.name, p.city, p.shop, p.category, p.exclusive, p.desc].some(f => f?.toLowerCase().includes(search.toLowerCase()))
+
+  const displayProducts = (selectedCity
+    ? selectedCity.products.map(p => ({ ...p, city: selectedCity.name, color: selectedCity.color }))
+    : allProducts
+  ).filter(p => {
+    const catOk = filterCategories.length === 0 || filterCategories.includes(p.category);
+    const typeOk = filterTypes.length === 0 || filterTypes.includes(p.locationType);
+    return catOk && typeOk;
+  });
+
+  const searchResults = search.length > 1 ? allProducts.filter(p =>
+    [p.name, p.city, p.shop, p.category].some(f => f?.toLowerCase().includes(search.toLowerCase()))
   ) : [];
 
-  const accentColor = selectedCity?.color || "#D4B483";
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    const d = R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return d < 1 ? Math.round(d*1000)+"m" : d.toFixed(1)+"km";
+  };
+  const getDistanceRaw = (lat1, lon1, lat2, lon2) => {
+    const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
+  const requestLocation = () => {
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocationLoading(false); },
+      () => setLocationLoading(false), { enableHighAccuracy: true }
+    );
+  };
+
+  const confirmStillHere = (id) => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(() => {
+      setStillHereMap(prev => ({ ...prev, [id]: { count: (prev[id]?.count||0)+(prev[id]?.userConfirmed?0:1), userConfirmed: true, date: new Date().toLocaleDateString("en-GB", { month:"short", year:"numeric" }) } }));
+    }, () => alert("Please enable location."));
+  };
 
   const sendAI = async () => {
     if (!aiInput.trim() || aiLoading) return;
@@ -228,672 +190,819 @@ export default function OnlyHere() {
     setAiMessages(prev => [...prev, { role: "user", text: msg }]);
     setAiLoading(true);
     try {
-      const productList = allProducts.map(p => p.name + " in " + p.city + " (" + p.price + ") - " + p.exclusive).join(", ");
+      const productList = allProducts.map(p => `${p.name} in ${p.city} (${p.price}) - ${p.exclusive}`).join(", ");
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
         body: JSON.stringify({
           model: "gpt-4o-mini",
           messages: [
-            { role: "system", content: "You are Local Assist — OnlyHere's AI guide. Help travelers find exclusive local finds that exist nowhere else. Be warm, concise and specific. Available products: " + productList },
+            { role: "system", content: "You are Local Assist — Gemlyx's AI guide. Help travelers discover exclusive local finds in Denmark. Be warm, concise and specific. Available: " + productList },
             ...aiMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
             { role: "user", content: msg }
-          ],
-          max_tokens: 400
+          ], max_tokens: 400
         })
       });
       const data = await res.json();
-      const reply = data.choices?.[0]?.message?.content || data.error?.message || "Something went wrong!";
-      setAiMessages(prev => [...prev, { role: "assistant", text: reply }]);
-    } catch (err) {
-      setAiMessages(prev => [...prev, { role: "assistant", text: "Connection error — try again!" }]);
-    }
+      setAiMessages(prev => [...prev, { role: "assistant", text: data.choices?.[0]?.message?.content || data.error?.message || "Something went wrong!" }]);
+    } catch { setAiMessages(prev => [...prev, { role: "assistant", text: "Connection error — try again!" }]); }
     setAiLoading(false);
   };
 
-  const sendSupport = async () => {
-    if (!supportInput.trim() || supportLoading) return;
-    const msg = supportInput.trim();
-    setSupportInput("");
-    setSupportMessages(prev => [...prev, { role: "user", text: msg }]);
-    setSupportLoading(true);
-    try {
-      const history = supportMessages.map(m => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.text }]
-      }));
-      const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + import.meta.env.VITE_GEMINI_KEY,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: "You are GoBot — the friendly support assistant for OnlyHere, an app where travelers discover exclusive things that exist nowhere else. Keep answers short and warm. Cities available: Seoul, Tokyo, Marrakech, Copenhagen, Mexico City, Tirana. The app is free for travelers. Shops can DM us to get listed. Users can save finds with the heart button. AI Guide tab gives recommendations. Map tab shows shop locations." }] },
-            contents: [...history, { role: "user", parts: [{ text: msg }] }]
-          })
-        }
-      );
-      const data = await res.json();
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text
-        || data.error?.message
-        || "Something went wrong — try again!";
-      setSupportMessages(prev => [...prev, { role: "assistant", text: reply }]);
-    } catch (err) {
-      setSupportMessages(prev => [...prev, { role: "assistant", text: "Connection error — try again!" }]);
-    }
-    setSupportLoading(false);
-  };
+  // ── PILL BUTTON ───────────────────────────────────────────────
+  const Pill = ({ label, active, onClick, color }) => (
+    <button onClick={onClick} style={{ background: active ? (color||C.accent) : C.surface, color: active ? "#fff" : C.muted, border: `1px solid ${active ? (color||C.accent) : C.border}`, borderRadius: 100, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>
+      {label}
+    </button>
+  );
 
-  const onDragStart = (e) => {
-    e.stopPropagation();
-    if (e.touches && e.cancelable) e.preventDefault();
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
-    const el = e.currentTarget.getBoundingClientRect();
-    dragOffset.current = { x: cx - el.left, y: cy - el.top };
-    hasMoved.current = false;
-    const onMove = (ev) => {
-      if (ev.cancelable) ev.preventDefault();
-      const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
-      const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
-      if (!hasMoved.current) setDragText(dragTexts[Math.floor(Math.random() * dragTexts.length)]);
-      hasMoved.current = true;
-      setDragging(true);
-      setBubblePos({ x: Math.min(Math.max(x - dragOffset.current.x, 0), window.innerWidth - 80), y: Math.min(Math.max(y - dragOffset.current.y, 0), window.innerHeight - 120) });
-    };
-    const onUp = () => {
-      if (!hasMoved.current) setSupportOpen(true);
-      setDragging(false);
-      setTimeout(() => setDragText(""), 400);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("touchend", onUp);
-    };
-    window.addEventListener("mousemove", onMove, { passive: false });
-    window.addEventListener("touchmove", onMove, { passive: false });
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("touchend", onUp);
-  };
-
-  const getDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const d = R * c;
-    return d < 1 ? Math.round(d * 1000) + "m" : d.toFixed(1) + "km";
-  };
-
-  const getDistanceRaw = (lat1, lon1, lat2, lon2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  };
-
-  const requestLocation = () => {
-    setLocationLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocationLoading(false); },
-      () => { setLocationLoading(false); },
-      { enableHighAccuracy: true }
-    );
-  };
-
+  // ── PRODUCT CARD ─────────────────────────────────────────────
   const ProductCard = ({ product }) => (
-    <div className="product-card" style={{ marginBottom: 10 }} onClick={() => setSelectedProduct(product)}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <div style={{ width: 64, height: 64, borderRadius: 12, overflow: "hidden", flexShrink: 0, background: `${product.color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>
-          {product.photo ? <img src={product.photo} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : product.emoji}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.25, paddingRight: 8, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>{product.name}</div>
-            <button className="save-btn" onClick={e => { e.stopPropagation(); toggleSave(product.id); }}>{savedItems.includes(product.id) ? "♥" : "♡"}</button>
-          </div>
-          <div style={{ fontSize: 11, color: "#6B5442", marginTop: 3, textTransform: "uppercase", letterSpacing: 0.3 }}>{product.shop}</div>
-          {product.city && product.city !== selectedCity?.name && (
-            <div style={{ fontSize: 10, color: product.color, marginTop: 2, fontWeight: 700 }}>◆ {product.city}</div>
-          )}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ background: `${product.color}18`, color: product.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>◆ {product.exclusive}</span>
-              {product.trending && <span style={{ fontSize: 10, fontWeight: 700, color: "#D4B483" }}>↗ HOT</span>}
-              {product.isNew && <span style={{ fontSize: 10, fontWeight: 700, color: product.color }}>◆ NEW</span>}
-              {product.locationType === "popup" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FF9966" }}>⚠ Pop-up</span>}
-              {product.locationType === "seasonal" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347" }}>◷ Seasonal</span>}
-            </div>
-            <span style={{ fontWeight: 700, fontSize: 15, color: "#D4B483", fontFamily: "'Cormorant Garamond', serif" }}>{product.price}</span>
-          </div>
-          {product.verified && (
-            <div style={{ marginTop: 6, fontSize: 10, color: "#6B5442" }}>✓ Verified {product.verified}</div>
-          )}
+    <div onClick={() => setSelectedProduct({ ...product, color: product.color || C.accent })}
+      style={{ background: C.surface, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, cursor: "pointer", position: "relative" }}>
+      <div style={{ height: 160, background: `${product.color}22`, position: "relative", overflow: "hidden" }}>
+        {product.photo ? <img src={product.photo} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", fontSize: 48 }}>{product.emoji}</div>}
+        <button onClick={e => { e.stopPropagation(); toggleSave(product.id); }}
+          style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: savedItems.includes(product.id) ? C.gold : "#fff", cursor: "pointer" }}>
+          {savedItems.includes(product.id) ? "♥" : "♡"}
+        </button>
+        {product.trending && <div style={{ position: "absolute", top: 8, left: 8, background: C.accent, color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>HOT ↗</div>}
+        {product.isNew && <div style={{ position: "absolute", top: product.trending ? 30 : 8, left: 8, background: C.gold, color: "#000", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>NEW</div>}
+      </div>
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2, fontFamily: "'Cormorant Garamond', serif" }}>{product.name}</div>
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{product.shop}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ background: `${product.color}22`, color: product.color, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>◆ {product.exclusive}</span>
+          <span style={{ fontWeight: 700, fontSize: 15, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>{product.price}</span>
         </div>
       </div>
     </div>
   );
 
-  return (
-    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", background: "#16120A", minHeight: "100vh", maxWidth: 430, margin: "0 auto", color: "#EDE0C4", position: "relative" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { display: none; }
-        @keyframes slideUp { from{transform:translateY(16px);opacity:0} to{transform:translateY(0);opacity:1} }
-        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
-        @keyframes slideDown { from{transform:translateY(-20px);opacity:0} to{transform:translateY(0);opacity:1} }
-        @keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.2)} 100%{transform:scale(1)} }
-        .slide-up { animation: slideUp 0.3s ease forwards; }
-        .product-card { background:#1E1610;border-radius:16px;padding:14px;border:1px solid #2A1E10;cursor:pointer;transition:all 0.2s; }
-        .product-card:active { transform:scale(0.98); }
-        .cat-btn { border:1px solid #2A1E10;background:#1E1610;border-radius:100px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;white-space:nowrap;flex-shrink:0;color:#8A7355;transition:all 0.2s; }
-        .save-btn { border:none;background:none;cursor:pointer;font-size:18px;padding:4px;color:#8A7355; }
-        .save-btn:active { animation:pop 0.3s; }
-        .modal-bg { position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100;display:flex;align-items:flex-end;animation:fadeIn 0.2s; }
-        .modal-sheet { background:#1A1208;border-radius:24px 24px 0 0;width:100%;max-width:430px;margin:0 auto;padding:20px 20px 44px;animation:slideUp 0.3s;max-height:88vh;overflow-y:auto;color:#EDE0C4; }
-      `}</style>
-
-      {/* Header */}
-      <div style={{ background: "#16120A", borderBottom: "1px solid #2A1E10", padding: "44px 16px 10px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div>
-            <div style={{ fontSize: 9, fontWeight: 700, color: "#D4B483", letterSpacing: 2, textTransform: "uppercase", marginBottom: 2 }}>◆ OnlyHere</div>
-            <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>Discover wonders.</div>
-          </div>
-
-        </div>
-        <div style={{ background: "#1E1610", borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8, border: "1px solid #2A1E10" }}>
-          <span style={{ fontSize: 13, color: "#8A7355" }}>◆</span>
-          <input value={search} onChange={e => { setSearch(e.target.value); if (e.target.value) setActive("search"); else setActive("explore"); }}
-            placeholder="Search cities, shops, products..."
-            style={{ border: "none", outline: "none", fontSize: 13, flex: 1, background: "transparent", color: "#EDE0C4", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-          {search && <button onClick={() => { setSearch(""); setActive("explore"); }} style={{ border: "none", background: "none", cursor: "pointer", color: "#8A7355", fontSize: 14 }}>✕</button>}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div style={{ height: "calc(100vh - 148px - 96px)", overflowY: active === "ai" ? "hidden" : "auto", paddingBottom: active === "ai" ? 0 : 16 }}>
-
-        {/* SEARCH */}
-        {active === "search" && (
-          <div className="slide-up" style={{ padding: "16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>{searchResults.length} results for "{search}"</div>
-            {searchResults.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#8A7355" }}>No finds matched</div>
-            ) : searchResults.map(p => <ProductCard key={p.id} product={p} />)}
-          </div>
-        )}
-
-        {/* EXPLORE */}
-        {active === "explore" && (
-          <div className="slide-up">
-            <div style={{ padding: "12px 0 6px" }}>
-              {/* Continents */}
-              <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16, marginBottom: 10 }}>
-                {continents.map(c => (
-                  <button key={c} className="cat-btn"
-                    onClick={() => { setContinent(continent === c ? null : c); setCountry(null); setSelectedCity(null); }}
-                    style={{ background: continent === c ? "#D4B483" : "#1E1610", color: continent === c ? "#16120A" : "#8A7355", border: `1px solid ${continent === c ? "#D4B483" : "#2A1E10"}` }}>
-                    {c === "Europe" ? "🇪🇺 " : c === "Asia" ? "🌏 " : c === "Africa" ? "🌍 " : "🌎 "}{c}
-                  </button>
-                ))}
-              </div>
-
-              {/* Countries */}
-              {continent && (
-                <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16, marginBottom: 10 }}>
-                  {getCountries(continent).map(c => (
-                    <button key={c} className="cat-btn"
-                      onClick={() => { setCountry(country === c ? null : c); setSelectedCity(null); }}
-                      style={{ background: country === c ? "#D4B483" : "#1E1610", color: country === c ? "#16120A" : "#8A7355", border: `1px solid ${country === c ? "#D4B483" : "#2A1E10"}`, display: "flex", alignItems: "center", gap: 6 }}>
-                      {COUNTRY_FLAGS[c] && <span style={{ fontSize: 14 }}>{COUNTRY_FLAGS[c]}</span>}
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Cities */}
-              {continent && country && (
-                <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16, marginBottom: 8 }}>
-                  {cities.filter(c => c.continent === continent && c.country === country).sort((a,b) => a.name.localeCompare(b.name)).map(city => (
-                    <button key={city.id}
-                      onClick={() => setSelectedCity(selectedCity?.id === city.id ? null : city)}
-                      style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 100, background: selectedCity?.id === city.id ? city.color : "#1E1610", color: selectedCity?.id === city.id ? "#fff" : "#8A7355", border: `2px solid ${selectedCity?.id === city.id ? city.color : "#2A1E10"}`, fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>
-                      <FlagImg flagCode={city.flagCode} />
-                      {city.name}
-                    </button>
-                  ))}
-                </div>
-              )}
+  // ── EVENT CARD ───────────────────────────────────────────────
+  const EventCard = ({ event }) => (
+    <div style={{ background: C.surface, borderRadius: 16, padding: "16px", marginBottom: 10, border: `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: event.color }} />
+      <div style={{ paddingLeft: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 18 }}>{event.emoji}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{event.name}</span>
             </div>
-
-            {/* Hero */}
-            <div style={{ padding: "4px 16px 6px" }}>
-              <div style={{ borderRadius: 16, overflow: "hidden", position: "relative", height: 110, background: selectedCity ? selectedCity.color : country ? "#2A1E10" : "#1A1208" }}>
-                {selectedCity?.photo && (
-                  <img src={selectedCity.photo} alt={selectedCity.name} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, opacity: 0.55 }} />
-                )}
-                <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.15) 100%)" }} />
-                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "10px 14px" }}>
-                  <div style={{ fontSize: 20, fontWeight: 600, color: "#fff", fontFamily: "'Cormorant Garamond', serif", lineHeight: 1 }}>
-                    {selectedCity ? selectedCity.name : country ? country : "World's Merchandise"}
-                  </div>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginTop: 3 }}>
-                    {selectedCity ? `◆ ${displayProducts.length} finds in ${selectedCity.name}` : country ? `◆ ${displayProducts.length} finds across ${country}` : "Select a continent to start exploring"}
-                  </div>
-                </div>
-                {(selectedCity || country) && (
-                  <div style={{ position: "absolute", top: 10, left: 12 }}>
-                    <span style={{ background: selectedCity ? selectedCity.color : "#D4B483", color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.8 }}>
-                      {selectedCity ? selectedCity.tag : country}
-                    </span>
-                  </div>
-                )}
-              </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: event.color, background: `${event.color}22`, padding: "3px 8px", borderRadius: 100 }}>{event.type}</span>
+              <span style={{ fontSize: 11, color: C.muted }}>{event.town}</span>
+              <span style={{ fontSize: 11, color: C.gold }}>★ {event.rating}</span>
+              <span style={{ fontSize: 11, color: C.muted }}>{event.travelTime} from CPH</span>
             </div>
-
-            {/* Category filter */}
-            {displayProducts.length > 0 && (
-              <div style={{ display: "flex", gap: 8, padding: "4px 16px 8px", overflowX: "auto" }}>
-                {["All", "Fashion", "Accessories", "Bags"].map(cat => (
-                  <button key={cat} className="cat-btn" onClick={() => setCategory(cat)}
-                    style={{ background: category === cat ? "#D4B483" : "#1E1610", color: category === cat ? "#16120A" : "#8A7355", border: `1px solid ${category === cat ? "#D4B483" : "#2A1E10"}` }}>
-                    {cat}
-                  </button>
-                ))}
+            {event.ticketStatus && (
+              <div style={{ marginTop: 6 }}>
+                {event.ticketStatus === "sold_out" && <span style={{ fontSize: 10, fontWeight: 700, color: "#ff4444", background: "#ff444422", padding: "2px 8px", borderRadius: 100 }}>🔴 Sold out</span>}
+                {event.ticketStatus === "selling_fast" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "2px 8px", borderRadius: 100 }}>🟡 Selling fast</span>}
+                {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "2px 8px", borderRadius: 100 }}>🟢 Available</span>}
+                {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "2px 8px", borderRadius: 100 }}>✓ Free entry</span>}
               </div>
             )}
-
-            {/* Products */}
-            <div style={{ padding: "0 16px" }}>
-              {displayProducts.length === 0 && (continent || country) ? (
-                <div style={{ textAlign: "center", padding: "30px 0", color: "#8A7355" }}>
-                  {continent && !country ? "Select a country to see finds" : continent && country && !selectedCity ? "Showing all finds in " + country : "No finds in this category"}
-                </div>
-              ) : (
-                <>
-                  {displayProducts.length > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#8A7355", letterSpacing: 1.5, textTransform: "uppercase" }}>{displayProducts.length} Finds</span>
-                      <span style={{ fontSize: 11, color: "#6B5442" }}>{selectedCity ? selectedCity.name : country || ""}</span>
-                    </div>
-                  )}
-                  {displayProducts.map(p => <ProductCard key={p.id} product={p} />)}
-                </>
-              )}
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>
+              {daysUntil(event.date) <= 0 ? "Now!" : daysUntil(event.date) === 1 ? "Tmrw" : `${daysUntil(event.date)}d`}
             </div>
+            <div style={{ fontSize: 9, color: C.muted }}>away</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: C.gold, fontWeight: 600, marginBottom: 6 }}>📅 {getEventDate(event.date, event.dateEnd)}</div>
+        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{event.desc}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {event.tags.map(t => <span key={t} style={{ fontSize: 10, color: C.muted, background: C.bg, padding: "3px 8px", borderRadius: 100 }}>{t}</span>)}
+        </div>
+        <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>📍 Location in Denmark</div>
+        <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 260 }}>
+          <iframe title={event.name} width="100%" height="260" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
+            src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint)}&zoom=7&maptype=roadmap`} />
+        </div>
+        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.mapHint)}`} target="_blank" rel="noreferrer"
+          style={{ display: "block", background: event.color, color: "#fff", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
+          ↗ Get Directions
+        </a>
+      </div>
+    </div>
+  );
+
+  const filteredEvents = (eventTab === "local" ? events : majorEvents)
+    .filter(e => isUpcoming(e.date))
+    .filter(e => {
+      const em = new Date(e.date).toLocaleString("en", { month: "short" });
+      return (!eventMonth || em === eventMonth) && (!eventType || e.type === eventType || (eventType === "North Zealand" && ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town)));
+    })
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  return (
+    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", background: C.bg, minHeight: "100vh", width: "100%", color: C.text, position: "relative" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: ${C.bg}; }
+        ::-webkit-scrollbar { width: 0; }
+        .slide-up { animation: slideUp 0.2s ease; }
+        @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(6px); } }
+        @media (min-width: 900px) { .mobile-only { display: none !important; } }
+        @media (max-width: 899px) { .desktop-only { display: none !important; } }
+        .products-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (min-width: 600px) { .products-grid { grid-template-columns: 1fr 1fr 1fr; } }
+        @media (min-width: 900px) { .products-grid { grid-template-columns: 1fr 1fr 1fr 1fr; } }
+      `}</style>
+
+      {/* ── HEADER ─────────────────────────────────────────── */}
+      <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "44px 16px 10px", position: "sticky", top: 0, zIndex: 100 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          {/* Logo */}
+          <div onClick={() => setActive("home")} style={{ cursor: "pointer" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, letterSpacing: -0.5 }}>◆ Gemlyx</div>
+            <div style={{ fontSize: 9, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>It exists nowhere else</div>
+          </div>
+
+          {/* Right icons */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {/* Search */}
+            <button onClick={() => setShowSearch(!showSearch)} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8 }}>🔍</button>
+            {/* Saved */}
+            <button onClick={() => setActive("explore")} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8, position: "relative" }} title="Saved">
+              ♡
+              {savedItems.length > 0 && <span style={{ position: "absolute", top: 4, right: 4, background: C.accent, color: "#fff", fontSize: 9, fontWeight: 700, width: 14, height: 14, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{savedItems.length}</span>}
+            </button>
+            {/* Hamburger menu */}
+            <button onClick={() => setShowMenu(!showMenu)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "6px 10px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
+              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
+              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
+            </button>
+          </div>
+        </div>
+
+        {/* Search bar */}
+        {showSearch && (
+          <div style={{ marginTop: 10, position: "relative" }}>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search cities, businesses, finds..." autoFocus
+              style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 16px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
           </div>
         )}
 
-        {/* AI GUIDE */}
-        {active === "ai" && (
-          <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-            <div style={{ padding: "8px 16px 6px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 14, color: "#D4B483" }}>◆</span>
-                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4" }}>Local Assist</span>
-                <span style={{ fontSize: 11, color: "#8A7355", marginLeft: 4 }}>— powered by AI</span>
+        {/* Search results */}
+        {search.length > 1 && searchResults.length > 0 && (
+          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: C.surface, borderBottom: `1px solid ${C.border}`, zIndex: 200, maxHeight: 240, overflowY: "auto" }}>
+            {searchResults.map(p => (
+              <div key={p.id} onClick={() => { setSelectedProduct({ ...p }); setSearch(""); setShowSearch(false); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                <span style={{ fontSize: 18 }}>{p.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{p.shop} · {p.city}</div>
+                </div>
+                <span style={{ fontWeight: 700, color: C.gold, fontSize: 13 }}>{p.price}</span>
               </div>
-            </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px 8px", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
-              {aiMessages.map((m, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
-                  {m.role === "assistant" && (
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #D4B483, #8A7355)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, marginRight: 8, flexShrink: 0, marginTop: 2 }}>◆</div>
-                  )}
-                  <div style={{ maxWidth: "78%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.5, background: m.role === "user" ? "#D4B483" : "#1E1610", color: m.role === "user" ? "#16120A" : "#EDE0C4", border: m.role === "user" ? "none" : "1px solid #2A1E10" }}>
-                    {m.text}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── TOP NAV TABS ───────────────────────────────────── */}
+      {(
+        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "sticky", top: 73, zIndex: 90, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content" }}>
+            {[
+              { id: "home", label: "🧭 Explore" },
+              { id: "explore", label: "🏪 Merchandise" },
+              { id: "events", label: "◈ Events" },
+              { id: "visits", label: "◉ Towns" },
+              { id: "essentials", label: "✓ Essentials" },
+            ].map(item => (
+              <button key={item.id} onClick={() => setActive(item.id)}
+                style={{ background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.accent : "transparent"}`, color: active === item.id ? C.text : C.muted, padding: "12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", transition: "all 0.2s" }}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── DROPDOWN MENU ──────────────────────────────────── */}
+      {showMenu && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
+          <div style={{ position: "absolute", top: 90, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
+            <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }`}</style>
+            {[
+              { id: "home", label: "🧭 Explore", action: "nav" },
+              { id: "login", label: "👤 Login", action: "login" },
+              { id: "faq", label: "❓ FAQ", action: "faq" },
+              { id: "support", label: "✉ Support", action: "mail" },
+            ].map((item, i) => (
+              <button key={item.id}
+                onClick={() => {
+                  setShowMenu(false);
+                  if (item.action === "nav") setActive("home");
+                  else if (item.action === "faq") setActive("essentials");
+                  else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
+                  else if (item.action === "login") { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }
+                }}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.06}s both` }}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── LAYOUT ─────────────────────────────────────────── */}
+      <div style={{ display: "flex", width: "100%" }}>
+
+        {/* Desktop sidebar */}
+        <div className="desktop-only" style={{ width: 240, flexShrink: 0, borderRight: `1px solid ${C.border}`, height: "calc(100vh - 73px)", overflowY: "auto", position: "sticky", top: 73, background: C.bg, padding: "16px 12px" }}>
+          {[
+            { id: "home", label: "Explore", icon: "🧭" },
+            { id: "explore", label: "Merchandise", icon: "🏪" },
+            { id: "events", label: "Events", icon: "◈" },
+            { id: "visits", label: "Towns", icon: "◉" },
+            { id: "essentials", label: "Essentials", icon: "✓" },
+          ].map(item => (
+            <button key={item.id} onClick={() => setActive(item.id)}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active === item.id ? C.accent : "transparent", color: active === item.id ? "#fff" : C.muted, border: "none", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 4, textAlign: "left", transition: "all 0.2s" }}>
+              <span>{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+          <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 16, paddingTop: 16 }}>
+            <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>🇩🇰 Denmark</div>
+            {cities.map(city => (
+              <button key={city.id} onClick={() => { setSelectedCity(city); setActive("explore"); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: selectedCity?.id === city.id ? `${city.color}22` : "transparent", color: selectedCity?.id === city.id ? city.color : C.muted, border: `1px solid ${selectedCity?.id === city.id ? city.color : "transparent"}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 4, textAlign: "left" }}>
+                🇩🇰 {city.name}
+                <span style={{ marginLeft: "auto", fontSize: 11 }}>{city.products.length}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Main content */}
+        <div style={{ flex: 1, height: "calc(100vh - 73px)", overflowY: "auto", paddingBottom: 20 }}>
+
+
+          {/* ── HOME LANDING ─────────────────────────────────── */}
+          {active === "home" && (
+            <div className="slide-up" style={{ margin: "-0px -0px" }}>
+              {/* Hero */}
+              <div style={{ height: "calc(100vh - 73px)", position: "relative", overflow: "hidden" }}>
+                <img src="/picture1.jpg" alt="Denmark" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(10,15,30,0.3) 0%, rgba(10,15,30,0.7) 100%)" }} />
+                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 24px" }}>
+                  <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#fff", marginBottom: 8, textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>◆ Gemlyx</div>
+                  <div style={{ fontSize: 16, color: "rgba(255,255,255,0.9)", marginBottom: 6, textShadow: "0 1px 10px rgba(0,0,0,0.5)" }}>Discover Denmark's hidden gems</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", letterSpacing: 2, textTransform: "uppercase" }}>It exists nowhere else</div>
+                  <div style={{ position: "absolute", bottom: 40, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,0.7)", fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, animation: "bounce 2s infinite" }}>
+                    <span>Scroll to explore</span>
+                    <span style={{ fontSize: 18 }}>↓</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation sections */}
+              {[
+                { id: "explore", img: "/picture2.png", title: "Merchandise", sub: "Exclusive finds that exist nowhere else", icon: "🏪" },
+                { id: "events", img: "/picture3.png", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
+                { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
+                { id: "craft", img: "/picture5.jpg", title: "Local Craft", sub: "Commission something made by hand", icon: "🔨" },
+              ].map((section, i) => (
+                <div key={section.id} onClick={() => { if (section.id === "craft") { setActive("explore"); setShopTab("craft"); } else { setActive(section.id); } window.scrollTo(0,0); }}
+                  style={{ height: 280, position: "relative", overflow: "hidden", cursor: "pointer" }}>
+                  <img src={section.img} alt={section.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s" }}
+                    onMouseOver={e => e.target.style.transform = "scale(1.04)"}
+                    onMouseOut={e => e.target.style.transform = "scale(1)"} />
+                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.85) 0%, rgba(10,15,30,0.2) 60%)" }} />
+                  <div style={{ position: "absolute", bottom: 24, left: 24, right: 24 }}>
+                    <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#fff", marginBottom: 4 }}>{section.icon} {section.title}</div>
+                    <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>{section.sub}</div>
+                    <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(200,16,46,0.9)", color: "#fff", borderRadius: 100, padding: "8px 18px", fontSize: 12, fontWeight: 700 }}>
+                      Explore →
+                    </div>
                   </div>
                 </div>
               ))}
-              {aiLoading && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #D4B483, #8A7355)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>◆</div>
-                  <div style={{ background: "#1E1610", border: "1px solid #2A1E10", borderRadius: "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, color: "#8A7355" }}>Thinking...</div>
-                </div>
-              )}
-              <div ref={aiBottomRef} />
-            </div>
-            <div style={{ flexShrink: 0, padding: "6px 16px 8px", borderTop: "1px solid #2A1E10", background: "#16120A" }}>
-              <div style={{ fontSize: 10, color: "#6B5442", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Try asking →</div>
-              <div style={{ display: "flex", gap: 6, marginBottom: 8, overflowX: "auto" }}>
-                {["Edgy Seoul finds", "Tokyo under ¥20k", "Artisan bags", "Hidden gems"].map(s => (
-                  <button key={s} onClick={() => setAiInput(s)} style={{ background: "#1E1610", border: "1px solid #2A1E10", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#8A7355", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s}</button>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
-                  placeholder="Tell me where you're heading..."
-                  style={{ flex: 1, border: "1.5px solid #D4B483", borderRadius: 100, padding: "10px 16px", fontSize: 13, outline: "none", background: "#1E1610", color: "#EDE0C4", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-                <button onClick={sendAI} disabled={aiLoading || !aiInput.trim()} style={{ background: aiLoading || !aiInput.trim() ? "#2A1E10" : "#D4B483", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", color: aiLoading || !aiInput.trim() ? "#8A7355" : "#16120A", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>→</button>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* MAP */}
-        {active === "map" && (
-          <div className="slide-up" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 148px)" }}>
-            <div style={{ padding: "8px 0 4px", flexShrink: 0 }}>
-              <div style={{ display: "flex", gap: 8, paddingLeft: 16, overflowX: "auto", paddingRight: 16 }}>
-                {[...cities].sort((a,b) => a.name.localeCompare(b.name)).map(city => (
-                  <button key={city.id} onClick={() => { setMapCity(city); setSelectedPin(null); }}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 100, background: mapCity?.id === city.id ? city.color : "#1E1610", color: mapCity?.id === city.id ? "#fff" : "#8A7355", border: `1px solid ${mapCity?.id === city.id ? city.color : "#2A1E10"}`, fontWeight: 600, fontSize: 12, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-                    <FlagImg flagCode={city.flagCode} />
-                    {city.name}
+              {/* AI at the end of the journey */}
+              <div style={{ padding: "36px 20px 28px", borderTop: `1px solid ${C.border}`, background: C.surface }}>
+                <div style={{ textAlign: "center", marginBottom: 16 }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>✦ Overwhelmed? Let me help you.</div>
+                </div>
+
+                {aiMessages.length > 1 && (
+                  <div style={{ maxHeight: 300, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
+                    {aiMessages.slice(1).map((m, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+                        <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.5, background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}` }}>
+                          {m.text}
+                        </div>
+                      </div>
+                    ))}
+                    {aiLoading && <div style={{ background: C.bg, borderRadius: "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, color: C.muted, border: `1px solid ${C.border}`, display: "inline-block", marginBottom: 10 }}>thinking...</div>}
+                    <div ref={aiBottomRef} />
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                  {["Plan my 3 days in Denmark", "Exclusive fashion in Copenhagen", "Best craft to commission"].map(s => (
+                    <button key={s} onClick={() => setAiInput(s)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, color: C.light, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>{s}</button>
+                  ))}
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
+                    placeholder="Ask me anything about Denmark..."
+                    style={{ flex: 1, border: `1.5px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+                  <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: "#fff" }}>↗</button>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: "36px 24px 32px", textAlign: "center", borderTop: `1px solid ${C.border}` }}>
+                {!emailSubmitted ? (
+                  <div style={{ maxWidth: 420, margin: "0 auto 28px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Stay in the loop</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input value={emailSignup} onChange={e => setEmailSignup(e.target.value)} placeholder="Enter your email"
+                        style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 14px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+                      <button onClick={() => { if (emailSignup.includes("@")) setEmailSubmitted(true); }}
+                        style={{ background: C.accent, border: "none", borderRadius: 10, padding: "11px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#fff", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" }}>
+                        Notify me
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Be first when we launch new cities. No spam.</div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: "#4CAF50", fontWeight: 700, marginBottom: 28 }}>✓ You're on the list — we'll be in touch.</div>
+                )}
+                <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
+                <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.5 — Jul 2026</div>
+              </div>
+            </div>
+          )}
+
+          {/* ── EXPLORE ──────────────────────────────────────── */}
+          {active === "explore" && (
+            <div className="slide-up">
+              {/* Sub tabs */}
+              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}` }}>
+                {[
+                  { id: "shops", label: "🏪 Shops" },
+                  { id: "craft", label: "🔨 Craft" },
+                  { id: "saved", label: `♡ Saved${savedItems.length > 0 ? ` (${savedItems.length})` : ""}` },
+                ].map(t => (
+                  <button key={t.id} onClick={() => setShopTab(t.id)}
+                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${shopTab === t.id ? C.accent : "transparent"}`, color: shopTab === t.id ? C.text : C.muted, padding: "14px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "all 0.2s" }}>
+                    {t.label}
                   </button>
                 ))}
               </div>
-            </div>
 
-            {!mapCity ? (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "0 24px" }}>
-                <div style={{ fontSize: 28, color: "#D4B483" }}>●</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#EDE0C4", fontFamily: "'Cormorant Garamond', serif" }}>Pick a city</div>
-                <div style={{ fontSize: 12, color: "#8A7355", textAlign: "center" }}>Select a city above to see its exclusive finds</div>
-              </div>
-            ) : (
-              <div style={{ flex: 1, margin: "8px 16px 0", borderRadius: 16, overflow: "hidden", border: "1px solid #2A1E10", display: "flex", flexDirection: "column" }}>
-                <div style={{ height: 220, position: "relative", flexShrink: 0, overflow: "hidden" }}>
-                  {(() => {
-                    const COORDS = {
-                      1:[37.5563,126.9374], 2:[37.5247,127.0400], 3:[37.5563,126.9227],
-                      4:[37.5200,127.0420], 5:[37.5340,126.9940], 20:[37.5500,126.9200],
-                      6:[35.6654,139.7107], 7:[35.6702,139.7026], 8:[35.6488,139.7026], 9:[35.6654,139.7200],
-                      10:[31.6315,-7.9887], 11:[31.6290,-7.9900], 12:[31.6340,-7.9950],
-                      13:[55.6761,12.5683], 14:[55.6780,12.5700], 15:[55.6750,12.5760],
-                      16:[19.4284,-99.1276], 17:[19.4180,-99.1620], 18:[19.3980,-99.1200],
-                      19:[41.3275,19.8187],
-                    };
-                    const CITY_CENTER = {
-                      "Seoul":[37.5665,126.9780], "Tokyo":[35.6762,139.6503],
-                      "Marrakech":[31.6295,-7.9811], "Copenhagen":[55.6761,12.5683],
-                      "Mexico City":[19.4326,-99.1332], "Tirana":[41.3275,19.8187],
-                    };
-                    const pinCoords = selectedPin ? COORDS[selectedPin.id] : null;
-                    const cityCenter = CITY_CENTER[mapCity.name] || [37.5665,126.9780];
-                    const src = selectedPin && pinCoords
-                      ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.mapHint || selectedPin.shop)}&zoom=17`
-                      : userLocation
-                      ? `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=${userLocation.lat},${userLocation.lng}&zoom=14&maptype=roadmap`
-                      : `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=${cityCenter[0]},${cityCenter[1]}&zoom=14&maptype=roadmap`;
-                    return (
-                      <iframe
-                        key={mapCity.name + (selectedPin?.id || "overview")}
-                        title="Google Map"
-                        width="100%"
-                        height="220"
-                        frameBorder="0"
-                        style={{ border: 0, display: "block" }}
-                        referrerPolicy="no-referrer-when-downgrade"
-                        src={src}
-                        allowFullScreen
-                      />
-                    );
-                  })()}
-                  <div style={{ position: "absolute", bottom: 8, left: 8, pointerEvents: "none" }}>
-                    <span style={{ background: mapCity.color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100 }}>{mapCity.name} · {mapCity.products.length} finds</span>
+              {/* SHOPS */}
+              {shopTab === "shops" && (
+                <div style={{ padding: "14px 16px" }}>
+                  {/* City + Filter row */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                      {cities.map(city => (
+                        <Pill key={city.id} label={`🇩🇰 ${city.name}`} active={selectedCity?.id === city.id} onClick={() => setSelectedCity(selectedCity?.id === city.id ? null : city)} color={city.color} />
+                      ))}
+                    </div>
+                    <button onClick={() => setShowFilter(true)}
+                      style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", fontSize: 12, color: C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, flexShrink: 0, marginLeft: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      ⊟ Filter
+                    </button>
                   </div>
-                  {(() => {
-                    const COORDS = {
-                      1:[37.5563,126.9374], 2:[37.5247,127.0400], 3:[37.5563,126.9227],
-                      4:[37.5200,127.0420], 5:[37.5340,126.9940], 20:[37.5500,126.9200],
-                      6:[35.6654,139.7107], 7:[35.6702,139.7026], 8:[35.6488,139.7026], 9:[35.6654,139.7200],
-                      10:[31.6315,-7.9887], 11:[31.6290,-7.9900], 12:[31.6340,-7.9950],
-                      13:[55.6761,12.5683], 14:[55.6780,12.5700], 15:[55.6750,12.5760],
-                      16:[19.4284,-99.1276], 17:[19.4180,-99.1620], 18:[19.3980,-99.1200],
-                      19:[41.3275,19.8187],
-                    };
-                    const pinCoords = selectedPin ? COORDS[selectedPin.id] : null;
-                    const mapsUrl = selectedPin && pinCoords
-                      ? `https://www.google.com/maps/dir/?api=1&destination=${pinCoords[0]},${pinCoords[1]}&destination_place_id=${encodeURIComponent(selectedPin.shop)}`
-                      : `https://www.google.com/maps/search/?api=1&query=boutiques+${encodeURIComponent(mapCity.name)}`;
-                    return (
-                      <a href={mapsUrl} target="_blank" rel="noreferrer"
-                        style={{ position: "absolute", bottom: 8, right: 8, background: "#D4B483", color: "#16120A", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-                        {selectedPin ? "Get Directions ↗" : "Open in Maps ↗"}
-                      </a>
-                    );
-                  })()}
+
+                  {/* Hero */}
+                  {selectedCity && (
+                    <div style={{ borderRadius: 16, overflow: "hidden", position: "relative", height: 100, background: selectedCity.color, marginBottom: 14 }}>
+                      {selectedCity.photo && <img src={selectedCity.photo} alt={selectedCity.name} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.4 }} />}
+                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.1) 100%)" }} />
+                      <div style={{ position: "absolute", bottom: 10, left: 14 }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#fff", fontFamily: "'Cormorant Garamond', serif" }}>{selectedCity.name}</div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>◆ {displayProducts.length} finds</div>
+                      </div>
+                      <div style={{ position: "absolute", top: 10, left: 14, background: selectedCity.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, textTransform: "uppercase" }}>{selectedCity.tag}</div>
+                    </div>
+                  )}
+
+                  {/* Products grid */}
+                  <div className="products-grid">
+                    {displayProducts.map(p => <ProductCard key={p.id} product={p} />)}
+                  </div>
+                  {displayProducts.length === 0 && (
+                    <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No businesses found</div>
+                  )}
                 </div>
-                <div style={{ flex: 1, overflowY: "auto" }}>
-                  {/* Location button */}
-                  <div style={{ padding: "10px 14px", borderBottom: "1px solid #1E1610", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 11, color: "#8A7355" }}>
-                      {userLocation ? "● Sorted by distance" : "Sort by distance?"}
-                    </span>
-                    {!userLocation && (
-                      <button onClick={requestLocation} disabled={locationLoading}
-                        style={{ background: "#D4B483", border: "none", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#16120A", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {locationLoading ? "Locating..." : "Use my location ●"}
-                      </button>
-                    )}
-                    {userLocation && (
-                      <button onClick={() => setUserLocation(null)}
-                        style={{ background: "none", border: "1px solid #2A1E10", borderRadius: 100, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: "#8A7355", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        Clear
-                      </button>
-                    )}
-                  </div>
+              )}
 
-                  {(() => {
-                    const COORDS = {
-                      1:[37.5563,126.9374], 2:[37.5247,127.0400], 3:[37.5563,126.9227],
-                      4:[37.5200,127.0420], 5:[37.5340,126.9940], 20:[37.5500,126.9200],
-                      6:[35.6654,139.7107], 7:[35.6702,139.7026], 8:[35.6488,139.7026], 9:[35.6654,139.7200],
-                      10:[31.6315,-7.9887], 11:[31.6290,-7.9900], 12:[31.6340,-7.9950],
-                      13:[55.6761,12.5683], 14:[55.6780,12.5700], 15:[55.6750,12.5760],
-                      16:[19.4284,-99.1276], 17:[19.4180,-99.1620], 18:[19.3980,-99.1200],
-                      19:[41.3275,19.8187],
-                    };
-                    const sorted = [...mapCity.products].sort((a, b) => {
+              {/* CRAFT */}
+              {shopTab === "craft" && (
+                <div style={{ padding: "16px" }}>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>🔨 Local Craft</div>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Commission something made by hand — before or during your visit</div>
+                  </div>
+                  {craftItems.map(craft => (
+                    <div key={craft.id} style={{ background: C.surface, borderRadius: 16, padding: "16px", marginBottom: 12, border: `1px solid ${C.border}`, position: "relative" }}>
+                      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: craft.color, borderRadius: "16px 0 0 16px" }} />
+                      <div style={{ paddingLeft: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                          <span style={{ fontSize: 20 }}>{craft.emoji}</span>
+                          <div>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{craft.name}</div>
+                            <div style={{ fontSize: 11, color: C.muted }}>{craft.location} · {craft.travelTime} from CPH</div>
+                          </div>
+                          <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, color: craft.color, background: `${craft.color}22`, padding: "3px 8px", borderRadius: 100 }}>{craft.type}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{craft.desc}</div>
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>What you can make</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {craft.what.map(w => <span key={w} style={{ fontSize: 10, color: C.light, background: C.bg, padding: "3px 8px", borderRadius: 100 }}>{w}</span>)}
+                          </div>
+                        </div>
+                        <div style={{ height: 130, borderRadius: 10, overflow: "hidden", marginBottom: 10 }}>
+                          <iframe title={craft.name} width="100%" height="130" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
+                            src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(craft.mapHint)}&zoom=13`} />
+                        </div>
+                        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(craft.mapHint)}`} target="_blank" rel="noreferrer"
+                          style={{ display: "block", background: craft.color, color: "#fff", borderRadius: 10, padding: "8px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
+                          ↗ Get Directions
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* SAVED */}
+              {shopTab === "saved" && (
+                <div style={{ padding: "16px" }}>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>♡ Saved Finds</div>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{savedProducts.length} businesses saved</div>
+                  </div>
+                  {savedProducts.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "50px 0" }}>
+                      <div style={{ fontSize: 40, marginBottom: 12 }}>♡</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Nothing saved yet</div>
+                      <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>Tap ♡ on any find to save it</div>
+                    </div>
+                  ) : (
+                    <div className="products-grid">
+                      {savedProducts.map(p => <ProductCard key={p.id} product={p} />)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── EVENTS ───────────────────────────────────────── */}
+          {active === "events" && (
+            <div className="slide-up" style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>◈ Events</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Discover what's happening across Denmark</div>
+              </div>
+              <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
+                {[{ id: "local", label: "🏘 Local" }, { id: "major", label: "🌟 Major" }].map(t => (
+                  <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
+                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                  {["All", "Jun", "Jul", "Aug", "Sep"].map(m => (
+                    <Pill key={m} label={m} active={(m === "All" && !eventMonth) || eventMonth === m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                  {(eventTab === "local" ? ["All", "Festival", "Market", "Concert", "North Zealand"] : ["All", "Music", "Cultural"]).map(f => (
+                    <Pill key={f} label={f} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />
+                  ))}
+                </div>
+              </div>
+              {filteredEvents.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No upcoming events — try a different filter</div>
+              ) : filteredEvents.map(e => <EventCard key={e.id} event={e} />)}
+            </div>
+          )}
+
+          {/* ── TOWNS ────────────────────────────────────────── */}
+          {active === "visits" && (
+            <div className="slide-up" style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>◉ Local Towns</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Denmark's most beautiful hidden towns</div>
+              </div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+                {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "Bornholm", "Fanø Island"].map(r => (
+                  <Pill key={r} label={r} active={(r === "All" && !townFilter) || townFilter === r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))} />
+                ))}
+              </div>
+              {towns.filter(t => !townFilter || t.region === townFilter).map(town => (
+                <div key={town.id} style={{ background: C.surface, borderRadius: 16, marginBottom: 12, overflow: "hidden", border: `1px solid ${C.border}` }}>
+                  <div style={{ padding: "14px 16px 10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 20 }}>{town.emoji}</span>
+                      <div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{town.name}</div>
+                        <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>{town.region}</div>
+                      </div>
+                      <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, color: town.nomiPotential === "Very High" ? "#4CAF50" : C.gold, background: town.nomiPotential === "Very High" ? "#4CAF5022" : `${C.gold}22`, padding: "3px 8px", borderRadius: 100 }}>
+                        {town.nomiPotential === "Very High" ? "⭐ Top Pick" : "◆ Pick"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginBottom: 6 }}>{town.tag}</div>
+                    <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{town.desc}</div>
+                    <div style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 10, borderLeft: `3px solid ${C.gold}` }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>◆ Gemlyx Find</div>
+                      <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{town.highlight}</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{town.travelTime} from CPH</div>
+                  </div>
+                  <div style={{ height: 150 }}>
+                    <iframe title={town.name} width="100%" height="150" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
+                      src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(town.mapHint)}&zoom=12`} />
+                  </div>
+                  <div style={{ padding: "10px 16px 14px" }}>
+                    <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(town.mapHint)}`} target="_blank" rel="noreferrer"
+                      style={{ display: "block", background: C.accent, color: "#fff", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
+                      ↗ Get Directions
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── ESSENTIALS ───────────────────────────────────── */}
+          {active === "essentials" && (
+            <div className="slide-up" style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>✓ Travel Essentials</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Everything you need to travel Denmark like a local</div>
+              </div>
+              {["Transport", "Payments", "Sightseeing", "Connectivity"].map(cat => (
+                <div key={cat} style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{cat}</div>
+                  {essentials.filter(e => e.category === cat).map(item => (
+                    <div key={item.id} style={{ background: C.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${C.border}` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                        <span style={{ fontSize: 22 }}>{item.emoji}</span>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{item.name}</div>
+                          <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{item.price}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>{item.desc}</div>
+                      <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, marginBottom: 3 }}>How to get it</div>
+                        <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
+                      </div>
+                      <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: item.link ? 8 : 0 }}>💡 {item.tip}</div>
+                      {item.link && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <a href={item.link} target="_blank" rel="noreferrer"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#000", color: "#fff", borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                        🍎 App Store
+                      </a>
+                      {item.linkAndroid && (
+                        <a href={item.linkAndroid} target="_blank" rel="noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#01875F", color: "#fff", borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                          🤖 Google Play
+                        </a>
+                      )}
+                      {!item.linkAndroid && (
+                        <a href={item.link} target="_blank" rel="noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, color: C.light, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                          🌐 Website ↗
+                        </a>
+                      )}
+                    </div>
+                  )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {/* FAQ */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>FAQ</div>
+                {[
+                  { q: "Is Gemlyx free?", a: "Yes — completely free for travelers. Browse, save, use the map and discover hidden finds at no cost." },
+                  { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
+                  { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyx.com. We visit and verify every listing personally." },
+                  { q: "Are all finds verified?", a: "Yes — every listing is physically verified by a real person. We show the verification date on each find." },
+                  { q: "Which cities are covered?", a: "Currently Copenhagen, Denmark. More Danish cities coming soon." },
+                ].map((item, i) => (
+                  <div key={i} style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{item.q}</div>
+                    <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{item.a}</div>
+                  </div>
+                ))}
+                <div style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Still need help?</div>
+                  <a href="mailto:hello@gemlyx.com" style={{ display: "inline-block", background: C.accent, color: "#fff", borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 6 }}>✉ hello@gemlyx.com</a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── MAP ──────────────────────────────────────────── */}
+          {active === "map" && (
+            <div className="slide-up" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 73px)" }}>
+              <div style={{ padding: "12px 16px 8px", flexShrink: 0 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Select a city</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                  {cities.map(city => (
+                    <Pill key={city.id} label={`🇩🇰 ${city.name}`} active={mapCity?.id === city.id} onClick={() => { setMapCity(city); setSelectedPin(null); }} color={city.color} />
+                  ))}
+                </div>
+              </div>
+              {mapCity ? (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  <div style={{ height: 220, position: "relative", flexShrink: 0 }}>
+                    {(() => {
+                      const src = selectedPin
+                        ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.shop)}&zoom=17`
+                        : `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=55.6761,12.5683&zoom=14&maptype=roadmap`;
+                      return <iframe key={mapCity.name + (selectedPin?.id||"")} title="Map" width="100%" height="220" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade" src={src} allowFullScreen />;
+                    })()}
+                    <a href={selectedPin ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(selectedPin.shop+" Copenhagen")}` : `https://www.google.com/maps/search/?api=1&query=local+shops+Copenhagen`}
+                      target="_blank" rel="noreferrer"
+                      style={{ position: "absolute", bottom: 8, right: 8, background: C.gold, color: "#000", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                      {selectedPin ? "Get Directions ↗" : "Open in Maps ↗"}
+                    </a>
+                  </div>
+                  <div style={{ flex: 1, overflowY: "auto" }}>
+                    <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 11, color: userLocation ? "#4CAF50" : C.muted }}>{userLocation ? "● Sorted by distance" : "Sort by distance?"}</span>
+                      {!userLocation ? (
+                        <button onClick={requestLocation} disabled={locationLoading} style={{ background: C.gold, border: "none", borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#000", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {locationLoading ? "Locating..." : "Use my location ●"}
+                        </button>
+                      ) : (
+                        <button onClick={() => setUserLocation(null)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: C.muted, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Clear</button>
+                      )}
+                    </div>
+                    {[...mapCity.products].sort((a,b) => {
                       if (!userLocation) return 0;
-                      const ca = COORDS[a.id], cb = COORDS[b.id];
-                      if (!ca || !cb) return 0;
-                      return getDistanceRaw(userLocation.lat, userLocation.lng, ca[0], ca[1]) -
-                             getDistanceRaw(userLocation.lat, userLocation.lng, cb[0], cb[1]);
-                    });
-                    return sorted.map(p => {
-                      const c = COORDS[p.id];
+                      const ca = PRODUCT_COORDS[a.id], cb = PRODUCT_COORDS[b.id];
+                      if (!ca||!cb) return 0;
+                      return getDistanceRaw(userLocation.lat, userLocation.lng, ca[0], ca[1]) - getDistanceRaw(userLocation.lat, userLocation.lng, cb[0], cb[1]);
+                    }).map(p => {
+                      const c = PRODUCT_COORDS[p.id];
                       const dist = userLocation && c ? getDistance(userLocation.lat, userLocation.lng, c[0], c[1]) : null;
                       return (
-                        <div key={p.id}
-                          onClick={() => setSelectedPin(selectedPin?.id === p.id ? null : p)}
+                        <div key={p.id} onClick={() => setSelectedPin(selectedPin?.id === p.id ? null : p)}
                           onDoubleClick={() => setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color })}
-                          style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", borderBottom: "1px solid #1E1610", cursor: "pointer", background: selectedPin?.id === p.id ? `${mapCity.color}15` : "transparent", transition: "background 0.2s" }}>
+                          style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", background: selectedPin?.id === p.id ? `${mapCity.color}15` : "transparent" }}>
                           <div style={{ width: 40, height: 40, borderRadius: 10, overflow: "hidden", background: `${mapCity.color}22`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                            {p.photo ? <img src={p.photo} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.emoji}
+                            {p.photo ? <img src={p.photo} alt={p.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : p.emoji}
                           </div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: "#EDE0C4", fontFamily: "'Cormorant Garamond', serif" }}>{p.name}</div>
-                            <div style={{ fontSize: 10, color: "#8A7355", marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3 }}>{p.shop}</div>
-                            {dist && (
-                              <div style={{ fontSize: 11, color: "#D4B483", marginTop: 3, fontWeight: 700 }}>● {dist} away</div>
-                            )}
+                            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{p.name}</div>
+                            <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{p.shop}</div>
+                            {dist && <div style={{ fontSize: 11, color: C.gold, marginTop: 3, fontWeight: 700 }}>● {dist} away</div>}
                           </div>
-                          <div style={{ textAlign: "right", flexShrink: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: "#D4B483", fontFamily: "'Cormorant Garamond', serif" }}>{p.price}</div>
-                            {selectedPin?.id === p.id ? (
-                              <button onClick={e => { e.stopPropagation(); setSelectedProduct({ ...p, city: mapCity.name, color: mapCity.color }); }}
-                                style={{ fontSize: 11, color: "#fff", background: mapCity.color, border: "none", borderRadius: 100, padding: "2px 8px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700 }}>
-                                Details ↗
-                              </button>
-                            ) : (
-                              <span style={{ fontSize: 11, color: "#8A7355" }}>Tap to locate</span>
-                            )}
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>{p.price}</div>
+                            <span style={{ fontSize: 10, color: C.muted }}>{selectedPin?.id === p.id ? "✓ Selected" : "Tap to locate"}</span>
                           </div>
                         </div>
                       );
-                    });
-                  })()}
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              ) : (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8, color: C.muted }}>
+                  <div style={{ fontSize: 32 }}>⊙</div>
+                  <div style={{ fontSize: 14 }}>Select a city to explore the map</div>
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* SAVED */}
-        {active === "saved" && (
-          <div className="slide-up" style={{ padding: "16px" }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4", marginBottom: 4 }}>♡ Saved</h2>
-            <p style={{ fontSize: 12, color: "#8A7355", marginBottom: 14 }}>{savedProducts.length} items saved</p>
-            {savedProducts.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "50px 0" }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>♡</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#8A7355" }}>Nothing saved yet</div>
-                <div style={{ fontSize: 12, color: "#6B5442", marginTop: 8 }}>Tap ♡ on any find to save it</div>
-              </div>
-            ) : savedProducts.map(p => <ProductCard key={p.id} product={p} />)}
-          </div>
-        )}
-
+        </div>
       </div>
 
-      {/* Bottom Nav */}
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "rgba(22,18,10,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid #2A1E10", padding: "6px 4px 20px", display: "flex", justifyContent: "space-around", zIndex: 50 }}>
-        {navItems.map(item => (
-          <button key={item.id} onClick={() => setActive(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", padding: "0 8px" }}>
-            <div style={{ background: active === item.id ? "#D4B483" : "transparent", borderRadius: 8, padding: "4px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, transition: "all 0.2s" }}>
-              <span style={{ fontSize: 13, fontFamily: "serif", color: active === item.id ? "#16120A" : "#6B5442" }}>{item.icon}</span>
-              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: active === item.id ? "#16120A" : "#6B5442" }}>{item.label}</span>
+      {/* ── FILTER PANEL (Hotels.com style) ──────────────── */}
+      {showFilter && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 400, display: "flex", alignItems: "flex-end" }} onClick={() => setShowFilter(false)}>
+          <div style={{ background: C.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 500, margin: "0 auto", padding: "20px 20px 40px" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Sort & Filter</div>
+              <button onClick={() => { setFilterCategory("All"); setFilterType("All"); }} style={{ background: "none", border: "none", color: C.accent, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }} onClick={() => { setFilterCategories([]); setFilterTypes([]); }}>Reset</button>
             </div>
-          </button>
-        ))}
-      </div>
 
-      {/* Location alert */}
-      {alertVisible && locationAlert && (
-        <div onClick={() => { setContinent(locationAlert.continent); setCountry(locationAlert.country); setSelectedCity(locationAlert); setActive("explore"); setAlertVisible(false); }}
-          style={{ position: "fixed", top: 60, left: 16, right: 16, maxWidth: 398, margin: "0 auto", background: "#1E1610", border: `1.5px solid ${locationAlert.color}`, borderRadius: 16, padding: "12px 16px", zIndex: 300, cursor: "pointer", animation: "slideDown 0.4s ease", boxShadow: "0 8px 32px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: "50%", background: locationAlert.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{locationAlert.emoji}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#EDE0C4" }}>It exists here! ◆</div>
-            <div style={{ fontSize: 11, color: "#8A7355", marginTop: 2 }}>You're in {locationAlert.country} — things here exist nowhere else</div>
-          </div>
-          <button onClick={e => { e.stopPropagation(); setAlertVisible(false); }} style={{ background: "none", border: "none", color: "#8A7355", fontSize: 14, cursor: "pointer" }}>✕</button>
-        </div>
-      )}
-
-      {/* Support bubble */}
-      {!supportOpen && supportVisible && !supportDismissed && (
-        <div onMouseDown={onDragStart} onTouchStart={onDragStart}
-          style={{ position: "fixed", bottom: bubblePos.y !== null ? "auto" : 88, right: bubblePos.x !== null ? "auto" : 16, left: bubblePos.x !== null ? bubblePos.x : "auto", top: bubblePos.y !== null ? bubblePos.y : "auto", cursor: dragging ? "grabbing" : "grab", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, userSelect: "none", touchAction: "none" }}>
-          <div style={{ position: "relative" }}>
-            <div style={{ background: dragging ? "#D4B483" : "#1E1610", color: dragging ? "#16120A" : "#D4B483", fontSize: dragging ? 14 : 10, fontWeight: 800, padding: "5px 12px", borderRadius: 100, whiteSpace: "nowrap", marginBottom: 2, boxShadow: "0 2px 12px rgba(0,0,0,0.3)", border: "1px solid #D4B483", paddingRight: dragging ? 12 : 24, transition: "all 0.1s" }}>
-              {dragging && dragText ? dragText : "Need help? →"}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 }}>Category</div>
+              {["Fashion", "Accessories", "Bags"].map(cat => {
+                const checked = filterCategories.includes(cat);
+                return (
+                  <label key={cat} onClick={() => setFilterCategories(prev => checked ? prev.filter(x => x !== cat) : [...prev, cat])}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                    <span style={{ fontSize: 14, color: C.text }}>{cat}</span>
+                    <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${checked ? C.accent : C.border}`, background: checked ? C.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                      {checked && <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>✓</span>}
+                    </div>
+                  </label>
+                );
+              })}
             </div>
-            {!dragging && (
-              <button onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setSupportDismissed(true); }}
-                style={{ position: "absolute", top: "50%", right: 6, transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#8A7355", fontSize: 9, padding: 2, lineHeight: 1 }}>✕</button>
+
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 }}>Availability</div>
+              {[{ id: "permanent", label: "Permanent shops" }, { id: "seasonal", label: "Seasonal" }, { id: "popup", label: "Pop-up" }].map(opt => {
+                const checked = filterTypes.includes(opt.id);
+                return (
+                  <label key={opt.id} onClick={() => setFilterTypes(prev => checked ? prev.filter(x => x !== opt.id) : [...prev, opt.id])}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                    <span style={{ fontSize: 14, color: C.text }}>{opt.label}</span>
+                    <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${checked ? C.accent : C.border}`, background: checked ? C.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                      {checked && <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>✓</span>}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <button onClick={() => setShowFilter(false)}
+              style={{ width: "100%", background: C.accent, border: "none", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Show {displayProducts.length} results
+            </button>
+            {(filterCategories.length > 0 || filterTypes.length > 0) && (
+              <button onClick={() => { setFilterCategories([]); setFilterTypes([]); }}
+                style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px", fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 8 }}>
+                Clear all filters
+              </button>
             )}
           </div>
-          <div style={{ width: 52, height: 52, borderRadius: "50%", background: "linear-gradient(135deg, #1E1610, #2A1E10)", border: `2px solid ${accentColor}`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.3)", position: "relative" }}>
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-              <rect x="6" y="8" width="20" height="16" rx="4" fill="#EDE0C4" opacity="0.9"/>
-              <line x1="16" y1="2" x2="16" y2="8" stroke="#EDE0C4" strokeWidth="2" strokeLinecap="round"/>
-              <circle cx="16" cy="2" r="2" fill={accentColor}/>
-              <rect x="9" y="12" width="5" height="4" rx="1.5" fill={accentColor}/>
-              <rect x="18" y="12" width="5" height="4" rx="1.5" fill={accentColor}/>
-              <path d="M11 20 Q16 23 21 20" stroke={accentColor} strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-            </svg>
-            <div style={{ position: "absolute", bottom: 2, right: 2, width: 10, height: 10, borderRadius: "50%", background: "#00CC88", border: "2px solid #16120A" }} />
-          </div>
-          <div style={{ fontSize: 9, fontWeight: 700, color: "#6B5442", textTransform: "uppercase", letterSpacing: 0.5 }}>Support</div>
         </div>
       )}
 
-      {/* Support chat */}
-      {supportOpen && (
-        <div style={{ position: "fixed", bottom: 80, right: 16, left: 16, maxWidth: 398, marginLeft: "auto", background: "#1A1208", borderRadius: 20, boxShadow: "0 8px 40px rgba(0,0,0,0.5)", zIndex: 200, display: "flex", flexDirection: "column", maxHeight: "60vh", overflow: "hidden", border: "1px solid #2A1E10" }}>
-          <div style={{ padding: "12px 16px", borderBottom: "1px solid #2A1E10", background: "#16120A", borderRadius: "20px 20px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#1E1610", border: `2px solid ${accentColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
-                  <rect x="6" y="8" width="20" height="16" rx="4" fill="#EDE0C4" opacity="0.9"/>
-                  <rect x="9" y="12" width="5" height="4" rx="1.5" fill={accentColor}/>
-                  <rect x="18" y="12" width="5" height="4" rx="1.5" fill={accentColor}/>
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: "#EDE0C4" }}>GoBot</div>
-                <div style={{ fontSize: 10, color: "#8A7355", display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00CC88" }} />Always online</div>
-              </div>
-            </div>
-            <button onClick={() => setSupportOpen(false)} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", color: "#EDE0C4", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
-          </div>
-          <div style={{ padding: "8px 14px 0", display: "flex", gap: 6, overflowX: "auto", borderBottom: "1px solid #2A1E10", paddingBottom: 8 }}>
-            {["How does it work?", "Is it free?", "Add my shop?", "Which cities?"].map(q => (
-              <button key={q} onClick={() => { setSupportInput(q); }} style={{ background: "#1E1610", border: "1px solid #2A1E10", borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#D4B483", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{q}</button>
-            ))}
-          </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
-            {supportMessages.map((m, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
-                <div style={{ maxWidth: "80%", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "10px 12px", fontSize: 13, lineHeight: 1.5, background: m.role === "user" ? "#D4B483" : "#1E1610", color: m.role === "user" ? "#16120A" : "#EDE0C4" }}>{m.text}</div>
-              </div>
-            ))}
-            {supportLoading && <div style={{ background: "#1E1610", borderRadius: "16px 16px 16px 4px", padding: "10px 12px", fontSize: 13, color: "#8A7355", display: "inline-block" }}>Typing...</div>}
-          </div>
-          <div style={{ padding: "10px 14px 14px", display: "flex", gap: 8, borderTop: "1px solid #2A1E10" }}>
-            <input value={supportInput} onChange={e => setSupportInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendSupport()}
-              placeholder="Ask anything..."
-              style={{ flex: 1, border: "1px solid #2A1E10", borderRadius: 100, padding: "9px 14px", fontSize: 13, outline: "none", background: "#1E1610", color: "#EDE0C4", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-            <button onClick={sendSupport} disabled={supportLoading || !supportInput.trim()} style={{ background: supportLoading || !supportInput.trim() ? "#1E1610" : "#D4B483", border: "none", borderRadius: "50%", width: 38, height: 38, cursor: "pointer", color: supportLoading || !supportInput.trim() ? "#8A7355" : "#16120A", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>→</button>
-          </div>
-        </div>
-      )}
-
-      {/* Product modal */}
+      {/* ── PRODUCT MODAL ─────────────────────────────────── */}
       {selectedProduct && (
-        <div className="modal-bg" onClick={() => setSelectedProduct(null)}>
-          <div className="modal-sheet" onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#8A7355", textTransform: "uppercase", letterSpacing: 0.5 }}>{selectedProduct.city} · {selectedProduct.category}</div>
-              <button onClick={() => setSelectedProduct(null)} style={{ background: "#1E1610", border: "none", borderRadius: "50%", width: 32, height: 32, fontSize: 14, cursor: "pointer", color: "#EDE0C4", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-            </div>
-            <div style={{ borderRadius: 18, height: 180, marginBottom: 16, position: "relative", overflow: "hidden", background: selectedProduct.color }}>
-              {selectedProduct.photo && <img src={selectedProduct.photo} alt={selectedProduct.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%)" }} />
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "flex-end" }} onClick={() => setSelectedProduct(null)}>
+          <div style={{ background: C.bg, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 500, margin: "0 auto", maxHeight: "88vh", overflowY: "auto", paddingBottom: 32 }} onClick={e => e.stopPropagation()}>
+            <div style={{ height: 200, background: `${selectedProduct.color}22`, position: "relative", borderRadius: "24px 24px 0 0", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 64 }}>
+              {selectedProduct.photo ? <img src={selectedProduct.photo} alt={selectedProduct.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : selectedProduct.emoji}
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: selectedProduct.color }} />
             </div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#EDE0C4", lineHeight: 1.2 }}>{selectedProduct.name}</h2>
-            <p style={{ fontSize: 12, color: "#8A7355", marginTop: 6, textTransform: "uppercase", letterSpacing: 0.3 }}>{selectedProduct.shop}</p>
-            <p style={{ fontSize: 13, color: "#A08C6E", marginTop: 10, lineHeight: 1.6 }}>{selectedProduct.desc}</p>
-            <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ background: `${selectedProduct.color}20`, color: selectedProduct.color, fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100 }}>◆ {selectedProduct.exclusive}</span>
-              {selectedProduct.trending && <span style={{ fontSize: 11, fontWeight: 700, color: "#D4B483" }}>↗ TRENDING</span>}
-              {selectedProduct.isNew && <span style={{ fontSize: 11, fontWeight: 700, color: selectedProduct.color }}>◆ NEW</span>}
-              {selectedProduct.locationType === "popup" && <span style={{ fontSize: 11, fontWeight: 700, color: "#FF9966", background: "#FF996622", padding: "4px 10px", borderRadius: 100 }}>⚠ Pop-up — verify before visiting</span>}
-              {selectedProduct.locationType === "seasonal" && <span style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "4px 10px", borderRadius: 100 }}>◷ Seasonal — may not be available</span>}
-            </div>
-            {selectedProduct.verified && (
-              <div style={{ marginTop: 8, fontSize: 11, color: "#6B5442" }}>✓ Last verified {selectedProduct.verified}</div>
-            )}
-            {selectedProduct.mapHint && (
-              <div style={{ marginTop: 10, background: "#1E1610", borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 14 }}>●</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#8A7355" }}>{selectedProduct.mapHint}</span>
+            <div style={{ padding: "16px 20px" }}>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 24, fontWeight: 700, color: C.text, marginBottom: 4 }}>{selectedProduct.name}</div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, textTransform: "uppercase" }}>{selectedProduct.shop}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                <span style={{ background: `${selectedProduct.color}22`, color: selectedProduct.color, fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100 }}>◆ {selectedProduct.exclusive}</span>
+                {selectedProduct.trending && <span style={{ fontSize: 11, fontWeight: 700, color: C.gold }}>↗ TRENDING</span>}
+                {selectedProduct.locationType === "popup" && <span style={{ fontSize: 11, fontWeight: 700, color: "#FF9966", background: "#FF996622", padding: "4px 10px", borderRadius: 100 }}>⚠ Pop-up</span>}
+                {selectedProduct.locationType === "seasonal" && <span style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "4px 10px", borderRadius: 100 }}>◷ Seasonal</span>}
               </div>
-            )}
-            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <button onClick={() => toggleSave(selectedProduct.id)} style={{ flex: 1, background: savedItems.includes(selectedProduct.id) ? `${selectedProduct.color}20` : "#1E1610", color: savedItems.includes(selectedProduct.id) ? selectedProduct.color : "#8A7355", border: `1px solid ${savedItems.includes(selectedProduct.id) ? selectedProduct.color : "#2A1E10"}`, borderRadius: 14, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {savedItems.includes(selectedProduct.id) ? "♥ Saved" : "♡ Save"}
+              {selectedProduct.verified && <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>✓ Last verified {selectedProduct.verified}</div>}
+              <div style={{ fontSize: 26, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", marginBottom: 12 }}>{selectedProduct.price}</div>
+              <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, marginBottom: 16 }}>{selectedProduct.desc}</div>
+              <div style={{ marginBottom: 16, background: C.surface, borderRadius: 14, padding: "14px 16px", border: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Still here?</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                      {stillHereMap[selectedProduct.id]?.count ? `✓ Confirmed by ${stillHereMap[selectedProduct.id].count} traveler${stillHereMap[selectedProduct.id].count > 1 ? "s" : ""} · ${stillHereMap[selectedProduct.id].date}` : "Be the first to confirm"}
+                    </div>
+                  </div>
+                  <button onClick={() => confirmStillHere(selectedProduct.id)} disabled={stillHereMap[selectedProduct.id]?.userConfirmed}
+                    style={{ background: stillHereMap[selectedProduct.id]?.userConfirmed ? "#1A3320" : C.accent, color: stillHereMap[selectedProduct.id]?.userConfirmed ? "#4CAF50" : "#fff", border: "none", borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0, marginLeft: 12 }}>
+                    {stillHereMap[selectedProduct.id]?.userConfirmed ? "✓ Confirmed!" : "📍 Still here!"}
+                  </button>
+                </div>
+              </div>
+              <button onClick={() => setSelectedProduct(null)}
+                style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px", fontSize: 14, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Close
               </button>
-              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedProduct.shop + " " + selectedProduct.city)}`} target="_blank" rel="noreferrer"
-                style={{ flex: 2, background: selectedProduct.color, color: "#fff", border: "none", borderRadius: 14, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                Find on Maps ↗
-              </a>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position: "fixed", bottom: 30, left: "50%", transform: "translateX(-50%)", background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "10px 20px", fontSize: 13, fontWeight: 600, zIndex: 500, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }}>
+          {toast}
         </div>
       )}
     </div>
