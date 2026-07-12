@@ -68,23 +68,23 @@ const majorEvents = [
 ];
 
 const towns = [
-  { id: 1, name: "Ribe", region: "South Jutland", emoji: "⛪", tag: "Denmark's oldest town", desc: "Founded around 700 AD — the oldest town in Scandinavia. Medieval cathedral, Viking museum and cobblestone streets.", highlight: "Viking Center Ribe — artisans craft authentic Viking jewellery, leather and textiles on site.", travelTime: "3h 15min 🚂", mapHint: "Ribe, 6760 Ribe, Denmark", nomiPotential: "High" },
-  { id: 2, name: "Dragør", region: "Copenhagen Area", emoji: "⚓", tag: "Fisherman's village", desc: "Just 12km from Copenhagen — yellow ochre houses, a working harbour, cobblestone streets. Feels like another era.", highlight: "The harbour fish stalls sell smoked fish caught the same morning. No menus, no TripAdvisor.", travelTime: "30min 🚌", mapHint: "Dragør Havn, 2791 Dragør, Denmark", nomiPotential: "High" },
-  { id: 3, name: "Ærøskøbing", region: "Funen", emoji: "🏡", tag: "Denmark's fairy-tale town", desc: "750-year-old town on the island of Ærø. Half-timbered houses, flower-lined streets. One of Europe's best preserved small towns.", highlight: "The local bottle ship museum — a man spent decades making ships inside bottles.", travelTime: "3h + ferry 🚢", mapHint: "Ærøskøbing, 5970 Ærø, Denmark", nomiPotential: "Very High" },
-  { id: 4, name: "Skagen", region: "North Jutland", emoji: "🌊", tag: "Where two seas meet", desc: "Denmark's northernmost town. Where the North Sea and Baltic Sea collide. Yellow houses, artist culture.", highlight: "The local fish auction starts at 6am on weekdays. Fresh fish sold direct from boats.", travelTime: "4h 🚂", mapHint: "Skagen, 9990 Skagen, Denmark", nomiPotential: "High" },
-  { id: 5, name: "Præstø", region: "Zealand", emoji: "🏘", tag: "Hidden countryside gem", desc: "South of Copenhagen — cobbled streets, old market square. The kind of town that makes you wonder why nobody talks about it.", highlight: "Oremandsgaard Estate sells locally produced goods from their own farm and distillery.", travelTime: "1h 10min 🚂", mapHint: "Præstø Torv, 4720 Præstø, Denmark", nomiPotential: "Very High" },
-  { id: 6, name: "Faaborg", region: "Funen", emoji: "🌿", tag: "Old-world harbour charm", desc: "Quiet harbour town on the south coast of Funen. 17th century merchant buildings, cobblestone alleys.", highlight: "The local ceramics workshop near the harbour sells pieces made on site. Cash only, no website.", travelTime: "2h 30min 🚂", mapHint: "Faaborg Havn, 5600 Faaborg, Denmark", nomiPotential: "High" },
-  { id: 7, name: "Gudhjem", region: "Bornholm", emoji: "🐟", tag: "Baltic island village", desc: "Atmospheric fishing village on Bornholm. Home of the legendary Sol over Gudhjem smoked herring dish.", highlight: "Røgeriet — the old smokehouse. Watch them smoke herring the traditional way.", travelTime: "2h + ferry 🚢", mapHint: "Gudhjem Havn, 3760 Gudhjem, Bornholm", nomiPotential: "Very High" },
-  { id: 8, name: "Sønderho", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island. Thatched houses, winding lanes, seals in the Wadden Sea National Park.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts made on the island for centuries.", travelTime: "3h + ferry 🚢", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
+  { id: 1, name: "Ribe", photo: "/towns/ribe.jpg", region: "South Jutland", emoji: "⛪", tag: "Denmark's oldest town", desc: "Founded around 700 AD — the oldest town in Scandinavia. Medieval cathedral, Viking museum and cobblestone streets.", highlight: "Viking Center Ribe — artisans craft authentic Viking jewellery, leather and textiles on site.", travelTime: "3h 15min 🚂", mapHint: "Ribe, 6760 Ribe, Denmark", nomiPotential: "High" },
+  { id: 2, name: "Dragør", photo: "/towns/dragor.jpg", region: "Copenhagen Area", emoji: "⚓", tag: "Fisherman's village", desc: "Just 12km from Copenhagen — yellow ochre houses, a working harbour, cobblestone streets. Feels like another era.", highlight: "The harbour fish stalls sell smoked fish caught the same morning. No menus, no TripAdvisor.", travelTime: "30min 🚌", mapHint: "Dragør Havn, 2791 Dragør, Denmark", nomiPotential: "High" },
+  { id: 3, name: "Ærøskøbing", photo: "/towns/aeroskobing.jpg", region: "Funen", emoji: "🏡", tag: "Denmark's fairy-tale town", desc: "750-year-old town on the island of Ærø. Half-timbered houses, flower-lined streets. One of Europe's best preserved small towns.", highlight: "The local bottle ship museum — a man spent decades making ships inside bottles.", travelTime: "3h + ferry 🚢", mapHint: "Ærøskøbing, 5970 Ærø, Denmark", nomiPotential: "Very High" },
+  { id: 4, name: "Skagen", photo: "/towns/skagen.jpg", region: "North Jutland", emoji: "🌊", tag: "Where two seas meet", desc: "Denmark's northernmost town. Where the North Sea and Baltic Sea collide. Yellow houses, artist culture.", highlight: "The local fish auction starts at 6am on weekdays. Fresh fish sold direct from boats.", travelTime: "4h 🚂", mapHint: "Skagen, 9990 Skagen, Denmark", nomiPotential: "High" },
+  { id: 5, name: "Præstø", photo: "/towns/praesto.jpg", region: "Zealand", emoji: "🏘", tag: "Hidden countryside gem", desc: "South of Copenhagen — cobbled streets, old market square. The kind of town that makes you wonder why nobody talks about it.", highlight: "Oremandsgaard Estate sells locally produced goods from their own farm and distillery.", travelTime: "1h 10min 🚂", mapHint: "Præstø Torv, 4720 Præstø, Denmark", nomiPotential: "Very High" },
+  { id: 6, name: "Faaborg", photo: "/towns/faaborg.jpg", region: "Funen", emoji: "🌿", tag: "Old-world harbour charm", desc: "Quiet harbour town on the south coast of Funen. 17th century merchant buildings, cobblestone alleys.", highlight: "The local ceramics workshop near the harbour sells pieces made on site. Cash only, no website.", travelTime: "2h 30min 🚂", mapHint: "Faaborg Havn, 5600 Faaborg, Denmark", nomiPotential: "High" },
+  { id: 7, name: "Gudhjem", photo: "/towns/gudhjem.jpg", region: "Bornholm", emoji: "🐟", tag: "Baltic island village", desc: "Atmospheric fishing village on Bornholm. Home of the legendary Sol over Gudhjem smoked herring dish.", highlight: "Røgeriet — the old smokehouse. Watch them smoke herring the traditional way.", travelTime: "2h + ferry 🚢", mapHint: "Gudhjem Havn, 3760 Gudhjem, Bornholm", nomiPotential: "Very High" },
+  { id: 8, name: "Sønderho", photo: "/towns/sonderho.jpg", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island. Thatched houses, winding lanes, seals in the Wadden Sea National Park.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts made on the island for centuries.", travelTime: "3h + ferry 🚢", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
 ];
 
 const essentials = [
-  { id: 1, name: "Rejsekort", category: "Transport", emoji: "🚇", desc: "Denmark's public transport card — trains, buses and metro nationwide. Much cheaper than individual tickets.", howTo: "Buy at any train station. 80 DKK deposit. Top up with cash or card.", price: "80 DKK deposit + top-up", link: "https://www.rejsekort.dk/en", tip: "Always check OUT when leaving — or you get charged max fare." },
+  { id: 1, name: "DOT Tickets App", category: "Transport", emoji: "🎫", desc: "Buy metro, bus and train tickets for the Copenhagen area straight from your phone. Works with any international card — no Danish accounts needed.", howTo: "Download DOT Tickets, pick your zones and pay with any Visa or Mastercard. Show the ticket on your screen.", price: "From 24 DKK per ticket", link: "https://dinoffentligetransport.dk/en", tip: "A City Pass (24h–120h) gives unlimited travel in Copenhagen including the airport metro — usually the best deal for visitors." },
   { id: 2, name: "Rent a Bike", category: "Transport", emoji: "🚲", desc: "Copenhagen has 390km of cycle lanes. Renting a bike is the best way to see the city.", howTo: "Bycyklen electric bikes available across Copenhagen via app. Or rent from shops from 100 DKK/day.", price: "From 100 DKK/day", link: "https://apps.apple.com/dk/app/bycyklen/id985075832", linkAndroid: "https://play.google.com/store/apps/details?id=dk.bycyklen.app", tip: "Cycle on the right, signal with your arm, always lock up." },
-  { id: 3, name: "MobilePay", category: "Payments", emoji: "📱", desc: "Denmark's universal payment app. Almost every market stall and local vendor accepts it.", howTo: "Download MobilePay app. Requires Danish phone number or international setup.", price: "Free", link: "https://apps.apple.com/dk/app/mobilepay/id624499138", linkAndroid: "https://play.google.com/store/apps/details?id=dk.danskebank.mobilepay", tip: "Many Gemlyx businesses ONLY accept MobilePay or cash." },
+  { id: 3, name: "Cards & Mobile Pay­ment", category: "Payments", emoji: "💳", desc: "Denmark is one of the world's most cashless countries. Visa and Mastercard — physical or through Apple Pay / Google Pay — work almost everywhere, from cafés to market stalls.", howTo: "Just tap. Contactless is the standard everywhere. Tell your bank you're traveling so nothing gets blocked.", price: "Free", link: null, tip: "A few tiny stalls only take MobilePay (a locals-only Danish app) or cash — carry 100–200 DKK in cash as backup." },
   { id: 4, name: "DSB App", category: "Transport", emoji: "🚂", desc: "Danish national railway app. Book tickets, check schedules, get real-time delays.", howTo: "Download DSB app. Buy tickets in advance for cheaper prices.", price: "Free app", link: "https://apps.apple.com/dk/app/dsb/id531645423", linkAndroid: "https://play.google.com/store/apps/details?id=dk.dsb.rejseplanen", tip: "Buy Orange tickets weeks ahead for up to 50% off." },
   { id: 5, name: "Copenhagen Card", category: "Sightseeing", emoji: "🎟", desc: "Free entry to 89 attractions + unlimited transport. Worth it for 2+ days.", howTo: "Buy at copenhagencard.com or airport. 24h, 48h, 72h or 120h options.", price: "From 499 DKK", link: "https://www.copenhagencard.com", tip: "Tivoli alone is 150 DKK — card pays for itself with 3+ attractions." },
-  { id: 6, name: "eSIM or Local SIM", category: "Connectivity", emoji: "📶", desc: "EU roaming covers most Europeans. Outside EU — get a local SIM for navigation and MobilePay.", howTo: "Buy at 7-Eleven, Netto or any phone shop. Lebara and Lycamobile work well.", price: "From 49 DKK", link: null, tip: "Make sure your phone is unlocked before traveling." },
+  { id: 6, name: "eSIM or Local SIM", category: "Connectivity", emoji: "📶", desc: "EU roaming covers most Europeans. Outside EU — get a local SIM or eSIM for maps, tickets and translations on the go.", howTo: "Buy at 7-Eleven, Netto or any phone shop. Lebara and Lycamobile work well.", price: "From 49 DKK", link: null, tip: "Make sure your phone is unlocked before traveling." },
 ];
 
 const getEventDate = (dateStr, dateEnd) => {
@@ -101,7 +101,22 @@ const PRODUCT_COORDS = {
   21: [55.6820, 12.5710], 22: [55.6795, 12.5830], 23: [55.6980, 12.5500],
 };
 
-const APP_VERSION = "v2.11 — navy theme-color";
+const StoreBadge = ({ type, href }) => (
+  <a href={href} target="_blank" rel="noreferrer"
+    style={{ display: "inline-flex", alignItems: "center", gap: 9, background: "#000", border: "1px solid #3a3a3a", borderRadius: 8, padding: "7px 13px", textDecoration: "none" }}>
+    {type === "ios" ? (
+      <svg width="19" height="22" viewBox="0 0 24 28" fill="#fff"><path d="M19.6 14.7c0-3.2 2.6-4.7 2.7-4.8-1.5-2.2-3.8-2.5-4.6-2.5-2-.2-3.8 1.2-4.8 1.2-1 0-2.5-1.1-4.2-1.1-2.1 0-4.1 1.2-5.2 3.2-2.2 3.8-.6 9.5 1.6 12.6 1.1 1.5 2.3 3.2 4 3.2 1.6-.1 2.2-1 4.1-1 1.9 0 2.5 1 4.2 1 1.7 0 2.8-1.6 3.8-3.1 1.2-1.8 1.7-3.5 1.7-3.6-.1 0-3.3-1.3-3.3-5.1zM16.4 4.9c.9-1.1 1.5-2.5 1.3-4-1.3.1-2.8.9-3.7 1.9-.8 1-1.5 2.5-1.3 3.9 1.4.1 2.8-.7 3.7-1.8z"/></svg>
+    ) : (
+      <svg width="18" height="20" viewBox="0 0 24 26"><path fill="#00D7FE" d="M1.3.6C1 1 .8 1.5.8 2.2v21.6c0 .7.2 1.2.5 1.6l.1.1L14.6 12.3v-.3L1.4.5l-.1.1z"/><path fill="#FFCE00" d="M19 16.8l-4.4-4.5v-.3L19 7.5l.1.1 5.2 3c1.5.8 1.5 2.2 0 3.1l-5.2 3-.1.1z"/><path fill="#FF3A44" d="M19.1 16.7L14.6 12 1.3 25.4c.5.5 1.3.6 2.2.1l15.6-8.8"/><path fill="#00F076" d="M19.1 7.4L3.5.6C2.6.1 1.8.2 1.3.7L14.6 12l4.5-4.6z"/></svg>
+    )}
+    <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+      <span style={{ fontSize: 8, color: "#ccc", letterSpacing: 0.4 }}>{type === "ios" ? "Download on the" : "GET IT ON"}</span>
+      <span style={{ fontSize: 13, color: "#fff", fontWeight: 700, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{type === "ios" ? "App Store" : "Google Play"}</span>
+    </span>
+  </a>
+);
+
+const APP_VERSION = "v2.24 — pager hero fix";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -113,7 +128,6 @@ export default function Gemlyx() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [stillHereMap, setStillHereMap] = useState({});
   const [search, setSearch] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategories, setFilterCategories] = useState([]);
   const [filterTypes, setFilterTypes] = useState([]);
@@ -125,6 +139,11 @@ export default function Gemlyx() {
   const [eventType, setEventType] = useState(null);
   const [eventTab, setEventTab] = useState("local");
   const [townFilter, setTownFilter] = useState(null);
+  const [craftType, setCraftType] = useState(null);
+  const [craftKind, setCraftKind] = useState(null);
+  const [craftModal, setCraftModal] = useState(null);
+  const [craftForm, setCraftForm] = useState({ name: "", email: "", interest: "", visit: "" });
+  const [craftStatus, setCraftStatus] = useState(null);
   const [emailSignup, setEmailSignup] = useState("");
   const [emailSubmitted, setEmailSubmitted] = useState(false);
   const [aiMessages, setAiMessages] = useState([
@@ -141,6 +160,60 @@ export default function Gemlyx() {
   useEffect(() => {
     if (aiMessages.length > 1 && aiBottomRef.current) aiBottomRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [aiMessages]);
+
+  const TAB_ORDER = ["home", "essentials", "explore", "craft", "events", "visits"];
+  const [slideDir, setSlideDir] = useState(null);
+  const pageAnim = "";
+  const goTab = (id) => {
+    const a = TAB_ORDER.indexOf(active), b = TAB_ORDER.indexOf(id);
+    setSlideDir(b > a ? "next" : b < a ? "prev" : null);
+    setActive(id);
+  };
+  const stripRef = useRef(null);
+  const dragRef = useRef({ x: 0, y: 0, dx: 0, dragging: false, skip: false });
+  const tabIdx = TAB_ORDER.indexOf(active);
+
+  const setStrip = (dx, animate) => {
+    const el = stripRef.current; if (!el) return;
+    el.style.transition = animate ? "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)" : "none";
+    el.style.transform = `translateX(calc(${-tabIdx * (100/6)}% + ${dx}px))`;
+  };
+
+  useEffect(() => { setStrip(0, true); }, [active]);
+
+  const onSwipeStart = (e) => {
+    const t = e.touches[0];
+    let el = e.target, skip = false;
+    while (el && el !== e.currentTarget) {
+      const st = window.getComputedStyle(el);
+      if ((st.overflowX === "auto" || st.overflowX === "scroll") && el.scrollWidth > el.clientWidth + 5) { skip = true; break; }
+      el = el.parentElement;
+    }
+    dragRef.current = { x: t.clientX, y: t.clientY, dx: 0, dragging: false, skip };
+  };
+  const onSwipeMove = (e) => {
+    const d = dragRef.current;
+    if (d.skip) return;
+    const t = e.touches[0];
+    const dx = t.clientX - d.x, dy = t.clientY - d.y;
+    if (!d.dragging) {
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4) d.dragging = true;
+      else return;
+    }
+    let out = dx;
+    if ((tabIdx === 0 && dx > 0) || (tabIdx === TAB_ORDER.length - 1 && dx < 0)) out = dx * 0.3;
+    d.dx = out;
+    setStrip(out, false);
+  };
+  const onSwipeEnd = () => {
+    const d = dragRef.current;
+    if (d.skip || !d.dragging) return;
+    const w = window.innerWidth;
+    if (d.dx < -Math.min(90, w * 0.22) && tabIdx < TAB_ORDER.length - 1) goTab(TAB_ORDER[tabIdx + 1]);
+    else if (d.dx > Math.min(90, w * 0.22) && tabIdx > 0) goTab(TAB_ORDER[tabIdx - 1]);
+    else setStrip(0, true);
+    d.dragging = false; d.dx = 0;
+  };
 
   const toggleSave = (id) => setSavedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const savedProducts = allProducts.filter(p => savedItems.includes(p.id));
@@ -184,6 +257,22 @@ export default function Gemlyx() {
       setStillHereMap(prev => ({ ...prev, [id]: { count: (prev[id]?.count||0)+(prev[id]?.userConfirmed?0:1), userConfirmed: true, date: new Date().toLocaleDateString("en-GB", { month:"short", year:"numeric" }) } }));
     }, () => alert("Please enable location."));
   };
+
+  const sendCraftRequest = async () => {
+    if (!craftForm.email.includes("@") || !craftForm.interest.trim()) { setCraftStatus("invalid"); return; }
+    setCraftStatus("sending");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/craft_requests`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ craft: craftModal.name, location: craftModal.location, name: craftForm.name, email: craftForm.email, interest: craftForm.interest, visit: craftForm.visit })
+      });
+      if (res.ok) { setCraftStatus("sent"); }
+      else { setCraftStatus("fallback"); }
+    } catch { setCraftStatus("fallback"); }
+  };
+
+  const craftMailto = () => craftModal ? `mailto:hello@gemlyx.com?subject=${encodeURIComponent("Craft request — " + craftModal.name)}&body=${encodeURIComponent("Name: " + craftForm.name + "\nEmail: " + craftForm.email + "\nInterested in: " + craftForm.interest + "\nVisiting: " + craftForm.visit)}` : "#";
 
   const sendAI = async () => {
     if (!aiInput.trim() || aiLoading) return;
@@ -244,52 +333,36 @@ export default function Gemlyx() {
 
   // ── EVENT CARD ───────────────────────────────────────────────
   const EventCard = ({ event }) => (
-    <div style={{ background: C.surface, borderRadius: 16, padding: "16px", marginBottom: 10, border: `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: event.color }} />
-      <div style={{ paddingLeft: 8 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 18 }}>{event.emoji}</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{event.name}</span>
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: event.color, background: `${event.color}22`, padding: "3px 8px", borderRadius: 100 }}>{event.type}</span>
-              <span style={{ fontSize: 11, color: C.muted }}>{event.town}</span>
-              <span style={{ fontSize: 11, color: C.gold }}>★ {event.rating}</span>
-              <span style={{ fontSize: 11, color: C.muted }}>{event.travelTime} from CPH</span>
-            </div>
-            {event.ticketStatus && (
-              <div style={{ marginTop: 6 }}>
-                {event.ticketStatus === "sold_out" && <span style={{ fontSize: 10, fontWeight: 700, color: "#ff4444", background: "#ff444422", padding: "2px 8px", borderRadius: 100 }}>🔴 Sold out</span>}
-                {event.ticketStatus === "selling_fast" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "2px 8px", borderRadius: 100 }}>🟡 Selling fast</span>}
-                {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "2px 8px", borderRadius: 100 }}>🟢 Available</span>}
-                {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "2px 8px", borderRadius: 100 }}>✓ Free entry</span>}
-              </div>
-            )}
+    <div style={{ borderTop: `1px solid ${C.border}`, padding: "20px 0 24px" }}>
+      <div style={{ display: "flex", gap: 14, marginBottom: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: event.color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>{event.type} · {event.town}</div>
+          <div style={{ fontSize: 23, fontWeight: 600, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15, marginBottom: 6 }}>{event.emoji} {event.name}</div>
+          <div style={{ fontSize: 12, color: C.gold, fontWeight: 600 }}>{getEventDate(event.date, event.dateEnd)}</div>
+        </div>
+        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+          <div style={{ width: 88, height: 88, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}`, pointerEvents: "none" }}>
+            <iframe title={`${event.name} map`} width="88" height="88" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
+              src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint)}&zoom=6`} />
           </div>
-          <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>
-              {daysUntil(event.date) <= 0 ? "Now!" : daysUntil(event.date) === 1 ? "Tmrw" : `${daysUntil(event.date)}d`}
-            </div>
-            <div style={{ fontSize: 9, color: C.muted }}>away</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>
+            {daysUntil(event.date) <= 0 ? "Happening now" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)} days away`}
           </div>
         </div>
-        <div style={{ fontSize: 11, color: C.gold, fontWeight: 600, marginBottom: 6 }}>📅 {getEventDate(event.date, event.dateEnd)}</div>
-        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{event.desc}</div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-          {event.tags.map(t => <span key={t} style={{ fontSize: 10, color: C.muted, background: C.bg, padding: "3px 8px", borderRadius: 100 }}>{t}</span>)}
-        </div>
-        <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>📍 Location in Denmark</div>
-        <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 10, height: 260 }}>
-          <iframe title={event.name} width="100%" height="260" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
-            src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint)}&zoom=7&maptype=roadmap`} />
-        </div>
-        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.mapHint)}`} target="_blank" rel="noreferrer"
-          style={{ display: "block", background: event.color, color: "#fff", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
-          ↗ Get Directions
-        </a>
       </div>
+      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, marginBottom: 10, maxWidth: 560 }}>{event.desc}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>
+        <span style={{ fontSize: 12, color: C.muted }}>{event.travelTime} from CPH</span>
+        {event.ticketStatus === "sold_out" && <span style={{ fontSize: 10, fontWeight: 700, color: "#ff4444", background: "#ff444422", padding: "3px 9px", borderRadius: 100 }}>🔴 Sold out</span>}
+        {event.ticketStatus === "selling_fast" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "3px 9px", borderRadius: 100 }}>🟡 Selling fast</span>}
+        {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>🟢 Available</span>}
+        {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>✓ Free entry</span>}
+      </div>
+      <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.mapHint)}`} target="_blank" rel="noreferrer"
+        style={{ color: C.text, fontSize: 13, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "4px" }}>
+        Get Directions →
+      </a>
     </div>
   );
 
@@ -301,169 +374,11 @@ export default function Gemlyx() {
     })
     .sort((a,b) => new Date(a.date) - new Date(b.date));
 
-  return (
-    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", background: C.bg, minHeight: "100vh", width: "100%", color: C.text, position: "relative" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: ${C.bg}; }
-        ::-webkit-scrollbar { width: 0; }
-        @media (min-width: 900px) {
-          ::-webkit-scrollbar { width: 10px; }
-          ::-webkit-scrollbar-track { background: #0A0F1E; }
-          ::-webkit-scrollbar-thumb { background: #2A3A52; border-radius: 100px; }
-          ::-webkit-scrollbar-thumb:hover { background: #6B7A99; }
-        }
-        .hero-h { height: calc(100vh - 108px); }
-        @supports (height: 100dvh) { .hero-h { height: calc(100dvh - 108px); } }
-        .slide-up { animation: slideUp 0.2s ease; }
-        @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes nudge { 0%, 100% { transform: translateX(0); opacity: 0.6; } 50% { transform: translateX(4px); opacity: 1; } }
-        @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(6px); } }
-        @media (min-width: 900px) { .mobile-only { display: none !important; } }
-        @media (max-width: 899px) { .desktop-only { display: none !important; } }
-        .products-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        @media (min-width: 600px) { .products-grid { grid-template-columns: 1fr 1fr 1fr; } }
-        @media (min-width: 900px) { .products-grid { grid-template-columns: 1fr 1fr 1fr 1fr; } }
-      `}</style>
-
-      <div style={{ position: "sticky", top: 0, zIndex: 100 }}>
-      {/* ── HEADER ─────────────────────────────────────────── */}
-      <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          {/* Logo */}
-          <div onClick={() => setActive("home")} style={{ cursor: "pointer" }}>
-            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, letterSpacing: -0.5 }}>◆ Gemlyx</div>
-            <div style={{ fontSize: 9, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>It exists nowhere else</div>
-          </div>
-
-          {/* Right icons */}
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {/* Search */}
-            <button onClick={() => setShowSearch(!showSearch)} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8 }}>🔍</button>
-            {/* Saved */}
-            <button onClick={() => setActive("explore")} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8, position: "relative" }} title="Saved">
-              ♡
-              {savedItems.length > 0 && <span style={{ position: "absolute", top: 4, right: 4, background: C.accent, color: "#fff", fontSize: 9, fontWeight: 700, width: 14, height: 14, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{savedItems.length}</span>}
-            </button>
-            {/* Hamburger menu */}
-            <button onClick={() => setShowMenu(!showMenu)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "6px 10px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
-              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
-              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
-            </button>
-          </div>
-        </div>
-
-        {/* Search bar */}
-        {showSearch && (
-          <div style={{ marginTop: 10, position: "relative" }}>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search cities, businesses, finds..." autoFocus
-              style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 16px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-          </div>
-        )}
-
-        {/* Search results */}
-        {search.length > 1 && searchResults.length > 0 && (
-          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: C.surface, borderBottom: `1px solid ${C.border}`, zIndex: 200, maxHeight: 240, overflowY: "auto" }}>
-            {searchResults.map(p => (
-              <div key={p.id} onClick={() => { setSelectedProduct({ ...p }); setSearch(""); setShowSearch(false); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                <span style={{ fontSize: 18 }}>{p.emoji}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: C.muted }}>{p.shop} · {p.city}</div>
-                </div>
-                <span style={{ fontWeight: 700, color: C.gold, fontSize: 13 }}>{p.price}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── TOP NAV TABS ───────────────────────────────────── */}
-      {(
-        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "relative" }}>
-          <div onScroll={e => setTabArrow(e.target.scrollLeft + e.target.clientWidth < e.target.scrollWidth - 8)}
-            style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content" }}>
-            {[
-              { id: "home", label: "🧭 Explore" },
-              { id: "explore", label: "🏪 Merchandise" },
-              { id: "events", label: "◈ Events" },
-              { id: "visits", label: "◉ Towns" },
-              { id: "essentials", label: "✓ Essentials" },
-            ].map(item => (
-              <button key={item.id} onClick={() => setActive(item.id)}
-                style={{ background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.accent : "transparent"}`, color: active === item.id ? C.text : C.muted, padding: "12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", transition: "all 0.2s" }}>
-                {item.label}
-              </button>
-            ))}
-          </div>
-          </div>
-          {tabArrow && (
-            <div className="mobile-only" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 56, background: `linear-gradient(to right, transparent, ${C.bg} 70%)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, pointerEvents: "none" }}>
-              <span style={{ color: C.light, fontSize: 18, fontWeight: 700, animation: "nudge 1.4s ease-in-out infinite" }}>›</span>
-            </div>
-          )}
-        </div>
-      )}
-      </div>
-
-      {/* ── DROPDOWN MENU ──────────────────────────────────── */}
-      {showMenu && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
-          <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
-            <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }`}</style>
-            {[
-              { id: "home", label: "🧭 Explore", action: "nav" },
-              { id: "login", label: "👤 Login", action: "login" },
-              { id: "faq", label: "❓ FAQ", action: "faq" },
-              { id: "support", label: "✉ Support", action: "mail" },
-            ].map((item, i) => (
-              <button key={item.id}
-                onClick={() => {
-                  setShowMenu(false);
-                  if (item.action === "nav") setActive("home");
-                  else if (item.action === "faq") setActive("essentials");
-                  else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
-                  else if (item.action === "login") { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }
-                }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.06}s both` }}>
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── LAYOUT ─────────────────────────────────────────── */}
-      <div style={{ display: "flex", width: "100%" }}>
-
-        {/* Desktop sidebar */}
-        <div className="desktop-only" style={{ width: 240, flexShrink: 0, borderRight: `1px solid ${C.border}`, height: "calc(100vh - 108px)", overflowY: "auto", position: "sticky", top: 108, background: C.bg, padding: "16px 12px" }}>
-          {[
-            { id: "home", label: "Explore", icon: "🧭" },
-            { id: "explore", label: "Merchandise", icon: "🏪" },
-            { id: "events", label: "Events", icon: "◈" },
-            { id: "visits", label: "Towns", icon: "◉" },
-            { id: "essentials", label: "Essentials", icon: "✓" },
-          ].map(item => (
-            <button key={item.id} onClick={() => setActive(item.id)}
-              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active === item.id ? C.accent : "transparent", color: active === item.id ? "#fff" : C.muted, border: "none", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 4, textAlign: "left", transition: "all 0.2s" }}>
-              <span>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Main content */}
-        <div style={{ flex: 1, minWidth: 0, paddingBottom: 20 }}>
-
-
+  const renderTab = (tab) => (
+    <>
           {/* ── HOME LANDING ─────────────────────────────────── */}
-          {active === "home" && (
-            <div className="slide-up" style={{ margin: "-0px -0px" }}>
+          {tab === "home" && (
+            <div className={pageAnim} style={{ margin: "-0px -0px" }}>
               {/* Hero */}
               <div className="hero-h" style={{ position: "relative", overflow: "hidden" }}>
                 {!videoError ? (
@@ -489,10 +404,11 @@ export default function Gemlyx() {
               {[
                 { id: "explore", img: "/picture2.png", title: "Merchandise", sub: "Exclusive finds that exist nowhere else", icon: "🏪" },
                 { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
+                { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
                 { id: "craft", img: "/picture5.jpg", title: "Local Craft", sub: "Commission something made by hand", icon: "🔨" },
               ].map((section, i) => (
-                <div key={section.id} onClick={() => { if (section.id === "craft") { setActive("explore"); setShopTab("craft"); } else { setActive(section.id); } window.scrollTo(0,0); }}
+                <div key={section.id} onClick={() => { goTab(section.id); window.scrollTo(0,0); }}
                   style={{ height: 280, position: "relative", overflow: "hidden", cursor: "pointer" }}>
                   <img src={section.img} alt={section.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s" }}
                     onMouseOver={e => e.target.style.transform = "scale(1.04)"}
@@ -562,19 +478,18 @@ export default function Gemlyx() {
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.11 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.24 — Jul 2026</div>
               </div>
             </div>
           )}
 
           {/* ── EXPLORE ──────────────────────────────────────── */}
-          {active === "explore" && (
-            <div className="slide-up">
+          {tab === "explore" && (
+            <div className={pageAnim}>
               {/* Sub tabs */}
               <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}` }}>
                 {[
                   { id: "shops", label: "🏪 Shops" },
-                  { id: "craft", label: "🔨 Craft" },
                   { id: "saved", label: `♡ Saved${savedItems.length > 0 ? ` (${savedItems.length})` : ""}` },
                 ].map(t => (
                   <button key={t.id} onClick={() => setShopTab(t.id)}
@@ -623,46 +538,6 @@ export default function Gemlyx() {
                 </div>
               )}
 
-              {/* CRAFT */}
-              {shopTab === "craft" && (
-                <div style={{ padding: "16px" }}>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>🔨 Local Craft</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Commission something made by hand — before or during your visit</div>
-                  </div>
-                  {craftItems.map(craft => (
-                    <div key={craft.id} style={{ background: C.surface, borderRadius: 16, padding: "16px", marginBottom: 12, border: `1px solid ${C.border}`, position: "relative" }}>
-                      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: craft.color, borderRadius: "16px 0 0 16px" }} />
-                      <div style={{ paddingLeft: 8 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                          <span style={{ fontSize: 20 }}>{craft.emoji}</span>
-                          <div>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{craft.name}</div>
-                            <div style={{ fontSize: 11, color: C.muted }}>{craft.location} · {craft.travelTime} from CPH</div>
-                          </div>
-                          <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, color: craft.color, background: `${craft.color}22`, padding: "3px 8px", borderRadius: 100 }}>{craft.type}</span>
-                        </div>
-                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{craft.desc}</div>
-                        <div style={{ marginBottom: 10 }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>What you can make</div>
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            {craft.what.map(w => <span key={w} style={{ fontSize: 10, color: C.light, background: C.bg, padding: "3px 8px", borderRadius: 100 }}>{w}</span>)}
-                          </div>
-                        </div>
-                        <div style={{ height: 130, borderRadius: 10, overflow: "hidden", marginBottom: 10 }}>
-                          <iframe title={craft.name} width="100%" height="130" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
-                            src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(craft.mapHint)}&zoom=13`} />
-                        </div>
-                        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(craft.mapHint)}`} target="_blank" rel="noreferrer"
-                          style={{ display: "block", background: craft.color, color: "#fff", borderRadius: 10, padding: "8px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
-                          ↗ Get Directions
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               {/* SAVED */}
               {shopTab === "saved" && (
                 <div style={{ padding: "16px" }}>
@@ -686,12 +561,74 @@ export default function Gemlyx() {
             </div>
           )}
 
+          {/* ── CRAFT ────────────────────────────────────────── */}
+          {tab === "craft" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Local Craft</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Make something with your own hands — or commission it from a Danish craftsperson. Blacksmiths, potters and candy makers keeping centuries-old techniques alive.</div>
+              </div>
+
+              {/* Filters */}
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                  {["All", "Major", "Local"].map(t => (
+                    <Pill key={t} label={t} active={(t === "All" && !craftType) || craftType === t} onClick={() => setCraftType(t === "All" ? null : (craftType === t ? null : t))} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+                  {["All", "Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"].map(k => (
+                    <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Grid */}
+              {(() => {
+                const kindKeys = { Blacksmithing: ["blacksmith"], Ceramics: ["ceramic", "pottery"], Jewellery: ["jewellery"], Leather: ["leather"], Textiles: ["textile", "dyeing", "felting"], Woodwork: ["wood"], Candy: ["candy"] };
+                const filtered = craftItems.filter(cr => {
+                  const typeOk = !craftType || cr.type === craftType;
+                  const kindOk = !craftKind || cr.what.some(w => (kindKeys[craftKind] || []).some(k => w.toLowerCase().includes(k)));
+                  return typeOk && kindOk;
+                });
+                if (filtered.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No craft spots match — try another filter</div>;
+                return (
+                  <div className="products-grid">
+                    {filtered.map(craft => (
+                      <div key={craft.id} style={{ background: C.surface, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, display: "flex", flexDirection: "column" }}>
+                        <div style={{ height: 130, background: `${craft.color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                          <span style={{ fontSize: 44 }}>{craft.emoji}</span>
+                          <div style={{ position: "absolute", top: 8, left: 8, background: craft.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, textTransform: "uppercase" }}>{craft.type}</div>
+                        </div>
+                        <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.2, marginBottom: 3 }}>{craft.name}</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{craft.location} · {craft.travelTime} from CPH</div>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
+                            {craft.what.slice(0, 3).map(w => (
+                              <span key={w} style={{ fontSize: 9, color: C.light, background: C.bg, padding: "3px 7px", borderRadius: 100 }}>{w}</span>
+                            ))}
+                          </div>
+                          <button onClick={() => { setCraftModal(craft); setCraftStatus(null); }}
+                            style={{ marginTop: "auto", display: "block", width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 10, padding: "9px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "center", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            🔨 Craft
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* ── EVENTS ───────────────────────────────────────── */}
-          {active === "events" && (
-            <div className="slide-up" style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>◈ Events</div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Discover what's happening across Denmark</div>
+          {tab === "events" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Events</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about — we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
                 {[{ id: "local", label: "🏘 Local" }, { id: "major", label: "🌟 Major" }].map(t => (
@@ -722,56 +659,52 @@ export default function Gemlyx() {
           )}
 
           {/* ── TOWNS ────────────────────────────────────────── */}
-          {active === "visits" && (
-            <div className="slide-up" style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>◉ Local Towns</div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Denmark's most beautiful hidden towns</div>
+          {tab === "visits" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Hidden Towns</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — every one of them visited and verified in person.</div>
               </div>
               <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
                 {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "Bornholm", "Fanø Island"].map(r => (
                   <Pill key={r} label={r} active={(r === "All" && !townFilter) || townFilter === r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))} />
                 ))}
               </div>
-              {towns.filter(t => !townFilter || t.region === townFilter).map(town => (
-                <div key={town.id} style={{ background: C.surface, borderRadius: 16, marginBottom: 12, overflow: "hidden", border: `1px solid ${C.border}` }}>
-                  <div style={{ padding: "14px 16px 10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 20 }}>{town.emoji}</span>
-                      <div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{town.name}</div>
-                        <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>{town.region}</div>
+              <div className="towns-grid">
+                {towns.filter(t => !townFilter || t.region === townFilter).map(town => (
+                  <div key={town.id}>
+                    <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{town.emoji}</span>
+                      <img src={town.photo} alt={town.name} onError={e => { e.target.style.display = "none"; }}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+                      <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
+                        <iframe title={`${town.name} map`} width="68" height="68" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
+                          src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(town.mapHint)}&zoom=9`} />
                       </div>
-                      <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, color: town.nomiPotential === "Very High" ? "#4CAF50" : C.gold, background: town.nomiPotential === "Very High" ? "#4CAF5022" : `${C.gold}22`, padding: "3px 8px", borderRadius: 100 }}>
-                        {town.nomiPotential === "Very High" ? "⭐ Top Pick" : "◆ Pick"}
-                      </span>
+                      {town.nomiPotential === "Very High" && (
+                        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>⭐ Top Pick</div>
+                      )}
                     </div>
-                    <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginBottom: 6 }}>{town.tag}</div>
-                    <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{town.desc}</div>
-                    <div style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 10, borderLeft: `3px solid ${C.gold}` }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>◆ Gemlyx Find</div>
-                      <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{town.highlight}</div>
+                    <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
+                    <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region} · {town.travelTime}</div>
+                    <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
+                    <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{town.desc}</div>
+                    <div style={{ fontSize: 11, color: C.text, lineHeight: 1.6, marginTop: 8 }}>
+                      <span style={{ color: C.gold, fontWeight: 700 }}>◆ Gemlyx Find · </span>{town.highlight}
                     </div>
-                    <div style={{ fontSize: 11, color: C.muted }}>{town.travelTime} from CPH</div>
-                  </div>
-                  <div style={{ height: 150 }}>
-                    <iframe title={town.name} width="100%" height="150" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
-                      src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(town.mapHint)}&zoom=12`} />
-                  </div>
-                  <div style={{ padding: "10px 16px 14px" }}>
                     <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(town.mapHint)}`} target="_blank" rel="noreferrer"
-                      style={{ display: "block", background: C.accent, color: "#fff", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
-                      ↗ Get Directions
+                      style={{ display: "inline-block", marginTop: 10, color: C.text, fontSize: 12, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "3px" }}>
+                      Get Directions →
                     </a>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
           {/* ── ESSENTIALS ───────────────────────────────────── */}
-          {active === "essentials" && (
-            <div className="slide-up" style={{ padding: "16px" }}>
+          {tab === "essentials" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>✓ Travel Essentials</div>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Everything you need to travel Denmark like a local</div>
@@ -795,18 +728,13 @@ export default function Gemlyx() {
                       </div>
                       <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: item.link ? 8 : 0 }}>💡 {item.tip}</div>
                       {item.link && (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <a href={item.link} target="_blank" rel="noreferrer"
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#000", color: "#fff", borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-                        🍎 App Store
-                      </a>
-                      {item.linkAndroid && (
-                        <a href={item.linkAndroid} target="_blank" rel="noreferrer"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#01875F", color: "#fff", borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-                          🤖 Google Play
-                        </a>
-                      )}
-                      {!item.linkAndroid && (
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      {item.linkAndroid ? (
+                        <>
+                          <StoreBadge type="ios" href={item.link} />
+                          <StoreBadge type="android" href={item.linkAndroid} />
+                        </>
+                      ) : (
                         <a href={item.link} target="_blank" rel="noreferrer"
                           style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, color: C.light, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
                           🌐 Website ↗
@@ -842,8 +770,8 @@ export default function Gemlyx() {
           )}
 
           {/* ── MAP ──────────────────────────────────────────── */}
-          {active === "map" && (
-            <div className="slide-up" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 73px)" }}>
+          {tab === "map" && (
+            <div className={pageAnim} style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 73px)" }}>
               <div style={{ padding: "12px 16px 8px", flexShrink: 0 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Select a city</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
@@ -915,7 +843,172 @@ export default function Gemlyx() {
               )}
             </div>
           )}
+    </>
+  );
 
+  return (
+    <div className="app-root" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", background: C.bg, width: "100%", color: C.text, position: "relative", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: ${C.bg}; }
+        ::-webkit-scrollbar { width: 0; }
+        @media (min-width: 900px) {
+          ::-webkit-scrollbar { width: 10px; }
+          ::-webkit-scrollbar-track { background: #0A0F1E; }
+          ::-webkit-scrollbar-thumb { background: #2A3A52; border-radius: 100px; }
+          ::-webkit-scrollbar-thumb:hover { background: #6B7A99; }
+        }
+        .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
+        @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
+        .app-root { height: 100vh; }
+        .hero-h { height: calc(100vh - 172px); min-height: 420px; }
+        @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 172px); } }
+        .slide-up { animation: slideUp 0.2s ease; }
+        .page-enter-next { animation: pageNext 0.32s cubic-bezier(0.2, 0.8, 0.3, 1); }
+        .page-enter-prev { animation: pagePrev 0.32s cubic-bezier(0.2, 0.8, 0.3, 1); }
+        @keyframes pageNext { from { opacity: 0.3; transform: translateX(64px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes pagePrev { from { opacity: 0.3; transform: translateX(-64px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes nudge { 0%, 100% { transform: translateX(0); opacity: 0.6; } 50% { transform: translateX(4px); opacity: 1; } }
+        @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(6px); } }
+        @media (min-width: 900px) { .mobile-only { display: none !important; } }
+        @media (max-width: 899px) { .desktop-only { display: none !important; } }
+        .products-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (min-width: 600px) { .products-grid { grid-template-columns: 1fr 1fr 1fr; } }
+        @media (min-width: 900px) { .products-grid { grid-template-columns: 1fr 1fr 1fr 1fr; } }
+      `}</style>
+
+      <div style={{ flexShrink: 0, position: "relative", zIndex: 100 }}>
+      {/* ── HEADER ─────────────────────────────────────────── */}
+      <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          {/* Logo */}
+          <div onClick={() => goTab("home")} style={{ cursor: "pointer" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, letterSpacing: -0.5 }}>◆ Gemlyx</div>
+            <div style={{ fontSize: 9, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>It exists nowhere else</div>
+          </div>
+
+          {/* Right icons */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {/* Search */}
+            
+            {/* Saved */}
+            <button onClick={() => setActive("explore")} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8, position: "relative" }} title="Saved">
+              ♡
+              {savedItems.length > 0 && <span style={{ position: "absolute", top: 4, right: 4, background: C.accent, color: "#fff", fontSize: 9, fontWeight: 700, width: 14, height: 14, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{savedItems.length}</span>}
+            </button>
+            {/* Hamburger menu */}
+            <button onClick={() => setShowMenu(!showMenu)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "6px 10px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
+              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
+              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
+            </button>
+          </div>
+        </div>
+
+        {/* Search bar — always visible */}
+        <div style={{ marginTop: 12, position: "relative" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2" strokeLinecap="round"
+            style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+            <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.2" y2="16.2" />
+          </svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search cities, businesses, finds..."
+            style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px 12px 40px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+        </div>
+
+        {/* Search results */}
+        {search.length > 1 && searchResults.length > 0 && (
+          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: C.surface, borderBottom: `1px solid ${C.border}`, zIndex: 200, maxHeight: 240, overflowY: "auto" }}>
+            {searchResults.map(p => (
+              <div key={p.id} onClick={() => { setSelectedProduct({ ...p }); setSearch(""); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                <span style={{ fontSize: 18 }}>{p.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{p.shop} · {p.city}</div>
+                </div>
+                <span style={{ fontWeight: 700, color: C.gold, fontSize: 13 }}>{p.price}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── TOP NAV TABS ───────────────────────────────────── */}
+      {(
+        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "relative" }}>
+          <div onScroll={e => setTabArrow(e.target.scrollLeft + e.target.clientWidth < e.target.scrollWidth - 8)}
+            style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content" }}>
+            {[
+              { id: "home", label: "🧭 Explore" },
+              { id: "essentials", label: "✓ Essentials" },
+              { id: "explore", label: "🏪 Merchandise" },
+              { id: "craft", label: "🔨 Craft" },
+              { id: "events", label: "◈ Events" },
+              { id: "visits", label: "◉ Towns" },
+            ].map(item => (
+              <button key={item.id} onClick={() => goTab(item.id)}
+                style={{ background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.accent : "transparent"}`, color: active === item.id ? C.text : C.muted, padding: "12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", transition: "all 0.2s" }}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          </div>
+          {tabArrow && (
+            <div className="mobile-only" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 56, background: `linear-gradient(to right, transparent, ${C.bg} 70%)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, pointerEvents: "none" }}>
+              <span style={{ color: C.light, fontSize: 18, fontWeight: 700, animation: "nudge 1.4s ease-in-out infinite" }}>›</span>
+            </div>
+          )}
+        </div>
+      )}
+      </div>
+
+      {/* ── DROPDOWN MENU ──────────────────────────────────── */}
+      {showMenu && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
+          <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
+            <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }`}</style>
+            {[
+              { id: "home", label: "🧭 Explore", action: "nav" },
+              { id: "login", label: "👤 Login", action: "login" },
+              { id: "faq", label: "❓ FAQ", action: "faq" },
+              { id: "support", label: "✉ Support", action: "mail" },
+            ].map((item, i) => (
+              <button key={item.id}
+                onClick={() => {
+                  setShowMenu(false);
+                  if (item.action === "nav") setActive("home");
+                  else if (item.action === "faq") setActive("essentials");
+                  else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
+                  else if (item.action === "login") { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }
+                }}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.06}s both` }}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── PAGER ──────────────────────────────────────────── */}
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
+        <div ref={stripRef}
+          onTouchStart={onSwipeStart} onTouchMove={onSwipeMove} onTouchEnd={onSwipeEnd}
+          style={{ display: "flex", height: "100%", width: "600%", transform: `translateX(${-tabIdx * (100/6)}%)`, transition: "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)", touchAction: "pan-y" }}>
+          {TAB_ORDER.map((tabId, i) => (
+            <div key={tabId} style={{ width: `${100/6}%`, height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 20 }}>
+              {Math.abs(i - tabIdx) <= 1 && renderTab(tabId)}
+            </div>
+          ))}
+        </div>
+        {/* Page dots */}
+        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, zIndex: 60, background: "rgba(10,15,30,0.55)", padding: "7px 12px", borderRadius: 100, backdropFilter: "blur(8px)" }}>
+          {TAB_ORDER.map((t, i) => (
+            <div key={t} onClick={() => goTab(t)}
+              style={{ width: i === tabIdx ? 8 : 6, height: i === tabIdx ? 8 : 6, borderRadius: "50%", background: i === tabIdx ? "#fff" : "rgba(255,255,255,0.35)", cursor: "pointer", transition: "all 0.2s", alignSelf: "center" }} />
+          ))}
         </div>
       </div>
 
@@ -969,6 +1062,60 @@ export default function Gemlyx() {
                 style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px", fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 8 }}>
                 Clear all filters
               </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── CRAFT REQUEST MODAL ───────────────────────────── */}
+      {craftModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 300, display: "flex", alignItems: "flex-end" }} onClick={() => setCraftModal(null)}>
+          <div style={{ background: C.bg, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 500, margin: "0 auto", maxHeight: "88vh", overflowY: "auto", padding: "22px 20px 36px" }} onClick={e => e.stopPropagation()}>
+            {craftStatus !== "sent" ? (
+              <>
+                <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 2 }}>{craftModal.emoji} {craftModal.name}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{craftModal.location} · {craftModal.travelTime} from CPH</div>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>Tell us what you'd like to make or commission — we'll connect you with the craftspeople and reply personally.</div>
+
+                {[
+                  { key: "name", label: "Your name", ph: "Anna Schmidt" },
+                  { key: "email", label: "Email *", ph: "you@email.com" },
+                  { key: "interest", label: "What would you like to make? *", ph: "e.g. a hand-forged knife, custom ceramics..." },
+                  { key: "visit", label: "When are you visiting?", ph: "e.g. mid-August 2026" },
+                ].map(f => (
+                  <div key={f.key} style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.light, marginBottom: 6 }}>{f.label}</div>
+                    <input value={craftForm[f.key]} onChange={e => setCraftForm(prev => ({ ...prev, [f.key]: e.target.value }))} placeholder={f.ph}
+                      style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 14px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+                  </div>
+                ))}
+
+                {craftStatus === "invalid" && <div style={{ fontSize: 12, color: "#ff6666", marginBottom: 10 }}>Please fill in your email and what you'd like to make.</div>}
+                {craftStatus === "fallback" && (
+                  <div style={{ fontSize: 12, color: C.light, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
+                    Couldn't send directly — <a href={craftMailto()} style={{ color: C.gold, fontWeight: 700 }}>tap here to send via your email app</a> instead.
+                  </div>
+                )}
+
+                <button onClick={sendCraftRequest} disabled={craftStatus === "sending"}
+                  style={{ width: "100%", background: C.accent, border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 4 }}>
+                  {craftStatus === "sending" ? "Sending..." : "Send request"}
+                </button>
+                <button onClick={() => setCraftModal(null)}
+                  style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 8 }}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <div style={{ textAlign: "center", padding: "26px 0 10px" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
+                <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 6 }}>Request sent!</div>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 20 }}>We'll connect you with {craftModal.name} and reply to {craftForm.email} personally.</div>
+                <button onClick={() => { setCraftModal(null); setCraftForm({ name: "", email: "", interest: "", visit: "" }); }}
+                  style={{ background: C.accent, border: "none", borderRadius: 12, padding: "12px 28px", fontSize: 14, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Done
+                </button>
+              </div>
             )}
           </div>
         </div>
