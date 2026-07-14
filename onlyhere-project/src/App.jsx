@@ -31,18 +31,50 @@ const cities = [
 const allProducts = cities.flatMap(c => c.products.map(p => ({ ...p, city: c.name, color: c.color })));
 
 const craftItemsFallback = [
-  { id: 1, name: "Viking Ship Museum", price: "230 DKK", priceNote: "Adult ticket · groups & workshops by request", location: "Roskilde", type: "Major", emoji: "⚓", travelTime: "25min 🚂",
-    desc: "Watch boatbuilders reconstruct Viking ships using historic techniques. Try rope making, blacksmithing, textile crafts and woodcarving — daily June to September.",
-    what: ["Rope making", "Blacksmithing", "Textile crafts", "Woodcarving"], color: "#1565C0", mapHint: "Vikingeskibsmuseet, Vindeboder 12, 4000 Roskilde, Denmark",
-    bookingType: "request" },
+  { id: 1, name: "Viking Ship Museum", price: "150 DKK", priceNote: "Adult entry online (10 DKK cheaper than at the door)", location: "Roskilde", type: "Major", emoji: "⚓", travelTime: "25min 🚂",
+    desc: "Watch boatbuilders reconstruct Viking ships using historic techniques. Try rope making, blacksmithing, textile crafts and woodcarving — daily June to September. Sail a real Viking ship replica on Roskilde Fjord, May–September.",
+    what: ["Rope making", "Blacksmithing", "Textile crafts", "Woodcarving", "Fjord sailing"], color: "#1565C0", mapHint: "Vikingeskibsmuseet, Vindeboder 12, 4000 Roskilde, Denmark",
+    bookingType: "online", bookingUrl: "https://www.vikingeskibsmuseet.dk/koeb/koeb-billet",
+    bestTime: "Sailing trips run daily May–Sept and sell out — book the first sailing of the day online to guarantee a spot. Guided tours run hourly, included in entry.",
+    ticketOptions: [
+      { name: "Adult entry (online)", price: "150 DKK" },
+      { name: "Adult entry (at the door)", price: "160 DKK" },
+      { name: "Family ticket (2 adults + all kids under 18)", price: "300 DKK" },
+      { name: "Children under 18", price: "Free" },
+      { name: "Fjord sailing (add-on to entry, May–Sept)", price: "+130 DKK" },
+      { name: "Season Pass — unlimited entry, 1 year", price: "200 DKK" },
+      { name: "Groups (min. 25 adults)", price: "Contact museum" },
+    ],
+    recommendedPackage: { name: "Entry + Fjord Sailing", reason: "Reviewers consistently call the Viking ship sailing trip the highlight of the visit — rowing and setting sail on a real reconstructed longship, led by the museum's skipper. Available May–September; book the first sailing of the day online, it sells out." },
+    rating: 4.5 },
   { id: 2, name: "Moesgaard Viking Days", price: "180 DKK", priceNote: "Adult ticket · online", location: "Aarhus", type: "Major", emoji: "🛡", travelTime: "3h 🚂",
     desc: "Four days of hands-on Viking craft at Moesgaard Museum. Try blacksmithing, plant dyeing, felting and coin minting.",
     what: ["Blacksmithing", "Plant dyeing", "Felting", "Coin minting"], color: "#6A1B9A", mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark",
     bookingType: "online", bookingUrl: "https://shop.moesgaardmuseum.dk/en/momuevents" },
-  { id: 3, name: "Viking Center Ribe", price: "Market prices vary", priceNote: "Buy or commission in person · cash preferred", location: "Ribe", type: "Local", emoji: "🪖", travelTime: "3h 15min 🚂",
-    desc: "Denmark's oldest town has on-site craftspeople making authentic Viking jewellery, leather goods and metalwork at the marketplace. Buy directly or ask about a custom commission.",
-    what: ["Jewellery", "Leather working", "Metalwork", "Textiles"], color: C.accent, mapHint: "Viking Center Ribe, 6760 Ribe, Denmark",
-    bookingType: "request" },
+  { id: 3, name: "Viking Center Ribe", price: "160 DKK", priceNote: "Adult admission · reduced rates 70–140 DKK · online", location: "Ribe", type: "Local", emoji: "🪖", travelTime: "3h 15min 🚂",
+    desc: "Denmark's oldest town has an entire reconstructed Viking settlement — Ripa, 700–980 AD. Daily hands-on activities included in admission: archery, coin making, whittling, warrior training and falconry shows. Craftspeople sell jewellery, leather and metalwork at the marketplace — ask about a custom commission.",
+    what: ["Archery", "Coin making", "Whittling", "Falconry show", "Jewellery", "Leather working", "Metalwork"], color: C.accent, mapHint: "Viking Center Ribe, Roagervej 129, 6760 Ribe, Denmark",
+    bookingType: "online", bookingUrl: "https://www.ribevikingecenter.dk/en/plan-your-visit/opening-hours-and-admission",
+    bestTime: "Every day has archery, coin making and whittling included — falconry shows run at 14:00. Saturdays and Sundays in July add extra \"Experience Viking Ripa\" activities.",
+    transportWarning: "The center is 3km south of Ribe town — the only bus (417) runs just 4 times a day, weekdays only, and isn't reliable for a spontaneous visit. If you don't have a bike or car, either plan tightly around the bus times or take a taxi (roughly 15 min, ~150 DKK). Skip this one if you're relying purely on walking or infrequent public transport.",
+    ticketOptions: [
+      { name: "Adult admission", price: "160 DKK" },
+      { name: "Activity Card — archery + whittling + coin making", price: "70 DKK" },
+      { name: "Each activity separately", price: "30 DKK each (90 DKK for all 3)" },
+      { name: "Reduced/child admission", price: "70–140 DKK" },
+      { name: "Season ticket — unlimited visits", price: "See website" },
+    ],
+    recommendedPackage: { name: "Admission + Activity Card", reason: "The Activity Card bundles all 3 hands-on experiences for 70 DKK — buying archery, whittling and coin making separately costs 90 DKK. It's Ribe VikingeCenter's own official recommendation, and the combination visitors do most." },
+    upcomingEvents: [
+      { name: "Threads, clothing and creed in the Viking Age", dates: "13–17 July 2026" },
+      { name: "Viking horses and other animals", dates: "20–24 July 2026" },
+      { name: "Viking Warriors", dates: "27 July – 2 August 2026" },
+      { name: "The Vikings and White Christ", dates: "3–7 August 2026" },
+      { name: "Family friendly campfire cooking (Danish)", dates: "7 August 2026" },
+      { name: "Blacksmiths' Gathering", dates: "15–16 August 2026" },
+      { name: "The magic of plant dyes (English workshop)", dates: "4 September 2026" },
+      { name: "The magic of plant dyes (English workshop)", dates: "11 September 2026" },
+    ], rating: 4.6 },
   { id: 4, name: "Bornholm Ceramics — Hjorths Fabrik", price: "225 DKK", priceNote: "45min pottery wheel workshop · online only", location: "Rønne, Bornholm", type: "Local", emoji: "🏺", travelTime: "2h + ferry 🚢",
     desc: "Try throwing your own ceramics on the wheel at the 160-year-old Hjorths Fabrik in Rønne. Instructed by experienced ceramists — take one piece home glazed and fired.",
     what: ["Hand-thrown ceramics", "Glazing", "Firing included"], color: "#E65100", mapHint: "Hjorths Fabrik, Krystalgade 5, 3700 Rønne, Denmark",
@@ -50,36 +82,70 @@ const craftItemsFallback = [
   { id: 5, name: "Sømods Bolcher", price: "Free entry", priceNote: "Candy from 45 DKK · groups of 8+ call ahead", location: "Copenhagen", type: "Local", emoji: "🍬", travelTime: "In Copenhagen 🚇",
     desc: "Royal Court candy makers since 1891. Watch them pull traditional hard candy by hand at Nørregade 24 — a craft unchanged for 130 years. Free to watch, no ticket needed for individuals.",
     what: ["Hand-pulled candy", "Traditional recipes", "Royal Court craft"], color: C.gold, mapHint: "Sømods Bolcher, Nørregade 24, 1165 Copenhagen, Denmark",
-    bookingType: "request" },
+    bookingType: "request", bestTime: "Watch a production run at 10:15, 12:00, 13:30 or 15:00 on weekdays — arrive a few minutes early, the little shop fills up fast right when candy-pulling starts.", rating: 4.7 },
+  { id: 6, name: "Glasgalleriet", price: "1,100 DKK", priceNote: "Weekday rate for 1–2 people · 1,300 DKK evenings/weekends", location: "Roskilde", type: "Local", emoji: "🫧", travelTime: "25min 🚂",
+    desc: "A working glassblowing studio in Roskilde's former gasworks by the harbour. Glassblower Skak Snitker has run it since 1977 — watching him work is free, but you can also blow your own piece from start to finish under his direct guidance. About an hour, and your finished glasswork is ready to collect the next day.",
+    what: ["Glassblowing", "Watch demonstrations", "Blow your own piece", "Gallery & shop"], color: "#00838F", mapHint: "Glasgalleriet, Sankt Ibsvej 12, 4000 Roskilde, Denmark",
+    bookingType: "request", bestTime: "Contact ahead to book the hands-on session — only 1-2 people per session, so it fills up. Watching the open workshop needs no booking at all.", rating: 4.5 },
+  { id: 7, name: "Tivoli Gardens", price: "170–200 DKK", priceNote: "Entry only · ride pass ~190 DKK extra · online", location: "Copenhagen", type: "Major", emoji: "🎡", travelTime: "In Copenhagen 🚇",
+    desc: "The world's second-oldest amusement park, open since 1843 — right in the heart of Copenhagen, a 2-minute walk from Central Station. Historic wooden roller coaster, themed gardens, live music and seasonal transformations for Halloween and Christmas.",
+    what: ["Roller coasters", "Gardens", "Live music", "Seasonal events"], color: "#C8102E", mapHint: "Tivoli Gardens, Vesterbrogade 3, 1630 København V, Denmark",
+    bookingType: "online", bookingUrl: "https://shop.tivoli.dk/en/billetter-og-tivolikort",
+    bestTime: "Go early morning for a quieter garden walk, then return after dark — the lit-up gardens at night are Tivoli's most magical side.", rating: 4.5 },
 ];
 
 const events = [
-  { id: 1, name: "Præstø Litteraturfestival", travelTime: "1h 10min 🚂", rating: 4.6, town: "Præstø", type: "Festival", emoji: "📚", date: "2026-06-20", dateEnd: "2026-06-21", desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Literature", "Music"] },
-  { id: 2, name: "Sommerdage i Præstø", travelTime: "1h 10min 🚂", rating: 4.4, town: "Præstø", type: "Festival", emoji: "🌿", date: "2026-07-04", dateEnd: "2026-07-06", desc: "Nature and craft festival in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky.", mapHint: "Præstø Havn, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Craft", "Nature"] },
-  { id: 3, name: "Gyldne Dage i Præstø", travelTime: "1h 10min 🚂", rating: 4.3, town: "Præstø", type: "Festival", emoji: "🏰", date: "2026-09-12", dateEnd: "2026-09-13", desc: "Annual historical festival in Præstø with period costumes, local food and craft stalls.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["History", "Culture"] },
-  { id: 4, name: "Bondemarked på Oremandsgaard", travelTime: "1h 10min 🚂", rating: 4.5, town: "Præstø", type: "Market", emoji: "🌾", date: "2026-06-06", dateEnd: null, desc: "Farm market at the beautiful Oremandsgaard Estate. Local food, organic goods and handmade crafts.", mapHint: "Oremandsgaard, Jungshoved, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Food", "Market"] },
-  { id: 5, name: "Bakkefest", travelTime: "1h 15min 🚂", rating: 4.7, town: "Gilleleje", type: "Festival", emoji: "🎵", date: "2026-07-10", dateEnd: "2026-07-12", desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors.", mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Seaside"] },
-  { id: 6, name: "Musik i Lejet", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"] },
-  { id: 7, name: "Folkely Festival", travelTime: "1h 30min 🚂", rating: 4.5, town: "Hundested", type: "Festival", emoji: "⚓", date: "2026-08-20", dateEnd: "2026-08-22", desc: "Three days of music, art and talks in Hundested harbour.", mapHint: "Hundested Havn, 3390 Hundested, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Harbour"] },
-  { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"] },
-  { id: 9, name: "Haveje Beach Bar Events", travelTime: "1h 20min 🚂", rating: 4.4, town: "Liseleje", type: "Concert", emoji: "🏖", date: "2026-07-14", dateEnd: "2026-07-15", desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches.", mapHint: "Liselejevej, 3360 Liseleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Beach"] },
-  { id: 10, name: "Samsø Music Festival", travelTime: "2h 30min 🚢", rating: 4.9, town: "Samsø", type: "Festival", emoji: "🎸", date: "2026-07-13", dateEnd: "2026-07-19", desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø.", mapHint: "Mårup Kildevej 8, 8305 Samsø, Denmark", verified: "Jun 2026", color: "#6A1B9A", tags: ["Music", "Island"] },
-  { id: 11, name: "Maribo Jazz Festival", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", desc: "Denmark's friendliest jazz festival in historic Maribo. 120+ musicians across 18 venues.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Historic"] },
-  { id: 12, name: "KirsebærFestival", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", desc: "Cherry festival in Kerteminde, Northeast Funen.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local"] },
+  { id: 1, name: "Præstø Litteraturfestival", travelTime: "1h 10min 🚂", rating: 4.6, town: "Præstø", type: "Festival", emoji: "📚", date: "2026-06-20", dateEnd: "2026-06-21", photo: "/local1.jpg", desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Literature", "Music"] },
+  { id: 2, name: "Sommerdage i Præstø", travelTime: "1h 10min 🚂", rating: 4.4, town: "Præstø", type: "Festival", emoji: "🌿", date: "2026-07-04", dateEnd: "2026-07-06", photo: "/local2.jpg", desc: "Nature and craft festival in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky.", mapHint: "Præstø Havn, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Craft", "Nature"] },
+  { id: 3, name: "Gyldne Dage i Præstø", travelTime: "1h 10min 🚂", rating: 4.3, town: "Præstø", type: "Festival", emoji: "🏰", date: "2026-09-12", dateEnd: "2026-09-13", photo: "/local3.jpg", desc: "Annual historical festival in Præstø with period costumes, local food and craft stalls.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["History", "Culture"] },
+  { id: 4, name: "Bondemarked på Oremandsgaard", travelTime: "1h 10min 🚂", rating: 4.5, town: "Præstø", type: "Market", emoji: "🌾", date: "2026-06-06", dateEnd: null, photo: "/local4.jpg", desc: "Farm market at the beautiful Oremandsgaard Estate. Local food, organic goods and handmade crafts.", mapHint: "Oremandsgaard, Jungshoved, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Food", "Market"] },
+  { id: 5, name: "Bakkefest", travelTime: "1h 15min 🚂", rating: 4.7, town: "Gilleleje", type: "Festival", emoji: "🎵", date: "2026-07-10", dateEnd: "2026-07-12", photo: "/local5.jpg", desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors.", mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Seaside"] },
+  { id: 6, name: "Musik i Lejet", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local6.jpg", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"] },
+  { id: 7, name: "Folkely Festival", travelTime: "1h 30min 🚂", rating: 4.5, town: "Hundested", type: "Festival", emoji: "⚓", date: "2026-08-20", dateEnd: "2026-08-22", photo: "/local7.jpg", desc: "Three days of music, art and talks in Hundested harbour.", mapHint: "Hundested Havn, 3390 Hundested, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Harbour"] },
+  { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", photo: "/local8.jpg", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"] },
+  { id: 9, name: "Haveje Beach Bar Events", travelTime: "1h 20min 🚂", rating: 4.4, town: "Liseleje", type: "Concert", emoji: "🏖", date: "2026-07-14", dateEnd: "2026-07-15", photo: "/local9.jpg", desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches.", mapHint: "Liselejevej, 3360 Liseleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Beach"] },
+  { id: 10, name: "Samsø Music Festival", travelTime: "2h 30min 🚢", rating: 4.9, town: "Samsø", type: "Festival", emoji: "🎸", date: "2026-07-13", dateEnd: "2026-07-19", photo: "/local10.jpg", desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø.", mapHint: "Mårup Kildevej 8, 8305 Samsø, Denmark", verified: "Jun 2026", color: "#6A1B9A", tags: ["Music", "Island"] },
+  { id: 11, name: "Maribo Jazz Festival", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", photo: "/local11.jpg", desc: "Denmark's friendliest jazz festival in historic Maribo. 120+ musicians across 18 venues.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Historic"] },
+  { id: 12, name: "KirsebærFestival", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local12.jpg", desc: "Cherry festival in Kerteminde, Northeast Funen.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local"] },
 ];
 
 const majorEvents = [
-  { id: 101, name: "Roskilde Festival", travelTime: "25min 🚂", rating: 4.9, ticketStatus: "sold_out", town: "Roskilde", type: "Music", emoji: "🎸", date: "2026-06-27", dateEnd: "2026-07-04", desc: "Northern Europe's largest music festival. 130,000 attendees, 8 stages, 8 days.", mapHint: "Roskilde Festival, Darupvej 35, 4000 Roskilde, Denmark", verified: "Jun 2026", color: "#E53935", tags: ["Music", "Camping"] },
-  { id: 102, name: "Distortion", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street"] },
-  { id: 103, name: "Aalborg Karneval", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aalborg", type: "Cultural", emoji: "🎭", date: "2026-05-20", dateEnd: "2026-05-24", desc: "Scandinavia's largest carnival. 100,000+ participants in costumes.", mapHint: "Aalborg Centrum, 9000 Aalborg, Denmark", verified: "Jun 2026", color: "#F57F17", tags: ["Carnival", "Parade"] },
-  { id: 104, name: "Copenhagen Jazz Festival", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🎷", date: "2026-07-03", dateEnd: "2026-07-12", desc: "10 days of jazz across 100+ venues. Free concerts in squares and parks.", mapHint: "Copenhagen City Hall Square, Denmark", verified: "Jun 2026", color: "#00695C", tags: ["Jazz", "Free"] },
-  { id: 105, name: "Smukfest", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest"] },
-  { id: 106, name: "NorthSide Festival", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aarhus", type: "Music", emoji: "🎪", date: "2026-06-05", dateEnd: "2026-06-07", desc: "Aarhus's biggest music festival with eco-friendly focus.", mapHint: "NorthSide Festival, Eskelundsvej, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Eco"] },
-  { id: 107, name: "Aarhus Festuge", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", desc: "One of Scandinavia's largest cultural festivals. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Free"] },
-  { id: 108, name: "Tønder Festival", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", desc: "Scandinavia's leading folk and roots festival near the German border.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots"] },
-  { id: 109, name: "Triangle Folklore Festival", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform in the streets of Vejle.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance"] },
-  { id: 110, name: "Odense Flower Festival", travelTime: "1h 30min 🚂", rating: 4.7, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", desc: "200,000+ flowers transform the entire city centre of Odense.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free"] },
-  { id: 111, name: "H.C. Andersen Festivals", travelTime: "1h 30min 🚂", rating: 4.8, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", desc: "Denmark's largest cultural festival. 500+ events across 10 days in H.C. Andersen's hometown.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free"] },
+  { id: 101, name: "Roskilde Festival", tier: "Can't miss out", travelTime: "25min 🚂", rating: 4.9, ticketStatus: "sold_out", town: "Roskilde", type: "Music", emoji: "🎸", date: "2026-06-27", dateEnd: "2026-07-04", photo: "/major1.jpg", desc: "Northern Europe's largest music festival. 130,000 attendees, 8 stages, 8 days.", mapHint: "Roskilde Festival, Darupvej 35, 4000 Roskilde, Denmark", verified: "Jun 2026", color: "#E53935", tags: ["Music", "Camping"] },
+  { id: 102, name: "Distortion", tier: "Recommended", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", photo: "/major2.jpg", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street"] },
+  { id: 103, name: "Aalborg Karneval", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aalborg", type: "Cultural", emoji: "🎭", date: "2026-05-20", dateEnd: "2026-05-24", photo: "/major3.jpg", desc: "Scandinavia's largest carnival. 100,000+ participants in costumes.", mapHint: "Aalborg Centrum, 9000 Aalborg, Denmark", verified: "Jun 2026", color: "#F57F17", tags: ["Carnival", "Parade"] },
+  { id: 104, name: "Copenhagen Jazz Festival", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🎷", date: "2026-07-03", dateEnd: "2026-07-12", photo: "/major4.jpg", desc: "10 days of jazz across 100+ venues. Free concerts in squares and parks.", mapHint: "Copenhagen City Hall Square, Denmark", verified: "Jun 2026", color: "#00695C", tags: ["Jazz", "Free"] },
+  { id: 105, name: "Smukfest", tier: "Worth it for longer stays", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", photo: "/major5.jpg", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest"] },
+  { id: 106, name: "NorthSide Festival", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aarhus", type: "Music", emoji: "🎪", date: "2026-06-05", dateEnd: "2026-06-07", photo: "/major6.jpg", desc: "Aarhus's biggest music festival with eco-friendly focus.", mapHint: "NorthSide Festival, Eskelundsvej, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Eco"] },
+  { id: 107, name: "Aarhus Festuge", tier: "Worth it for longer stays", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", photo: "/major7.jpg", desc: "One of Scandinavia's largest cultural festivals. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Free"] },
+  { id: 108, name: "Tønder Festival", tier: "Worth it for longer stays", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", photo: "/major8.jpg", desc: "Scandinavia's leading folk and roots festival near the German border.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots"] },
+  { id: 109, name: "Triangle Folklore Festival", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", photo: "/major9.jpg", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform in the streets of Vejle.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance"] },
+  { id: 110, name: "Odense Flower Festival", travelTime: "1h 30min 🚂", rating: 4.7, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", photo: "/major10.jpg", desc: "200,000+ flowers transform the entire city centre of Odense.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free"] },
+  { id: 111, name: "H.C. Andersen Festivals", travelTime: "1h 30min 🚂", rating: 4.8, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", photo: "/major11.jpg", desc: "Denmark's largest cultural festival. 500+ events across 10 days in H.C. Andersen's hometown.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free"] },
+  { id: 112, name: "Samsø Food Festival (Råvarefestival)", travelTime: "2h 30min 🚢", rating: 4.5, ticketStatus: "free", tier: "Recommended", town: "Samsø", type: "Cultural", emoji: "🥔", date: "2026-06-13", dateEnd: "2026-06-14", photo: "/major12.jpg", desc: "A cosy weekend celebrating everything Samsø grows and makes — the island is famous nationwide for its potatoes. Free entry, with food workshops, tastings, a communal island dinner and even a tug-of-war championship. Guest chefs join local producers each year, including Anne Hjernøe in 2026.", mapHint: "Onsbjerg Mark, Pillemarksvej 1, 8305 Tranebjerg, Samsø, Denmark", verified: "Jul 2026", color: "#2E7D32", tags: ["Food", "Island", "Family"] },
+];
+
+const vikingEvents = [
+  { id: 201, name: "Trelleborg Vikingefestival", tier: "Recommended", travelTime: "1h 15min 🚂", rating: 4.8, town: "Slagelse", type: "Battle & Market", emoji: "🛡", date: "2026-07-11", dateEnd: "2026-07-19", photo: "/viking1.jpg",
+    desc: "Denmark's largest Viking festival — over 1,000 reenactors camp on the exact UNESCO World Heritage ring fortress Harald Bluetooth built in 980. Nine days of trade, craft and everyday Viking life, building to the Battle of Trelleborg: 250 armoured warriors fighting daily at 13:00 from Thursday to Sunday. A free bus (line 909) runs from Slagelse Station all season.",
+    mapHint: "Trelleborg Allé 4, 4200 Slagelse, Denmark", verified: "Jul 2026", color: "#8D6E63", tags: ["Battle Reenactment", "UNESCO Site", "Craft"], price: "150 DKK adult / 50 DKK child" },
+  { id: 202, name: "Internationalt Vikingemarked", tier: "Recommended", travelTime: "3h 15min 🚂", rating: 4.6, town: "Ribe", type: "Market", emoji: "⚔️", date: "2026-04-27", dateEnd: "2026-05-03", photo: "/viking2.jpg",
+    desc: "Traders and reenactors from across Europe fill Ribe VikingeCenter's marketplace — the same spot that made Ribe a trading town 1,300 years ago. Warriors, riders, archers and musicians throughout. Foreign traders take cash only (DKK/EUR); many Danish traders also accept MobilePay — no cards, no ATM on site.",
+    mapHint: "Ribe VikingeCenter, Lustrupvej 4, 6760 Ribe, Denmark", verified: "Jul 2026", color: C.accent, tags: ["Viking Market", "Craft", "Family"] },
+  { id: 203, name: "Moesgaard Viking Moot", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.6, town: "Aarhus", type: "Market & Combat", emoji: "🛡", date: "2026-07-24", dateEnd: "2026-07-26", photo: "/viking3.jpg",
+    desc: "Denmark's most dramatic Viking market — international warriors, mounted horse combat and craft demonstrations at Moesgaard Museum. See the full Viking Days experience details under Booking.",
+    mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Horse Combat"] },
+  { id: 204, name: "Als Vikingemarked", travelTime: "3h 30min 🚂", rating: 4.4, town: "Sønderborg", type: "Market", emoji: "🔨", date: "2026-06-13", dateEnd: "2026-06-14", photo: "/viking4.jpg",
+    desc: "A working Viking settlement for a weekend — jewellers, leatherworkers, blacksmiths, weavers and bowyers demonstrate their craft live, alongside daily combat displays, archery and activities for kids.",
+    mapHint: "Als Vikingemarked, Skydebanevej, Kær Vestermark, 6400 Sønderborg, Denmark", verified: "Jul 2026", color: "#2E7D32", tags: ["Viking Market", "Craft", "Family"] },
+  { id: 205, name: "Vikingemarkedet på Lindholm Høje", travelTime: "3h 🚂", rating: 4.5, town: "Nørresundby (Aalborg)", type: "Market", emoji: "⛰", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/viking5.jpg",
+    desc: "Set right on Lindholm Høje — one of Scandinavia's largest Viking burial sites — this market brings reenactors and craftspeople to the very ground where Vikings once lived. Genuinely close to Aalborg, easy to combine with a city visit.",
+    mapHint: "Vendilavej 11, 9400 Nørresundby, Denmark", verified: "Jul 2026", color: "#1565C0", tags: ["Viking Market", "Craft"] },
+  { id: 206, name: "Ravnens Marked", travelTime: "2h 15min 🚂", rating: 4.4, town: "Jelling", type: "Market", emoji: "🐦", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/viking6.jpg",
+    desc: "A Viking market at Jelling — the same town where Denmark was named as a nation on the famous rune stones. Combine with a stop at the UNESCO stones themselves; this event sits right on the Copenhagen–Aalborg road trip route.",
+    mapHint: "Fårupvej 25, 7300 Jelling, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Craft"] },
+  { id: 207, name: "Aggersborg Vikingehåndværkertræf", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/viking7.jpg",
+    desc: "A craftsmen-only gathering at Aggersborg — one of Denmark's largest Viking ring fortresses. Less market, more workshop: expect to see smiths, carvers and weavers deep in their process rather than just selling finished goods.",
+    mapHint: "Thorupvej 13, Aggersund, 9670 Løgstør, Denmark", verified: "Jul 2026", color: "#E65100", tags: ["Viking Market", "Craft"] },
 ];
 
 const towns = [
@@ -91,16 +157,125 @@ const towns = [
   { id: 6, name: "Faaborg", photo: "/towns/faaborg.jpg", region: "Funen", emoji: "🌿", tag: "Old-world harbour charm", desc: "Quiet harbour town on the south coast of Funen. 17th century merchant buildings, cobblestone alleys.", highlight: "The local ceramics workshop near the harbour sells pieces made on site. Cash only, no website.", travelTime: "2h 30min 🚂", mapHint: "Faaborg Havn, 5600 Faaborg, Denmark", nomiPotential: "High" },
   { id: 7, name: "Gudhjem", photo: "/towns/gudhjem.jpg", region: "Bornholm", emoji: "🐟", tag: "Baltic island village", desc: "Atmospheric fishing village on Bornholm. Home of the legendary Sol over Gudhjem smoked herring dish.", highlight: "Røgeriet — the old smokehouse. Watch them smoke herring the traditional way.", travelTime: "2h + ferry 🚢", mapHint: "Gudhjem Havn, 3760 Gudhjem, Bornholm", nomiPotential: "Very High" },
   { id: 8, name: "Sønderho", photo: "/towns/sonderho.jpg", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island. Thatched houses, winding lanes, seals in the Wadden Sea National Park.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts made on the island for centuries.", travelTime: "3h + ferry 🚢", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
+  { id: 9, name: "Mariager", photo: "/towns/mariager.jpg", region: "North Jutland", emoji: "🌹", tag: "The City of Roses", desc: "An 18th-century town of cobblestone streets and half-timbered houses, built around a medieval abbey on the Mariager Fjord.", highlight: "Mariager Saltcenter, a working salt museum nearby, lets you taste local salt variations most Danes have never heard of.", travelTime: "3h 30min 🚂", mapHint: "Mariager, 9550 Mariager, Denmark", nomiPotential: "High" },
+  { id: 10, name: "Sæby", photo: "/towns/saeby.jpg", region: "North Jutland", emoji: "⚓", tag: "The Artisans' Coastal Haven", desc: "A quiet coastal town with a historic watermill canal path and yellow timber fishermen's houses along the water.", highlight: "Small amber-carving workshops are tucked along the old streets — genuine local craft, no tour buses.", travelTime: "3h 45min 🚂", mapHint: "Sæby, 9300 Sæby, Denmark", nomiPotential: "High" },
+  { id: 11, name: "Thorup Strand", photo: "/towns/thorupstrand.jpg", region: "North Jutland", emoji: "🎣", tag: "The Last Living Fishing Hamlet", desc: "One of Denmark's last true coastal fishing communities — blue wooden cutters are still winched straight onto the beach by hand, the way it's been done for generations.", highlight: "Buy fish straight off the boat at the local beach-side cooperative shop, caught that same morning.", travelTime: "4h drive", mapHint: "Thorup Strand, 9690 Fjerritslev, Denmark", nomiPotential: "Very High" },
+  { id: 12, name: "Ebeltoft", photo: "/towns/ebeltoft.jpg", region: "East Jutland", emoji: "🚢", tag: "The Crooked-House Village of Mols", desc: "A perfectly preserved 1789 town hall, cobblestone alleys and one of the world's longest wooden warships moored right in the harbour.", highlight: "Step aboard the Fregatten Jylland, a genuine 19th-century wooden frigate you can walk through deck by deck. Great base for hiking Mols Bjerge National Park.", travelTime: "3h 30min 🚂", mapHint: "Ebeltoft, 8400 Ebeltoft, Denmark", nomiPotential: "High" },
+];
+
+const attractions = [
+  // ── AARHUS ──
+  { id: 1, name: "Den Gamle By", city: "Aarhus", rank: 1, type: "Open-air museum", emoji: "🏘", desc: "A world-class open-air museum of urban history — over 560,000 guests a year — showcasing Danish town life from the 1500s to the 1970s.", website: "https://www.dengamleby.dk/", color: "#8D6E63" },
+  { id: 2, name: "ARoS Aarhus Art Museum", city: "Aarhus", rank: 2, type: "Art museum", emoji: "🌈", desc: "One of Scandinavia's largest art museums, internationally known for \"Your Rainbow Panorama\" — a circular rainbow-glass skywalk on the roof.", website: "https://www.aros.dk/", color: "#8E24AA" },
+  { id: 3, name: "Moesgaard Museum (MOMU)", city: "Aarhus", rank: 3, type: "Archaeology museum", emoji: "🏛", desc: "An architecturally striking archaeology and ethnography museum, its grass roof built directly into the hills south of the city.", website: "https://www.moesgaardmuseum.dk/", color: "#6A1B9A" },
+  { id: 4, name: "The Greenhouses, Botanical Garden", city: "Aarhus", rank: 4, type: "Botanical garden", emoji: "🌿", desc: "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free.", website: "https://sciencemuseerne.dk/botanisk-have/", color: "#2E7D32" },
+  { id: 5, name: "The Viking Museum", city: "Aarhus", rank: 5, type: "Small basement museum", emoji: "⚔️", desc: "A tiny, easily-missed museum literally underground beneath a bank on the town square — real on-site Viking excavations.", website: "https://www.nordjyskemuseer.dk/", color: "#1565C0" },
+  { id: 6, name: "Ole's Garden, University Park", city: "Aarhus", rank: 6, type: "Hidden park", emoji: "🌳", desc: "A serene, secret park hidden inside Aarhus University's yellow-brick campus — largely known only to local students.", website: "https://www.au.dk/", color: "#558B2F" },
+  // ── AALBORG ──
+  { id: 7, name: "Lindholm Høje & Viking Museum", city: "Aalborg", rank: 1, type: "Burial site & museum", emoji: "⛰", desc: "A breathtaking ancient Viking burial site with nearly 700 graves, paired with an interactive museum.", website: "https://nordjyskemuseer.dk/u/vikingemuseet-lindholm-hoje/", color: "#1565C0" },
+  { id: 8, name: "Aalborg Tower", city: "Aalborg", rank: 2, type: "Observation tower", emoji: "🗼", desc: "A 105-metre steel tower with an unmatched 360° panoramic view over Aalborg and the Limfjord.", website: "http://www.aalborgtaarnet.dk/", color: "#455A64" },
+  { id: 9, name: "Springeren Marine Experience Centre", city: "Aalborg", rank: 3, type: "Maritime museum", emoji: "🚢", desc: "Step inside a real submarine, explore torpedo boats and try a professional ship simulator.", website: "http://springeren-maritimt.dk/", color: "#0277BD" },
+  { id: 10, name: "Aalborg Defence & Garrison Museum", city: "Aalborg", rank: 4, type: "Military museum", emoji: "✈️", desc: "Housed in a massive WWII aircraft hangar, packed with military planes, tanks and vehicles.", website: "https://forsvarsmuseum.dk/", color: "#5D4037" },
+  { id: 11, name: "The Singing Trees", city: "Aalborg", rank: 5, type: "Musical park installation", emoji: "🎵", desc: "International stars — Elton John, Sting — have planted trees here. Press the button at each tree to hear their music.", website: "https://akkc.dk/de-syngende-traeer/", color: "#D4AF37" },
+  { id: 12, name: "Franciscan Friary Museum", city: "Aalborg", rank: 6, type: "Subterranean ruins", emoji: "💀", desc: "A fully underground museum reached by glass elevator on a busy shopping street — medieval ruins and skeletons below your feet.", website: "https://nordjyskemuseer.dk/u/graabroedekloster-museet/", color: "#6D4C41" },
+  { id: 13, name: "Aalborg Monastery", city: "Aalborg", rank: 7, type: "Historic estate (guided tours)", emoji: "⛪", desc: "A peaceful, highly preserved monastic estate from 1431, with a hidden courtyard garden in the middle of the city.", website: "http://www.aalborgkloster.dk/", color: "#8D6E63" },
+  { id: 14, name: "Sohngårdsholmpark", city: "Aalborg", rank: 8, type: "Park & fruit orchard", emoji: "🍎", desc: "A sprawling neighbourhood park around a 19th-century manor — with a public apple orchard anyone can pick from.", website: null, color: "#558B2F" },
+  // ── COPENHAGEN ──
+  { id: 15, name: "Tivoli Gardens", city: "Copenhagen", rank: 1, type: "Amusement park", emoji: "🎡", desc: "Copenhagen's historic amusement park, ~4 million visitors a year — see it in full detail under Booking, where real ticket prices and booking are listed.", website: "https://www.tivoli.dk/en", color: "#C8102E" },
+  { id: 16, name: "Nyhavn", city: "Copenhagen", rank: 2, type: "Historic harbour", emoji: "⛵", desc: "The iconic harbour district — colourful townhouses, historic wooden ships, bustling waterfront restaurants.", website: "https://www.visitcopenhagen.dk/", color: "#1565C0" },
+  { id: 17, name: "Amalienborg Palace", city: "Copenhagen", rank: 3, type: "Royal residence & museum", emoji: "👑", desc: "The Royal Family's winter residence — crowds gather daily to watch the Royal Life Guards change at 12:00.", website: "https://www.kongernessamling.dk/amalienborg/", color: "#D4AF37" },
+  { id: 18, name: "The Cisterns (Cisternerne)", city: "Copenhagen", rank: 4, type: "Underground art space", emoji: "🕳", desc: "A massive former underground water reservoir beneath Søndermarken park, now a dark, atmospheric contemporary art space.", website: null, color: "#37474F" },
+  { id: 19, name: "The Royal Library Garden", city: "Copenhagen", rank: 5, type: "Hidden courtyard garden", emoji: "📚", desc: "A silent, beautifully manicured oasis tucked between Christiansborg Palace and the Royal Library.", website: null, color: "#2E7D32" },
+  { id: 20, name: "Medical Herb Garden, Kastellet", city: "Copenhagen", rank: 6, type: "Hidden garden", emoji: "🌱", desc: "A tiny, secluded herb patch inside the star-fortress of Kastellet — bypassed by most tourists rushing to the Little Mermaid.", website: "https://www.kastelletsvenner.dk/", color: "#558B2F" },
+];
+
+const nightlifeSpots = [
+  // ── LOCAL — Danes go here, tourists mostly don't ──
+  { id: 1, name: "Toga Vinstue", type: "Local", crowd: "Almost entirely Danish", emoji: "🍺", category: "Brown bar (bodega)", location: "Indre By, Copenhagen", desc: "A classic \"brown bar\" — old wood interior, low light, walls covered in political cartoons. Sits five minutes from the Danish Parliament, and actual lawmakers drink here. Cheap beer (around 45 DKK), smoking still allowed indoors, genuinely local despite the central address.", tip: "Don't expect English menus or tourist-friendly service — this is a real neighbourhood bodega, not a show.", mapHint: "Toga Vinstue, Store Kongensgade, 1264 København K, Denmark", color: "#5D4037" },
+  { id: 2, name: "Cirkuskroen", type: "Local", crowd: "Almost entirely Danish", emoji: "🤡", category: "Historic pub, est. mid-1900s", location: "Aarhus", desc: "One of Aarhus's oldest and smallest pubs — walls and ceiling covered in over 500 clown figures, a nod to the circus family that once ran it. A genuine only-in-Aarhus oddity, nominated by locals as one of the city's real hidden places.", tip: "Small and intimate — go early evening on a weekday for the best chance at a seat and an actual conversation with regulars.", mapHint: "Cirkuskroen, Skovvejen 23, 8000 Aarhus, Denmark", color: "#6A1B9A" },
+  // ── MAJOR — busy, mixed or mostly international ──
+  { id: 3, name: "Strøget (Old Irish & pub strip)", type: "Major", crowd: "Very international", emoji: "🍀", category: "Pub strip", location: "Copenhagen city centre", desc: "Copenhagen's main pedestrian shopping street doubles as a tourist-heavy nightlife strip after dark — Irish pubs like Old Irish anchor it. Fun, easy, English spoken everywhere, but you're mostly meeting other travelers, not Danes.", tip: "Great for an easy first night out — just don't expect to make Danish friends here.", mapHint: "Strøget, 1160 København, Denmark", color: "#2E7D32" },
+  { id: 4, name: "Gothersgade", type: "Major", crowd: "Mixed — locals & tourists", emoji: "🍸", category: "Cocktail bars & pub strip", location: "Copenhagen city centre", desc: "Runs from Kongens Nytorv past Rosenborg Castle, packed with cocktail bars, jazz clubs and well-known pubs like The Dubliner and The Globe. Genuinely mixed crowd — busy but not purely a tourist strip.", tip: "Weeknights are noticeably calmer and more local than weekends.", mapHint: "Gothersgade, 1123 København, Denmark", color: "#1565C0" },
+  { id: 5, name: "Jomfru Ane Gade", type: "Major", crowd: "Mixed — locals, students & tourists", emoji: "🎉", category: "Denmark's densest bar street", location: "Aalborg", desc: "150 metres, 30+ bars — locals just call it \"Gaden\" (The Street). Fuelled heavily by Aalborg University's 20,000+ students, so it's genuinely local-heavy on weekdays, with tourists joining the mix on weekends. Cheap drinks, loud, unpolished — not classy, but real.", tip: "Head to the far end of the street for the cheaper \"shots bar\" locals actually use — the bars closer to the entrance are pricier.", mapHint: "Jomfru Ane Gade, 9000 Aalborg, Denmark", color: "#C8102E" },
+];
+
+const foodSpots = [
+  // ── LOCAL — casual, everyday, no-frills ──
+  { id: 1, name: "Harry's Place", type: "Local", emoji: "🌭", category: "Hot dog stand", location: "Nørrebro/Nordvest, Copenhagen", price: "40–70 DKK",
+    desc: "A hot dog cart since 1965, run by the same kind of hands-on owners the whole time. Order the \"Børge med krudt\" — the local's move — or the flæskesteg (roast pork) sandwich. Cash or Dankort only. No frills, no seats, just stand and eat like generations before you.",
+    tip: "Ask for it \"the traditional way\" and the person behind the counter will usually tell you exactly how to eat it.", mapHint: "Harry's Place, Nordre Fasanvej 269, 2200 København N, Denmark", color: "#D4AF37" },
+  { id: 2, name: "Sankt Peders Bageri", type: "Local", emoji: "🥐", category: "Bakery, est. 1652", location: "Latin Quarter, Copenhagen", price: "20–40 DKK",
+    desc: "Copenhagen's oldest working bakery — 370+ years on the same cobbled street. Famous for the \"onsdagssnegl\" (Wednesday snail), a cinnamon roll twice the normal size, sold at a discount only on Wednesdays. About 4,000 sell in a single day.",
+    tip: "Arrive by 6:30am on a Wednesday if you want the snail without a long queue — they're known to sell out by mid-morning.", mapHint: "Sankt Peders Stræde 29, 1453 København K, Denmark", color: "#E65100" },
+  { id: 3, name: "Vesterbro's Originale Burgerrestaurant", type: "Local", emoji: "🍔", category: "Burgers", location: "Vesterbro, Copenhagen", price: "100–180 DKK",
+    desc: "A no-nonsense burger joint on Istedgade since 2012, with a relaxed basement bar downstairs. Ten burger options — try \"the almighty\" if you're hungry: a 300g steak patty, fried egg, bacon and cheddar.",
+    tip: "It gets loud and casual on weekend evenings — go earlier if you want an actual conversation over dinner.", mapHint: "Istedgade 36, 1650 København, Denmark", color: C.accent },
+  // ── MAJOR — bigger, busier, famous ──
+  { id: 4, name: "Torvehallerne", type: "Major", emoji: "🏪", category: "Food market", location: "Nørreport, Copenhagen", price: "Varies by stall",
+    desc: "Copenhagen's flagship food market — two glass halls of specialty stalls, fresh produce, cheese, seafood, coffee and prepared food. The go-to for a proper Danish food-market experience, and consistently busy.",
+    tip: "Come on a weekday morning to actually get a seat — weekends are genuinely packed.", mapHint: "Torvehallerne, Frederiksborggade 21, 1360 København K, Denmark", color: "#2E7D32" },
+  { id: 5, name: "Reffen", type: "Major", emoji: "🔥", category: "Street food market", location: "Refshaleøen, Copenhagen", price: "60–150 DKK per stall",
+    desc: "Copenhagen's largest street food market, built from shipping containers on the old harbour. Dozens of vendors, waterfront seating, and a genuinely festival-like atmosphere in summer.",
+    tip: "Seasonal — usually open spring through autumn. Go by bike or the harbour bus (line 991/992), parking is limited.", mapHint: "Refshalevej 167A, 1432 København, Denmark", color: "#C8102E" },
+  { id: 6, name: "Ida Davidsen", type: "Major", emoji: "🐟", category: "Smørrebrød institution", location: "Store Kongensgade, Copenhagen", price: "150–250 DKK per plate",
+    desc: "A fifth-generation smørrebrød restaurant, one of the most famous open-sandwich institutions in Denmark. Menu runs to over 100 varieties — expect a proper sit-down lunch, not a quick bite.",
+    tip: "Book ahead if visiting at lunch — it's a well-known stop on the Copenhagen food-tour circuit.", mapHint: "Store Kongensgade 70, 1264 København K, Denmark", color: "#1565C0" },
 ];
 
 const essentials = [
   { id: 1, name: "DOT Tickets App", category: "Transport", emoji: "🎫", desc: "Buy metro, bus and train tickets for the Copenhagen area straight from your phone. Works with any international card — no Danish accounts needed.", howTo: "Download DOT Tickets, pick your zones and pay with any Visa or Mastercard. Show the ticket on your screen.", price: "From 24 DKK per ticket", link: "https://dinoffentligetransport.dk/en", tip: "A City Pass (24h–120h) gives unlimited travel in Copenhagen including the airport metro — usually the best deal for visitors." },
+  { id: 7, name: "Avoid the 750 DKK Fine", category: "Transport", emoji: "⚠️", desc: "Denmark's transport fine (kontrolafgift) is real, common among tourists, and currently 750 DKK — issued on the spot if your ticket isn't valid, even by accident. The physical Rejsekort card was discontinued on 28 May 2026, so if an older guide told you to buy one, ignore it — it no longer works.", howTo: "The 3 mistakes that catch tourists most: (1) Installing a ticket app isn't the same as buying a ticket — you must actually purchase and activate it before boarding. (2) If using a check-in/check-out app, forgetting to check OUT at the end is the single most common tourist fine. (3) A dead phone battery mid-journey means no valid ticket — inspectors don't make exceptions.", price: "750 DKK if fined", link: "https://dinoffentligetransport.dk/en", tip: "Simplest fix for visitors: buy a fixed ticket in the DOT app or Rejsebillet before you travel, rather than a check-in/check-out card — nothing to forget to end." },
   { id: 2, name: "Rent a Bike", category: "Transport", emoji: "🚲", desc: "Copenhagen has 390km of cycle lanes. Renting a bike is the best way to see the city.", howTo: "Bycyklen electric bikes available across Copenhagen via app. Or rent from shops from 100 DKK/day.", price: "From 100 DKK/day", link: "https://apps.apple.com/dk/app/bycyklen/id985075832", linkAndroid: "https://play.google.com/store/apps/details?id=dk.bycyklen.app", tip: "Cycle on the right, signal with your arm, always lock up." },
   { id: 3, name: "Cards & Mobile Pay­ment", category: "Payments", emoji: "💳", desc: "Denmark is one of the world's most cashless countries. Visa and Mastercard — physical or through Apple Pay / Google Pay — work almost everywhere, from cafés to market stalls.", howTo: "Just tap. Contactless is the standard everywhere. Tell your bank you're traveling so nothing gets blocked.", price: "Free", link: null, tip: "A few tiny stalls only take MobilePay (a locals-only Danish app) or cash — carry 100–200 DKK in cash as backup." },
   { id: 4, name: "DSB App", category: "Transport", emoji: "🚂", desc: "Danish national railway app. Book tickets, check schedules, get real-time delays.", howTo: "Download DSB app. Buy tickets in advance for cheaper prices.", price: "Free app", link: "https://apps.apple.com/dk/app/dsb/id531645423", linkAndroid: "https://play.google.com/store/apps/details?id=dk.dsb.rejseplanen", tip: "Buy Orange tickets weeks ahead for up to 50% off." },
   { id: 5, name: "Copenhagen Card", category: "Sightseeing", emoji: "🎟", desc: "Free entry to 89 attractions + unlimited transport. Worth it for 2+ days.", howTo: "Buy at copenhagencard.com or airport. 24h, 48h, 72h or 120h options.", price: "From 499 DKK", link: "https://www.copenhagencard.com", tip: "Tivoli alone is 150 DKK — card pays for itself with 3+ attractions." },
   { id: 6, name: "eSIM or Local SIM", category: "Connectivity", emoji: "📶", desc: "EU roaming covers most Europeans. Outside EU — get a local SIM or eSIM for maps, tickets and translations on the go.", howTo: "Buy at 7-Eleven, Netto or any phone shop. Lebara and Lycamobile work well.", price: "From 49 DKK", link: null, tip: "Make sure your phone is unlocked before traveling." },
 ];
+
+const roadTrips = [
+  { id: 1, name: "Copenhagen to Aalborg", region: "Zealand → Jutland", emoji: "🚗", duration: "4h 30min drive", distance: "330 km",
+    desc: "The classic cross-country route — but almost nobody stops along the way. This drive passes some of Denmark's most important history within a few minutes of the E45, yet most people drive straight through.",
+    stops: [
+      { name: "Roskilde", note: "Viking Ship Museum, 25min off route" },
+      { name: "Jelling", note: "UNESCO Viking rune stones — where Denmark was named as a nation. 15min detour, extraordinary." },
+      { name: "Vejle", note: "Fjord views, a proper coffee stop" },
+      { name: "Aarhus", note: "Latin Quarter, Moesgaard Museum just south of the city" },
+      { name: "Skanderborg", note: "Lakeside forest, home of Smukfest" },
+    ],
+    color: "#1565C0", mapHint: "Copenhagen to Aalborg, Denmark", vibe: "🏛 For history that hides in plain sight" },
+  { id: 2, name: "The Wadden Sea Coast", region: "South Jutland", emoji: "🌾", duration: "2h drive", distance: "95 km",
+    desc: "Denmark's wildest coastline, and a UNESCO World Heritage site most travelers never hear about. Flat marshland, enormous skies, and the best sunsets in the country.",
+    stops: [
+      { name: "Ribe", note: "Denmark's oldest town, Viking Center on the outskirts" },
+      { name: "Mandø", note: "An island you drive to — only at low tide, across the seabed" },
+      { name: "Fanø", note: "Ferry crossing, dune villages, Sønderho at the southern tip" },
+    ],
+    color: "#2E7D32", mapHint: "Wadden Sea Ribe Denmark", vibe: "🌾 Recommended for nature & traditional life" },
+  { id: 3, name: "North Zealand Coastal Loop", region: "Zealand", emoji: "🌊", duration: "2h 30min drive", distance: "110 km",
+    desc: "A half-day loop from Copenhagen through fishing villages, royal castles and beach towns — genuinely underrated compared to how much attention Copenhagen itself gets.",
+    stops: [
+      { name: "Dragør", note: "Yellow ochre fisherman's village, 30min from the city" },
+      { name: "Kronborg Castle", note: "Hamlet's Elsinore, right on the sound to Sweden" },
+      { name: "Gilleleje", note: "Working fishing harbour, best smoked fish in Zealand" },
+      { name: "Tisvildeleje", note: "Forest meets beach, popular with Copenhageners but unknown abroad" },
+    ],
+    color: "#6A1B9A", mapHint: "North Zealand coast Denmark", vibe: "🔥 Most underrated day trip from Copenhagen" },
+];
+
+const campingSpots = [
+  { id: 1, name: "Bøtø Nor Shelter", region: "South Zealand", emoji: "⛺", type: "Free shelter", desc: "Free-to-use wooden shelter right on the coast near Præstø — first come first served, no booking, no fee. Bring your own everything.", travelTime: "1h 20min drive", mapHint: "Bøtø Nor, 4780 Stege, Denmark", color: "#2E7D32", vibe: "🔥 Completely free — locals-only secret" },
+  { id: 2, name: "Rørvig Camping", region: "North Zealand", emoji: "🏕", type: "Campsite", desc: "Beachfront campsite near the Odsherred coast — pitch a tent metres from the water. Popular with Danes, almost unknown to tourists.", travelTime: "1h 30min drive", mapHint: "Rørvig Camping, 4581 Rørvig, Denmark", color: "#1565C0", vibe: "🌊 For sleeping to the sound of waves" },
+  { id: 3, name: "Skagen Klitplantage", region: "North Jutland", emoji: "🌲", type: "Primitive camping", desc: "Free primitive camping (\"Naturstyrelsen\" spots) in dune forest between Skagen's two seas. Marked pitches, composting toilets, nothing else.", travelTime: "4h drive", mapHint: "Skagen Klitplantage, 9990 Skagen, Denmark", color: "#6A1B9A", vibe: "🌲 Recommended for nature & traditional life" },
+  { id: 4, name: "Mols Bjerge Shelters", region: "East Jutland", emoji: "⛰", type: "Free shelter", desc: "Hilltop shelters in Denmark's only \"mountain\" national park. Short hike in, real silence, some of the best stargazing in the country.", travelTime: "3h 15min drive", mapHint: "Mols Bjerge National Park, 8400 Ebeltoft, Denmark", color: "#E65100", vibe: "✨ Best stargazing spot in Denmark" },
+];
+
+const getSeason = () => {
+  const m = new Date().getMonth(); // 0=Jan
+  if ([11, 0, 1].includes(m)) return "winter";
+  if ([2, 3, 4].includes(m)) return "spring";
+  if ([5, 6, 7].includes(m)) return "summer";
+  return "autumn";
+};
 
 const getEventDate = (dateStr, dateEnd) => {
   const d = new Date(dateStr);
@@ -121,8 +296,12 @@ const DetailPage = ({ item, onClose, kind }) => {
   const color = item.color || C.accent;
   return (
     <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 290, overflowY: "auto" }}>
-      <div style={{ height: 190, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-        <span style={{ fontSize: 64 }}>{item.emoji}</span>
+      <div style={{ height: 190, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+        <span style={{ fontSize: 64, opacity: item.photo ? 0.25 : 1, position: item.photo ? "absolute" : "static" }}>{item.emoji}</span>
+        {item.photo && (
+          <img src={item.photo} alt={item.name} onError={e => { e.target.style.display = "none"; }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+        )}
         <button onClick={onClose}
           style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           ‹ Back
@@ -136,10 +315,21 @@ const DetailPage = ({ item, onClose, kind }) => {
         <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 8 }}>{item.name}</div>
 
         {kind === "event" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-            <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>{getEventDate(item.date, item.dateEnd)}</span>
-            <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>
-            <span style={{ fontSize: 12, color: C.muted }}>{item.travelTime} from CPH</span>
+          <div style={{ marginBottom: 12 }}>
+            {item.tier && (
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100, marginRight: 8, display: "inline-block", marginBottom: 8,
+                color: item.tier === "Can't miss out" ? "#0A0F1E" : item.tier === "Worth it for longer stays" ? "#FFB347" : "#4CAF50",
+                background: item.tier === "Can't miss out" ? C.gold : item.tier === "Worth it for longer stays" ? "#FFB34722" : "#4CAF5022",
+              }}>
+                {item.tier === "Can't miss out" ? "⭐ Can't miss out" : item.tier === "Worth it for longer stays" ? "◷ Worth it for longer stays" : "👍 Recommended"}
+              </span>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>{getEventDate(item.date, item.dateEnd)}</span>
+              <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>
+              <span style={{ fontSize: 12, color: C.muted }}>{item.travelTime} from CPH</span>
+            </div>
           </div>
         )}
         {kind === "town" && (
@@ -184,7 +374,7 @@ const StoreBadge = ({ type, href }) => (
   </a>
 );
 
-const APP_VERSION = "v2.29 — real booking data, online vs request";
+const APP_VERSION = "v2.51 — 4 new towns (Mariager, Sæby, Thorup Strand, Ebeltoft)";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -199,6 +389,8 @@ export default function Gemlyx() {
   const [showFilter, setShowFilter] = useState(false);
   const [filterCategories, setFilterCategories] = useState([]);
   const [filterTypes, setFilterTypes] = useState([]);
+  const [priceMax, setPriceMax] = useState(5000);
+  const [bookableOnly, setBookableOnly] = useState(false);
   const [mapCity, setMapCity] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
@@ -211,6 +403,9 @@ export default function Gemlyx() {
   const [craftLoading, setCraftLoading] = useState(true);
   const [craftType, setCraftType] = useState(null);
   const [craftKind, setCraftKind] = useState(null);
+  const [foodTab, setFoodTab] = useState("Local");
+  const [nightlifeTab, setNightlifeTab] = useState("Local");
+  const [attractionCity, setAttractionCity] = useState("Copenhagen");
   const [craftModal, setCraftModal] = useState(null);
   const [craftDetail, setCraftDetail] = useState(null);
   const [eventDetail, setEventDetail] = useState(null);
@@ -248,7 +443,7 @@ export default function Gemlyx() {
     if (aiMessages.length > 1) document.querySelectorAll(".ai-msgs").forEach(el => { el.scrollTop = el.scrollHeight; });
   }, [aiMessages]);
 
-  const TAB_ORDER = ["home", "essentials", "explore", "craft", "events", "visits"];
+  const TAB_ORDER = ["home", "plans", "essentials", "explore", "craft", "attractions", "events", "food", "nightlife", "roadtrips", "visits"];
   const [slideDir, setSlideDir] = useState(null);
   const pageAnim = "";
   const goTab = (id) => {
@@ -263,7 +458,7 @@ export default function Gemlyx() {
   const setStrip = (dx, animate) => {
     const el = stripRef.current; if (!el) return;
     el.style.transition = animate ? "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)" : "none";
-    el.style.transform = `translateX(calc(${-tabIdx * (100/6)}% + ${dx}px))`;
+    el.style.transform = `translateX(calc(${-tabIdx * (100/TAB_ORDER.length)}% + ${dx}px))`;
   };
 
   useEffect(() => { setStrip(0, true); }, [active]);
@@ -305,13 +500,20 @@ export default function Gemlyx() {
   const toggleSave = (id) => setSavedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const savedProducts = allProducts.filter(p => savedItems.includes(p.id));
 
+  const parsePrice = (str) => {
+    if (!str) return 0;
+    const m = str.replace(/,/g, "").match(/\d+/);
+    return m ? parseInt(m[0], 10) : 0;
+  };
+
   const displayProducts = (selectedCity
     ? selectedCity.products.map(p => ({ ...p, city: selectedCity.name, color: selectedCity.color }))
     : allProducts
   ).filter(p => {
     const catOk = filterCategories.length === 0 || filterCategories.includes(p.category);
     const typeOk = filterTypes.length === 0 || filterTypes.includes(p.locationType);
-    return catOk && typeOk;
+    const priceOk = parsePrice(p.price) <= priceMax;
+    return catOk && typeOk && priceOk;
   });
 
   const searchResults = search.length > 1 ? allProducts.filter(p =>
@@ -369,16 +571,46 @@ export default function Gemlyx() {
     setAiLoading(true);
     try {
       const productList = allProducts.map(p => `${p.name} in ${p.city} (${p.price}) - ${p.exclusive}`).join(", ");
+      const townList = towns.map(t => `${t.name} (${t.region}, ${t.travelTime} from CPH) — ${t.tag}`).join("; ");
+      const tripList = roadTrips.map(r => `${r.name} (${r.duration}, ${r.distance}) — stops: ${r.stops.map(s => s.name).join(", ")}`).join("; ");
+      const campList = campingSpots.map(s => `${s.name} (${s.region}, ${s.type})`).join("; ");
+      const foodList = foodSpots.map(f => `${f.name} (${f.type}, ${f.category}, ${f.location}, ${f.price})`).join("; ");
+      const nightlifeList = nightlifeSpots.map(f => `${f.name} (${f.type}, crowd: ${f.crowd}, ${f.location})`).join("; ");
+      const attractionsList = attractions.map(a => `${a.name} in ${a.city} (rank #${a.rank}, ${a.type})`).join("; ");
+      const upcomingLocal = events.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})`).join("; ");
+      const upcomingMajor = majorEvents.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})`).join("; ");
+      const upcomingViking = vikingEvents.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})`).join("; ");
+      const craftList = craftItems.map(c => `${c.name} in ${c.location} (${c.price}${c.rating ? ", ★" + c.rating : ""})`).join("; ");
+      const now = new Date();
+      const monthName = now.toLocaleString("en", { month: "long" });
+      const season = getSeason();
+
+      const sysPrompt = `You are Local Assist — Gemlyx's AI trip-planning guide for Denmark. Today is ${monthName} (${season} season in Denmark). Be warm, concise, and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+
+MERCHANDISE: ${productList}
+BOOKING/CRAFT EXPERIENCES: ${craftList}
+TOWNS: ${townList}
+ROAD TRIPS: ${tripList}
+CAMPING & SHELTERS: ${campList}
+FOOD SPOTS (Local & Major): ${foodList}
+NIGHTLIFE (note whether local/Danish or international crowd): ${nightlifeList}
+ATTRACTIONS (ranked by popularity per city, most popular = lowest rank number): ${attractionsList}
+UPCOMING LOCAL EVENTS: ${upcomingLocal}
+UPCOMING MAJOR EVENTS: ${upcomingMajor}
+UPCOMING VIKING EVENTS (markets, festivals, battle reenactments): ${upcomingViking}
+
+If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. Gemlyx's core mission: most tourists only see Copenhagen for 3-4 days and never explore the rest of Denmark, especially Jutland and North Zealand. When someone is staying more than 2 days, actively suggest at least one destination outside Copenhagen — don't just default to city recommendations. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket.`;
+
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
         body: JSON.stringify({
           model: "gpt-4o-mini",
           messages: [
-            { role: "system", content: "You are Local Assist — Gemlyx's AI guide. Help travelers discover exclusive local finds in Denmark. Be warm, concise and specific. Available: " + productList },
+            { role: "system", content: sysPrompt },
             ...aiMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
             { role: "user", content: msg }
-          ], max_tokens: 400
+          ], max_tokens: 600
         })
       });
       const data = await res.json();
@@ -420,7 +652,14 @@ export default function Gemlyx() {
 
   // ── EVENT CARD ───────────────────────────────────────────────
   const EventCard = ({ event }) => (
-    <div style={{ borderTop: `1px solid ${C.border}`, padding: "20px 0 24px" }}>
+    <div onClick={() => setEventDetail(event)} style={{ borderTop: `1px solid ${C.border}`, padding: "20px 0 24px", cursor: "pointer" }}>
+      {event.photo && (
+        <div style={{ height: 130, borderRadius: 12, overflow: "hidden", marginBottom: 14, position: "relative", background: `linear-gradient(135deg, ${event.color}33 0%, #0A0F1E 100%)` }}>
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44, opacity: 0.25 }}>{event.emoji}</span>
+          <img src={event.photo} alt={event.name} onError={e => { e.target.style.display = "none"; }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+        </div>
+      )}
       <div style={{ display: "flex", gap: 14, marginBottom: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: event.color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>{event.type} · {event.town}</div>
@@ -437,6 +676,17 @@ export default function Gemlyx() {
           </div>
         </div>
       </div>
+      {event.tier && (
+        <div style={{ marginBottom: 10 }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100,
+            color: event.tier === "Can't miss out" ? "#0A0F1E" : event.tier === "Worth it for longer stays" ? "#FFB347" : "#4CAF50",
+            background: event.tier === "Can't miss out" ? C.gold : event.tier === "Worth it for longer stays" ? "#FFB34722" : "#4CAF5022",
+          }}>
+            {event.tier === "Can't miss out" ? "⭐ Can't miss out" : event.tier === "Worth it for longer stays" ? "◷ Worth it for longer stays" : "👍 Recommended"}
+          </span>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
         <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>
         <span style={{ fontSize: 12, color: C.muted }}>{event.travelTime} from CPH</span>
@@ -445,14 +695,13 @@ export default function Gemlyx() {
         {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>🟢 Available</span>}
         {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>✓ Free entry</span>}
       </div>
-      <button onClick={() => setEventDetail(event)}
-        style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: C.light, fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
         Read more <span style={{ fontSize: 15 }}>›</span>
-      </button>
+      </div>
     </div>
   );
 
-  const filteredEvents = (eventTab === "local" ? events : majorEvents)
+  const filteredEvents = (eventTab === "local" ? events : eventTab === "viking" ? vikingEvents : majorEvents)
     .filter(e => isUpcoming(e.date))
     .filter(e => {
       const em = new Date(e.date).toLocaleString("en", { month: "short" });
@@ -498,6 +747,55 @@ export default function Gemlyx() {
     </div>
   );
 
+  const buildPlans = () => {
+    const season = getSeason();
+    const upcomingLocal = events.filter(e => isUpcoming(e.date)).sort((a,b) => new Date(a.date) - new Date(b.date));
+    const upcomingMajor = majorEvents.filter(e => isUpcoming(e.date)).sort((a,b) => new Date(a.date) - new Date(b.date));
+    const topTown = towns.find(t => t.nomiPotential === "Very High") || towns[0];
+    const vikingCraft = craftItems.filter(c => /viking/i.test(c.name) || /viking/i.test(c.desc || ""));
+    const bestRoadTrip = roadTrips[0];
+    const natureTrip = roadTrips.find(r => r.id === 2) || roadTrips[0];
+    const natureCamps = campingSpots.slice(0, 2);
+
+    const plans = [
+      {
+        id: "citybreak", icon: "🏙", color: C.accent, title: "Copenhagen City Break",
+        seasons: ["winter", "spring", "summer", "autumn"],
+        desc: "Everything in this plan is inside Copenhagen — no car, no long trains. Good any time of year.",
+        stops: [
+          { icon: "🏪", label: "Browse Merchandise", sub: "Flagship-only finds you won't see abroad" },
+          { icon: "🍬", label: "Sømods Bolcher", sub: "Watch royal-court candy pulled by hand" },
+          ...(upcomingLocal.filter(e => ["Copenhagen","Dragør"].includes(e.town)).slice(0,1).map(e => ({ icon: "◈", label: e.name, sub: getEventDate(e.date, e.dateEnd) }))),
+        ],
+      },
+      {
+        id: "viking", icon: "⚓", color: "#1565C0", title: "Viking Heritage Trail",
+        seasons: ["spring", "summer", "autumn"],
+        seasonNote: "Ribe VikingeCenter closes for winter (roughly Nov–Apr) — Roskilde and Moesgaard stay open, but this trail is best April–October.",
+        desc: "Denmark's three real Viking sites, connected into one trip.",
+        stops: vikingCraft.slice(0, 3).map(c => ({ icon: c.emoji, label: c.name, sub: `${c.location} · ${c.rating ? "★ " + c.rating : c.price}` })),
+      },
+      {
+        id: "nature", icon: "🌲", color: "#2E7D32", title: "Nature & Camping Escape",
+        seasons: ["summer", "spring"],
+        seasonNote: season === "winter" ? "Not recommended right now — cold, short daylight, some shelters exposed. Try the City Break instead, or revisit this plan April–September." : season === "autumn" ? "Still doable but pack for cold nights — best window is May–September." : undefined,
+        desc: `${natureTrip?.name || "A scenic drive"} paired with real Danish shelters and campsites along the way.`,
+        stops: [
+          ...(natureTrip ? [{ icon: natureTrip.emoji, label: natureTrip.name, sub: `${natureTrip.duration} · ${natureTrip.distance}` }] : []),
+          ...natureCamps.map(s => ({ icon: s.emoji, label: s.name, sub: s.type })),
+        ],
+      },
+      {
+        id: "festival", icon: "🎪", color: "#6A1B9A", title: "Festival Season",
+        seasons: ["summer"],
+        seasonNote: season !== "summer" ? "Denmark's festival season runs roughly May–September — nothing major is running right now, check back closer to summer." : undefined,
+        desc: "Ride the wave of Denmark's biggest live events, local and major.",
+        stops: [...upcomingMajor.slice(0,2), ...upcomingLocal.slice(0,1)].map(e => ({ icon: e.emoji, label: e.name, sub: getEventDate(e.date, e.dateEnd) })),
+      },
+    ];
+    return plans.filter(p => p.stops.length > 0);
+  };
+
   const renderTab = (tab) => (
     <>
           {/* ── HOME LANDING ─────────────────────────────────── */}
@@ -528,9 +826,14 @@ export default function Gemlyx() {
               {[
                 { id: "explore", img: "/picture2.png", title: "Merchandise", sub: "Exclusive finds that exist nowhere else", icon: "🏪" },
                 { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
+                { id: "plans", img: "/picture4.png", title: "Plans", sub: "Ready-made trips, built from what's actually open right now", icon: "🗺" },
                 { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
+                { id: "food", img: "/picture5.jpg", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", icon: "🍽" },
+                { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", icon: "🍺" },
+                { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", icon: "🚗" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
                 { id: "craft", img: "/picture5.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" },
+                { id: "attractions", img: "/picture4.png", title: "Attractions", sub: "Ranked, city by city — from icons to the truly hidden", icon: "🏛" },
               ].map((section, i) => (
                 <div key={section.id} onClick={() => { goTab(section.id); window.scrollTo(0,0); }}
                   style={{ height: 280, position: "relative", overflow: "hidden", cursor: "pointer" }}>
@@ -547,6 +850,16 @@ export default function Gemlyx() {
                   </div>
                 </div>
               ))}
+
+              {/* Mission callout */}
+              <div style={{ padding: "32px 24px", background: C.surface, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
+                <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 10 }}>Most tourists see Denmark for 3–4 days. All of it in Copenhagen.</div>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 16px" }}>It's a recognised issue, even in Danish media — the rest of the country, especially Jutland and North Zealand, barely gets seen. Gemlyx exists to change that: real places, real routes, worth the extra hour outside the capital.</div>
+                <button onClick={() => goTab("roadtrips")}
+                  style={{ background: C.accent, border: "none", borderRadius: 100, padding: "10px 22px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  See a Road Trip →
+                </button>
+              </div>
 
               {aiHelperBlock()}
 
@@ -570,7 +883,7 @@ export default function Gemlyx() {
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.29 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.51 — Jul 2026</div>
               </div>
             </div>
           )}
@@ -671,11 +984,12 @@ export default function Gemlyx() {
                   ))}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
                   {["All", "Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"].map(k => (
                     <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
                   ))}
                 </div>
+                <Pill label="● Bookable online only" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
               </div>
 
               {/* Grid */}
@@ -684,17 +998,20 @@ export default function Gemlyx() {
                 const filtered = craftItems.filter(cr => {
                   const typeOk = !craftType || cr.type === craftType;
                   const kindOk = !craftKind || cr.what.some(w => (kindKeys[craftKind] || []).some(k => w.toLowerCase().includes(k)));
-                  return typeOk && kindOk;
-                });
+                  const bookOk = !bookableOnly || cr.bookingType === "online";
+                  return typeOk && kindOk && bookOk;
+                }).sort((a, b) => (b.rating || 0) - (a.rating || 0));
                 if (craftLoading) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>Loading craft spots...</div>;
                 if (filtered.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No craft spots match — try another filter</div>;
                 return (
                   <div className="products-grid">
                     {filtered.map(craft => (
-                      <div key={craft.id} style={{ background: C.surface, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, display: "flex", flexDirection: "column" }}>
+                      <div key={craft.id} onClick={() => setCraftDetail(craft)} style={{ background: C.surface, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, display: "flex", flexDirection: "column", cursor: "pointer" }}>
                         <div style={{ height: 130, background: `${craft.color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
                           <span style={{ fontSize: 44 }}>{craft.emoji}</span>
                           <div style={{ position: "absolute", top: 8, left: 8, background: craft.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, textTransform: "uppercase" }}>{craft.type}</div>
+                          {craft.rating && <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(10,15,30,0.75)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>★ {craft.rating}</div>}
+                          {craft.transportWarning && <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 13, padding: "4px 7px", borderRadius: 8 }} title="Limited public transport">🚲</div>}
                         </div>
                         <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
                           <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.2, marginBottom: 3 }}>{craft.name}</div>
@@ -708,10 +1025,9 @@ export default function Gemlyx() {
                             <div style={{ fontSize: 16, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", marginTop: 8 }}>{craft.price || "Price on request"}</div>
                             {craft.priceNote && <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{craft.priceNote}</div>}
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
-                              <button onClick={() => { setCraftDetail(craft); }}
-                                style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: C.light, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "6px 0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 12, fontWeight: 700, padding: "6px 0" }}>
                                 Read more <span style={{ fontSize: 14 }}>›</span>
-                              </button>
+                              </div>
                               {craft.bookingType === "online" && (
                                 <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 8px", borderRadius: 100 }}>● Book online</span>
                               )}
@@ -727,6 +1043,44 @@ export default function Gemlyx() {
             </div>
           )}
 
+          {/* ── ATTRACTIONS ──────────────────────────────────── */}
+          {tab === "attractions" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Attractions</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Ranked from most popular to most hidden, city by city — so you can pick the icon everyone sees, or the secret spot almost nobody does.</div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 18 }}>
+                {["Copenhagen", "Aarhus", "Aalborg"].map(c => (
+                  <Pill key={c} label={c} active={attractionCity === c} onClick={() => setAttractionCity(c)} />
+                ))}
+              </div>
+
+              {attractions.filter(a => a.city === attractionCity).sort((a,b) => a.rank - b.rank).map(a => (
+                <div key={a.id} style={{ borderTop: `1px solid ${C.border}`, padding: "16px 0 20px" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                    <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", background: `${a.color}22`, color: a.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif" }}>#{a.rank}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontSize: 18 }}>{a.emoji}</span>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{a.name}</div>
+                      </div>
+                      <div style={{ fontSize: 10, color: a.color, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 }}>{a.type}</div>
+                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: a.website ? 10 : 0 }}>{a.desc}</div>
+                      {a.website && (
+                        <a href={a.website} target="_blank" rel="noreferrer" style={{ color: C.text, fontSize: 12, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "3px" }}>
+                          Visit website →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {aiHelperBlock()}
+            </div>
+          )}
+
           {/* ── EVENTS ───────────────────────────────────────── */}
           {tab === "events" && (
             <div className={pageAnim} style={{ padding: "16px" }}>
@@ -735,7 +1089,7 @@ export default function Gemlyx() {
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about — we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
-                {[{ id: "local", label: "🏘 Local" }, { id: "major", label: "🌟 Major" }].map(t => (
+                {[{ id: "local", label: "🏘 Local" }, { id: "major", label: "🌟 Major" }, { id: "viking", label: "⚔️ Viking" }].map(t => (
                   <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
                     style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     {t.label}
@@ -751,7 +1105,7 @@ export default function Gemlyx() {
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                  {(eventTab === "local" ? ["All", "Festival", "Market", "Concert", "North Zealand"] : ["All", "Music", "Cultural"]).map(f => (
+                  {(eventTab === "local" ? ["All", "Festival", "Market", "Concert", "North Zealand"] : eventTab === "viking" ? ["All", "Market", "Battle & Market", "Craftsmen Gathering", "Market & Combat"] : ["All", "Music", "Cultural"]).map(f => (
                     <Pill key={f} label={f} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />
                   ))}
                 </div>
@@ -764,6 +1118,168 @@ export default function Gemlyx() {
           )}
 
           {/* ── TOWNS ────────────────────────────────────────── */}
+          {/* ── FOOD ─────────────────────────────────────────── */}
+          {tab === "food" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Food</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market — the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
+              </div>
+
+              <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
+                {[{ id: "Local", label: "🏘 Local" }, { id: "Major", label: "🌟 Major" }].map(t => (
+                  <button key={t.id} onClick={() => setFoodTab(t.id)}
+                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${foodTab === t.id ? C.accent : "transparent"}`, color: foodTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {foodSpots.filter(f => f.type === foodTab).map(spot => (
+                <div key={spot.id} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontSize: 22 }}>{spot.emoji}</span>
+                    <div>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{spot.name}</div>
+                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
+                    </div>
+                    <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: spot.color, flexShrink: 0 }}>{spot.price}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{spot.desc}</div>
+                  <div style={{ fontSize: 12, color: C.text, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, lineHeight: 1.5 }}>
+                    💡 {spot.tip}
+                  </div>
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`} target="_blank" rel="noreferrer"
+                    style={{ color: C.text, fontSize: 13, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "4px" }}>
+                    Get Directions →
+                  </a>
+                </div>
+              ))}
+              {aiHelperBlock()}
+            </div>
+          )}
+
+          {/* ── NIGHTLIFE ────────────────────────────────────── */}
+          {tab === "nightlife" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers — but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
+              </div>
+
+              <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
+                {[{ id: "Local", label: "🇩🇰 Local" }, { id: "Major", label: "🌍 Major" }].map(t => (
+                  <button key={t.id} onClick={() => setNightlifeTab(t.id)}
+                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${nightlifeTab === t.id ? C.accent : "transparent"}`, color: nightlifeTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {nightlifeSpots.filter(f => f.type === nightlifeTab).map(spot => (
+                <div key={spot.id} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontSize: 22 }}>{spot.emoji}</span>
+                    <div>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{spot.name}</div>
+                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
+                    👥 {spot.crowd}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{spot.desc}</div>
+                  <div style={{ fontSize: 12, color: C.text, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, lineHeight: 1.5 }}>
+                    💡 {spot.tip}
+                  </div>
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`} target="_blank" rel="noreferrer"
+                    style={{ color: C.text, fontSize: 13, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "4px" }}>
+                    Get Directions →
+                  </a>
+                </div>
+              ))}
+              {aiHelperBlock()}
+            </div>
+          )}
+
+          {/* ── ROAD TRIPS ───────────────────────────────────── */}
+          {tab === "roadtrips" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Road Trips</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark rewards the drive as much as the destination. These routes turn a transit day into the best part of the trip — real stops, real detours, worth the extra hour.</div>
+              </div>
+
+              {roadTrips.map(trip => (
+                <div key={trip.id} style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0 26px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontSize: 22 }}>{trip.emoji}</span>
+                    <div>
+                      <div style={{ fontSize: 23, fontWeight: 600, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{trip.name}</div>
+                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1 }}>{trip.region}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 14, marginBottom: 12 }}>
+                    <span style={{ fontSize: 12, color: trip.color, fontWeight: 700 }}>🕐 {trip.duration}</span>
+                    <span style={{ fontSize: 12, color: C.muted }}>📍 {trip.distance}</span>
+                  </div>
+                  {trip.vibe && (
+                    <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: trip.color, background: `${trip.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 14 }}>
+                      {trip.vibe}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, marginBottom: 16, maxWidth: 560 }}>{trip.desc}</div>
+
+                  <div style={{ fontSize: 10, fontWeight: 700, color: trip.color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Stops along the way</div>
+                  <div style={{ marginBottom: 16 }}>
+                    {trip.stops.map((stop, i) => (
+                      <div key={stop.name} style={{ display: "flex", gap: 12, marginBottom: i < trip.stops.length - 1 ? 14 : 0 }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: trip.color, marginTop: 4 }} />
+                          {i < trip.stops.length - 1 && <div style={{ width: 1, flex: 1, background: C.border, marginTop: 4 }} />}
+                        </div>
+                        <div style={{ paddingBottom: 2 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{stop.name}</div>
+                          <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 2 }}>{stop.note}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(trip.mapHint)}`} target="_blank" rel="noreferrer"
+                    style={{ color: C.text, fontSize: 13, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "4px" }}>
+                    Open Route →
+                  </a>
+                </div>
+              ))}
+
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 22, marginTop: 4 }}>
+                <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 6 }}>⛺ Camping & Tent Spots</div>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 16, maxWidth: 560 }}>Denmark's shelters and coastal campsites are one of its best-kept secrets — many are completely free. Perfect stops to break up any of the routes above.</div>
+                <div className="products-grid">
+                  {campingSpots.map(spot => (
+                    <div key={spot.id} onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`, "_blank")}
+                      style={{ background: C.surface, borderRadius: 16, padding: "14px", border: `1px solid ${C.border}`, cursor: "pointer" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 20 }}>{spot.emoji}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: spot.color, background: `${spot.color}22`, padding: "3px 8px", borderRadius: 100 }}>{spot.type}</span>
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 3 }}>{spot.name}</div>
+                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>{spot.region} · {spot.travelTime}</div>
+                      {spot.vibe && (
+                        <div style={{ fontSize: 10, fontWeight: 700, color: spot.color, marginBottom: 8 }}>{spot.vibe}</div>
+                      )}
+                      <div style={{ fontSize: 12, color: C.light, lineHeight: 1.55 }}>{spot.desc}</div>
+                      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 10, textDecoration: "underline", textUnderlineOffset: "3px" }}>Get Directions →</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {aiHelperBlock()}
+            </div>
+          )}
+
           {tab === "visits" && (
             <div className={pageAnim} style={{ padding: "16px" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
@@ -771,13 +1287,13 @@ export default function Gemlyx() {
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — every one of them visited and verified in person.</div>
               </div>
               <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
-                {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "Bornholm", "Fanø Island"].map(r => (
+                {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "East Jutland", "Bornholm", "Fanø Island"].map(r => (
                   <Pill key={r} label={r} active={(r === "All" && !townFilter) || townFilter === r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))} />
                 ))}
               </div>
               <div className="towns-grid">
                 {towns.filter(t => !townFilter || t.region === townFilter).map(town => (
-                  <div key={town.id}>
+                  <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                     <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{town.emoji}</span>
                       <img src={town.photo} alt={town.name} onError={e => { e.target.style.display = "none"; }}
@@ -794,13 +1310,67 @@ export default function Gemlyx() {
                     <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region} · {town.travelTime}</div>
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                     <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{town.desc.slice(0, 90)}{town.desc.length > 90 ? "…" : ""}</div>
-                    <button onClick={() => setTownDetail(town)}
-                      style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: C.text, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "10px 0 2px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
                       Read more <span style={{ fontSize: 14 }}>›</span>
-                    </button>
+                    </div>
                   </div>
                 ))}
               </div>
+              {aiHelperBlock()}
+            </div>
+          )}
+
+          {/* ── PLANS ────────────────────────────────────────── */}
+          {tab === "plans" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Plans</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>
+                  Ready-made trips, assembled live from everything in Gemlyx right now — and adjusted for the season. It's {new Date().toLocaleString("en", { month: "long" })}, so plans that don't suit right now are marked, not hidden.
+                </div>
+              </div>
+
+              {buildPlans().map(plan => {
+                const inSeason = plan.seasons.includes(getSeason());
+                return (
+                  <div key={plan.id} style={{ background: C.surface, borderRadius: 16, padding: "18px", marginBottom: 16, border: `1px solid ${inSeason ? plan.color : C.border}`, opacity: inSeason ? 1 : 0.72 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                      <span style={{ fontSize: 24 }}>{plan.icon}</span>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{plan.title}</div>
+                      {inSeason && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>● Good now</span>}
+                    </div>
+                    <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: plan.seasonNote ? 8 : 14 }}>{plan.desc}</div>
+                    {plan.seasonNote && (
+                      <div style={{ fontSize: 12, color: "#FFB347", background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 10, padding: "8px 12px", marginBottom: 14, lineHeight: 1.5 }}>
+                        ◷ {plan.seasonNote}
+                      </div>
+                    )}
+                    {plan.stops.map((s, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i === 0 ? `1px solid ${C.border}` : "none", borderBottom: i < plan.stops.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                        <span style={{ fontSize: 16, width: 22, textAlign: "center", flexShrink: 0 }}>{s.icon}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{s.label}</div>
+                          <div style={{ fontSize: 11, color: C.muted }}>{s.sub}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+
+              <div style={{ background: C.surface, borderRadius: 16, padding: "18px", border: `1px solid ${C.accent}`, marginBottom: 4 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 6 }}>✦ Want something more specific?</div>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 12 }}>Tell the AI Guide below your dates, how you're travelling and what you're into — it'll build a real day-by-day plan from everything currently in Gemlyx.</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {["Plan me 3 days, no car", "I have a bike, what's best in " + new Date().toLocaleString("en", { month: "long" }), "Plan a family weekend with kids"].map(s => (
+                    <button key={s} onClick={() => { setAiInput(s); document.querySelector(".ai-msgs")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "7px 14px", fontSize: 12, color: C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {aiHelperBlock()}
             </div>
           )}
@@ -816,17 +1386,17 @@ export default function Gemlyx() {
                 <div key={cat} style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{cat}</div>
                   {essentials.filter(e => e.category === cat).map(item => (
-                    <div key={item.id} style={{ background: C.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${C.border}` }}>
+                    <div key={item.id} style={{ background: item.id === 7 ? "#3D2A0A" : C.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${item.id === 7 ? "#FFB347" : C.border}` }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         <span style={{ fontSize: 22 }}>{item.emoji}</span>
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{item.name}</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: item.id === 7 ? "#FFB347" : C.text, fontFamily: "'Cormorant Garamond', serif" }}>{item.name}</div>
                           <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{item.price}</div>
                         </div>
                       </div>
                       <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>{item.desc}</div>
                       <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, marginBottom: 3 }}>How to get it</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, marginBottom: 3 }}>{item.id === 7 ? "The 3 mistakes to avoid" : "How to get it"}</div>
                         <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
                       </div>
                       <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: item.link ? 8 : 0 }}>💡 {item.tip}</div>
@@ -849,6 +1419,21 @@ export default function Gemlyx() {
                   ))}
                 </div>
               ))}
+
+              {/* Solo traveller tip */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Traveling Solo?</div>
+                <div style={{ background: C.surface, borderRadius: 14, padding: "16px", border: `1px solid ${C.border}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <span style={{ fontSize: 22 }}>🍺</span>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Find a local, if you can</div>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65 }}>
+                    Danes are famously reserved with strangers — but genuinely warm once you're in. Copenhagen's real culture, especially pub life, is something you mostly experience *with* Danes, not just around them. If you get the chance to join a local for a beer or a bar crawl, take it — it opens up a side of Denmark most tourists never see. Hostels with common bar areas, run clubs, and language exchange meetups (search "language cafe Copenhagen" on Facebook) are the easiest low-pressure ways in.
+                  </div>
+                </div>
+              </div>
+
               {/* FAQ */}
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>FAQ</div>
@@ -1047,10 +1632,15 @@ export default function Gemlyx() {
           <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content" }}>
             {[
               { id: "home", label: "🧭 Explore" },
+              { id: "plans", label: "🗺 Plans" },
               { id: "essentials", label: "✓ Essentials" },
               { id: "explore", label: "🏪 Merchandise" },
               { id: "craft", label: "◈ Booking" },
+              { id: "attractions", label: "🏛 Attractions" },
               { id: "events", label: "◈ Events" },
+              { id: "food", label: "🍽 Food" },
+              { id: "nightlife", label: "🍺 Nightlife" },
+              { id: "roadtrips", label: "🚗 Road Trips" },
               { id: "visits", label: "◉ Towns" },
             ].map(item => (
               <button key={item.id} onClick={() => goTab(item.id)}
@@ -1100,9 +1690,9 @@ export default function Gemlyx() {
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
         <div ref={stripRef}
           onTouchStart={onSwipeStart} onTouchMove={onSwipeMove} onTouchEnd={onSwipeEnd}
-          style={{ display: "flex", height: "100%", width: "600%", transform: `translateX(${-tabIdx * (100/6)}%)`, transition: "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)", touchAction: "pan-y" }}>
+          style={{ display: "flex", height: "100%", width: `${TAB_ORDER.length * 100}%`, transform: `translateX(${-tabIdx * (100/TAB_ORDER.length)}%)`, transition: "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)", touchAction: "pan-y" }}>
           {TAB_ORDER.map((tabId, i) => (
-            <div key={tabId} style={{ width: `${100/6}%`, height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 20 }}>
+            <div key={tabId} style={{ width: `${100/TAB_ORDER.length}%`, height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 20 }}>
               {Math.abs(i - tabIdx) <= 1 && renderTab(tabId)}
             </div>
           ))}
@@ -1122,7 +1712,7 @@ export default function Gemlyx() {
           <div style={{ background: C.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 500, margin: "0 auto", padding: "20px 20px 40px" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Sort & Filter</div>
-              <button onClick={() => { setFilterCategory("All"); setFilterType("All"); }} style={{ background: "none", border: "none", color: C.accent, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }} onClick={() => { setFilterCategories([]); setFilterTypes([]); }}>Reset</button>
+              <button onClick={() => { setFilterCategories([]); setFilterTypes([]); setPriceMax(5000); setBookableOnly(false); }} style={{ background: "none", border: "none", color: C.accent, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Reset</button>
             </div>
 
             <div style={{ marginBottom: 20 }}>
@@ -1157,12 +1747,37 @@ export default function Gemlyx() {
               })}
             </div>
 
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Max price</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>{priceMax >= 5000 ? "Any price" : `Up to ${priceMax.toLocaleString()} DKK`}</div>
+              </div>
+              <input type="range" min="50" max="5000" step="50" value={priceMax} onChange={e => setPriceMax(Number(e.target.value))}
+                style={{ width: "100%", accentColor: C.accent }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.muted, marginTop: 4 }}>
+                <span>50 DKK</span><span>5,000+ DKK</span>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label onClick={() => setBookableOnly(v => !v)}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", cursor: "pointer" }}>
+                <div>
+                  <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>● Bookable online only</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Skip anything needing a request first</div>
+                </div>
+                <div style={{ width: 44, height: 26, borderRadius: 100, background: bookableOnly ? C.accent : C.border, position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: bookableOnly ? 21 : 3, transition: "all 0.2s" }} />
+                </div>
+              </label>
+            </div>
+
             <button onClick={() => setShowFilter(false)}
               style={{ width: "100%", background: C.accent, border: "none", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Show {displayProducts.length} results
             </button>
-            {(filterCategories.length > 0 || filterTypes.length > 0) && (
-              <button onClick={() => { setFilterCategories([]); setFilterTypes([]); }}
+            {(filterCategories.length > 0 || filterTypes.length > 0 || priceMax < 5000 || bookableOnly) && (
+              <button onClick={() => { setFilterCategories([]); setFilterTypes([]); setPriceMax(5000); setBookableOnly(false); }}
                 style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px", fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 8 }}>
                 Clear all filters
               </button>
@@ -1189,7 +1804,7 @@ export default function Gemlyx() {
 
           <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
             <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 6 }}>{craftDetail.name}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{craftDetail.location} · {craftDetail.travelTime} from CPH</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{craftDetail.location} · {craftDetail.travelTime} from CPH{craftDetail.rating && <span> · <span style={{ color: C.gold, fontWeight: 700 }}>★ {craftDetail.rating}</span></span>}</div>
 
             {/* Price block */}
             <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 20 }}>
@@ -1201,12 +1816,68 @@ export default function Gemlyx() {
 
             <div style={{ fontSize: 14, color: C.light, lineHeight: 1.75, marginBottom: 22 }}>{craftDetail.desc}</div>
 
+            {craftDetail.bestTime && (
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>◷ Best Time to Arrive</div>
+                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6, marginBottom: 12 }}>{craftDetail.bestTime}</div>
+                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(craftDetail.mapHint)}`} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12, color: C.gold, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "3px" }}>
+                  Check today's live crowd levels on Google Maps ↗
+                </a>
+              </div>
+            )}
+
+            {craftDetail.transportWarning && (
+              <div style={{ background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 14, padding: "16px", marginBottom: 22 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                  <span style={{ fontSize: 14 }}>🚲</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", letterSpacing: 1, textTransform: "uppercase" }}>No car or bike? Read this</span>
+                </div>
+                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>{craftDetail.transportWarning}</div>
+              </div>
+            )}
+
             <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>What you can make</div>
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 26 }}>
               {(craftDetail.what || []).map(w => (
                 <span key={w} style={{ fontSize: 12, color: C.text, background: C.surface, border: `1px solid ${C.border}`, padding: "7px 13px", borderRadius: 100 }}>{w}</span>
               ))}
             </div>
+
+            {craftDetail.recommendedPackage && (
+              <div style={{ background: `${craftDetail.color}18`, border: `1px solid ${craftDetail.color}`, borderRadius: 14, padding: "16px", marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 14 }}>★</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: craftDetail.color, letterSpacing: 1, textTransform: "uppercase" }}>Recommended Package</span>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 6 }}>{craftDetail.recommendedPackage.name}</div>
+                <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{craftDetail.recommendedPackage.reason}</div>
+              </div>
+            )}
+
+            {craftDetail.ticketOptions && craftDetail.ticketOptions.length > 0 && (
+              <div style={{ marginBottom: 26 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Ticket Options</div>
+                {craftDetail.ticketOptions.map((t, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "10px 0", borderBottom: i < craftDetail.ticketOptions.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <span style={{ fontSize: 13, color: C.text }}>{t.name}</span>
+                    <span style={{ fontSize: 13, color: C.gold, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>{t.price}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {craftDetail.upcomingEvents && craftDetail.upcomingEvents.length > 0 && (
+              <div style={{ marginBottom: 26 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Upcoming Events This Season</div>
+                {craftDetail.upcomingEvents.map((ev, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "10px 0", borderBottom: i < craftDetail.upcomingEvents.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <span style={{ fontSize: 13, color: C.text }}>{ev.name}</span>
+                    <span style={{ fontSize: 12, color: C.gold, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>{ev.dates}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {craftDetail.bookingType === "online" ? (
               <>
