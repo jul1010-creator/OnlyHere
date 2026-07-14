@@ -403,7 +403,14 @@ const StoreBadge = ({ type, href }) => (
   </a>
 );
 
-const APP_VERSION = "v2.56 — Matas-style mobile nav, full nav restored on PC";
+const MapPlaceholder = () => (
+  <div style={{ width: "100%", height: "100%", minHeight: 0, background: "#0D1526", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, border: "1px dashed #1E2A3A", borderRadius: 12 }}>
+    <span style={{ fontSize: 24 }}>🗺</span>
+    <span style={{ fontSize: 11, color: "#6B7A99" }}>Map preview — live in the full app</span>
+  </div>
+);
+
+const APP_VERSION = "v2.55 — safer nav grouping + real AI web search";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -600,90 +607,24 @@ export default function Gemlyx() {
     setAiLoading(true);
     try {
       const productList = allProducts.map(p => `${p.name} in ${p.city} (${p.price}) - ${p.exclusive}`).join(", ");
-      const townList = towns.map(t => `${t.name} (${t.region}, ${t.travelTime} from CPH) — ${t.tag}`).join("; ");
-      const tripList = roadTrips.map(r => `${r.name} (${r.duration}, ${r.distance}) — stops: ${r.stops.map(s => s.name).join(", ")}`).join("; ");
-      const campList = campingSpots.map(s => `${s.name} (${s.region}, ${s.type})`).join("; ");
-      const foodList = foodSpots.map(f => `${f.name} (${f.type}, ${f.category}, ${f.location}, ${f.price})`).join("; ");
-      const nightlifeList = nightlifeSpots.map(f => `${f.name} (${f.type}, crowd: ${f.crowd}, ${f.location})`).join("; ");
-      const attractionsList = freeEntrance.map(a => `${a.name} in ${a.city} (${a.type}, free entry)`).join("; ");
-      const handmadeList = handmadeCraftShops.map(s => `${s.name} in ${s.location} (${s.yearRound ? "open year-round" : "seasonal"})`).join("; ");
-      const upcomingLocal = events.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})`).join("; ");
-      const upcomingMajor = majorEvents.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})`).join("; ");
-      const upcomingViking = vikingEvents.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})`).join("; ");
-      const craftList = craftItems.map(c => `${c.name} in ${c.location} (${c.price}${c.rating ? ", ★" + c.rating : ""})`).join("; ");
-      const now = new Date();
-      const monthName = now.toLocaleString("en", { month: "long" });
-      const season = getSeason();
-
-      const sysPrompt = `You are Local Assist — Gemlyx's AI trip-planning guide for Denmark. Today is ${monthName} (${season} season in Denmark). Be warm, concise, and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
-
-MERCHANDISE: ${productList}
-BOOKING/CRAFT EXPERIENCES: ${craftList}
-TOWNS: ${townList}
-ROAD TRIPS: ${tripList}
-CAMPING & SHELTERS: ${campList}
-FOOD SPOTS (Local & Major): ${foodList}
-NIGHTLIFE (note whether local/Danish or international crowd): ${nightlifeList}
-FREE ENTRANCE ATTRACTIONS (genuinely free, no ticket needed): ${attractionsList}
-HANDMADE CANDY & CRAFT SHOPS (walk-in, watch it made): ${handmadeList}
-UPCOMING LOCAL EVENTS: ${upcomingLocal}
-UPCOMING MAJOR EVENTS: ${upcomingMajor}
-UPCOMING VIKING EVENTS (markets, festivals, battle reenactments): ${upcomingViking}
-
-If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. Gemlyx's core mission: most tourists only see Copenhagen for 3-4 days and never explore the rest of Denmark, especially Jutland and North Zealand. When someone is staying more than 2 days, actively suggest at least one destination outside Copenhagen — don't just default to city recommendations. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket.
-
-You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.`;
-
-      const tools = [{
-        type: "function",
-        function: {
-          name: "web_search",
-          description: "Search the live web for current information — opening hours, event schedules, ticket availability — for anything not already in your provided lists.",
-          parameters: {
-            type: "object",
-            properties: { query: { type: "string", description: "The search query" } },
-            required: ["query"],
-          },
-        },
-      }];
-
-      const baseMessages = [
-        { role: "system", content: sysPrompt },
-        ...aiMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
-        { role: "user", content: msg },
-      ];
-
-      const callOpenAI = (messages) => fetch("https://api.openai.com/v1/chat/completions", {
+      const history = [];
+      aiMessages.forEach(m => {
+        if (history.length === 0 && m.role !== "user") return;
+        history.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.text });
+      });
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
-        body: JSON.stringify({ model: "gpt-4o-mini", messages, tools, max_tokens: 600 }),
-      }).then(r => r.json());
-
-      let data = await callOpenAI(baseMessages);
-      let choice = data.choices?.[0]?.message;
-      const toolCalls = choice?.tool_calls;
-
-      if (toolCalls && toolCalls.length > 0) {
-        // Model wants to search — run it, then ask again with results
-        const call = toolCalls[0];
-        const { query } = JSON.parse(call.function.arguments || "{}");
-        let searchSummary = "No results found.";
-        try {
-          const searchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-          const searchData = await searchRes.json();
-          searchSummary = searchData.answer || (searchData.results || []).map(r => `${r.title}: ${r.snippet}`).join(" | ") || searchSummary;
-        } catch { /* keep fallback summary, don't break the chat */ }
-
-        const followUpMessages = [
-          ...baseMessages,
-          choice,
-          { role: "tool", tool_call_id: call.id, content: searchSummary },
-        ];
-        data = await callOpenAI(followUpMessages);
-        choice = data.choices?.[0]?.message;
-      }
-
-      setAiMessages(prev => [...prev, { role: "assistant", text: choice?.content || data.error?.message || "Something went wrong!" }]);
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          system: "You are Local Assist — Gemlyx's AI guide. Help travelers discover exclusive local finds in Denmark. Be warm, concise and specific. Available finds: " + productList,
+          messages: [...history, { role: "user", content: msg }]
+        })
+      });
+      const data = await res.json();
+      const reply = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n") || "Something went wrong!";
+      setAiMessages(prev => [...prev, { role: "assistant", text: reply }]);
     } catch { setAiMessages(prev => [...prev, { role: "assistant", text: "Connection error — try again!" }]); }
     setAiLoading(false);
   };
@@ -737,8 +678,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
         </div>
         <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
           <div style={{ width: 88, height: 88, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}`, pointerEvents: "none" }}>
-            <iframe title={`${event.name} map`} width="88" height="88" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
-              src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint)}&zoom=6`} />
+            <MapPlaceholder />
           </div>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>
             {daysUntil(event.date) <= 0 ? "Happening now" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)} days away`}
@@ -887,7 +827,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     onError={() => setVideoError(true)}
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center" }} />
                 ) : (
-                  <img src="/picture3.png" alt="Denmark" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src="https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=1200&q=80" alt="Denmark" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 )}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(10,15,30,0.3) 0%, rgba(10,15,30,0.7) 100%)" }} />
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 24px" }}>
@@ -903,22 +843,22 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
               {/* Navigation sections */}
               {[
-                { id: "explore", img: "/picture2.png", title: "Merchandise", sub: "Exclusive finds that exist nowhere else", icon: "🏪" },
-                { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
-                { id: "plans", img: "/picture4.png", title: "Plans", sub: "Ready-made trips, built from what's actually open right now", icon: "🗺" },
-                { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
-                { id: "food", img: "/picture5.jpg", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", icon: "🍽" },
+                { id: "explore", grad: "linear-gradient(135deg, #7F1D2E 0%, #0A0F1E 100%)", title: "Merchandise", sub: "Exclusive finds that exist nowhere else", icon: "🏪" },
+                { id: "events", grad: "linear-gradient(135deg, #1D3A7F 0%, #0A0F1E 100%)", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
+                { id: "plans", grad: "linear-gradient(135deg, #1D7F4C 0%, #0A0F1E 100%)", title: "Plans", sub: "Ready-made trips, built from what's actually open right now", icon: "🗺" },
+                { id: "essentials", grad: "linear-gradient(135deg, #1D6F7F 0%, #0A0F1E 100%)", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
+                { id: "food", grad: "linear-gradient(135deg, #7F5A1D 0%, #0A0F1E 100%)", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", icon: "🍽" },
                 { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", icon: "🍺" },
-                { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", icon: "🚗" },
-                { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
-                { id: "craft", img: "/picture9.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" },
-                { id: "attractions", img: "/picture7.jpg", title: "Free Entrance", sub: "Genuinely free places worth your time, city by city", icon: "🆓" },
+                { id: "roadtrips", grad: "linear-gradient(135deg, #1D3A7F 0%, #0A0F1E 100%)", title: "Road Trips", sub: "The drive is half the adventure", icon: "🚗" },
+                { id: "visits", grad: "linear-gradient(135deg, #1D7F4C 0%, #0A0F1E 100%)", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
+                { id: "craft", grad: "linear-gradient(135deg, #C8102E 0%, #0A0F1E 100%)", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" },
+                { id: "attractions", grad: "linear-gradient(135deg, #2E7D32 0%, #0A0F1E 100%)", title: "Free Entrance", sub: "Genuinely free places worth your time, city by city", icon: "🆓" },
               ].map((section, i) => (
                 <div key={section.id} onClick={() => { goTab(section.id); window.scrollTo(0,0); }}
                   style={{ height: 280, position: "relative", overflow: "hidden", cursor: "pointer" }}>
-                  <img src={section.img} alt={section.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s" }}
-                    onMouseOver={e => e.target.style.transform = "scale(1.04)"}
-                    onMouseOut={e => e.target.style.transform = "scale(1)"} />
+                  <div style={{ width: "100%", height: "100%", background: section.grad, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ fontSize: 90, opacity: 0.22 }}>{section.icon}</span>
+                  </div>
                   <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.85) 0%, rgba(10,15,30,0.2) 60%)" }} />
                   <div style={{ position: "absolute", bottom: 24, left: 24, right: 24 }}>
                     <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: "#fff", marginBottom: 4 }}>{section.icon} {section.title}</div>
@@ -962,7 +902,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.56 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.55 — Jul 2026</div>
               </div>
             </div>
           )}
@@ -1424,8 +1364,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       <img src={town.photo} alt={town.name} onError={e => { e.target.style.display = "none"; }}
                         style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
                       <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
-                        <iframe title={`${town.name} map`} width="68" height="68" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
-                          src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(town.mapHint)}&zoom=9`} />
+                        <MapPlaceholder />
                       </div>
                       {town.nomiPotential === "Very High" && (
                         <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>⭐ Top Pick</div>
@@ -1600,12 +1539,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {mapCity ? (
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                   <div style={{ height: 220, position: "relative", flexShrink: 0 }}>
-                    {(() => {
-                      const src = selectedPin
-                        ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.shop)}&zoom=17`
-                        : `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=55.6761,12.5683&zoom=14&maptype=roadmap`;
-                      return <iframe key={mapCity.name + (selectedPin?.id||"")} title="Map" width="100%" height="220" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade" src={src} allowFullScreen />;
-                    })()}
+                    <MapPlaceholder />
                     <a href={selectedPin ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(selectedPin.shop+" Copenhagen")}` : `https://www.google.com/maps/search/?api=1&query=local+shops+Copenhagen`}
                       target="_blank" rel="noreferrer"
                       style={{ position: "absolute", bottom: 8, right: 8, background: C.gold, color: "#000", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
@@ -1679,12 +1613,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
         .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
         .app-root { height: 100vh; }
-        .hero-h { height: calc(100vh - 120px); min-height: 420px; }
-        @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 120px); } }
-        @media (min-width: 900px) {
-          .hero-h { height: calc(100vh - 172px); }
-          @supports (height: 100dvh) { .hero-h { height: calc(100dvh - 172px); } }
-        }
+        .hero-h { height: calc(100vh - 172px); min-height: 420px; }
+        @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 172px); } }
         .slide-up { animation: slideUp 0.2s ease; }
         .page-enter-next { animation: pageNext 0.32s cubic-bezier(0.2, 0.8, 0.3, 1); }
         .page-enter-prev { animation: pagePrev 0.32s cubic-bezier(0.2, 0.8, 0.3, 1); }
@@ -1719,12 +1649,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               ♡
               {savedItems.length > 0 && <span style={{ position: "absolute", top: 4, right: 4, background: C.accent, color: "#fff", fontSize: 9, fontWeight: 700, width: 14, height: 14, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{savedItems.length}</span>}
             </button>
-            {/* Login (mobile only — sits next to hamburger nav) */}
-            <button className="mobile-only" onClick={() => { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }}
-              style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8 }} title="Login">
-              👤
-            </button>
-            {/* Hamburger menu — full navigation on mobile */}
+            {/* Hamburger menu */}
             <button onClick={() => setShowMenu(!showMenu)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "6px 10px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
               <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
               <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
@@ -1761,23 +1686,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
         )}
       </div>
 
-      {/* ── TOP NAV TABS (desktop only — mobile uses hamburger) ──── */}
+      {/* ── TOP NAV TABS ───────────────────────────────────── */}
       {(
-        <div className="desktop-only" style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "relative" }}>
+        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "relative" }}>
           <div onScroll={e => setTabArrow(e.target.scrollLeft + e.target.clientWidth < e.target.scrollWidth - 8)}
             style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content" }}>
             {[
               { id: "home", label: "🧭 Explore" },
               { id: "plans", label: "🗺 Plans" },
-              { id: "essentials", label: "✓ Essentials" },
               { id: "explore", label: "🏪 Merchandise" },
               { id: "craft", label: "◈ Booking" },
-              { id: "attractions", label: "🆓 Free Entrance" },
               { id: "events", label: "◈ Events" },
-              { id: "food", label: "🍽 Food" },
-              { id: "nightlife", label: "🍺 Nightlife" },
-              { id: "roadtrips", label: "🚗 Road Trips" },
               { id: "visits", label: "◉ Towns" },
             ].map(item => (
               <button key={item.id} onClick={() => goTab(item.id)}
@@ -1801,27 +1721,22 @@ You also have a web_search tool. Use it whenever someone asks about something th
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
           <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 220, boxShadow: "0 8px 32px rgba(0,0,0,0.6)", maxHeight: "70vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
             <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }`}</style>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>Navigate</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>More sections</div>
             {[
-              { id: "home", label: "🧭 Explore" },
-              { id: "plans", label: "🗺 Plans" },
               { id: "essentials", label: "✓ Essentials" },
-              { id: "explore", label: "🏪 Merchandise" },
-              { id: "craft", label: "◈ Booking" },
               { id: "attractions", label: "🆓 Free Entrance" },
-              { id: "events", label: "◈ Events" },
               { id: "food", label: "🍽 Food" },
               { id: "nightlife", label: "🍺 Nightlife" },
               { id: "roadtrips", label: "🚗 Road Trips" },
-              { id: "visits", label: "◉ Towns" },
             ].map((item, i) => (
               <button key={item.id} onClick={() => { setShowMenu(false); goTab(item.id); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: active === item.id ? `${C.accent}22` : "transparent", color: active === item.id ? C.text : C.light, border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: active === item.id ? `${C.accent}22` : "transparent", color: active === item.id ? C.text : C.light, border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.05}s both` }}>
                 {item.label}
               </button>
             ))}
             <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
             {[
+              { id: "home", label: "🧭 Explore", action: "nav" },
               { id: "login", label: "👤 Login", action: "login" },
               { id: "faq", label: "❓ FAQ", action: "faq" },
               { id: "support", label: "✉ Support", action: "mail" },
@@ -1829,11 +1744,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
               <button key={item.id}
                 onClick={() => {
                   setShowMenu(false);
-                  if (item.action === "faq") setActive("essentials");
+                  if (item.action === "nav") setActive("home");
+                  else if (item.action === "faq") setActive("essentials");
                   else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
                   else if (item.action === "login") { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }
                 }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 11) * 0.04}s both` }}>
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 5) * 0.05}s both` }}>
                 {item.label}
               </button>
             ))}
