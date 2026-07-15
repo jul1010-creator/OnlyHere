@@ -320,7 +320,7 @@ const PRODUCT_COORDS = {
   21: [55.6820, 12.5710], 22: [55.6795, 12.5830], 23: [55.6980, 12.5500],
 };
 
-const DetailPage = ({ item, onClose, kind }) => {
+const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   return (
@@ -379,6 +379,16 @@ const DetailPage = ({ item, onClose, kind }) => {
           </div>
         )}
 
+        <button onClick={() => checkLiveInfo(item)} disabled={liveInfoLoading === item.name}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: liveInfo?.[item.name] ? 12 : 14 }}>
+          {liveInfoLoading === item.name ? "Checking..." : "🔍 Check live info"}
+        </button>
+        {liveInfo?.[item.name] && (
+          <div style={{ background: `${color}18`, border: `1px solid ${color}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+            {liveInfo[item.name]}
+          </div>
+        )}
+
         <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.mapHint)}`} target="_blank" rel="noreferrer"
           style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
           ↗ Get Directions
@@ -403,7 +413,7 @@ const StoreBadge = ({ type, href }) => (
   </a>
 );
 
-const APP_VERSION = "v2.56 — Matas-style mobile nav, full nav restored on PC";
+const APP_VERSION = "v2.57 — live-search buttons, video fade fix, Ask AI nav";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -436,6 +446,20 @@ export default function Gemlyx() {
   const [nightlifeTab, setNightlifeTab] = useState("Local");
   const [attractionCity, setAttractionCity] = useState("Copenhagen");
   const [craftModal, setCraftModal] = useState(null);
+  const [liveInfo, setLiveInfo] = useState({});
+  const [liveInfoLoading, setLiveInfoLoading] = useState(null);
+
+  const checkLiveInfo = async (item) => {
+    setLiveInfoLoading(item.name);
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(item.name + " " + (item.location || item.town || "") + " opening hours events 2026")}`);
+      const data = await res.json();
+      setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || "No current updates found." }));
+    } catch {
+      setLiveInfo(prev => ({ ...prev, [item.name]: "Couldn't check right now — try again in a moment." }));
+    }
+    setLiveInfoLoading(null);
+  };
   const [craftDetail, setCraftDetail] = useState(null);
   const [eventDetail, setEventDetail] = useState(null);
   const [townDetail, setTownDetail] = useState(null);
@@ -450,6 +474,7 @@ export default function Gemlyx() {
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const [tabArrow, setTabArrow] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -779,7 +804,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
     .sort((a,b) => new Date(a.date) - new Date(b.date));
 
   const aiHelperBlock = () => (
-    <div style={{ marginTop: 28 }}>
+    <div id="ai-helper-anchor" style={{ marginTop: 28 }}>
               {/* AI at the end of the journey */}
               <div style={{ padding: "36px 20px 28px", borderTop: `1px solid ${C.border}`, background: C.surface }}>
                 <div style={{ textAlign: "center", marginBottom: 16 }}>
@@ -881,13 +906,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
           {tab === "home" && (
             <div className={pageAnim} style={{ margin: "-0px -0px" }}>
               {/* Hero */}
-              <div className="hero-h" style={{ position: "relative", overflow: "hidden" }}>
-                {!videoError ? (
-                  <video src="/video1.mp4" autoPlay muted loop playsInline poster="/picture3.png"
+              <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: `url('/picture3.png') center/cover no-repeat` }}>
+                {!videoError && (
+                  <video src="/video1.mp4" autoPlay muted loop playsInline
+                    onCanPlay={() => setVideoReady(true)}
                     onError={() => setVideoError(true)}
-                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center" }} />
-                ) : (
-                  <img src="/picture3.png" alt="Denmark" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
                 )}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(10,15,30,0.3) 0%, rgba(10,15,30,0.7) 100%)" }} />
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 24px" }}>
@@ -962,7 +986,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.56 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.57 — Jul 2026</div>
               </div>
             </div>
           )}
@@ -1785,6 +1809,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {item.label}
               </button>
             ))}
+            <button onClick={() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              style={{ background: C.accent, border: "none", color: "#fff", padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", borderRadius: 100, margin: "8px" }}>
+              ✦ Ask AI
+            </button>
           </div>
           </div>
           {tabArrow && (
@@ -1820,6 +1848,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {item.label}
               </button>
             ))}
+            <button onClick={() => { setShowMenu(false); setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth" }), 150); }}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: C.accent, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 6, marginBottom: 2 }}>
+              ✦ Ask AI
+            </button>
             <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
             {[
               { id: "login", label: "👤 Login", action: "login" },
@@ -1941,8 +1973,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
         </div>
       )}
 
-      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" />
-      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" />
+      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
+      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
 
       {/* ── BOOKING DETAIL PAGE ───────────────────────────── */}
       {craftDetail && (
@@ -2036,6 +2068,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <span style={{ fontSize: 12, color: C.gold, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>{ev.dates}</span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            <button onClick={() => checkLiveInfo(craftDetail)} disabled={liveInfoLoading === craftDetail.name}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: liveInfo?.[craftDetail.name] ? 12 : 14 }}>
+              {liveInfoLoading === craftDetail.name ? "Checking..." : "🔍 Check live info"}
+            </button>
+            {liveInfo?.[craftDetail.name] && (
+              <div style={{ background: `${craftDetail.color}18`, border: `1px solid ${craftDetail.color}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+                {liveInfo[craftDetail.name]}
               </div>
             )}
 
