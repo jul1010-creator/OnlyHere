@@ -241,7 +241,9 @@ const essentials = [
   { id: 4, name: "DSB App", category: "Transport", emoji: "🚂", desc: "Danish national railway app. Book tickets, check schedules, get real-time delays.", howTo: "Download DSB app. Buy tickets in advance for cheaper prices.", price: "Free app", link: "https://apps.apple.com/dk/app/dsb/id531645423", linkAndroid: "https://play.google.com/store/apps/details?id=dk.dsb.rejseplanen", tip: "Buy Orange tickets weeks ahead for up to 50% off." },
   { id: 5, name: "Copenhagen Card", category: "Sightseeing", emoji: "🎟", desc: "Free entry to 89 attractions + unlimited transport. Worth it for 2+ days.", howTo: "Buy at copenhagencard.com or airport. 24h, 48h, 72h or 120h options.", price: "From 499 DKK", link: "https://www.copenhagencard.com", tip: "Tivoli alone is 150 DKK — card pays for itself with 3+ attractions." },
   { id: 6, name: "eSIM or Local SIM", category: "Connectivity", emoji: "📶", desc: "EU roaming covers most Europeans. Outside EU — get a local SIM or eSIM for maps, tickets and translations on the go.", howTo: "Buy at 7-Eleven, Netto or any phone shop. Lebara and Lycamobile work well.", price: "From 49 DKK", link: null, tip: "Make sure your phone is unlocked before traveling." },
-  { id: 8, name: "Skyscanner", category: "Flights", emoji: "✈️", desc: "A free flight comparison search engine — checks dozens of airlines and booking sites at once to find the cheapest route into Denmark. Doesn't sell tickets itself; it sends you to the airline or agent with the best price.", howTo: "Search your dates on skyscanner.com, or use their \"Whole Month\" or \"Cheapest Month\" view if your travel dates are flexible — often saves the most.", price: "Free to use", link: "https://www.skyscanner.net", tip: "Copenhagen Airport (CPH) is Denmark's main hub, but Billund (BLL) in Jutland is sometimes cheaper and puts you closer to Legoland and central Jutland." },
+  { id: 8, name: "Skyscanner", category: "Flights & Buses", emoji: "✈️", desc: "A free flight comparison search engine — checks dozens of airlines and booking sites at once to find the cheapest route into Denmark. Doesn't sell tickets itself; it sends you to the airline or agent with the best price.", howTo: "Search your dates on skyscanner.com, or use their \"Whole Month\" or \"Cheapest Month\" view if your travel dates are flexible — often saves the most.", price: "Free to use", link: "https://www.skyscanner.net", tip: "Copenhagen Airport (CPH) is Denmark's main hub, but Billund (BLL) in Jutland is sometimes cheaper and puts you closer to Legoland and central Jutland." },
+  { id: 9, name: "FlixBus", category: "Flights & Buses", emoji: "🚌", desc: "A budget long-distance bus network with 7 routes across Denmark, plus international connections to Hamburg, Oslo and Stockholm. Often the cheapest way in if you're already elsewhere in Europe — a Odense–Copenhagen ticket can run under 100 DKK if booked early.", howTo: "Book on flixbus.com or the FlixBus app. Show your e-ticket on your phone — no printing needed.", price: "From ~100 DKK domestic", link: "https://www.flixbus.com/bus/denmark", tip: "Book as early as possible — FlixBus prices rise the closer you get to departure, sometimes tripling." },
+  { id: 10, name: "Kombardo Expressen", category: "Flights & Buses", emoji: "🚍", desc: "A Denmark-based budget bus line running direct routes Copenhagen–Aarhus, Copenhagen–Aalborg, and Copenhagen–Rønne (Bornholm) as a single through-ticket — genuinely convenient if you'd rather not book bus and ferry separately.", howTo: "Book on kombardoexpressen.dk. Modern buses, comfortable for the longer Jutland routes.", price: "Varies by route", link: "https://www.kombardoexpressen.dk", tip: "The Rønne route bundles the ferry crossing into one ticket — check the exact itinerary when booking." },
 ];
 
 const handmadeCraftShops = [
@@ -262,7 +264,7 @@ const handmadeCraftShops = [
 ];
 
 const roadTrips = [
-  { id: 1, name: "Copenhagen to Aalborg", region: "Zealand → Jutland", emoji: "🚗", duration: "4h 30min drive", distance: "330 km",
+  { id: 1, name: "Copenhagen to Aalborg", region: "Zealand → Jutland", emoji: "🚗", duration: "4h 30min drive", distance: "330 km", lat: 56.1629, lon: 10.2039,
     desc: "The classic cross-country route — but almost nobody stops along the way. This drive passes some of Denmark's most important history within a few minutes of the E45, yet most people drive straight through.",
     stops: [
       { name: "Roskilde", note: "Viking Ship Museum, 25min off route" },
@@ -272,7 +274,7 @@ const roadTrips = [
       { name: "Skanderborg", note: "Lakeside forest, home of Smukfest" },
     ],
     color: "#1565C0", mapHint: "Copenhagen to Aalborg, Denmark", vibe: "🏛 For history that hides in plain sight" },
-  { id: 2, name: "The Wadden Sea Coast", region: "South Jutland", emoji: "🌾", duration: "2h drive", distance: "95 km",
+  { id: 2, name: "The Wadden Sea Coast", region: "South Jutland", emoji: "🌾", duration: "2h drive", distance: "95 km", lat: 55.3297, lon: 8.7671,
     desc: "Denmark's wildest coastline, and a UNESCO World Heritage site most travelers never hear about. Flat marshland, enormous skies, and the best sunsets in the country.",
     stops: [
       { name: "Ribe", note: "Denmark's oldest town, Viking Center on the outskirts" },
@@ -280,7 +282,7 @@ const roadTrips = [
       { name: "Fanø", note: "Ferry crossing, dune villages, Sønderho at the southern tip" },
     ],
     color: "#2E7D32", mapHint: "Wadden Sea Ribe Denmark", vibe: "🌾 Recommended for nature & traditional life" },
-  { id: 3, name: "North Zealand Coastal Loop", region: "Zealand", emoji: "🌊", duration: "2h 30min drive", distance: "110 km",
+  { id: 3, name: "North Zealand Coastal Loop", region: "Zealand", emoji: "🌊", duration: "2h 30min drive", distance: "110 km", lat: 56.1223, lon: 12.3130,
     desc: "A half-day loop from Copenhagen through fishing villages, royal castles and beach towns — genuinely underrated compared to how much attention Copenhagen itself gets.",
     stops: [
       { name: "Dragør", note: "Yellow ochre fisherman's village, 30min from the city" },
@@ -296,6 +298,47 @@ const campingSpots = [
   { id: 2, name: "Rørvig Camping", region: "North Zealand", emoji: "🏕", type: "Campsite", desc: "Beachfront campsite near the Odsherred coast — pitch a tent metres from the water. Popular with Danes, almost unknown to tourists.", travelTime: "1h 30min drive", mapHint: "Rørvig Camping, 4581 Rørvig, Denmark", color: "#1565C0", vibe: "🌊 For sleeping to the sound of waves" },
   { id: 3, name: "Skagen Klitplantage", region: "North Jutland", emoji: "🌲", type: "Primitive camping", desc: "Free primitive camping (\"Naturstyrelsen\" spots) in dune forest between Skagen's two seas. Marked pitches, composting toilets, nothing else.", travelTime: "4h drive", mapHint: "Skagen Klitplantage, 9990 Skagen, Denmark", color: "#6A1B9A", vibe: "🌲 Recommended for nature & traditional life" },
   { id: 4, name: "Mols Bjerge Shelters", region: "East Jutland", emoji: "⛰", type: "Free shelter", desc: "Hilltop shelters in Denmark's only \"mountain\" national park. Short hike in, real silence, some of the best stargazing in the country.", travelTime: "3h 15min drive", mapHint: "Mols Bjerge National Park, 8400 Ebeltoft, Denmark", color: "#E65100", vibe: "✨ Best stargazing spot in Denmark" },
+];
+
+const seasonalItineraries = [
+  {
+    id: "summer-nature", title: "The Great Nature Adventure", emoji: "🌿", color: "#2E7D32",
+    seasons: ["summer"], duration: "7 days", bestFor: "Nature lovers, hidden-gem seekers, coastal Denmark",
+    intro: "Denmark's summer days stretch to 17 hours of light, and this route is built entirely around it — from a harbour swim in the capital to standing where two seas collide at Denmark's northern tip.",
+    days: [
+      { day: 1, title: "Copenhagen & Harbour Swim", activity: "Rent a bike, explore Indre By, then swim right in the harbour at Islands Brygge. End with a cold beer at Nyhavn or Reffen Street Food." },
+      { day: 2, title: "South Zealand & Møns Klint", activity: "Drive to Møns Klint. Walk the 500 steps down to the beach and see the towering white chalk cliffs rise from turquoise water. Stay in a local B&B." },
+      { day: 3, title: "Funen & Odense", activity: "Cross the Storebælt Bridge. Explore the South Funen archipelago or visit the striking H.C. Andersen's House in Odense." },
+      { day: 4, title: "Nationalpark Thy — Wild West Jutland", activity: "Head to Jutland's west coast, to \"Cold Hawaii\" in Klitmøller. Experience raw, untouched nature shaped by the North Sea wind." },
+      { day: 5, title: "Skagen — Where Two Seas Meet", activity: "Drive to Denmark's northernmost point, Grenen. Stand with one foot in the Skagerrak and the other in the Kattegat. See the buried church and Råbjerg Mile, Denmark's largest migrating dune." },
+      { day: 6, title: "Aarhus — Culture & Food", activity: "Drive south to Aarhus. Visit ARoS Art Museum (walk the rainbow-coloured panorama circle) and eat dinner in the cosy Latin Quarter." },
+      { day: 7, title: "Silkeborg Lakes on the Way Back", activity: "Walk through Silkeborg's deep forests and lakes before heading to the airport for the trip home." },
+    ],
+  },
+  {
+    id: "winter-culture", title: "Culture, History & City Hygge", emoji: "🏰", color: "#6A1B9A",
+    seasons: ["winter"], duration: "4 days", bestFor: "History lovers, budget travellers, museum and café people",
+    seasonNote: "Danish winter nature is genuinely not recommended — short daylight (dark by 15:30), frequent horizontal rain and wind, and coastal towns partly shut down. This itinerary goes 100% indoor culture, history and food instead.",
+    intro: "Denmark's cheapest months to visit, with zero museum queues — this route leans fully into castles, Viking history and warm cafés rather than fighting the weather.",
+    days: [
+      { day: 1, title: "Royal Copenhagen", activity: "Start indoors and warm at Rosenborg Castle to see the crown jewels. Walk over to Christiansborg Palace and explore the royal reception rooms. In the evening: a lit-up Tivoli in December, or a cosy Nørrebro microbrewery/café in Jan–Feb." },
+      { day: 2, title: "Viking Ships & Cathedral in Roskilde", activity: "Take the 30-minute train to Roskilde. Visit the Viking Ship Museum right on the fjord to see original 1,000-year-old ships, then Roskilde Cathedral, resting place of nearly 40 Danish kings and queens." },
+      { day: 3, title: "Cultural Capital Aarhus & Den Gamle By", activity: "Take the express train to Aarhus. Spend the morning at Den Gamle By — a living open-air museum, genuinely atmospheric in winter with costumed guides. Evening: Aarhus Street Food for cheap, excellent food from around the world." },
+      { day: 4, title: "Moesgaard Museum & Flight Home", activity: "Visit the architectural masterpiece Moesgaard Museum outside Aarhus — home to the Grauballe Man, the best-preserved Iron Age bog body in the world. Head back to the airport." },
+    ],
+  },
+  {
+    id: "shoulder-hidden", title: "The Hidden Denmark", emoji: "💎", color: C.gold,
+    seasons: ["spring", "autumn"], duration: "5 days", bestFor: "Couples, foodies, and anyone chasing the genuinely unusual",
+    intro: "May and September are the sweet spot — good daylight, thin crowds, and this is when Denmark's strangest and most beautiful natural phenomenon, Sort Sol, is actually visible.",
+    days: [
+      { day: 1, title: "Bornholm — The Rock Island", activity: "Fly or ferry to Bornholm. The island is at its best in May and September. Explore Hammershus, Northern Europe's largest ruined castle, and see the island's unique round churches." },
+      { day: 2, title: "Smokehouses & Local Delicacies", activity: "Eat \"Sol over Gudhjem\" (smoked herring with egg yolk and chives) at a traditional smokehouse. Walk the dramatic cliff coast at Helligdomsklipperne." },
+      { day: 3, title: "Sort Sol in South Jutland (Autumn only — Sept/Oct)", activity: "Travel to the Wadden Sea in South Jutland. Witness \"Sort Sol\" (Black Sun) — up to a million starlings gathering into vast shifting shapes across the sunset sky. One of Europe's wildest natural phenomena, and genuinely obscure to international travellers." },
+      { day: 4, title: "Ribe — Denmark's Oldest Town", activity: "Walk Ribe's cobblestone streets lined with medieval half-timbered houses. Visit Ribe VikingeCenter and climb the storm bell tower at Ribe Cathedral for a view across the flat marshland." },
+      { day: 5, title: "Hunting the Forgotten Giants", activity: "Spend the last day in the forests around Copenhagen searching for \"De Glemte Kæmper\" (The Forgotten Giants) — enormous recycled-wood troll sculptures hidden in nature by artist Thomas Dambo — before departure." },
+    ],
+  },
 ];
 
 const getSeason = () => {
@@ -398,6 +441,99 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
   );
 };
 
+const weatherIcon = (code) => {
+  if (!code) return "🌤";
+  if (code.includes("rain") || code.includes("sleet")) return "🌧";
+  if (code.includes("snow")) return "❄️";
+  if (code.includes("thunder")) return "⛈";
+  if (code.includes("cloudy") || code.includes("fog")) return "☁️";
+  if (code.includes("clearsky") || code.includes("fair")) return "☀️";
+  return "⛅";
+};
+
+const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoading, checkWeather }) => {
+  const data = weather[weatherKey];
+  useEffect(() => {
+    if (!data && weatherLoading !== weatherKey) checkWeather(weatherKey, lat, lon);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weatherKey]);
+
+  return (
+    <div style={{ background: C.surface, borderRadius: 16, padding: "16px", border: `1px solid ${C.border}`, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{label}</div>
+        {weatherLoading === weatherKey && <span style={{ fontSize: 11, color: C.muted }}>Loading...</span>}
+      </div>
+
+      {data && !data.error ? (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+            <span style={{ fontSize: 40 }}>{weatherIcon(data.condition)}</span>
+            <div>
+              <div style={{ fontSize: 30, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1 }}>{Math.round(data.temperature_c)}°C</div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Wind {data.wind_speed_ms} m/s · Humidity {data.humidity_percent}%</div>
+            </div>
+          </div>
+
+          {data.warnings?.length > 0 && data.warnings.map((w, i) => (
+            <div key={i} style={{ background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 10, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#FFB347", lineHeight: 1.5 }}>
+              ◷ {w.type}: {w.detaljer}
+            </div>
+          ))}
+
+          {data.forecast?.length > 0 && (
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+              {data.forecast.map((day, i) => {
+                const d = new Date(day.date);
+                const label = i === 0 ? "Today" : d.toLocaleDateString("en", { weekday: "short" });
+                return (
+                  <div key={day.date} style={{ flexShrink: 0, background: C.bg, borderRadius: 10, padding: "8px 10px", textAlign: "center", minWidth: 56 }}>
+                    <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 16, marginBottom: 4 }}>{weatherIcon(day.condition)}</div>
+                    <div style={{ fontSize: 12, color: C.text, fontWeight: 700 }}>{Math.round(day.temperature_c)}°</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : data?.error ? (
+        <div style={{ fontSize: 12, color: C.muted }}>Couldn't fetch weather — check /api/weather.js is deployed with a working User-Agent.</div>
+      ) : (
+        <div style={{ fontSize: 12, color: C.muted }}>Loading forecast...</div>
+      )}
+    </div>
+  );
+};
+
+const WEATHER_CITIES = [
+  { key: "copenhagen", label: "Copenhagen", lat: 55.6761, lon: 12.5683 },
+  { key: "aarhus", label: "Aarhus", lat: 56.1629, lon: 10.2039 },
+  { key: "aalborg", label: "Aalborg", lat: 57.0488, lon: 9.9217 },
+];
+
+const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather }) => {
+  useEffect(() => {
+    WEATHER_CITIES.forEach(c => { if (!weather[c.key] && weatherLoading !== c.key) checkWeather(c.key, c.lat, c.lon); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div style={{ display: "flex", gap: 14, overflowX: "auto", padding: "10px 0", marginTop: 4 }}>
+      {WEATHER_CITIES.map(c => {
+        const d = weather[c.key];
+        return (
+          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 15 }}>{d && !d.error ? weatherIcon(d.condition) : "⏳"}</span>
+            <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{c.label}</span>
+            <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{d && !d.error ? `${Math.round(d.temperature_c)}°` : "--"}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const StoreBadge = ({ type, href }) => (
   <a href={href} target="_blank" rel="noreferrer"
     style={{ display: "inline-flex", alignItems: "center", gap: 9, background: "#000", border: "1px solid #3a3a3a", borderRadius: 8, padding: "7px 13px", textDecoration: "none" }}>
@@ -413,7 +549,7 @@ const StoreBadge = ({ type, href }) => (
   </a>
 );
 
-const APP_VERSION = "v2.57 — live-search buttons, video fade fix, Ask AI nav";
+const APP_VERSION = "v2.62 — Plans rebuilt: 3 real seasonal itineraries";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -446,6 +582,7 @@ export default function Gemlyx() {
   const [nightlifeTab, setNightlifeTab] = useState("Local");
   const [attractionCity, setAttractionCity] = useState("Copenhagen");
   const [craftModal, setCraftModal] = useState(null);
+  const [expandedPlan, setExpandedPlan] = useState(null);
   const [liveInfo, setLiveInfo] = useState({});
   const [liveInfoLoading, setLiveInfoLoading] = useState(null);
 
@@ -459,6 +596,20 @@ export default function Gemlyx() {
       setLiveInfo(prev => ({ ...prev, [item.name]: "Couldn't check right now — try again in a moment." }));
     }
     setLiveInfoLoading(null);
+  };
+
+  const [weather, setWeather] = useState({});
+  const [weatherLoading, setWeatherLoading] = useState(null);
+  const checkWeather = async (key, lat, lon) => {
+    setWeatherLoading(key);
+    try {
+      const res = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
+      const data = await res.json();
+      setWeather(prev => ({ ...prev, [key]: data }));
+    } catch {
+      setWeather(prev => ({ ...prev, [key]: { error: true } }));
+    }
+    setWeatherLoading(null);
   };
   const [craftDetail, setCraftDetail] = useState(null);
   const [eventDetail, setEventDetail] = useState(null);
@@ -497,7 +648,7 @@ export default function Gemlyx() {
     if (aiMessages.length > 1) document.querySelectorAll(".ai-msgs").forEach(el => { el.scrollTop = el.scrollHeight; });
   }, [aiMessages]);
 
-  const TAB_ORDER = ["home", "plans", "essentials", "explore", "craft", "attractions", "events", "food", "nightlife", "roadtrips", "visits"];
+  const TAB_ORDER = ["home", "ai", "plans", "essentials", "explore", "craft", "attractions", "events", "food", "nightlife", "roadtrips", "visits"];
   const [slideDir, setSlideDir] = useState(null);
   const pageAnim = "";
   const goTab = (id) => {
@@ -715,7 +866,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
   // ── PILL BUTTON ───────────────────────────────────────────────
   const Pill = ({ label, active, onClick, color }) => (
-    <button onClick={onClick} style={{ background: active ? (color||C.accent) : C.surface, color: active ? "#fff" : C.muted, border: `1px solid ${active ? (color||C.accent) : C.border}`, borderRadius: 100, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>
+    <button onClick={onClick} style={{ background: active ? (color||C.accent) : C.surface, color: active ? "#fff" : (color || C.muted), border: `1px solid ${active ? (color||C.accent) : (color ? `${color}66` : C.border)}`, borderRadius: 100, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>
       {label}
     </button>
   );
@@ -841,64 +992,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
     </div>
   );
 
-  const buildPlans = () => {
-    const season = getSeason();
-    const upcomingLocal = events.filter(e => isUpcoming(e.date)).sort((a,b) => new Date(a.date) - new Date(b.date));
-    const upcomingMajor = majorEvents.filter(e => isUpcoming(e.date)).sort((a,b) => new Date(a.date) - new Date(b.date));
-    const topTown = towns.find(t => t.nomiPotential === "Very High") || towns[0];
-    const vikingCraft = craftItems.filter(c => /viking/i.test(c.name) || /viking/i.test(c.desc || ""));
-    const bestRoadTrip = roadTrips[0];
-    const natureTrip = roadTrips.find(r => r.id === 2) || roadTrips[0];
-    const natureCamps = campingSpots.slice(0, 2);
-
-    const plans = [
-      {
-        id: "citybreak", icon: "🏙", color: C.accent, title: "Copenhagen City Break",
-        seasons: ["winter", "spring", "summer", "autumn"],
-        desc: "Everything in this plan is inside Copenhagen — no car, no long trains. Good any time of year.",
-        stops: [
-          { icon: "🏪", label: "Browse Merchandise", sub: "Flagship-only finds you won't see abroad" },
-          { icon: "🍬", label: "Sømods Bolcher", sub: "Watch royal-court candy pulled by hand" },
-          ...(upcomingLocal.filter(e => ["Copenhagen","Dragør"].includes(e.town)).slice(0,1).map(e => ({ icon: "◈", label: e.name, sub: getEventDate(e.date, e.dateEnd) }))),
-        ],
-      },
-      {
-        id: "viking", icon: "⚓", color: "#1565C0", title: "Viking Heritage Trail",
-        seasons: ["spring", "summer", "autumn"],
-        seasonNote: "Ribe VikingeCenter closes for winter (roughly Nov–Apr) — Roskilde and Moesgaard stay open, but this trail is best April–October.",
-        desc: "Denmark's three real Viking sites, connected into one trip.",
-        stops: vikingCraft.slice(0, 3).map(c => ({ icon: c.emoji, label: c.name, sub: `${c.location} · ${c.rating ? "★ " + c.rating : c.price}` })),
-      },
-      {
-        id: "nature", icon: "🌲", color: "#2E7D32", title: "Nature & Camping Escape",
-        seasons: ["summer", "spring"],
-        seasonNote: season === "winter" ? "Not recommended right now — cold, short daylight, some shelters exposed. Try the City Break instead, or revisit this plan April–September." : season === "autumn" ? "Still doable but pack for cold nights — best window is May–September." : undefined,
-        desc: `${natureTrip?.name || "A scenic drive"} paired with real Danish shelters and campsites along the way.`,
-        stops: [
-          ...(natureTrip ? [{ icon: natureTrip.emoji, label: natureTrip.name, sub: `${natureTrip.duration} · ${natureTrip.distance}` }] : []),
-          ...natureCamps.map(s => ({ icon: s.emoji, label: s.name, sub: s.type })),
-        ],
-      },
-      {
-        id: "festival", icon: "🎪", color: "#6A1B9A", title: "Festival Season",
-        seasons: ["summer"],
-        seasonNote: season !== "summer" ? "Denmark's festival season runs roughly May–September — nothing major is running right now, check back closer to summer." : undefined,
-        desc: "Ride the wave of Denmark's biggest live events, local and major.",
-        stops: [...upcomingMajor.slice(0,2), ...upcomingLocal.slice(0,1)].map(e => ({ icon: e.emoji, label: e.name, sub: getEventDate(e.date, e.dateEnd) })),
-      },
-      {
-        id: "hiddengems", icon: "◆", color: C.gold, title: "Discover Hidden Gems",
-        seasons: ["winter", "spring", "summer", "autumn"],
-        desc: "Only genuinely tagged \"Hidden Gem\" content — the opposite of Nyhavn and Tivoli. Real finds most tourists never hear about, from any season.",
-        stops: [
-          ...freeEntrance.filter(a => a.popularityTag === "Hidden Gem").slice(0, 2).map(a => ({ icon: a.emoji, label: a.name, sub: `${a.city} · Free entry` })),
-          ...craftItems.filter(c => c.popularityTag === "Hidden Gem").slice(0, 1).map(c => ({ icon: c.emoji, label: c.name, sub: c.location })),
-          ...towns.filter(t => t.nomiPotential === "Very High").slice(0, 2).map(t => ({ icon: t.emoji, label: t.name, sub: t.tag })),
-        ],
-      },
-    ];
-    return plans.filter(p => p.stops.length > 0);
-  };
 
   const renderTab = (tab) => (
     <>
@@ -930,6 +1023,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 { id: "explore", img: "/picture2.png", title: "Merchandise", sub: "Exclusive finds that exist nowhere else", icon: "🏪" },
                 { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
                 { id: "plans", img: "/picture4.png", title: "Plans", sub: "Ready-made trips, built from what's actually open right now", icon: "🗺" },
+                { id: "ai", img: "/picture9.jpg", title: "Ask AI", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
                 { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
                 { id: "food", img: "/picture5.jpg", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", icon: "🍽" },
                 { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", icon: "🍺" },
@@ -986,7 +1080,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.57 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.62 — Jul 2026</div>
               </div>
             </div>
           )}
@@ -1131,6 +1225,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
                   ))}
                 </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Booking speed</div>
                 <Pill label="● Bookable online only" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
               </div>
 
@@ -1368,10 +1463,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1 }}>{trip.region}</div>
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 14, marginBottom: 12 }}>
+                  <div style={{ display: "flex", gap: 14, marginBottom: 14 }}>
                     <span style={{ fontSize: 12, color: trip.color, fontWeight: 700 }}>🕐 {trip.duration}</span>
                     <span style={{ fontSize: 12, color: C.muted }}>📍 {trip.distance}</span>
                   </div>
+                  <WeatherStrip label={`Weather along the route`} weatherKey={trip.name} lat={trip.lat} lon={trip.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
                   {trip.vibe && (
                     <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: trip.color, background: `${trip.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 14 }}>
                       {trip.vibe}
@@ -1472,40 +1568,87 @@ You also have a web_search tool. Use it whenever someone asks about something th
             </div>
           )}
 
+          {/* ── AI (dedicated page) ─────────────────────────────── */}
+          {tab === "ai" && (
+            <div className={pageAnim} style={{ padding: "16px" }}>
+              <div style={{ marginBottom: 18, paddingTop: 8, textAlign: "center" }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>✦ Ask AI</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide — plans your trip, and can check what's actually happening right now.</div>
+              </div>
+
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 24 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4CAF50", flexShrink: 0 }} />
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Live Right Now</div>
+                </div>
+                {[...majorEvents.filter(e => isUpcoming(e.date)).slice(0, 2), ...vikingEvents.filter(e => isUpcoming(e.date)).slice(0, 1)].map(e => (
+                  <div key={e.name} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 0" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: liveInfo?.[e.name] ? 8 : 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{e.emoji} {e.name}</div>
+                      <button onClick={() => checkLiveInfo(e)} disabled={liveInfoLoading === e.name}
+                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 100, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
+                        {liveInfoLoading === e.name ? "Checking..." : "🔍 Check"}
+                      </button>
+                    </div>
+                    {liveInfo?.[e.name] && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{liveInfo[e.name]}</div>}
+                  </div>
+                ))}
+              </div>
+
+              {aiHelperBlock()}
+            </div>
+          )}
+
           {/* ── PLANS ────────────────────────────────────────── */}
           {tab === "plans" && (
             <div className={pageAnim} style={{ padding: "16px" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Plans</div>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Recommendations</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>
-                  Ready-made trips, assembled live from everything in Gemlyx right now — and adjusted for the season. It's {new Date().toLocaleString("en", { month: "long" })}, so plans that don't suit right now are marked, not hidden.
+                  Three complete, day-by-day routes across Denmark's seasons. It's {new Date().toLocaleString("en", { month: "long" })} — the one that fits right now is marked, the rest are here for whenever you're planning ahead.
                 </div>
               </div>
 
-              {buildPlans().map(plan => {
+              {seasonalItineraries.map(plan => {
                 const inSeason = plan.seasons.includes(getSeason());
+                const isOpen = expandedPlan === plan.id;
                 return (
-                  <div key={plan.id} style={{ background: C.surface, borderRadius: 16, padding: "18px", marginBottom: 16, border: `1px solid ${inSeason ? plan.color : C.border}`, opacity: inSeason ? 1 : 0.72 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                      <span style={{ fontSize: 24 }}>{plan.icon}</span>
-                      <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{plan.title}</div>
-                      {inSeason && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>● Good now</span>}
+                  <div key={plan.id} style={{ background: C.surface, borderRadius: 16, marginBottom: 16, border: `1px solid ${inSeason ? plan.color : C.border}`, opacity: inSeason ? 1 : 0.85, overflow: "hidden" }}>
+                    <div style={{ padding: "18px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                        <span style={{ fontSize: 24 }}>{plan.emoji}</span>
+                        <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{plan.title}</div>
+                        {inSeason && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100, flexShrink: 0 }}>● Good now</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 12, color: plan.color, fontWeight: 700 }}>📅 {plan.duration}</span>
+                        <span style={{ fontSize: 12, color: C.muted }}>👤 {plan.bestFor}</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: plan.seasonNote ? 10 : 14 }}>{plan.intro}</div>
+                      {plan.seasonNote && (
+                        <div style={{ fontSize: 12, color: "#FFB347", background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 10, padding: "10px 12px", marginBottom: 14, lineHeight: 1.55 }}>
+                          ◷ {plan.seasonNote}
+                        </div>
+                      )}
+                      <button onClick={() => setExpandedPlan(isOpen ? null : plan.id)}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: isOpen ? "transparent" : plan.color, border: isOpen ? `1px solid ${C.border}` : "none", color: isOpen ? C.light : "#fff", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {isOpen ? "Hide day-by-day" : `See all ${plan.days.length} days`} {isOpen ? "▲" : "▼"}
+                      </button>
                     </div>
-                    <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: plan.seasonNote ? 8 : 14 }}>{plan.desc}</div>
-                    {plan.seasonNote && (
-                      <div style={{ fontSize: 12, color: "#FFB347", background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 10, padding: "8px 12px", marginBottom: 14, lineHeight: 1.5 }}>
-                        ◷ {plan.seasonNote}
+
+                    {isOpen && (
+                      <div style={{ borderTop: `1px solid ${C.border}`, padding: "6px 18px 18px" }}>
+                        {plan.days.map((d, i) => (
+                          <div key={d.day} style={{ display: "flex", gap: 12, padding: "14px 0", borderBottom: i < plan.days.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                            <div style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", background: `${plan.color}22`, color: plan.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif" }}>{d.day}</div>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4 }}>{d.title}</div>
+                              <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{d.activity}</div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    {plan.stops.map((s, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i === 0 ? `1px solid ${C.border}` : "none", borderBottom: i < plan.stops.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                        <span style={{ fontSize: 16, width: 22, textAlign: "center", flexShrink: 0 }}>{s.icon}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{s.label}</div>
-                          <div style={{ fontSize: 11, color: C.muted }}>{s.sub}</div>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 );
               })}
@@ -1515,7 +1658,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 12 }}>Tell the AI Guide below your dates, how you're travelling and what you're into — it'll build a real day-by-day plan from everything currently in Gemlyx.</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {["Plan me 3 days, no car", "I have a bike, what's best in " + new Date().toLocaleString("en", { month: "long" }), "Plan a family weekend with kids"].map(s => (
-                    <button key={s} onClick={() => { setAiInput(s); document.querySelector(".ai-msgs")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+                    <button key={s} onClick={() => { setAiInput(s); goTab("ai"); }}
                       style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "7px 14px", fontSize: 12, color: C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                       {s}
                     </button>
@@ -1534,21 +1677,71 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>✓ Travel Essentials</div>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Everything you need to travel Denmark like a local</div>
               </div>
-              {["Flights", "Transport", "Payments", "Sightseeing", "Connectivity"].map(cat => (
-                <div key={cat} style={{ marginBottom: 20 }}>
+
+              {/* Fine warning — always first */}
+              {essentials.filter(e => e.id === 7).map(item => (
+                <div key={item.id} id="ess-safety" style={{ background: "#3D2A0A", borderRadius: 14, padding: "16px", marginBottom: 20, border: "1px solid #FFB347", scrollMarginTop: 90 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 22 }}>{item.emoji}</span>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#FFB347", fontFamily: "'Cormorant Garamond', serif" }}>{item.name}</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>{item.desc}</div>
+                  <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", marginBottom: 3 }}>The 3 mistakes to avoid</div>
+                    <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic" }}>💡 {item.tip}</div>
+                </div>
+              ))}
+
+              {/* Quick-jump grid — modern icon menu, tap to scroll */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 24 }}>
+                {[
+                  { id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" },
+                  { id: "ess-flights", icon: "✈️", label: "Flights & Buses", color: "#6A1B9A" },
+                  { id: "ess-transport", icon: "🚇", label: "Transport", color: "#00838F" },
+                  { id: "ess-payments", icon: "💳", label: "Payments", color: "#2E7D32" },
+                  { id: "ess-sightseeing", icon: "🎟", label: "Sightseeing", color: C.gold },
+                  { id: "ess-connectivity", icon: "📶", label: "Connectivity", color: "#C8102E" },
+                  { id: "ess-solo", icon: "🍺", label: "Solo Travel", color: "#8D6E63" },
+                  { id: "ess-faq", icon: "❓", label: "FAQ", color: "#455A64" },
+                ].map(s => (
+                  <button key={s.id} onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 6px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <div style={{ width: 34, height: 34, borderRadius: "50%", background: `${s.color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{s.icon}</div>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: C.text, textAlign: "center", lineHeight: 1.2 }}>{s.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Weather */}
+              <div id="ess-weather" style={{ scrollMarginTop: 90 }}>
+                {WEATHER_CITIES.map(c => (
+                  <WeatherStrip key={c.key} label={`🌤 ${c.label}`} weatherKey={c.key} lat={c.lat} lon={c.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+                ))}
+              </div>
+
+              {[
+                { cat: "Flights & Buses", anchor: "ess-flights" },
+                { cat: "Transport", anchor: "ess-transport" },
+                { cat: "Payments", anchor: "ess-payments" },
+                { cat: "Sightseeing", anchor: "ess-sightseeing" },
+                { cat: "Connectivity", anchor: "ess-connectivity" },
+              ].map(({ cat, anchor }) => (
+                <div key={cat} id={anchor} style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{cat}</div>
-                  {essentials.filter(e => e.category === cat).map(item => (
-                    <div key={item.id} style={{ background: item.id === 7 ? "#3D2A0A" : C.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${item.id === 7 ? "#FFB347" : C.border}` }}>
+                  {essentials.filter(e => e.category === cat && e.id !== 7).map(item => (
+                    <div key={item.id} style={{ background: C.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${C.border}` }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         <span style={{ fontSize: 22 }}>{item.emoji}</span>
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: item.id === 7 ? "#FFB347" : C.text, fontFamily: "'Cormorant Garamond', serif" }}>{item.name}</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{item.name}</div>
                           <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{item.price}</div>
                         </div>
                       </div>
                       <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 8 }}>{item.desc}</div>
                       <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, marginBottom: 3 }}>{item.id === 7 ? "The 3 mistakes to avoid" : "How to get it"}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, marginBottom: 3 }}>How to get it</div>
                         <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
                       </div>
                       <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: item.link ? 8 : 0 }}>💡 {item.tip}</div>
@@ -1573,7 +1766,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               ))}
 
               {/* Solo traveller tip */}
-              <div style={{ marginBottom: 20 }}>
+              <div id="ess-solo" style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Traveling Solo?</div>
                 <div style={{ background: C.surface, borderRadius: 14, padding: "16px", border: `1px solid ${C.border}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -1587,7 +1780,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
 
               {/* FAQ */}
-              <div style={{ marginBottom: 20 }}>
+              <div id="ess-faq" style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>FAQ</div>
                 {[
                   { q: "Is Gemlyx free?", a: "Yes — completely free for travelers. Browse, save, use the map and discover hidden finds at no cost." },
@@ -1703,11 +1896,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
         .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
         .app-root { height: 100vh; }
-        .hero-h { height: calc(100vh - 120px); min-height: 420px; }
-        @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 120px); } }
+        .hero-h { height: calc(100vh - 162px); min-height: 380px; }
+        @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 162px); } }
         @media (min-width: 900px) {
-          .hero-h { height: calc(100vh - 172px); }
-          @supports (height: 100dvh) { .hero-h { height: calc(100dvh - 172px); } }
+          .hero-h { height: calc(100vh - 214px); }
+          @supports (height: 100dvh) { .hero-h { height: calc(100dvh - 214px); } }
         }
         .slide-up { animation: slideUp 0.2s ease; }
         .page-enter-next { animation: pageNext 0.32s cubic-bezier(0.2, 0.8, 0.3, 1); }
@@ -1767,6 +1960,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
             style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px 12px 40px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
         </div>
 
+        {/* Weather — always visible, multiple cities, auto-loads */}
+        <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+
         {/* Search results */}
         {search.length > 1 && searchResults.length > 0 && (
           <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: C.surface, borderBottom: `1px solid ${C.border}`, zIndex: 200, maxHeight: 240, overflowY: "auto" }}>
@@ -1809,8 +2005,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {item.label}
               </button>
             ))}
-            <button onClick={() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              style={{ background: C.accent, border: "none", color: "#fff", padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", borderRadius: 100, margin: "8px" }}>
+            <button onClick={() => goTab("ai")}
+              style={{ background: active === "ai" ? "#fff" : C.accent, border: "none", color: active === "ai" ? C.accent : "#fff", padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", borderRadius: 100, margin: "8px" }}>
               ✦ Ask AI
             </button>
           </div>
@@ -1848,7 +2044,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {item.label}
               </button>
             ))}
-            <button onClick={() => { setShowMenu(false); setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth" }), 150); }}
+            <button onClick={() => { setShowMenu(false); goTab("ai"); }}
               style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: C.accent, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 6, marginBottom: 2 }}>
               ✦ Ask AI
             </button>
