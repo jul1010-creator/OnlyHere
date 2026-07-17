@@ -31,7 +31,7 @@ const cities = [
 const allProducts = cities.flatMap(c => c.products.map(p => ({ ...p, city: c.name, color: c.color })));
 
 const craftItemsFallback = [
-  { id: 1, name: "Viking Ship Museum", price: "150 DKK", priceNote: "Adult entry online (10 DKK cheaper than at the door)", location: "Roskilde", type: "Major", emoji: "⚓", travelTime: "25min 🚂",
+  { id: 1, name: "Viking Ship Museum", price: "150 DKK", priceNote: "Adult entry online (10 DKK cheaper than at the door)", location: "Roskilde", type: "Major", emoji: "⚓", travelTime: "25min 🚂", photo: "/vikingshipmuseum1.jpg",
     desc: "Watch boatbuilders reconstruct Viking ships using historic techniques. Try rope making, blacksmithing, textile crafts and woodcarving — daily June to September. Sail a real Viking ship replica on Roskilde Fjord, May–September.",
     what: ["Rope making", "Blacksmithing", "Textile crafts", "Woodcarving", "Fjord sailing"], color: "#1565C0", mapHint: "Vikingeskibsmuseet, Vindeboder 12, 4000 Roskilde, Denmark",
     bookingType: "online", bookingUrl: "https://www.vikingeskibsmuseet.dk/koeb/koeb-billet",
@@ -46,6 +46,9 @@ const craftItemsFallback = [
       { name: "Groups (min. 25 adults)", price: "Contact museum" },
     ],
     recommendedPackage: { name: "Entry + Fjord Sailing", reason: "Reviewers consistently call the Viking ship sailing trip the highlight of the visit — rowing and setting sail on a real reconstructed longship, led by the museum's skipper. Available May–September; book the first sailing of the day online, it sells out." },
+    blogBody: [
+      { type: "image", src: "/vikingshipmuseum2.jpg", caption: "The boatyard, where craftspeople reconstruct Viking ships using historic techniques throughout the season." },
+    ],
     rating: 4.5 },
   { id: 2, name: "Moesgaard Viking Days", price: "180 DKK", priceNote: "Adult ticket · online", location: "Aarhus", type: "Major", emoji: "🛡", travelTime: "3h 🚂",
     desc: "Four days of hands-on Viking craft at Moesgaard Museum. Try blacksmithing, plant dyeing, felting and coin minting.",
@@ -112,6 +115,10 @@ const craftItemsFallback = [
     desc: "A massive former underground water reservoir beneath Søndermarken park, now a dark, atmospheric contemporary art space.",
     what: ["Underground reservoir", "Contemporary art", "Atmospheric"], color: "#37474F", mapHint: "Cisternerne, Søndermarken, 2000 Frederiksberg, Denmark",
     bookingType: "request" },
+  { id: 14, name: "Kronborg Castle", popularityTag: "Common Attraction", price: "See website", priceNote: "UNESCO World Heritage Site · online", location: "Helsingør", type: "Major", emoji: "🏰", travelTime: "50min 🚂", photo: "/kronborgslot.jpg",
+    desc: "The real-life setting for Shakespeare's Hamlet, guarding the narrowest point of the Øresund strait — close enough to Sweden to see it clearly across the water. A UNESCO World Heritage Site since 2000.",
+    what: ["Renaissance castle", "Casemates", "Royal apartments", "Øresund views"], color: "#455A64", mapHint: "Kronborg, 3000 Helsingør, Denmark",
+    bookingType: "online", bookingUrl: "https://kronborg.dk/en/" },
 ];
 
 const events = [
@@ -119,7 +126,10 @@ const events = [
   { id: 2, name: "Sommerdage i Præstø", travelTime: "1h 10min 🚂", rating: 4.4, town: "Præstø", type: "Festival", emoji: "🌿", date: "2026-07-04", dateEnd: "2026-07-06", photo: "/local2.jpg", desc: "Nature and craft festival in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky.", mapHint: "Præstø Havn, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Craft", "Nature"] },
   { id: 3, name: "Gyldne Dage i Præstø", travelTime: "1h 10min 🚂", rating: 4.3, town: "Præstø", type: "Festival", emoji: "🏰", date: "2026-09-12", dateEnd: "2026-09-13", photo: "/local3.jpg", desc: "Annual historical festival in Præstø with period costumes, local food and craft stalls.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["History", "Culture"] },
   { id: 4, name: "Bondemarked på Oremandsgaard", travelTime: "1h 10min 🚂", rating: 4.5, town: "Præstø", type: "Market", emoji: "🌾", date: "2026-06-06", dateEnd: null, photo: "/local4.jpg", desc: "Farm market at the beautiful Oremandsgaard Estate. Local food, organic goods and handmade crafts.", mapHint: "Oremandsgaard, Jungshoved, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Food", "Market"] },
-  { id: 5, name: "Bakkefest", travelTime: "1h 15min 🚂", rating: 4.7, town: "Gilleleje", type: "Festival", emoji: "🎵", date: "2026-07-10", dateEnd: "2026-07-12", photo: "/local5.jpg", desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors.", mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Seaside"] },
+  { id: 5, name: "Bakkefest", travelTime: "1h 15min 🚂", rating: 4.7, town: "Gilleleje", type: "Festival", emoji: "🎵", date: "2026-07-10", dateEnd: "2026-07-12", photo: "/gilleleje.jpg", desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors.", mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Seaside"],
+    blogBody: [
+      { type: "image", src: "/gillelejenakkehoved.jpg", caption: "Nakkehoved lighthouse, a short walk from town — worth the detour before or after the festival." },
+    ] },
   { id: 6, name: "Musik i Lejet", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local6.jpg", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"] },
   { id: 7, name: "Folkely Festival", travelTime: "1h 30min 🚂", rating: 4.5, town: "Hundested", type: "Festival", emoji: "⚓", date: "2026-08-20", dateEnd: "2026-08-22", photo: "/local7.jpg", desc: "Three days of music, art and talks in Hundested harbour.", mapHint: "Hundested Havn, 3390 Hundested, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Harbour"] },
   { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", photo: "/local8.jpg", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"] },
@@ -160,7 +170,7 @@ const vikingEvents = [
   { id: 205, name: "Vikingemarkedet på Lindholm Høje", travelTime: "3h 🚂", rating: 4.5, town: "Nørresundby (Aalborg)", type: "Market", emoji: "⛰", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/viking5.jpg",
     desc: "Set right on Lindholm Høje — one of Scandinavia's largest Viking burial sites — this market brings reenactors and craftspeople to the very ground where Vikings once lived. Genuinely close to Aalborg, easy to combine with a city visit.",
     mapHint: "Vendilavej 11, 9400 Nørresundby, Denmark", verified: "Jul 2026", color: "#1565C0", tags: ["Viking Market", "Craft"] },
-  { id: 206, name: "Ravnens Marked", travelTime: "2h 15min 🚂", rating: 4.4, town: "Jelling", type: "Market", emoji: "🐦", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/viking6.jpg",
+  { id: 206, name: "Ravnens Marked", travelTime: "2h 15min 🚂", rating: 4.4, town: "Jelling", type: "Market", emoji: "🐦", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/jelling.jpg",
     desc: "A Viking market at Jelling — the same town where Denmark was named as a nation on the famous rune stones. Combine with a stop at the UNESCO stones themselves; this event sits right on the Copenhagen–Aalborg road trip route.",
     mapHint: "Fårupvej 25, 7300 Jelling, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Craft"] },
   { id: 207, name: "Aggersborg Vikingehåndværkertræf", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/viking7.jpg",
@@ -169,14 +179,14 @@ const vikingEvents = [
 ];
 
 const towns = [
-  { id: 1, name: "Ribe", photo: "/towns/ribe.jpg", region: "South Jutland", emoji: "⛪", tag: "Denmark's oldest town", desc: "Founded around 700 AD — the oldest town in Scandinavia. Medieval cathedral, Viking museum and cobblestone streets.", highlight: "Viking Center Ribe — artisans craft authentic Viking jewellery, leather and textiles on site.", travelTime: "3h 15min 🚂", mapHint: "Ribe, 6760 Ribe, Denmark", nomiPotential: "High" },
+  { id: 1, name: "Ribe", photo: "/ribe.jpg", region: "South Jutland", emoji: "⛪", tag: "Denmark's oldest town", desc: "Founded around 700 AD — the oldest town in Scandinavia. Medieval cathedral, Viking museum and cobblestone streets.", highlight: "Viking Center Ribe — artisans craft authentic Viking jewellery, leather and textiles on site.", travelTime: "3h 15min 🚂", mapHint: "Ribe, 6760 Ribe, Denmark", nomiPotential: "High" },
   { id: 2, name: "Dragør", photo: "/towns/dragor.jpg", region: "Copenhagen Area", emoji: "⚓", tag: "Fisherman's village", desc: "Just 12km from Copenhagen — yellow ochre houses, a working harbour, cobblestone streets. Feels like another era.", highlight: "The harbour fish stalls sell smoked fish caught the same morning. No menus, no TripAdvisor.", travelTime: "30min 🚌", mapHint: "Dragør Havn, 2791 Dragør, Denmark", nomiPotential: "High" },
   { id: 3, name: "Ærøskøbing", photo: "/towns/aeroskobing.jpg", region: "Funen", emoji: "🏡", tag: "Denmark's fairy-tale town", desc: "750-year-old town on the island of Ærø. Half-timbered houses, flower-lined streets. One of Europe's best preserved small towns.", highlight: "The local bottle ship museum — a man spent decades making ships inside bottles.", travelTime: "3h + ferry 🚢", mapHint: "Ærøskøbing, 5970 Ærø, Denmark", nomiPotential: "Very High" },
   { id: 4, name: "Skagen", photo: "/towns/skagen.jpg", region: "North Jutland", emoji: "🌊", tag: "Where two seas meet", desc: "Denmark's northernmost town. Where the North Sea and Baltic Sea collide. Yellow houses, artist culture.", highlight: "The local fish auction starts at 6am on weekdays. Fresh fish sold direct from boats.", travelTime: "4h 🚂", mapHint: "Skagen, 9990 Skagen, Denmark", nomiPotential: "High" },
   { id: 5, name: "Præstø", photo: "/towns/praesto.jpg", region: "Zealand", emoji: "🏘", tag: "Hidden countryside gem", desc: "South of Copenhagen — cobbled streets, old market square. The kind of town that makes you wonder why nobody talks about it.", highlight: "Oremandsgaard Estate sells locally produced goods from their own farm and distillery.", travelTime: "1h 10min 🚂", mapHint: "Præstø Torv, 4720 Præstø, Denmark", nomiPotential: "Very High" },
   { id: 6, name: "Faaborg", photo: "/towns/faaborg.jpg", region: "Funen", emoji: "🌿", tag: "Old-world harbour charm", desc: "Quiet harbour town on the south coast of Funen. 17th century merchant buildings, cobblestone alleys.", highlight: "The local ceramics workshop near the harbour sells pieces made on site. Cash only, no website.", travelTime: "2h 30min 🚂", mapHint: "Faaborg Havn, 5600 Faaborg, Denmark", nomiPotential: "High" },
   { id: 7, name: "Gudhjem", photo: "/towns/gudhjem.jpg", region: "Bornholm", emoji: "🐟", tag: "Baltic island village", desc: "Atmospheric fishing village on Bornholm. Home of the legendary Sol over Gudhjem smoked herring dish.", highlight: "Røgeriet — the old smokehouse. Watch them smoke herring the traditional way.", travelTime: "2h + ferry 🚢", mapHint: "Gudhjem Havn, 3760 Gudhjem, Bornholm", nomiPotential: "Very High" },
-  { id: 8, name: "Sønderho", photo: "/towns/sonderho.jpg", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island. Thatched houses, winding lanes, seals in the Wadden Sea National Park.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts made on the island for centuries.", travelTime: "3h + ferry 🚢", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
+  { id: 8, name: "Sønderho", photo: "/fanø.jpg", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island. Thatched houses, winding lanes, seals in the Wadden Sea National Park.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts made on the island for centuries.", travelTime: "3h + ferry 🚢", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
   { id: 9, name: "Mariager", photo: "/towns/mariager.jpg", region: "North Jutland", emoji: "🌹", tag: "The City of Roses", desc: "An 18th-century town of cobblestone streets and half-timbered houses, built around a medieval abbey on the Mariager Fjord.", highlight: "Mariager Saltcenter, a working salt museum nearby, lets you taste local salt variations most Danes have never heard of.", travelTime: "3h 30min 🚂", mapHint: "Mariager, 9550 Mariager, Denmark", nomiPotential: "High" },
   { id: 10, name: "Sæby", photo: "/towns/saeby.jpg", region: "North Jutland", emoji: "⚓", tag: "The Artisans' Coastal Haven", desc: "A quiet coastal town with a historic watermill canal path and yellow timber fishermen's houses along the water.", highlight: "Small amber-carving workshops are tucked along the old streets — genuine local craft, no tour buses.", travelTime: "3h 45min 🚂", mapHint: "Sæby, 9300 Sæby, Denmark", nomiPotential: "High" },
   { id: 11, name: "Thorup Strand", photo: "/towns/thorupstrand.jpg", region: "North Jutland", emoji: "🎣", tag: "The Last Living Fishing Hamlet", desc: "One of Denmark's last true coastal fishing communities — blue wooden cutters are still winched straight onto the beach by hand, the way it's been done for generations.", highlight: "Buy fish straight off the boat at the local beach-side cooperative shop, caught that same morning.", travelTime: "4h drive", mapHint: "Thorup Strand, 9690 Fjerritslev, Denmark", nomiPotential: "Very High" },
@@ -195,8 +205,32 @@ const freeEntrance = [
   { id: 6, name: "Franciscan Friary Museum", popularityTag: "Hidden Gem", city: "Aalborg", type: "Subterranean ruins", emoji: "💀", desc: "A fully underground museum reached by glass elevator on a busy shopping street — medieval ruins and skeletons below your feet. Small entry fee may apply.", website: "https://nordjyskemuseer.dk/u/graabroedekloster-museet/", color: "#6D4C41" },
   { id: 7, name: "Sohngårdsholmpark", popularityTag: "Hidden Gem", city: "Aalborg", type: "Park & fruit orchard", emoji: "🍎", desc: "A sprawling neighbourhood park around a 19th-century manor — with a public apple orchard anyone can pick from.", website: null, color: "#558B2F" },
   // ── COPENHAGEN ──
-  { id: 9, name: "Amalienborg Palace Courtyard", popularityTag: "Common Attraction", city: "Copenhagen", type: "Royal residence (courtyard)", emoji: "👑", desc: "The Royal Family's winter residence — crowds gather daily to watch the Royal Life Guards change at 12:00. Watching the courtyard and changing of the guard is free; the museum inside charges entry.", website: "https://www.kongernessamling.dk/amalienborg/", color: "#D4AF37" },
-  { id: 10, name: "The Royal Library Garden", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Hidden courtyard garden", emoji: "📚", desc: "A silent, beautifully manicured oasis tucked between Christiansborg Palace and the Royal Library.", website: null, color: "#2E7D32" },
+  { id: 9, name: "Amalienborg Palace Courtyard", popularityTag: "Common Attraction", city: "Copenhagen", type: "Royal residence (courtyard)", emoji: "👑", photo: "/amalienborg1.jpg",
+    desc: "One of Copenhagen's most iconic landmarks — the official residence of the Danish royal family, and the perfect place to experience Danish royal tradition without spending a krone.",
+    website: "https://www.kongernessamling.dk/amalienborg/", color: "#D4AF37",
+    blogBody: [
+      { type: "paragraph", content: "Unlike many royal palaces in Europe, Amalienborg is still an active royal residence. The elegant octagonal courtyard is framed by four identical palace buildings, with the Marble Church creating one of Copenhagen's most recognisable views. Time your visit for 12:00 PM and you'll also witness the famous Changing of the Guard." },
+      { type: "image", src: "/amalienborg2.jpg" },
+      { type: "heading", content: "What Travelers Love" },
+      { type: "paragraph", content: "Visitors consistently mention how much grander the courtyard feels in person than in photos. The guard ceremony is the biggest draw, but many find themselves just as impressed by the peaceful atmosphere outside ceremony hours and the beautiful symmetry of the palace complex. If you're hoping for the best view of the guards, arriving 15–20 minutes early is well worth it." },
+      { type: "image", src: "/amalienborg3.jpg" },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Most of the palace buildings are private royal residences, so the courtyard is the main attraction unless you purchase a museum ticket. Around noon, the square becomes one of Copenhagen's busiest tourist spots, so expect crowds during the guard ceremony." },
+      { type: "image", src: "/amalienborg4.jpg" },
+    ] },
+  { id: 10, name: "The Royal Library Garden", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Hidden courtyard garden", emoji: "📚", photo: "/librarygarden1.jpg",
+    desc: "Hidden between Christiansborg Palace and the Black Diamond library, this is one of Copenhagen's best-kept secrets — a peaceful escape from the city's busiest streets.",
+    website: null, color: "#2E7D32",
+    blogBody: [
+      { type: "paragraph", content: "Despite being just steps from Parliament and some of Copenhagen's busiest sights, the garden feels surprisingly secluded. A central fountain, colourful flower beds and the statue of philosopher Søren Kierkegaard create a calm, almost hidden atmosphere that's perfect for slowing down." },
+      { type: "image", src: "/librarygarden2.jpg" },
+      { type: "heading", content: "What Travelers Love" },
+      { type: "paragraph", content: "Many visitors stumble across Bibliotekshaven by accident and end up wishing they'd stayed longer. It's often described as one of Copenhagen's quietest green spaces — a favourite place to enjoy a coffee, read a book or simply escape the crowds for a while." },
+      { type: "image", src: "/librarygarden3.jpg" },
+      { type: "heading", content: "Best Time to Visit" },
+      { type: "paragraph", content: "May–September — the gardens are at their most colourful, with blooming flowers and plenty of sunny spots to relax." },
+      { type: "image", src: "/librarygarden4.jpg" },
+    ] },
   { id: 11, name: "Medical Herb Garden, Kastellet", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Hidden garden", emoji: "🌱", desc: "A tiny, secluded herb patch inside the star-fortress of Kastellet — bypassed by most tourists rushing to the Little Mermaid.", website: "https://www.kastelletsvenner.dk/", color: "#558B2F" },
 ];
 
@@ -212,7 +246,7 @@ const nightlifeSpots = [
 
 const foodSpots = [
   // ── LOCAL — casual, everyday, no-frills ──
-  { id: 1, name: "Harry's Place", type: "Local", emoji: "🌭", category: "Hot dog stand", location: "Nørrebro/Nordvest, Copenhagen", price: "40–70 DKK",
+  { id: 1, name: "Harry's Place", type: "Local", emoji: "🌭", category: "Hot dog stand", location: "Nørrebro/Nordvest, Copenhagen", price: "40–70 DKK", photo: "/harrysplace1.jpg",
     desc: "A hot dog cart since 1965, run by the same kind of hands-on owners the whole time. Order the \"Børge med krudt\" — the local's move — or the flæskesteg (roast pork) sandwich. Cash or Dankort only. No frills, no seats, just stand and eat like generations before you.",
     tip: "Ask for it \"the traditional way\" and the person behind the counter will usually tell you exactly how to eat it.", mapHint: "Harry's Place, Nordre Fasanvej 269, 2200 København N, Denmark", color: "#D4AF37" },
   { id: 2, name: "Sankt Peders Bageri", type: "Local", emoji: "🥐", category: "Bakery, est. 1652", location: "Latin Quarter, Copenhagen", price: "20–40 DKK",
@@ -235,11 +269,12 @@ const foodSpots = [
 
 const essentials = [
   { id: 1, name: "DOT Tickets App", category: "Transport", emoji: "🎫", desc: "Buy metro, bus and train tickets for the Copenhagen area straight from your phone. Works with any international card — no Danish accounts needed.", howTo: "Download DOT Tickets, pick your zones and pay with any Visa or Mastercard. Show the ticket on your screen.", price: "From 24 DKK per ticket", link: "https://dinoffentligetransport.dk/en", tip: "A City Pass (24h–120h) gives unlimited travel in Copenhagen including the airport metro — usually the best deal for visitors." },
-  { id: 7, name: "Avoid the 750 DKK Fine", category: "Transport", emoji: "⚠️", desc: "Denmark's transport fine (kontrolafgift) is real, common among tourists, and currently 750 DKK — issued on the spot if your ticket isn't valid, even by accident. The physical Rejsekort card was discontinued on 28 May 2026, so if an older guide told you to buy one, ignore it — it no longer works.", howTo: "The 3 mistakes that catch tourists most: (1) Installing a ticket app isn't the same as buying a ticket — you must actually purchase and activate it before boarding. (2) If using a check-in/check-out app, forgetting to check OUT at the end is the single most common tourist fine. (3) A dead phone battery mid-journey means no valid ticket — inspectors don't make exceptions.", price: "750 DKK if fined", link: "https://dinoffentligetransport.dk/en", tip: "Simplest fix for visitors: buy a fixed ticket in the DOT app or Rejsebillet before you travel, rather than a check-in/check-out card — nothing to forget to end." },
+  { id: 7, name: "Avoid the Transit Fine", category: "Transport", emoji: "⚠️", desc: "Denmark's transport fine (kontrolafgift) is real and common among tourists — issued on the spot for an invalid ticket, even by accident. It's 750 DKK on the Metro and light rail, and 1,000 DKK on DSB trains and Movia buses. The physical Rejsekort card was discontinued on 28 May 2026 — a new \"Basiskort\" now exists for physical-card users, but a digital ticket is far simpler for a short visit.", howTo: "The 3 mistakes that catch tourists most: (1) Installing a ticket app isn't the same as buying a ticket — you must actually purchase and activate it before boarding. (2) If using a check-in/check-out app, forgetting to check OUT at the end is the single most common tourist fine. (3) A dead phone battery mid-journey means no valid ticket — inspectors don't make exceptions.", price: "750–1,000 DKK if fined", link: "https://dinoffentligetransport.dk/en", tip: "Simplest fix for visitors: buy a fixed ticket in the DOT app or Rejsebillet before you travel, rather than a check-in/check-out card — nothing to forget to end." },
   { id: 2, name: "Rent a Bike", category: "Transport", emoji: "🚲", desc: "Copenhagen has 390km of cycle lanes. Renting a bike is the best way to see the city.", howTo: "Bycyklen electric bikes available across Copenhagen via app. Or rent from shops from 100 DKK/day.", price: "From 100 DKK/day", link: "https://apps.apple.com/dk/app/bycyklen/id985075832", linkAndroid: "https://play.google.com/store/apps/details?id=dk.bycyklen.app", tip: "Cycle on the right, signal with your arm, always lock up." },
   { id: 3, name: "Cards & Mobile Pay­ment", category: "Payments", emoji: "💳", desc: "Denmark is one of the world's most cashless countries. Visa and Mastercard — physical or through Apple Pay / Google Pay — work almost everywhere, from cafés to market stalls.", howTo: "Just tap. Contactless is the standard everywhere. Tell your bank you're traveling so nothing gets blocked.", price: "Free", link: null, tip: "A few tiny stalls only take MobilePay (a locals-only Danish app) or cash — carry 100–200 DKK in cash as backup." },
   { id: 4, name: "DSB App", category: "Transport", emoji: "🚂", desc: "Danish national railway app. Book tickets, check schedules, get real-time delays.", howTo: "Download DSB app. Buy tickets in advance for cheaper prices.", price: "Free app", link: "https://apps.apple.com/dk/app/dsb/id531645423", linkAndroid: "https://play.google.com/store/apps/details?id=dk.dsb.rejseplanen", tip: "Buy Orange tickets weeks ahead for up to 50% off." },
-  { id: 5, name: "Copenhagen Card", category: "Sightseeing", emoji: "🎟", desc: "Free entry to 89 attractions + unlimited transport. Worth it for 2+ days.", howTo: "Buy at copenhagencard.com or airport. 24h, 48h, 72h or 120h options.", price: "From 499 DKK", link: "https://www.copenhagencard.com", tip: "Tivoli alone is 150 DKK — card pays for itself with 3+ attractions." },
+  { id: 5, name: "Copenhagen Card", category: "Sightseeing", emoji: "🎟", desc: "Free entry to 80+ attractions + unlimited transport across zones 1-99. Worth it for 2+ days.", howTo: "Buy at copenhagencard.com or airport. 24h, 48h, 72h or 120h options.", price: "From 589 DKK", link: "https://www.copenhagencard.com", tip: "Tivoli alone is 190 DKK — card pays for itself with 3+ attractions." },
+  { id: 11, name: "Power Adapters & Plugs", category: "Connectivity", emoji: "🔌", desc: "Denmark uses the Type K socket — a Danish design that looks like a smiley face, but takes a standard European two-pin (Type C) plug without any issue.", howTo: "Bring a standard European Type C adapter if you're coming from outside Europe — it fits almost every outlet in the country. Phones, laptops and cameras handle Denmark's 230V automatically with just a plug adapter.", price: "Adapter from ~50 DKK", link: null, tip: "American hair dryers and curling irons are the exception — don't run them through a cheap plastic adapter alone. Denmark's 230V is much stronger than the US's 120V and will burn out a device built only for the lower voltage." },
   { id: 6, name: "eSIM or Local SIM", category: "Connectivity", emoji: "📶", desc: "EU roaming covers most Europeans. Outside EU — get a local SIM or eSIM for maps, tickets and translations on the go.", howTo: "Buy at 7-Eleven, Netto or any phone shop. Lebara and Lycamobile work well.", price: "From 49 DKK", link: null, tip: "Make sure your phone is unlocked before traveling." },
   { id: 8, name: "Skyscanner", category: "Flights & Buses", emoji: "✈️", desc: "A free flight comparison search engine — checks dozens of airlines and booking sites at once to find the cheapest route into Denmark. Doesn't sell tickets itself; it sends you to the airline or agent with the best price.", howTo: "Search your dates on skyscanner.com, or use their \"Whole Month\" or \"Cheapest Month\" view if your travel dates are flexible — often saves the most.", price: "Free to use", link: "https://www.skyscanner.net", tip: "Copenhagen Airport (CPH) is Denmark's main hub, but Billund (BLL) in Jutland is sometimes cheaper and puts you closer to Legoland and central Jutland." },
   { id: 9, name: "FlixBus", category: "Flights & Buses", emoji: "🚌", desc: "A budget long-distance bus network with 7 routes across Denmark, plus international connections to Hamburg, Oslo and Stockholm. Often the cheapest way in if you're already elsewhere in Europe — a Odense–Copenhagen ticket can run under 100 DKK if booked early.", howTo: "Book on flixbus.com or the FlixBus app. Show your e-ticket on your phone — no printing needed.", price: "From ~100 DKK domestic", link: "https://www.flixbus.com/bus/denmark", tip: "Book as early as possible — FlixBus prices rise the closer you get to departure, sometimes tripling." },
@@ -264,7 +299,7 @@ const handmadeCraftShops = [
 ];
 
 const roadTrips = [
-  { id: 1, name: "Copenhagen to Aalborg", region: "Zealand → Jutland", emoji: "🚗", duration: "4h 30min drive", distance: "330 km", lat: 56.1629, lon: 10.2039,
+  { id: 1, name: "Copenhagen to Aalborg", region: "Zealand → Jutland", emoji: "🚗", duration: "4h 30min drive", distance: "330 km", lat: 56.1629, lon: 10.2039, photo: "/roskilde.jpg",
     desc: "The classic cross-country route — but almost nobody stops along the way. This drive passes some of Denmark's most important history within a few minutes of the E45, yet most people drive straight through.",
     stops: [
       { name: "Roskilde", note: "Viking Ship Museum, 25min off route" },
@@ -274,7 +309,7 @@ const roadTrips = [
       { name: "Skanderborg", note: "Lakeside forest, home of Smukfest" },
     ],
     color: "#1565C0", mapHint: "Copenhagen to Aalborg, Denmark", vibe: "🏛 For history that hides in plain sight" },
-  { id: 2, name: "The Wadden Sea Coast", region: "South Jutland", emoji: "🌾", duration: "2h drive", distance: "95 km", lat: 55.3297, lon: 8.7671,
+  { id: 2, name: "The Wadden Sea Coast", region: "South Jutland", emoji: "🌾", duration: "2h drive", distance: "95 km", lat: 55.3297, lon: 8.7671, photo: "/roadtrip.jpg",
     desc: "Denmark's wildest coastline, and a UNESCO World Heritage site most travelers never hear about. Flat marshland, enormous skies, and the best sunsets in the country.",
     stops: [
       { name: "Ribe", note: "Denmark's oldest town, Viking Center on the outskirts" },
@@ -282,7 +317,7 @@ const roadTrips = [
       { name: "Fanø", note: "Ferry crossing, dune villages, Sønderho at the southern tip" },
     ],
     color: "#2E7D32", mapHint: "Wadden Sea Ribe Denmark", vibe: "🌾 Recommended for nature & traditional life" },
-  { id: 3, name: "North Zealand Coastal Loop", region: "Zealand", emoji: "🌊", duration: "2h 30min drive", distance: "110 km", lat: 56.1223, lon: 12.3130,
+  { id: 3, name: "North Zealand Coastal Loop", region: "Zealand", emoji: "🌊", duration: "2h 30min drive", distance: "110 km", lat: 56.1223, lon: 12.3130, photo: "/tisvildevej.jpg",
     desc: "A half-day loop from Copenhagen through fishing villages, royal castles and beach towns — genuinely underrated compared to how much attention Copenhagen itself gets.",
     stops: [
       { name: "Dragør", note: "Yellow ochre fisherman's village, 30min from the city" },
@@ -382,9 +417,20 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
       </div>
       <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
-          {kind === "event" ? `${item.town}` : item.region}
+          {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : item.region}
         </div>
         <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 8 }}>{item.name}</div>
+
+        {kind === "nightlife" && item.crowd && (
+          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 18 }}>
+            👥 {item.crowd}
+          </div>
+        )}
+        {kind === "free" && item.popularityTag && (
+          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: item.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: item.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.surface, border: `1px solid ${item.popularityTag === "Hidden Gem" ? C.gold : C.border}`, padding: "5px 12px", borderRadius: 100, marginBottom: 18 }}>
+            {item.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"} · FREE
+          </div>
+        )}
 
         {kind === "event" && (
           <div style={{ marginBottom: 12 }}>
@@ -410,6 +456,24 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
 
         <div style={{ fontSize: 14, color: C.light, lineHeight: 1.75, marginBottom: 20 }}>{item.desc}</div>
 
+        {item.blogBody && item.blogBody.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            {item.blogBody.map((block, i) => (
+              block.type === "image" ? (
+                <div key={i} style={{ marginBottom: 16 }}>
+                  <img src={block.src} alt={block.caption || item.name} onError={e => { e.target.style.display = "none"; }}
+                    style={{ width: "100%", borderRadius: 14, display: "block" }} />
+                  {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
+                </div>
+              ) : block.type === "heading" ? (
+                <div key={i} style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginTop: 20, marginBottom: 10 }}>{block.content}</div>
+              ) : (
+                <div key={i} style={{ fontSize: 14, color: C.light, lineHeight: 1.8, marginBottom: 14 }}>{block.content}</div>
+              )
+            ))}
+          </div>
+        )}
+
         {kind === "town" && item.highlight && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>◆ Gemlyx Find</div>
@@ -419,6 +483,11 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
         {kind === "event" && item.tags && (
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 26 }}>
             {item.tags.map(t => <span key={t} style={{ fontSize: 12, color: C.text, background: C.surface, border: `1px solid ${C.border}`, padding: "7px 13px", borderRadius: 100 }}>{t}</span>)}
+          </div>
+        )}
+        {kind === "nightlife" && item.tip && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 22, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+            💡 {item.tip}
           </div>
         )}
 
@@ -432,7 +501,14 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
           </div>
         )}
 
-        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.mapHint)}`} target="_blank" rel="noreferrer"
+        {kind === "free" && item.website && (
+          <a href={item.website} target="_blank" rel="noreferrer"
+            style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
+            🌐 Visit website
+          </a>
+        )}
+
+        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.mapHint || `${item.name} ${item.city || item.location || ""} Denmark`)}`} target="_blank" rel="noreferrer"
           style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
           ↗ Get Directions
         </a>
@@ -512,6 +588,14 @@ const WEATHER_CITIES = [
   { key: "aalborg", label: "Aalborg", lat: 57.0488, lon: 9.9217 },
 ];
 
+const PageHero = ({ src, emoji, color }) => (
+  <div style={{ height: 130, borderRadius: 14, overflow: "hidden", marginBottom: 18, position: "relative", background: `linear-gradient(135deg, ${color}33 0%, #0A0F1E 100%)` }}>
+    <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 46, opacity: 0.22 }}>{emoji}</span>
+    <img src={src} alt="" onError={e => { e.target.style.display = "none"; }}
+      style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+  </div>
+);
+
 const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather }) => {
   useEffect(() => {
     WEATHER_CITIES.forEach(c => { if (!weather[c.key] && weatherLoading !== c.key) checkWeather(c.key, c.lat, c.lon); });
@@ -549,7 +633,7 @@ const StoreBadge = ({ type, href }) => (
   </a>
 );
 
-const APP_VERSION = "v2.62 — Plans rebuilt: 3 real seasonal itineraries";
+const APP_VERSION = "v2.66 — all real photos wired in, Kronborg Castle added";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -614,6 +698,8 @@ export default function Gemlyx() {
   const [craftDetail, setCraftDetail] = useState(null);
   const [eventDetail, setEventDetail] = useState(null);
   const [townDetail, setTownDetail] = useState(null);
+  const [nightlifeDetail, setNightlifeDetail] = useState(null);
+  const [freeDetail, setFreeDetail] = useState(null);
   const [craftForm, setCraftForm] = useState({ name: "", email: "", interest: "", visit: "" });
   const [craftStatus, setCraftStatus] = useState(null);
   const [emailSignup, setEmailSignup] = useState("");
@@ -1080,7 +1166,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.62 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.66 — Jul 2026</div>
               </div>
             </div>
           )}
@@ -1296,7 +1382,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
 
               {freeEntrance.filter(a => a.city === attractionCity).map(a => (
-                <div key={a.id} style={{ borderTop: `1px solid ${C.border}`, padding: "16px 0 20px" }}>
+                <div key={a.id} onClick={() => setFreeDetail(a)} style={{ borderTop: `1px solid ${C.border}`, padding: "16px 0 20px", cursor: "pointer" }}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                     <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", background: `${a.color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{a.emoji}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1311,12 +1397,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         </div>
                       </div>
                       <div style={{ fontSize: 10, color: a.color, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 }}>{a.type}</div>
-                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: a.website ? 10 : 0 }}>{a.desc}</div>
-                      {a.website && (
-                        <a href={a.website} target="_blank" rel="noreferrer" style={{ color: C.text, fontSize: 12, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "3px" }}>
-                          Visit website →
-                        </a>
-                      )}
+                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{a.desc.slice(0, 100)}{a.desc.length > 100 ? "…" : ""}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 12, fontWeight: 700 }}>
+                        Read more <span style={{ fontSize: 14 }}>›</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1381,6 +1465,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
               {foodSpots.filter(f => f.type === foodTab).map(spot => (
                 <div key={spot.id} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px" }}>
+                  {spot.photo && (
+                    <div style={{ height: 140, borderRadius: 12, overflow: "hidden", marginBottom: 14, position: "relative", background: `linear-gradient(135deg, ${spot.color}33 0%, #0A0F1E 100%)` }}>
+                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44, opacity: 0.25 }}>{spot.emoji}</span>
+                      <img src={spot.photo} alt={spot.name} onError={e => { e.target.style.display = "none"; }}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+                    </div>
+                  )}
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                     <span style={{ fontSize: 22 }}>{spot.emoji}</span>
                     <div>
@@ -1410,6 +1501,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers — but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
               </div>
+              <PageHero src="/tuborg.jpg" emoji="🍺" color="#C8102E" />
 
               <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
                 {[{ id: "Local", label: "🇩🇰 Local" }, { id: "Major", label: "🌍 Major" }].map(t => (
@@ -1421,7 +1513,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
 
               {nightlifeSpots.filter(f => f.type === nightlifeTab).map(spot => (
-                <div key={spot.id} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px" }}>
+                <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                     <span style={{ fontSize: 22 }}>{spot.emoji}</span>
                     <div>
@@ -1432,14 +1524,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
                     👥 {spot.crowd}
                   </div>
-                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{spot.desc}</div>
-                  <div style={{ fontSize: 12, color: C.text, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, lineHeight: 1.5 }}>
-                    💡 {spot.tip}
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{spot.desc.slice(0, 100)}{spot.desc.length > 100 ? "…" : ""}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
+                    Read more <span style={{ fontSize: 15 }}>›</span>
                   </div>
-                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`} target="_blank" rel="noreferrer"
-                    style={{ color: C.text, fontSize: 13, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "4px" }}>
-                    Get Directions →
-                  </a>
                 </div>
               ))}
               {aiHelperBlock()}
@@ -1456,6 +1544,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
               {roadTrips.map(trip => (
                 <div key={trip.id} style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0 26px" }}>
+                  {trip.photo && (
+                    <div style={{ height: 160, borderRadius: 14, overflow: "hidden", marginBottom: 16, position: "relative", background: `linear-gradient(135deg, ${trip.color}33 0%, #0A0F1E 100%)` }}>
+                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, opacity: 0.25 }}>{trip.emoji}</span>
+                      <img src={trip.photo} alt={trip.name} onError={e => { e.target.style.display = "none"; }}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+                    </div>
+                  )}
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                     <span style={{ fontSize: 22 }}>{trip.emoji}</span>
                     <div>
@@ -1608,6 +1703,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   Three complete, day-by-day routes across Denmark's seasons. It's {new Date().toLocaleString("en", { month: "long" })} — the one that fits right now is marked, the rest are here for whenever you're planning ahead.
                 </div>
               </div>
+              <PageHero src="/plans.jpg" emoji="🗺" color={C.accent} />
 
               {seasonalItineraries.map(plan => {
                 const inSeason = plan.seasons.includes(getSeason());
@@ -1677,6 +1773,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>✓ Travel Essentials</div>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Everything you need to travel Denmark like a local</div>
               </div>
+              <PageHero src="/checklist.jpg" emoji="✓" color="#2E7D32" />
 
               {/* Fine warning — always first */}
               {essentials.filter(e => e.id === 7).map(item => (
@@ -2171,6 +2268,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
       <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
       <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
+      <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
+      <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
 
       {/* ── BOOKING DETAIL PAGE ───────────────────────────── */}
       {craftDetail && (
@@ -2203,6 +2302,24 @@ You also have a web_search tool. Use it whenever someone asks about something th
             </div>
 
             <div style={{ fontSize: 14, color: C.light, lineHeight: 1.75, marginBottom: 22 }}>{craftDetail.desc}</div>
+
+            {craftDetail.blogBody && craftDetail.blogBody.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                {craftDetail.blogBody.map((block, i) => (
+                  block.type === "image" ? (
+                    <div key={i} style={{ marginBottom: 16 }}>
+                      <img src={block.src} alt={craftDetail.name} onError={e => { e.target.style.display = "none"; }}
+                        style={{ width: "100%", borderRadius: 14, display: "block" }} />
+                      {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
+                    </div>
+                  ) : block.type === "heading" ? (
+                    <div key={i} style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginTop: 20, marginBottom: 10 }}>{block.content}</div>
+                  ) : (
+                    <div key={i} style={{ fontSize: 14, color: C.light, lineHeight: 1.8, marginBottom: 14 }}>{block.content}</div>
+                  )
+                ))}
+              </div>
+            )}
 
             {craftDetail.bestTime && (
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
