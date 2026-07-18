@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 const SUPABASE_URL = "https://vpxfahjnerkkkoueovhl.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweGZhaGpuZXJra2tvdWVvdmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4OTYsImV4cCI6MjA5NTMxMDg5Nn0.-GgXeog0DufIz6WNXn_8pIzxmQfkHRK3Lz8V71O-v_c";
@@ -59,6 +61,12 @@ const craftItemsFallback = [
     what: ["Archery", "Coin making", "Whittling", "Falconry show", "Jewellery", "Leather working", "Metalwork"], color: C.accent, mapHint: "Viking Center Ribe, Roagervej 129, 6760 Ribe, Denmark",
     bookingType: "online", bookingUrl: "https://www.ribevikingecenter.dk/en/plan-your-visit/opening-hours-and-admission",
     bestTime: "Every day has archery, coin making and whittling included — falconry shows run at 14:00. Saturdays and Sundays in July add extra \"Experience Viking Ripa\" activities.",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "Everything here is designed to recreate Viking life as accurately as possible. Costumed interpreters live and work in reconstructed buildings, demonstrating traditional crafts, cooking over open fires, forging iron and practising archery — you're walking through a village that feels genuinely alive, not observing history from behind glass." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "The centre operates seasonally, generally closed through winter (late April–October). As it's almost entirely outdoors, comfortable footwear and weather-appropriate clothing are essential if you're spending several hours here." },
+    ],
     transportWarning: "The center is 3km south of Ribe town — the only bus (417) runs just 4 times a day, weekdays only, and isn't reliable for a spontaneous visit. If you don't have a bike or car, either plan tightly around the bus times or take a taxi (roughly 15 min, ~150 DKK). Skip this one if you're relying purely on walking or infrequent public transport.",
     ticketOptions: [
       { name: "Adult admission", price: "160 DKK" },
@@ -130,27 +138,126 @@ const events = [
     blogBody: [
       { type: "image", src: "/gillelejenakkehoved.jpg", caption: "Nakkehoved lighthouse, a short walk from town — worth the detour before or after the festival." },
     ] },
-  { id: 6, name: "Musik i Lejet", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local6.jpg", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"] },
+  { id: 6, name: "Musik i Lejet", tier: "Recommended", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local6.jpg", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"],
+    blogBody: [
+      { type: "heading", content: "Music & Atmosphere" },
+      { type: "paragraph", content: "Expect Danish pop, rock and electronic music rather than international headliners. The setting, food and atmosphere are just as important as the concerts, creating a stylish yet relaxed festival where beach sunsets and long summer evenings become part of the experience." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Popular with Danes in their 20s and 30s — couples, groups of friends and travellers looking for a premium summer weekend." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Tickets are famously difficult to secure and accommodation disappears months in advance. It ranks among Denmark's more expensive festivals, so planning ahead is essential." },
+    ] },
   { id: 7, name: "Folkely Festival", travelTime: "1h 30min 🚂", rating: 4.5, town: "Hundested", type: "Festival", emoji: "⚓", date: "2026-08-20", dateEnd: "2026-08-22", photo: "/local7.jpg", desc: "Three days of music, art and talks in Hundested harbour.", mapHint: "Hundested Havn, 3390 Hundested, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Harbour"] },
-  { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", photo: "/local8.jpg", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"] },
+  { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", photo: "/local8.jpg", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"],
+    blogBody: [
+      { type: "heading", content: "Music & Atmosphere" },
+      { type: "paragraph", content: "Expect cover bands, local musicians and a casual atmosphere where families, friends and residents gather to enjoy a summer weekend together. It's small in scale but genuinely welcoming." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "A good choice if you're already staying in North Zealand or travelling with children." },
+      { type: "heading", content: "Should You Visit?" },
+      { type: "paragraph", content: "If you're nearby, Fjordlys is a lovely way to experience Danish community life. If you're travelling across the country specifically for festivals, there are stronger options to prioritise." },
+    ] },
   { id: 9, name: "Haveje Beach Bar Events", travelTime: "1h 20min 🚂", rating: 4.4, town: "Liseleje", type: "Concert", emoji: "🏖", date: "2026-07-14", dateEnd: "2026-07-15", photo: "/local9.jpg", desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches.", mapHint: "Liselejevej, 3360 Liseleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Beach"] },
   { id: 10, name: "Samsø Music Festival", travelTime: "2h 30min 🚢", rating: 4.9, town: "Samsø", type: "Festival", emoji: "🎸", date: "2026-07-13", dateEnd: "2026-07-19", photo: "/local10.jpg", desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø.", mapHint: "Mårup Kildevej 8, 8305 Samsø, Denmark", verified: "Jun 2026", color: "#6A1B9A", tags: ["Music", "Island"] },
-  { id: 11, name: "Maribo Jazz Festival", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", photo: "/local11.jpg", desc: "Denmark's friendliest jazz festival in historic Maribo. 120+ musicians across 18 venues.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Historic"] },
-  { id: 12, name: "KirsebærFestival", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local12.jpg", desc: "Cherry festival in Kerteminde, Northeast Funen.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local"] },
+  { id: 11, name: "Maribo Jazz Festival", tier: "Recommended", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", photo: "/local11.jpg", desc: "Denmark's friendliest jazz festival in historic Maribo. 120+ musicians across 18 venues.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Historic"],
+    blogBody: [
+      { type: "heading", content: "Music & Atmosphere" },
+      { type: "paragraph", content: "Music spills out from pubs, cafés and festival tents throughout the town, creating a cosy atmosphere that's more about enjoying great performances than chasing headline acts." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Perfect for jazz lovers, mature travellers and anyone looking for a quieter festival experience." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Don't expect modern pop, electronic music or huge festival crowds — Maribo is intentionally low-key." },
+    ] },
+  { id: 12, name: "KirsebærFestival", tier: "Recommended", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local12.jpg", desc: "Cherry festival in Kerteminde, Northeast Funen.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local"],
+    blogBody: [
+      { type: "heading", content: "Music & Atmosphere" },
+      { type: "paragraph", content: "The festival is built around local culture rather than big-name performers. Expect open-air concerts, food stalls, family activities and a welcoming atmosphere that feels more like a town celebration than a commercial festival." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Ideal for families, food lovers, couples and slower-paced travellers who enjoy authentic local experiences instead of nightlife." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "The town becomes busy during festival weekend, especially around the harbour, and parking can be frustrating." },
+    ] },
+  { id: 13, name: "Gyldne Dage i Præstø", tier: "Recommended", travelTime: "1h 30min 🚂", rating: 4.5, town: "Præstø", type: "Cultural", emoji: "🏰", date: "2026-09-12", dateEnd: "2026-09-13",
+    desc: "Every September, the historic harbour town of Præstø steps back into the late 1800s — volunteers in period costume, traditional crafts and historical performances transform the streets into one of Denmark's most immersive cultural festivals.",
+    mapHint: "Præstø Havn, 4720 Præstø, Denmark", verified: "Jul 2026", color: "#8D6E63", tags: ["History", "Free"],
+    blogBody: [
+      { type: "heading", content: "History & Atmosphere" },
+      { type: "paragraph", content: "Rather than music stages, you'll find historic markets, demonstrations of traditional trades, classical performances and costumed locals bringing the town's history to life. The harbour setting makes it especially enjoyable for photographers." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "History enthusiasts, families, photographers and travellers wanting something different from Denmark's music festivals." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "If you're looking for nightlife or modern entertainment, this probably isn't the right festival — expect a slower pace focused on storytelling, local traditions and community involvement." },
+    ] },
 ];
 
 const majorEvents = [
   { id: 101, name: "Roskilde Festival", tier: "Can't miss out", travelTime: "25min 🚂", rating: 4.9, ticketStatus: "sold_out", town: "Roskilde", type: "Music", emoji: "🎸", date: "2026-06-27", dateEnd: "2026-07-04", photo: "/major1.jpg", desc: "Northern Europe's largest music festival. 130,000 attendees, 8 stages, 8 days.", mapHint: "Roskilde Festival, Darupvej 35, 4000 Roskilde, Denmark", verified: "Jun 2026", color: "#E53935", tags: ["Music", "Camping"] },
-  { id: 102, name: "Distortion", tier: "Recommended", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", photo: "/major2.jpg", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street"] },
+  { id: 102, name: "Distortion", tier: "Recommended", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", photo: "/major2.jpg", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street"],
+    blogBody: [
+      { type: "heading", content: "Music & Atmosphere" },
+      { type: "paragraph", content: "Distortion isn't confined to a single festival site. During the week, neighbourhoods like Nørrebro and Vesterbro come alive with DJs, bars, street food and thousands of people celebrating outdoors before everything moves to Refshaleøen for the festival finale." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Perfect for travellers in their 20s and 30s, backpackers, nightlife lovers and anyone who enjoys electronic music. If you like discovering a city's social scene rather than spending all day inside a fenced festival, Distortion is an easy recommendation." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "The streets can become extremely busy, particularly during the free neighbourhood events. Expect crowds, loud music and late nights throughout the city." },
+    ] },
   { id: 103, name: "Aalborg Karneval", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aalborg", type: "Cultural", emoji: "🎭", date: "2026-05-20", dateEnd: "2026-05-24", photo: "/major3.jpg", desc: "Scandinavia's largest carnival. 100,000+ participants in costumes.", mapHint: "Aalborg Centrum, 9000 Aalborg, Denmark", verified: "Jun 2026", color: "#F57F17", tags: ["Carnival", "Parade"] },
   { id: 104, name: "Copenhagen Jazz Festival", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🎷", date: "2026-07-03", dateEnd: "2026-07-12", photo: "/major4.jpg", desc: "10 days of jazz across 100+ venues. Free concerts in squares and parks.", mapHint: "Copenhagen City Hall Square, Denmark", verified: "Jun 2026", color: "#00695C", tags: ["Jazz", "Free"] },
-  { id: 105, name: "Smukfest", tier: "Worth it for longer stays", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", photo: "/major5.jpg", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest"] },
+  { id: 105, name: "Smukfest", tier: "Worth it for longer stays", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", photo: "/major5.jpg", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest"],
+    blogBody: [
+      { type: "heading", content: "Music & Atmosphere" },
+      { type: "paragraph", content: "Few festivals anywhere in Europe can match Smukfest's setting. Concerts take place beneath towering beech trees, with illuminated forest paths creating a magical atmosphere after sunset. Food courts, bars and beautifully designed campsites make it feel more like a temporary woodland village than a traditional campsite." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Attracts everyone from groups of friends and couples to seasoned festival-goers in their 20s through 50s — perfect for travellers who love music but also appreciate good food and a relaxed atmosphere." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "This isn't a budget festival — tickets, accommodation, food and drinks add up quickly, and you'll spend plenty of time walking hilly forest terrain. Tickets are notoriously difficult to secure." },
+    ] },
   { id: 106, name: "NorthSide Festival", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aarhus", type: "Music", emoji: "🎪", date: "2026-06-05", dateEnd: "2026-06-07", photo: "/major6.jpg", desc: "Aarhus's biggest music festival with eco-friendly focus.", mapHint: "NorthSide Festival, Eskelundsvej, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Eco"] },
-  { id: 107, name: "Aarhus Festuge", tier: "Worth it for longer stays", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", photo: "/major7.jpg", desc: "One of Scandinavia's largest cultural festivals. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Free"] },
-  { id: 108, name: "Tønder Festival", tier: "Worth it for longer stays", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", photo: "/major8.jpg", desc: "Scandinavia's leading folk and roots festival near the German border.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots"] },
-  { id: 109, name: "Triangle Folklore Festival", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", photo: "/major9.jpg", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform in the streets of Vejle.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance"] },
-  { id: 110, name: "Odense Flower Festival", travelTime: "1h 30min 🚂", rating: 4.7, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", photo: "/major10.jpg", desc: "200,000+ flowers transform the entire city centre of Odense.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free"] },
-  { id: 111, name: "H.C. Andersen Festivals", travelTime: "1h 30min 🚂", rating: 4.8, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", photo: "/major11.jpg", desc: "Denmark's largest cultural festival. 500+ events across 10 days in H.C. Andersen's hometown.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free"] },
+  { id: 107, name: "Aarhus Festuge", tier: "Worth it for longer stays", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", photo: "/major7.jpg", desc: "One of Scandinavia's largest cultural festivals. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Free"],
+    blogBody: [
+      { type: "heading", content: "Art & Atmosphere" },
+      { type: "paragraph", content: "Aarhus Festuge isn't a festival you simply attend — it's one you stumble across as you explore the city. One moment you might discover a giant interactive art installation in a public square, the next you'll hear live music echoing through a side street." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "One of Denmark's most accessible festivals — art lovers, foodies, architecture enthusiasts and families will all find reasons to wander the city." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Events are spread across the city, so comfortable walking shoes are essential. Popular performances often sell out in advance, and hotels become noticeably more expensive during the festival." },
+    ] },
+  { id: 108, name: "Tønder Festival", tier: "Worth it for longer stays", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", photo: "/major8.jpg", desc: "Scandinavia's leading folk and roots festival near the German border.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots"],
+    blogBody: [
+      { type: "heading", content: "Music & Atmosphere" },
+      { type: "paragraph", content: "If you enjoy acoustic music, singer-songwriters, bluegrass, folk or Americana, Tønder is unlike any other festival in Denmark. Audiences are known for listening respectfully, often falling completely silent during quieter performances — and once the official concerts finish, spontaneous jam sessions continue around the campsite late into the night." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Attracts a slightly older audience than many Danish festivals, but music lovers of all ages who value musicianship and intimate settings over mainstream headliners will fit right in." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Hotels in Tønder book out surprisingly early — many experienced visitors choose the festival campsite instead." },
+    ] },
+  { id: 109, name: "Triangle Folklore Festival", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", photo: "/major9.jpg", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform in the streets of Vejle.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance"],
+    blogBody: [
+      { type: "heading", content: "Music & Atmosphere" },
+      { type: "paragraph", content: "The festival feels more like travelling the world in a single afternoon than attending a traditional festival. Dance groups from Europe, South America and beyond perform throughout the city, while colourful parades and live music fill pedestrian streets with energy." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Ideal for families, photographers, culture lovers and travellers looking for something different from Denmark's many music festivals." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "If you're looking for major concerts, nightlife or internationally famous bands, this probably isn't the right festival — it's best enjoyed at a slower pace while exploring Vejle on foot." },
+    ] },
+  { id: 110, name: "Odense Flower Festival", tier: "Recommended", travelTime: "1h 30min 🚂", rating: 4.7, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", photo: "/major10.jpg", desc: "200,000+ flowers transform the entire city centre of Odense.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free"],
+    blogBody: [
+      { type: "heading", content: "Flowers & Atmosphere" },
+      { type: "paragraph", content: "The festival is less about organised events and more about wandering through a city that has temporarily become a giant open-air garden. Elaborate flower sculptures and artistic installations appear around every corner." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Perfect for photographers, gardeners, couples, families and anyone who enjoys slow travel over loud concerts or busy nightlife." },
+      { type: "heading", content: "Should You Visit?" },
+      { type: "paragraph", content: "Definitely. One of Denmark's most beautiful free events — visit early morning or later in the evening for the best light and fewer crowds." },
+    ] },
+  { id: 111, name: "H.C. Andersen Festivals", travelTime: "1h 30min 🚂", rating: 4.8, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", photo: "/major11.jpg", desc: "Denmark's largest cultural festival. 500+ events across 10 days in H.C. Andersen's hometown.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free"],
+    blogBody: [
+      { type: "heading", content: "Theatre & Atmosphere" },
+      { type: "paragraph", content: "Rather than revolving around one stage, the H.C. Andersen Festivals take over the entire city. Street performers, musicians, storytellers and actors appear throughout Odense, blending fairy tales with modern theatre, concerts, comedy and interactive performances." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Genuinely has something for everyone — families with young children will love the storytelling and interactive theatre, while culture lovers can wander between performances for hours." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Runs the same time as the Odense Flower Festival, making the city centre particularly busy — walking or public transport is much easier than driving." },
+    ] },
   { id: 112, name: "Samsø Food Festival (Råvarefestival)", travelTime: "2h 30min 🚢", rating: 4.5, ticketStatus: "free", tier: "Recommended", town: "Samsø", type: "Cultural", emoji: "🥔", date: "2026-06-13", dateEnd: "2026-06-14", photo: "/major12.jpg", desc: "A cosy weekend celebrating everything Samsø grows and makes — the island is famous nationwide for its potatoes. Free entry, with food workshops, tastings, a communal island dinner and even a tug-of-war championship. Guest chefs join local producers each year, including Anne Hjernøe in 2026.", mapHint: "Onsbjerg Mark, Pillemarksvej 1, 8305 Tranebjerg, Samsø, Denmark", verified: "Jul 2026", color: "#2E7D32", tags: ["Food", "Island", "Family"] },
 ];
 
@@ -163,7 +270,15 @@ const vikingEvents = [
     mapHint: "Ribe VikingeCenter, Lustrupvej 4, 6760 Ribe, Denmark", verified: "Jul 2026", color: C.accent, tags: ["Viking Market", "Craft", "Family"] },
   { id: 203, name: "Moesgaard Viking Moot", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.6, town: "Aarhus", type: "Market & Combat", emoji: "🛡", date: "2026-07-24", dateEnd: "2026-07-26", photo: "/viking3.jpg",
     desc: "Denmark's most dramatic Viking market — international warriors, mounted horse combat and craft demonstrations at Moesgaard Museum. See the full Viking Days experience details under Booking.",
-    mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Horse Combat"] },
+    mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Horse Combat"],
+    blogBody: [
+      { type: "heading", content: "History & Atmosphere" },
+      { type: "paragraph", content: "This isn't a theme park — it's living history. Reenactors fully embrace Viking life, wearing historically accurate clothing and demonstrating ancient crafts. Wander through the sprawling market camp, watch blacksmiths at work, experience falconry displays, or witness dramatic combat demonstrations on the beach." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "Appeals to almost everyone — families, history enthusiasts, photographers and anyone fascinated by Nordic history." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Expect plenty of walking across a large outdoor area. Comfortable footwear is essential, and wet weather can make parts of the grounds muddy." },
+    ] },
   { id: 204, name: "Als Vikingemarked", travelTime: "3h 30min 🚂", rating: 4.4, town: "Sønderborg", type: "Market", emoji: "🔨", date: "2026-06-13", dateEnd: "2026-06-14", photo: "/viking4.jpg",
     desc: "A working Viking settlement for a weekend — jewellers, leatherworkers, blacksmiths, weavers and bowyers demonstrate their craft live, alongside daily combat displays, archery and activities for kids.",
     mapHint: "Als Vikingemarked, Skydebanevej, Kær Vestermark, 6400 Sønderborg, Denmark", verified: "Jul 2026", color: "#2E7D32", tags: ["Viking Market", "Craft", "Family"] },
@@ -173,9 +288,17 @@ const vikingEvents = [
   { id: 206, name: "Ravnens Marked", travelTime: "2h 15min 🚂", rating: 4.4, town: "Jelling", type: "Market", emoji: "🐦", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/jelling.jpg",
     desc: "A Viking market at Jelling — the same town where Denmark was named as a nation on the famous rune stones. Combine with a stop at the UNESCO stones themselves; this event sits right on the Copenhagen–Aalborg road trip route.",
     mapHint: "Fårupvej 25, 7300 Jelling, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Craft"] },
-  { id: 207, name: "Aggersborg Vikingehåndværkertræf", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/viking7.jpg",
+  { id: 207, name: "Aggersborg Vikingehåndværkertræf", tier: "Recommended", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/viking7.jpg",
     desc: "A craftsmen-only gathering at Aggersborg — one of Denmark's largest Viking ring fortresses. Less market, more workshop: expect to see smiths, carvers and weavers deep in their process rather than just selling finished goods.",
-    mapHint: "Thorupvej 13, Aggersund, 9670 Løgstør, Denmark", verified: "Jul 2026", color: "#E65100", tags: ["Viking Market", "Craft"] },
+    mapHint: "Thorupvej 13, Aggersund, 9670 Løgstør, Denmark", verified: "Jul 2026", color: "#E65100", tags: ["Viking Market", "Craft"],
+    blogBody: [
+      { type: "heading", content: "History & Atmosphere" },
+      { type: "paragraph", content: "Unlike Denmark's larger Viking festivals, Aggersborg focuses on craftsmanship, archaeology and quiet reflection — blacksmiths, woodworkers and traditional artisans demonstrating historic techniques inside one of Harald Bluetooth's remarkable ring fortresses." },
+      { type: "heading", content: "Who Is It For?" },
+      { type: "paragraph", content: "A fantastic stop for archaeology enthusiasts, UNESCO collectors and slow travellers who prefer meaningful conversations over crowds." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Don't expect towering ruins or theatrical battle shows — much of Aggersborg survives as grass-covered earthworks. The location is fairly remote; a car is the easiest way to visit." },
+    ] },
 ];
 
 const towns = [
@@ -196,14 +319,50 @@ const towns = [
 
 const freeEntrance = [
   // ── AARHUS ──
-  { id: 1, name: "The Greenhouses, Botanical Garden", popularityTag: "Hidden Gem", city: "Aarhus", type: "Botanical garden", emoji: "🌿", desc: "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free.", website: "https://sciencemuseerne.dk/botanisk-have/", color: "#2E7D32" },
-  { id: 2, name: "The Viking Museum", popularityTag: "Hidden Gem", city: "Aarhus", type: "Small basement museum", emoji: "⚔️", desc: "A tiny, easily-missed museum literally underground beneath a bank on the town square — real on-site Viking excavations. Small entry fee may apply, but usually free to peek in.", website: "https://www.nordjyskemuseer.dk/", color: "#1565C0" },
+  { id: 1, name: "The Greenhouses, Botanical Garden", popularityTag: "Hidden Gem", city: "Aarhus", type: "Botanical garden", emoji: "🌿", desc: "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free.", website: "https://sciencemuseerne.dk/botanisk-have/", color: "#2E7D32",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "The star attraction is the Tropical Dome, where an elevated wooden walkway takes you above the rainforest canopy. The scenery shifts from lush jungle to Mediterranean gardens and arid desert, feeling like several attractions rolled into one." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "The tropical greenhouse is exactly that — tropical. Expect high humidity and warm temperatures, particularly in summer." },
+    ] },
+  { id: 2, name: "The Viking Museum", popularityTag: "Hidden Gem", city: "Aarhus", type: "Small basement museum", emoji: "⚔️", desc: "A tiny, easily-missed museum literally underground beneath a bank on the town square, built around the genuine remains of ancient Aros. Around 30 DKK for adults, free under 18.", website: "https://www.nordjyskemuseer.dk/", color: "#1565C0",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "Rather than replicas, the museum is built around genuine archaeological remains discovered beneath the modern city — ancient house foundations, runic carvings and everyday artefacts telling the story of how Aarhus grew from a Viking settlement into Denmark's second-largest city." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "This is a compact museum, with most visits lasting 30–45 minutes. If you're expecting reconstructed Viking ships or a large interactive exhibition, this isn't that — it's a quick, worthwhile stop while exploring the city centre. Generally closed Mondays outside summer season." },
+    ] },
   { id: 3, name: "Ole's Garden, University Park", popularityTag: "Hidden Gem", city: "Aarhus", type: "Hidden park", emoji: "🌳", desc: "A serene, secret park hidden inside Aarhus University's yellow-brick campus — largely known only to local students.", website: "https://www.au.dk/", color: "#558B2F" },
   // ── AALBORG ──
-  { id: 4, name: "Lindholm Høje", popularityTag: "Common Attraction", city: "Aalborg", type: "Ancient burial site (outdoor)", emoji: "⛰", desc: "A breathtaking ancient Viking burial site with nearly 700 graves, free to walk year-round. The paired indoor museum charges a small entry fee.", website: "https://nordjyskemuseer.dk/u/vikingemuseet-lindholm-hoje/", color: "#1565C0" },
-  { id: 5, name: "The Singing Trees", popularityTag: "Hidden Gem", city: "Aalborg", type: "Musical park installation", emoji: "🎵", desc: "International stars — Elton John, Sting — have planted trees here. Press the button at each tree to hear their music.", website: "https://akkc.dk/de-syngende-traeer/", color: "#D4AF37" },
-  { id: 6, name: "Franciscan Friary Museum", popularityTag: "Hidden Gem", city: "Aalborg", type: "Subterranean ruins", emoji: "💀", desc: "A fully underground museum reached by glass elevator on a busy shopping street — medieval ruins and skeletons below your feet. Small entry fee may apply.", website: "https://nordjyskemuseer.dk/u/graabroedekloster-museet/", color: "#6D4C41" },
-  { id: 7, name: "Sohngårdsholmpark", popularityTag: "Hidden Gem", city: "Aalborg", type: "Park & fruit orchard", emoji: "🍎", desc: "A sprawling neighbourhood park around a 19th-century manor — with a public apple orchard anyone can pick from.", website: null, color: "#558B2F" },
+  { id: 4, name: "Lindholm Høje", popularityTag: "Common Attraction", city: "Aalborg", type: "Ancient burial site (outdoor)", emoji: "⛰", desc: "A breathtaking ancient Viking burial site with nearly 700 graves, free to walk year-round. The paired indoor museum charges a small entry fee.", website: "https://nordjyskemuseer.dk/u/vikingemuseet-lindholm-hoje/", color: "#1565C0",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "Dating back more than 1,000 years, Lindholm Høje is famous for its hundreds of stone circles and ship-shaped grave markers spread across a windswept hillside, with panoramic views over the Limfjord." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Rather than ropes and glass cases, you're free to walk among the ancient graves while sheep quietly graze the surrounding hills. Sunset is especially popular. The indoor museum typically closes mid-December to early January, though the outdoor burial grounds stay accessible year-round." },
+    ] },
+  { id: 5, name: "The Singing Trees", popularityTag: "Hidden Gem", city: "Aalborg", type: "Musical park installation", emoji: "🎵", desc: "International stars — Elton John, Sting — have planted trees here. Press the button at each tree to hear their music.", website: "https://akkc.dk/de-syngende-traeer/", color: "#D4AF37",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "Every major artist who performs in Aalborg is invited to plant a tree in Kildeparken, creating a living musical timeline of the city's concerts — from Elton John and Sting to Backstreet Boys and many more." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Best experienced as part of a walk through central Aalborg rather than a destination on its own. During winter or maintenance periods, some speakers may not be operating." },
+    ] },
+  { id: 6, name: "Franciscan Friary Museum", popularityTag: "Hidden Gem", city: "Aalborg", type: "Subterranean ruins", emoji: "💀", desc: "A fully underground museum reached by glass elevator on a busy shopping street — medieval ruins and skeletons below your feet. Small entry fee may apply.", website: "https://nordjyskemuseer.dk/u/graabroedekloster-museet/", color: "#6D4C41",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "Built around the authentic ruins of a 13th-century Franciscan friary, letting visitors walk through excavated foundations hidden for centuries beneath one of Aalborg's busiest shopping streets." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "A small museum — most visits last 20–40 minutes, focused on archaeological remains rather than interactive exhibits." },
+    ] },
+  { id: 7, name: "Sohngårdsholmpark", popularityTag: "Hidden Gem", city: "Aalborg", type: "Park & fruit orchard", emoji: "🍎", desc: "A sprawling neighbourhood park around a 19th-century manor — with a public apple orchard anyone can pick from.", website: null, color: "#558B2F",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "Unlike Aalborg's smaller city parks, Sohngårdsholm feels spacious and tranquil — walking paths wind through mature woodland, open grassy areas and past the historic manor house." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "A little outside Aalborg's main tourist area, best combined with other nearby stops. Facilities are limited, so bring water or snacks." },
+    ] },
   // ── COPENHAGEN ──
   { id: 9, name: "Amalienborg Palace Courtyard", popularityTag: "Common Attraction", city: "Copenhagen", type: "Royal residence (courtyard)", emoji: "👑", photo: "/amalienborg1.jpg",
     desc: "One of Copenhagen's most iconic landmarks — the official residence of the Danish royal family, and the perfect place to experience Danish royal tradition without spending a krone.",
@@ -232,6 +391,27 @@ const freeEntrance = [
       { type: "image", src: "/librarygarden4.jpg" },
     ] },
   { id: 11, name: "Medical Herb Garden, Kastellet", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Hidden garden", emoji: "🌱", desc: "A tiny, secluded herb patch inside the star-fortress of Kastellet — bypassed by most tourists rushing to the Little Mermaid.", website: "https://www.kastelletsvenner.dk/", color: "#558B2F" },
+  { id: 12, name: "Kastellet", popularityTag: "Common Attraction", city: "Copenhagen", type: "Star fortress & waterfront walk", emoji: "🛡", desc: "One of Europe's best-preserved star fortresses — centuries of military history combined with some of Copenhagen's best waterfront walks. Completely free, and a genuinely better use of your time than just photographing the Little Mermaid next door.", website: null, color: "#455A64",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "Kastellet isn't just a historic fortress — it's an active military site that's also one of Copenhagen's most scenic public spaces. Walk the grassy ramparts, admire the bright red barracks, visit the historic windmill and enjoy panoramic views across the moats and harbour." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "The best views are from the elevated ramparts, reached via gravel paths and grassy slopes that can get slippery after heavy rain or ice. Kastellet remains an active military area — stay within the public sections." },
+    ] },
+  { id: 13, name: "Øens Have", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Urban farm", emoji: "🌾", desc: "Northern Europe's largest urban farm, set on the creative Refshaleøen peninsula — vegetable gardens, chickens and beehives against the backdrop of Copenhagen's former shipyards. Free to explore the farm itself; the farm-to-table restaurant is a paid, premium experience.", website: null, color: "#2E7D32",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "A unique blend of sustainability, food culture and relaxed outdoor living unlike anywhere else in the city. Most people come for the gardens but stay for the atmosphere — the contrast between lush greenery and the industrial surroundings gives Øens Have a character all its own." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "A seasonal attraction, at its best from late spring through early autumn — during winter, many outdoor areas become quieter and some operations scale back. Book ahead if you're planning to dine, especially in summer." },
+    ] },
+  { id: 14, name: "Medical Herb Garden (Lægeurtehaven)", popularityTag: "Hidden Gem", city: "Aalborg", type: "Monastery herb garden", emoji: "🌿", desc: "Tucked beside Aalborg's historic monastery, a small peaceful green space inspired by the medicinal gardens once maintained by monks.", website: null, color: "#558B2F",
+    blogBody: [
+      { type: "heading", content: "What Makes It Special" },
+      { type: "paragraph", content: "The garden recreates the type of herb garden that would have supplied medieval monks with plants for cooking and traditional remedies — clearly labelled beds of medicinal and culinary herbs." },
+      { type: "heading", content: "Things to Know" },
+      { type: "paragraph", content: "Relatively small — most people spend 15–30 minutes here. Works best as a short stop alongside nearby attractions rather than a destination on its own." },
+    ] },
 ];
 
 const nightlifeSpots = [
@@ -391,6 +571,12 @@ const getEventDate = (dateStr, dateEnd) => {
   return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
 };
 const isUpcoming = (d) => new Date(d) >= new Date();
+const isCurrentlyLive = (start, end) => {
+  const now = new Date();
+  const s = new Date(start);
+  const e = end ? new Date(end) : s;
+  return s <= now && now <= e;
+};
 const daysUntil = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
 
 const PRODUCT_COORDS = {
@@ -417,7 +603,7 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
       </div>
       <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
-          {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : item.region}
+          {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : item.region}
         </div>
         <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 8 }}>{item.name}</div>
 
@@ -429,6 +615,12 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
         {kind === "free" && item.popularityTag && (
           <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: item.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: item.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.surface, border: `1px solid ${item.popularityTag === "Hidden Gem" ? C.gold : C.border}`, padding: "5px 12px", borderRadius: 100, marginBottom: 18 }}>
             {item.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"} · FREE
+          </div>
+        )}
+        {kind === "food" && (
+          <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100 }}>{item.category}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, background: `${C.gold}18`, padding: "5px 12px", borderRadius: 100 }}>{item.price}</span>
           </div>
         )}
 
@@ -485,7 +677,7 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
             {item.tags.map(t => <span key={t} style={{ fontSize: 12, color: C.text, background: C.surface, border: `1px solid ${C.border}`, padding: "7px 13px", borderRadius: 100 }}>{t}</span>)}
           </div>
         )}
-        {kind === "nightlife" && item.tip && (
+        {(kind === "nightlife" || kind === "food") && item.tip && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 22, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
             💡 {item.tip}
           </div>
@@ -586,7 +778,89 @@ const WEATHER_CITIES = [
   { key: "copenhagen", label: "Copenhagen", lat: 55.6761, lon: 12.5683 },
   { key: "aarhus", label: "Aarhus", lat: 56.1629, lon: 10.2039 },
   { key: "aalborg", label: "Aalborg", lat: 57.0488, lon: 9.9217 },
+  { key: "odense", label: "Odense", lat: 55.4038, lon: 10.4024 },
 ];
+
+// ─── MAPS (Google-free) ──────────────────────────────────────
+// Town-centre coordinates (approximate, town-level) for the SVG locator maps.
+const TOWN_COORDS = {
+  "Copenhagen": [55.676, 12.568], "Aarhus": [56.157, 10.210], "Aalborg": [57.048, 9.919],
+  "Nørresundby (Aalborg)": [57.059, 9.922], "Odense": [55.396, 10.389], "Roskilde": [55.642, 12.088],
+  "Gilleleje": [56.126, 12.310], "Tisvildeleje": [56.043, 12.078], "Liseleje": [56.076, 11.964],
+  "Hundested": [55.964, 11.851], "Frederiksværk": [55.971, 12.022], "Kerteminde": [55.449, 10.658],
+  "Maribo": [54.777, 11.500], "Præstø": [55.123, 12.045], "Jelling": [55.756, 9.420],
+  "Skanderborg": [56.036, 9.926], "Vejle": [55.709, 9.536], "Tønder": [54.933, 8.864],
+  "Slagelse": [55.403, 11.354], "Samsø": [55.836, 10.604], "Løgstør": [56.964, 9.256],
+  "Sønderborg": [54.909, 9.792], "Ribe": [55.328, 8.765], "Dragør": [55.593, 12.669],
+  "Ærøskøbing": [54.888, 10.411], "Skagen": [57.720, 10.590], "Faaborg": [55.095, 10.243],
+  "Gudhjem": [55.214, 14.972], "Sønderho": [55.337, 8.474], "Mariager": [56.649, 9.977],
+  "Sæby": [57.331, 10.519], "Thorup Strand": [57.143, 9.106], "Ebeltoft": [56.195, 10.679],
+  "Nyhavn": [55.680, 12.590],
+};
+
+// Simplified Denmark coastline polygons as [lat, lon] vertices (Jutland, Funen, Zealand, Lolland-Falster, Bornholm)
+const DK_SHAPES = [
+  [[54.90,8.65],[55.10,8.60],[55.35,8.45],[55.56,8.08],[55.90,8.12],[56.30,8.10],[56.70,8.21],[57.00,8.40],[57.12,8.62],[57.45,9.60],[57.60,10.10],[57.73,10.60],[57.44,10.54],[57.33,10.52],[56.90,10.30],[56.70,10.35],[56.50,10.85],[56.42,10.95],[56.25,10.80],[56.15,10.25],[55.85,10.05],[55.70,9.75],[55.55,9.72],[55.30,9.70],[55.05,9.90],[54.91,9.79],[54.85,9.40]],
+  [[55.50,9.80],[55.60,10.10],[55.62,10.32],[55.50,10.62],[55.30,10.80],[55.05,10.68],[55.02,10.25],[55.18,9.90]],
+  [[55.97,11.28],[56.05,11.65],[56.10,12.05],[56.13,12.31],[55.95,12.55],[55.68,12.65],[55.45,12.50],[55.28,12.45],[55.15,12.20],[54.96,11.85],[55.10,11.35],[55.20,11.08],[55.45,11.05],[55.70,11.10]],
+  [[54.83,11.05],[54.95,11.50],[54.90,11.90],[54.70,12.00],[54.56,11.93],[54.65,11.35]],
+  [[55.30,14.68],[55.30,15.15],[55.06,15.19],[54.99,14.90],[55.15,14.68]],
+];
+
+// Equirectangular projection scaled to km at Denmark's latitude, so proportions stay honest.
+const dkProject = (lat, lon) => [(lon - 8.0) * 62.06, (57.85 - lat) * 111.32];
+const DK_PATHS = DK_SHAPES.map(shape => shape.map(([la, lo]) => dkProject(la, lo).map(n => n.toFixed(1)).join(",")).join(" "));
+
+// Tiny self-drawn Denmark locator — replaces the old Google mini-map iframes.
+// Zero network requests, no API keys, no tile-usage-policy concerns.
+const DKLocator = ({ town, color }) => {
+  const coords = TOWN_COORDS[town];
+  const dot = coords ? dkProject(coords[0], coords[1]) : null;
+  return (
+    <svg viewBox="-12 -12 477 397" style={{ width: "100%", height: "100%", display: "block", background: "#0D1526" }} aria-label={town ? `Location of ${town} in Denmark` : "Map of Denmark"}>
+      {DK_PATHS.map((p, i) => <polygon key={i} points={p} fill="#1A2438" stroke="#2A3A55" strokeWidth="3" />)}
+      {dot && (
+        <>
+          <circle cx={dot[0]} cy={dot[1]} r="26" fill={`${color || C.gold}33`} />
+          <circle cx={dot[0]} cy={dot[1]} r="11" fill={color || C.gold} stroke="#0D1526" strokeWidth="3" />
+        </>
+      )}
+    </svg>
+  );
+};
+
+// One real interactive map (Explore tab) — Leaflet + OpenStreetMap tiles. Free, no key, no billing account.
+const LeafletMap = ({ center, zoom, overlayLabel }) => {
+  const holderRef = useRef(null);
+  const mapRef = useRef(null);
+  useEffect(() => {
+    if (!holderRef.current || mapRef.current) return;
+    const map = L.map(holderRef.current, { zoomControl: false }).setView(center, zoom);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      className: "gemlyx-tiles",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+    L.control.zoom({ position: "bottomleft" }).addTo(map);
+    mapRef.current = map;
+    return () => { map.remove(); mapRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (mapRef.current) mapRef.current.setView(center, zoom);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [center[0], center[1], zoom]);
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div ref={holderRef} style={{ width: "100%", height: "100%" }} />
+      {overlayLabel && (
+        <div style={{ position: "absolute", top: 8, left: 8, right: 8, zIndex: 500, background: "rgba(10,15,30,0.88)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", fontSize: 12, color: C.text, fontWeight: 600, pointerEvents: "none" }}>
+          📍 {overlayLabel}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const PageHero = ({ src, emoji, color }) => (
   <div style={{ height: 130, borderRadius: 14, overflow: "hidden", marginBottom: 18, position: "relative", background: `linear-gradient(135deg, ${color}33 0%, #0A0F1E 100%)` }}>
@@ -596,24 +870,101 @@ const PageHero = ({ src, emoji, color }) => (
   </div>
 );
 
+const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo }) => {
+  const [open, setOpen] = useState(false);
+  const allTracked = [...events, ...majorEvents, ...vikingEvents];
+  const currentlyLive = allTracked.filter(e => isCurrentlyLive(e.date, e.dateEnd));
+  const comingSoon = allTracked.filter(e => isUpcoming(e.date) && !isCurrentlyLive(e.date, e.dateEnd)).sort((a, b) => new Date(a.date) - new Date(b.date));
+  const headline = currentlyLive[0] || comingSoon[0];
+  if (!headline) return null;
+
+  const EventRow = (e) => (
+    <div key={e.name} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: liveInfo?.[e.name] ? 8 : 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{e.emoji} {e.name}</div>
+        <button onClick={() => checkLiveInfo(e)} disabled={liveInfoLoading === e.name}
+          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 100, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
+          {liveInfoLoading === e.name ? "Checking..." : "🔍 Check"}
+        </button>
+      </div>
+      {liveInfo?.[e.name] && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{liveInfo[e.name]}</div>}
+    </div>
+  );
+
+  return (
+    <div style={{ marginTop: 2 }}>
+      <button onClick={() => setOpen(true)}
+        style={{ display: "flex", alignItems: "center", gap: 7, background: "none", border: "none", padding: "6px 0", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", width: "100%", textAlign: "left" }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: currentlyLive.length ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: currentlyLive.length ? "0 0 6px #4CAF50" : "none" }} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: currentlyLive.length ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0 }}>{currentlyLive.length ? "Live" : "Coming"}</span>
+        <span style={{ fontSize: 13, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{headline.emoji} {headline.name}</span>
+        <span style={{ marginLeft: "auto", color: C.muted, fontSize: 13, flexShrink: 0 }}>›</span>
+      </button>
+
+      {open && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpen(false)}>
+          <div style={{ width: "100%", maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            {currentlyLive.length > 0 && (
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4CAF50", flexShrink: 0 }} />
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Current Live Events</div>
+                </div>
+                {currentlyLive.slice(0, 4).map(EventRow)}
+              </div>
+            )}
+            {comingSoon.length > 0 && (
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.gold, flexShrink: 0 }} />
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Coming Events</div>
+                </div>
+                {comingSoon.slice(0, 4).map(EventRow)}
+              </div>
+            )}
+            <button onClick={() => setOpen(false)} style={{ display: "block", width: "100%", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather }) => {
+  const [openCity, setOpenCity] = useState(null);
   useEffect(() => {
     WEATHER_CITIES.forEach(c => { if (!weather[c.key] && weatherLoading !== c.key) checkWeather(c.key, c.lat, c.lon); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const openCityData = WEATHER_CITIES.find(c => c.key === openCity);
 
   return (
     <div style={{ display: "flex", gap: 14, overflowX: "auto", padding: "10px 0", marginTop: 4 }}>
       {WEATHER_CITIES.map(c => {
         const d = weather[c.key];
         return (
-          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <button key={c.key} onClick={() => setOpenCity(c.key)}
+            style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             <span style={{ fontSize: 15 }}>{d && !d.error ? weatherIcon(d.condition) : "⏳"}</span>
             <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{c.label}</span>
             <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{d && !d.error ? `${Math.round(d.temperature_c)}°` : "--"}</span>
-          </div>
+          </button>
         );
       })}
+
+      {openCityData && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpenCity(null)}>
+          <div style={{ width: "100%", maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <WeatherStrip label={`🌤 ${openCityData.label}`} weatherKey={openCityData.key} lat={openCityData.lat} lon={openCityData.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+            <button onClick={() => setOpenCity(null)} style={{ display: "block", width: "100%", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -633,7 +984,7 @@ const StoreBadge = ({ type, href }) => (
   </a>
 );
 
-const APP_VERSION = "v2.66 — all real photos wired in, Kronborg Castle added";
+const APP_VERSION = "v2.76 — Essentials first, live events in header, premium AI styling";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -700,6 +1051,7 @@ export default function Gemlyx() {
   const [townDetail, setTownDetail] = useState(null);
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
+  const [foodDetail, setFoodDetail] = useState(null);
   const [craftForm, setCraftForm] = useState({ name: "", email: "", interest: "", visit: "" });
   const [craftStatus, setCraftStatus] = useState(null);
   const [emailSignup, setEmailSignup] = useState("");
@@ -734,7 +1086,21 @@ export default function Gemlyx() {
     if (aiMessages.length > 1) document.querySelectorAll(".ai-msgs").forEach(el => { el.scrollTop = el.scrollHeight; });
   }, [aiMessages]);
 
-  const TAB_ORDER = ["home", "ai", "plans", "essentials", "explore", "craft", "attractions", "events", "food", "nightlife", "roadtrips", "visits"];
+  const TAB_ORDER = ["home", "essentials", "plans", "craft", "attractions", "events", "food", "nightlife", "roadtrips", "visits", "ai"];
+  // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
+  const NAV_ITEMS = [
+    { id: "home", label: "🧭 Explore" },
+    { id: "essentials", label: "✓ Essentials" },
+    { id: "plans", label: "🗺 Plans" },
+    { id: "craft", label: "◈ Booking" },
+    { id: "attractions", label: "🆓 Free Entrance" },
+    { id: "events", label: "◈ Events" },
+    { id: "food", label: "🍽 Food" },
+    { id: "nightlife", label: "🍺 Nightlife" },
+    { id: "roadtrips", label: "🚗 Road Trips" },
+    { id: "visits", label: "◉ Towns" },
+    { id: "ai", label: "✦ Ask AI" },
+  ];
   const [slideDir, setSlideDir] = useState(null);
   const pageAnim = "";
   const goTab = (id) => {
@@ -952,7 +1318,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
   // ── PILL BUTTON ───────────────────────────────────────────────
   const Pill = ({ label, active, onClick, color }) => (
-    <button onClick={onClick} style={{ background: active ? (color||C.accent) : C.surface, color: active ? "#fff" : (color || C.muted), border: `1px solid ${active ? (color||C.accent) : (color ? `${color}66` : C.border)}`, borderRadius: 100, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>
+    <button onClick={onClick} style={{
+      display: "inline-flex", alignItems: "center", gap: 7,
+      background: active ? `${color || C.accent}1F` : C.surface,
+      color: active ? C.text : C.muted,
+      border: `1px solid ${active ? (color || C.accent) : C.border}`,
+      borderRadius: 10, padding: "8px 14px", fontSize: 12.5, fontWeight: 600,
+      cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif",
+      whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.18s ease",
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: active ? (color || C.accent) : "#2A3A55", transition: "background 0.18s", flexShrink: 0 }} />
       {label}
     </button>
   );
@@ -998,9 +1373,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ fontSize: 12, color: C.gold, fontWeight: 600 }}>{getEventDate(event.date, event.dateEnd)}</div>
         </div>
         <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-          <div style={{ width: 88, height: 88, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}`, pointerEvents: "none" }}>
-            <iframe title={`${event.name} map`} width="88" height="88" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
-              src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(event.mapHint)}&zoom=6`} />
+          <div style={{ width: 88, height: 88, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}` }}>
+            <DKLocator town={event.town} color={event.color} />
           </div>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>
             {daysUntil(event.date) <= 0 ? "Happening now" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)} days away`}
@@ -1106,17 +1480,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
               {/* Navigation sections */}
               {[
-                { id: "explore", img: "/picture2.png", title: "Merchandise", sub: "Exclusive finds that exist nowhere else", icon: "🏪" },
+                { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
                 { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
                 { id: "plans", img: "/picture4.png", title: "Plans", sub: "Ready-made trips, built from what's actually open right now", icon: "🗺" },
-                { id: "ai", img: "/picture9.jpg", title: "Ask AI", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
-                { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
                 { id: "food", img: "/picture5.jpg", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", icon: "🍽" },
                 { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", icon: "🍺" },
                 { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", icon: "🚗" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
                 { id: "craft", img: "/picture9.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" },
                 { id: "attractions", img: "/picture7.jpg", title: "Free Entrance", sub: "Genuinely free places worth your time, city by city", icon: "🆓" },
+                { id: "ai", img: "/picture9.jpg", title: "Ask AI", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
               ].map((section, i) => (
                 <div key={section.id} onClick={() => { goTab(section.id); window.scrollTo(0,0); }}
                   style={{ height: 280, position: "relative", overflow: "hidden", cursor: "pointer" }}>
@@ -1166,125 +1539,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.66 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.76 — Jul 2026</div>
               </div>
             </div>
           )}
 
           {/* ── EXPLORE ──────────────────────────────────────── */}
-          {tab === "explore" && (
-            <div className={pageAnim}>
-              {/* Sub tabs */}
-              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}` }}>
-                {[
-                  { id: "shops", label: "🏪 Shops" },
-                  { id: "handmade", label: "🍬 Handmade" },
-                  { id: "saved", label: `♡ Saved${savedItems.length > 0 ? ` (${savedItems.length})` : ""}` },
-                ].map(t => (
-                  <button key={t.id} onClick={() => setShopTab(t.id)}
-                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${shopTab === t.id ? C.accent : "transparent"}`, color: shopTab === t.id ? C.text : C.muted, padding: "14px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "all 0.2s" }}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* SHOPS */}
-              {shopTab === "shops" && (
-                <div style={{ padding: "14px 16px" }}>
-                  {/* City + Filter row */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                      {cities.map(city => (
-                        <Pill key={city.id} label={`🇩🇰 ${city.name}`} active={selectedCity?.id === city.id} onClick={() => setSelectedCity(selectedCity?.id === city.id ? null : city)} color={city.color} />
-                      ))}
-                    </div>
-                    <button onClick={() => setShowFilter(true)}
-                      style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", fontSize: 12, color: C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, flexShrink: 0, marginLeft: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                      ⊟ Filter
-                    </button>
-                  </div>
-
-                  {/* Hero */}
-                  {selectedCity && (
-                    <div style={{ borderRadius: 16, overflow: "hidden", position: "relative", height: 100, background: selectedCity.color, marginBottom: 14 }}>
-                      {selectedCity.photo && <img src={selectedCity.photo} alt={selectedCity.name} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.4 }} />}
-                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.1) 100%)" }} />
-                      <div style={{ position: "absolute", bottom: 10, left: 14 }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "#fff", fontFamily: "'Cormorant Garamond', serif" }}>{selectedCity.name}</div>
-                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>◆ {displayProducts.length} finds</div>
-                      </div>
-                      <div style={{ position: "absolute", top: 10, left: 14, background: selectedCity.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, textTransform: "uppercase" }}>{selectedCity.tag}</div>
-                    </div>
-                  )}
-
-                  {/* Products grid */}
-                  <div className="products-grid">
-                    {displayProducts.map(p => <ProductCard key={p.id} product={p} />)}
-                  </div>
-                  {displayProducts.length === 0 && (
-                    <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No businesses found</div>
-                  )}
-                </div>
-              )}
-
-              {/* HANDMADE */}
-              {shopTab === "handmade" && (
-                <div style={{ padding: "16px" }}>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>🍬 Handmade Candy & Craft</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Watch it made, buy it warm — no ticket, no booking, just walk in</div>
-                  </div>
-                  {handmadeCraftShops.map(shop => (
-                    <div key={shop.id} style={{ background: C.surface, borderRadius: 16, padding: "16px", marginBottom: 12, border: `1px solid ${shop.color}33`, position: "relative" }}>
-                      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: shop.color, borderRadius: "16px 0 0 16px" }} />
-                      <div style={{ paddingLeft: 8 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                          <span style={{ fontSize: 20 }}>{shop.emoji}</span>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{shop.name}</div>
-                          {shop.yearRound && (
-                            <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 8px", borderRadius: 100, flexShrink: 0 }}>◆ Open year-round</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>{shop.location}</div>
-                        <div style={{ fontSize: 11, color: shop.color, fontWeight: 700, marginBottom: 8 }}>{shop.tag}</div>
-                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{shop.desc}</div>
-                        <div style={{ fontSize: 12, color: C.text, background: C.bg, borderRadius: 10, padding: "8px 12px", marginBottom: 10, lineHeight: 1.5 }}>
-                          💡 {shop.highlight}
-                        </div>
-                        <div style={{ fontSize: 11, color: C.gold, fontWeight: 600, marginBottom: 10 }}>{shop.price}</div>
-                        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(shop.mapHint)}`} target="_blank" rel="noreferrer"
-                          style={{ display: "block", background: shop.color, color: "#fff", borderRadius: 10, padding: "9px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
-                          ↗ Get Directions
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* SAVED */}
-              {shopTab === "saved" && (
-                <div style={{ padding: "16px" }}>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>♡ Saved Finds</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{savedProducts.length} businesses saved</div>
-                  </div>
-                  {savedProducts.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "50px 0" }}>
-                      <div style={{ fontSize: 40, marginBottom: 12 }}>♡</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Nothing saved yet</div>
-                      <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>Tap ♡ on any find to save it</div>
-                    </div>
-                  ) : (
-                    <div className="products-grid">
-                      {savedProducts.map(p => <ProductCard key={p.id} product={p} />)}
-                    </div>
-                  )}
-                </div>
-              )}
-              {aiHelperBlock()}
-            </div>
-          )}
 
           {/* ── CRAFT ────────────────────────────────────────── */}
           {tab === "craft" && (
@@ -1312,7 +1572,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   ))}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Booking speed</div>
-                <Pill label="● Bookable online only" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
+                <Pill label="Bookable online only" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
               </div>
 
               {/* Grid */}
@@ -1327,35 +1587,33 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 if (craftLoading) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>Loading craft spots...</div>;
                 if (filtered.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No craft spots match — try another filter</div>;
                 return (
-                  <div className="products-grid">
+                  <div>
                     {filtered.map(craft => (
-                      <div key={craft.id} onClick={() => setCraftDetail(craft)} style={{ background: C.surface, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, display: "flex", flexDirection: "column", cursor: "pointer" }}>
-                        <div style={{ height: 130, background: `${craft.color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                          <span style={{ fontSize: 44 }}>{craft.emoji}</span>
-                          <div style={{ position: "absolute", top: 8, left: 8, background: craft.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, textTransform: "uppercase" }}>{craft.type}</div>
-                          {craft.rating && <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(10,15,30,0.75)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>★ {craft.rating}</div>}
-                          {craft.popularityTag === "Hidden Gem" && <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(10,15,30,0.85)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 100 }}>◆ Hidden Gem</div>}
-                          {craft.transportWarning && <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 13, padding: "4px 7px", borderRadius: 8 }} title="Limited public transport">🚲</div>}
+                      <div key={craft.id} onClick={() => setCraftDetail(craft)} style={{ background: C.surface, borderRadius: 18, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 14, cursor: "pointer" }}>
+                        <div style={{ height: 160, position: "relative", background: `linear-gradient(135deg, ${craft.color}33 0%, #0A0F1E 100%)` }}>
+                          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, opacity: 0.25 }}>{craft.emoji}</span>
+                          {craft.photo && <img src={craft.photo} alt={craft.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />}
+                          <div style={{ position: "absolute", top: 10, left: 10, background: craft.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "4px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>{craft.type}</div>
+                          {craft.rating && <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 100 }}>★ {craft.rating}</div>}
+                          {craft.popularityTag === "Hidden Gem" && <div style={{ position: "absolute", bottom: 10, left: 10, background: "rgba(10,15,30,0.85)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "4px 9px", borderRadius: 100 }}>◆ Hidden Gem</div>}
+                          {craft.transportWarning && <div style={{ position: "absolute", bottom: 10, right: 10, background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 13, padding: "4px 7px", borderRadius: 8 }} title="Limited public transport">🚲</div>}
                         </div>
-                        <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", flex: 1 }}>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.2, marginBottom: 3 }}>{craft.name}</div>
-                          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{craft.location} · {craft.travelTime} from CPH</div>
-                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
-                            {craft.what.slice(0, 3).map(w => (
-                              <span key={w} style={{ fontSize: 9, color: C.light, background: C.bg, padding: "3px 7px", borderRadius: 100 }}>{w}</span>
-                            ))}
-                          </div>
-                          <div style={{ marginTop: "auto", paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-                            <div style={{ fontSize: 16, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", marginTop: 8 }}>{craft.price || "Price on request"}</div>
-                            {craft.priceNote && <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{craft.priceNote}</div>}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 12, fontWeight: 700, padding: "6px 0" }}>
-                                Read more <span style={{ fontSize: 14 }}>›</span>
-                              </div>
-                              {craft.bookingType === "online" && (
-                                <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 8px", borderRadius: 100 }}>● Book online</span>
-                              )}
+                        <div style={{ padding: "14px 16px 16px" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 3 }}>
+                            <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{craft.name}</div>
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>{craft.price || "On request"}</div>
                             </div>
+                          </div>
+                          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{craft.location} · {craft.travelTime} from CPH{craft.priceNote ? ` · ${craft.priceNote}` : ""}</div>
+                          <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{craft.desc.slice(0, 110)}{craft.desc.length > 110 ? "…" : ""}</div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
+                              Read more <span style={{ fontSize: 15 }}>›</span>
+                            </div>
+                            {craft.bookingType === "online" && (
+                              <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "4px 9px", borderRadius: 100 }}>● Book online</span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1376,12 +1634,42 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
 
               <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 18 }}>
-                {["Copenhagen", "Aarhus", "Aalborg"].map(c => (
-                  <Pill key={c} label={c} active={attractionCity === c} onClick={() => setAttractionCity(c)} />
+                {["Copenhagen", "Aarhus", "Aalborg", "🍬 Handmade"].map(c => (
+                  <Pill key={c} label={c} active={attractionCity === c} onClick={() => setAttractionCity(c)} color={c === "🍬 Handmade" ? "#E91E63" : undefined} />
                 ))}
               </div>
 
-              {freeEntrance.filter(a => a.city === attractionCity).map(a => (
+              {attractionCity === "🍬 Handmade" ? (
+                <>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Watch it made, buy it warm — no ticket, no booking, just walk in.</div>
+                  {handmadeCraftShops.map(shop => (
+                    <div key={shop.id} style={{ background: C.surface, borderRadius: 16, padding: "16px", marginBottom: 12, border: `1px solid ${shop.color}33`, position: "relative" }}>
+                      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: shop.color, borderRadius: "16px 0 0 16px" }} />
+                      <div style={{ paddingLeft: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 20 }}>{shop.emoji}</span>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{shop.name}</div>
+                          {shop.yearRound && (
+                            <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 8px", borderRadius: 100, flexShrink: 0 }}>◆ Open year-round</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>{shop.location}</div>
+                        <div style={{ fontSize: 11, color: shop.color, fontWeight: 700, marginBottom: 8 }}>{shop.tag}</div>
+                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{shop.desc}</div>
+                        <div style={{ fontSize: 12, color: C.text, background: C.bg, borderRadius: 10, padding: "8px 12px", marginBottom: 10, lineHeight: 1.5 }}>
+                          💡 {shop.highlight}
+                        </div>
+                        <div style={{ fontSize: 11, color: C.gold, fontWeight: 600, marginBottom: 10 }}>{shop.price}</div>
+                        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(shop.mapHint)}`} target="_blank" rel="noreferrer"
+                          style={{ display: "block", background: shop.color, color: "#fff", borderRadius: 10, padding: "9px", fontSize: 12, fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
+                          ↗ Get Directions
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+              freeEntrance.filter(a => a.city === attractionCity).map(a => (
                 <div key={a.id} onClick={() => setFreeDetail(a)} style={{ borderTop: `1px solid ${C.border}`, padding: "16px 0 20px", cursor: "pointer" }}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                     <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", background: `${a.color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{a.emoji}</div>
@@ -1404,7 +1692,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
                   </div>
                 </div>
-              ))}
+              )))}
               {aiHelperBlock()}
             </div>
           )}
@@ -1464,7 +1752,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
 
               {foodSpots.filter(f => f.type === foodTab).map(spot => (
-                <div key={spot.id} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px" }}>
+                <div key={spot.id} onClick={() => setFoodDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
                   {spot.photo && (
                     <div style={{ height: 140, borderRadius: 12, overflow: "hidden", marginBottom: 14, position: "relative", background: `linear-gradient(135deg, ${spot.color}33 0%, #0A0F1E 100%)` }}>
                       <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44, opacity: 0.25 }}>{spot.emoji}</span>
@@ -1480,14 +1768,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
                     <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: spot.color, flexShrink: 0 }}>{spot.price}</span>
                   </div>
-                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{spot.desc}</div>
-                  <div style={{ fontSize: 12, color: C.text, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, lineHeight: 1.5 }}>
-                    💡 {spot.tip}
+                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{spot.desc.slice(0, 100)}{spot.desc.length > 100 ? "…" : ""}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
+                    Read more <span style={{ fontSize: 15 }}>›</span>
                   </div>
-                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`} target="_blank" rel="noreferrer"
-                    style={{ color: C.text, fontSize: 13, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "4px" }}>
-                    Get Directions →
-                  </a>
                 </div>
               ))}
               {aiHelperBlock()}
@@ -1639,8 +1923,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       <img src={town.photo} alt={town.name} onError={e => { e.target.style.display = "none"; }}
                         style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
                       <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
-                        <iframe title={`${town.name} map`} width="68" height="68" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade"
-                          src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(town.mapHint)}&zoom=9`} />
+                        <DKLocator town={town.name} color={C.gold} />
                       </div>
                       {town.nomiPotential === "Very High" && (
                         <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>⭐ Top Pick</div>
@@ -1666,28 +1949,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
           {/* ── AI (dedicated page) ─────────────────────────────── */}
           {tab === "ai" && (
             <div className={pageAnim} style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 18, paddingTop: 8, textAlign: "center" }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>✦ Ask AI</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide — plans your trip, and can check what's actually happening right now.</div>
-              </div>
-
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 24 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4CAF50", flexShrink: 0 }} />
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Live Right Now</div>
+              <div style={{ marginBottom: 22, paddingTop: 8, textAlign: "center" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "6px 16px", marginBottom: 16 }}>
+                  <span style={{ fontSize: 13 }}>✦</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Gemlyx Intelligence</span>
                 </div>
-                {[...majorEvents.filter(e => isUpcoming(e.date)).slice(0, 2), ...vikingEvents.filter(e => isUpcoming(e.date)).slice(0, 1)].map(e => (
-                  <div key={e.name} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 0" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: liveInfo?.[e.name] ? 8 : 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{e.emoji} {e.name}</div>
-                      <button onClick={() => checkLiveInfo(e)} disabled={liveInfoLoading === e.name}
-                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 100, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
-                        {liveInfoLoading === e.name ? "Checking..." : "🔍 Check"}
-                      </button>
-                    </div>
-                    {liveInfo?.[e.name] && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{liveInfo[e.name]}</div>}
-                  </div>
-                ))}
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Ask AI</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide — plans your trip, and can check what's actually happening right now. Live events are tracked in the header on every page.</div>
               </div>
 
               {aiHelperBlock()}
@@ -1914,15 +2182,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {mapCity ? (
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                   <div style={{ height: 220, position: "relative", flexShrink: 0 }}>
-                    {(() => {
-                      const src = selectedPin
-                        ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(selectedPin.shop)}&zoom=17`
-                        : `https://www.google.com/maps/embed/v1/view?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&center=55.6761,12.5683&zoom=14&maptype=roadmap`;
-                      return <iframe key={mapCity.name + (selectedPin?.id||"")} title="Map" width="100%" height="220" frameBorder="0" style={{ border: 0, display: "block" }} referrerPolicy="no-referrer-when-downgrade" src={src} allowFullScreen />;
-                    })()}
+                    <LeafletMap
+                      center={[55.6761, 12.5683]}
+                      zoom={13}
+                      overlayLabel={selectedPin ? `${selectedPin.shop} — tap Get Directions for the exact spot` : null}
+                    />
                     <a href={selectedPin ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(selectedPin.shop+" Copenhagen")}` : `https://www.google.com/maps/search/?api=1&query=local+shops+Copenhagen`}
                       target="_blank" rel="noreferrer"
-                      style={{ position: "absolute", bottom: 8, right: 8, background: C.gold, color: "#000", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                      style={{ position: "absolute", bottom: 8, right: 8, zIndex: 600, background: C.gold, color: "#000", padding: "5px 12px", borderRadius: 100, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
                       {selectedPin ? "Get Directions ↗" : "Open in Maps ↗"}
                     </a>
                   </div>
@@ -1993,11 +2260,19 @@ You also have a web_search tool. Use it whenever someone asks about something th
         .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
         .app-root { height: 100vh; }
-        .hero-h { height: calc(100vh - 162px); min-height: 380px; }
-        @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 162px); } }
+        .hero-h { height: calc(100vh - 196px); min-height: 340px; }
+        /* ── Leaflet, Gemlyx dark theme ── */
+        .gemlyx-tiles { filter: invert(1) hue-rotate(189deg) brightness(0.92) contrast(1.12) saturate(0.35); }
+        .leaflet-container { background: #0D1526 !important; font-family: 'Plus Jakarta Sans', sans-serif !important; }
+        .leaflet-control-zoom { border: 1px solid #1E2A3A !important; border-radius: 10px !important; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.5) !important; }
+        .leaflet-control-zoom a { background: rgba(10,15,30,0.92) !important; color: #E8EDF7 !important; border-bottom: 1px solid #1E2A3A !important; width: 30px !important; height: 30px !important; line-height: 30px !important; font-size: 15px !important; }
+        .leaflet-control-zoom a:hover { background: #16203A !important; color: #D4AF37 !important; }
+        .leaflet-control-attribution { background: rgba(10,15,30,0.78) !important; color: #6B7A99 !important; font-size: 9px !important; padding: 2px 6px !important; border-radius: 8px 0 0 0 !important; }
+        .leaflet-control-attribution a { color: #8fa3c7 !important; }
+        @supports (height: 100dvh) { .app-root { height: 100dvh; } .hero-h { height: calc(100dvh - 196px); } }
         @media (min-width: 900px) {
-          .hero-h { height: calc(100vh - 214px); }
-          @supports (height: 100dvh) { .hero-h { height: calc(100dvh - 214px); } }
+          .hero-h { height: calc(100vh - 248px); }
+          @supports (height: 100dvh) { .hero-h { height: calc(100dvh - 248px); } }
         }
         .slide-up { animation: slideUp 0.2s ease; }
         .page-enter-next { animation: pageNext 0.32s cubic-bezier(0.2, 0.8, 0.3, 1); }
@@ -2028,11 +2303,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             {/* Search */}
             
-            {/* Saved */}
-            <button onClick={() => setActive("explore")} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8, position: "relative" }} title="Saved">
-              ♡
-              {savedItems.length > 0 && <span style={{ position: "absolute", top: 4, right: 4, background: C.accent, color: "#fff", fontSize: 9, fontWeight: 700, width: 14, height: 14, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{savedItems.length}</span>}
-            </button>
             {/* Login (mobile only — sits next to hamburger nav) */}
             <button className="mobile-only" onClick={() => { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }}
               style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8 }} title="Login">
@@ -2059,6 +2329,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
         {/* Weather — always visible, multiple cities, auto-loads */}
         <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+        <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
 
         {/* Search results */}
         {search.length > 1 && searchResults.length > 0 && (
@@ -2083,29 +2354,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
         <div className="desktop-only" style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "relative" }}>
           <div onScroll={e => setTabArrow(e.target.scrollLeft + e.target.clientWidth < e.target.scrollWidth - 8)}
             style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content" }}>
-            {[
-              { id: "home", label: "🧭 Explore" },
-              { id: "plans", label: "🗺 Plans" },
-              { id: "essentials", label: "✓ Essentials" },
-              { id: "explore", label: "🏪 Merchandise" },
-              { id: "craft", label: "◈ Booking" },
-              { id: "attractions", label: "🆓 Free Entrance" },
-              { id: "events", label: "◈ Events" },
-              { id: "food", label: "🍽 Food" },
-              { id: "nightlife", label: "🍺 Nightlife" },
-              { id: "roadtrips", label: "🚗 Road Trips" },
-              { id: "visits", label: "◉ Towns" },
-            ].map(item => (
+          <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content", alignItems: "center" }}>
+            {NAV_ITEMS.map(item => item.id === "ai" ? (
+              <button key={item.id} onClick={() => goTab("ai")}
+                style={{ background: active === "ai" ? "#fff" : `linear-gradient(135deg, ${C.gold}, ${C.accent})`, border: "none", color: active === "ai" ? C.accent : "#fff", padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", borderRadius: 100, margin: "8px", boxShadow: active === "ai" ? "none" : `0 2px 10px ${C.gold}44` }}>
+                {item.label}
+              </button>
+            ) : (
               <button key={item.id} onClick={() => goTab(item.id)}
                 style={{ background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.accent : "transparent"}`, color: active === item.id ? C.text : C.muted, padding: "12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", transition: "all 0.2s" }}>
                 {item.label}
               </button>
             ))}
-            <button onClick={() => goTab("ai")}
-              style={{ background: active === "ai" ? "#fff" : C.accent, border: "none", color: active === "ai" ? C.accent : "#fff", padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", borderRadius: 100, margin: "8px" }}>
-              ✦ Ask AI
-            </button>
           </div>
           </div>
           {tabArrow && (
@@ -2123,28 +2383,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 220, boxShadow: "0 8px 32px rgba(0,0,0,0.6)", maxHeight: "70vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
             <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }`}</style>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>Navigate</div>
-            {[
-              { id: "home", label: "🧭 Explore" },
-              { id: "plans", label: "🗺 Plans" },
-              { id: "essentials", label: "✓ Essentials" },
-              { id: "explore", label: "🏪 Merchandise" },
-              { id: "craft", label: "◈ Booking" },
-              { id: "attractions", label: "🆓 Free Entrance" },
-              { id: "events", label: "◈ Events" },
-              { id: "food", label: "🍽 Food" },
-              { id: "nightlife", label: "🍺 Nightlife" },
-              { id: "roadtrips", label: "🚗 Road Trips" },
-              { id: "visits", label: "◉ Towns" },
-            ].map((item, i) => (
+            {NAV_ITEMS.map((item, i) => item.id === "ai" ? (
+              <button key={item.id} onClick={() => { setShowMenu(false); goTab("ai"); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 6, marginBottom: 2, boxShadow: `0 2px 10px ${C.gold}33`, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
+                {item.label}
+              </button>
+            ) : (
               <button key={item.id} onClick={() => { setShowMenu(false); goTab(item.id); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: active === item.id ? `${C.accent}22` : "transparent", color: active === item.id ? C.text : C.light, border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
                 {item.label}
               </button>
             ))}
-            <button onClick={() => { setShowMenu(false); goTab("ai"); }}
-              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: C.accent, color: "#fff", border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 6, marginBottom: 2 }}>
-              ✦ Ask AI
-            </button>
             <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
             {[
               { id: "login", label: "👤 Login", action: "login" },
@@ -2270,6 +2519,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
       <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
       <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
       <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
+      <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
 
       {/* ── BOOKING DETAIL PAGE ───────────────────────────── */}
       {craftDetail && (
