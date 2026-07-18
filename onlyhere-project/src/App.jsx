@@ -13,21 +13,24 @@ import { essentials } from "./data/essentials.js";
 import { handmadeCraftShops } from "./data/handmade.js";
 import { roadTrips } from "./data/roadTrips.js";
 import { seasonalItineraries } from "./data/seasonalItineraries.js";
+import { C } from "./theme.js";
+import { getSeason, getEventDate, isUpcoming, isCurrentlyLive } from "./utils/dateHelpers.js";
+import { weatherIcon } from "./utils/weatherIcon.js";
+import { TOWN_COORDS, DK_SHAPES, dkProject, DK_PATHS } from "./utils/mapGeometry.js";
+import { WEATHER_CITIES } from "./data/weatherCities.js";
+import { DetailPage } from "./components/DetailPage.jsx";
+import { WeatherStrip } from "./components/WeatherStrip.jsx";
+import { DKLocator } from "./components/DKLocator.jsx";
+import { LeafletMap } from "./components/LeafletMap.jsx";
+import { PageHero } from "./components/PageHero.jsx";
+import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip.jsx";
+import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip.jsx";
+import { StoreBadge } from "./components/StoreBadge.jsx";
 
 const SUPABASE_URL = "https://vpxfahjnerkkkoueovhl.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweGZhaGpuZXJra2tvdWVvdmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4OTYsImV4cCI6MjA5NTMxMDg5Nn0.-GgXeog0DufIz6WNXn_8pIzxmQfkHRK3Lz8V71O-v_c";
 
 // ─── COLORS ───────────────────────────────────────────────────
-const C = {
-  bg: "#0A0F1E",         // deep navy
-  surface: "#111827",    // card background
-  border: "#1E2A3A",     // border
-  accent: "#C8102E",     // Danish red
-  gold: "#D4AF37",       // gold accent
-  text: "#F0F4FF",       // primary text
-  muted: "#6B7A99",      // muted text
-  light: "#9AA5BE",      // light text
-};
 
 const cities = [
   { id: 4, name: "Copenhagen", country: "Denmark", flagCode: "dk", color: C.accent, tag: "Nordic Minimal", vibe: "Quiet luxury, built to last forever", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=800&q=80",
@@ -63,27 +66,7 @@ const campingSpots = [
 ];
 
 
-const getSeason = () => {
-  const m = new Date().getMonth(); // 0=Jan
-  if ([11, 0, 1].includes(m)) return "winter";
-  if ([2, 3, 4].includes(m)) return "spring";
-  if ([5, 6, 7].includes(m)) return "summer";
-  return "autumn";
-};
 
-const getEventDate = (dateStr, dateEnd) => {
-  const d = new Date(dateStr);
-  const opts = { day: "numeric", month: "short" };
-  if (dateEnd) return d.toLocaleDateString("en-GB", opts) + " – " + new Date(dateEnd).toLocaleDateString("en-GB", opts);
-  return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
-};
-const isUpcoming = (d) => new Date(d) >= new Date();
-const isCurrentlyLive = (start, end) => {
-  const now = new Date();
-  const s = new Date(start);
-  const e = end ? new Date(end) : s;
-  return s <= now && now <= e;
-};
 const daysUntil = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
 
 const PRODUCT_COORDS = {
@@ -91,407 +74,27 @@ const PRODUCT_COORDS = {
   21: [55.6820, 12.5710], 22: [55.6795, 12.5830], 23: [55.6980, 12.5500],
 };
 
-const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo }) => {
-  if (!item) return null;
-  const color = item.color || C.accent;
-  return (
-    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 290, overflowY: "auto" }}>
-      <div style={{ height: 190, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
-        <span style={{ fontSize: 64, opacity: item.photo ? 0.25 : 1, position: item.photo ? "absolute" : "static" }}>{item.emoji}</span>
-        {item.photo && (
-          <img src={item.photo} alt={item.name} onError={e => { e.target.style.display = "none"; }}
-            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
-        )}
-        <button onClick={onClose}
-          style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          ‹ Back
-        </button>
-        {item.type && <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", right: 14, background: color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{item.type}</div>}
-      </div>
-      <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
-          {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : item.region}
-        </div>
-        <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 8 }}>{item.name}</div>
 
-        {kind === "nightlife" && item.crowd && (
-          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 18 }}>
-            👥 {item.crowd}
-          </div>
-        )}
-        {kind === "free" && item.popularityTag && (
-          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: item.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: item.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.surface, border: `1px solid ${item.popularityTag === "Hidden Gem" ? C.gold : C.border}`, padding: "5px 12px", borderRadius: 100, marginBottom: 18 }}>
-            {item.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"} · FREE
-          </div>
-        )}
-        {kind === "food" && (
-          <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: color, background: `${color}18`, padding: "5px 12px", borderRadius: 100 }}>{item.category}</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, background: `${C.gold}18`, padding: "5px 12px", borderRadius: 100 }}>{item.price}</span>
-          </div>
-        )}
 
-        {kind === "event" && (
-          <div style={{ marginBottom: 12 }}>
-            {item.tier && (
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100, marginRight: 8, display: "inline-block", marginBottom: 8,
-                color: item.tier === "Can't miss out" ? "#0A0F1E" : item.tier === "Worth it for longer stays" ? "#FFB347" : "#4CAF50",
-                background: item.tier === "Can't miss out" ? C.gold : item.tier === "Worth it for longer stays" ? "#FFB34722" : "#4CAF5022",
-              }}>
-                {item.tier === "Can't miss out" ? "⭐ Can't miss out" : item.tier === "Worth it for longer stays" ? "◷ Worth it for longer stays" : "👍 Recommended"}
-              </span>
-            )}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>{getEventDate(item.date, item.dateEnd)}</span>
-              <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>
-              <span style={{ fontSize: 12, color: C.muted }}>{item.travelTime} from CPH</span>
-            </div>
-          </div>
-        )}
-        {kind === "town" && (
-          <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{item.travelTime} from CPH</div>
-        )}
 
-        <div style={{ fontSize: 14, color: C.light, lineHeight: 1.75, marginBottom: 20 }}>{item.desc}</div>
-
-        {item.blogBody && item.blogBody.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
-            {item.blogBody.map((block, i) => (
-              block.type === "image" ? (
-                <div key={i} style={{ marginBottom: 16 }}>
-                  <img src={block.src} alt={block.caption || item.name} onError={e => { e.target.style.display = "none"; }}
-                    style={{ width: "100%", borderRadius: 14, display: "block" }} />
-                  {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
-                </div>
-              ) : block.type === "heading" ? (
-                <div key={i} style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginTop: 20, marginBottom: 10 }}>{block.content}</div>
-              ) : (
-                <div key={i} style={{ fontSize: 14, color: C.light, lineHeight: 1.8, marginBottom: 14 }}>{block.content}</div>
-              )
-            ))}
-          </div>
-        )}
-
-        {kind === "town" && item.highlight && (
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>◆ Gemlyx Find</div>
-            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.65 }}>{item.highlight}</div>
-          </div>
-        )}
-        {kind === "event" && item.tags && (
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 26 }}>
-            {item.tags.map(t => <span key={t} style={{ fontSize: 12, color: C.text, background: C.surface, border: `1px solid ${C.border}`, padding: "7px 13px", borderRadius: 100 }}>{t}</span>)}
-          </div>
-        )}
-        {(kind === "nightlife" || kind === "food") && item.tip && (
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 22, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
-            💡 {item.tip}
-          </div>
-        )}
-
-        <button onClick={() => checkLiveInfo(item)} disabled={liveInfoLoading === item.name}
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: liveInfo?.[item.name] ? 12 : 14 }}>
-          {liveInfoLoading === item.name ? "Checking..." : "🔍 Check live info"}
-        </button>
-        {liveInfo?.[item.name] && (
-          <div style={{ background: `${color}18`, border: `1px solid ${color}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
-            {liveInfo[item.name]}
-          </div>
-        )}
-
-        {kind === "free" && item.website && (
-          <a href={item.website} target="_blank" rel="noreferrer"
-            style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
-            🌐 Visit website
-          </a>
-        )}
-
-        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.mapHint || `${item.name} ${item.city || item.location || ""} Denmark`)}`} target="_blank" rel="noreferrer"
-          style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
-          ↗ Get Directions
-        </a>
-      </div>
-    </div>
-  );
-};
-
-const weatherIcon = (code) => {
-  if (!code) return "🌤";
-  if (code.includes("rain") || code.includes("sleet")) return "🌧";
-  if (code.includes("snow")) return "❄️";
-  if (code.includes("thunder")) return "⛈";
-  if (code.includes("cloudy") || code.includes("fog")) return "☁️";
-  if (code.includes("clearsky") || code.includes("fair")) return "☀️";
-  return "⛅";
-};
-
-const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoading, checkWeather }) => {
-  const data = weather[weatherKey];
-  useEffect(() => {
-    if (!data && weatherLoading !== weatherKey) checkWeather(weatherKey, lat, lon);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weatherKey]);
-
-  return (
-    <div style={{ background: C.surface, borderRadius: 16, padding: "16px", border: `1px solid ${C.border}`, marginBottom: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{label}</div>
-        {weatherLoading === weatherKey && <span style={{ fontSize: 11, color: C.muted }}>Loading...</span>}
-      </div>
-
-      {data && !data.error ? (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
-            <span style={{ fontSize: 40 }}>{weatherIcon(data.condition)}</span>
-            <div>
-              <div style={{ fontSize: 30, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1 }}>{Math.round(data.temperature_c)}°C</div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Wind {data.wind_speed_ms} m/s · Humidity {data.humidity_percent}%</div>
-            </div>
-          </div>
-
-          {data.warnings?.length > 0 && data.warnings.map((w, i) => (
-            <div key={i} style={{ background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 10, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#FFB347", lineHeight: 1.5 }}>
-              ◷ {w.type}: {w.detaljer}
-            </div>
-          ))}
-
-          {data.forecast?.length > 0 && (
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-              {data.forecast.map((day, i) => {
-                const d = new Date(day.date);
-                const label = i === 0 ? "Today" : d.toLocaleDateString("en", { weekday: "short" });
-                return (
-                  <div key={day.date} style={{ flexShrink: 0, background: C.bg, borderRadius: 10, padding: "8px 10px", textAlign: "center", minWidth: 56 }}>
-                    <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, marginBottom: 4 }}>{label}</div>
-                    <div style={{ fontSize: 16, marginBottom: 4 }}>{weatherIcon(day.condition)}</div>
-                    <div style={{ fontSize: 12, color: C.text, fontWeight: 700 }}>{Math.round(day.temperature_c)}°</div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      ) : data?.error ? (
-        <div style={{ fontSize: 12, color: C.muted }}>Couldn't fetch weather — check /api/weather.js is deployed with a working User-Agent.</div>
-      ) : (
-        <div style={{ fontSize: 12, color: C.muted }}>Loading forecast...</div>
-      )}
-    </div>
-  );
-};
-
-const WEATHER_CITIES = [
-  { key: "copenhagen", label: "Copenhagen", lat: 55.6761, lon: 12.5683 },
-  { key: "aarhus", label: "Aarhus", lat: 56.1629, lon: 10.2039 },
-  { key: "aalborg", label: "Aalborg", lat: 57.0488, lon: 9.9217 },
-  { key: "odense", label: "Odense", lat: 55.4038, lon: 10.4024 },
-];
 
 // ─── MAPS (Google-free) ──────────────────────────────────────
 // Town-centre coordinates (approximate, town-level) for the SVG locator maps.
-const TOWN_COORDS = {
-  "Copenhagen": [55.676, 12.568], "Aarhus": [56.157, 10.210], "Aalborg": [57.048, 9.919],
-  "Nørresundby (Aalborg)": [57.059, 9.922], "Odense": [55.396, 10.389], "Roskilde": [55.642, 12.088],
-  "Gilleleje": [56.126, 12.310], "Tisvildeleje": [56.043, 12.078], "Liseleje": [56.076, 11.964],
-  "Hundested": [55.964, 11.851], "Frederiksværk": [55.971, 12.022], "Kerteminde": [55.449, 10.658],
-  "Maribo": [54.777, 11.500], "Præstø": [55.123, 12.045], "Jelling": [55.756, 9.420],
-  "Skanderborg": [56.036, 9.926], "Vejle": [55.709, 9.536], "Tønder": [54.933, 8.864],
-  "Slagelse": [55.403, 11.354], "Samsø": [55.836, 10.604], "Løgstør": [56.964, 9.256],
-  "Sønderborg": [54.909, 9.792], "Ribe": [55.328, 8.765], "Dragør": [55.593, 12.669],
-  "Ærøskøbing": [54.888, 10.411], "Skagen": [57.720, 10.590], "Faaborg": [55.095, 10.243],
-  "Gudhjem": [55.214, 14.972], "Sønderho": [55.337, 8.474], "Mariager": [56.649, 9.977],
-  "Sæby": [57.331, 10.519], "Thorup Strand": [57.143, 9.106], "Ebeltoft": [56.195, 10.679],
-  "Nyhavn": [55.680, 12.590],
-};
 
 // Simplified Denmark coastline polygons as [lat, lon] vertices (Jutland, Funen, Zealand, Lolland-Falster, Bornholm)
-const DK_SHAPES = [
-  [[54.90,8.65],[55.10,8.60],[55.35,8.45],[55.56,8.08],[55.90,8.12],[56.30,8.10],[56.70,8.21],[57.00,8.40],[57.12,8.62],[57.45,9.60],[57.60,10.10],[57.73,10.60],[57.44,10.54],[57.33,10.52],[56.90,10.30],[56.70,10.35],[56.50,10.85],[56.42,10.95],[56.25,10.80],[56.15,10.25],[55.85,10.05],[55.70,9.75],[55.55,9.72],[55.30,9.70],[55.05,9.90],[54.91,9.79],[54.85,9.40]],
-  [[55.50,9.80],[55.60,10.10],[55.62,10.32],[55.50,10.62],[55.30,10.80],[55.05,10.68],[55.02,10.25],[55.18,9.90]],
-  [[55.97,11.28],[56.05,11.65],[56.10,12.05],[56.13,12.31],[55.95,12.55],[55.68,12.65],[55.45,12.50],[55.28,12.45],[55.15,12.20],[54.96,11.85],[55.10,11.35],[55.20,11.08],[55.45,11.05],[55.70,11.10]],
-  [[54.83,11.05],[54.95,11.50],[54.90,11.90],[54.70,12.00],[54.56,11.93],[54.65,11.35]],
-  [[55.30,14.68],[55.30,15.15],[55.06,15.19],[54.99,14.90],[55.15,14.68]],
-];
 
 // Equirectangular projection scaled to km at Denmark's latitude, so proportions stay honest.
-const dkProject = (lat, lon) => [(lon - 8.0) * 62.06, (57.85 - lat) * 111.32];
-const DK_PATHS = DK_SHAPES.map(shape => shape.map(([la, lo]) => dkProject(la, lo).map(n => n.toFixed(1)).join(",")).join(" "));
 
 // Tiny self-drawn Denmark locator — replaces the old Google mini-map iframes.
 // Zero network requests, no API keys, no tile-usage-policy concerns.
-const DKLocator = ({ town, color }) => {
-  const coords = TOWN_COORDS[town];
-  const dot = coords ? dkProject(coords[0], coords[1]) : null;
-  return (
-    <svg viewBox="-12 -12 477 397" style={{ width: "100%", height: "100%", display: "block", background: "#0D1526" }} aria-label={town ? `Location of ${town} in Denmark` : "Map of Denmark"}>
-      {DK_PATHS.map((p, i) => <polygon key={i} points={p} fill="#1A2438" stroke="#2A3A55" strokeWidth="3" />)}
-      {dot && (
-        <>
-          <circle cx={dot[0]} cy={dot[1]} r="26" fill={`${color || C.gold}33`} />
-          <circle cx={dot[0]} cy={dot[1]} r="11" fill={color || C.gold} stroke="#0D1526" strokeWidth="3" />
-        </>
-      )}
-    </svg>
-  );
-};
 
 // One real interactive map (Explore tab) — Leaflet + OpenStreetMap tiles. Free, no key, no billing account.
-const LeafletMap = ({ center, zoom, overlayLabel }) => {
-  const holderRef = useRef(null);
-  const mapRef = useRef(null);
-  useEffect(() => {
-    if (!holderRef.current || mapRef.current) return;
-    const map = L.map(holderRef.current, { zoomControl: false }).setView(center, zoom);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      className: "gemlyx-tiles",
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
-    L.control.zoom({ position: "bottomleft" }).addTo(map);
-    mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  useEffect(() => {
-    if (mapRef.current) mapRef.current.setView(center, zoom);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center[0], center[1], zoom]);
-  return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <div ref={holderRef} style={{ width: "100%", height: "100%" }} />
-      {overlayLabel && (
-        <div style={{ position: "absolute", top: 8, left: 8, right: 8, zIndex: 500, background: "rgba(10,15,30,0.88)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", fontSize: 12, color: C.text, fontWeight: 600, pointerEvents: "none" }}>
-          📍 {overlayLabel}
-        </div>
-      )}
-    </div>
-  );
-};
 
-const PageHero = ({ src, emoji, color }) => (
-  <div style={{ height: 130, borderRadius: 14, overflow: "hidden", marginBottom: 18, position: "relative", background: `linear-gradient(135deg, ${color}33 0%, #0A0F1E 100%)` }}>
-    <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 46, opacity: 0.22 }}>{emoji}</span>
-    <img src={src} alt="" onError={e => { e.target.style.display = "none"; }}
-      style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
-  </div>
-);
 
-const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo }) => {
-  const [open, setOpen] = useState(false);
-  const allTracked = [...events, ...majorEvents, ...vikingEvents];
-  const currentlyLive = allTracked.filter(e => isCurrentlyLive(e.date, e.dateEnd));
-  const comingSoon = allTracked.filter(e => isUpcoming(e.date) && !isCurrentlyLive(e.date, e.dateEnd)).sort((a, b) => new Date(a.date) - new Date(b.date));
-  const headline = currentlyLive[0] || comingSoon[0];
-  if (!headline) return null;
 
-  const EventRow = (e) => (
-    <div key={e.name} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 0" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: liveInfo?.[e.name] ? 8 : 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{e.emoji} {e.name}</div>
-        <button onClick={() => checkLiveInfo(e)} disabled={liveInfoLoading === e.name}
-          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 100, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
-          {liveInfoLoading === e.name ? "Checking..." : "🔍 Check"}
-        </button>
-      </div>
-      {liveInfo?.[e.name] && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{liveInfo[e.name]}</div>}
-    </div>
-  );
 
-  return (
-    <div style={{ marginTop: 2 }}>
-      <button onClick={() => setOpen(true)}
-        style={{ display: "flex", alignItems: "center", gap: 7, background: "none", border: "none", padding: "6px 0", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", width: "100%", textAlign: "left" }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: currentlyLive.length ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: currentlyLive.length ? "0 0 6px #4CAF50" : "none" }} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: currentlyLive.length ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0 }}>{currentlyLive.length ? "Live" : "Coming"}</span>
-        <span style={{ fontSize: 13, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{headline.emoji} {headline.name}</span>
-        <span style={{ marginLeft: "auto", color: C.muted, fontSize: 13, flexShrink: 0 }}>›</span>
-      </button>
 
-      {open && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpen(false)}>
-          <div style={{ width: "100%", maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-            {currentlyLive.length > 0 && (
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 14 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4CAF50", flexShrink: 0 }} />
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Current Live Events</div>
-                </div>
-                {currentlyLive.slice(0, 4).map(EventRow)}
-              </div>
-            )}
-            {comingSoon.length > 0 && (
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 14 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.gold, flexShrink: 0 }} />
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Coming Events</div>
-                </div>
-                {comingSoon.slice(0, 4).map(EventRow)}
-              </div>
-            )}
-            <button onClick={() => setOpen(false)} style={{ display: "block", width: "100%", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather }) => {
-  const [openCity, setOpenCity] = useState(null);
-  useEffect(() => {
-    WEATHER_CITIES.forEach(c => { if (!weather[c.key] && weatherLoading !== c.key) checkWeather(c.key, c.lat, c.lon); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const openCityData = WEATHER_CITIES.find(c => c.key === openCity);
-
-  return (
-    <div style={{ display: "flex", gap: 14, overflowX: "auto", padding: "10px 0", marginTop: 4 }}>
-      {WEATHER_CITIES.map(c => {
-        const d = weather[c.key];
-        return (
-          <button key={c.key} onClick={() => setOpenCity(c.key)}
-            style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            <span style={{ fontSize: 15 }}>{d && !d.error ? weatherIcon(d.condition) : "⏳"}</span>
-            <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{c.label}</span>
-            <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{d && !d.error ? `${Math.round(d.temperature_c)}°` : "--"}</span>
-          </button>
-        );
-      })}
-
-      {openCityData && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpenCity(null)}>
-          <div style={{ width: "100%", maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-            <WeatherStrip label={`🌤 ${openCityData.label}`} weatherKey={openCityData.key} lat={openCityData.lat} lon={openCityData.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
-            <button onClick={() => setOpenCity(null)} style={{ display: "block", width: "100%", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const StoreBadge = ({ type, href }) => (
-  <a href={href} target="_blank" rel="noreferrer"
-    style={{ display: "inline-flex", alignItems: "center", gap: 9, background: "#000", border: "1px solid #3a3a3a", borderRadius: 8, padding: "7px 13px", textDecoration: "none" }}>
-    {type === "ios" ? (
-      <svg width="19" height="22" viewBox="0 0 24 28" fill="#fff"><path d="M19.6 14.7c0-3.2 2.6-4.7 2.7-4.8-1.5-2.2-3.8-2.5-4.6-2.5-2-.2-3.8 1.2-4.8 1.2-1 0-2.5-1.1-4.2-1.1-2.1 0-4.1 1.2-5.2 3.2-2.2 3.8-.6 9.5 1.6 12.6 1.1 1.5 2.3 3.2 4 3.2 1.6-.1 2.2-1 4.1-1 1.9 0 2.5 1 4.2 1 1.7 0 2.8-1.6 3.8-3.1 1.2-1.8 1.7-3.5 1.7-3.6-.1 0-3.3-1.3-3.3-5.1zM16.4 4.9c.9-1.1 1.5-2.5 1.3-4-1.3.1-2.8.9-3.7 1.9-.8 1-1.5 2.5-1.3 3.9 1.4.1 2.8-.7 3.7-1.8z"/></svg>
-    ) : (
-      <svg width="18" height="20" viewBox="0 0 24 26"><path fill="#00D7FE" d="M1.3.6C1 1 .8 1.5.8 2.2v21.6c0 .7.2 1.2.5 1.6l.1.1L14.6 12.3v-.3L1.4.5l-.1.1z"/><path fill="#FFCE00" d="M19 16.8l-4.4-4.5v-.3L19 7.5l.1.1 5.2 3c1.5.8 1.5 2.2 0 3.1l-5.2 3-.1.1z"/><path fill="#FF3A44" d="M19.1 16.7L14.6 12 1.3 25.4c.5.5 1.3.6 2.2.1l15.6-8.8"/><path fill="#00F076" d="M19.1 7.4L3.5.6C2.6.1 1.8.2 1.3.7L14.6 12l4.5-4.6z"/></svg>
-    )}
-    <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
-      <span style={{ fontSize: 8, color: "#ccc", letterSpacing: 0.4 }}>{type === "ios" ? "Download on the" : "GET IT ON"}</span>
-      <span style={{ fontSize: 13, color: "#fff", fontWeight: 700, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{type === "ios" ? "App Store" : "Google Play"}</span>
-    </span>
-  </a>
-);
-
-const APP_VERSION = "v2.77 — Step 1 of file split: 12 data files extracted (2733→2283 lines)";
+const APP_VERSION = "v2.78 — Step 2: components split out (2283→1887 lines)";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -1046,7 +649,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.77 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.78 — Jul 2026</div>
               </div>
             </div>
           )}
