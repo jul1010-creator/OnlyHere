@@ -1,4 +1,5 @@
 import { C } from "../theme.js";
+import { getEventDate } from "../utils/dateHelpers.js";
 
 export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo }) => {
   if (!item) return null;

@@ -94,7 +94,7 @@ const PRODUCT_COORDS = {
 
 
 
-const APP_VERSION = "v2.78 — Step 2: components split out (2283→1887 lines)";
+const APP_VERSION = "v2.79 — FIX: DetailPage missing getEventDate import (caused blank screen)";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -649,7 +649,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.78 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.79 — Jul 2026</div>
               </div>
             </div>
           )}
