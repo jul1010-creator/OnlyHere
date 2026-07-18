@@ -1,0 +1,39 @@
+name: Build Check
+
+# Runs a real build on every push and pull request — catches broken code
+# before Vercel deploys it, and before anyone has to notice manually.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build the app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: onlyhere-project
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: onlyhere-project/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (this is the real check)
+        run: npm run build
+
+      - name: Report success
+        if: success()
+        run: echo "✅ Build passed — safe to deploy."
