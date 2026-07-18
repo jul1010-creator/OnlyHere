@@ -602,7 +602,33 @@ const WEATHER_CITIES = [
 
 
 
-const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo }) => {
+const isInDenmark = (coords) => coords && typeof coords === "object" &&
+  coords.lat >= 54.4 && coords.lat <= 57.9 && coords.lon >= 7.9 && coords.lon <= 15.3;
+
+// Straight-line km distance from the user to a named town, falling back to the
+// existing "from Copenhagen" travel-time string whenever it can't be resolved.
+const travelLabel = (userCoords, townName, fallbackTravelTime) => {
+  if (isInDenmark(userCoords) && townName && TOWN_COORDS[townName]) {
+    const [tLat, tLon] = TOWN_COORDS[townName];
+    const dLat = (tLat - userCoords.lat) * 111.32;
+    const dLon = (tLon - userCoords.lon) * 62.06;
+    const km = Math.round(Math.sqrt(dLat * dLat + dLon * dLon));
+    return km < 2 ? "~2 km from you" : `~${km} km from you`;
+  }
+  return `${fallbackTravelTime} from CPH`;
+};
+
+const stripMarkdown = (text) => {
+  if (!text) return text;
+  return text
+    .replace(/^#{1,6}\s+/gm, "")       // headings
+    .replace(/\*\*(.+?)\*\*/g, "$1")    // bold
+    .replace(/\*(.+?)\*/g, "$1")        // italics
+    .replace(/^[-•]\s+/gm, "")          // bullet dashes
+    .replace(/^\d+\.\s+/gm, "");        // numbered lists
+};
+
+const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   return (
@@ -656,7 +682,7 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>{getEventDate(item.date, item.dateEnd)}</span>
               <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>
-              <span style={{ fontSize: 12, color: C.muted }}>{item.travelTime} from CPH</span>
+              <span style={{ fontSize: 12, color: C.muted }}>{travelLabel(userCoords, item.town, item.travelTime)}</span>
             </div>
           </div>
         )}
@@ -690,7 +716,7 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
           </div>
         )}
         {kind === "town" && (
-          <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{item.travelTime} from CPH</div>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{travelLabel(userCoords, item.name, item.travelTime)}</div>
         )}
 
         <div style={{ fontSize: 14, color: C.light, lineHeight: 1.75, marginBottom: 20 }}>{item.desc}</div>
@@ -877,41 +903,77 @@ const PageHero = ({ src, emoji, color }) => (
 
 
 
-const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo }) => {
+const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearYou, findNearYou, setEventDetail, setFreeDetail, setFoodDetail }) => {
   const [openEvent, setOpenEvent] = useState(null);
   const allTracked = [...events, ...majorEvents, ...vikingEvents];
   const currentlyLive = allTracked.filter(e => isCurrentlyLive(e.date, e.dateEnd));
   const comingSoon = allTracked.filter(e => isUpcoming(e.date) && !isCurrentlyLive(e.date, e.dateEnd)).sort((a, b) => new Date(a.date) - new Date(b.date));
   const showList = currentlyLive.length > 0 ? currentlyLive : comingSoon.slice(0, 6);
-  if (showList.length === 0) return null;
   const isLive = currentlyLive.length > 0;
 
   return (
     <div style={{ marginTop: 4, marginBottom: 2 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: isLive ? "0 0 6px #4CAF50" : "none" }} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: isLive ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5 }}>{isLive ? "Live Events" : "Coming Events"}</span>
-      </div>
-      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-        {showList.map(e => (
-          <button key={e.name} onClick={() => setOpenEvent(e)}
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            <span style={{ fontSize: 13 }}>{e.emoji}</span>
-            <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{e.name}</span>
-          </button>
-        ))}
-      </div>
+      {showList.length > 0 && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: isLive ? "0 0 6px #4CAF50" : "none" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: isLive ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5 }}>{isLive ? "Live Events" : "Coming Events"}</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, marginBottom: 8 }}>
+            {showList.map(e => (
+              <button key={e.name} onClick={() => setOpenEvent(e)}
+                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <span style={{ fontSize: 13 }}>{e.emoji}</span>
+                <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{e.name}</span>
+                <span style={{ fontSize: 10, color: C.muted, whiteSpace: "nowrap" }}>{getEventDate(e.date, e.dateEnd)}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!nearYou && (
+        <button onClick={findNearYou} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <span style={{ fontSize: 12, color: C.light, fontWeight: 600 }}>📍 What's closest to me?</span>
+        </button>
+      )}
+      {nearYou === "loading" && <div style={{ fontSize: 12, color: C.muted, padding: "4px 0" }}>Finding your location...</div>}
+      {nearYou === "denied" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+          <span style={{ fontSize: 12, color: C.muted }}>Couldn't get your location.</span>
+          <button onClick={findNearYou} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try again</button>
+        </div>
+      )}
+      {nearYou && typeof nearYou === "object" && (
+        <div style={{ marginTop: 2 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 6 }}>📍 Closest to you{nearYou.matches.length > 0 ? ` — ${nearYou.matches.length} thing${nearYou.matches.length > 1 ? "s" : ""} within reach` : ""}</div>
+          {nearYou.matches.length > 0 && (
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+              {nearYou.matches.map(item => (
+                <button key={`${item._kind}-${item.name}`}
+                  onClick={() => { item._kind === "event" ? setEventDetail(item) : item._kind === "free" ? setFreeDetail(item) : setFoodDetail(item); }}
+                  style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <span style={{ fontSize: 13 }}>{item.emoji}</span>
+                  <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{item.name}</span>
+                  <span style={{ fontSize: 10, color: C.muted, whiteSpace: "nowrap" }}>{item._kind === "event" ? getEventDate(item.date, item.dateEnd) : `~${Math.round(item._km)} km`}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {openEvent && (
         <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpenEvent(null)}>
           <div style={{ width: "100%", maxWidth: 420, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px" }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: liveInfo?.[openEvent.name] ? 12 : 4 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{openEvent.emoji} {openEvent.name}</div>
               <button onClick={() => checkLiveInfo(openEvent)} disabled={liveInfoLoading === openEvent.name}
                 style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 100, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
                 {liveInfoLoading === openEvent.name ? "Checking..." : "🔍 Check"}
               </button>
             </div>
+            <div style={{ fontSize: 12, color: C.gold, fontWeight: 600, marginBottom: liveInfo?.[openEvent.name] ? 12 : 4 }}>{getEventDate(openEvent.date, openEvent.dateEnd)}</div>
             {liveInfo?.[openEvent.name] && <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 14 }}>{liveInfo[openEvent.name]}</div>}
             <button onClick={() => setOpenEvent(null)} style={{ display: "block", width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Close
@@ -1049,7 +1111,7 @@ const PRODUCT_COORDS = {
 
 
 
-const APP_VERSION = "v2.81 — At a Glance on cards, all live events shown, Near You geolocation";
+const APP_VERSION = "v2.84 — AI plain-text formatting, Closest to Me, Route Builder with save";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -1089,7 +1151,11 @@ export default function Gemlyx() {
   const checkLiveInfo = async (item) => {
     setLiveInfoLoading(item.name);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(item.name + " " + (item.location || item.town || "") + " opening hours events 2026")}`);
+      // Biases toward Instagram/Facebook when they're publicly indexed by search engines —
+      // this is NOT an Instagram/Facebook API integration (Meta doesn't allow open search of
+      // public content that way), just a search query nudge toward those platforms' public posts.
+      const query = `${item.name} ${item.location || item.town || ""} Instagram Facebook official page latest update opening hours events 2026`;
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || "No current updates found." }));
     } catch {
@@ -1117,6 +1183,17 @@ export default function Gemlyx() {
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
   const [foodDetail, setFoodDetail] = useState(null);
+  const [userCoords, setUserCoords] = useState(null); // null | "denied" | { lat, lon }
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => setUserCoords("denied"),
+      { timeout: 8000 }
+    );
+  }, []);
+
   const [nearYou, setNearYou] = useState(null); // null | "loading" | "denied" | { town, distanceKm, matches }
 
   const findNearYou = () => {
@@ -1125,24 +1202,94 @@ export default function Gemlyx() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
-        let nearestTown = null, nearestDist = Infinity;
-        for (const [name, [tLat, tLon]] of Object.entries(TOWN_COORDS)) {
+        // Rank every known town by real distance, not just the single nearest
+        const ranked = Object.entries(TOWN_COORDS).map(([name, [tLat, tLon]]) => {
           const dLat = (tLat - latitude) * 111.32;
           const dLon = (tLon - longitude) * 62.06;
-          const dist = Math.sqrt(dLat * dLat + dLon * dLon);
-          if (dist < nearestDist) { nearestDist = dist; nearestTown = name; }
-        }
+          return { name, km: Math.sqrt(dLat * dLat + dLon * dLon) };
+        }).sort((a, b) => a.km - b.km);
+
+        const nearestTown = ranked[0]?.name;
+        const closeTowns = ranked.filter(t => t.km <= 30).map(t => t.name); // realistic same-day-trip radius
+
         const allTracked = [...events, ...majorEvents, ...vikingEvents];
-        const matches = allTracked.filter(e => e.town === nearestTown || e.town?.includes(nearestTown) || nearestTown?.includes(e.town || ""))
+        const nearbyEvents = allTracked.filter(e => closeTowns.includes(e.town))
           .filter(e => isUpcoming(e.date) || isCurrentlyLive(e.date, e.dateEnd));
-        setNearYou({ town: nearestTown, distanceKm: Math.round(nearestDist), matches });
+        const nearbyFree = freeEntrance.filter(a => closeTowns.includes(a.city));
+        const nearbyFood = foodSpots.filter(f => closeTowns.some(t => f.location?.includes(t)));
+
+        // Combine, tag with distance from the town each thing belongs to, sort by that distance
+        const matches = [
+          ...nearbyEvents.map(e => ({ ...e, _kind: "event", _km: ranked.find(t => t.name === e.town)?.km ?? 999 })),
+          ...nearbyFree.map(a => ({ ...a, _kind: "free", _km: ranked.find(t => t.name === a.city)?.km ?? 999 })),
+          ...nearbyFood.map(f => ({ ...f, _kind: "food", _km: ranked.find(t => f.location?.includes(t.name))?.km ?? 999 })),
+        ].sort((a, b) => a._km - b._km).slice(0, 8);
+
+        setNearYou({ town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches, userLat: latitude, userLon: longitude });
       },
       () => setNearYou("denied"),
       { timeout: 8000 }
     );
   };
 
-  const [craftForm, setCraftForm] = useState({ name: "", email: "", interest: "", visit: "" });
+  const [routeStops, setRouteStops] = useState([]); // array of town names, in order
+  const [routeSummary, setRouteSummary] = useState(null);
+  const [routeSummaryLoading, setRouteSummaryLoading] = useState(false);
+  const [savedRoutes, setSavedRoutes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gemlyx_saved_routes") || "[]"); } catch { return []; }
+  });
+
+  const nearbyTownsRanked = (isInDenmark(userCoords)) ? Object.entries(TOWN_COORDS).map(([name, [tLat, tLon]]) => {
+    const dLat = (tLat - userCoords.lat) * 111.32;
+    const dLon = (tLon - userCoords.lon) * 62.06;
+    return { name, km: Math.round(Math.sqrt(dLat * dLat + dLon * dLon)) };
+  }).sort((a, b) => a.km - b.km).slice(0, 12) : [];
+
+  const toggleRouteStop = (townName) => {
+    setRouteSummary(null);
+    setRouteStops(prev => prev.includes(townName) ? prev.filter(t => t !== townName) : [...prev, townName]);
+  };
+
+  const generateRouteSummary = async () => {
+    if (routeStops.length < 2) return;
+    setRouteSummaryLoading(true);
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "You write short, warm, specific 2-sentence route descriptions for a Denmark travel app called Gemlyx, in plain conversational text with no markdown formatting, no headers, no asterisks." },
+            { role: "user", content: `Write a short, appealing 2-sentence description for a self-planned road trip starting near the traveler's current location, stopping at these towns in this order: ${routeStops.join(" → ")}. Mention the character of the route, not just the list.` }
+          ],
+          max_tokens: 150,
+        }),
+      });
+      const data = await res.json();
+      setRouteSummary(stripMarkdown(data.choices?.[0]?.message?.content) || "A custom route through " + routeStops.join(", ") + ".");
+    } catch {
+      setRouteSummary("A custom route through " + routeStops.join(", ") + ".");
+    }
+    setRouteSummaryLoading(false);
+  };
+
+  const saveCurrentRoute = () => {
+    const newRoute = { id: Date.now(), stops: routeStops, summary: routeSummary, savedAt: new Date().toISOString() };
+    const updated = [newRoute, ...savedRoutes].slice(0, 20);
+    setSavedRoutes(updated);
+    try { localStorage.setItem("gemlyx_saved_routes", JSON.stringify(updated)); } catch { /* storage unavailable, route still shown this session */ }
+    setToast("💾 Route saved");
+    setTimeout(() => setToast(null), 2200);
+  };
+
+  const deleteSavedRoute = (id) => {
+    const updated = savedRoutes.filter(r => r.id !== id);
+    setSavedRoutes(updated);
+    try { localStorage.setItem("gemlyx_saved_routes", JSON.stringify(updated)); } catch { /* ignore */ }
+  };
+
+
   const [craftStatus, setCraftStatus] = useState(null);
   const [emailSignup, setEmailSignup] = useState("");
   const [emailSubmitted, setEmailSubmitted] = useState(false);
@@ -1335,6 +1482,8 @@ export default function Gemlyx() {
 
       const sysPrompt = `You are Local Assist — Gemlyx's AI trip-planning guide for Denmark. Today is ${monthName} (${season} season in Denmark). Be warm, concise, and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
+FORMATTING — this is critical: write in plain conversational text only. This is a mobile chat bubble, not a document. Never use markdown — no # headings, no ** for bold, no bullet-point dashes, no numbered lists with periods. If you're listing a few things, write them into a flowing sentence ("Try Harry's Place for a hot dog, then walk to Torvehallerne for something more substantial") rather than a list. Use line breaks between short paragraphs instead of headers to organize longer answers.
+
 MERCHANDISE: ${productList}
 BOOKING/CRAFT EXPERIENCES: ${craftList}
 TOWNS: ${townList}
@@ -1484,7 +1633,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
         <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>
-        <span style={{ fontSize: 12, color: C.muted }}>{event.travelTime} from CPH</span>
+        <span style={{ fontSize: 12, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime)}</span>
         {event.ticketStatus === "sold_out" && <span style={{ fontSize: 10, fontWeight: 700, color: "#ff4444", background: "#ff444422", padding: "3px 9px", borderRadius: 100 }}>🔴 Sold out</span>}
         {event.ticketStatus === "selling_fast" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "3px 9px", borderRadius: 100 }}>🟡 Selling fast</span>}
         {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>🟢 Available</span>}
@@ -1524,7 +1673,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {aiMessages.slice(1).map((m, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                         <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.5, background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}` }}>
-                          {m.text}
+                          {m.role === "assistant" ? stripMarkdown(m.text) : m.text}
                         </div>
                       </div>
                     ))}
@@ -1636,7 +1785,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.81 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.84 — Jul 2026</div>
               </div>
             </div>
           )}
@@ -1702,7 +1851,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                               <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>{craft.price || "On request"}</div>
                             </div>
                           </div>
-                          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{craft.location} · {craft.travelTime} from CPH{craft.priceNote ? ` · ${craft.priceNote}` : ""}</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{craft.location} · {travelLabel(userCoords, craft.location, craft.travelTime)}{craft.priceNote ? ` · ${craft.priceNote}` : ""}</div>
                           <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{craft.desc.slice(0, 110)}{craft.desc.length > 110 ? "…" : ""}</div>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
@@ -1802,44 +1951,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about — we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
 
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px", marginBottom: 20 }}>
-                {!nearYou && (
-                  <button onClick={findNearYou} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: C.accent, border: "none", color: "#fff", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    📍 What's near me right now?
-                  </button>
-                )}
-                {nearYou === "loading" && (
-                  <div style={{ textAlign: "center", padding: "8px 0", fontSize: 13, color: C.muted }}>Finding your location...</div>
-                )}
-                {nearYou === "denied" && (
-                  <div style={{ textAlign: "center", padding: "4px 0" }}>
-                    <div style={{ fontSize: 13, color: C.muted, marginBottom: 10 }}>Couldn't get your location — check your browser's location permission and try again.</div>
-                    <button onClick={findNearYou} style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try again</button>
-                  </div>
-                )}
-                {nearYou && typeof nearYou === "object" && (
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 4 }}>📍 Near {nearYou.town}</div>
-                    {nearYou.matches.length > 0 ? (
-                      <>
-                        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{nearYou.matches.length} thing{nearYou.matches.length > 1 ? "s" : ""} happening close to you</div>
-                        {nearYou.matches.map(e => (
-                          <div key={e.name} onClick={() => setEventDetail(e)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${C.border}`, cursor: "pointer" }}>
-                            <span style={{ fontSize: 16 }}>{e.emoji}</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{e.name}</div>
-                              <div style={{ fontSize: 11, color: C.muted }}>{getEventDate(e.date, e.dateEnd)}</div>
-                            </div>
-                            <span style={{ color: C.muted, fontSize: 14 }}>›</span>
-                          </div>
-                        ))}
-                      </>
-                    ) : (
-                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>Nothing tracked right near {nearYou.town} at the moment — browse everything below instead.</div>
-                    )}
-                  </div>
-                )}
-              </div>
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
                 {[{ id: "local", label: "🏘 Local" }, { id: "major", label: "🌟 Major" }, { id: "viking", label: "⚔️ Viking" }].map(t => (
                   <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
@@ -1961,6 +2072,71 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Road Trips</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark rewards the drive as much as the destination. These routes turn a transit day into the best part of the trip — real stops, real detours, worth the extra hour.</div>
               </div>
+
+              <div style={{ background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 16, padding: "18px", marginBottom: 24 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>🧭 Build a Route From Here</div>
+                {!isInDenmark(userCoords) ? (
+                  <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>This builds a real route starting from wherever you are — works once you're in Denmark with location enabled.</div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 14 }}>Tap towns to add them to your route, in the order you'd visit them — closest to you first.</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: routeStops.length > 0 ? 16 : 0 }}>
+                      {nearbyTownsRanked.map(t => (
+                        <button key={t.name} onClick={() => toggleRouteStop(t.name)}
+                          style={{ display: "flex", alignItems: "center", gap: 6, background: routeStops.includes(t.name) ? C.accent : C.bg, border: `1px solid ${routeStops.includes(t.name) ? C.accent : C.border}`, borderRadius: 100, padding: "7px 13px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          <span style={{ fontSize: 12, color: routeStops.includes(t.name) ? "#fff" : C.text, fontWeight: 600 }}>{t.name}</span>
+                          <span style={{ fontSize: 10, color: routeStops.includes(t.name) ? "#ffffffaa" : C.muted }}>~{t.km} km</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {routeStops.length > 0 && (
+                      <div style={{ background: C.bg, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Your Route</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: routeSummary ? 12 : 0 }}>
+                          <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>📍 You</span>
+                          {routeStops.map((stop, i) => (
+                            <span key={stop} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ color: C.muted, fontSize: 12 }}>→</span>
+                              <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{stop}</span>
+                              <button onClick={() => toggleRouteStop(stop)} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
+                            </span>
+                          ))}
+                        </div>
+                        {routeSummary && <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, fontStyle: "italic" }}>{routeSummary}</div>}
+                      </div>
+                    )}
+
+                    {routeStops.length >= 2 && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={generateRouteSummary} disabled={routeSummaryLoading}
+                          style={{ flex: 1, background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {routeSummaryLoading ? "Writing..." : "✦ Describe this route"}
+                        </button>
+                        <button onClick={saveCurrentRoute}
+                          style={{ flex: 1, background: C.accent, border: "none", color: "#fff", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          💾 Save Route
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {savedRoutes.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Routes</div>
+                  {savedRoutes.map(r => (
+                    <div key={r.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>📍 You → {r.stops.join(" → ")}</div>
+                        <button onClick={() => deleteSavedRoute(r.id)} style={{ background: "none", border: "none", color: C.muted, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                      </div>
+                      {r.summary && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, fontStyle: "italic" }}>{r.summary}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {roadTrips.map(trip => (
                 <div key={trip.id} style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0 26px" }}>
@@ -2465,7 +2641,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
         {/* Weather — always visible, multiple cities, auto-loads */}
         <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
-        <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
+        <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} findNearYou={findNearYou} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} />
 
         {/* Search results */}
         {search.length > 1 && searchResults.length > 0 && (
@@ -2651,11 +2827,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
         </div>
       )}
 
-      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
-      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
-      <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
-      <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
-      <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} />
+      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
+      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
+      <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
+      <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
+      <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
 
       {/* ── BOOKING DETAIL PAGE ───────────────────────────── */}
       {craftDetail && (
@@ -2672,7 +2848,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
             <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 6 }}>{craftDetail.name}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{craftDetail.location} · {craftDetail.travelTime} from CPH{craftDetail.rating && <span> · <span style={{ color: C.gold, fontWeight: 700 }}>★ {craftDetail.rating}</span></span>}</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{craftDetail.location} · {travelLabel(userCoords, craftDetail.location, craftDetail.travelTime)}{craftDetail.rating && <span> · <span style={{ color: C.gold, fontWeight: 700 }}>★ {craftDetail.rating}</span></span>}</div>
             {craftDetail.popularityTag && (
               <span style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: craftDetail.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: craftDetail.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.surface, border: `1px solid ${craftDetail.popularityTag === "Hidden Gem" ? C.gold : C.border}`, padding: "4px 11px", borderRadius: 100, marginBottom: 18 }}>
                 {craftDetail.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"}
