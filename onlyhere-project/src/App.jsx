@@ -106,7 +106,7 @@ const events = [
     blogBody: [
       { type: "image", src: "/gillelejenakkehoved.jpg", caption: "Nakkehoved lighthouse, a short walk from town — worth the detour before or after the festival." },
     ] },
-  { id: 6, name: "Musik i Lejet", tier: "Recommended", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local6.jpg", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"],
+  { id: 6, name: "Musik i Lejet", nearestStation: "Vejby Station", ticketInfo: "Extremely limited. Official sales usually sell out within minutes.", accommodationTip: "Book as early as possible.", budgetLevel: "High.", tier: "Recommended", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local6.jpg", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"],
     blogBody: [
       { type: "heading", content: "Music & Atmosphere" },
       { type: "paragraph", content: "Expect Danish pop, rock and electronic music rather than international headliners. The setting, food and atmosphere are just as important as the concerts, creating a stylish yet relaxed festival where beach sunsets and long summer evenings become part of the experience." },
@@ -116,7 +116,7 @@ const events = [
       { type: "paragraph", content: "Tickets are famously difficult to secure and accommodation disappears months in advance. It ranks among Denmark's more expensive festivals, so planning ahead is essential." },
     ] },
   { id: 7, name: "Folkely Festival", travelTime: "1h 30min 🚂", rating: 4.5, town: "Hundested", type: "Festival", emoji: "⚓", date: "2026-08-20", dateEnd: "2026-08-22", photo: "/local7.jpg", desc: "Three days of music, art and talks in Hundested harbour.", mapHint: "Hundested Havn, 3390 Hundested, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Harbour"] },
-  { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", photo: "/local8.jpg", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"],
+  { id: 8, name: "Fjordlys Festival", nearestStation: "Frederiksv\u00e6rk Station.", ticketInfo: "Mostly free or inexpensive.", accommodationTip: "Best enjoyed as a day trip.", budgetLevel: "Very Low.", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", photo: "/local8.jpg", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"],
     blogBody: [
       { type: "heading", content: "Music & Atmosphere" },
       { type: "paragraph", content: "Expect cover bands, local musicians and a casual atmosphere where families, friends and residents gather to enjoy a summer weekend together. It's small in scale but genuinely welcoming." },
@@ -127,7 +127,7 @@ const events = [
     ] },
   { id: 9, name: "Haveje Beach Bar Events", travelTime: "1h 20min 🚂", rating: 4.4, town: "Liseleje", type: "Concert", emoji: "🏖", date: "2026-07-14", dateEnd: "2026-07-15", photo: "/local9.jpg", desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches.", mapHint: "Liselejevej, 3360 Liseleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Beach"] },
   { id: 10, name: "Samsø Music Festival", travelTime: "2h 30min 🚢", rating: 4.9, town: "Samsø", type: "Festival", emoji: "🎸", date: "2026-07-13", dateEnd: "2026-07-19", photo: "/local10.jpg", desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø.", mapHint: "Mårup Kildevej 8, 8305 Samsø, Denmark", verified: "Jun 2026", color: "#6A1B9A", tags: ["Music", "Island"] },
-  { id: 11, name: "Maribo Jazz Festival", tier: "Recommended", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", photo: "/local11.jpg", desc: "Denmark's friendliest jazz festival in historic Maribo. 120+ musicians across 18 venues.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Historic"],
+  { id: 11, name: "Maribo Jazz Festival", nearestStation: "Maribo Station.", ticketInfo: "Wristbands required for main venues; some performances are free.", accommodationTip: "Hotels, inns and holiday cottages around Maribo.", budgetLevel: "Moderate.", tier: "Recommended", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", photo: "/local11.jpg", desc: "Denmark's friendliest jazz festival in historic Maribo. 120+ musicians across 18 venues.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Historic"],
     blogBody: [
       { type: "heading", content: "Music & Atmosphere" },
       { type: "paragraph", content: "Music spills out from pubs, cafés and festival tents throughout the town, creating a cosy atmosphere that's more about enjoying great performances than chasing headline acts." },
@@ -136,7 +136,7 @@ const events = [
       { type: "heading", content: "Things to Know" },
       { type: "paragraph", content: "Don't expect modern pop, electronic music or huge festival crowds — Maribo is intentionally low-key." },
     ] },
-  { id: 12, name: "KirsebærFestival", tier: "Recommended", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local12.jpg", desc: "Cherry festival in Kerteminde, Northeast Funen.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local"],
+  { id: 12, name: "KirsebærFestival", nearestStation: "Odense Station, then Bus 151", ticketInfo: "Free entry.", accommodationTip: "Stay in Kerteminde or nearby Odense.", budgetLevel: "Low--Moderate.", tier: "Recommended", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local12.jpg", desc: "Cherry festival in Kerteminde, Northeast Funen.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local"],
     blogBody: [
       { type: "heading", content: "Music & Atmosphere" },
       { type: "paragraph", content: "The festival is built around local culture rather than big-name performers. Expect open-air concerts, food stalls, family activities and a welcoming atmosphere that feels more like a town celebration than a commercial festival." },
@@ -160,7 +160,7 @@ const events = [
 
 const majorEvents = [
   { id: 101, name: "Roskilde Festival", tier: "Can't miss out", travelTime: "25min 🚂", rating: 4.9, ticketStatus: "sold_out", town: "Roskilde", type: "Music", emoji: "🎸", date: "2026-06-27", dateEnd: "2026-07-04", photo: "/major1.jpg", desc: "Northern Europe's largest music festival. 130,000 attendees, 8 stages, 8 days.", mapHint: "Roskilde Festival, Darupvej 35, 4000 Roskilde, Denmark", verified: "Jun 2026", color: "#E53935", tags: ["Music", "Camping"] },
-  { id: 102, name: "Distortion", tier: "Recommended", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", photo: "/major2.jpg", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street"],
+  { id: 102, name: "Distortion", nearestStation: "N\u00f8rreport Station, Copenhagen Central Station or nearby Metro stations", ticketInfo: "Street parties are free. Distortion X and Distortion \u00d8 require tickets.", accommodationTip: "Stay in central Copenhagen and book several months in advance.", budgetLevel: "Moderate--High.", tier: "Recommended", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", photo: "/major2.jpg", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street"],
     blogBody: [
       { type: "heading", content: "Music & Atmosphere" },
       { type: "paragraph", content: "Distortion isn't confined to a single festival site. During the week, neighbourhoods like Nørrebro and Vesterbro come alive with DJs, bars, street food and thousands of people celebrating outdoors before everything moves to Refshaleøen for the festival finale." },
@@ -171,7 +171,7 @@ const majorEvents = [
     ] },
   { id: 103, name: "Aalborg Karneval", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aalborg", type: "Cultural", emoji: "🎭", date: "2026-05-20", dateEnd: "2026-05-24", photo: "/major3.jpg", desc: "Scandinavia's largest carnival. 100,000+ participants in costumes.", mapHint: "Aalborg Centrum, 9000 Aalborg, Denmark", verified: "Jun 2026", color: "#F57F17", tags: ["Carnival", "Parade"] },
   { id: 104, name: "Copenhagen Jazz Festival", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🎷", date: "2026-07-03", dateEnd: "2026-07-12", photo: "/major4.jpg", desc: "10 days of jazz across 100+ venues. Free concerts in squares and parks.", mapHint: "Copenhagen City Hall Square, Denmark", verified: "Jun 2026", color: "#00695C", tags: ["Jazz", "Free"] },
-  { id: 105, name: "Smukfest", tier: "Worth it for longer stays", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", photo: "/major5.jpg", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest"],
+  { id: 105, name: "Smukfest", nearestStation: "Skanderborg Station (festival shuttle buses available)", ticketInfo: "Extremely high demand. Full festival passes usually sell out months in advance.", accommodationTip: "Reserve camping or nearby accommodation as early as possible.", budgetLevel: "Very High.", tier: "Worth it for longer stays", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", photo: "/major5.jpg", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest"],
     blogBody: [
       { type: "heading", content: "Music & Atmosphere" },
       { type: "paragraph", content: "Few festivals anywhere in Europe can match Smukfest's setting. Concerts take place beneath towering beech trees, with illuminated forest paths creating a magical atmosphere after sunset. Food courts, bars and beautifully designed campsites make it feel more like a temporary woodland village than a traditional campsite." },
@@ -181,7 +181,7 @@ const majorEvents = [
       { type: "paragraph", content: "This isn't a budget festival — tickets, accommodation, food and drinks add up quickly, and you'll spend plenty of time walking hilly forest terrain. Tickets are notoriously difficult to secure." },
     ] },
   { id: 106, name: "NorthSide Festival", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aarhus", type: "Music", emoji: "🎪", date: "2026-06-05", dateEnd: "2026-06-07", photo: "/major6.jpg", desc: "Aarhus's biggest music festival with eco-friendly focus.", mapHint: "NorthSide Festival, Eskelundsvej, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Eco"] },
-  { id: 107, name: "Aarhus Festuge", tier: "Worth it for longer stays", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", photo: "/major7.jpg", desc: "One of Scandinavia's largest cultural festivals. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Free"],
+  { id: 107, name: "Aarhus Festuge", nearestStation: "Aarhus Central Station (Aarhus H)", ticketInfo: "Many outdoor events, concerts and art installations are free. Some theatre performances, concerts, dining experiences and special exhibitions require tickets.", accommodationTip: "Stay in central Aarhus if possible. Booking early is highly recommended.", budgetLevel: "Moderate.", tier: "Worth it for longer stays", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", photo: "/major7.jpg", desc: "One of Scandinavia's largest cultural festivals. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Free"],
     blogBody: [
       { type: "heading", content: "Art & Atmosphere" },
       { type: "paragraph", content: "Aarhus Festuge isn't a festival you simply attend — it's one you stumble across as you explore the city. One moment you might discover a giant interactive art installation in a public square, the next you'll hear live music echoing through a side street." },
@@ -190,7 +190,7 @@ const majorEvents = [
       { type: "heading", content: "Things to Know" },
       { type: "paragraph", content: "Events are spread across the city, so comfortable walking shoes are essential. Popular performances often sell out in advance, and hotels become noticeably more expensive during the festival." },
     ] },
-  { id: 108, name: "Tønder Festival", tier: "Worth it for longer stays", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", photo: "/major8.jpg", desc: "Scandinavia's leading folk and roots festival near the German border.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots"],
+  { id: 108, name: "Tønder Festival", nearestStation: "T\u00f8nder Station", ticketInfo: "High demand. Four-day passes and popular day tickets often sell out well before the festival.", accommodationTip: "Book accommodation early or stay at the festival campsite.", budgetLevel: "Moderate--High.", tier: "Worth it for longer stays", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", photo: "/major8.jpg", desc: "Scandinavia's leading folk and roots festival near the German border.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots"],
     blogBody: [
       { type: "heading", content: "Music & Atmosphere" },
       { type: "paragraph", content: "If you enjoy acoustic music, singer-songwriters, bluegrass, folk or Americana, Tønder is unlike any other festival in Denmark. Audiences are known for listening respectfully, often falling completely silent during quieter performances — and once the official concerts finish, spontaneous jam sessions continue around the campsite late into the night." },
@@ -199,7 +199,7 @@ const majorEvents = [
       { type: "heading", content: "Things to Know" },
       { type: "paragraph", content: "Hotels in Tønder book out surprisingly early — many experienced visitors choose the festival campsite instead." },
     ] },
-  { id: 109, name: "Triangle Folklore Festival", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", photo: "/major9.jpg", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform in the streets of Vejle.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance"],
+  { id: 109, name: "Triangle Folklore Festival", nearestStation: "Vejle Station", ticketInfo: "Outdoor performances are free. Indoor Gala Shows require inexpensive tickets.", accommodationTip: "Stay in central Vejle for easy access to the festival and regional train connections.", budgetLevel: "Low.", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", photo: "/major9.jpg", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform in the streets of Vejle.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance"],
     blogBody: [
       { type: "heading", content: "Music & Atmosphere" },
       { type: "paragraph", content: "The festival feels more like travelling the world in a single afternoon than attending a traditional festival. Dance groups from Europe, South America and beyond perform throughout the city, while colourful parades and live music fill pedestrian streets with energy." },
@@ -208,7 +208,7 @@ const majorEvents = [
       { type: "heading", content: "Things to Know" },
       { type: "paragraph", content: "If you're looking for major concerts, nightlife or internationally famous bands, this probably isn't the right festival — it's best enjoyed at a slower pace while exploring Vejle on foot." },
     ] },
-  { id: 110, name: "Odense Flower Festival", tier: "Recommended", travelTime: "1h 30min 🚂", rating: 4.7, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", photo: "/major10.jpg", desc: "200,000+ flowers transform the entire city centre of Odense.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free"],
+  { id: 110, name: "Odense Flower Festival", nearestStation: "Odense Station", ticketInfo: "Free.", accommodationTip: "Stay in central Odense or visit as an easy day trip from Copenhagen.", budgetLevel: "Low.", tier: "Recommended", travelTime: "1h 30min 🚂", rating: 4.7, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", photo: "/major10.jpg", desc: "200,000+ flowers transform the entire city centre of Odense.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free"],
     blogBody: [
       { type: "heading", content: "Flowers & Atmosphere" },
       { type: "paragraph", content: "The festival is less about organised events and more about wandering through a city that has temporarily become a giant open-air garden. Elaborate flower sculptures and artistic installations appear around every corner." },
@@ -217,7 +217,7 @@ const majorEvents = [
       { type: "heading", content: "Should You Visit?" },
       { type: "paragraph", content: "Definitely. One of Denmark's most beautiful free events — visit early morning or later in the evening for the best light and fewer crowds." },
     ] },
-  { id: 111, name: "H.C. Andersen Festivals", travelTime: "1h 30min 🚂", rating: 4.8, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", photo: "/major11.jpg", desc: "Denmark's largest cultural festival. 500+ events across 10 days in H.C. Andersen's hometown.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free"],
+  { id: 111, name: "H.C. Andersen Festivals", nearestStation: "Odense Station", ticketInfo: "Most outdoor performances are free. Some theatre productions, concerts and special events require tickets.", accommodationTip: "Stay in central Odense or use the city's light rail to reach the festival from surrounding neighbourhoods.", budgetLevel: "Low--Moderate.", travelTime: "1h 30min 🚂", rating: 4.8, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", photo: "/major11.jpg", desc: "Denmark's largest cultural festival. 500+ events across 10 days in H.C. Andersen's hometown.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free"],
     blogBody: [
       { type: "heading", content: "Theatre & Atmosphere" },
       { type: "paragraph", content: "Rather than revolving around one stage, the H.C. Andersen Festivals take over the entire city. Street performers, musicians, storytellers and actors appear throughout Odense, blending fairy tales with modern theatre, concerts, comedy and interactive performances." },
@@ -236,7 +236,7 @@ const vikingEvents = [
   { id: 202, name: "Internationalt Vikingemarked", tier: "Recommended", travelTime: "3h 15min 🚂", rating: 4.6, town: "Ribe", type: "Market", emoji: "⚔️", date: "2026-04-27", dateEnd: "2026-05-03", photo: "/viking2.jpg",
     desc: "Traders and reenactors from across Europe fill Ribe VikingeCenter's marketplace — the same spot that made Ribe a trading town 1,300 years ago. Warriors, riders, archers and musicians throughout. Foreign traders take cash only (DKK/EUR); many Danish traders also accept MobilePay — no cards, no ATM on site.",
     mapHint: "Ribe VikingeCenter, Lustrupvej 4, 6760 Ribe, Denmark", verified: "Jul 2026", color: "#C8102E", tags: ["Viking Market", "Craft", "Family"] },
-  { id: 203, name: "Moesgaard Viking Moot", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.6, town: "Aarhus", type: "Market & Combat", emoji: "🛡", date: "2026-07-24", dateEnd: "2026-07-26", photo: "/viking3.jpg",
+  { id: 203, name: "Moesgaard Viking Moot", nearestStation: "Aarhus Central Station, then Bus 18 to Moesgaard Beach.", ticketInfo: "Paid entry. Tickets are easy to purchase online and rarely sell out.", accommodationTip: "Stay in central Aarhus and use public transport to the festival.", budgetLevel: "Moderate.", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.6, town: "Aarhus", type: "Market & Combat", emoji: "🛡", date: "2026-07-24", dateEnd: "2026-07-26", photo: "/viking3.jpg",
     desc: "Denmark's most dramatic Viking market — international warriors, mounted horse combat and craft demonstrations at Moesgaard Museum. See the full Viking Days experience details under Booking.",
     mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Horse Combat"],
     blogBody: [
@@ -256,7 +256,7 @@ const vikingEvents = [
   { id: 206, name: "Ravnens Marked", travelTime: "2h 15min 🚂", rating: 4.4, town: "Jelling", type: "Market", emoji: "🐦", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/jelling.jpg",
     desc: "A Viking market at Jelling — the same town where Denmark was named as a nation on the famous rune stones. Combine with a stop at the UNESCO stones themselves; this event sits right on the Copenhagen–Aalborg road trip route.",
     mapHint: "Fårupvej 25, 7300 Jelling, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Craft"] },
-  { id: 207, name: "Aggersborg Vikingehåndværkertræf", tier: "Recommended", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/viking7.jpg",
+  { id: 207, name: "Aggersborg Vikingehåndværkertræf", nearestStation: "Aalborg Station, followed by a regional bus or car journey to Aggersborg.", ticketInfo: "The fortress grounds are generally free to visit, with open access throughout the summer.", accommodationTip: "Stay in L\u00f8gst\u00f8r or Aalborg.", budgetLevel: "Very Low.", tier: "Recommended", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/viking7.jpg",
     desc: "A craftsmen-only gathering at Aggersborg — one of Denmark's largest Viking ring fortresses. Less market, more workshop: expect to see smiths, carvers and weavers deep in their process rather than just selling finished goods.",
     mapHint: "Thorupvej 13, Aggersund, 9670 Løgstør, Denmark", verified: "Jul 2026", color: "#E65100", tags: ["Viking Market", "Craft"],
     blogBody: [
@@ -660,6 +660,35 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
             </div>
           </div>
         )}
+        {kind === "event" && (item.nearestStation || item.ticketInfo || item.accommodationTip || item.budgetLevel) && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>📍 At a Glance</div>
+            {item.nearestStation && (
+              <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                <span style={{ flexShrink: 0, width: 20 }}>🚆</span>
+                <div><span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Nearest Station: </span><span style={{ fontSize: 12, color: C.light }}>{item.nearestStation}</span></div>
+              </div>
+            )}
+            {item.ticketInfo && (
+              <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                <span style={{ flexShrink: 0, width: 20 }}>🎟️</span>
+                <div><span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Tickets: </span><span style={{ fontSize: 12, color: C.light }}>{item.ticketInfo}</span></div>
+              </div>
+            )}
+            {item.accommodationTip && (
+              <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                <span style={{ flexShrink: 0, width: 20 }}>🏡</span>
+                <div><span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Accommodation: </span><span style={{ fontSize: 12, color: C.light }}>{item.accommodationTip}</span></div>
+              </div>
+            )}
+            {item.budgetLevel && (
+              <div style={{ display: "flex", gap: 10 }}>
+                <span style={{ flexShrink: 0, width: 20 }}>💰</span>
+                <div><span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Budget: </span><span style={{ fontSize: 12, color: C.light }}>{item.budgetLevel}</span></div>
+              </div>
+            )}
+          </div>
+        )}
         {kind === "town" && (
           <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{item.travelTime} from CPH</div>
         )}
@@ -1036,7 +1065,7 @@ const PRODUCT_COORDS = {
 
 
 
-const APP_VERSION = "v2.79 — FIX: DetailPage missing getEventDate import (caused blank screen)";
+const APP_VERSION = "v2.80 — restored missing festival logistics (station, tickets, accommodation, budget)";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -1591,7 +1620,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.79 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.80 — Jul 2026</div>
               </div>
             </div>
           )}
