@@ -968,31 +968,6 @@ const StoreBadge = ({ type, href }) => (
 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { craftItemsFallback } from "./data/craft.js";
-import { events } from "./data/events.js";
-import { majorEvents } from "./data/majorEvents.js";
-import { vikingEvents } from "./data/vikingEvents.js";
-import { towns } from "./data/towns.js";
-import { freeEntrance } from "./data/freeEntrance.js";
-import { nightlifeSpots } from "./data/nightlife.js";
-import { foodSpots } from "./data/food.js";
-import { essentials } from "./data/essentials.js";
-import { handmadeCraftShops } from "./data/handmade.js";
-import { roadTrips } from "./data/roadTrips.js";
-import { seasonalItineraries } from "./data/seasonalItineraries.js";
-import { C } from "./theme.js";
-import { getSeason, getEventDate, isUpcoming, isCurrentlyLive } from "./utils/dateHelpers.js";
-import { weatherIcon } from "./utils/weatherIcon.js";
-import { TOWN_COORDS, DK_SHAPES, dkProject, DK_PATHS } from "./utils/mapGeometry.js";
-import { WEATHER_CITIES } from "./data/weatherCities.js";
-import { DetailPage } from "./components/DetailPage.jsx";
-import { WeatherStrip } from "./components/WeatherStrip.jsx";
-import { DKLocator } from "./components/DKLocator.jsx";
-import { LeafletMap } from "./components/LeafletMap.jsx";
-import { PageHero } from "./components/PageHero.jsx";
-import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip.jsx";
-import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip.jsx";
-import { StoreBadge } from "./components/StoreBadge.jsx";
 
 const SUPABASE_URL = "https://vpxfahjnerkkkoueovhl.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweGZhaGpuZXJra2tvdWVvdmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4OTYsImV4cCI6MjA5NTMxMDg5Nn0.-GgXeog0DufIz6WNXn_8pIzxmQfkHRK3Lz8V71O-v_c";
