@@ -878,58 +878,42 @@ const PageHero = ({ src, emoji, color }) => (
 
 
 const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo }) => {
-  const [open, setOpen] = useState(false);
+  const [openEvent, setOpenEvent] = useState(null);
   const allTracked = [...events, ...majorEvents, ...vikingEvents];
   const currentlyLive = allTracked.filter(e => isCurrentlyLive(e.date, e.dateEnd));
   const comingSoon = allTracked.filter(e => isUpcoming(e.date) && !isCurrentlyLive(e.date, e.dateEnd)).sort((a, b) => new Date(a.date) - new Date(b.date));
-  const headline = currentlyLive[0] || comingSoon[0];
-  if (!headline) return null;
-
-  const EventRow = (e) => (
-    <div key={e.name} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 0" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: liveInfo?.[e.name] ? 8 : 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{e.emoji} {e.name}</div>
-        <button onClick={() => checkLiveInfo(e)} disabled={liveInfoLoading === e.name}
-          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 100, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
-          {liveInfoLoading === e.name ? "Checking..." : "🔍 Check"}
-        </button>
-      </div>
-      {liveInfo?.[e.name] && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{liveInfo[e.name]}</div>}
-    </div>
-  );
+  const showList = currentlyLive.length > 0 ? currentlyLive : comingSoon.slice(0, 6);
+  if (showList.length === 0) return null;
+  const isLive = currentlyLive.length > 0;
 
   return (
-    <div style={{ marginTop: 2 }}>
-      <button onClick={() => setOpen(true)}
-        style={{ display: "flex", alignItems: "center", gap: 7, background: "none", border: "none", padding: "6px 0", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", width: "100%", textAlign: "left" }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: currentlyLive.length ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: currentlyLive.length ? "0 0 6px #4CAF50" : "none" }} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: currentlyLive.length ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0 }}>{currentlyLive.length ? "Live" : "Coming"}</span>
-        <span style={{ fontSize: 13, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{headline.emoji} {headline.name}</span>
-        <span style={{ marginLeft: "auto", color: C.muted, fontSize: 13, flexShrink: 0 }}>›</span>
-      </button>
+    <div style={{ marginTop: 4, marginBottom: 2 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: isLive ? "0 0 6px #4CAF50" : "none" }} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: isLive ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5 }}>{isLive ? "Live Events" : "Coming Events"}</span>
+      </div>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+        {showList.map(e => (
+          <button key={e.name} onClick={() => setOpenEvent(e)}
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <span style={{ fontSize: 13 }}>{e.emoji}</span>
+            <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{e.name}</span>
+          </button>
+        ))}
+      </div>
 
-      {open && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpen(false)}>
-          <div style={{ width: "100%", maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-            {currentlyLive.length > 0 && (
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 14 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4CAF50", flexShrink: 0 }} />
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Current Live Events</div>
-                </div>
-                {currentlyLive.slice(0, 4).map(EventRow)}
-              </div>
-            )}
-            {comingSoon.length > 0 && (
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 14 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.gold, flexShrink: 0 }} />
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>Coming Events</div>
-                </div>
-                {comingSoon.slice(0, 4).map(EventRow)}
-              </div>
-            )}
-            <button onClick={() => setOpen(false)} style={{ display: "block", width: "100%", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {openEvent && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpenEvent(null)}>
+          <div style={{ width: "100%", maxWidth: 420, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: liveInfo?.[openEvent.name] ? 12 : 4 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{openEvent.emoji} {openEvent.name}</div>
+              <button onClick={() => checkLiveInfo(openEvent)} disabled={liveInfoLoading === openEvent.name}
+                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 100, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
+                {liveInfoLoading === openEvent.name ? "Checking..." : "🔍 Check"}
+              </button>
+            </div>
+            {liveInfo?.[openEvent.name] && <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 14 }}>{liveInfo[openEvent.name]}</div>}
+            <button onClick={() => setOpenEvent(null)} style={{ display: "block", width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Close
             </button>
           </div>
@@ -1065,7 +1049,7 @@ const PRODUCT_COORDS = {
 
 
 
-const APP_VERSION = "v2.80 — restored missing festival logistics (station, tickets, accommodation, budget)";
+const APP_VERSION = "v2.81 — At a Glance on cards, all live events shown, Near You geolocation";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -1133,6 +1117,31 @@ export default function Gemlyx() {
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
   const [foodDetail, setFoodDetail] = useState(null);
+  const [nearYou, setNearYou] = useState(null); // null | "loading" | "denied" | { town, distanceKm, matches }
+
+  const findNearYou = () => {
+    if (!navigator.geolocation) { setNearYou("denied"); return; }
+    setNearYou("loading");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        let nearestTown = null, nearestDist = Infinity;
+        for (const [name, [tLat, tLon]] of Object.entries(TOWN_COORDS)) {
+          const dLat = (tLat - latitude) * 111.32;
+          const dLon = (tLon - longitude) * 62.06;
+          const dist = Math.sqrt(dLat * dLat + dLon * dLon);
+          if (dist < nearestDist) { nearestDist = dist; nearestTown = name; }
+        }
+        const allTracked = [...events, ...majorEvents, ...vikingEvents];
+        const matches = allTracked.filter(e => e.town === nearestTown || e.town?.includes(nearestTown) || nearestTown?.includes(e.town || ""))
+          .filter(e => isUpcoming(e.date) || isCurrentlyLive(e.date, e.dateEnd));
+        setNearYou({ town: nearestTown, distanceKm: Math.round(nearestDist), matches });
+      },
+      () => setNearYou("denied"),
+      { timeout: 8000 }
+    );
+  };
+
   const [craftForm, setCraftForm] = useState({ name: "", email: "", interest: "", visit: "" });
   const [craftStatus, setCraftStatus] = useState(null);
   const [emailSignup, setEmailSignup] = useState("");
@@ -1481,6 +1490,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
         {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>🟢 Available</span>}
         {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>✓ Free entry</span>}
       </div>
+      {(event.nearestStation || event.ticketInfo || event.accommodationTip || event.budgetLevel) && (
+        <div style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 12, display: "flex", flexDirection: "column", gap: 5 }}>
+          {event.nearestStation && <div style={{ fontSize: 11, color: C.light }}>🚆 <span style={{ color: C.muted }}>Station:</span> {event.nearestStation}</div>}
+          {event.ticketInfo && <div style={{ fontSize: 11, color: C.light }}>🎟️ <span style={{ color: C.muted }}>Tickets:</span> {event.ticketInfo}</div>}
+          {event.budgetLevel && <div style={{ fontSize: 11, color: C.light }}>💰 <span style={{ color: C.muted }}>Budget:</span> {event.budgetLevel}</div>}
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
         Read more <span style={{ fontSize: 15 }}>›</span>
       </div>
@@ -1620,7 +1636,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.80 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.81 — Jul 2026</div>
               </div>
             </div>
           )}
@@ -1784,6 +1800,45 @@ You also have a web_search tool. Use it whenever someone asks about something th
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Events</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about — we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
+              </div>
+
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+                {!nearYou && (
+                  <button onClick={findNearYou} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: C.accent, border: "none", color: "#fff", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    📍 What's near me right now?
+                  </button>
+                )}
+                {nearYou === "loading" && (
+                  <div style={{ textAlign: "center", padding: "8px 0", fontSize: 13, color: C.muted }}>Finding your location...</div>
+                )}
+                {nearYou === "denied" && (
+                  <div style={{ textAlign: "center", padding: "4px 0" }}>
+                    <div style={{ fontSize: 13, color: C.muted, marginBottom: 10 }}>Couldn't get your location — check your browser's location permission and try again.</div>
+                    <button onClick={findNearYou} style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try again</button>
+                  </div>
+                )}
+                {nearYou && typeof nearYou === "object" && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 4 }}>📍 Near {nearYou.town}</div>
+                    {nearYou.matches.length > 0 ? (
+                      <>
+                        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{nearYou.matches.length} thing{nearYou.matches.length > 1 ? "s" : ""} happening close to you</div>
+                        {nearYou.matches.map(e => (
+                          <div key={e.name} onClick={() => setEventDetail(e)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${C.border}`, cursor: "pointer" }}>
+                            <span style={{ fontSize: 16 }}>{e.emoji}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{e.name}</div>
+                              <div style={{ fontSize: 11, color: C.muted }}>{getEventDate(e.date, e.dateEnd)}</div>
+                            </div>
+                            <span style={{ color: C.muted, fontSize: 14 }}>›</span>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>Nothing tracked right near {nearYou.town} at the moment — browse everything below instead.</div>
+                    )}
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
                 {[{ id: "local", label: "🏘 Local" }, { id: "major", label: "🌟 Major" }, { id: "viking", label: "⚔️ Viking" }].map(t => (
