@@ -1,6 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { craftItemsFallback } from "./data/craft.js";
+import { events } from "./data/events.js";
+import { majorEvents } from "./data/majorEvents.js";
+import { vikingEvents } from "./data/vikingEvents.js";
+import { towns } from "./data/towns.js";
+import { freeEntrance } from "./data/freeEntrance.js";
+import { nightlifeSpots } from "./data/nightlife.js";
+import { foodSpots } from "./data/food.js";
+import { essentials } from "./data/essentials.js";
+import { handmadeCraftShops } from "./data/handmade.js";
+import { roadTrips } from "./data/roadTrips.js";
+import { seasonalItineraries } from "./data/seasonalItineraries.js";
 
 const SUPABASE_URL = "https://vpxfahjnerkkkoueovhl.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweGZhaGpuZXJra2tvdWVvdmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4OTYsImV4cCI6MjA5NTMxMDg5Nn0.-GgXeog0DufIz6WNXn_8pIzxmQfkHRK3Lz8V71O-v_c";
@@ -32,481 +44,16 @@ const cities = [
 
 const allProducts = cities.flatMap(c => c.products.map(p => ({ ...p, city: c.name, color: c.color })));
 
-const craftItemsFallback = [
-  { id: 1, name: "Viking Ship Museum", price: "150 DKK", priceNote: "Adult entry online (10 DKK cheaper than at the door)", location: "Roskilde", type: "Major", emoji: "⚓", travelTime: "25min 🚂", photo: "/vikingshipmuseum1.jpg",
-    desc: "Watch boatbuilders reconstruct Viking ships using historic techniques. Try rope making, blacksmithing, textile crafts and woodcarving — daily June to September. Sail a real Viking ship replica on Roskilde Fjord, May–September.",
-    what: ["Rope making", "Blacksmithing", "Textile crafts", "Woodcarving", "Fjord sailing"], color: "#1565C0", mapHint: "Vikingeskibsmuseet, Vindeboder 12, 4000 Roskilde, Denmark",
-    bookingType: "online", bookingUrl: "https://www.vikingeskibsmuseet.dk/koeb/koeb-billet",
-    bestTime: "Sailing trips run daily May–Sept and sell out — book the first sailing of the day online to guarantee a spot. Guided tours run hourly, included in entry.",
-    ticketOptions: [
-      { name: "Adult entry (online)", price: "150 DKK" },
-      { name: "Adult entry (at the door)", price: "160 DKK" },
-      { name: "Family ticket (2 adults + all kids under 18)", price: "300 DKK" },
-      { name: "Children under 18", price: "Free" },
-      { name: "Fjord sailing (add-on to entry, May–Sept)", price: "+130 DKK" },
-      { name: "Season Pass — unlimited entry, 1 year", price: "200 DKK" },
-      { name: "Groups (min. 25 adults)", price: "Contact museum" },
-    ],
-    recommendedPackage: { name: "Entry + Fjord Sailing", reason: "Reviewers consistently call the Viking ship sailing trip the highlight of the visit — rowing and setting sail on a real reconstructed longship, led by the museum's skipper. Available May–September; book the first sailing of the day online, it sells out." },
-    blogBody: [
-      { type: "image", src: "/vikingshipmuseum2.jpg", caption: "The boatyard, where craftspeople reconstruct Viking ships using historic techniques throughout the season." },
-    ],
-    rating: 4.5 },
-  { id: 2, name: "Moesgaard Viking Days", price: "180 DKK", priceNote: "Adult ticket · online", location: "Aarhus", type: "Major", emoji: "🛡", travelTime: "3h 🚂",
-    desc: "Four days of hands-on Viking craft at Moesgaard Museum. Try blacksmithing, plant dyeing, felting and coin minting.",
-    what: ["Blacksmithing", "Plant dyeing", "Felting", "Coin minting"], color: "#6A1B9A", mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark",
-    bookingType: "online", bookingUrl: "https://shop.moesgaardmuseum.dk/en/momuevents" },
-  { id: 3, name: "Viking Center Ribe", price: "160 DKK", priceNote: "Adult admission · reduced rates 70–140 DKK · online", location: "Ribe", type: "Local", emoji: "🪖", travelTime: "3h 15min 🚂",
-    desc: "Denmark's oldest town has an entire reconstructed Viking settlement — Ripa, 700–980 AD. Daily hands-on activities included in admission: archery, coin making, whittling, warrior training and falconry shows. Craftspeople sell jewellery, leather and metalwork at the marketplace — ask about a custom commission.",
-    what: ["Archery", "Coin making", "Whittling", "Falconry show", "Jewellery", "Leather working", "Metalwork"], color: C.accent, mapHint: "Viking Center Ribe, Roagervej 129, 6760 Ribe, Denmark",
-    bookingType: "online", bookingUrl: "https://www.ribevikingecenter.dk/en/plan-your-visit/opening-hours-and-admission",
-    bestTime: "Every day has archery, coin making and whittling included — falconry shows run at 14:00. Saturdays and Sundays in July add extra \"Experience Viking Ripa\" activities.",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "Everything here is designed to recreate Viking life as accurately as possible. Costumed interpreters live and work in reconstructed buildings, demonstrating traditional crafts, cooking over open fires, forging iron and practising archery — you're walking through a village that feels genuinely alive, not observing history from behind glass." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "The centre operates seasonally, generally closed through winter (late April–October). As it's almost entirely outdoors, comfortable footwear and weather-appropriate clothing are essential if you're spending several hours here." },
-    ],
-    transportWarning: "The center is 3km south of Ribe town — the only bus (417) runs just 4 times a day, weekdays only, and isn't reliable for a spontaneous visit. If you don't have a bike or car, either plan tightly around the bus times or take a taxi (roughly 15 min, ~150 DKK). Skip this one if you're relying purely on walking or infrequent public transport.",
-    ticketOptions: [
-      { name: "Adult admission", price: "160 DKK" },
-      { name: "Activity Card — archery + whittling + coin making", price: "70 DKK" },
-      { name: "Each activity separately", price: "30 DKK each (90 DKK for all 3)" },
-      { name: "Reduced/child admission", price: "70–140 DKK" },
-      { name: "Season ticket — unlimited visits", price: "See website" },
-    ],
-    recommendedPackage: { name: "Admission + Activity Card", reason: "The Activity Card bundles all 3 hands-on experiences for 70 DKK — buying archery, whittling and coin making separately costs 90 DKK. It's Ribe VikingeCenter's own official recommendation, and the combination visitors do most." },
-    upcomingEvents: [
-      { name: "Threads, clothing and creed in the Viking Age", dates: "13–17 July 2026" },
-      { name: "Viking horses and other animals", dates: "20–24 July 2026" },
-      { name: "Viking Warriors", dates: "27 July – 2 August 2026" },
-      { name: "The Vikings and White Christ", dates: "3–7 August 2026" },
-      { name: "Family friendly campfire cooking (Danish)", dates: "7 August 2026" },
-      { name: "Blacksmiths' Gathering", dates: "15–16 August 2026" },
-      { name: "The magic of plant dyes (English workshop)", dates: "4 September 2026" },
-      { name: "The magic of plant dyes (English workshop)", dates: "11 September 2026" },
-    ], rating: 4.6 },
-  { id: 4, name: "Bornholm Ceramics — Hjorths Fabrik", price: "225 DKK", priceNote: "45min pottery wheel workshop · online only", location: "Rønne, Bornholm", type: "Local", emoji: "🏺", travelTime: "2h + ferry 🚢",
-    desc: "Try throwing your own ceramics on the wheel at the 160-year-old Hjorths Fabrik in Rønne. Instructed by experienced ceramists — take one piece home glazed and fired.",
-    what: ["Hand-thrown ceramics", "Glazing", "Firing included"], color: "#E65100", mapHint: "Hjorths Fabrik, Krystalgade 5, 3700 Rønne, Denmark",
-    bookingType: "online", bookingUrl: "https://shop.bornholmsmuseum.dk" },
-  { id: 6, name: "Glasgalleriet", price: "1,100 DKK", priceNote: "Weekday rate for 1–2 people · 1,300 DKK evenings/weekends", location: "Roskilde", type: "Local", emoji: "🫧", travelTime: "25min 🚂",
-    desc: "A working glassblowing studio in Roskilde's former gasworks by the harbour. Glassblower Skak Snitker has run it since 1977 — watching him work is free, but you can also blow your own piece from start to finish under his direct guidance. About an hour, and your finished glasswork is ready to collect the next day.",
-    what: ["Glassblowing", "Watch demonstrations", "Blow your own piece", "Gallery & shop"], color: "#00838F", mapHint: "Glasgalleriet, Sankt Ibsvej 12, 4000 Roskilde, Denmark",
-    bookingType: "request", bestTime: "Contact ahead to book the hands-on session — only 1-2 people per session, so it fills up. Watching the open workshop needs no booking at all.", rating: 4.5 },
-  { id: 7, name: "Tivoli Gardens", popularityTag: "Common Attraction", price: "170–200 DKK", priceNote: "Entry only · ride pass ~190 DKK extra · online", location: "Copenhagen", type: "Major", emoji: "🎡", travelTime: "In Copenhagen 🚇",
-    desc: "The world's second-oldest amusement park, open since 1843 — right in the heart of Copenhagen, a 2-minute walk from Central Station. Historic wooden roller coaster, themed gardens, live music and seasonal transformations for Halloween and Christmas.",
-    what: ["Roller coasters", "Gardens", "Live music", "Seasonal events"], color: "#C8102E", mapHint: "Tivoli Gardens, Vesterbrogade 3, 1630 København V, Denmark",
-    bookingType: "online", bookingUrl: "https://shop.tivoli.dk/en/billetter-og-tivolikort",
-    bestTime: "Go early morning for a quieter garden walk, then return after dark — the lit-up gardens at night are Tivoli's most magical side.", rating: 4.5 },
-  { id: 8, name: "Den Gamle By", popularityTag: "Common Attraction", price: "See website", priceNote: "Open-air museum · online", location: "Aarhus", type: "Major", emoji: "🏘", travelTime: "3h 🚂",
-    desc: "A world-class open-air museum of urban history — over 560,000 guests a year — showcasing Danish town life from the 1500s to the 1970s.",
-    what: ["Historic buildings", "Costumed guides", "Old town streets"], color: "#8D6E63", mapHint: "Den Gamle By, Viborgvej 2, 8000 Aarhus, Denmark",
-    bookingType: "online", bookingUrl: "https://www.dengamleby.dk/" },
-  { id: 9, name: "ARoS Aarhus Art Museum", popularityTag: "Common Attraction", price: "See website", priceNote: "Art museum · online", location: "Aarhus", type: "Major", emoji: "🌈", travelTime: "3h 🚂",
-    desc: "One of Scandinavia's largest art museums, internationally known for \"Your Rainbow Panorama\" — a circular rainbow-glass skywalk on the roof.",
-    what: ["Rainbow Panorama", "Contemporary art", "Rooftop views"], color: "#8E24AA", mapHint: "ARoS Aarhus Kunstmuseum, Aros Allé 2, 8000 Aarhus, Denmark",
-    bookingType: "online", bookingUrl: "https://www.aros.dk/" },
-  { id: 10, name: "Aalborg Tower", popularityTag: "Common Attraction", price: "See website", priceNote: "Observation tower · ticket required on-site", location: "Aalborg", type: "Major", emoji: "🗼", travelTime: "3h 🚂",
-    desc: "A 105-metre steel tower with an unmatched 360° panoramic view over Aalborg and the Limfjord.",
-    what: ["360° views", "Limfjord panorama"], color: "#455A64", mapHint: "Aalborgtårnet, Skovbakken 27, 9000 Aalborg, Denmark",
-    bookingType: "online", bookingUrl: "http://www.aalborgtaarnet.dk/" },
-  { id: 11, name: "Springeren Marine Experience Centre", popularityTag: "Common Attraction", price: "See website", priceNote: "Maritime museum · online", location: "Aalborg", type: "Major", emoji: "🚢", travelTime: "3h 🚂",
-    desc: "Step inside a real submarine, explore torpedo boats and try a professional ship simulator.",
-    what: ["Real submarine", "Ship simulator", "Torpedo boats"], color: "#0277BD", mapHint: "Springeren, Vestre Fjordvej, 9000 Aalborg, Denmark",
-    bookingType: "online", bookingUrl: "http://springeren-maritimt.dk/" },
-  { id: 12, name: "Aalborg Monastery", popularityTag: "Hidden Gem", price: "See website", priceNote: "Indoor access by guided tour only", location: "Aalborg", type: "Local", emoji: "⛪", travelTime: "3h 🚂",
-    desc: "A peaceful, highly preserved monastic estate from 1431, with a hidden courtyard garden in the middle of the city. The courtyard is free; indoor access needs a booked guided tour.",
-    what: ["Guided tours", "Medieval architecture", "Hidden courtyard"], color: "#8D6E63", mapHint: "Aalborg Kloster, C.W. Obels Plads 4, 9000 Aalborg, Denmark",
-    bookingType: "request" },
-  { id: 13, name: "The Cisterns (Cisternerne)", popularityTag: "Hidden Gem", price: "See website", priceNote: "Underground art space · online", location: "Copenhagen", type: "Local", emoji: "🕳", travelTime: "In Copenhagen 🚇",
-    desc: "A massive former underground water reservoir beneath Søndermarken park, now a dark, atmospheric contemporary art space.",
-    what: ["Underground reservoir", "Contemporary art", "Atmospheric"], color: "#37474F", mapHint: "Cisternerne, Søndermarken, 2000 Frederiksberg, Denmark",
-    bookingType: "request" },
-  { id: 14, name: "Kronborg Castle", popularityTag: "Common Attraction", price: "See website", priceNote: "UNESCO World Heritage Site · online", location: "Helsingør", type: "Major", emoji: "🏰", travelTime: "50min 🚂", photo: "/kronborgslot.jpg",
-    desc: "The real-life setting for Shakespeare's Hamlet, guarding the narrowest point of the Øresund strait — close enough to Sweden to see it clearly across the water. A UNESCO World Heritage Site since 2000.",
-    what: ["Renaissance castle", "Casemates", "Royal apartments", "Øresund views"], color: "#455A64", mapHint: "Kronborg, 3000 Helsingør, Denmark",
-    bookingType: "online", bookingUrl: "https://kronborg.dk/en/" },
-];
 
-const events = [
-  { id: 1, name: "Præstø Litteraturfestival", travelTime: "1h 10min 🚂", rating: 4.6, town: "Præstø", type: "Festival", emoji: "📚", date: "2026-06-20", dateEnd: "2026-06-21", photo: "/local1.jpg", desc: "Denmark's cosiest literature festival in the charming harbour town of Præstø.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Literature", "Music"] },
-  { id: 2, name: "Sommerdage i Præstø", travelTime: "1h 10min 🚂", rating: 4.4, town: "Præstø", type: "Festival", emoji: "🌿", date: "2026-07-04", dateEnd: "2026-07-06", photo: "/local2.jpg", desc: "Nature and craft festival in Præstø. Plant dyeing workshops, ceramics, intimate concerts under open sky.", mapHint: "Præstø Havn, 4720 Præstø, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Craft", "Nature"] },
-  { id: 3, name: "Gyldne Dage i Præstø", travelTime: "1h 10min 🚂", rating: 4.3, town: "Præstø", type: "Festival", emoji: "🏰", date: "2026-09-12", dateEnd: "2026-09-13", photo: "/local3.jpg", desc: "Annual historical festival in Præstø with period costumes, local food and craft stalls.", mapHint: "Præstø Torv, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["History", "Culture"] },
-  { id: 4, name: "Bondemarked på Oremandsgaard", travelTime: "1h 10min 🚂", rating: 4.5, town: "Præstø", type: "Market", emoji: "🌾", date: "2026-06-06", dateEnd: null, photo: "/local4.jpg", desc: "Farm market at the beautiful Oremandsgaard Estate. Local food, organic goods and handmade crafts.", mapHint: "Oremandsgaard, Jungshoved, 4720 Præstø, Denmark", verified: "Jun 2026", color: C.accent, tags: ["Food", "Market"] },
-  { id: 5, name: "Bakkefest", travelTime: "1h 15min 🚂", rating: 4.7, town: "Gilleleje", type: "Festival", emoji: "🎵", date: "2026-07-10", dateEnd: "2026-07-12", photo: "/gilleleje.jpg", desc: "Three days of music overlooking the sea in Gilleleje. Big Danish artists, live DJs, food vendors.", mapHint: "Bøgebakken 19, 3250 Gilleleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Seaside"],
-    blogBody: [
-      { type: "image", src: "/gillelejenakkehoved.jpg", caption: "Nakkehoved lighthouse, a short walk from town — worth the detour before or after the festival." },
-    ] },
-  { id: 6, name: "Musik i Lejet", tier: "Recommended", travelTime: "1h 20min 🚂", rating: 4.8, town: "Tisvildeleje", type: "Festival", emoji: "🌊", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local6.jpg", desc: "Intimate music festival in the picturesque coastal village of Tisvildeleje.", mapHint: "Tisvildeleje Strand, 3220 Tisvildeleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Coastal"],
-    blogBody: [
-      { type: "heading", content: "Music & Atmosphere" },
-      { type: "paragraph", content: "Expect Danish pop, rock and electronic music rather than international headliners. The setting, food and atmosphere are just as important as the concerts, creating a stylish yet relaxed festival where beach sunsets and long summer evenings become part of the experience." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Popular with Danes in their 20s and 30s — couples, groups of friends and travellers looking for a premium summer weekend." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Tickets are famously difficult to secure and accommodation disappears months in advance. It ranks among Denmark's more expensive festivals, so planning ahead is essential." },
-    ] },
-  { id: 7, name: "Folkely Festival", travelTime: "1h 30min 🚂", rating: 4.5, town: "Hundested", type: "Festival", emoji: "⚓", date: "2026-08-20", dateEnd: "2026-08-22", photo: "/local7.jpg", desc: "Three days of music, art and talks in Hundested harbour.", mapHint: "Hundested Havn, 3390 Hundested, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Harbour"] },
-  { id: 8, name: "Fjordlys Festival", travelTime: "1h 25min 🚂", rating: 4.3, town: "Frederiksværk", type: "Festival", emoji: "🎆", date: "2026-07-25", dateEnd: "2026-07-26", photo: "/local8.jpg", desc: "Summer festival by the fjord in Frederiksværk.", mapHint: "Frederiksværk Havn, 3300 Frederiksværk, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Fjord"],
-    blogBody: [
-      { type: "heading", content: "Music & Atmosphere" },
-      { type: "paragraph", content: "Expect cover bands, local musicians and a casual atmosphere where families, friends and residents gather to enjoy a summer weekend together. It's small in scale but genuinely welcoming." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "A good choice if you're already staying in North Zealand or travelling with children." },
-      { type: "heading", content: "Should You Visit?" },
-      { type: "paragraph", content: "If you're nearby, Fjordlys is a lovely way to experience Danish community life. If you're travelling across the country specifically for festivals, there are stronger options to prioritise." },
-    ] },
-  { id: 9, name: "Haveje Beach Bar Events", travelTime: "1h 20min 🚂", rating: 4.4, town: "Liseleje", type: "Concert", emoji: "🏖", date: "2026-07-14", dateEnd: "2026-07-15", photo: "/local9.jpg", desc: "Live music at Haveje beach bar, 150m from one of Denmark's most beautiful white sand beaches.", mapHint: "Liselejevej, 3360 Liseleje, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Beach"] },
-  { id: 10, name: "Samsø Music Festival", travelTime: "2h 30min 🚢", rating: 4.9, town: "Samsø", type: "Festival", emoji: "🎸", date: "2026-07-13", dateEnd: "2026-07-19", photo: "/local10.jpg", desc: "Since 1990, Denmark's cosiest music festival on the island of Samsø.", mapHint: "Mårup Kildevej 8, 8305 Samsø, Denmark", verified: "Jun 2026", color: "#6A1B9A", tags: ["Music", "Island"] },
-  { id: 11, name: "Maribo Jazz Festival", tier: "Recommended", travelTime: "1h 45min 🚂", rating: 4.7, town: "Maribo", type: "Festival", emoji: "🎷", date: "2026-07-18", dateEnd: "2026-07-21", photo: "/local11.jpg", desc: "Denmark's friendliest jazz festival in historic Maribo. 120+ musicians across 18 venues.", mapHint: "Kirkepladsen, 4930 Maribo, Denmark", verified: "Jun 2026", color: "#E65100", tags: ["Jazz", "Historic"],
-    blogBody: [
-      { type: "heading", content: "Music & Atmosphere" },
-      { type: "paragraph", content: "Music spills out from pubs, cafés and festival tents throughout the town, creating a cosy atmosphere that's more about enjoying great performances than chasing headline acts." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Perfect for jazz lovers, mature travellers and anyone looking for a quieter festival experience." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Don't expect modern pop, electronic music or huge festival crowds — Maribo is intentionally low-key." },
-    ] },
-  { id: 12, name: "KirsebærFestival", tier: "Recommended", travelTime: "2h 10min 🚂", rating: 4.6, town: "Kerteminde", type: "Festival", emoji: "🍒", date: "2026-07-17", dateEnd: "2026-07-19", photo: "/local12.jpg", desc: "Cherry festival in Kerteminde, Northeast Funen.", mapHint: "Kerteminde Havn, 5300 Kerteminde, Denmark", verified: "Jun 2026", color: "#B71C1C", tags: ["Food", "Local"],
-    blogBody: [
-      { type: "heading", content: "Music & Atmosphere" },
-      { type: "paragraph", content: "The festival is built around local culture rather than big-name performers. Expect open-air concerts, food stalls, family activities and a welcoming atmosphere that feels more like a town celebration than a commercial festival." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Ideal for families, food lovers, couples and slower-paced travellers who enjoy authentic local experiences instead of nightlife." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "The town becomes busy during festival weekend, especially around the harbour, and parking can be frustrating." },
-    ] },
-  { id: 13, name: "Gyldne Dage i Præstø", tier: "Recommended", travelTime: "1h 30min 🚂", rating: 4.5, town: "Præstø", type: "Cultural", emoji: "🏰", date: "2026-09-12", dateEnd: "2026-09-13",
-    desc: "Every September, the historic harbour town of Præstø steps back into the late 1800s — volunteers in period costume, traditional crafts and historical performances transform the streets into one of Denmark's most immersive cultural festivals.",
-    mapHint: "Præstø Havn, 4720 Præstø, Denmark", verified: "Jul 2026", color: "#8D6E63", tags: ["History", "Free"],
-    blogBody: [
-      { type: "heading", content: "History & Atmosphere" },
-      { type: "paragraph", content: "Rather than music stages, you'll find historic markets, demonstrations of traditional trades, classical performances and costumed locals bringing the town's history to life. The harbour setting makes it especially enjoyable for photographers." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "History enthusiasts, families, photographers and travellers wanting something different from Denmark's music festivals." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "If you're looking for nightlife or modern entertainment, this probably isn't the right festival — expect a slower pace focused on storytelling, local traditions and community involvement." },
-    ] },
-];
 
-const majorEvents = [
-  { id: 101, name: "Roskilde Festival", tier: "Can't miss out", travelTime: "25min 🚂", rating: 4.9, ticketStatus: "sold_out", town: "Roskilde", type: "Music", emoji: "🎸", date: "2026-06-27", dateEnd: "2026-07-04", photo: "/major1.jpg", desc: "Northern Europe's largest music festival. 130,000 attendees, 8 stages, 8 days.", mapHint: "Roskilde Festival, Darupvej 35, 4000 Roskilde, Denmark", verified: "Jun 2026", color: "#E53935", tags: ["Music", "Camping"] },
-  { id: 102, name: "Distortion", tier: "Recommended", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🔊", date: "2026-06-03", dateEnd: "2026-06-07", photo: "/major2.jpg", desc: "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods.", mapHint: "Nørrebrogade, 2200 Copenhagen, Denmark", verified: "Jun 2026", color: "#8E24AA", tags: ["Electronic", "Street"],
-    blogBody: [
-      { type: "heading", content: "Music & Atmosphere" },
-      { type: "paragraph", content: "Distortion isn't confined to a single festival site. During the week, neighbourhoods like Nørrebro and Vesterbro come alive with DJs, bars, street food and thousands of people celebrating outdoors before everything moves to Refshaleøen for the festival finale." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Perfect for travellers in their 20s and 30s, backpackers, nightlife lovers and anyone who enjoys electronic music. If you like discovering a city's social scene rather than spending all day inside a fenced festival, Distortion is an easy recommendation." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "The streets can become extremely busy, particularly during the free neighbourhood events. Expect crowds, loud music and late nights throughout the city." },
-    ] },
-  { id: 103, name: "Aalborg Karneval", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aalborg", type: "Cultural", emoji: "🎭", date: "2026-05-20", dateEnd: "2026-05-24", photo: "/major3.jpg", desc: "Scandinavia's largest carnival. 100,000+ participants in costumes.", mapHint: "Aalborg Centrum, 9000 Aalborg, Denmark", verified: "Jun 2026", color: "#F57F17", tags: ["Carnival", "Parade"] },
-  { id: 104, name: "Copenhagen Jazz Festival", travelTime: "In Copenhagen 🚇", rating: 4.8, ticketStatus: "free", town: "Copenhagen", type: "Music", emoji: "🎷", date: "2026-07-03", dateEnd: "2026-07-12", photo: "/major4.jpg", desc: "10 days of jazz across 100+ venues. Free concerts in squares and parks.", mapHint: "Copenhagen City Hall Square, Denmark", verified: "Jun 2026", color: "#00695C", tags: ["Jazz", "Free"] },
-  { id: 105, name: "Smukfest", tier: "Worth it for longer stays", travelTime: "2h 45min 🚂", rating: 4.9, ticketStatus: "selling_fast", town: "Skanderborg", type: "Music", emoji: "🌲", date: "2026-08-05", dateEnd: "2026-08-09", photo: "/major5.jpg", desc: "Denmark's Most Beautiful Festival in a beech forest near Skanderborg.", mapHint: "Smukfest, Dyrehaven, 8660 Skanderborg, Denmark", verified: "Jun 2026", color: "#2E7D32", tags: ["Music", "Forest"],
-    blogBody: [
-      { type: "heading", content: "Music & Atmosphere" },
-      { type: "paragraph", content: "Few festivals anywhere in Europe can match Smukfest's setting. Concerts take place beneath towering beech trees, with illuminated forest paths creating a magical atmosphere after sunset. Food courts, bars and beautifully designed campsites make it feel more like a temporary woodland village than a traditional campsite." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Attracts everyone from groups of friends and couples to seasoned festival-goers in their 20s through 50s — perfect for travellers who love music but also appreciate good food and a relaxed atmosphere." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "This isn't a budget festival — tickets, accommodation, food and drinks add up quickly, and you'll spend plenty of time walking hilly forest terrain. Tickets are notoriously difficult to secure." },
-    ] },
-  { id: 106, name: "NorthSide Festival", travelTime: "3h 🚂", rating: 4.7, ticketStatus: "available", town: "Aarhus", type: "Music", emoji: "🎪", date: "2026-06-05", dateEnd: "2026-06-07", photo: "/major6.jpg", desc: "Aarhus's biggest music festival with eco-friendly focus.", mapHint: "NorthSide Festival, Eskelundsvej, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#1565C0", tags: ["Music", "Eco"] },
-  { id: 107, name: "Aarhus Festuge", tier: "Worth it for longer stays", travelTime: "3h 🚂", rating: 4.6, ticketStatus: "free", town: "Aarhus", type: "Cultural", emoji: "🎨", date: "2026-08-28", dateEnd: "2026-09-06", photo: "/major7.jpg", desc: "One of Scandinavia's largest cultural festivals. 300+ events, most free.", mapHint: "Aarhus Centrum, 8000 Aarhus, Denmark", verified: "Jun 2026", color: "#AD1457", tags: ["Culture", "Free"],
-    blogBody: [
-      { type: "heading", content: "Art & Atmosphere" },
-      { type: "paragraph", content: "Aarhus Festuge isn't a festival you simply attend — it's one you stumble across as you explore the city. One moment you might discover a giant interactive art installation in a public square, the next you'll hear live music echoing through a side street." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "One of Denmark's most accessible festivals — art lovers, foodies, architecture enthusiasts and families will all find reasons to wander the city." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Events are spread across the city, so comfortable walking shoes are essential. Popular performances often sell out in advance, and hotels become noticeably more expensive during the festival." },
-    ] },
-  { id: 108, name: "Tønder Festival", tier: "Worth it for longer stays", travelTime: "3h 30min 🚂", rating: 4.8, ticketStatus: "available", town: "Tønder", type: "Music", emoji: "🎻", date: "2026-08-26", dateEnd: "2026-08-30", photo: "/major8.jpg", desc: "Scandinavia's leading folk and roots festival near the German border.", mapHint: "Tønder Festival Pladsen, 6270 Tønder, Denmark", verified: "Jun 2026", color: "#4E342E", tags: ["Folk", "Roots"],
-    blogBody: [
-      { type: "heading", content: "Music & Atmosphere" },
-      { type: "paragraph", content: "If you enjoy acoustic music, singer-songwriters, bluegrass, folk or Americana, Tønder is unlike any other festival in Denmark. Audiences are known for listening respectfully, often falling completely silent during quieter performances — and once the official concerts finish, spontaneous jam sessions continue around the campsite late into the night." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Attracts a slightly older audience than many Danish festivals, but music lovers of all ages who value musicianship and intimate settings over mainstream headliners will fit right in." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Hotels in Tønder book out surprisingly early — many experienced visitors choose the festival campsite instead." },
-    ] },
-  { id: 109, name: "Triangle Folklore Festival", travelTime: "2h 15min 🚂", rating: 4.5, ticketStatus: "free", town: "Vejle", type: "Cultural", emoji: "🌍", date: "2026-07-26", dateEnd: "2026-08-01", photo: "/major9.jpg", desc: "Denmark's biggest international folklore festival. Groups from 10+ countries perform in the streets of Vejle.", mapHint: "Vejle Centrum, 7100 Vejle, Denmark", verified: "Jul 2026", color: "#1B5E20", tags: ["Folklore", "Dance"],
-    blogBody: [
-      { type: "heading", content: "Music & Atmosphere" },
-      { type: "paragraph", content: "The festival feels more like travelling the world in a single afternoon than attending a traditional festival. Dance groups from Europe, South America and beyond perform throughout the city, while colourful parades and live music fill pedestrian streets with energy." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Ideal for families, photographers, culture lovers and travellers looking for something different from Denmark's many music festivals." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "If you're looking for major concerts, nightlife or internationally famous bands, this probably isn't the right festival — it's best enjoyed at a slower pace while exploring Vejle on foot." },
-    ] },
-  { id: 110, name: "Odense Flower Festival", tier: "Recommended", travelTime: "1h 30min 🚂", rating: 4.7, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "🌸", date: "2026-08-13", dateEnd: "2026-08-16", photo: "/major10.jpg", desc: "200,000+ flowers transform the entire city centre of Odense.", mapHint: "Flakhaven, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#E91E8C", tags: ["Flowers", "Free"],
-    blogBody: [
-      { type: "heading", content: "Flowers & Atmosphere" },
-      { type: "paragraph", content: "The festival is less about organised events and more about wandering through a city that has temporarily become a giant open-air garden. Elaborate flower sculptures and artistic installations appear around every corner." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Perfect for photographers, gardeners, couples, families and anyone who enjoys slow travel over loud concerts or busy nightlife." },
-      { type: "heading", content: "Should You Visit?" },
-      { type: "paragraph", content: "Definitely. One of Denmark's most beautiful free events — visit early morning or later in the evening for the best light and fewer crowds." },
-    ] },
-  { id: 111, name: "H.C. Andersen Festivals", travelTime: "1h 30min 🚂", rating: 4.8, ticketStatus: "free", town: "Odense", type: "Cultural", emoji: "📖", date: "2026-08-13", dateEnd: "2026-08-22", photo: "/major11.jpg", desc: "Denmark's largest cultural festival. 500+ events across 10 days in H.C. Andersen's hometown.", mapHint: "Odense City Centre, 5000 Odense C, Denmark", verified: "Jul 2026", color: "#7B1FA2", tags: ["Culture", "Free"],
-    blogBody: [
-      { type: "heading", content: "Theatre & Atmosphere" },
-      { type: "paragraph", content: "Rather than revolving around one stage, the H.C. Andersen Festivals take over the entire city. Street performers, musicians, storytellers and actors appear throughout Odense, blending fairy tales with modern theatre, concerts, comedy and interactive performances." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Genuinely has something for everyone — families with young children will love the storytelling and interactive theatre, while culture lovers can wander between performances for hours." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Runs the same time as the Odense Flower Festival, making the city centre particularly busy — walking or public transport is much easier than driving." },
-    ] },
-  { id: 112, name: "Samsø Food Festival (Råvarefestival)", travelTime: "2h 30min 🚢", rating: 4.5, ticketStatus: "free", tier: "Recommended", town: "Samsø", type: "Cultural", emoji: "🥔", date: "2026-06-13", dateEnd: "2026-06-14", photo: "/major12.jpg", desc: "A cosy weekend celebrating everything Samsø grows and makes — the island is famous nationwide for its potatoes. Free entry, with food workshops, tastings, a communal island dinner and even a tug-of-war championship. Guest chefs join local producers each year, including Anne Hjernøe in 2026.", mapHint: "Onsbjerg Mark, Pillemarksvej 1, 8305 Tranebjerg, Samsø, Denmark", verified: "Jul 2026", color: "#2E7D32", tags: ["Food", "Island", "Family"] },
-];
 
-const vikingEvents = [
-  { id: 201, name: "Trelleborg Vikingefestival", tier: "Recommended", travelTime: "1h 15min 🚂", rating: 4.8, town: "Slagelse", type: "Battle & Market", emoji: "🛡", date: "2026-07-11", dateEnd: "2026-07-19", photo: "/viking1.jpg",
-    desc: "Denmark's largest Viking festival — over 1,000 reenactors camp on the exact UNESCO World Heritage ring fortress Harald Bluetooth built in 980. Nine days of trade, craft and everyday Viking life, building to the Battle of Trelleborg: 250 armoured warriors fighting daily at 13:00 from Thursday to Sunday. A free bus (line 909) runs from Slagelse Station all season.",
-    mapHint: "Trelleborg Allé 4, 4200 Slagelse, Denmark", verified: "Jul 2026", color: "#8D6E63", tags: ["Battle Reenactment", "UNESCO Site", "Craft"], price: "150 DKK adult / 50 DKK child" },
-  { id: 202, name: "Internationalt Vikingemarked", tier: "Recommended", travelTime: "3h 15min 🚂", rating: 4.6, town: "Ribe", type: "Market", emoji: "⚔️", date: "2026-04-27", dateEnd: "2026-05-03", photo: "/viking2.jpg",
-    desc: "Traders and reenactors from across Europe fill Ribe VikingeCenter's marketplace — the same spot that made Ribe a trading town 1,300 years ago. Warriors, riders, archers and musicians throughout. Foreign traders take cash only (DKK/EUR); many Danish traders also accept MobilePay — no cards, no ATM on site.",
-    mapHint: "Ribe VikingeCenter, Lustrupvej 4, 6760 Ribe, Denmark", verified: "Jul 2026", color: C.accent, tags: ["Viking Market", "Craft", "Family"] },
-  { id: 203, name: "Moesgaard Viking Moot", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.6, town: "Aarhus", type: "Market & Combat", emoji: "🛡", date: "2026-07-24", dateEnd: "2026-07-26", photo: "/viking3.jpg",
-    desc: "Denmark's most dramatic Viking market — international warriors, mounted horse combat and craft demonstrations at Moesgaard Museum. See the full Viking Days experience details under Booking.",
-    mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Horse Combat"],
-    blogBody: [
-      { type: "heading", content: "History & Atmosphere" },
-      { type: "paragraph", content: "This isn't a theme park — it's living history. Reenactors fully embrace Viking life, wearing historically accurate clothing and demonstrating ancient crafts. Wander through the sprawling market camp, watch blacksmiths at work, experience falconry displays, or witness dramatic combat demonstrations on the beach." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "Appeals to almost everyone — families, history enthusiasts, photographers and anyone fascinated by Nordic history." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Expect plenty of walking across a large outdoor area. Comfortable footwear is essential, and wet weather can make parts of the grounds muddy." },
-    ] },
-  { id: 204, name: "Als Vikingemarked", travelTime: "3h 30min 🚂", rating: 4.4, town: "Sønderborg", type: "Market", emoji: "🔨", date: "2026-06-13", dateEnd: "2026-06-14", photo: "/viking4.jpg",
-    desc: "A working Viking settlement for a weekend — jewellers, leatherworkers, blacksmiths, weavers and bowyers demonstrate their craft live, alongside daily combat displays, archery and activities for kids.",
-    mapHint: "Als Vikingemarked, Skydebanevej, Kær Vestermark, 6400 Sønderborg, Denmark", verified: "Jul 2026", color: "#2E7D32", tags: ["Viking Market", "Craft", "Family"] },
-  { id: 205, name: "Vikingemarkedet på Lindholm Høje", travelTime: "3h 🚂", rating: 4.5, town: "Nørresundby (Aalborg)", type: "Market", emoji: "⛰", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/viking5.jpg",
-    desc: "Set right on Lindholm Høje — one of Scandinavia's largest Viking burial sites — this market brings reenactors and craftspeople to the very ground where Vikings once lived. Genuinely close to Aalborg, easy to combine with a city visit.",
-    mapHint: "Vendilavej 11, 9400 Nørresundby, Denmark", verified: "Jul 2026", color: "#1565C0", tags: ["Viking Market", "Craft"] },
-  { id: 206, name: "Ravnens Marked", travelTime: "2h 15min 🚂", rating: 4.4, town: "Jelling", type: "Market", emoji: "🐦", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/jelling.jpg",
-    desc: "A Viking market at Jelling — the same town where Denmark was named as a nation on the famous rune stones. Combine with a stop at the UNESCO stones themselves; this event sits right on the Copenhagen–Aalborg road trip route.",
-    mapHint: "Fårupvej 25, 7300 Jelling, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Craft"] },
-  { id: 207, name: "Aggersborg Vikingehåndværkertræf", tier: "Recommended", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/viking7.jpg",
-    desc: "A craftsmen-only gathering at Aggersborg — one of Denmark's largest Viking ring fortresses. Less market, more workshop: expect to see smiths, carvers and weavers deep in their process rather than just selling finished goods.",
-    mapHint: "Thorupvej 13, Aggersund, 9670 Løgstør, Denmark", verified: "Jul 2026", color: "#E65100", tags: ["Viking Market", "Craft"],
-    blogBody: [
-      { type: "heading", content: "History & Atmosphere" },
-      { type: "paragraph", content: "Unlike Denmark's larger Viking festivals, Aggersborg focuses on craftsmanship, archaeology and quiet reflection — blacksmiths, woodworkers and traditional artisans demonstrating historic techniques inside one of Harald Bluetooth's remarkable ring fortresses." },
-      { type: "heading", content: "Who Is It For?" },
-      { type: "paragraph", content: "A fantastic stop for archaeology enthusiasts, UNESCO collectors and slow travellers who prefer meaningful conversations over crowds." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Don't expect towering ruins or theatrical battle shows — much of Aggersborg survives as grass-covered earthworks. The location is fairly remote; a car is the easiest way to visit." },
-    ] },
-];
 
-const towns = [
-  { id: 1, name: "Ribe", photo: "/ribe.jpg", region: "South Jutland", emoji: "⛪", tag: "Denmark's oldest town", desc: "Founded around 700 AD — the oldest town in Scandinavia. Medieval cathedral, Viking museum and cobblestone streets.", highlight: "Viking Center Ribe — artisans craft authentic Viking jewellery, leather and textiles on site.", travelTime: "3h 15min 🚂", mapHint: "Ribe, 6760 Ribe, Denmark", nomiPotential: "High" },
-  { id: 2, name: "Dragør", photo: "/towns/dragor.jpg", region: "Copenhagen Area", emoji: "⚓", tag: "Fisherman's village", desc: "Just 12km from Copenhagen — yellow ochre houses, a working harbour, cobblestone streets. Feels like another era.", highlight: "The harbour fish stalls sell smoked fish caught the same morning. No menus, no TripAdvisor.", travelTime: "30min 🚌", mapHint: "Dragør Havn, 2791 Dragør, Denmark", nomiPotential: "High" },
-  { id: 3, name: "Ærøskøbing", photo: "/towns/aeroskobing.jpg", region: "Funen", emoji: "🏡", tag: "Denmark's fairy-tale town", desc: "750-year-old town on the island of Ærø. Half-timbered houses, flower-lined streets. One of Europe's best preserved small towns.", highlight: "The local bottle ship museum — a man spent decades making ships inside bottles.", travelTime: "3h + ferry 🚢", mapHint: "Ærøskøbing, 5970 Ærø, Denmark", nomiPotential: "Very High" },
-  { id: 4, name: "Skagen", photo: "/towns/skagen.jpg", region: "North Jutland", emoji: "🌊", tag: "Where two seas meet", desc: "Denmark's northernmost town. Where the North Sea and Baltic Sea collide. Yellow houses, artist culture.", highlight: "The local fish auction starts at 6am on weekdays. Fresh fish sold direct from boats.", travelTime: "4h 🚂", mapHint: "Skagen, 9990 Skagen, Denmark", nomiPotential: "High" },
-  { id: 5, name: "Præstø", photo: "/towns/praesto.jpg", region: "Zealand", emoji: "🏘", tag: "Hidden countryside gem", desc: "South of Copenhagen — cobbled streets, old market square. The kind of town that makes you wonder why nobody talks about it.", highlight: "Oremandsgaard Estate sells locally produced goods from their own farm and distillery.", travelTime: "1h 10min 🚂", mapHint: "Præstø Torv, 4720 Præstø, Denmark", nomiPotential: "Very High" },
-  { id: 6, name: "Faaborg", photo: "/towns/faaborg.jpg", region: "Funen", emoji: "🌿", tag: "Old-world harbour charm", desc: "Quiet harbour town on the south coast of Funen. 17th century merchant buildings, cobblestone alleys.", highlight: "The local ceramics workshop near the harbour sells pieces made on site. Cash only, no website.", travelTime: "2h 30min 🚂", mapHint: "Faaborg Havn, 5600 Faaborg, Denmark", nomiPotential: "High" },
-  { id: 7, name: "Gudhjem", photo: "/towns/gudhjem.jpg", region: "Bornholm", emoji: "🐟", tag: "Baltic island village", desc: "Atmospheric fishing village on Bornholm. Home of the legendary Sol over Gudhjem smoked herring dish.", highlight: "Røgeriet — the old smokehouse. Watch them smoke herring the traditional way.", travelTime: "2h + ferry 🚢", mapHint: "Gudhjem Havn, 3760 Gudhjem, Bornholm", nomiPotential: "Very High" },
-  { id: 8, name: "Sønderho", photo: "/fanø.jpg", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island. Thatched houses, winding lanes, seals in the Wadden Sea National Park.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts made on the island for centuries.", travelTime: "3h + ferry 🚢", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
-  { id: 9, name: "Mariager", photo: "/towns/mariager.jpg", region: "North Jutland", emoji: "🌹", tag: "The City of Roses", desc: "An 18th-century town of cobblestone streets and half-timbered houses, built around a medieval abbey on the Mariager Fjord.", highlight: "Mariager Saltcenter, a working salt museum nearby, lets you taste local salt variations most Danes have never heard of.", travelTime: "3h 30min 🚂", mapHint: "Mariager, 9550 Mariager, Denmark", nomiPotential: "High" },
-  { id: 10, name: "Sæby", photo: "/towns/saeby.jpg", region: "North Jutland", emoji: "⚓", tag: "The Artisans' Coastal Haven", desc: "A quiet coastal town with a historic watermill canal path and yellow timber fishermen's houses along the water.", highlight: "Small amber-carving workshops are tucked along the old streets — genuine local craft, no tour buses.", travelTime: "3h 45min 🚂", mapHint: "Sæby, 9300 Sæby, Denmark", nomiPotential: "High" },
-  { id: 11, name: "Thorup Strand", photo: "/towns/thorupstrand.jpg", region: "North Jutland", emoji: "🎣", tag: "The Last Living Fishing Hamlet", desc: "One of Denmark's last true coastal fishing communities — blue wooden cutters are still winched straight onto the beach by hand, the way it's been done for generations.", highlight: "Buy fish straight off the boat at the local beach-side cooperative shop, caught that same morning.", travelTime: "4h drive", mapHint: "Thorup Strand, 9690 Fjerritslev, Denmark", nomiPotential: "Very High" },
-  { id: 12, name: "Ebeltoft", photo: "/towns/ebeltoft.jpg", region: "East Jutland", emoji: "🚢", tag: "The Crooked-House Village of Mols", desc: "A perfectly preserved 1789 town hall, cobblestone alleys and one of the world's longest wooden warships moored right in the harbour.", highlight: "Step aboard the Fregatten Jylland, a genuine 19th-century wooden frigate you can walk through deck by deck. Great base for hiking Mols Bjerge National Park.", travelTime: "3h 30min 🚂", mapHint: "Ebeltoft, 8400 Ebeltoft, Denmark", nomiPotential: "High" },
-  { id: 13, name: "Nyhavn", popularityTag: "Common Attraction", region: "Copenhagen Area", emoji: "⛵", tag: "Copenhagen's most photographed harbour", desc: "The colourful 17th-century harbour district everyone recognises from postcards — wooden ships, waterfront restaurants, and Copenhagen's most Instagrammed street. Genuinely worth seeing, but this is the opposite of hidden — go in, know it, then find the quieter places nearby.", highlight: "Walk 10 minutes north to the quieter Nyboder district — original 17th-century naval rowhouses, still lived in, almost nobody stops there.", travelTime: "In Copenhagen 🚇", mapHint: "Nyhavn, 1051 København, Denmark", nomiPotential: "Common" },
-];
 
-const freeEntrance = [
-  // ── AARHUS ──
-  { id: 1, name: "The Greenhouses, Botanical Garden", popularityTag: "Hidden Gem", city: "Aarhus", type: "Botanical garden", emoji: "🌿", desc: "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free.", website: "https://sciencemuseerne.dk/botanisk-have/", color: "#2E7D32",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "The star attraction is the Tropical Dome, where an elevated wooden walkway takes you above the rainforest canopy. The scenery shifts from lush jungle to Mediterranean gardens and arid desert, feeling like several attractions rolled into one." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "The tropical greenhouse is exactly that — tropical. Expect high humidity and warm temperatures, particularly in summer." },
-    ] },
-  { id: 2, name: "The Viking Museum", popularityTag: "Hidden Gem", city: "Aarhus", type: "Small basement museum", emoji: "⚔️", desc: "A tiny, easily-missed museum literally underground beneath a bank on the town square, built around the genuine remains of ancient Aros. Around 30 DKK for adults, free under 18.", website: "https://www.nordjyskemuseer.dk/", color: "#1565C0",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "Rather than replicas, the museum is built around genuine archaeological remains discovered beneath the modern city — ancient house foundations, runic carvings and everyday artefacts telling the story of how Aarhus grew from a Viking settlement into Denmark's second-largest city." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "This is a compact museum, with most visits lasting 30–45 minutes. If you're expecting reconstructed Viking ships or a large interactive exhibition, this isn't that — it's a quick, worthwhile stop while exploring the city centre. Generally closed Mondays outside summer season." },
-    ] },
-  { id: 3, name: "Ole's Garden, University Park", popularityTag: "Hidden Gem", city: "Aarhus", type: "Hidden park", emoji: "🌳", desc: "A serene, secret park hidden inside Aarhus University's yellow-brick campus — largely known only to local students.", website: "https://www.au.dk/", color: "#558B2F" },
-  // ── AALBORG ──
-  { id: 4, name: "Lindholm Høje", popularityTag: "Common Attraction", city: "Aalborg", type: "Ancient burial site (outdoor)", emoji: "⛰", desc: "A breathtaking ancient Viking burial site with nearly 700 graves, free to walk year-round. The paired indoor museum charges a small entry fee.", website: "https://nordjyskemuseer.dk/u/vikingemuseet-lindholm-hoje/", color: "#1565C0",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "Dating back more than 1,000 years, Lindholm Høje is famous for its hundreds of stone circles and ship-shaped grave markers spread across a windswept hillside, with panoramic views over the Limfjord." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Rather than ropes and glass cases, you're free to walk among the ancient graves while sheep quietly graze the surrounding hills. Sunset is especially popular. The indoor museum typically closes mid-December to early January, though the outdoor burial grounds stay accessible year-round." },
-    ] },
-  { id: 5, name: "The Singing Trees", popularityTag: "Hidden Gem", city: "Aalborg", type: "Musical park installation", emoji: "🎵", desc: "International stars — Elton John, Sting — have planted trees here. Press the button at each tree to hear their music.", website: "https://akkc.dk/de-syngende-traeer/", color: "#D4AF37",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "Every major artist who performs in Aalborg is invited to plant a tree in Kildeparken, creating a living musical timeline of the city's concerts — from Elton John and Sting to Backstreet Boys and many more." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Best experienced as part of a walk through central Aalborg rather than a destination on its own. During winter or maintenance periods, some speakers may not be operating." },
-    ] },
-  { id: 6, name: "Franciscan Friary Museum", popularityTag: "Hidden Gem", city: "Aalborg", type: "Subterranean ruins", emoji: "💀", desc: "A fully underground museum reached by glass elevator on a busy shopping street — medieval ruins and skeletons below your feet. Small entry fee may apply.", website: "https://nordjyskemuseer.dk/u/graabroedekloster-museet/", color: "#6D4C41",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "Built around the authentic ruins of a 13th-century Franciscan friary, letting visitors walk through excavated foundations hidden for centuries beneath one of Aalborg's busiest shopping streets." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "A small museum — most visits last 20–40 minutes, focused on archaeological remains rather than interactive exhibits." },
-    ] },
-  { id: 7, name: "Sohngårdsholmpark", popularityTag: "Hidden Gem", city: "Aalborg", type: "Park & fruit orchard", emoji: "🍎", desc: "A sprawling neighbourhood park around a 19th-century manor — with a public apple orchard anyone can pick from.", website: null, color: "#558B2F",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "Unlike Aalborg's smaller city parks, Sohngårdsholm feels spacious and tranquil — walking paths wind through mature woodland, open grassy areas and past the historic manor house." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "A little outside Aalborg's main tourist area, best combined with other nearby stops. Facilities are limited, so bring water or snacks." },
-    ] },
-  // ── COPENHAGEN ──
-  { id: 9, name: "Amalienborg Palace Courtyard", popularityTag: "Common Attraction", city: "Copenhagen", type: "Royal residence (courtyard)", emoji: "👑", photo: "/amalienborg1.jpg",
-    desc: "One of Copenhagen's most iconic landmarks — the official residence of the Danish royal family, and the perfect place to experience Danish royal tradition without spending a krone.",
-    website: "https://www.kongernessamling.dk/amalienborg/", color: "#D4AF37",
-    blogBody: [
-      { type: "paragraph", content: "Unlike many royal palaces in Europe, Amalienborg is still an active royal residence. The elegant octagonal courtyard is framed by four identical palace buildings, with the Marble Church creating one of Copenhagen's most recognisable views. Time your visit for 12:00 PM and you'll also witness the famous Changing of the Guard." },
-      { type: "image", src: "/amalienborg2.jpg" },
-      { type: "heading", content: "What Travelers Love" },
-      { type: "paragraph", content: "Visitors consistently mention how much grander the courtyard feels in person than in photos. The guard ceremony is the biggest draw, but many find themselves just as impressed by the peaceful atmosphere outside ceremony hours and the beautiful symmetry of the palace complex. If you're hoping for the best view of the guards, arriving 15–20 minutes early is well worth it." },
-      { type: "image", src: "/amalienborg3.jpg" },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Most of the palace buildings are private royal residences, so the courtyard is the main attraction unless you purchase a museum ticket. Around noon, the square becomes one of Copenhagen's busiest tourist spots, so expect crowds during the guard ceremony." },
-      { type: "image", src: "/amalienborg4.jpg" },
-    ] },
-  { id: 10, name: "The Royal Library Garden", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Hidden courtyard garden", emoji: "📚", photo: "/librarygarden1.jpg",
-    desc: "Hidden between Christiansborg Palace and the Black Diamond library, this is one of Copenhagen's best-kept secrets — a peaceful escape from the city's busiest streets.",
-    website: null, color: "#2E7D32",
-    blogBody: [
-      { type: "paragraph", content: "Despite being just steps from Parliament and some of Copenhagen's busiest sights, the garden feels surprisingly secluded. A central fountain, colourful flower beds and the statue of philosopher Søren Kierkegaard create a calm, almost hidden atmosphere that's perfect for slowing down." },
-      { type: "image", src: "/librarygarden2.jpg" },
-      { type: "heading", content: "What Travelers Love" },
-      { type: "paragraph", content: "Many visitors stumble across Bibliotekshaven by accident and end up wishing they'd stayed longer. It's often described as one of Copenhagen's quietest green spaces — a favourite place to enjoy a coffee, read a book or simply escape the crowds for a while." },
-      { type: "image", src: "/librarygarden3.jpg" },
-      { type: "heading", content: "Best Time to Visit" },
-      { type: "paragraph", content: "May–September — the gardens are at their most colourful, with blooming flowers and plenty of sunny spots to relax." },
-      { type: "image", src: "/librarygarden4.jpg" },
-    ] },
-  { id: 11, name: "Medical Herb Garden, Kastellet", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Hidden garden", emoji: "🌱", desc: "A tiny, secluded herb patch inside the star-fortress of Kastellet — bypassed by most tourists rushing to the Little Mermaid.", website: "https://www.kastelletsvenner.dk/", color: "#558B2F" },
-  { id: 12, name: "Kastellet", popularityTag: "Common Attraction", city: "Copenhagen", type: "Star fortress & waterfront walk", emoji: "🛡", desc: "One of Europe's best-preserved star fortresses — centuries of military history combined with some of Copenhagen's best waterfront walks. Completely free, and a genuinely better use of your time than just photographing the Little Mermaid next door.", website: null, color: "#455A64",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "Kastellet isn't just a historic fortress — it's an active military site that's also one of Copenhagen's most scenic public spaces. Walk the grassy ramparts, admire the bright red barracks, visit the historic windmill and enjoy panoramic views across the moats and harbour." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "The best views are from the elevated ramparts, reached via gravel paths and grassy slopes that can get slippery after heavy rain or ice. Kastellet remains an active military area — stay within the public sections." },
-    ] },
-  { id: 13, name: "Øens Have", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Urban farm", emoji: "🌾", desc: "Northern Europe's largest urban farm, set on the creative Refshaleøen peninsula — vegetable gardens, chickens and beehives against the backdrop of Copenhagen's former shipyards. Free to explore the farm itself; the farm-to-table restaurant is a paid, premium experience.", website: null, color: "#2E7D32",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "A unique blend of sustainability, food culture and relaxed outdoor living unlike anywhere else in the city. Most people come for the gardens but stay for the atmosphere — the contrast between lush greenery and the industrial surroundings gives Øens Have a character all its own." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "A seasonal attraction, at its best from late spring through early autumn — during winter, many outdoor areas become quieter and some operations scale back. Book ahead if you're planning to dine, especially in summer." },
-    ] },
-  { id: 14, name: "Medical Herb Garden (Lægeurtehaven)", popularityTag: "Hidden Gem", city: "Aalborg", type: "Monastery herb garden", emoji: "🌿", desc: "Tucked beside Aalborg's historic monastery, a small peaceful green space inspired by the medicinal gardens once maintained by monks.", website: null, color: "#558B2F",
-    blogBody: [
-      { type: "heading", content: "What Makes It Special" },
-      { type: "paragraph", content: "The garden recreates the type of herb garden that would have supplied medieval monks with plants for cooking and traditional remedies — clearly labelled beds of medicinal and culinary herbs." },
-      { type: "heading", content: "Things to Know" },
-      { type: "paragraph", content: "Relatively small — most people spend 15–30 minutes here. Works best as a short stop alongside nearby attractions rather than a destination on its own." },
-    ] },
-];
 
-const nightlifeSpots = [
-  // ── LOCAL — Danes go here, tourists mostly don't ──
-  { id: 1, name: "Toga Vinstue", type: "Local", crowd: "Almost entirely Danish", emoji: "🍺", category: "Brown bar (bodega)", location: "Indre By, Copenhagen", desc: "A classic \"brown bar\" — old wood interior, low light, walls covered in political cartoons. Sits five minutes from the Danish Parliament, and actual lawmakers drink here. Cheap beer (around 45 DKK), smoking still allowed indoors, genuinely local despite the central address.", tip: "Don't expect English menus or tourist-friendly service — this is a real neighbourhood bodega, not a show.", mapHint: "Toga Vinstue, Store Kongensgade, 1264 København K, Denmark", color: "#5D4037" },
-  { id: 2, name: "Cirkuskroen", type: "Local", crowd: "Almost entirely Danish", emoji: "🤡", category: "Historic pub, est. mid-1900s", location: "Aarhus", desc: "One of Aarhus's oldest and smallest pubs — walls and ceiling covered in over 500 clown figures, a nod to the circus family that once ran it. A genuine only-in-Aarhus oddity, nominated by locals as one of the city's real hidden places.", tip: "Small and intimate — go early evening on a weekday for the best chance at a seat and an actual conversation with regulars.", mapHint: "Cirkuskroen, Skovvejen 23, 8000 Aarhus, Denmark", color: "#6A1B9A" },
-  // ── MAJOR — busy, mixed or mostly international ──
-  { id: 3, name: "Strøget (Old Irish & pub strip)", type: "Major", crowd: "Very international", emoji: "🍀", category: "Pub strip", location: "Copenhagen city centre", desc: "Copenhagen's main pedestrian shopping street doubles as a tourist-heavy nightlife strip after dark — Irish pubs like Old Irish anchor it. Fun, easy, English spoken everywhere, but you're mostly meeting other travelers, not Danes.", tip: "Great for an easy first night out — just don't expect to make Danish friends here.", mapHint: "Strøget, 1160 København, Denmark", color: "#2E7D32" },
-  { id: 4, name: "Gothersgade", type: "Major", crowd: "Mixed — locals & tourists", emoji: "🍸", category: "Cocktail bars & pub strip", location: "Copenhagen city centre", desc: "Runs from Kongens Nytorv past Rosenborg Castle, packed with cocktail bars, jazz clubs and well-known pubs like The Dubliner and The Globe. Genuinely mixed crowd — busy but not purely a tourist strip.", tip: "Weeknights are noticeably calmer and more local than weekends.", mapHint: "Gothersgade, 1123 København, Denmark", color: "#1565C0" },
-  { id: 5, name: "Jomfru Ane Gade", type: "Major", crowd: "Mixed — locals, students & tourists", emoji: "🎉", category: "Denmark's densest bar street", location: "Aalborg", desc: "150 metres, 30+ bars — locals just call it \"Gaden\" (The Street). Fuelled heavily by Aalborg University's 20,000+ students, so it's genuinely local-heavy on weekdays, with tourists joining the mix on weekends. Cheap drinks, loud, unpolished — not classy, but real.", tip: "Head to the far end of the street for the cheaper \"shots bar\" locals actually use — the bars closer to the entrance are pricier.", mapHint: "Jomfru Ane Gade, 9000 Aalborg, Denmark", color: "#C8102E" },
-];
 
-const foodSpots = [
-  // ── LOCAL — casual, everyday, no-frills ──
-  { id: 1, name: "Harry's Place", type: "Local", emoji: "🌭", category: "Hot dog stand", location: "Nørrebro/Nordvest, Copenhagen", price: "40–70 DKK", photo: "/harrysplace1.jpg",
-    desc: "A hot dog cart since 1965, run by the same kind of hands-on owners the whole time. Order the \"Børge med krudt\" — the local's move — or the flæskesteg (roast pork) sandwich. Cash or Dankort only. No frills, no seats, just stand and eat like generations before you.",
-    tip: "Ask for it \"the traditional way\" and the person behind the counter will usually tell you exactly how to eat it.", mapHint: "Harry's Place, Nordre Fasanvej 269, 2200 København N, Denmark", color: "#D4AF37" },
-  { id: 2, name: "Sankt Peders Bageri", type: "Local", emoji: "🥐", category: "Bakery, est. 1652", location: "Latin Quarter, Copenhagen", price: "20–40 DKK",
-    desc: "Copenhagen's oldest working bakery — 370+ years on the same cobbled street. Famous for the \"onsdagssnegl\" (Wednesday snail), a cinnamon roll twice the normal size, sold at a discount only on Wednesdays. About 4,000 sell in a single day.",
-    tip: "Arrive by 6:30am on a Wednesday if you want the snail without a long queue — they're known to sell out by mid-morning.", mapHint: "Sankt Peders Stræde 29, 1453 København K, Denmark", color: "#E65100" },
-  { id: 3, name: "Vesterbro's Originale Burgerrestaurant", type: "Local", emoji: "🍔", category: "Burgers", location: "Vesterbro, Copenhagen", price: "100–180 DKK",
-    desc: "A no-nonsense burger joint on Istedgade since 2012, with a relaxed basement bar downstairs. Ten burger options — try \"the almighty\" if you're hungry: a 300g steak patty, fried egg, bacon and cheddar.",
-    tip: "It gets loud and casual on weekend evenings — go earlier if you want an actual conversation over dinner.", mapHint: "Istedgade 36, 1650 København, Denmark", color: C.accent },
-  // ── MAJOR — bigger, busier, famous ──
-  { id: 4, name: "Torvehallerne", type: "Major", emoji: "🏪", category: "Food market", location: "Nørreport, Copenhagen", price: "Varies by stall",
-    desc: "Copenhagen's flagship food market — two glass halls of specialty stalls, fresh produce, cheese, seafood, coffee and prepared food. The go-to for a proper Danish food-market experience, and consistently busy.",
-    tip: "Come on a weekday morning to actually get a seat — weekends are genuinely packed.", mapHint: "Torvehallerne, Frederiksborggade 21, 1360 København K, Denmark", color: "#2E7D32" },
-  { id: 5, name: "Reffen", type: "Major", emoji: "🔥", category: "Street food market", location: "Refshaleøen, Copenhagen", price: "60–150 DKK per stall",
-    desc: "Copenhagen's largest street food market, built from shipping containers on the old harbour. Dozens of vendors, waterfront seating, and a genuinely festival-like atmosphere in summer.",
-    tip: "Seasonal — usually open spring through autumn. Go by bike or the harbour bus (line 991/992), parking is limited.", mapHint: "Refshalevej 167A, 1432 København, Denmark", color: "#C8102E" },
-  { id: 6, name: "Ida Davidsen", type: "Major", emoji: "🐟", category: "Smørrebrød institution", location: "Store Kongensgade, Copenhagen", price: "150–250 DKK per plate",
-    desc: "A fifth-generation smørrebrød restaurant, one of the most famous open-sandwich institutions in Denmark. Menu runs to over 100 varieties — expect a proper sit-down lunch, not a quick bite.",
-    tip: "Book ahead if visiting at lunch — it's a well-known stop on the Copenhagen food-tour circuit.", mapHint: "Store Kongensgade 70, 1264 København K, Denmark", color: "#1565C0" },
-];
 
-const essentials = [
-  { id: 1, name: "DOT Tickets App", category: "Transport", emoji: "🎫", desc: "Buy metro, bus and train tickets for the Copenhagen area straight from your phone. Works with any international card — no Danish accounts needed.", howTo: "Download DOT Tickets, pick your zones and pay with any Visa or Mastercard. Show the ticket on your screen.", price: "From 24 DKK per ticket", link: "https://dinoffentligetransport.dk/en", tip: "A City Pass (24h–120h) gives unlimited travel in Copenhagen including the airport metro — usually the best deal for visitors." },
-  { id: 7, name: "Avoid the Transit Fine", category: "Transport", emoji: "⚠️", desc: "Denmark's transport fine (kontrolafgift) is real and common among tourists — issued on the spot for an invalid ticket, even by accident. It's 750 DKK on the Metro and light rail, and 1,000 DKK on DSB trains and Movia buses. The physical Rejsekort card was discontinued on 28 May 2026 — a new \"Basiskort\" now exists for physical-card users, but a digital ticket is far simpler for a short visit.", howTo: "The 3 mistakes that catch tourists most: (1) Installing a ticket app isn't the same as buying a ticket — you must actually purchase and activate it before boarding. (2) If using a check-in/check-out app, forgetting to check OUT at the end is the single most common tourist fine. (3) A dead phone battery mid-journey means no valid ticket — inspectors don't make exceptions.", price: "750–1,000 DKK if fined", link: "https://dinoffentligetransport.dk/en", tip: "Simplest fix for visitors: buy a fixed ticket in the DOT app or Rejsebillet before you travel, rather than a check-in/check-out card — nothing to forget to end." },
-  { id: 2, name: "Rent a Bike", category: "Transport", emoji: "🚲", desc: "Copenhagen has 390km of cycle lanes. Renting a bike is the best way to see the city.", howTo: "Bycyklen electric bikes available across Copenhagen via app. Or rent from shops from 100 DKK/day.", price: "From 100 DKK/day", link: "https://apps.apple.com/dk/app/bycyklen/id985075832", linkAndroid: "https://play.google.com/store/apps/details?id=dk.bycyklen.app", tip: "Cycle on the right, signal with your arm, always lock up." },
-  { id: 3, name: "Cards & Mobile Pay­ment", category: "Payments", emoji: "💳", desc: "Denmark is one of the world's most cashless countries. Visa and Mastercard — physical or through Apple Pay / Google Pay — work almost everywhere, from cafés to market stalls.", howTo: "Just tap. Contactless is the standard everywhere. Tell your bank you're traveling so nothing gets blocked.", price: "Free", link: null, tip: "A few tiny stalls only take MobilePay (a locals-only Danish app) or cash — carry 100–200 DKK in cash as backup." },
-  { id: 4, name: "DSB App", category: "Transport", emoji: "🚂", desc: "Danish national railway app. Book tickets, check schedules, get real-time delays.", howTo: "Download DSB app. Buy tickets in advance for cheaper prices.", price: "Free app", link: "https://apps.apple.com/dk/app/dsb/id531645423", linkAndroid: "https://play.google.com/store/apps/details?id=dk.dsb.rejseplanen", tip: "Buy Orange tickets weeks ahead for up to 50% off." },
-  { id: 5, name: "Copenhagen Card", category: "Sightseeing", emoji: "🎟", desc: "Free entry to 80+ attractions + unlimited transport across zones 1-99. Worth it for 2+ days.", howTo: "Buy at copenhagencard.com or airport. 24h, 48h, 72h or 120h options.", price: "From 589 DKK", link: "https://www.copenhagencard.com", tip: "Tivoli alone is 190 DKK — card pays for itself with 3+ attractions." },
-  { id: 11, name: "Power Adapters & Plugs", category: "Connectivity", emoji: "🔌", desc: "Denmark uses the Type K socket — a Danish design that looks like a smiley face, but takes a standard European two-pin (Type C) plug without any issue.", howTo: "Bring a standard European Type C adapter if you're coming from outside Europe — it fits almost every outlet in the country. Phones, laptops and cameras handle Denmark's 230V automatically with just a plug adapter.", price: "Adapter from ~50 DKK", link: null, tip: "American hair dryers and curling irons are the exception — don't run them through a cheap plastic adapter alone. Denmark's 230V is much stronger than the US's 120V and will burn out a device built only for the lower voltage." },
-  { id: 6, name: "eSIM or Local SIM", category: "Connectivity", emoji: "📶", desc: "EU roaming covers most Europeans. Outside EU — get a local SIM or eSIM for maps, tickets and translations on the go.", howTo: "Buy at 7-Eleven, Netto or any phone shop. Lebara and Lycamobile work well.", price: "From 49 DKK", link: null, tip: "Make sure your phone is unlocked before traveling." },
-  { id: 8, name: "Skyscanner", category: "Flights & Buses", emoji: "✈️", desc: "A free flight comparison search engine — checks dozens of airlines and booking sites at once to find the cheapest route into Denmark. Doesn't sell tickets itself; it sends you to the airline or agent with the best price.", howTo: "Search your dates on skyscanner.com, or use their \"Whole Month\" or \"Cheapest Month\" view if your travel dates are flexible — often saves the most.", price: "Free to use", link: "https://www.skyscanner.net", tip: "Copenhagen Airport (CPH) is Denmark's main hub, but Billund (BLL) in Jutland is sometimes cheaper and puts you closer to Legoland and central Jutland." },
-  { id: 9, name: "FlixBus", category: "Flights & Buses", emoji: "🚌", desc: "A budget long-distance bus network with 7 routes across Denmark, plus international connections to Hamburg, Oslo and Stockholm. Often the cheapest way in if you're already elsewhere in Europe — a Odense–Copenhagen ticket can run under 100 DKK if booked early.", howTo: "Book on flixbus.com or the FlixBus app. Show your e-ticket on your phone — no printing needed.", price: "From ~100 DKK domestic", link: "https://www.flixbus.com/bus/denmark", tip: "Book as early as possible — FlixBus prices rise the closer you get to departure, sometimes tripling." },
-  { id: 10, name: "Kombardo Expressen", category: "Flights & Buses", emoji: "🚍", desc: "A Denmark-based budget bus line running direct routes Copenhagen–Aarhus, Copenhagen–Aalborg, and Copenhagen–Rønne (Bornholm) as a single through-ticket — genuinely convenient if you'd rather not book bus and ferry separately.", howTo: "Book on kombardoexpressen.dk. Modern buses, comfortable for the longer Jutland routes.", price: "Varies by route", link: "https://www.kombardoexpressen.dk", tip: "The Rønne route bundles the ferry crossing into one ticket — check the exact itinerary when booking." },
-];
 
-const handmadeCraftShops = [
-  { id: 1, name: "Blåvand Bolcher", location: "Blåvand, West Jutland", emoji: "🍭", tag: "Denmark's oldest candy recipes — since 1864", price: "Free to watch · make-your-own lollipop typically small fee",
-    desc: "Denmark's oldest candy recipes, running since 1864, in a spacious kitchen right on the West Coast. This is the one that matters most for off-season travel: it runs every single weekday, all year round — no summer-only window, no booking. Walk in, watch the candy being made, and make your own lollipop.",
-    highlight: "Runs year-round, every weekday — genuinely useful for autumn and winter travelers when most craft experiences in this app are closed for the season.",
-    mapHint: "Blåvandvej 17, 6857 Blåvand, Denmark", color: "#00838F", yearRound: true },
-  { id: 2, name: "Sømods Bolcher", location: "Copenhagen", emoji: "🍬", tag: "Royal Court Purveyor since 1891",
-    price: "Free to watch · candy from 45 DKK",
-    desc: "Royal Court candy makers since 1891 — a living-museum atmosphere on Nørregade. Free summer-only hands-on workshops run late June to early August; outside that window, you can still watch hard candy pulled by hand daily.",
-    highlight: "Watch a production run at 10:15, 12:00, 13:30 or 15:00 on weekdays — arrive a few minutes early, the shop fills fast right when the pulling starts.",
-    mapHint: "Sømods Bolcher, Nørregade 24, 1165 Copenhagen, Denmark", color: C.gold, yearRound: false },
-  { id: 3, name: "Almuegaarden", location: "Tivoli Gardens, Copenhagen · also Gudhjem, Bornholm", emoji: "🎪", tag: "Motif candy over an open fire",
-    price: "Free to watch · candy for sale, no booking for hands-on",
-    desc: "Denmark's most famous motif-candy maker, working from a shop built into Tivoli's \"cheerful corner\" — watch intricate designs get boiled into hard candy live during Tivoli's opening season. Their Gudhjem branch on Bornholm runs genuine hands-on workshops with no booking required, any day the shop is open.",
-    highlight: "The Bornholm branch explicitly requires no booking — walk in any time during opening hours and make your own candy.",
-    mapHint: "Almuegaarden, Tivoli Gardens, Vesterbrogade 3, 1630 Copenhagen, Denmark", color: "#C8102E", yearRound: false },
-];
 
-const roadTrips = [
-  { id: 1, name: "Copenhagen to Aalborg", region: "Zealand → Jutland", emoji: "🚗", duration: "4h 30min drive", distance: "330 km", lat: 56.1629, lon: 10.2039, photo: "/roskilde.jpg",
-    desc: "The classic cross-country route — but almost nobody stops along the way. This drive passes some of Denmark's most important history within a few minutes of the E45, yet most people drive straight through.",
-    stops: [
-      { name: "Roskilde", note: "Viking Ship Museum, 25min off route" },
-      { name: "Jelling", note: "UNESCO Viking rune stones — where Denmark was named as a nation. 15min detour, extraordinary." },
-      { name: "Vejle", note: "Fjord views, a proper coffee stop" },
-      { name: "Aarhus", note: "Latin Quarter, Moesgaard Museum just south of the city" },
-      { name: "Skanderborg", note: "Lakeside forest, home of Smukfest" },
-    ],
-    color: "#1565C0", mapHint: "Copenhagen to Aalborg, Denmark", vibe: "🏛 For history that hides in plain sight" },
-  { id: 2, name: "The Wadden Sea Coast", region: "South Jutland", emoji: "🌾", duration: "2h drive", distance: "95 km", lat: 55.3297, lon: 8.7671, photo: "/roadtrip.jpg",
-    desc: "Denmark's wildest coastline, and a UNESCO World Heritage site most travelers never hear about. Flat marshland, enormous skies, and the best sunsets in the country.",
-    stops: [
-      { name: "Ribe", note: "Denmark's oldest town, Viking Center on the outskirts" },
-      { name: "Mandø", note: "An island you drive to — only at low tide, across the seabed" },
-      { name: "Fanø", note: "Ferry crossing, dune villages, Sønderho at the southern tip" },
-    ],
-    color: "#2E7D32", mapHint: "Wadden Sea Ribe Denmark", vibe: "🌾 Recommended for nature & traditional life" },
-  { id: 3, name: "North Zealand Coastal Loop", region: "Zealand", emoji: "🌊", duration: "2h 30min drive", distance: "110 km", lat: 56.1223, lon: 12.3130, photo: "/tisvildevej.jpg",
-    desc: "A half-day loop from Copenhagen through fishing villages, royal castles and beach towns — genuinely underrated compared to how much attention Copenhagen itself gets.",
-    stops: [
-      { name: "Dragør", note: "Yellow ochre fisherman's village, 30min from the city" },
-      { name: "Kronborg Castle", note: "Hamlet's Elsinore, right on the sound to Sweden" },
-      { name: "Gilleleje", note: "Working fishing harbour, best smoked fish in Zealand" },
-      { name: "Tisvildeleje", note: "Forest meets beach, popular with Copenhageners but unknown abroad" },
-    ],
-    color: "#6A1B9A", mapHint: "North Zealand coast Denmark", vibe: "🔥 Most underrated day trip from Copenhagen" },
-];
 
 const campingSpots = [
   { id: 1, name: "Bøtø Nor Shelter", region: "South Zealand", emoji: "⛺", type: "Free shelter", desc: "Free-to-use wooden shelter right on the coast near Præstø — first come first served, no booking, no fee. Bring your own everything.", travelTime: "1h 20min drive", mapHint: "Bøtø Nor, 4780 Stege, Denmark", color: "#2E7D32", vibe: "🔥 Completely free — locals-only secret" },
@@ -515,46 +62,6 @@ const campingSpots = [
   { id: 4, name: "Mols Bjerge Shelters", region: "East Jutland", emoji: "⛰", type: "Free shelter", desc: "Hilltop shelters in Denmark's only \"mountain\" national park. Short hike in, real silence, some of the best stargazing in the country.", travelTime: "3h 15min drive", mapHint: "Mols Bjerge National Park, 8400 Ebeltoft, Denmark", color: "#E65100", vibe: "✨ Best stargazing spot in Denmark" },
 ];
 
-const seasonalItineraries = [
-  {
-    id: "summer-nature", title: "The Great Nature Adventure", emoji: "🌿", color: "#2E7D32",
-    seasons: ["summer"], duration: "7 days", bestFor: "Nature lovers, hidden-gem seekers, coastal Denmark",
-    intro: "Denmark's summer days stretch to 17 hours of light, and this route is built entirely around it — from a harbour swim in the capital to standing where two seas collide at Denmark's northern tip.",
-    days: [
-      { day: 1, title: "Copenhagen & Harbour Swim", activity: "Rent a bike, explore Indre By, then swim right in the harbour at Islands Brygge. End with a cold beer at Nyhavn or Reffen Street Food." },
-      { day: 2, title: "South Zealand & Møns Klint", activity: "Drive to Møns Klint. Walk the 500 steps down to the beach and see the towering white chalk cliffs rise from turquoise water. Stay in a local B&B." },
-      { day: 3, title: "Funen & Odense", activity: "Cross the Storebælt Bridge. Explore the South Funen archipelago or visit the striking H.C. Andersen's House in Odense." },
-      { day: 4, title: "Nationalpark Thy — Wild West Jutland", activity: "Head to Jutland's west coast, to \"Cold Hawaii\" in Klitmøller. Experience raw, untouched nature shaped by the North Sea wind." },
-      { day: 5, title: "Skagen — Where Two Seas Meet", activity: "Drive to Denmark's northernmost point, Grenen. Stand with one foot in the Skagerrak and the other in the Kattegat. See the buried church and Råbjerg Mile, Denmark's largest migrating dune." },
-      { day: 6, title: "Aarhus — Culture & Food", activity: "Drive south to Aarhus. Visit ARoS Art Museum (walk the rainbow-coloured panorama circle) and eat dinner in the cosy Latin Quarter." },
-      { day: 7, title: "Silkeborg Lakes on the Way Back", activity: "Walk through Silkeborg's deep forests and lakes before heading to the airport for the trip home." },
-    ],
-  },
-  {
-    id: "winter-culture", title: "Culture, History & City Hygge", emoji: "🏰", color: "#6A1B9A",
-    seasons: ["winter"], duration: "4 days", bestFor: "History lovers, budget travellers, museum and café people",
-    seasonNote: "Danish winter nature is genuinely not recommended — short daylight (dark by 15:30), frequent horizontal rain and wind, and coastal towns partly shut down. This itinerary goes 100% indoor culture, history and food instead.",
-    intro: "Denmark's cheapest months to visit, with zero museum queues — this route leans fully into castles, Viking history and warm cafés rather than fighting the weather.",
-    days: [
-      { day: 1, title: "Royal Copenhagen", activity: "Start indoors and warm at Rosenborg Castle to see the crown jewels. Walk over to Christiansborg Palace and explore the royal reception rooms. In the evening: a lit-up Tivoli in December, or a cosy Nørrebro microbrewery/café in Jan–Feb." },
-      { day: 2, title: "Viking Ships & Cathedral in Roskilde", activity: "Take the 30-minute train to Roskilde. Visit the Viking Ship Museum right on the fjord to see original 1,000-year-old ships, then Roskilde Cathedral, resting place of nearly 40 Danish kings and queens." },
-      { day: 3, title: "Cultural Capital Aarhus & Den Gamle By", activity: "Take the express train to Aarhus. Spend the morning at Den Gamle By — a living open-air museum, genuinely atmospheric in winter with costumed guides. Evening: Aarhus Street Food for cheap, excellent food from around the world." },
-      { day: 4, title: "Moesgaard Museum & Flight Home", activity: "Visit the architectural masterpiece Moesgaard Museum outside Aarhus — home to the Grauballe Man, the best-preserved Iron Age bog body in the world. Head back to the airport." },
-    ],
-  },
-  {
-    id: "shoulder-hidden", title: "The Hidden Denmark", emoji: "💎", color: C.gold,
-    seasons: ["spring", "autumn"], duration: "5 days", bestFor: "Couples, foodies, and anyone chasing the genuinely unusual",
-    intro: "May and September are the sweet spot — good daylight, thin crowds, and this is when Denmark's strangest and most beautiful natural phenomenon, Sort Sol, is actually visible.",
-    days: [
-      { day: 1, title: "Bornholm — The Rock Island", activity: "Fly or ferry to Bornholm. The island is at its best in May and September. Explore Hammershus, Northern Europe's largest ruined castle, and see the island's unique round churches." },
-      { day: 2, title: "Smokehouses & Local Delicacies", activity: "Eat \"Sol over Gudhjem\" (smoked herring with egg yolk and chives) at a traditional smokehouse. Walk the dramatic cliff coast at Helligdomsklipperne." },
-      { day: 3, title: "Sort Sol in South Jutland (Autumn only — Sept/Oct)", activity: "Travel to the Wadden Sea in South Jutland. Witness \"Sort Sol\" (Black Sun) — up to a million starlings gathering into vast shifting shapes across the sunset sky. One of Europe's wildest natural phenomena, and genuinely obscure to international travellers." },
-      { day: 4, title: "Ribe — Denmark's Oldest Town", activity: "Walk Ribe's cobblestone streets lined with medieval half-timbered houses. Visit Ribe VikingeCenter and climb the storm bell tower at Ribe Cathedral for a view across the flat marshland." },
-      { day: 5, title: "Hunting the Forgotten Giants", activity: "Spend the last day in the forests around Copenhagen searching for \"De Glemte Kæmper\" (The Forgotten Giants) — enormous recycled-wood troll sculptures hidden in nature by artist Thomas Dambo — before departure." },
-    ],
-  },
-];
 
 const getSeason = () => {
   const m = new Date().getMonth(); // 0=Jan
@@ -984,7 +491,7 @@ const StoreBadge = ({ type, href }) => (
   </a>
 );
 
-const APP_VERSION = "v2.76 — Essentials first, live events in header, premium AI styling";
+const APP_VERSION = "v2.77 — Step 1 of file split: 12 data files extracted (2733→2283 lines)";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -1539,7 +1046,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.76 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.77 — Jul 2026</div>
               </div>
             </div>
           )}

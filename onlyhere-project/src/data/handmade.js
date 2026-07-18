@@ -1,0 +1,16 @@
+export const handmadeCraftShops = [
+  { id: 1, name: "Blåvand Bolcher", location: "Blåvand, West Jutland", emoji: "🍭", tag: "Denmark's oldest candy recipes — since 1864", price: "Free to watch · make-your-own lollipop typically small fee",
+    desc: "Denmark's oldest candy recipes, running since 1864, in a spacious kitchen right on the West Coast. This is the one that matters most for off-season travel: it runs every single weekday, all year round — no summer-only window, no booking. Walk in, watch the candy being made, and make your own lollipop.",
+    highlight: "Runs year-round, every weekday — genuinely useful for autumn and winter travelers when most craft experiences in this app are closed for the season.",
+    mapHint: "Blåvandvej 17, 6857 Blåvand, Denmark", color: "#00838F", yearRound: true },
+  { id: 2, name: "Sømods Bolcher", location: "Copenhagen", emoji: "🍬", tag: "Royal Court Purveyor since 1891",
+    price: "Free to watch · candy from 45 DKK",
+    desc: "Royal Court candy makers since 1891 — a living-museum atmosphere on Nørregade. Free summer-only hands-on workshops run late June to early August; outside that window, you can still watch hard candy pulled by hand daily.",
+    highlight: "Watch a production run at 10:15, 12:00, 13:30 or 15:00 on weekdays — arrive a few minutes early, the shop fills fast right when the pulling starts.",
+    mapHint: "Sømods Bolcher, Nørregade 24, 1165 Copenhagen, Denmark", color: "#D4AF37", yearRound: false },
+  { id: 3, name: "Almuegaarden", location: "Tivoli Gardens, Copenhagen · also Gudhjem, Bornholm", emoji: "🎪", tag: "Motif candy over an open fire",
+    price: "Free to watch · candy for sale, no booking for hands-on",
+    desc: "Denmark's most famous motif-candy maker, working from a shop built into Tivoli's \"cheerful corner\" — watch intricate designs get boiled into hard candy live during Tivoli's opening season. Their Gudhjem branch on Bornholm runs genuine hands-on workshops with no booking required, any day the shop is open.",
+    highlight: "The Bornholm branch explicitly requires no booking — walk in any time during opening hours and make your own candy.",
+    mapHint: "Almuegaarden, Tivoli Gardens, Vesterbrogade 3, 1630 Copenhagen, Denmark", color: "#C8102E", yearRound: false },
+];
