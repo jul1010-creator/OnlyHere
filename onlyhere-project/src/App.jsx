@@ -420,6 +420,7 @@ const essentials = [
   { id: 7, name: "Avoid the Transit Fine", category: "Transport", emoji: "⚠️", desc: "Denmark's transport fine (kontrolafgift) is real and common among tourists — issued on the spot for an invalid ticket, even by accident. It's 750 DKK on the Metro and light rail, and 1,000 DKK on DSB trains and Movia buses. The physical Rejsekort card was discontinued on 28 May 2026 — a new \"Basiskort\" now exists for physical-card users, but a digital ticket is far simpler for a short visit.", howTo: "The 3 mistakes that catch tourists most: (1) Installing a ticket app isn't the same as buying a ticket — you must actually purchase and activate it before boarding. (2) If using a check-in/check-out app, forgetting to check OUT at the end is the single most common tourist fine. (3) A dead phone battery mid-journey means no valid ticket — inspectors don't make exceptions.", price: "750–1,000 DKK if fined", link: "https://dinoffentligetransport.dk/en", tip: "Simplest fix for visitors: buy a fixed ticket in the DOT app or Rejsebillet before you travel, rather than a check-in/check-out card — nothing to forget to end." },
   { id: 2, name: "Rent a Bike", category: "Transport", emoji: "🚲", desc: "Copenhagen has 390km of cycle lanes. Renting a bike is the best way to see the city.", howTo: "Bycyklen electric bikes available across Copenhagen via app. Or rent from shops from 100 DKK/day.", price: "From 100 DKK/day", link: "https://apps.apple.com/dk/app/bycyklen/id985075832", linkAndroid: "https://play.google.com/store/apps/details?id=dk.bycyklen.app", tip: "Cycle on the right, signal with your arm, always lock up." },
   { id: 3, name: "Cards & Mobile Pay­ment", category: "Payments", emoji: "💳", desc: "Denmark is one of the world's most cashless countries. Visa and Mastercard — physical or through Apple Pay / Google Pay — work almost everywhere, from cafés to market stalls.", howTo: "Just tap. Contactless is the standard everywhere. Tell your bank you're traveling so nothing gets blocked.", price: "Free", link: null, tip: "A few tiny stalls only take MobilePay (a locals-only Danish app) or cash — carry 100–200 DKK in cash as backup." },
+  { id: 12, name: "Tax-Free Shopping (Non-EU Visitors)", category: "Payments", emoji: "🧾", desc: "If you live outside the EU, you can claim back a large part of Denmark's 25% VAT (moms) on things you buy and take home — one of the most overlooked travel savings. It applies in participating shops when you spend at least 300 DKK in the same store, and after operator fees the refund typically works out to roughly 12–19% of the price. The goods must leave the EU unused, normally within 3 months of purchase.", howTo: "(1) In the shop: ask for a tax-free form before paying (Global Blue and Planet are the two big operators) and have your passport ready. (2) At your final departure point from the EU — for most visitors Copenhagen Airport — get the form validated at customs before checking in the goods; many refunds can now be validated at self-service kiosks. (3) Collect your refund at the operator's counter, or have it sent to your card. Leave extra time at the airport — the customs step can queue in summer.", price: "Refund ≈ 12–19% back", link: "https://skat.dk", tip: "The refund follows where you live, not your passport line at the airport — EU residents can't claim it, and special rules apply for residents of Norway, so ask in the shop. Keep receipts and the goods accessible, not buried in checked luggage, in case customs wants to see them." },
   { id: 4, name: "DSB App", category: "Transport", emoji: "🚂", desc: "Danish national railway app. Book tickets, check schedules, get real-time delays.", howTo: "Download DSB app. Buy tickets in advance for cheaper prices.", price: "Free app", link: "https://apps.apple.com/dk/app/dsb/id531645423", linkAndroid: "https://play.google.com/store/apps/details?id=dk.dsb.rejseplanen", tip: "Buy Orange tickets weeks ahead for up to 50% off." },
   { id: 5, name: "Copenhagen Card", category: "Sightseeing", emoji: "🎟", desc: "Free entry to 80+ attractions + unlimited transport across zones 1-99. Worth it for 2+ days.", howTo: "Buy at copenhagencard.com or airport. 24h, 48h, 72h or 120h options.", price: "From 589 DKK", link: "https://www.copenhagencard.com", tip: "Tivoli alone is 190 DKK — card pays for itself with 3+ attractions." },
   { id: 11, name: "Power Adapters & Plugs", category: "Connectivity", emoji: "🔌", desc: "Denmark uses the Type K socket — a Danish design that looks like a smiley face, but takes a standard European two-pin (Type C) plug without any issue.", howTo: "Bring a standard European Type C adapter if you're coming from outside Europe — it fits almost every outlet in the country. Phones, laptops and cameras handle Denmark's 230V automatically with just a plug adapter.", price: "Adapter from ~50 DKK", link: null, tip: "American hair dryers and curling irons are the exception — don't run them through a cheap plastic adapter alone. Denmark's 230V is much stronger than the US's 120V and will burn out a device built only for the lower voltage." },
@@ -946,7 +947,10 @@ const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearY
       )}
       {nearYou && typeof nearYou === "object" && (
         <div style={{ marginTop: 2 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 6 }}>📍 Closest to you{nearYou.matches.length > 0 ? ` — ${nearYou.matches.length} thing${nearYou.matches.length > 1 ? "s" : ""} within reach` : ""}</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 6 }}>📍 Events near you{nearYou.matches.length > 0 ? ` — ${nearYou.matches.length} upcoming within ~30 km` : ""}</div>
+          {nearYou.matches.length === 0 && (
+            <div style={{ fontSize: 11, color: C.muted }}>No upcoming events near {nearYou.town} right now — browse all under Events.</div>
+          )}
           {nearYou.matches.length > 0 && (
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
               {nearYou.matches.map(item => (
@@ -1128,6 +1132,7 @@ export default function Gemlyx() {
   const [filterTypes, setFilterTypes] = useState([]);
   const [priceMax, setPriceMax] = useState(5000);
   const [bookableOnly, setBookableOnly] = useState(false);
+  const [craftSort, setCraftSort] = useState("recommended"); // "recommended" | "near"
   const [mapCity, setMapCity] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
@@ -1214,14 +1219,10 @@ export default function Gemlyx() {
     const allTracked = [...events, ...majorEvents, ...vikingEvents];
     const nearbyEvents = allTracked.filter(e => closeTowns.includes(e.town))
       .filter(e => isUpcoming(e.date) || isCurrentlyLive(e.date, e.dateEnd));
-    const nearbyFree = freeEntrance.filter(a => closeTowns.includes(a.city));
-    const nearbyFood = foodSpots.filter(f => closeTowns.some(t => f.location?.includes(t)));
 
-    const matches = [
-      ...nearbyEvents.map(e => ({ ...e, _kind: "event", _km: ranked.find(t => t.name === e.town)?.km ?? 999 })),
-      ...nearbyFree.map(a => ({ ...a, _kind: "free", _km: ranked.find(t => t.name === a.city)?.km ?? 999 })),
-      ...nearbyFood.map(f => ({ ...f, _kind: "food", _km: ranked.find(t => f.location?.includes(t.name))?.km ?? 999 })),
-    ].sort((a, b) => a._km - b._km).slice(0, 8);
+    const matches = nearbyEvents
+      .map(e => ({ ...e, _kind: "event", _km: ranked.find(t => t.name === e.town)?.km ?? 999 }))
+      .sort((a, b) => a._km - b._km).slice(0, 8);
 
     return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches };
   })() : (userCoords === "denied" ? "denied" : userCoords === "requesting" ? "loading" : null);
@@ -1234,11 +1235,77 @@ export default function Gemlyx() {
   });
 
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
+  const [glancePending, setGlancePending] = useState(0);
+
+  // For each guide day: one Tavily search for live facts, then OpenAI distills them
+  // into a tiny At-a-Glance box. Never invents — falls back to "check" wording.
+  const enrichGuideDays = (days, gid) => {
+    setGlancePending(days.length);
+    days.forEach(async (day, idx) => {
+      try {
+        const stopNames = (day.stops || []).map(s => s.name).slice(0, 4).join(", ");
+        if (!stopNames) return;
+        let context = "";
+        try {
+          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`${stopNames} Denmark nearest train station entry ticket prices where to stay 2026`)}`);
+          const sData = await sRes.json();
+          context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
+        } catch { /* search down — OpenAI will fall back to safe wording */ }
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: `You write a tiny "At a Glance" box for one day of a Denmark trip visiting: ${stopNames}. Use ONLY the provided search context plus well-established Danish geography/transit knowledge. Respond with ONLY strict JSON: {"station": "Nearest useful train station (e.g. 'Frederiksværk Station'), or 'Check Rejseplanen' if genuinely unclear", "tickets": "One short sentence on entry/ticket costs — never invent a specific price that isn't in the context; if unclear say 'See official websites'", "accommodation": "One short practical sentence, e.g. 'Best enjoyed as a day trip' or where to base yourself", "budget": "Very Low, Low, Moderate or High, optionally with a 2-4 word reason"}. Each value under 12 words.` },
+              { role: "user", content: context || "No live search context available — use only safe general knowledge and 'check' fallbacks." }
+            ],
+            max_tokens: 220,
+          }),
+        });
+        const data = await res.json();
+        const glance = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+        if (glance.station || glance.tickets || glance.accommodation || glance.budget) {
+          setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
+            ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, glance } : d) }
+            : prev);
+        }
+      } catch { /* leave this day without a glance box */ }
+      finally { setGlancePending(p => Math.max(0, p - 1)); }
+    });
+  };
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [guideError, setGuideError] = useState(null);
   const [savedGuides, setSavedGuides] = useState(() => {
     try { return JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]"); } catch { return []; }
   });
+
+  const [savedPlaces, setSavedPlaces] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gemlyx_saved_places") || "[]"); } catch { return []; }
+  });
+  const isPlaceSaved = (kind, id) => savedPlaces.some(p => p.kind === kind && p.id === id);
+  const toggleSavePlace = (kind, item, townName) => {
+    setSavedPlaces(prev => {
+      const exists = prev.some(p => p.kind === kind && p.id === item.id);
+      const updated = exists
+        ? prev.filter(p => !(p.kind === kind && p.id === item.id))
+        : [{ kind, id: item.id, name: item.name, emoji: item.emoji, town: townName || item.town || item.city || item.location || "" }, ...prev].slice(0, 40);
+      try { localStorage.setItem("gemlyx_saved_places", JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+  };
+
+  // Distance (km) from user to the town mentioned in a free-text location string, or null.
+  const townKmFromUser = (locStr) => {
+    if (!isInDenmark(userCoords) || !locStr) return null;
+    const key = Object.keys(TOWN_COORDS).find(t => locStr.includes(t));
+    if (!key) return null;
+    const [tLat, tLon] = TOWN_COORDS[key];
+    const dLat = (tLat - userCoords.lat) * 111.32;
+    const dLon = (tLon - userCoords.lon) * 62.06;
+    return Math.sqrt(dLat * dLat + dLon * dLon);
+  };
 
   // Looks up a stop name against everything real Gemlyx already knows, so the guide
   // shows real price/hours/type instead of just repeating the AI's own prose.
@@ -1250,6 +1317,7 @@ export default function Gemlyx() {
       ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
       ...foodSpots.map(p => ({ ...p, _src: "food" })),
       ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
+      ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event" })),
       ...towns.map(p => ({ ...p, _src: "town" })),
     ];
     return pools.find(p => p.name && (norm.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(norm))) || null;
@@ -1279,7 +1347,9 @@ If the conversation only covers a single day or a few stops with no explicit day
       const data = await res.json();
       const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
-      setGuideModal({ title: parsed.title || "Your Custom Route", days: parsed.days });
+      const gid = Date.now();
+      setGuideModal({ _gid: gid, title: parsed.title || "Your Custom Route", days: parsed.days });
+      enrichGuideDays(parsed.days, gid);
     } catch {
       setGuideModal(null);
       setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
@@ -1516,10 +1586,11 @@ If the conversation only covers a single day or a few stops with no explicit day
 
   const craftMailto = () => craftModal ? `mailto:hello@gemlyx.com?subject=${encodeURIComponent("Craft request — " + craftModal.name)}&body=${encodeURIComponent("Name: " + craftForm.name + "\nEmail: " + craftForm.email + "\nInterested in: " + craftForm.interest + "\nVisiting: " + craftForm.visit)}` : "#";
 
-  const sendAI = async () => {
-    if (!aiInput.trim() || aiLoading) return;
-    const msg = aiInput.trim();
-    setAiInput("");
+  const sendAI = async (forcedMsg) => {
+    const forced = typeof forcedMsg === "string" ? forcedMsg.trim() : null;
+    const msg = forced || aiInput.trim();
+    if (!msg || aiLoading) return;
+    if (!forced) setAiInput("");
     setAiMessages(prev => [...prev, { role: "user", text: msg }]);
     setAiLoading(true);
     try {
@@ -1913,6 +1984,15 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Booking speed</div>
                 <Pill label="Bookable online only" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", margin: "12px 0 8px" }}>Sort</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
+                  <Pill label="📍 Closest to you" active={craftSort === "near"} color={C.gold}
+                    onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
+                </div>
+                {craftSort === "near" && !isInDenmark(userCoords) && (
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Works once you're in Denmark with location enabled — showing recommended order for now.</div>
+                )}
               </div>
 
               {/* Grid */}
@@ -1923,7 +2003,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   const kindOk = !craftKind || cr.what.some(w => (kindKeys[craftKind] || []).some(k => w.toLowerCase().includes(k)));
                   const bookOk = !bookableOnly || cr.bookingType === "online";
                   return typeOk && kindOk && bookOk;
-                }).sort((a, b) => (b.rating || 0) - (a.rating || 0));
+                }).sort((a, b) => (craftSort === "near" && isInDenmark(userCoords))
+                  ? (townKmFromUser(a.location) ?? 9999) - (townKmFromUser(b.location) ?? 9999)
+                  : (b.rating || 0) - (a.rating || 0));
                 if (craftLoading) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>Loading craft spots...</div>;
                 if (filtered.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No craft spots match — try another filter</div>;
                 return (
@@ -1935,6 +2017,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           {craft.photo && <img src={craft.photo} alt={craft.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />}
                           <div style={{ position: "absolute", top: 10, left: 10, background: craft.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "4px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>{craft.type}</div>
                           {craft.rating && <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 100 }}>★ {craft.rating}</div>}
+                          <button onClick={(e) => { e.stopPropagation(); toggleSavePlace("craft", craft, craft.location); }}
+                            style={{ position: "absolute", top: craft.rating ? 38 : 10, right: 10, background: "rgba(10,15,30,0.8)", border: "none", borderRadius: 100, padding: "4px 9px", fontSize: 13, cursor: "pointer", color: isPlaceSaved("craft", craft.id) ? "#E91E63" : "#ffffff88" }}>
+                            {isPlaceSaved("craft", craft.id) ? "♥" : "♡"}
+                          </button>
                           {craft.popularityTag === "Hidden Gem" && <div style={{ position: "absolute", bottom: 10, left: 10, background: "rgba(10,15,30,0.85)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "4px 9px", borderRadius: 100 }}>◆ Hidden Gem</div>}
                           {craft.transportWarning && <div style={{ position: "absolute", bottom: 10, right: 10, background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 13, padding: "4px 7px", borderRadius: 8 }} title="Limited public transport">🚲</div>}
                         </div>
@@ -2016,7 +2102,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" }}>
                         <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{a.name}</div>
-                        <div style={{ marginLeft: "auto", flexShrink: 0 }}>
+                        <div style={{ marginLeft: "auto", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                          <button onClick={(e) => { e.stopPropagation(); toggleSavePlace("free", a, a.city); }}
+                            style={{ background: "none", border: "none", padding: 0, fontSize: 15, cursor: "pointer", color: isPlaceSaved("free", a.id) ? "#E91E63" : C.muted }}>
+                            {isPlaceSaved("free", a.id) ? "♥" : "♡"}
+                          </button>
                           {a.popularityTag && (
                             <span style={{ fontSize: 9, fontWeight: 700, color: a.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: a.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.bg, padding: "3px 8px", borderRadius: 100 }}>
                               {a.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"}
@@ -2175,6 +2265,32 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Road Trips</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark rewards the drive as much as the destination. These routes turn a transit day into the best part of the trip — real stops, real detours, worth the extra hour.</div>
               </div>
+
+              {savedPlaces.length > 0 && (
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 18 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>♥ Your Saved Places</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Saved from Free Entrance and Booking — tap ✕ to remove.</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                    {savedPlaces.map(p => (
+                      <span key={`${p.kind}-${p.id}`} style={{ display: "flex", alignItems: "center", gap: 6, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px" }}>
+                        <span style={{ fontSize: 12 }}>{p.emoji}</span>
+                        <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{p.name}</span>
+                        {p.town && <span style={{ fontSize: 10, color: C.muted }}>{p.town}</span>}
+                        <button onClick={() => toggleSavePlace(p.kind, p)} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const list = savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ");
+                      goTab("ai");
+                      sendAI(`Plan me a road trip that includes these places I've saved: ${list}. Suggest a sensible order, roughly how long I need, and one or two things worth seeing along the way.`);
+                    }}
+                    style={{ width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    ✦ Ask AI for a road trip from these
+                  </button>
+                </div>
+              )}
 
               <div style={{ background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 16, padding: "18px", marginBottom: 24 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>🧭 Build a Route From Here</div>
@@ -3021,7 +3137,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       const townMatch = towns.find(t => t.name === stop.name)?.name || (real?._src === "town" ? real.name : null) || Object.keys(TOWN_COORDS).find(t => stop.name.includes(t));
                       return (
                         <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14 }}>
-                          {townMatch ? (
+                          {real?.photo ? (
+                            <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                              <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            </div>
+                          ) : townMatch ? (
                             <div style={{ width: 52, height: 52, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${C.border}` }}>
                               <DKLocator town={townMatch} color={C.gold} />
                             </div>
@@ -3043,6 +3163,22 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         </div>
                       );
                     })}
+                    {day.glance ? (
+                      <div style={{ background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 2 }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>✨ At a Glance</div>
+                        {[["🚆", "Nearest Station", day.glance.station], ["🎟️", "Tickets", day.glance.tickets], ["🏡", "Accommodation", day.glance.accommodation], ["💰", "Budget", day.glance.budget]].filter(([, , v]) => v).map(([ic, label, v]) => (
+                          <div key={label} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 5 }}>
+                            <span style={{ fontSize: 12, flexShrink: 0 }}>{ic}</span>
+                            <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+                              <span style={{ color: C.muted, fontWeight: 700 }}>{label}: </span>
+                              <span style={{ color: C.light }}>{v}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : glancePending > 0 ? (
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>✨ Checking stations, tickets & budget…</div>
+                    ) : null}
                   </div>
                 ))}
 
