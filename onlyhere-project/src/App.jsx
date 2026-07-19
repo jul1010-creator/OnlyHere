@@ -903,7 +903,7 @@ const PageHero = ({ src, emoji, color }) => (
 
 
 
-const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearYou, findNearYou, setEventDetail, setFreeDetail, setFoodDetail }) => {
+const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearYou, requestLocation, setEventDetail, setFreeDetail, setFoodDetail }) => {
   const [openEvent, setOpenEvent] = useState(null);
   const allTracked = [...events, ...majorEvents, ...vikingEvents];
   const currentlyLive = allTracked.filter(e => isCurrentlyLive(e.date, e.dateEnd));
@@ -933,7 +933,7 @@ const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearY
       )}
 
       {!nearYou && (
-        <button onClick={findNearYou} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <button onClick={requestLocation} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           <span style={{ fontSize: 12, color: C.light, fontWeight: 600 }}>📍 What's closest to me?</span>
         </button>
       )}
@@ -941,7 +941,7 @@ const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearY
       {nearYou === "denied" && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
           <span style={{ fontSize: 12, color: C.muted }}>Couldn't get your location.</span>
-          <button onClick={findNearYou} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try again</button>
+          <button onClick={requestLocation} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try again</button>
         </div>
       )}
       {nearYou && typeof nearYou === "object" && (
@@ -1111,7 +1111,7 @@ const PRODUCT_COORDS = {
 
 
 
-const APP_VERSION = "v2.84 — AI plain-text formatting, Closest to Me, Route Builder with save";
+const APP_VERSION = "v2.87 — AI plans become saveable guides with real data + mini-maps";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -1183,54 +1183,43 @@ export default function Gemlyx() {
   const [nightlifeDetail, setNightlifeDetail] = useState(null);
   const [freeDetail, setFreeDetail] = useState(null);
   const [foodDetail, setFoodDetail] = useState(null);
-  const [userCoords, setUserCoords] = useState(null); // null | "denied" | { lat, lon }
+  const [userCoords, setUserCoords] = useState(null); // null | "denied" | "requesting" | { lat, lon }
 
-  useEffect(() => {
-    if (!navigator.geolocation) return;
+  const requestLocation = () => {
+    if (!navigator.geolocation) { setUserCoords("denied"); return; }
+    setUserCoords("requesting");
     navigator.geolocation.getCurrentPosition(
       (pos) => setUserCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
       () => setUserCoords("denied"),
       { timeout: 8000 }
     );
-  }, []);
-
-  const [nearYou, setNearYou] = useState(null); // null | "loading" | "denied" | { town, distanceKm, matches }
-
-  const findNearYou = () => {
-    if (!navigator.geolocation) { setNearYou("denied"); return; }
-    setNearYou("loading");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        // Rank every known town by real distance, not just the single nearest
-        const ranked = Object.entries(TOWN_COORDS).map(([name, [tLat, tLon]]) => {
-          const dLat = (tLat - latitude) * 111.32;
-          const dLon = (tLon - longitude) * 62.06;
-          return { name, km: Math.sqrt(dLat * dLat + dLon * dLon) };
-        }).sort((a, b) => a.km - b.km);
-
-        const nearestTown = ranked[0]?.name;
-        const closeTowns = ranked.filter(t => t.km <= 30).map(t => t.name); // realistic same-day-trip radius
-
-        const allTracked = [...events, ...majorEvents, ...vikingEvents];
-        const nearbyEvents = allTracked.filter(e => closeTowns.includes(e.town))
-          .filter(e => isUpcoming(e.date) || isCurrentlyLive(e.date, e.dateEnd));
-        const nearbyFree = freeEntrance.filter(a => closeTowns.includes(a.city));
-        const nearbyFood = foodSpots.filter(f => closeTowns.some(t => f.location?.includes(t)));
-
-        // Combine, tag with distance from the town each thing belongs to, sort by that distance
-        const matches = [
-          ...nearbyEvents.map(e => ({ ...e, _kind: "event", _km: ranked.find(t => t.name === e.town)?.km ?? 999 })),
-          ...nearbyFree.map(a => ({ ...a, _kind: "free", _km: ranked.find(t => t.name === a.city)?.km ?? 999 })),
-          ...nearbyFood.map(f => ({ ...f, _kind: "food", _km: ranked.find(t => f.location?.includes(t.name))?.km ?? 999 })),
-        ].sort((a, b) => a._km - b._km).slice(0, 8);
-
-        setNearYou({ town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches, userLat: latitude, userLon: longitude });
-      },
-      () => setNearYou("denied"),
-      { timeout: 8000 }
-    );
   };
+
+
+  const nearYou = isInDenmark(userCoords) ? (() => {
+    const ranked = Object.entries(TOWN_COORDS).map(([name, [tLat, tLon]]) => {
+      const dLat = (tLat - userCoords.lat) * 111.32;
+      const dLon = (tLon - userCoords.lon) * 62.06;
+      return { name, km: Math.sqrt(dLat * dLat + dLon * dLon) };
+    }).sort((a, b) => a.km - b.km);
+
+    const nearestTown = ranked[0]?.name;
+    const closeTowns = ranked.filter(t => t.km <= 30).map(t => t.name); // realistic same-day-trip radius
+
+    const allTracked = [...events, ...majorEvents, ...vikingEvents];
+    const nearbyEvents = allTracked.filter(e => closeTowns.includes(e.town))
+      .filter(e => isUpcoming(e.date) || isCurrentlyLive(e.date, e.dateEnd));
+    const nearbyFree = freeEntrance.filter(a => closeTowns.includes(a.city));
+    const nearbyFood = foodSpots.filter(f => closeTowns.some(t => f.location?.includes(t)));
+
+    const matches = [
+      ...nearbyEvents.map(e => ({ ...e, _kind: "event", _km: ranked.find(t => t.name === e.town)?.km ?? 999 })),
+      ...nearbyFree.map(a => ({ ...a, _kind: "free", _km: ranked.find(t => t.name === a.city)?.km ?? 999 })),
+      ...nearbyFood.map(f => ({ ...f, _kind: "food", _km: ranked.find(t => f.location?.includes(t.name))?.km ?? 999 })),
+    ].sort((a, b) => a._km - b._km).slice(0, 8);
+
+    return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches };
+  })() : (userCoords === "denied" ? "denied" : userCoords === "requesting" ? "loading" : null);
 
   const [routeStops, setRouteStops] = useState([]); // array of town names, in order
   const [routeSummary, setRouteSummary] = useState(null);
@@ -1238,6 +1227,75 @@ export default function Gemlyx() {
   const [savedRoutes, setSavedRoutes] = useState(() => {
     try { return JSON.parse(localStorage.getItem("gemlyx_saved_routes") || "[]"); } catch { return []; }
   });
+
+  const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
+  const [guideError, setGuideError] = useState(null);
+  const [savedGuides, setSavedGuides] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]"); } catch { return []; }
+  });
+
+  // Looks up a stop name against everything real Gemlyx already knows, so the guide
+  // shows real price/hours/type instead of just repeating the AI's own prose.
+  const lookupRealPlace = (name) => {
+    if (!name) return null;
+    const norm = name.toLowerCase();
+    const pools = [
+      ...freeEntrance.map(p => ({ ...p, _src: "free" })),
+      ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
+      ...foodSpots.map(p => ({ ...p, _src: "food" })),
+      ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
+      ...towns.map(p => ({ ...p, _src: "town" })),
+    ];
+    return pools.find(p => p.name && (norm.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(norm))) || null;
+  };
+
+  const generateGuide = async () => {
+    const convoText = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+    if (!convoText.trim()) return;
+    setGuideModal("loading");
+    setGuideError(null);
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
+{"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "One short sentence on what to do there"}]}]}
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones.` },
+            { role: "user", content: convoText }
+          ],
+          max_tokens: 900,
+        }),
+      });
+      const data = await res.json();
+      const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
+      setGuideModal({ title: parsed.title || "Your Custom Route", days: parsed.days });
+    } catch {
+      setGuideModal(null);
+      setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
+      setTimeout(() => setGuideError(null), 3500);
+    }
+  };
+
+  const saveCurrentGuide = () => {
+    if (!guideModal || guideModal === "loading") return;
+    const newGuide = { id: Date.now(), title: guideModal.title, days: guideModal.days, savedAt: new Date().toISOString() };
+    const updated = [newGuide, ...savedGuides].slice(0, 20);
+    setSavedGuides(updated);
+    try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
+    setToast("📖 Guide saved");
+    setTimeout(() => setToast(null), 2200);
+  };
+
+  const deleteSavedGuide = (id) => {
+    const updated = savedGuides.filter(g => g.id !== id);
+    setSavedGuides(updated);
+    try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
+  };
 
   const nearbyTownsRanked = (isInDenmark(userCoords)) ? Object.entries(TOWN_COORDS).map(([name, [tLat, tLon]]) => {
     const dLat = (tLat - userCoords.lat) * 111.32;
@@ -1297,6 +1355,9 @@ export default function Gemlyx() {
     { role: "assistant", text: "Hi! I'm your Local Assist ◆ Tell me where you're heading — or what you're after — and I'll find you something that exists nowhere else." }
   ]);
   const [aiInput, setAiInput] = useState("");
+  const [intakeTime, setIntakeTime] = useState(null);
+  const [intakeBudget, setIntakeBudget] = useState(null);
+  const [intakeInterest, setIntakeInterest] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -1481,6 +1542,10 @@ export default function Gemlyx() {
       const season = getSeason();
 
       const sysPrompt = `You are Local Assist — Gemlyx's AI trip-planning guide for Denmark. Today is ${monthName} (${season} season in Denmark). Be warm, concise, and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+
+ASK BEFORE YOU PLAN — this matters more than anything else here. If someone asks for a plan, route, or itinerary and you don't already know their budget, how much time they actually have, and roughly what they enjoy (history, nature, food, nightlife, a mix), do NOT generate a full itinerary yet. Ask ONE short, warm question that covers those three things together — for example: "Happy to help! Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — history, nature, food, nightlife, or a bit of everything?" Keep it to one message, not three separate questions. Only build the actual plan once you know these, either from their answer or because they already told you in their first message.
+
+SCOPE THE ANSWER TO WHAT THEY ASKED — once you do have enough to plan, match the plan's size to what they actually requested. Someone with a few hours doesn't need a 3-day, 3-city itinerary. Someone who said "budget-friendly" shouldn't get a plan stacked with 230 DKK museum tickets without at least flagging the cost. Don't pad a short trip into a long one just to showcase more of Gemlyx's content.
 
 FORMATTING — this is critical: write in plain conversational text only. This is a mobile chat bubble, not a document. Never use markdown — no # headings, no ** for bold, no bullet-point dashes, no numbered lists with periods. If you're listing a few things, write them into a flowing sentence ("Try Harry's Place for a hot dog, then walk to Torvehallerne for something more substantial") rather than a list. Use line breaks between short paragraphs instead of headers to organize longer answers.
 
@@ -1681,6 +1746,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 )}
 
+                {aiMessages.length > 2 && !aiLoading && (
+                  <button onClick={generateGuide}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 12 }}>
+                    📖 Turn this into a guide
+                  </button>
+                )}
+                {guideError && (
+                  <div style={{ fontSize: 12, color: "#FFB347", textAlign: "center", marginBottom: 12 }}>{guideError}</div>
+                )}
+
                 <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                   {["Plan my 3 days in Denmark", "Exclusive fashion in Copenhagen", "Best craft to commission"].map(s => (
                     <button key={s} onClick={() => setAiInput(s)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, color: C.light, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>{s}</button>
@@ -1763,6 +1838,22 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </button>
               </div>
 
+              {savedGuides.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Guides</div>
+                  {savedGuides.map(g => (
+                    <div key={g.id} onClick={() => setGuideModal({ title: g.title, days: g.days })}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>📖 {g.title}</div>
+                        <div style={{ fontSize: 11, color: C.muted }}>{g.days.length} day{g.days.length > 1 ? "s" : ""}</div>
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); deleteSavedGuide(g.id); }} style={{ background: "none", border: "none", color: C.muted, fontSize: 14, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {aiHelperBlock()}
 
               {/* Footer */}
@@ -1785,7 +1876,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.84 — Jul 2026</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 — Jul 2026</div>
               </div>
             </div>
           )}
@@ -1930,7 +2021,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           )}
                         </div>
                       </div>
-                      <div style={{ fontSize: 10, color: a.color, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 }}>{a.type}</div>
+                      <div style={{ fontSize: 10, color: a.color, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 }}>
+                        {a.type}
+                        {isInDenmark(userCoords) && TOWN_COORDS[a.city] && (() => {
+                          const [tLat, tLon] = TOWN_COORDS[a.city];
+                          const dLat = (tLat - userCoords.lat) * 111.32;
+                          const dLon = (tLon - userCoords.lon) * 62.06;
+                          const km = Math.round(Math.sqrt(dLat * dLat + dLon * dLon));
+                          return ` · ~${km < 2 ? 2 : km} km from you`;
+                        })()}
+                      </div>
                       <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{a.desc.slice(0, 100)}{a.desc.length > 100 ? "…" : ""}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 12, fontWeight: 700 }}>
                         Read more <span style={{ fontSize: 14 }}>›</span>
@@ -2245,7 +2345,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       )}
                     </div>
                     <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
-                    <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region} · {town.travelTime}</div>
+                    <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region} · {travelLabel(userCoords, town.name, town.travelTime)}</div>
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                     <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{town.desc.slice(0, 90)}{town.desc.length > 90 ? "…" : ""}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
@@ -2268,6 +2368,46 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Ask AI</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide — plans your trip, and can check what's actually happening right now. Live events are tracked in the header on every page.</div>
+              </div>
+
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 20 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Quick start — tap what applies, then let AI build it</div>
+
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Time</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  {["A few hours", "One day", "A weekend", "A week or more"].map(t => (
+                    <Pill key={t} label={t} active={intakeTime === t} onClick={() => setIntakeTime(intakeTime === t ? null : t)} />
+                  ))}
+                </div>
+
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Budget</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  {["Keep it cheap", "Moderate", "Money's not the issue"].map(b => (
+                    <Pill key={b} label={b} active={intakeBudget === b} onClick={() => setIntakeBudget(intakeBudget === b ? null : b)} />
+                  ))}
+                </div>
+
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeTime || intakeBudget || intakeInterest ? 16 : 0 }}>
+                  {["History & culture", "Nature & outdoors", "Food & nightlife", "A bit of everything"].map(i => (
+                    <Pill key={i} label={i} active={intakeInterest === i} onClick={() => setIntakeInterest(intakeInterest === i ? null : i)} />
+                  ))}
+                </div>
+
+                {(intakeTime || intakeBudget || intakeInterest) && (
+                  <button
+                    onClick={() => {
+                      const parts = [];
+                      if (intakeTime) parts.push(`I have ${intakeTime.toLowerCase()}`);
+                      if (intakeBudget) parts.push(intakeBudget === "Keep it cheap" ? "on a tight budget" : intakeBudget === "Moderate" ? "with a moderate budget" : "with a flexible budget");
+                      if (intakeInterest) parts.push(intakeInterest === "A bit of everything" ? "and I like a bit of everything" : `and I'm mainly into ${intakeInterest.toLowerCase()}`);
+                      setAiInput(parts.join(", ") + ". Plan me something.");
+                      setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
+                    }}
+                    style={{ display: "block", width: "100%", background: C.accent, border: "none", color: "#fff", borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    ✦ Build my plan
+                  </button>
+                )}
               </div>
 
               {aiHelperBlock()}
@@ -2641,7 +2781,19 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
         {/* Weather — always visible, multiple cities, auto-loads */}
         <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
-        <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} findNearYou={findNearYou} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} />
+        {(userCoords === null || userCoords === "denied") && (
+          <button onClick={requestLocation}
+            style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 4, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left" }}>
+            <span style={{ fontSize: 13 }}>📍</span>
+            <span style={{ fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
+              {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Enable location to see real distances from you, not just Copenhagen"}
+            </span>
+          </button>
+        )}
+        {userCoords === "requesting" && (
+          <div style={{ fontSize: 12, color: C.muted, padding: "8px 0" }}>📍 Getting your location...</div>
+        )}
+        <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} />
 
         {/* Search results */}
         {search.length > 1 && searchResults.length > 0 && (
@@ -2832,6 +2984,74 @@ You also have a web_search tool. Use it whenever someone asks about something th
       <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
       <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
       <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
+
+      {guideModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.85)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
+          <div style={{ maxWidth: 480, margin: "0 auto", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20, padding: "22px" }} onClick={e => e.stopPropagation()}>
+            {guideModal === "loading" ? (
+              <div style={{ textAlign: "center", padding: "40px 0" }}>
+                <div style={{ fontSize: 30, marginBottom: 10 }}>📖</div>
+                <div style={{ fontSize: 14, color: C.muted }}>Building your guide...</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "4px 12px" }}>
+                    <span style={{ fontSize: 11 }}>✦</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 0.5, textTransform: "uppercase" }}>Your Guide</span>
+                  </div>
+                  <button onClick={() => setGuideModal(null)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 18 }}>{guideModal.title}</div>
+
+                {guideModal.days.map(day => (
+                  <div key={day.day} style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Day {day.day}{day.title ? ` — ${day.title}` : ""}</div>
+                    {day.stops.map((stop, i) => {
+                      const real = lookupRealPlace(stop.name);
+                      const townMatch = towns.find(t => t.name === stop.name)?.name || (real?._src === "town" ? real.name : null) || Object.keys(TOWN_COORDS).find(t => stop.name.includes(t));
+                      return (
+                        <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                          {townMatch ? (
+                            <div style={{ width: 52, height: 52, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${C.border}` }}>
+                              <DKLocator town={townMatch} color={C.gold} />
+                            </div>
+                          ) : (
+                            <div style={{ width: 52, height: 52, borderRadius: 10, flexShrink: 0, border: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                              {real?.emoji || "📍"}
+                            </div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>{stop.name}</div>
+                            <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginBottom: real ? 4 : 0 }}>{stop.note}</div>
+                            {real && (
+                              <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
+                                {real.price ? `${real.price}` : real.popularityTag === "Hidden Gem" ? "◆ Free — Hidden Gem" : real._src === "free" ? "Free entry" : ""}
+                                {real.travelTime ? ` · ${real.travelTime} from CPH` : ""}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <button onClick={saveCurrentGuide}
+                    style={{ flex: 1, background: C.accent, border: "none", color: "#fff", borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    💾 Save Guide
+                  </button>
+                  <button onClick={() => setGuideModal(null)}
+                    style={{ flex: 1, background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── BOOKING DETAIL PAGE ───────────────────────────── */}
       {craftDetail && (
