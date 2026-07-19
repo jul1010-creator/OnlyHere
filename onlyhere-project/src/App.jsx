@@ -1234,6 +1234,7 @@ export default function Gemlyx() {
   });
 
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [guideError, setGuideError] = useState(null);
   const [savedGuides, setSavedGuides] = useState(() => {
     try { return JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]"); } catch { return []; }
@@ -1268,11 +1269,11 @@ export default function Gemlyx() {
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "One short sentence on what to do there"}]}]}
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones.` },
+{"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "2-3 vivid sentences that paint a picture of this place — what it looks and feels like to be there, what makes it special, and one concrete thing to do or notice. Write like a well-travelled friend, not a brochure."}]}]}
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.` },
             { role: "user", content: convoText }
           ],
-          max_tokens: 900,
+          max_tokens: 1800,
         }),
       });
       const data = await res.json();
@@ -1765,6 +1766,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     style={{ flex: 1, border: `1.5px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
                   <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: "#fff" }}>↗</button>
                 </div>
+                <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginTop: 8 }}>
+                  Answers are generated via OpenAI — please don't include personal details.{" "}
+                  <span onClick={() => setShowPrivacy(true)} style={{ textDecoration: "underline", cursor: "pointer" }}>Privacy</span>
+                </div>
               </div>
 
     </div>
@@ -1873,6 +1878,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
                 <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
+                <div onClick={() => setShowPrivacy(true)} style={{ fontSize: 11, color: C.muted, marginTop: 8, textDecoration: "underline", cursor: "pointer" }}>Privacy & Data</div>
                 <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 — Jul 2026</div>
               </div>
             </div>
@@ -2782,8 +2788,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <button onClick={requestLocation}
             style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 4, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left" }}>
             <span style={{ fontSize: 13 }}>📍</span>
-            <span style={{ fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
-              {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Enable location to see real distances from you, not just Copenhagen"}
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
+                {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? Tap to calculate distances from you"}
+              </span>
+              <span onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
+                style={{ display: "block", fontSize: 10, color: C.muted, marginTop: 2 }}>
+                Only used on your device, never stored · <span style={{ textDecoration: "underline" }}>Privacy</span>
+              </span>
             </span>
           </button>
         )}
@@ -3046,6 +3058,33 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── PRIVACY & DATA MODAL ──────────────────────────── */}
+      {showPrivacy && (
+        <div onClick={() => setShowPrivacy(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", padding: "24px 22px 32px", border: `1px solid ${C.border}`, borderBottom: "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>Privacy & Data</div>
+              <button onClick={() => setShowPrivacy(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Close</button>
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>Last updated July 2026 · Gemlyx is built in Denmark and designed to collect as little as possible. No accounts, no ads, no tracking cookies, no analytics.</div>
+
+            {[
+              ["📍 Your location", "Only requested when you tap the location button — never in the background. Your coordinates are used directly in your browser to calculate distances to towns and events. They are not stored on any server and are not sent to anyone. You can revoke access anytime in your browser's site settings."],
+              ["✦ AI chats (Ask AI & Route Builder)", "When you use the AI Guide, your messages are sent to OpenAI (a US company) to generate the answer, and in some cases to Tavily to search for live information like opening status. Please don't include personal details in your messages — the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
+              ["💾 Saved routes & guides", "Guides and road-trip routes you save are stored only in your browser's local storage, on your own device. We never see them. Delete them in the app, or by clearing your browser data for this site."],
+              ["◈ Booking requests", "If you send a booking or craft request, the details you enter (name, email, message) are stored in our database (Supabase) so the maker can get back to you. We use them for nothing else. Email hello@gemlyx.com to have a request deleted."],
+              ["🌦 Weather & maps", "Weather comes from Yr.no (Norwegian Meteorological Institute) and map tiles from OpenStreetMap. Like any website loading content, these services can see your IP address when data loads. Neither is used to track you."],
+              ["🇪🇺 Your rights", "Under GDPR you can ask what data we hold about you, and have it corrected or deleted. Since almost everything lives on your own device, this usually means booking requests. Contact: hello@gemlyx.com. Data controller: Gemlyx, Denmark."],
+            ].map(([h, body]) => (
+              <div key={h} style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: 0.5, marginBottom: 5 }}>{h}</div>
+                <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65 }}>{body}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
