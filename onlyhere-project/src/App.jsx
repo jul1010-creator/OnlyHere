@@ -1237,17 +1237,66 @@ export default function Gemlyx() {
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
   const [glancePending, setGlancePending] = useState(0);
 
-  // For each guide day: one Tavily search for live facts, then OpenAI distills them
-  // into a tiny At-a-Glance box. Never invents — falls back to "check" wording.
+  // ── Founder studio (visible only at /#studio): Tavily+OpenAI drafts a new town
+  // entry in the exact towns[] schema, as paste-ready code for review — the founder
+  // verifies before anything ships, keeping "never invented content" true.
+  const isStudio = typeof window !== "undefined" && window.location.hash === "#studio";
+  const [studioTown, setStudioTown] = useState("");
+  const [studioLoading, setStudioLoading] = useState(false);
+  const [studioResult, setStudioResult] = useState(null);
+  const [studioError, setStudioError] = useState(null);
+  const generateArea = async () => {
+    const town = studioTown.trim();
+    if (!town || studioLoading) return;
+    setStudioLoading(true); setStudioResult(null); setStudioError(null);
+    try {
+      let context = "";
+      try {
+        const sRes = await fetch(`/api/search?q=${encodeURIComponent(`${town} Denmark travel guide history what makes it special attractions train travel time from Copenhagen`)}`);
+        const sData = await sRes.json();
+        context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 6).join(" ")).trim();
+      } catch { /* proceed without */ }
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: `Draft a Gemlyx town entry for ${town}, Denmark. Use ONLY the provided search context plus well-established facts. Respond with ONLY strict JSON:
+{"name": "${town}", "region": "Danish region, e.g. West Jutland / Funen / North Zealand", "emoji": "one fitting emoji", "tag": "3-5 word hook, e.g. 'Denmark's oldest town'", "desc": "Two vivid factual sentences about the town", "highlight": "One specific real place or experience there from the context — if none is clearly supported, empty string", "travelTime": "approx from Copenhagen like '3h 15min 🚂' (use 🚌 or 🚢 if bus/ferry)", "mapHint": "Town, postcode Town, Denmark", "lat": 56.09, "lon": 8.24, "nomiPotential": "High / Very High / Medium"}
+lat/lon must be the town's real approximate coordinates. Never invent a highlight — empty string beats a guess.` },
+            { role: "user", content: context || "No search context found — use only well-established knowledge, and leave highlight empty if unsure." }
+          ],
+          max_tokens: 500,
+        }),
+      });
+      const data = await res.json();
+      const t = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      if (!t.name || !t.desc) throw new Error("empty");
+      const nextId = Math.max(...towns.map(x => x.id)) + 1;
+      const slug = town.toLowerCase().replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "aa").replace(/[^a-z0-9]/g, "");
+      const code = `// 1) Paste inside the towns array:\n{ id: ${nextId}, name: ${JSON.stringify(t.name)}, photo: "/towns/${slug}.jpg", region: ${JSON.stringify(t.region || "")}, emoji: ${JSON.stringify(t.emoji || "📍")}, tag: ${JSON.stringify(t.tag || "")}, desc: ${JSON.stringify(t.desc)}, highlight: ${JSON.stringify(t.highlight || "")}, travelTime: ${JSON.stringify(t.travelTime || "")}, mapHint: ${JSON.stringify(t.mapHint || `${t.name}, Denmark`)}, nomiPotential: ${JSON.stringify(t.nomiPotential || "Medium")} },\n\n// 2) Paste inside TOWN_COORDS:\n${JSON.stringify(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime and coordinates.`;
+      setStudioResult(code);
+    } catch {
+      setStudioError("Couldn't draft that town — try again, or check the town name.");
+    }
+    setStudioLoading(false);
+  };
+
+  // For each guide day: one Tavily search for live facts, then OpenAI distills them into
+  // (a) how to travel between consecutive stops and (b) where to stay. Never invents —
+  // falls back to "Check Rejseplanen" wording when the context doesn't support a claim.
   const enrichGuideDays = (days, gid) => {
     setGlancePending(days.length);
     days.forEach(async (day, idx) => {
       try {
-        const stopNames = (day.stops || []).map(s => s.name).slice(0, 4).join(", ");
-        if (!stopNames) return;
+        const names = (day.stops || []).map(s => s.name);
+        if (names.length === 0) return;
+        const numbered = names.map((n, i) => `${i + 1}. ${n}`).join("; ");
         let context = "";
         try {
-          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`${stopNames} Denmark nearest train station entry ticket prices where to stay 2026`)}`);
+          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} Denmark train bus travel time where to stay overnight`)}`);
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down — OpenAI will fall back to safe wording */ }
@@ -1258,20 +1307,22 @@ export default function Gemlyx() {
             model: "gpt-4o-mini",
             response_format: { type: "json_object" },
             messages: [
-              { role: "system", content: `You write a tiny "At a Glance" box for one day of a Denmark trip visiting: ${stopNames}. Use ONLY the provided search context plus well-established Danish geography/transit knowledge. Respond with ONLY strict JSON: {"station": "Nearest useful train station (e.g. 'Frederiksværk Station'), or 'Check Rejseplanen' if genuinely unclear", "tickets": "One short sentence on entry/ticket costs — never invent a specific price that isn't in the context; if unclear say 'See official websites'", "accommodation": "One short practical sentence, e.g. 'Best enjoyed as a day trip' or where to base yourself", "budget": "Very Low, Low, Moderate or High, optionally with a 2-4 word reason"}. Each value under 12 words.` },
-              { role: "user", content: context || "No live search context available — use only safe general knowledge and 'check' fallbacks." }
+              { role: "system", content: `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
+{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One short sentence on where to base yourself for this day, e.g. 'Best as a day trip from Copenhagen' or 'Stay overnight in Ribe's old town'"}
+Rules: always prefix times with ~. If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
+              { role: "user", content: context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks." }
             ],
-            max_tokens: 220,
+            max_tokens: 350,
           }),
         });
         const data = await res.json();
         const glance = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-        if (glance.station || glance.tickets || glance.accommodation || glance.budget) {
+        if ((Array.isArray(glance.legs) && glance.legs.length > 0) || glance.accommodation) {
           setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
             ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, glance } : d) }
             : prev);
         }
-      } catch { /* leave this day without a glance box */ }
+      } catch { /* leave this day without travel details */ }
       finally { setGlancePending(p => Math.max(0, p - 1)); }
     });
   };
@@ -1841,6 +1892,31 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   Answers are generated via OpenAI — please don't include personal details.{" "}
                   <span onClick={() => setShowPrivacy(true)} style={{ textDecoration: "underline", cursor: "pointer" }}>Privacy</span>
                 </div>
+                {isStudio && (
+                  <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "16px", marginTop: 18 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>🛠 Area Generator — founder tool</div>
+                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>Drafts a new town entry via Tavily + OpenAI in the exact towns schema. Output is paste-ready code — verify every fact before committing. Not visible to users.</div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                      <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
+                        placeholder="Town name, e.g. Ringkøbing"
+                        style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+                      <button onClick={generateArea} disabled={studioLoading}
+                        style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
+                        {studioLoading ? "Researching…" : "Draft it"}
+                      </button>
+                    </div>
+                    {studioError && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 8 }}>{studioError}</div>}
+                    {studioResult && (
+                      <>
+                        <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", fontSize: 10.5, color: C.light, whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6, maxHeight: 260, overflowY: "auto", fontFamily: "monospace", margin: "0 0 10px" }}>{studioResult}</pre>
+                        <button onClick={() => { try { navigator.clipboard.writeText(studioResult); setToast("📋 Copied"); setTimeout(() => setToast(null), 1800); } catch { /* ignore */ } }}
+                          style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "9px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          📋 Copy code
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
     </div>
@@ -3136,7 +3212,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       const real = lookupRealPlace(stop.name);
                       const townMatch = towns.find(t => t.name === stop.name)?.name || (real?._src === "town" ? real.name : null) || Object.keys(TOWN_COORDS).find(t => stop.name.includes(t));
                       return (
-                        <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                        <div key={i}>
+                          <div style={{ display: "flex", gap: 12 }}>
                           {real?.photo ? (
                             <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
                               <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -3160,24 +3237,31 @@ You also have a web_search tool. Use it whenever someone asks about something th
                               </div>
                             )}
                           </div>
+                          </div>
+                          {i < day.stops.length - 1 ? (
+                            <div style={{ borderLeft: `2px dashed ${C.border}`, marginLeft: 31, padding: "7px 0 9px 14px", minHeight: 14 }}>
+                              {day.glance?.legs?.[i]?.how ? (
+                                <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>🚆 {day.glance.legs[i].how}</span>
+                              ) : glancePending > 0 ? (
+                                <span style={{ fontSize: 11, color: C.muted }}>✨ checking…</span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div style={{ height: 12 }} />
+                          )}
                         </div>
                       );
                     })}
-                    {day.glance ? (
-                      <div style={{ background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 2 }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>✨ At a Glance</div>
-                        {[["🚆", "Nearest Station", day.glance.station], ["🎟️", "Tickets", day.glance.tickets], ["🏡", "Accommodation", day.glance.accommodation], ["💰", "Budget", day.glance.budget]].filter(([, , v]) => v).map(([ic, label, v]) => (
-                          <div key={label} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 5 }}>
-                            <span style={{ fontSize: 12, flexShrink: 0 }}>{ic}</span>
-                            <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
-                              <span style={{ color: C.muted, fontWeight: 700 }}>{label}: </span>
-                              <span style={{ color: C.light }}>{v}</span>
-                            </div>
-                          </div>
-                        ))}
+                    {day.glance?.accommodation ? (
+                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "10px 12px", marginTop: 2 }}>
+                        <span style={{ fontSize: 13, flexShrink: 0 }}>🏡</span>
+                        <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+                          <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
+                          <span style={{ color: C.light }}>{day.glance.accommodation}</span>
+                        </div>
                       </div>
                     ) : glancePending > 0 ? (
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>✨ Checking stations, tickets & budget…</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>✨ Checking travel times & where to stay…</div>
                     ) : null}
                   </div>
                 ))}
