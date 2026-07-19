@@ -1188,9 +1188,14 @@ export default function Gemlyx() {
   const requestLocation = () => {
     if (!navigator.geolocation) { setUserCoords("denied"); return; }
     setUserCoords("requesting");
+    setLocationLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => setUserCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      () => setUserCoords("denied"),
+      (pos) => {
+        setUserCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocationLoading(false);
+      },
+      () => { setUserCoords("denied"); setLocationLoading(false); },
       { timeout: 8000 }
     );
   };
@@ -1485,14 +1490,6 @@ If the conversation only covers a single day or a few stops with no explicit day
     const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
     const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
     return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  };
-
-  const requestLocation = () => {
-    setLocationLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      pos => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocationLoading(false); },
-      () => setLocationLoading(false), { enableHighAccuracy: true }
-    );
   };
 
   const confirmStillHere = (id) => {
