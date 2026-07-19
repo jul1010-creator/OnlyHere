@@ -1537,6 +1537,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeTime, setIntakeTime] = useState(null);
   const [intakeBudget, setIntakeBudget] = useState(null);
   const [intakeInterest, setIntakeInterest] = useState(null);
+  const [intakeTransport, setIntakeTransport] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -1563,12 +1564,11 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (aiMessages.length > 1) document.querySelectorAll(".ai-msgs").forEach(el => { el.scrollTop = el.scrollHeight; });
   }, [aiMessages]);
 
-  const TAB_ORDER = ["home", "essentials", "plans", "craft", "attractions", "events", "food", "nightlife", "roadtrips", "visits", "ai"];
+  const TAB_ORDER = ["home", "essentials", "craft", "attractions", "events", "food", "nightlife", "roadtrips", "visits", "ai"];
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   const NAV_ITEMS = [
     { id: "home", label: "🧭 Explore" },
     { id: "essentials", label: "✓ Essentials" },
-    { id: "plans", label: "🗺 Plans" },
     { id: "craft", label: "◈ Booking" },
     { id: "attractions", label: "🆓 Free Entrance" },
     { id: "events", label: "◈ Events" },
@@ -1576,7 +1576,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     { id: "nightlife", label: "🍺 Nightlife" },
     { id: "roadtrips", label: "🚗 Road Trips" },
     { id: "visits", label: "◉ Towns" },
-    { id: "ai", label: "✦ Ask AI" },
+    { id: "ai", label: "✦ Ask Gemlyx" },
   ];
   const [slideDir, setSlideDir] = useState(null);
   const pageAnim = "";
@@ -1713,7 +1713,8 @@ If the conversation only covers a single day or a few stops with no explicit day
       const monthName = now.toLocaleString("en", { month: "long" });
       const season = getSeason();
 
-      const sysPrompt = `You are Local Assist — Gemlyx's AI trip-planning guide for Denmark. Today is ${monthName} (${season} season in Denmark). Be warm, concise, and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+      const sysPrompt = `You are Gemlyx — Denmark's insider guide. You speak as Gemlyx itself: warm, confident, like a well-travelled Danish friend, never like a generic AI assistant. Never call yourself an AI or a language model. Today is ${monthName} (${season} season in Denmark). Be concise and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+Transport matters: if the person hasn't said how they're getting around, ask — car, bike, or public transport — before proposing a route, since it changes everything. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine.
 
 ASK BEFORE YOU PLAN — this matters more than anything else here. If someone asks for a plan, route, or itinerary and you don't already know their budget, how much time they actually have, and roughly what they enjoy (history, nature, food, nightlife, a mix), do NOT generate a full itinerary yet. Ask ONE short, warm question that covers those three things together — for example: "Happy to help! Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — history, nature, food, nightlife, or a bit of everything?" Keep it to one message, not three separate questions. Only build the actual plan once you know these, either from their answer or because they already told you in their first message.
 
@@ -1902,19 +1903,23 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {/* AI at the end of the journey */}
               <div style={{ padding: "36px 20px 28px", borderTop: `1px solid ${C.border}`, background: C.surface }}>
                 <div style={{ textAlign: "center", marginBottom: 16 }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>✦ Overwhelmed? Let me help you.</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>✦ Gemlyx</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>Overwhelmed? Let me help you.</div>
                 </div>
 
                 {aiMessages.length > 1 && (
                   <div className="ai-msgs" style={{ maxHeight: 300, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
                     {aiMessages.slice(1).map((m, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
-                        <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.5, background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}` }}>
+                      <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+                        {m.role === "assistant" && (
+                          <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
+                        )}
+                        <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.5, background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
                           {m.role === "assistant" ? stripMarkdown(m.text) : m.text}
                         </div>
                       </div>
                     ))}
-                    {aiLoading && <div style={{ background: C.bg, borderRadius: "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, color: C.muted, border: `1px solid ${C.border}`, display: "inline-block", marginBottom: 10 }}>thinking...</div>}
+                    {aiLoading && <div style={{ background: C.bg, borderRadius: "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, color: C.muted, border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.gold}`, display: "inline-block", marginBottom: 10, fontStyle: "italic" }}>✦ Gemlyx is thinking…</div>}
                   </div>
                 )}
 
@@ -1936,7 +1941,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 <div style={{ display: "flex", gap: 8 }}>
                   <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
-                    placeholder="Ask me anything about Denmark..."
+                    placeholder="Ask Gemlyx anything about Denmark…"
                     style={{ flex: 1, border: `1.5px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
                   <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: "#fff" }}>↗</button>
                 </div>
@@ -2012,14 +2017,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {[
                 { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
                 { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
-                { id: "plans", img: "/picture4.png", title: "Plans", sub: "Ready-made trips, built from what's actually open right now", icon: "🗺" },
                 { id: "food", img: "/picture5.jpg", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", icon: "🍽" },
                 { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", icon: "🍺" },
                 { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", icon: "🚗" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
                 { id: "craft", img: "/picture9.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" },
                 { id: "attractions", img: "/picture7.jpg", title: "Free Entrance", sub: "Genuinely free places worth your time, city by city", icon: "🆓" },
-                { id: "ai", img: "/picture9.jpg", title: "Ask AI", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
+                { id: "ai", img: "/picture9.jpg", title: "Ask Gemlyx", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
               ].map((section, i) => (
                 <div key={section.id} onClick={() => { goTab(section.id); window.scrollTo(0,0); }}
                   style={{ height: 280, position: "relative", overflow: "hidden", cursor: "pointer" }}>
@@ -2063,7 +2067,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
               )}
 
-              {aiHelperBlock()}
 
               {/* Footer */}
               <div style={{ padding: "36px 24px 32px", textAlign: "center", borderTop: `1px solid ${C.border}` }}>
@@ -2183,7 +2186,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 );
               })()}
-              {aiHelperBlock()}
             </div>
           )}
 
@@ -2268,7 +2270,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 </div>
               )))}
-              {aiHelperBlock()}
             </div>
           )}
 
@@ -2305,7 +2306,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {filteredEvents.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No upcoming events — try a different filter</div>
               ) : filteredEvents.map(e => <EventCard key={e.id} event={e} />)}
-              {aiHelperBlock()}
             </div>
           )}
 
@@ -2350,7 +2350,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 </div>
               ))}
-              {aiHelperBlock()}
             </div>
           )}
 
@@ -2390,7 +2389,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 </div>
               ))}
-              {aiHelperBlock()}
             </div>
           )}
 
@@ -2423,7 +2421,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       sendAI(`Plan me a road trip that includes these places I've saved: ${list}. Suggest a sensible order, roughly how long I need, and one or two things worth seeing along the way.`);
                     }}
                     style={{ width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    ✦ Ask AI for a road trip from these
+                    ✦ Ask Gemlyx for a road trip from these
                   </button>
                 </div>
               )}
@@ -2567,7 +2565,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
               </div>
 
-              {aiHelperBlock()}
             </div>
           )}
 
@@ -2609,7 +2606,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 ))}
               </div>
-              {aiHelperBlock()}
             </div>
           )}
 
@@ -2621,12 +2617,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <span style={{ fontSize: 13 }}>✦</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Gemlyx Intelligence</span>
                 </div>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Ask AI</div>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Ask Gemlyx</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide — plans your trip, and can check what's actually happening right now. Live events are tracked in the header on every page.</div>
               </div>
 
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Quick start — tap what applies, then let AI build it</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Quick start — tap what applies, then let Gemlyx build it</div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Time</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
@@ -2643,19 +2639,27 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeTime || intakeBudget || intakeInterest ? 16 : 0 }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
                   {["History & culture", "Nature & outdoors", "Food & nightlife", "A bit of everything"].map(i => (
                     <Pill key={i} label={i} active={intakeInterest === i} onClick={() => setIntakeInterest(intakeInterest === i ? null : i)} />
                   ))}
                 </div>
 
-                {(intakeTime || intakeBudget || intakeInterest) && (
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeTime || intakeBudget || intakeInterest || intakeTransport ? 16 : 0 }}>
+                  {["🚗 Car", "🚲 Bike", "🚆 Public transport"].map(tr => (
+                    <Pill key={tr} label={tr} active={intakeTransport === tr} onClick={() => setIntakeTransport(intakeTransport === tr ? null : tr)} />
+                  ))}
+                </div>
+
+                {(intakeTime || intakeBudget || intakeInterest || intakeTransport) && (
                   <button
                     onClick={() => {
                       const parts = [];
                       if (intakeTime) parts.push(`I have ${intakeTime.toLowerCase()}`);
                       if (intakeBudget) parts.push(intakeBudget === "Keep it cheap" ? "on a tight budget" : intakeBudget === "Moderate" ? "with a moderate budget" : "with a flexible budget");
                       if (intakeInterest) parts.push(intakeInterest === "A bit of everything" ? "and I like a bit of everything" : `and I'm mainly into ${intakeInterest.toLowerCase()}`);
+                      if (intakeTransport) parts.push(`getting around by ${intakeTransport.replace(/^\S+\s/, "").toLowerCase()}`);
                       setAiInput(parts.join(", ") + ". Plan me something.");
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
                     }}
@@ -2665,21 +2669,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
               </div>
 
-              {aiHelperBlock()}
-            </div>
-          )}
-
-          {/* ── PLANS ────────────────────────────────────────── */}
-          {tab === "plans" && (
-            <div className={pageAnim} style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Recommendations</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>
-                  Three complete, day-by-day routes across Denmark's seasons. It's {new Date().toLocaleString("en", { month: "long" })} — the one that fits right now is marked, the rest are here for whenever you're planning ahead.
-                </div>
+              <div style={{ margin: "26px 0 12px" }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Signature Routes</div>
+                <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 4 }}>Three ready-made seasonal trips</div>
+                <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>Follow one as-is — or have Gemlyx bend it to your dates, transport and pace.</div>
               </div>
-              <PageHero src="/plans.jpg" emoji="🗺" color={C.accent} />
-
               {seasonalItineraries.map(plan => {
                 const inSeason = plan.seasons.includes(getSeason());
                 const isOpen = expandedPlan === plan.id;
@@ -2705,6 +2699,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: isOpen ? "transparent" : plan.color, border: isOpen ? `1px solid ${C.border}` : "none", color: isOpen ? C.light : "#fff", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         {isOpen ? "Hide day-by-day" : `See all ${plan.days.length} days`} {isOpen ? "▲" : "▼"}
                       </button>
+                      <button onClick={() => { sendAI(`Adapt the "${plan.title}" route for me — keep its spirit, but fit it to my dates, transport and interests. Start by asking what you need to know.`); setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 150); }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "transparent", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 8 }}>
+                        ✦ Adapt this with Gemlyx
+                      </button>
                     </div>
 
                     {isOpen && (
@@ -2723,19 +2721,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 );
               })}
-
-              <div style={{ background: C.surface, borderRadius: 16, padding: "18px", border: `1px solid ${C.accent}`, marginBottom: 4 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 6 }}>✦ Want something more specific?</div>
-                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 12 }}>Tell the AI Guide below your dates, how you're travelling and what you're into — it'll build a real day-by-day plan from everything currently in Gemlyx.</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {["Plan me 3 days, no car", "I have a bike, what's best in " + new Date().toLocaleString("en", { month: "long" }), "Plan a family weekend with kids"].map(s => (
-                    <button key={s} onClick={() => { setAiInput(s); goTab("ai"); }}
-                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "7px 14px", fontSize: 12, color: C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               {aiHelperBlock()}
             </div>
@@ -2871,7 +2856,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <a href="mailto:hello@gemlyx.com" style={{ display: "inline-block", background: C.accent, color: "#fff", borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none", marginTop: 6 }}>✉ hello@gemlyx.com</a>
                 </div>
               </div>
-              {aiHelperBlock()}
             </div>
           )}
 
@@ -3354,7 +3338,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
             {[
               ["📍 Your location", "Only requested when you tap the location button — never in the background. Your coordinates are used directly in your browser to calculate distances to towns and events. They are not stored on any server and are not sent to anyone. You can revoke access anytime in your browser's site settings."],
-              ["✦ AI chats (Ask AI & Route Builder)", "When you use the AI Guide, your messages are sent to OpenAI (a US company) to generate the answer, and in some cases to Tavily to search for live information like opening status. Please don't include personal details in your messages — the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
+              ["✦ AI chats (Ask Gemlyx & Route Builder)", "When you use the AI Guide, your messages are sent to OpenAI (a US company) to generate the answer, and in some cases to Tavily to search for live information like opening status. Please don't include personal details in your messages — the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
               ["💾 Saved routes & guides", "Guides and road-trip routes you save are stored only in your browser's local storage, on your own device. We never see them. Delete them in the app, or by clearing your browser data for this site."],
               ["◈ Booking requests", "If you send a booking or craft request, the details you enter (name, email, message) are stored in our database (Supabase) so the maker can get back to you. We use them for nothing else. Email hello@gemlyx.com to have a request deleted."],
               ["🌦 Weather & maps", "Weather comes from Yr.no (Norwegian Meteorological Institute) and map tiles from OpenStreetMap. Like any website loading content, these services can see your IP address when data loads. Neither is used to track you."],
