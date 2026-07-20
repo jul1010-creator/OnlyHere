@@ -1339,7 +1339,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "cr
   // For each guide day: one Tavily search for live facts, then OpenAI distills them into
   // (a) how to travel between consecutive stops and (b) where to stay. Never invents —
   // falls back to "Check Rejseplanen" wording when the context doesn't support a claim.
-  const enrichGuideDays = (days, gid) => {
+  const enrichGuideDays = (days, gid, travelMode) => {
     setGlancePending(days.length);
     days.forEach(async (day, idx) => {
       try {
@@ -1361,7 +1361,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "cr
             messages: [
               { role: "system", content: `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One short sentence on where to base yourself for this day, e.g. 'Best as a day trip from Copenhagen' or 'Stay overnight in Ribe's old town'"}
-Rules: always prefix times with ~. If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
+Rules: always prefix times with ~. ${travelMode ? `The traveler is getting around BY ${travelMode.toUpperCase()} — every leg must use that mode (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more).` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
               { role: "user", content: context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks." }
             ],
             max_tokens: 350,
@@ -1441,6 +1441,7 @@ Rules: always prefix times with ~. If two stops are in the same town or area, wa
           messages: [
             { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
 {"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "2-3 vivid sentences that paint a picture of this place — what it looks and feels like to be there, what makes it special, and one concrete thing to do or notice. Write like a well-travelled friend, not a brochure."}]}]}
+CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.` },
             { role: "user", content: convoText }
           ],
@@ -1451,8 +1452,12 @@ If the conversation only covers a single day or a few stops with no explicit day
       const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
       const gid = Date.now();
+      const lc = convoText.toLowerCase();
+      const travelMode = /\b(bike|cykel|cycling|cycle)\b/.test(lc) ? "bike"
+        : /\b(car|driving|drive|bil)\b/.test(lc) ? "car"
+        : /public transport|train|bus|tog\b/.test(lc) ? "public transport" : null;
       setGuideModal({ _gid: gid, title: parsed.title || "Your Custom Route", days: parsed.days });
-      enrichGuideDays(parsed.days, gid);
+      enrichGuideDays(parsed.days, gid, travelMode);
     } catch {
       setGuideModal(null);
       setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
@@ -1714,6 +1719,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const season = getSeason();
 
       const sysPrompt = `You are Gemlyx — Denmark's insider guide. You speak as Gemlyx itself: warm, confident, like a well-travelled Danish friend, never like a generic AI assistant. Never call yourself an AI or a language model. Today is ${monthName} (${season} season in Denmark). Be concise and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+After you have proposed a day-by-day plan, always end with one short friendly line like: "I've got you — tap 'Turn this into a guide' below and I'll build it out with travel times and where to stay." Do not say this before a plan exists.
 Transport matters: if the person hasn't said how they're getting around, ask — car, bike, or public transport — before proposing a route, since it changes everything. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine.
 
 ASK BEFORE YOU PLAN — this matters more than anything else here. If someone asks for a plan, route, or itinerary and you don't already know their budget, how much time they actually have, and roughly what they enjoy (history, nature, food, nightlife, a mix), do NOT generate a full itinerary yet. Ask ONE short, warm question that covers those three things together — for example: "Happy to help! Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — history, nature, food, nightlife, or a bit of everything?" Keep it to one message, not three separate questions. Only build the actual plan once you know these, either from their answer or because they already told you in their first message.
@@ -1926,7 +1932,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {aiMessages.length > 2 && !aiLoading && (
                   <button onClick={generateGuide}
                     style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 12 }}>
-                    📖 Turn this into a guide
+                    📖 I got you — turn this into a guide
                   </button>
                 )}
                 {guideError && (
@@ -3277,7 +3283,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             {real && (
                               <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
                                 {real.price ? `${real.price}` : real.popularityTag === "Hidden Gem" ? "◆ Free — Hidden Gem" : real._src === "free" ? "Free entry" : ""}
-                                {real.travelTime ? ` · ${real.travelTime} from CPH` : ""}
+
                               </div>
                             )}
                           </div>
