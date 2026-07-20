@@ -1359,6 +1359,8 @@ export default function Gemlyx() {
   const [studioError, setStudioError] = useState(null);
   const [studioDraft, setStudioDraft] = useState(null);
   const [publishStatus, setPublishStatus] = useState(null); // null | "sending" | "sent" | "error"
+  const [publishErrorDetail, setPublishErrorDetail] = useState(null);
+  const [studioPhotoName, setStudioPhotoName] = useState("");
 
   const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences.';
 
@@ -1465,7 +1467,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       }
       setStudioResult(code);
       setStudioDraft(t);
+      setStudioPhotoName(`${slugify(name)}.jpg`);
       setPublishStatus(null);
+      setPublishErrorDetail(null);
     } catch {
       setStudioError("Couldn't draft that — try again, or check the name.");
     }
@@ -1477,13 +1481,22 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
     setPublishStatus("sending");
     try {
       const shaped = shapeForLive(studioType, studioDraft);
+      if (studioPhotoName) shaped.photo = `/${{ town: "towns", festival: "events", free: "free", food: "food", night: "nightlife", booking: "craft" }[studioType]}/${studioPhotoName}`;
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
         method: "POST",
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify({ type: studioType, payload: shaped, published: true }),
       });
-      setPublishStatus(res.ok ? "sent" : "error");
-    } catch { setPublishStatus("error"); }
+      if (!res.ok) {
+        const body = await res.text();
+        console.error("Gemlyx publish failed:", res.status, body);
+        setPublishStatus("error");
+        setPublishErrorDetail(`${res.status}: ${body.slice(0, 200)}`);
+      } else {
+        setPublishStatus("sent");
+        setPublishErrorDetail(null);
+      }
+    } catch (err) { setPublishStatus("error"); setPublishErrorDetail(String(err)); }
   };
 
   // For each guide day: one Tavily search for live facts, then OpenAI distills them into
@@ -2206,6 +2219,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {studioResult && (
                       <>
                         <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", fontSize: 10.5, color: C.light, whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6, maxHeight: 260, overflowY: "auto", fontFamily: "monospace", margin: "0 0 10px" }}>{studioResult}</pre>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>PHOTO FILENAME (drop the matching file in the public folder)</div>
+                        <input value={studioPhotoName} onChange={e => setStudioPhotoName(e.target.value)}
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "monospace", marginBottom: 12, boxSizing: "border-box" }} />
                         {publishStatus === "sent" ? (
                           <div style={{ textAlign: "center", padding: "10px 0", fontSize: 12.5, color: "#4CAF50", fontWeight: 700 }}>✓ Published — live on Gemlyx now</div>
                         ) : (
@@ -2214,7 +2230,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             {publishStatus === "sending" ? "Publishing…" : "🚀 Publish to Gemlyx"}
                           </button>
                         )}
-                        {publishStatus === "error" && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8, textAlign: "center" }}>Publish failed — check the gemlyx_content table and RLS policy exist in Supabase.</div>}
+                        {publishStatus === "error" && (
+                          <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8 }}>
+                            Publish failed — check the gemlyx_content table and RLS policy exist in Supabase.
+                            {publishErrorDetail && <div style={{ marginTop: 4, fontFamily: "monospace", fontSize: 10, color: C.muted, wordBreak: "break-word" }}>{publishErrorDetail}</div>}
+                          </div>
+                        )}
                         <button onClick={() => { try { navigator.clipboard.writeText(studioResult); setToast("📋 Copied"); setTimeout(() => setToast(null), 1800); } catch { /* ignore */ } }}
                           style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           📋 Or copy code (manual paste into App.jsx)
