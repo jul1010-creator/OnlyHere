@@ -1481,6 +1481,19 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
     });
   };
 
+  // Resolve a guide stop name to real coordinates (content data first, then town list), or null.
+  const resolveStopCoords = (name) => {
+    const real = lookupRealPlace(name);
+    if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+    const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
+    return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
+  };
+  const kmBetween = (a, b) => {
+    const dLat = (a.lat - b.lat) * 111.32;
+    const dLon = (a.lon - b.lon) * 62.06;
+    return Math.sqrt(dLat * dLat + dLon * dLon);
+  };
+
   // Distance (km) from user to the town mentioned in a free-text location string, or null.
   const townKmFromUser = (locStr) => {
     if (!isInDenmark(userCoords) || !locStr) return null;
@@ -1523,6 +1536,7 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
           messages: [
             { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
 {"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "2-3 vivid sentences that paint a picture of this place — what it looks and feels like to be there, what makes it special, and one concrete thing to do or notice. Write like a well-travelled friend, not a brochure."}]}]}
+CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.` },
             { role: "user", content: convoText }
@@ -1538,7 +1552,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const travelMode = /\b(bike|cykel|cycling|cycle)\b/.test(lc) ? "bike"
         : /\b(car|driving|drive|bil)\b/.test(lc) ? "car"
         : /public transport|train|bus|tog\b/.test(lc) ? "public transport" : null;
-      setGuideModal({ _gid: gid, title: parsed.title || "Your Custom Route", days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, title: parsed.title || "Your Custom Route", days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode);
       fetchGuideWeather(parsed.days, gid);
     } catch {
@@ -3432,17 +3446,34 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             )}
                           </div>
                           </div>
-                          {i < day.stops.length - 1 ? (
-                            <div style={{ borderLeft: `2px dashed ${C.border}`, marginLeft: 31, padding: "7px 0 9px 14px", minHeight: 14 }}>
-                              {day.glance?.legs?.[i]?.how ? (
-                                <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
-                                  {/bike|cycl/i.test(day.glance.legs[i].how) ? "🚲" : /drive|car\b/i.test(day.glance.legs[i].how) ? "🚗" : /walk/i.test(day.glance.legs[i].how) ? "🚶" : /ferry|boat/i.test(day.glance.legs[i].how) ? "⛴" : "🚆"} {day.glance.legs[i].how}
-                                </span>
-                              ) : glancePending > 0 ? (
-                                <span style={{ fontSize: 11, color: C.muted }}>✨ checking…</span>
-                              ) : null}
-                            </div>
-                          ) : (
+                          {i < day.stops.length - 1 ? (() => {
+                            const nextStop = day.stops[i + 1];
+                            const how = day.glance?.legs?.[i]?.how || "";
+                            const mode = /bike|cycl/i.test(how) ? "bicycling" : /drive|car\b/i.test(how) ? "driving" : /walk/i.test(how) ? "walking" : /train|bus|transit/i.test(how) ? "transit"
+                              : guideModal._mode === "bike" ? "bicycling" : guideModal._mode === "car" ? "driving" : "transit";
+                            const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
+                            const a = resolveStopCoords(stop.name), b = resolveStopCoords(nextStop.name);
+                            const km = a && b ? kmBetween(a, b) : null;
+                            const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(stop.name + ", Denmark")}&destination=${encodeURIComponent(nextStop.name + ", Denmark")}&travelmode=${mode}`;
+                            return (
+                              <div style={{ borderLeft: `2px dashed ${C.border}`, marginLeft: 31, padding: "7px 0 9px 14px", minHeight: 14 }}>
+                                {glancePending > 0 && !how ? (
+                                  <span style={{ fontSize: 11, color: C.muted }}>✨ checking…</span>
+                                ) : (
+                                  <a href={mapsUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
+                                    <span style={{ fontSize: 12 }}>{icon}</span>
+                                    <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
+                                      {km !== null
+                                        ? `~${Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
+                                        : how || "Route"}
+                                    </span>
+                                    <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· Exact route ↗</span>
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })() : (
                             <div style={{ height: 12 }} />
                           )}
                         </div>
