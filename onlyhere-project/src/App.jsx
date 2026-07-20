@@ -1162,6 +1162,44 @@ const APP_VERSION = "v2.87 — AI plans become saveable guides with real data + 
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
+
+  // Pull in anything published via Content Studio and fold it into the shared content
+  // arrays. towns/majorEvents/freeEntrance/foodSpots/nightlifeSpots are module-level
+  // singletons (declared once outside this component) — mutating them in place means
+  // every existing .map()/lookup across the whole app picks the new items up for free,
+  // no need to touch dozens of call sites. bumpLiveContent forces the one re-render
+  // needed after the mutation, since React can't see a plain array push on its own.
+  const [, bumpLiveContent] = useState(0);
+  const fetchedLiveContent = useRef(false);
+  useEffect(() => {
+    if (fetchedLiveContent.current) return;
+    fetchedLiveContent.current = true;
+    (async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        });
+        const rows = await res.json();
+        if (!Array.isArray(rows) || rows.length === 0) return;
+        const bookingRows = [];
+        rows.forEach(row => {
+          const item = row.payload;
+          if (!item || !item.name) return;
+          const id = 100000 + row.id; // offset keeps live IDs clear of hardcoded ones
+          if (row.type === "town") {
+            towns.push({ id, ...item });
+            if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
+          } else if (row.type === "festival") majorEvents.push({ id, ...item });
+          else if (row.type === "free") freeEntrance.push({ id, ...item });
+          else if (row.type === "food") foodSpots.push({ id, ...item });
+          else if (row.type === "night") nightlifeSpots.push({ id, ...item });
+          else if (row.type === "booking") bookingRows.push({ id, ...item });
+        });
+        if (bookingRows.length > 0) setCraftItems(prev => [...prev, ...bookingRows]);
+        bumpLiveContent(v => v + 1);
+      } catch { /* live content is additive — a failed fetch just means nothing new shows yet */ }
+    })();
+  }, []);
   const [active, setActive] = useState("home");
   const [shopTab, setShopTab] = useState("shops");
   const [selectedCity, setSelectedCity] = useState(cities[0]);
@@ -1285,17 +1323,62 @@ export default function Gemlyx() {
   // Gemlyx editorial documents. Output is paste-ready code the founder verifies
   // before committing, keeping "never invented content" true.
   const isStudio = typeof window !== "undefined" && window.location.hash === "#studio";
+  const [studioSession, setStudioSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gemlyx_studio_session") || "null"); } catch { return null; }
+  });
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState(null);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const studioLogin = async () => {
+    if (!loginEmail.trim() || !loginPassword) return;
+    setLoginLoading(true); setLoginError(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail.trim(), password: loginPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.access_token) { setLoginError(data.error_description || data.msg || "Login failed — check email and password."); setLoginLoading(false); return; }
+      const session = { access_token: data.access_token, email: data.user?.email || loginEmail.trim() };
+      localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
+      setStudioSession(session);
+      setLoginPassword("");
+    } catch { setLoginError("Couldn't reach Supabase — check your connection."); }
+    setLoginLoading(false);
+  };
+  const studioLogout = () => {
+    localStorage.removeItem("gemlyx_studio_session");
+    setStudioSession(null);
+  };
   const [studioTown, setStudioTown] = useState("");
   const [studioType, setStudioType] = useState("town");
   const [studioLoading, setStudioLoading] = useState(false);
   const [studioResult, setStudioResult] = useState(null);
   const [studioError, setStudioError] = useState(null);
+  const [studioDraft, setStudioDraft] = useState(null);
+  const [publishStatus, setPublishStatus] = useState(null); // null | "sending" | "sent" | "error"
 
   const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences.';
 
   const slugify = (s) => s.toLowerCase().replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "aa").replace(/[^a-z0-9]/g, "");
   const J = (v) => JSON.stringify(v ?? "");
   const bb = (pairs) => pairs.filter(([, body]) => body).map(([h, body]) => `      { type: "heading", content: ${J(h)} },\n      { type: "paragraph", content: ${J(body)} },`).join("\n");
+  const bbData = (pairs) => pairs.filter(([, body]) => body).flatMap(([h, body]) => [{ type: "heading", content: h }, { type: "paragraph", content: body }]);
+
+  // Shapes a Studio draft into the exact object shape each hardcoded array expects —
+  // same fields the paste-ready codegen builds, but as a real JS object for direct use,
+  // not template-string code. `id` and TOWN_COORDS are set by the caller after insert.
+  const shapeForLive = (type, t) => {
+    if (type === "town") return { name: t.name, photo: `/towns/${slugify(t.name)}.jpg`, region: t.region || "", emoji: t.emoji || "📍", tag: t.tag || "", desc: t.desc, highlight: t.highlight || "", travelTime: t.travelTime || "", mapHint: t.mapHint || `${t.name}, Denmark`, nomiPotential: t.nomiPotential || "Medium", tier: t.tier || "Worth Considering", __lat: Number(t.lat) || null, __lon: Number(t.lon) || null, blogBody: bbData([["Getting There", t.gettingThere], ["Recommended Stay", t.recommendedStay], ["Best Time to Visit", t.bestTime], ["Accommodation", t.accommodation], ["Budget", t.budget], ["What Makes This Town Special?", t.special], ["What Travelers Love", t.travelersLove], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]]) };
+    if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", accommodationTip: t.accommodationTip || "", budgetLevel: t.budgetLevel || "", travelTime: t.travelTime || "", rating: 4.5, ticketStatus: t.ticketStatus || "on_sale", town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], blogBody: bbData([["Music & Atmosphere", t.atmosphere], ["Who Is It For?", t.whoFor], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]]) };
+    if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "Hidden Gem", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32", blogBody: bbData([["Getting There", t.gettingThere], ["Best Time to Visit", t.bestTime], ["What Makes It Special", t.special], ["Who It's For", t.whoFor], ["Things to Know", t.thingsToKnow]]) };
+    if (type === "food") return { name: t.name, type: t.type || "Local", emoji: t.emoji || "🍽", category: t.category || "", location: t.location || "", price: t.price || "See website", photo: `/food/${slugify(t.name)}.jpg`, desc: t.desc, tip: t.tip || "", mapHint: t.mapHint || "", color: t.color || "#D4AF37" };
+    if (type === "night") return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", location: t.location || "", desc: t.desc, tip: t.tip || "", mapHint: t.mapHint || "", color: t.color || "#5D4037" };
+    if (type === "booking") return { name: t.name, type: t.type || "Local", what: Array.isArray(t.what) ? t.what : [t.what].filter(Boolean), rating: t.rating ? Number(t.rating) : 4.5, location: t.location || "", price: t.price || "See website", priceNote: t.priceNote || "", travelTime: t.travelTime || "", bookingType: t.bookingType || "contact", popularityTag: t.popularityTag || "", transportWarning: !!t.transportWarning, emoji: t.emoji || "🔨", photo: `/craft/${slugify(t.name)}.jpg`, color: t.color || "#8E6B1F", desc: t.desc };
+    return null;
+  };
 
   const generateArea = async () => {
     const name = studioTown.trim();
@@ -1305,9 +1388,10 @@ export default function Gemlyx() {
       const cfg = {
         town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`] },
         festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup`, `${name} festival Denmark atmosphere who goes accommodation nearest station`] },
-        free: { queries: [`${name} free entry what makes it special opening hours`, `${name} Denmark visitor tips things to know`] },
+        free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`] },
         food: { queries: [`${name} Denmark what to order prices history reviews`, `${name} Denmark local tips address`] },
         night: { queries: [`${name} Denmark bar atmosphere crowd prices reviews`, `${name} Denmark local tips address`] },
+        booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`] },
       }[studioType];
       let context = "";
       for (const q of cfg.queries) {
@@ -1327,26 +1411,30 @@ ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "town": "host town", "type": "Music / Festival / Market / Culture", "emoji": "one emoji", "dateStart": "YYYY-MM-DD or empty if not in context", "dateEnd": "YYYY-MM-DD or empty", "tier": "Can't miss out / Highly Recommended / Worth Considering / Best If You're Already Nearby", "nearestStation": "...", "ticketInfo": "one sentence — never invent prices", "accommodationTip": "one sentence", "budgetLevel": "Very Low / Low / Moderate / High (ranges ok)", "travelTime": "from Copenhagen like '1h 10min 🚂', or 'In Copenhagen 🚇'", "ticketStatus": "free / on_sale / limited / sold_out", "desc": "two At-a-Glance sentences", "mapHint": "Venue/street, postcode Town, Denmark", "tags": ["two", "tags"], "color": "#hex fitting the vibe", "atmosphere": "Music & Atmosphere section", "whoFor": "Who Is It For? section", "thingsToKnow": "incl. at least one downside", "shouldYouVisit": "honest verdict"} Dates: ONLY from the context — empty string beats a guess.`,
         free: `Draft a complete Gemlyx free-entrance entry for ${name}, matching this REAL example: {"name": "The Greenhouses, Botanical Garden", "city": "Aarhus", "type": "Botanical garden", "popularityTag": "Hidden Gem", "desc": "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free."}
 ${STUDIO_VOICE}
-Respond with ONLY strict JSON: {"name": ${J(name)}, "city": "which Danish city", "type": "short category", "emoji": "one emoji", "popularityTag": "Hidden Gem / Local Favourite / Popular", "desc": "two card sentences — say clearly what is free", "website": "official URL ONLY if present in context, else empty string", "color": "#hex", "special": "What Makes It Special section", "thingsToKnow": "incl. at least one downside"}`,
+Write full paragraphs for every section below — 3-5 sentences each, not one-liners. This should read as thoroughly as a proper Gemlyx town writeup, just for a single place.
+Respond with ONLY strict JSON: {"name": ${J(name)}, "city": "which Danish city", "type": "short category", "emoji": "one emoji", "popularityTag": "Hidden Gem / Local Favourite / Popular", "desc": "two card sentences — say clearly what is free", "website": "official URL ONLY if present in context, else empty string", "color": "#hex", "gettingThere": "how to actually arrive — station, bus, or walk from the town centre", "bestTime": "months or time of day + why, if the context supports it", "special": "3-5 sentences on what makes this specific place worth the detour — real history, real detail, not just \'beautiful views\'", "whoFor": "who this suits — families, photographers, history buffs, quiet mornings, etc.", "thingsToKnow": "3-4 sentences of real practical caveats incl. at least one honest downside"}`,
         food: `Draft a complete Gemlyx food entry for ${name}, matching this REAL example: {"name": "Harry's Place", "type": "Local", "category": "Hot dog stand", "location": "Nørrebro/Nordvest, Copenhagen", "price": "40–70 DKK", "desc": "A hot dog cart since 1965, run by the same kind of hands-on owners the whole time. Order the \\"Børge med krudt\\" — the local's move — or the flæskesteg (roast pork) sandwich. Cash or Dankort only. No frills, no seats, just stand and eat like generations before you.", "tip": "Ask for it \\"the traditional way\\" and the person behind the counter will usually tell you exactly how to eat it."}
 ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "category": "e.g. Bakery, est. 1652", "location": "Neighbourhood, City", "price": "range like '40–70 DKK' ONLY from context, else 'See website'", "emoji": "one emoji", "desc": "3-4 sentences in the voice above — what to order, history, quirks", "tip": "one insider tip a local would give", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex"}`,
         night: `Draft a complete Gemlyx nightlife entry for ${name}, matching this REAL example: {"name": "Toga Vinstue", "type": "Local", "crowd": "Almost entirely Danish", "category": "Brown bar (bodega)", "location": "Indre By, Copenhagen", "desc": "A classic \\"brown bar\\" — old wood interior, low light, walls covered in political cartoons. Sits five minutes from the Danish Parliament, and actual lawmakers drink here. Cheap beer (around 45 DKK), smoking still allowed indoors, genuinely local despite the central address.", "tip": "Don't expect English menus or tourist-friendly service — this is a real neighbourhood bodega, not a show."}
 ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "crowd": "who actually drinks here", "category": "short category", "location": "Neighbourhood, City", "emoji": "one emoji", "desc": "3-4 sentences in the voice above", "tip": "one insider tip", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex"}`,
+        booking: `Draft a complete Gemlyx Booking (bookable craft/experience) entry for ${name}, Denmark, matching this REAL example: {"name": "Viking Center Ribe", "type": "Major", "what": ["blacksmithing", "leather", "textiles"], "location": "Ribe", "price": "180 DKK", "bookingType": "online", "desc": "Artisans craft authentic Viking jewellery, leather and textiles on site — watch smithing demonstrations and try archery in the reconstructed village."}
+${STUDIO_VOICE}
+Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, e.g. a named museum/center) or Local (small independent workshop)", "what": ["1-3 lowercase craft keywords from: blacksmith, ceramic/pottery, jewellery, leather, textile/dyeing/felting, wood, candy — only include what's genuinely true"], "rating": "a real rating if found in reviews, else omit", "location": "Town name", "price": "exact price if the context gives one, else 'See website'", "priceNote": "e.g. 'per person' or 'family ticket available', else empty string", "travelTime": "EXACT format like '3h 15min 🚂' from Copenhagen, or empty string", "bookingType": "'online' only if you can book/buy tickets on a website, otherwise 'contact'", "popularityTag": "'Hidden Gem' if genuinely under-the-radar, else empty string", "transportWarning": "true only if it's genuinely hard to reach without a car", "emoji": "one fitting emoji", "color": "#hex fitting the craft", "desc": "3-4 sentences — what you'll actually do there, real detail, not brochure language"}`,
       };
 
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
+          model: "gpt-4o",
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: prompts[studioType] },
             { role: "user", content: context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks." },
           ],
-          max_tokens: 1400,
+          max_tokens: 2200,
         }),
       });
       const data = await res.json();
@@ -1364,7 +1452,10 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "cr
         code = `// 1) Ctrl+F for \`const majorEvents = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, rating: 4.5, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])},\n  blogBody: [\n${bb([["Music & Atmosphere", t.atmosphere], ["Who Is It For?", t.whoFor], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) rating is set to 4.5 — adjust it yourself.\n// 4) VERIFY dates, station and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (studioType === "free") {
         const nextId = Math.max(...freeEntrance.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")},\n  blogBody: [\n${bb([["What Makes It Special", t.special], ["Things to Know", t.thingsToKnow]])}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
+        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")},\n  blogBody: [\n${bb([["Getting There", t.gettingThere], ["Best Time to Visit", t.bestTime], ["What Makes It Special", t.special], ["Who It's For", t.whoFor], ["Things to Know", t.thingsToKnow]])}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
+      } else if (studioType === "booking") {
+        const nextId = Math.max(...craftItems.map(x => x.id)) + 1;
+        code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : 4.5}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")},\n  desc: ${J(t.desc)} },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating defaults to 4.5 if the research didn't confirm one — adjust it yourself.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
       } else if (studioType === "food") {
         const nextId = Math.max(...foodSpots.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.desc)},\n  tip: ${J(t.tip)}, mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D4AF37")} },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
@@ -1373,10 +1464,26 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "cr
         code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, desc: ${J(t.desc)}, tip: ${J(t.tip)}, mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")} },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
       }
       setStudioResult(code);
+      setStudioDraft(t);
+      setPublishStatus(null);
     } catch {
       setStudioError("Couldn't draft that — try again, or check the name.");
     }
     setStudioLoading(false);
+  };
+
+  const publishDraft = async () => {
+    if (!studioDraft || !studioSession) return;
+    setPublishStatus("sending");
+    try {
+      const shaped = shapeForLive(studioType, studioDraft);
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ type: studioType, payload: shaped, published: true }),
+      });
+      setPublishStatus(res.ok ? "sent" : "error");
+    } catch { setPublishStatus("error"); }
   };
 
   // For each guide day: one Tavily search for live facts, then OpenAI distills them into
@@ -1426,7 +1533,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "cr
             response_format: { type: "json_object" },
             messages: [
               { role: "system", content: `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
-{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One short sentence on where to base yourself for this day, e.g. 'Best as a day trip from Copenhagen' or 'Stay overnight in Ribe's old town'"}
+{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day."}
 Rules: always prefix times with ~. ${travelMode ? `The traveler is getting around BY ${travelMode.toUpperCase()} — every leg must use that mode (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more).` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
               { role: "user", content: context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks." }
             ],
@@ -1535,7 +1642,7 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "2-3 vivid sentences that paint a picture of this place — what it looks and feels like to be there, what makes it special, and one concrete thing to do or notice. Write like a well-travelled friend, not a brochure."}]}]}
+{"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.` },
@@ -2053,12 +2160,33 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   Answers are generated via OpenAI — please don't include personal details.{" "}
                   <span onClick={() => setShowPrivacy(true)} style={{ textDecoration: "underline", cursor: "pointer" }}>Privacy</span>
                 </div>
-                {isStudio && (
+                {isStudio && !studioSession && (
+                  <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "20px", marginTop: 18 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>🔒 Content Studio — log in</div>
+                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>Only you can publish. Log in with your Gemlyx admin account.</div>
+                    <input value={loginEmail} onChange={e => setLoginEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && studioLogin()}
+                      placeholder="Email" type="email"
+                      style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 8, boxSizing: "border-box" }} />
+                    <input value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && studioLogin()}
+                      placeholder="Password" type="password"
+                      style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 10, boxSizing: "border-box" }} />
+                    {loginError && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 10 }}>{loginError}</div>}
+                    <button onClick={studioLogin} disabled={loginLoading}
+                      style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {loginLoading ? "Logging in…" : "Log in"}
+                    </button>
+                  </div>
+                )}
+                {isStudio && studioSession && (
                   <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "16px", marginTop: 18 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>🛠 Content Studio — founder tool</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>🛠 Content Studio — founder tool</div>
+                      <button onClick={studioLogout} style={{ background: "none", border: "none", color: C.muted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Log out</button>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 4 }}>Logged in as {studioSession.email}</div>
                     <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>Drafts a complete entry — card + full detail page — via Tavily + OpenAI, following the Gemlyx editorial docs. Output is paste-ready code — verify every fact before committing. Not visible to users.</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Festival"], ["free", "🎟 Free Entrance"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["festival", "🎪 Festival"], ["free", "🎟 Free Entrance"], ["booking", "🔨 Booking"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {label}
@@ -2067,7 +2195,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", food: "Place name + city, e.g. Gasoline Grill Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade" }[studioType]}
+                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade" }[studioType]}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
                       <button onClick={generateArea} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
@@ -2078,9 +2206,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {studioResult && (
                       <>
                         <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", fontSize: 10.5, color: C.light, whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6, maxHeight: 260, overflowY: "auto", fontFamily: "monospace", margin: "0 0 10px" }}>{studioResult}</pre>
+                        {publishStatus === "sent" ? (
+                          <div style={{ textAlign: "center", padding: "10px 0", fontSize: 12.5, color: "#4CAF50", fontWeight: 700 }}>✓ Published — live on Gemlyx now</div>
+                        ) : (
+                          <button onClick={publishDraft} disabled={publishStatus === "sending"}
+                            style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 8 }}>
+                            {publishStatus === "sending" ? "Publishing…" : "🚀 Publish to Gemlyx"}
+                          </button>
+                        )}
+                        {publishStatus === "error" && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8, textAlign: "center" }}>Publish failed — check the gemlyx_content table and RLS policy exist in Supabase.</div>}
                         <button onClick={() => { try { navigator.clipboard.writeText(studioResult); setToast("📋 Copied"); setTimeout(() => setToast(null), 1800); } catch { /* ignore */ } }}
-                          style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "9px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          📋 Copy code
+                          style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          📋 Or copy code (manual paste into App.jsx)
                         </button>
                       </>
                     )}
@@ -3390,10 +3527,36 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
                 <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 18 }}>{guideModal.title}</div>
 
-                {guideModal.days.map(day => (
+                {guideModal.days.map((day, dayIdx) => (
                   <div key={day.day} style={{ marginBottom: 20 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Day {day.day}{day.title ? ` — ${day.title}` : ""}</div>
+                    {(() => {
+                      // If today only has one stop, connect it to yesterday's last stop instead —
+                      // that inter-day leg (e.g. Dragør → Køge) IS the actual journey, and without
+                      // it a single-stop day would show no map and no travel info at all.
+                      if (day.stops.length > 1 || dayIdx === 0) return null;
+                      const prevDay = guideModal.days[dayIdx - 1];
+                      const prevStop = prevDay?.stops?.[prevDay.stops.length - 1];
+                      if (!prevStop) return null;
+                      const how = day.glance?.legs?.[0]?.how || "";
+                      const mode = /bike|cycl/i.test(how) ? "bicycling" : /drive|car\b/i.test(how) ? "driving" : /walk/i.test(how) ? "walking" : /train|bus|transit/i.test(how) ? "transit"
+                        : guideModal._mode === "bike" ? "bicycling" : guideModal._mode === "car" ? "driving" : "transit";
+                      const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : "🚆";
+                      const a = resolveStopCoords(prevStop.name), b = resolveStopCoords(day.stops[0].name);
+                      const km = a && b ? kmBetween(a, b) : null;
+                      const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(prevStop.name + ", Denmark")}&destination=${encodeURIComponent(day.stops[0].name + ", Denmark")}&travelmode=${mode}`;
+                      return (
+                        <a href={mapsUrl} target="_blank" rel="noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginBottom: 12 }}>
+                          <span style={{ fontSize: 12 }}>{icon}</span>
+                          <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
+                            {km !== null ? `~${Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}` : how || "Route from yesterday"}
+                          </span>
+                          <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· Exact route ↗</span>
+                        </a>
+                      );
+                    })()}
                       {day.weather && (
                         <div title="Forecast assumes the trip starts today" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: C.surface, border: `1px solid ${day.weather.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 11 }}>
                           <span>{day.weather.icon}</span>
@@ -3403,11 +3566,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       )}
                     </div>
                     {(() => {
-                      const routePoints = day.stops.map(s => {
-                        const real = lookupRealPlace(s.name);
-                        if (real?.lat && real?.lon) return { name: s.name, lat: real.lat, lon: real.lon };
-                        const key = Object.keys(TOWN_COORDS).find(t => s.name.includes(t));
-                        return key ? { name: s.name, lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
+                      const prevDay = dayIdx > 0 ? guideModal.days[dayIdx - 1] : null;
+                      const prevStop = prevDay?.stops?.[prevDay.stops.length - 1];
+                      const leadIn = day.stops.length === 1 && prevStop ? [prevStop] : [];
+                      const routePoints = [...leadIn, ...day.stops].map(s => {
+                        const c = resolveStopCoords(s.name);
+                        return c ? { name: s.name, ...c } : null;
                       }).filter(Boolean);
                       if (routePoints.length < 2) return null;
                       return (
