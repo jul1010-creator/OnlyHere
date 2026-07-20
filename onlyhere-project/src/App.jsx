@@ -619,6 +619,14 @@ const travelLabel = (userCoords, townName, fallbackTravelTime) => {
   return `${fallbackTravelTime} from CPH`;
 };
 
+// A message counts as a "full plan" once it lays out 2+ days — these get collapsed
+// to a short line in chat; the real detail only appears inside the generated guide.
+const isFullPlanText = (text) => {
+  if (!text) return false;
+  const dayHeaders = (text.match(/day\s*\d+\s*[:\-–]/gi) || []).length;
+  return dayHeaders >= 2 || (dayHeaders >= 1 && text.length > 500);
+};
+
 const stripMarkdown = (text) => {
   if (!text) return text;
   return text
@@ -893,6 +901,41 @@ const LeafletMap = ({ center, zoom, overlayLabel }) => {
 };
 
 
+
+const GuideRouteMap = ({ points }) => {
+  const holderRef = useRef(null);
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+  useEffect(() => {
+    if (!holderRef.current || points.length < 2) return;
+    if (!mapRef.current) {
+      const map = L.map(holderRef.current, { zoomControl: false, dragging: true, scrollWheelZoom: false }).setView([points[0].lat, points[0].lon], 8);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19, className: "gemlyx-tiles",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+      L.control.zoom({ position: "bottomleft" }).addTo(map);
+      mapRef.current = map;
+    }
+    const map = mapRef.current;
+    if (layerRef.current) { layerRef.current.remove(); }
+    const group = L.layerGroup().addTo(map);
+    layerRef.current = group;
+    const latlngs = points.map(p => [p.lat, p.lon]);
+    L.polyline(latlngs, { color: C.gold, weight: 3, dashArray: "1,8", lineCap: "round" }).addTo(group);
+    points.forEach((p, i) => {
+      L.circleMarker([p.lat, p.lon], { radius: 7, color: "#0A0F1E", weight: 2, fillColor: C.gold, fillOpacity: 1 })
+        .bindTooltip(`${i + 1}. ${p.name}`, { permanent: false, direction: "top" })
+        .addTo(group);
+    });
+    map.fitBounds(latlngs, { padding: [28, 28] });
+    return () => { group.remove(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(points)]);
+  useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
+  if (points.length < 2) return null;
+  return <div ref={holderRef} style={{ width: "100%", height: "100%" }} />;
+};
 
 const PageHero = ({ src, emoji, color }) => (
   <div style={{ height: 130, borderRadius: 14, overflow: "hidden", marginBottom: 18, position: "relative", background: `linear-gradient(135deg, ${color}33 0%, #0A0F1E 100%)` }}>
@@ -1339,6 +1382,29 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "cr
   // For each guide day: one Tavily search for live facts, then OpenAI distills them into
   // (a) how to travel between consecutive stops and (b) where to stay. Never invents —
   // falls back to "Check Rejseplanen" wording when the context doesn't support a claim.
+  const fetchGuideWeather = (days, gid) => {
+    days.forEach(async (day, idx) => {
+      try {
+        const point = day.stops.map(s => {
+          const real = lookupRealPlace(s.name);
+          if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+          const key = Object.keys(TOWN_COORDS).find(t => s.name.includes(t));
+          return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
+        }).find(Boolean);
+        if (!point) return;
+        const res = await fetch(`/api/weather?lat=${point.lat}&lon=${point.lon}`);
+        const data = await res.json();
+        const slot = data?.forecast?.[idx];
+        if (!slot) return;
+        const cond = (slot.condition || "").toLowerCase();
+        const risk = /rain|sleet|thunder|snow/.test(cond) ? "high" : /cloudy|fog/.test(cond) ? "low" : "none";
+        setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
+          ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, weather: { icon: weatherIcon(slot.condition), temp: Math.round(slot.temperature_c), risk } } : d) }
+          : prev);
+      } catch { /* weather is a nice-to-have — leave this day without it */ }
+    });
+  };
+
   const enrichGuideDays = (days, gid, travelMode) => {
     setGlancePending(days.length);
     days.forEach(async (day, idx) => {
@@ -1379,6 +1445,22 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
     });
   };
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestForm, setSuggestForm] = useState({ name: "", type: "Event", note: "" });
+  const [suggestStatus, setSuggestStatus] = useState(null); // null | "sending" | "sent" | "error"
+  const sendSuggestion = async () => {
+    if (!suggestForm.name.trim()) { setSuggestStatus("error"); return; }
+    setSuggestStatus("sending");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_suggestions`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ name: suggestForm.name, type: suggestForm.type, note: suggestForm.note }),
+      });
+      setSuggestStatus(res.ok ? "sent" : "error");
+      if (res.ok) setSuggestForm({ name: "", type: "Event", note: "" });
+    } catch { setSuggestStatus("error"); }
+  };
   const [guideError, setGuideError] = useState(null);
   const [savedGuides, setSavedGuides] = useState(() => {
     try { return JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]"); } catch { return []; }
@@ -1458,6 +1540,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         : /public transport|train|bus|tog\b/.test(lc) ? "public transport" : null;
       setGuideModal({ _gid: gid, title: parsed.title || "Your Custom Route", days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode);
+      fetchGuideWeather(parsed.days, gid);
     } catch {
       setGuideModal(null);
       setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
@@ -1719,7 +1802,6 @@ If the conversation only covers a single day or a few stops with no explicit day
       const season = getSeason();
 
       const sysPrompt = `You are Gemlyx — Denmark's insider guide. You speak as Gemlyx itself: warm, confident, like a well-travelled Danish friend, never like a generic AI assistant. Never call yourself an AI or a language model. Today is ${monthName} (${season} season in Denmark). Be concise and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
-After you have proposed a day-by-day plan, always end with one short friendly line like: "I've got you — tap 'Turn this into a guide' below and I'll build it out with travel times and where to stay." Do not say this before a plan exists.
 Transport matters: if the person hasn't said how they're getting around, ask — car, bike, or public transport — before proposing a route, since it changes everything. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine.
 
 ASK BEFORE YOU PLAN — this matters more than anything else here. If someone asks for a plan, route, or itinerary and you don't already know their budget, how much time they actually have, and roughly what they enjoy (history, nature, food, nightlife, a mix), do NOT generate a full itinerary yet. Ask ONE short, warm question that covers those three things together — for example: "Happy to help! Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — history, nature, food, nightlife, or a bit of everything?" Keep it to one message, not three separate questions. Only build the actual plan once you know these, either from their answer or because they already told you in their first message.
@@ -1920,8 +2002,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         {m.role === "assistant" && (
                           <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
                         )}
-                        <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.5, background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
-                          {m.role === "assistant" ? stripMarkdown(m.text) : m.text}
+                        <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
+                          {m.role === "assistant" ? (isFullPlanText(m.text) ? "I've got you — your plan's ready. Tap \"Turn this into a guide\" below, or tell me if you'd like anything changed first." : stripMarkdown(m.text)) : m.text}
                         </div>
                       </div>
                     ))}
@@ -1939,11 +2021,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <div style={{ fontSize: 12, color: "#FFB347", textAlign: "center", marginBottom: 12 }}>{guideError}</div>
                 )}
 
-                <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                  {["Plan my 3 days in Denmark", "Exclusive fashion in Copenhagen", "Best craft to commission"].map(s => (
-                    <button key={s} onClick={() => setAiInput(s)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, color: C.light, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>{s}</button>
-                  ))}
-                </div>
+                {aiMessages.length <= 1 && (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                    {["Plan my 3 days in Denmark", "Exclusive fashion in Copenhagen", "Best craft to commission"].map(s => (
+                      <button key={s} onClick={() => setAiInput(s)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, color: C.light, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>{s}</button>
+                    ))}
+                  </div>
+                )}
 
                 <div style={{ display: "flex", gap: 8 }}>
                   <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
@@ -2105,38 +2189,46 @@ You also have a web_search tool. Use it whenever someone asks about something th
           {/* ── CRAFT ────────────────────────────────────────── */}
           {tab === "craft" && (
             <div className={pageAnim} style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+              <div style={{ marginBottom: 20, paddingTop: 8 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>✓ Curated & Bookable</div>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Booking</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>These are options we highly recommend pre-booking — museums, workshops and tickets that sell out or need advance planning. Prices shown are per person unless noted.</div>
-                <div style={{ fontSize: 12, color: "#4CAF50", background: "#4CAF5022", border: "1px solid #4CAF50", borderRadius: 10, padding: "8px 12px", marginTop: 10, display: "inline-block" }}>
-                  Looking for something free instead? Check the Free Entrance tab.
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560, marginBottom: 12 }}>Worth pre-booking — museums, workshops and tickets that sell out or need advance planning. Prices are per person unless noted.</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#4CAF50", background: "#4CAF5015", border: "1px solid #4CAF5044", borderRadius: 10, padding: "9px 13px" }}>
+                  <span style={{ fontSize: 13 }}>✦</span> Looking for something free instead? Check Free Entrance.
                 </div>
               </div>
 
               {/* Filters */}
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 16px 14px", marginBottom: 18 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
                   {["All", "Major", "Local"].map(t => (
                     <Pill key={t} label={t} active={(t === "All" && !craftType) || craftType === t} onClick={() => setCraftType(t === "All" ? null : (craftType === t ? null : t))} />
                   ))}
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
                   {["All", "Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"].map(k => (
                     <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
                   ))}
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Booking speed</div>
-                <Pill label="Bookable online only" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", margin: "12px 0 8px" }}>Sort</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
-                  <Pill label="📍 Closest to you" active={craftSort === "near"} color={C.gold}
-                    onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
+                <div style={{ height: 1, background: C.border, margin: "2px 0 14px" }} />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Speed</div>
+                    <Pill label="⚡ Bookable online" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Sort</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
+                      <Pill label="📍 Closest" active={craftSort === "near"} color={C.gold}
+                        onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
+                    </div>
+                  </div>
                 </div>
                 {craftSort === "near" && !isInDenmark(userCoords) && (
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Works once you're in Denmark with location enabled — showing recommended order for now.</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you're in Denmark with location enabled — showing recommended order for now.</div>
                 )}
               </div>
 
@@ -2151,40 +2243,55 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 }).sort((a, b) => (craftSort === "near" && isInDenmark(userCoords))
                   ? (townKmFromUser(a.location) ?? 9999) - (townKmFromUser(b.location) ?? 9999)
                   : (b.rating || 0) - (a.rating || 0));
-                if (craftLoading) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>Loading craft spots...</div>;
-                if (filtered.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No craft spots match — try another filter</div>;
+                if (craftLoading) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>Loading craft spots…</div>;
+                if (filtered.length === 0) return (
+                  <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
+                    <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
+                    <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>Nothing matches those filters</div>
+                    <div style={{ fontSize: 12 }}>Try clearing one — Denmark still has plenty to offer.</div>
+                  </div>
+                );
                 return (
                   <div>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, paddingLeft: 2 }}>{filtered.length} experience{filtered.length !== 1 ? "s" : ""}{craftSort === "near" && isInDenmark(userCoords) ? " · nearest first" : ""}</div>
                     {filtered.map(craft => (
-                      <div key={craft.id} onClick={() => setCraftDetail(craft)} style={{ background: C.surface, borderRadius: 18, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 14, cursor: "pointer" }}>
-                        <div style={{ height: 160, position: "relative", background: `linear-gradient(135deg, ${craft.color}33 0%, #0A0F1E 100%)` }}>
-                          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, opacity: 0.25 }}>{craft.emoji}</span>
+                      <div key={craft.id} onClick={() => setCraftDetail(craft)} style={{ background: C.surface, borderRadius: 20, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 16, cursor: "pointer", boxShadow: "0 4px 18px rgba(0,0,0,0.18)" }}>
+                        <div style={{ height: 172, position: "relative", background: `linear-gradient(135deg, ${craft.color}40 0%, #0A0F1E 100%)` }}>
+                          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, opacity: 0.22 }}>{craft.emoji}</span>
                           {craft.photo && <img src={craft.photo} alt={craft.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />}
-                          <div style={{ position: "absolute", top: 10, left: 10, background: craft.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "4px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>{craft.type}</div>
-                          {craft.rating && <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 9px", borderRadius: 100 }}>★ {craft.rating}</div>}
+                          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(10,15,30,0.75) 100%)" }} />
+
+                          <div style={{ position: "absolute", top: 10, left: 10, display: "flex", gap: 6, alignItems: "center" }}>
+                            <span style={{ background: craft.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>{craft.type}</span>
+                            {craft.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.85)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, backdropFilter: "blur(4px)" }}>◆ Hidden Gem</span>}
+                          </div>
+
                           <button onClick={(e) => { e.stopPropagation(); toggleSavePlace("craft", craft, craft.location); }}
-                            style={{ position: "absolute", top: craft.rating ? 38 : 10, right: 10, background: "rgba(10,15,30,0.8)", border: "none", borderRadius: 100, padding: "4px 9px", fontSize: 13, cursor: "pointer", color: isPlaceSaved("craft", craft.id) ? "#E91E63" : "#ffffff88" }}>
+                            style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved("craft", craft.id) ? "#E91E63" : "#ffffffaa" }}>
                             {isPlaceSaved("craft", craft.id) ? "♥" : "♡"}
                           </button>
-                          {craft.popularityTag === "Hidden Gem" && <div style={{ position: "absolute", bottom: 10, left: 10, background: "rgba(10,15,30,0.85)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "4px 9px", borderRadius: 100 }}>◆ Hidden Gem</div>}
-                          {craft.transportWarning && <div style={{ position: "absolute", bottom: 10, right: 10, background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 13, padding: "4px 7px", borderRadius: 8 }} title="Limited public transport">🚲</div>}
+
+                          <div style={{ position: "absolute", bottom: 10, left: 12, right: 12, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.1, textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>{craft.name}</div>
+                            {craft.rating && <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: C.gold, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", padding: "4px 9px", borderRadius: 100 }}>★ {craft.rating}</div>}
+                          </div>
+                          {craft.transportWarning && <div style={{ position: "absolute", top: 10, right: 48 }} title="Limited public transport"><span style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 12, padding: "5px 8px", borderRadius: 100 }}>🚲</span></div>}
                         </div>
                         <div style={{ padding: "14px 16px 16px" }}>
-                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 3 }}>
-                            <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{craft.name}</div>
-                            <div style={{ textAlign: "right", flexShrink: 0 }}>
-                              <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>{craft.price || "On request"}</div>
-                            </div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                            <div style={{ fontSize: 12, color: C.muted }}>{craft.location} · {travelLabel(userCoords, craft.location, craft.travelTime)}{craft.priceNote ? ` · ${craft.priceNote}` : ""}</div>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", flexShrink: 0 }}>{craft.price || "On request"}</div>
                           </div>
-                          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{craft.location} · {travelLabel(userCoords, craft.location, craft.travelTime)}{craft.priceNote ? ` · ${craft.priceNote}` : ""}</div>
-                          <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 10 }}>{craft.desc.slice(0, 110)}{craft.desc.length > 110 ? "…" : ""}</div>
+                          <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 12 }}>{craft.desc.slice(0, 110)}{craft.desc.length > 110 ? "…" : ""}</div>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
-                              Read more <span style={{ fontSize: 15 }}>›</span>
-                            </div>
-                            {craft.bookingType === "online" && (
-                              <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "4px 9px", borderRadius: 100 }}>● Book online</span>
+                            {craft.bookingType === "online" ? (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "5px 10px", borderRadius: 100 }}>⚡ Book online</span>
+                            ) : (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, background: `${C.border}55`, padding: "5px 10px", borderRadius: 100 }}>Contact to book</span>
                             )}
+                            <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.gold, fontSize: 12.5, fontWeight: 700 }}>
+                              Details <span style={{ fontSize: 15 }}>›</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2728,6 +2835,20 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 );
               })}
 
+              <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 14, padding: "16px", margin: "0 0 4px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 22 }}>💡</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Know a place we're missing?</div>
+                    <div style={{ fontSize: 11.5, color: C.muted }}>Tell us — every Gemlyx entry is personally checked, so this helps us find the next one.</div>
+                  </div>
+                  <button onClick={() => { setSuggestOpen(true); setSuggestStatus(null); }}
+                    style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Suggest
+                  </button>
+                </div>
+              </div>
+
               {aiHelperBlock()}
             </div>
           )}
@@ -3257,7 +3378,30 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 {guideModal.days.map(day => (
                   <div key={day.day} style={{ marginBottom: 20 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Day {day.day}{day.title ? ` — ${day.title}` : ""}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Day {day.day}{day.title ? ` — ${day.title}` : ""}</div>
+                      {day.weather && (
+                        <div title="Forecast assumes the trip starts today" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: C.surface, border: `1px solid ${day.weather.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 11 }}>
+                          <span>{day.weather.icon}</span>
+                          <span style={{ color: C.text, fontWeight: 700 }}>{day.weather.temp}°</span>
+                          {day.weather.risk === "high" && <span style={{ color: "#FFB347", fontWeight: 700 }}>· rain likely</span>}
+                        </div>
+                      )}
+                    </div>
+                    {(() => {
+                      const routePoints = day.stops.map(s => {
+                        const real = lookupRealPlace(s.name);
+                        if (real?.lat && real?.lon) return { name: s.name, lat: real.lat, lon: real.lon };
+                        const key = Object.keys(TOWN_COORDS).find(t => s.name.includes(t));
+                        return key ? { name: s.name, lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
+                      }).filter(Boolean);
+                      if (routePoints.length < 2) return null;
+                      return (
+                        <div style={{ height: 160, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 14 }}>
+                          <GuideRouteMap points={routePoints} />
+                        </div>
+                      );
+                    })()}
                     {day.stops.map((stop, i) => {
                       const real = lookupRealPlace(stop.name);
                       const townMatch = towns.find(t => t.name === stop.name)?.name || (real?._src === "town" ? real.name : null) || Object.keys(TOWN_COORDS).find(t => stop.name.includes(t));
@@ -3291,7 +3435,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           {i < day.stops.length - 1 ? (
                             <div style={{ borderLeft: `2px dashed ${C.border}`, marginLeft: 31, padding: "7px 0 9px 14px", minHeight: 14 }}>
                               {day.glance?.legs?.[i]?.how ? (
-                                <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>🚆 {day.glance.legs[i].how}</span>
+                                <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
+                                  {/bike|cycl/i.test(day.glance.legs[i].how) ? "🚲" : /drive|car\b/i.test(day.glance.legs[i].how) ? "🚗" : /walk/i.test(day.glance.legs[i].how) ? "🚶" : /ferry|boat/i.test(day.glance.legs[i].how) ? "⛴" : "🚆"} {day.glance.legs[i].how}
+                                </span>
                               ) : glancePending > 0 ? (
                                 <span style={{ fontSize: 11, color: C.muted }}>✨ checking…</span>
                               ) : null}
@@ -3347,6 +3493,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               ["✦ AI chats (Ask Gemlyx & Route Builder)", "When you use the AI Guide, your messages are sent to OpenAI (a US company) to generate the answer, and in some cases to Tavily to search for live information like opening status. Please don't include personal details in your messages — the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
               ["💾 Saved routes & guides", "Guides and road-trip routes you save are stored only in your browser's local storage, on your own device. We never see them. Delete them in the app, or by clearing your browser data for this site."],
               ["◈ Booking requests", "If you send a booking or craft request, the details you enter (name, email, message) are stored in our database (Supabase) so the maker can get back to you. We use them for nothing else. Email hello@gemlyx.com to have a request deleted."],
+              ["💡 Suggestions", "If you suggest a place via 'Suggest a Place', what you type is stored so we can review it. We don't ask for your name or contact details — suggestions are anonymous."],
               ["🌦 Weather & maps", "Weather comes from Yr.no (Norwegian Meteorological Institute) and map tiles from OpenStreetMap. Like any website loading content, these services can see your IP address when data loads. Neither is used to track you."],
               ["🇪🇺 Your rights", "Under GDPR you can ask what data we hold about you, and have it corrected or deleted. Since almost everything lives on your own device, this usually means booking requests. Contact: hello@gemlyx.com. Data controller: Gemlyx, Denmark."],
             ].map(([h, body]) => (
@@ -3355,6 +3502,54 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65 }}>{body}</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── SUGGEST A PLACE MODAL ─────────────────────────── */}
+      {suggestOpen && (
+        <div onClick={() => setSuggestOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", padding: "24px 22px 32px", border: `1px solid ${C.border}`, borderBottom: "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>💡 Suggest a Place</div>
+              <button onClick={() => setSuggestOpen(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Close</button>
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18, lineHeight: 1.5 }}>We read every suggestion — nothing goes live automatically. If it's a real, worthwhile find, it'll show up in Gemlyx personally checked, same as everything else.</div>
+
+            {suggestStatus === "sent" ? (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>✓</div>
+                <div style={{ fontSize: 14, color: C.text, fontWeight: 700, marginBottom: 4 }}>Thank you!</div>
+                <div style={{ fontSize: 12, color: C.muted }}>We'll take a look.</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 }}>NAME</div>
+                <input value={suggestForm.name} onChange={e => setSuggestForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Ringkøbing Harbour Festival"
+                  style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, outline: "none", background: C.surface, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 14, boxSizing: "border-box" }} />
+
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 }}>TYPE</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  {["Event", "Town", "Free Entrance", "Food", "Nightlife", "Craft"].map(t => (
+                    <Pill key={t} label={t} active={suggestForm.type === t} onClick={() => setSuggestForm(f => ({ ...f, type: t }))} />
+                  ))}
+                </div>
+
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 }}>WHY IT'S WORTH INCLUDING (OPTIONAL)</div>
+                <textarea value={suggestForm.note} onChange={e => setSuggestForm(f => ({ ...f, note: e.target.value }))}
+                  placeholder="Anything that helps us find it — town, time of year, what makes it special..."
+                  rows={3}
+                  style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 13, outline: "none", background: C.surface, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 16, boxSizing: "border-box", resize: "vertical" }} />
+
+                {suggestStatus === "error" && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 10 }}>Please add a name, or check your connection.</div>}
+
+                <button onClick={sendSuggestion} disabled={suggestStatus === "sending"}
+                  style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "13px", fontSize: 13, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {suggestStatus === "sending" ? "Sending…" : "Send suggestion"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
