@@ -1456,6 +1456,7 @@ export default function Gemlyx() {
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [scanResults, setScanResults] = useState(null); // [{name, town, dates}] — new only
+  const [scanHint, setScanHint] = useState(null); // {town, dates} carried from the tapped scan chip, so real facts already found aren't thrown away
 
   const scanSource = async () => {
     const url = scanUrl.trim();
@@ -1586,7 +1587,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: prompts[studioType] },
-            { role: "user", content: context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks." },
+            { role: "user", content: (scanHint && (scanHint.town || scanHint.dates)
+              ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[scanHint.town && `town/city = ${scanHint.town}`, scanHint.dates && `dates = ${scanHint.dates}`].filter(Boolean).join(", ")}\n\n`
+              : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.") },
           ],
           max_tokens: 2200,
         }),
@@ -1594,6 +1597,17 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       const data = await res.json();
       const t = JSON.parse(data.choices?.[0]?.message?.content || "{}");
       if (!t.name || !t.desc) throw new Error("empty");
+      // A festival "date" already in the past is almost certainly a guess, not a real
+      // finding — the model should have left it empty. Don't trust its own honesty here;
+      // check mechanically and strip it so a wrong date can't slip through unnoticed.
+      if (studioType === "festival" && t.dateStart) {
+        const d = new Date(t.dateStart);
+        if (!isNaN(d) && d < new Date()) {
+          console.warn("Studio: dropped a festival date that was already in the past —", t.name, t.dateStart);
+          t.dateStart = ""; t.dateEnd = "";
+          t._dateWasStripped = true;
+        }
+      }
       if (t.travelTime) t.travelTime = t.travelTime.replace(/approx\.?( from)?( Copenhagen)?:?\s*/gi, "").trim();
       const slug = slugify(name);
       const stamp = new Date().toLocaleString("en-GB", { month: "short", year: "numeric" });
@@ -1621,6 +1635,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
         code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, desc: ${J(t.desc)}, tip: ${J(t.tip)}, mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")} },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
       }
       setStudioResult(code);
+      setScanHint(null);
       setStudioDraft(t);
       setStudioPhotoName(`${slugify(name)}.jpg`);
       setPublishStatus(null);
@@ -2416,7 +2431,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 8 }}>{scanResults.length} new — tap one to start drafting it:</div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                             {scanResults.map((it, i) => (
-                              <button key={i} onClick={() => { setStudioType("festival"); setStudioTown(it.name); setStudioResult(null); setStudioError(null); setScanResults(prev => prev.filter((_, j) => j !== i)); }}
+                              <button key={i} onClick={() => { setStudioType("festival"); setStudioTown(it.name); setScanHint({ town: it.town, dates: it.dates }); setStudioResult(null); setStudioError(null); setScanResults(prev => prev.filter((_, j) => j !== i)); }}
                                 title={[it.town, it.dates].filter(Boolean).join(" · ")}
                                 style={{ background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, color: C.text, cursor: "pointer" }}>
                                 {it.name}{it.town ? ` · ${it.town}` : ""}
