@@ -733,7 +733,14 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
         {item.blogBody && item.blogBody.length > 0 && (
           <div style={{ marginBottom: 24 }}>
             {item.blogBody.map((block, i) => (
-              block.type === "image" ? (
+              block.type === "instagram" ? (
+                <InstagramEmbed key={i} url={block.url} />
+              ) : block.type === "video" ? (
+                <div key={i} style={{ marginBottom: 16 }}>
+                  <video src={block.src} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 14, display: "block", background: "#000" }} />
+                  {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
+                </div>
+              ) : block.type === "image" ? (
                 <div key={i} style={{ marginBottom: 16 }}>
                   <img src={block.src} alt={block.caption || item.name} onError={e => { e.target.style.display = "none"; }}
                     style={{ width: "100%", borderRadius: 14, display: "block" }} />
@@ -935,6 +942,29 @@ const GuideRouteMap = ({ points }) => {
   useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
   if (points.length < 2) return null;
   return <div ref={holderRef} style={{ width: "100%", height: "100%" }} />;
+};
+
+// Renders a real, official Instagram post/reel using Instagram's own embed
+// widget (embed.js) — free, no API key or app review needed, since it's
+// their sharing mechanism (same idea as embedding a tweet), not scraping
+// or re-hosting someone else's video ourselves.
+const InstagramEmbed = ({ url }) => {
+  useEffect(() => {
+    const process = () => { if (window.instgrm) window.instgrm.Embeds.process(); };
+    if (document.getElementById("ig-embed-script")) { process(); return; }
+    const s = document.createElement("script");
+    s.id = "ig-embed-script";
+    s.src = "https://www.instagram.com/embed.js";
+    s.async = true;
+    s.onload = process;
+    document.body.appendChild(s);
+  }, [url]);
+  return (
+    <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
+      style={{ width: "100%", margin: "0 0 16px", background: "#111827", border: "1px solid #1E2A3A", borderRadius: 14, minWidth: 0 }}>
+      <a href={url} target="_blank" rel="noreferrer" style={{ display: "block", padding: 14, fontSize: 12, color: "#9AA5BE" }}>View on Instagram ↗</a>
+    </blockquote>
+  );
 };
 
 const PageHero = ({ src, emoji, color }) => (
@@ -1190,7 +1220,7 @@ export default function Gemlyx() {
         if (row.type === "town") {
           towns.push({ id, ...item });
           if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
-        } else if (row.type === "festival") majorEvents.push({ id, ...item });
+        } else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
         else if (row.type === "free") freeEntrance.push({ id, ...item });
         else if (row.type === "food") foodSpots.push({ id, ...item });
         else if (row.type === "night") nightlifeSpots.push({ id, ...item });
@@ -1353,6 +1383,42 @@ export default function Gemlyx() {
     } catch { setLoginError("Couldn't reach Supabase — check your connection."); }
     setLoginLoading(false);
   };
+  // ── Manage Published: list everything Studio has published, with delete.
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageItems, setManageItems] = useState(null);
+  const [manageLoading, setManageLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const loadManageItems = async () => {
+    if (!studioSession) return;
+    setManageLoading(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published&order=id.desc`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
+      });
+      const rows = await res.json();
+      setManageItems(Array.isArray(rows) ? rows : []);
+    } catch { setManageItems([]); }
+    setManageLoading(false);
+  };
+  const deleteContentItem = async (id) => {
+    if (!studioSession || !window.confirm("Delete this from Gemlyx? This can't be undone.")) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${id}`, {
+        method: "DELETE",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
+      });
+      if (res.ok) {
+        setToast("🗑 Deleted — refreshing");
+        setTimeout(() => window.location.reload(), 900); // simplest correct way to clear it from every merged array
+      } else {
+        setToast("❌ Delete failed — check the delete RLS policy exists");
+        setTimeout(() => setToast(null), 2500);
+      }
+    } catch { setToast("❌ Delete failed"); setTimeout(() => setToast(null), 2500); }
+    setDeletingId(null);
+  };
+
   const studioLogout = () => {
     localStorage.removeItem("gemlyx_studio_session");
     setStudioSession(null);
@@ -1382,6 +1448,52 @@ export default function Gemlyx() {
   const [studioError, setStudioError] = useState(null);
   const [studioDraft, setStudioDraft] = useState(null);
   const [publishStatus, setPublishStatus] = useState(null); // null | "sending" | "sent" | "error"
+
+  // ── Scan a Source: paste a listing page, Tally-style extraction via /api/scan-source
+  // (server-side fetch) + OpenAI (structured extraction only — never invents entries
+  // beyond what's actually in the page text), then dedupe against what Gemlyx already has.
+  const [scanUrl, setScanUrl] = useState("");
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState(null);
+  const [scanResults, setScanResults] = useState(null); // [{name, town, dates}] — new only
+
+  const scanSource = async () => {
+    const url = scanUrl.trim();
+    if (!url || scanLoading) return;
+    setScanLoading(true); setScanError(null); setScanResults(null);
+    try {
+      const pageRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
+      const pageData = await pageRes.json();
+      if (!pageRes.ok || !pageData.text) { setScanError(pageData.error || "Couldn't read that page."); setScanLoading(false); return; }
+
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: `Extract every distinct Danish festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items ACTUALLY present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
+            { role: "user", content: pageData.text },
+          ],
+          max_tokens: 3000,
+        }),
+      });
+      const data = await res.json();
+      const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      const items = Array.isArray(parsed.items) ? parsed.items : [];
+
+      // Dedupe against everything Gemlyx already has (case-insensitive substring match)
+      const known = [...towns, ...majorEvents, ...events, ...freeEntrance, ...foodSpots, ...nightlifeSpots]
+        .map(x => (x.name || "").toLowerCase());
+      const fresh = items.filter(it => it.name && !known.some(k => k.includes(it.name.toLowerCase()) || it.name.toLowerCase().includes(k)));
+
+      setScanResults(fresh);
+    } catch {
+      setScanError("Scan failed — check the URL and try again.");
+    }
+    setScanLoading(false);
+  };
   const [publishErrorDetail, setPublishErrorDetail] = useState(null);
   const [studioPhotoName, setStudioPhotoName] = useState("");
 
@@ -1397,7 +1509,7 @@ export default function Gemlyx() {
   // not template-string code. `id` and TOWN_COORDS are set by the caller after insert.
   const shapeForLive = (type, t) => {
     if (type === "town") return { name: t.name, photo: `/towns/${slugify(t.name)}.jpg`, region: t.region || "", emoji: t.emoji || "📍", tag: t.tag || "", desc: t.desc, highlight: t.highlight || "", travelTime: t.travelTime || "", mapHint: t.mapHint || `${t.name}, Denmark`, nomiPotential: t.nomiPotential || "Medium", tier: t.tier || "Worth Considering", __lat: Number(t.lat) || null, __lon: Number(t.lon) || null, blogBody: bbData([["Getting There", t.gettingThere], ["Recommended Stay", t.recommendedStay], ["Best Time to Visit", t.bestTime], ["Accommodation", t.accommodation], ["Budget", t.budget], ["What Makes This Town Special?", t.special], ["What Travelers Love", t.travelersLove], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]]) };
-    if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", accommodationTip: t.accommodationTip || "", budgetLevel: t.budgetLevel || "", travelTime: t.travelTime || "", rating: 4.5, ticketStatus: t.ticketStatus || "on_sale", town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], blogBody: bbData([["Music & Atmosphere", t.atmosphere], ["Who Is It For?", t.whoFor], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]]) };
+    if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", accommodationTip: t.accommodationTip || "", budgetLevel: t.budgetLevel || "", travelTime: t.travelTime || "", rating: 4.5, ticketStatus: t.ticketStatus || "on_sale", town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", blogBody: bbData([["Music & Atmosphere", t.atmosphere], ["Who Is It For?", t.whoFor], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]]) };
     if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "Hidden Gem", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32", blogBody: bbData([["Getting There", t.gettingThere], ["Best Time to Visit", t.bestTime], ["What Makes It Special", t.special], ["Who It's For", t.whoFor], ["Things to Know", t.thingsToKnow]]) };
     if (type === "food") return { name: t.name, type: t.type || "Local", emoji: t.emoji || "🍽", category: t.category || "", location: t.location || "", price: t.price || "See website", photo: `/food/${slugify(t.name)}.jpg`, desc: t.desc, tip: t.tip || "", mapHint: t.mapHint || "", color: t.color || "#D4AF37" };
     if (type === "night") return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", location: t.location || "", desc: t.desc, tip: t.tip || "", mapHint: t.mapHint || "", color: t.color || "#5D4037" };
@@ -1433,7 +1545,9 @@ ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "region": "...", "emoji": "one emoji", "tag": "3-5 word hook", "desc": "two card sentences in the voice above", "highlight": "one specific real place/experience with a concrete detail, or empty string", "travelTime": "EXACT format like '3h 15min 🚂' or '45min 🚌' or '2h + ferry 🚢' — duration + one emoji, NO other words", "mapHint": "Town, postcode Town, Denmark", "lat": 56.09, "lon": 8.24, "nomiPotential": "High / Very High / Medium", "tier": "Can't Miss Out / Highly Recommended / Worth Considering / Best If You're Already Nearby", "gettingThere": "how to arrive, which station, connections", "recommendedStay": "half day / full day / overnight, with reason", "bestTime": "months + why", "accommodation": "day trip vs overnight advice", "budget": "level + what costs money vs what's free", "special": "What Makes This Town Special — the honest core of why it's worth it", "travelersLove": "what visitors consistently praise", "thingsToKnow": "practical caveats incl. at least one downside", "shouldYouVisit": "honest verdict: who should come, who should skip"}`,
         festival: `Draft a complete Gemlyx festival entry for ${name}, Denmark, matching this REAL example: {"name": "Distortion", "town": "Copenhagen", "nearestStation": "Nørreport Station, Copenhagen Central Station or nearby Metro stations", "ticketInfo": "Street parties are free. Distortion X and Distortion Ø require tickets.", "accommodationTip": "Stay in central Copenhagen and book several months in advance.", "budgetLevel": "Moderate–High.", "desc": "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods."}
 ${STUDIO_VOICE}
-Respond with ONLY strict JSON: {"name": ${J(name)}, "town": "host town", "type": "Music / Festival / Market / Culture", "emoji": "one emoji", "dateStart": "YYYY-MM-DD or empty if not in context", "dateEnd": "YYYY-MM-DD or empty", "tier": "Can't miss out / Highly Recommended / Worth Considering / Best If You're Already Nearby", "nearestStation": "...", "ticketInfo": "one sentence — never invent prices", "accommodationTip": "one sentence", "budgetLevel": "Very Low / Low / Moderate / High (ranges ok)", "travelTime": "from Copenhagen like '1h 10min 🚂', or 'In Copenhagen 🚇'", "ticketStatus": "free / on_sale / limited / sold_out", "desc": "two At-a-Glance sentences", "mapHint": "Venue/street, postcode Town, Denmark", "tags": ["two", "tags"], "color": "#hex fitting the vibe", "atmosphere": "Music & Atmosphere section", "whoFor": "Who Is It For? section", "thingsToKnow": "incl. at least one downside", "shouldYouVisit": "honest verdict"} Dates: ONLY from the context — empty string beats a guess.`,
+Respond with ONLY strict JSON: {"name": ${J(name)}, "scale": "Major (large, well-known, city-wide/national draw — e.g. a festival with thousands+ attendees, mainstream press coverage) or Local (smaller, niche, community, underground, or regional — most festivals are this)", "town": "host town", "type": "Music / Festival / Market / Culture", "emoji": "one emoji", "dateStart": "YYYY-MM-DD or empty if not in context", "dateEnd": "YYYY-MM-DD or empty", "tier": "Can't miss out / Highly Recommended / Worth Considering / Best If You're Already Nearby", "nearestStation": "...", "ticketInfo": "one sentence — never invent prices", "accommodationTip": "one sentence", "budgetLevel": "Very Low / Low / Moderate / High (ranges ok)", "travelTime": "from Copenhagen like '1h 10min 🚂', or 'In Copenhagen 🚇'", "ticketStatus": "free / on_sale / limited / sold_out", "desc": "two At-a-Glance sentences", "mapHint": "Venue/street, postcode Town, Denmark", "tags": ["two", "tags"], "color": "#hex fitting the vibe", "atmosphere": "Music & Atmosphere section", "whoFor": "Who Is It For? section", "thingsToKnow": "incl. at least one downside", "shouldYouVisit": "honest verdict"} If the context doesn't clearly show this is a major, mainstream-known event, default "scale" to "Local" — most festivals are, and Gemlyx only calls something Major when the evidence genuinely supports it.
+Dates: ONLY from the context — empty string beats a guess.
+CRITICAL GEOGRAPHY CHECK — small/underground/local festivals are the highest-risk case for this: verify the town/region named in "nearestStation", "accommodationTip", and "mapHint" is ACTUALLY where this specific event happens, not a same-named or similar-sounding place elsewhere in Denmark. A real station or stop name can exist in multiple regions — Denmark has several places with overlapping or similar names (e.g. a "Hemmet" in West Jutland is unrelated to unrelated locations elsewhere). Getting the STATION NAME right is not enough if the TOWN attached to it is wrong. If the search context doesn't clearly confirm which town/region the venue is in, say so honestly (e.g. "Check the festival's own website for directions") rather than guessing a nearby-sounding place.`,
         free: `Draft a complete Gemlyx free-entrance entry for ${name}, matching this REAL example: {"name": "The Greenhouses, Botanical Garden", "city": "Aarhus", "type": "Botanical garden", "popularityTag": "Hidden Gem", "desc": "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free."}
 ${STUDIO_VOICE}
 Write full paragraphs for every section below — 3-5 sentences each, not one-liners. This should read as thoroughly as a proper Gemlyx town writeup, just for a single place.
@@ -1473,8 +1587,11 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
         const nextId = Math.max(...towns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.desc)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")},\n  blogBody: [\n${bb([["Getting There", t.gettingThere], ["Recommended Stay", t.recommendedStay], ["Best Time to Visit", t.bestTime], ["Accommodation", t.accommodation], ["Budget", t.budget], ["What Makes This Town Special?", t.special], ["What Travelers Love", t.travelersLove], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]])}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
       } else if (studioType === "festival") {
-        const nextId = Math.max(...majorEvents.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const majorEvents = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, rating: 4.5, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])},\n  blogBody: [\n${bb([["Music & Atmosphere", t.atmosphere], ["Who Is It For?", t.whoFor], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) rating is set to 4.5 — adjust it yourself.\n// 4) VERIFY dates, station and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
+        const isMajor = (t.scale || "").toLowerCase().startsWith("major");
+        const targetArr = isMajor ? majorEvents : events;
+        const targetName = isMajor ? "majorEvents" : "events";
+        const nextId = Math.max(...targetArr.map(x => x.id)) + 1;
+        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, rating: 4.5, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])},\n  blogBody: [\n${bb([["Music & Atmosphere", t.atmosphere], ["Who Is It For?", t.whoFor], ["Things to Know", t.thingsToKnow], ["Should You Visit?", t.shouldYouVisit]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) rating is set to 4.5 — adjust it yourself.\n// 4) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (studioType === "free") {
         const nextId = Math.max(...freeEntrance.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")},\n  blogBody: [\n${bb([["Getting There", t.gettingThere], ["Best Time to Visit", t.bestTime], ["What Makes It Special", t.special], ["Who It's For", t.whoFor], ["Things to Know", t.thingsToKnow]])}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
@@ -2228,8 +2345,72 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif" }}>🛠 Content Studio — founder tool</div>
                       <button onClick={studioLogout} style={{ background: "none", border: "none", color: C.muted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Log out</button>
                     </div>
-                    <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 4 }}>Logged in as {studioSession.email}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <div style={{ fontSize: 10.5, color: C.muted }}>Logged in as {studioSession.email}</div>
+                      <button onClick={() => { setManageOpen(v => !v); if (!manageOpen) loadManageItems(); }}
+                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        {manageOpen ? "Hide" : "📋 Manage Published"}
+                      </button>
+                    </div>
+
+                    {manageOpen && (
+                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16, maxHeight: 320, overflowY: "auto" }}>
+                        {manageLoading ? (
+                          <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Loading…</div>
+                        ) : !manageItems || manageItems.length === 0 ? (
+                          <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Nothing published yet.</div>
+                        ) : (
+                          manageItems.map(row => (
+                            <div key={row.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {row.payload?.emoji || "•"} {row.payload?.name || "(unnamed)"}
+                                </div>
+                                <div style={{ fontSize: 10, color: C.muted }}>
+                                  {row.type}{!row.published ? " · not published" : ""}
+                                </div>
+                              </div>
+                              <button onClick={() => deleteContentItem(row.id)} disabled={deletingId === row.id}
+                                style={{ flexShrink: 0, background: "none", border: "1px solid #C8102E66", color: "#E57373", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                {deletingId === row.id ? "…" : "🗑 Delete"}
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                     <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>Drafts a complete entry — card + full detail page — via Tavily + OpenAI, following the Gemlyx editorial docs. Output is paste-ready code — verify every fact before committing. Not visible to users.</div>
+
+                    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 16 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 3 }}>🔗 Scan a Source</div>
+                      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>Paste a listing page (e.g. a festival calendar) — pulls out names not already in Gemlyx. Doesn't write anything or publish — just gives you a queue to tap through below.</div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input value={scanUrl} onChange={e => setScanUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && scanSource()}
+                          placeholder="https://..."
+                          style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, outline: "none", background: C.surface, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+                        <button onClick={scanSource} disabled={scanLoading}
+                          style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, color: "#000", cursor: "pointer", flexShrink: 0 }}>
+                          {scanLoading ? "Scanning…" : "Scan"}
+                        </button>
+                      </div>
+                      {scanError && <div style={{ fontSize: 11.5, color: "#FFB347", marginTop: 8 }}>{scanError}</div>}
+                      {scanResults && scanResults.length === 0 && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8 }}>Nothing new found — Gemlyx already has everything this page mentions.</div>}
+                      {scanResults && scanResults.length > 0 && (
+                        <div style={{ marginTop: 10 }}>
+                          <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 8 }}>{scanResults.length} new — tap one to start drafting it:</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {scanResults.map((it, i) => (
+                              <button key={i} onClick={() => { setStudioType("festival"); setStudioTown(it.name); setStudioResult(null); setStudioError(null); setScanResults(prev => prev.filter((_, j) => j !== i)); }}
+                                title={[it.town, it.dates].filter(Boolean).join(" · ")}
+                                style={{ background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, color: C.text, cursor: "pointer" }}>
+                                {it.name}{it.town ? ` · ${it.town}` : ""}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                       {[["town", "🏘 Town"], ["festival", "🎪 Festival"], ["free", "🎟 Free Entrance"], ["booking", "🔨 Booking"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
@@ -3837,7 +4018,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
             {craftDetail.blogBody && craftDetail.blogBody.length > 0 && (
               <div style={{ marginBottom: 24 }}>
                 {craftDetail.blogBody.map((block, i) => (
-                  block.type === "image" ? (
+                  block.type === "instagram" ? (
+                    <InstagramEmbed key={i} url={block.url} />
+                  ) : block.type === "video" ? (
+                    <div key={i} style={{ marginBottom: 16 }}>
+                      <video src={block.src} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 14, display: "block", background: "#000" }} />
+                      {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
+                    </div>
+                  ) : block.type === "image" ? (
                     <div key={i} style={{ marginBottom: 16 }}>
                       <img src={block.src} alt={craftDetail.name} onError={e => { e.target.style.display = "none"; }}
                         style={{ width: "100%", borderRadius: 14, display: "block" }} />
