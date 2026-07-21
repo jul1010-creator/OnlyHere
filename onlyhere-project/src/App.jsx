@@ -1463,7 +1463,15 @@ export default function Gemlyx() {
     setScanLoading(true); setScanError(null); setScanResults(null);
     try {
       const pageRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
-      const pageData = await pageRes.json();
+      let pageData;
+      try {
+        pageData = await pageRes.json();
+      } catch {
+        setScanError(pageRes.status === 404
+          ? "The /api/scan-source endpoint isn't found (404) — has scan-source.js been added to your repo's /api/ folder and deployed?"
+          : `Got an unexpected response (status ${pageRes.status}) — not JSON. Check the Vercel deploy logs.`);
+        setScanLoading(false); return;
+      }
       if (!pageRes.ok || !pageData.text) { setScanError(pageData.error || "Couldn't read that page."); setScanLoading(false); return; }
 
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -1911,6 +1919,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeTransport, setIntakeTransport] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [tabArrow, setTabArrow] = useState(true);
@@ -3504,7 +3513,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           {/* Right icons */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {/* Search */}
+            {/* Search — compact icon, expands the bar below on tap */}
+            <button onClick={() => setShowSearch(v => !v)}
+              style={{ background: showSearch ? `${C.gold}22` : "none", border: `1px solid ${showSearch ? C.gold : C.border}`, color: showSearch ? C.gold : C.muted, fontSize: 15, cursor: "pointer", padding: "6px 9px", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }} title="Search">
+              🔍
+            </button>
             
             {/* Login (mobile only — sits next to hamburger nav) */}
             <button className="mobile-only" onClick={() => { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }}
@@ -3520,15 +3533,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
           </div>
         </div>
 
-        {/* Search bar — always visible */}
-        <div style={{ marginTop: 12, position: "relative" }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2" strokeLinecap="round"
-            style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-            <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.2" y2="16.2" />
-          </svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search cities, businesses, finds..."
-            style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px 12px 40px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-        </div>
+        {/* Search bar — collapsed by default, toggled from the icon above to save header height */}
+        {showSearch && (
+          <div style={{ marginTop: 12, position: "relative" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2" strokeLinecap="round"
+              style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+              <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.2" y2="16.2" />
+            </svg>
+            <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search cities, businesses, finds..."
+              style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px 12px 40px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+          </div>
+        )}
 
         {/* Weather — always visible, multiple cities, auto-loads */}
         <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
@@ -3570,32 +3585,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
         )}
       </div>
 
-      {/* ── TOP NAV TABS (desktop only — mobile uses hamburger) ──── */}
-      {(
-        <div className="desktop-only" style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, position: "relative" }}>
-          <div onScroll={e => setTabArrow(e.target.scrollLeft + e.target.clientWidth < e.target.scrollWidth - 8)}
-            style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <div style={{ display: "flex", padding: "0 8px", minWidth: "max-content", alignItems: "center" }}>
-            {NAV_ITEMS.map(item => item.id === "ai" ? (
-              <button key={item.id} onClick={() => goTab("ai")}
-                style={{ background: active === "ai" ? "#fff" : `linear-gradient(135deg, ${C.gold}, ${C.accent})`, border: "none", color: active === "ai" ? C.accent : "#fff", padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", borderRadius: 100, margin: "8px", boxShadow: active === "ai" ? "none" : `0 2px 10px ${C.gold}44` }}>
-                {item.label}
-              </button>
-            ) : (
-              <button key={item.id} onClick={() => goTab(item.id)}
-                style={{ background: "none", border: "none", borderBottom: `2px solid ${active === item.id ? C.accent : "transparent"}`, color: active === item.id ? C.text : C.muted, padding: "12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", transition: "all 0.2s" }}>
-                {item.label}
-              </button>
-            ))}
-          </div>
-          </div>
-          {tabArrow && (
-            <div className="mobile-only" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 56, background: `linear-gradient(to right, transparent, ${C.bg} 70%)`, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, pointerEvents: "none" }}>
-              <span style={{ color: C.light, fontSize: 18, fontWeight: 700, animation: "nudge 1.4s ease-in-out infinite" }}>›</span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Navigation lives only in the hamburger dropdown now — one nav
+          surface for every screen size, instead of duplicating it in a
+          separate always-visible tab row that ate a full extra header row. */}
       </div>
 
       {/* ── DROPDOWN MENU ──────────────────────────────────── */}
