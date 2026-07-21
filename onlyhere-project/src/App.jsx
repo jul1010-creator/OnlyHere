@@ -1484,11 +1484,18 @@ export default function Gemlyx() {
             { role: "system", content: `Extract every distinct Danish festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items ACTUALLY present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
             { role: "user", content: pageData.text },
           ],
-          max_tokens: 3000,
+          max_tokens: 8000,
         }),
       });
       const data = await res.json();
-      const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      if (data.error) { setScanError(`OpenAI error: ${data.error.message || "unknown"}`); setScanLoading(false); return; }
+      let parsed;
+      try {
+        parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      } catch {
+        setScanError("The extraction got cut off (the page had a lot of events) — try a shorter/filtered listing page, or ask me to raise the limit further.");
+        setScanLoading(false); return;
+      }
       const items = Array.isArray(parsed.items) ? parsed.items : [];
 
       // Dedupe against everything Gemlyx already has (case-insensitive substring match)
