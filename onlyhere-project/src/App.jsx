@@ -1171,34 +1171,39 @@ export default function Gemlyx() {
   // needed after the mutation, since React can't see a plain array push on its own.
   const [, bumpLiveContent] = useState(0);
   const fetchedLiveContent = useRef(false);
+  const mergedContentIds = useRef(new Set());
+  const loadLiveContent = async () => {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      });
+      const rows = await res.json();
+      if (!Array.isArray(rows)) { console.warn("gemlyx_content fetch did not return an array:", rows); return; }
+      if (rows.length === 0) return;
+      const bookingRows = [];
+      rows.forEach(row => {
+        if (mergedContentIds.current.has(row.id)) return; // already merged this row, skip
+        const item = row.payload;
+        if (!item || !item.name) return;
+        mergedContentIds.current.add(row.id);
+        const id = 100000 + row.id; // offset keeps live IDs clear of hardcoded ones
+        if (row.type === "town") {
+          towns.push({ id, ...item });
+          if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
+        } else if (row.type === "festival") majorEvents.push({ id, ...item });
+        else if (row.type === "free") freeEntrance.push({ id, ...item });
+        else if (row.type === "food") foodSpots.push({ id, ...item });
+        else if (row.type === "night") nightlifeSpots.push({ id, ...item });
+        else if (row.type === "booking") bookingRows.push({ id, ...item });
+      });
+      if (bookingRows.length > 0) setCraftItems(prev => [...prev, ...bookingRows]);
+      bumpLiveContent(v => v + 1);
+    } catch (err) { console.warn("gemlyx_content fetch failed:", err); }
+  };
   useEffect(() => {
     if (fetchedLiveContent.current) return;
     fetchedLiveContent.current = true;
-    (async () => {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true`, {
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-        });
-        const rows = await res.json();
-        if (!Array.isArray(rows) || rows.length === 0) return;
-        const bookingRows = [];
-        rows.forEach(row => {
-          const item = row.payload;
-          if (!item || !item.name) return;
-          const id = 100000 + row.id; // offset keeps live IDs clear of hardcoded ones
-          if (row.type === "town") {
-            towns.push({ id, ...item });
-            if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
-          } else if (row.type === "festival") majorEvents.push({ id, ...item });
-          else if (row.type === "free") freeEntrance.push({ id, ...item });
-          else if (row.type === "food") foodSpots.push({ id, ...item });
-          else if (row.type === "night") nightlifeSpots.push({ id, ...item });
-          else if (row.type === "booking") bookingRows.push({ id, ...item });
-        });
-        if (bookingRows.length > 0) setCraftItems(prev => [...prev, ...bookingRows]);
-        bumpLiveContent(v => v + 1);
-      } catch { /* live content is additive — a failed fetch just means nothing new shows yet */ }
-    })();
+    loadLiveContent();
   }, []);
   const [active, setActive] = useState("home");
   const [shopTab, setShopTab] = useState("shops");
@@ -1495,6 +1500,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       } else {
         setPublishStatus("sent");
         setPublishErrorDetail(null);
+        await loadLiveContent(); // pull it into this session right away — no reload needed
       }
     } catch (err) { setPublishStatus("error"); setPublishErrorDetail(String(err)); }
   };
