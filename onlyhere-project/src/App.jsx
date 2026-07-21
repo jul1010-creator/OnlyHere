@@ -1346,7 +1346,7 @@ export default function Gemlyx() {
       });
       const data = await res.json();
       if (!res.ok || !data.access_token) { setLoginError(data.error_description || data.msg || "Login failed — check email and password."); setLoginLoading(false); return; }
-      const session = { access_token: data.access_token, email: data.user?.email || loginEmail.trim() };
+      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: data.user?.email || loginEmail.trim() };
       localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
       setStudioSession(session);
       setLoginPassword("");
@@ -1356,6 +1356,24 @@ export default function Gemlyx() {
   const studioLogout = () => {
     localStorage.removeItem("gemlyx_studio_session");
     setStudioSession(null);
+  };
+  // Supabase access tokens expire (~1hr). Rather than failing the whole publish,
+  // try trading the refresh_token for a fresh one first — silent, no re-typing password.
+  const refreshStudioSession = async () => {
+    if (!studioSession?.refresh_token) return null;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: studioSession.refresh_token }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.access_token) return null;
+      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email };
+      localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
+      setStudioSession(session);
+      return session;
+    } catch { return null; }
   };
   const [studioTown, setStudioTown] = useState("");
   const [studioType, setStudioType] = useState("town");
@@ -1487,16 +1505,24 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
     try {
       const shaped = shapeForLive(studioType, studioDraft);
       if (studioPhotoName) shaped.photo = `/${{ town: "towns", festival: "events", free: "free", food: "food", night: "nightlife", booking: "craft" }[studioType]}/${studioPhotoName}`;
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
+      const body = JSON.stringify({ type: studioType, payload: shaped, published: true });
+      const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify({ type: studioType, payload: shaped, published: true }),
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body,
       });
+      let res = await attempt(studioSession.access_token);
+      if (res.status === 401) {
+        const fresh = await refreshStudioSession();
+        if (fresh) res = await attempt(fresh.access_token);
+      }
       if (!res.ok) {
-        const body = await res.text();
-        console.error("Gemlyx publish failed:", res.status, body);
+        const errBody = await res.text();
+        console.error("Gemlyx publish failed:", res.status, errBody);
         setPublishStatus("error");
-        setPublishErrorDetail(`${res.status}: ${body.slice(0, 200)}`);
+        setPublishErrorDetail(res.status === 401
+          ? "Your session expired and couldn't refresh automatically — please log out and back in."
+          : `${res.status}: ${errBody.slice(0, 200)}`);
       } else {
         setPublishStatus("sent");
         setPublishErrorDetail(null);
