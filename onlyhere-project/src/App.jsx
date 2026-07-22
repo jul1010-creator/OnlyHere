@@ -1448,7 +1448,7 @@ export default function Gemlyx() {
     setDraftEditError(null);
     setPublishStatus(null);
     setPublishErrorDetail(null);
-    setVerifyResults(null); setVerifyError(null);
+    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null);
     setManageOpen(false);
   };
 
@@ -1508,21 +1508,63 @@ export default function Gemlyx() {
     if (!studioDraft || verifyLoading) return;
     setVerifyLoading(true); setVerifyError(null); setVerifyResults(null);
     try {
-      const q = `${studioDraft.name} official dates location 2026 2027 Denmark`;
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      const results = (data.results || []).slice(0, 5).map(r => ({
-        title: r.title || r.url || "Source",
-        url: r.url || "",
-        snippet: (r.content || r.snippet || "").slice(0, 220),
-      }));
-      if (results.length === 0) { setVerifyError("No results found — try checking manually."); }
-      setVerifyResults(results);
+      const queries = [
+        `${studioDraft.name} official dates location 2026 2027 Denmark`,
+        `${studioDraft.name} ticket price kr DKK venue stage names`,
+      ];
+      const allResults = [];
+      for (const q of queries) {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        (data.results || []).slice(0, 3).forEach(r => allResults.push({
+          title: r.title || r.url || "Source",
+          url: r.url || "",
+          snippet: (r.content || r.snippet || "").slice(0, 220),
+        }));
+      }
+      if (allResults.length === 0) { setVerifyError("No results found — try checking manually."); }
+      setVerifyResults(allResults);
     } catch {
       setVerifyError("Couldn't search — check your connection and try again.");
     }
     setVerifyLoading(false);
   };
+
+  // Real independent second opinion via Gemini + Google Search grounding — genuinely
+  // different from Tavily+OpenAI (different search index, different model), which is
+  // why it caught things Studio's own research missed (e.g. the fabricated "Kap" stage
+  // and wrong currency for Skagen Festival). Never edits the draft automatically —
+  // shows a synthesized answer with real citations for Oliver to read and act on himself.
+  const [googleCheckLoading, setGoogleCheckLoading] = useState(false);
+  const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
+  const [googleCheckError, setGoogleCheckError] = useState(null);
+  const googleAICheck = async () => {
+    if (!studioDraft || googleCheckLoading) return;
+    const key = import.meta.env.VITE_GEMINI_KEY;
+    if (!key) { setGoogleCheckError("No Gemini API key set — add VITE_GEMINI_KEY in Vercel's environment variables (free key from aistudio.google.com)."); return; }
+    setGoogleCheckLoading(true); setGoogleCheckError(null); setGoogleCheckResult(null);
+    try {
+      const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. List anything wrong or unverifiable, and give the correct real facts where you find them. Be concise — bullet points, not an essay.\n\nDraft: ${JSON.stringify(studioDraft)}`;
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setGoogleCheckError(data.error?.message || `Request failed (${res.status})`); setGoogleCheckLoading(false); return; }
+      const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "No response text.";
+      const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const citations = chunks.map(c => ({ title: c.web?.title || c.web?.uri || "Source", url: c.web?.uri || "" })).filter(c => c.url);
+      setGoogleCheckResult({ text, citations });
+    } catch (err) {
+      setGoogleCheckError("Couldn't reach Gemini — check the API key and your connection.");
+    }
+    setGoogleCheckLoading(false);
+  };
+
   const [publishStatus, setPublishStatus] = useState(null); // null | "sending" | "sent" | "error"
 
   // ── Scan a Source: paste a listing page, Tally-style extraction via /api/scan-source
@@ -1589,7 +1631,7 @@ export default function Gemlyx() {
   const [publishErrorDetail, setPublishErrorDetail] = useState(null);
   const [studioPhotoName, setStudioPhotoName] = useState("");
 
-  const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences. If the search context includes real visitor/local opinions (e.g. from Reddit or forums), fold that texture into "Things to Know" or "What Travelers Love" as plain observed fact — write "the queue regularly runs over an hour in summer" or "locals tend to avoid it on weekends", NOT "Reddit users say..." or "according to visitors online...". Never name the source or platform. Never quote anyone directly — always paraphrase in your own words, and only include a specific claim if multiple sources agree or one source is clearly credible; a single offhand comment isn\'t worth repeating as fact.';
+  const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Also BANNED outright, no exceptions: "nestled in the heart", "captivates with", "a tapestry of culture", "intertwines with stories" — these are cliché AI-travel-writing tells, not real description. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences. If the search context includes real visitor/local opinions (e.g. from Reddit or forums), fold that texture into "Things to Know" or "What Travelers Love" as plain observed fact — write "the queue regularly runs over an hour in summer" or "locals tend to avoid it on weekends", NOT "Reddit users say..." or "according to visitors online...". Never name the source or platform. Never quote anyone directly — always paraphrase in your own words, and only include a specific claim if multiple sources agree or one source is clearly credible; a single offhand comment isn\'t worth repeating as fact. NEVER name a specific sub-venue, stage, room, or named feature (e.g. a stage name at a festival, a specific gallery room in a museum) unless that EXACT name appears in the search context — a plausible-sounding invented name (like a fake stage name) is a serious factual error, not a stylistic risk; if you cannot name a specific spot with confidence, describe the experience generically instead ("the main stage", "the indoor venue") rather than inventing a proper name. PRICES: always state prices in the currency actually found in the search context first (Danish prices are in kr./DKK) — you may add an approximate EUR/USD conversion in parentheses ONLY if the search context itself provides one; never calculate or invent a conversion yourself. If no real price is found, write "See website" rather than estimating one. GEMLYX FIND: this is a premium signature feature — it must be a genuinely specific, verified insider tip pulled from the search context (a real side-street spot, a real quiet corner, a real local tradition), never a generic restatement of the main attraction. If the search context has nothing that specific, OMIT gemlyxFind entirely (leave it an empty string) rather than filling it with a plausible-sounding placeholder — an empty section is honest, a fabricated one risks the brand.';
 
   const slugify = (s) => s.toLowerCase().replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "aa").replace(/[^a-z0-9]/g, "");
   const J = (v) => JSON.stringify(v ?? "");
@@ -1645,7 +1687,7 @@ export default function Gemlyx() {
     const name = studioTown.trim();
     if (!name || studioLoading) return;
     setStudioLoading(true); setStudioResult(null); setStudioError(null);
-    setVerifyResults(null); setVerifyError(null);
+    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null);
     try {
       const cfg = {
         town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`] },
@@ -2634,13 +2676,34 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             {studioType === "festival" && <li><b>Major vs. Local scale</b> — a judgment call the AI made; double-check it matches how well-known this actually is.</li>}
                             {studioType === "town" && <li><b>Map coordinates (lat/lon)</b> — check the pin would actually land on the right town.</li>}
                             {(studioType === "food" || studioType === "night" || studioType === "booking") && <li><b>Prices and opening details</b> — can go stale fast; verify the place still operates as described.</li>}
+                            <li><b>Named sub-venues/stages</b> (e.g. a specific stage or room name) — the AI has invented a plausible-sounding fake name before. Verify any specific venue name actually exists.</li>
+                            <li><b>Prices</b> — check the currency and the actual number. A converted price is a guess, not a fact.</li>
                             <li><b>Specific named details</b> in the description (a shop, dish, or landmark) — can be invented if the search results were thin. If in doubt, search the name yourself.</li>
                           </ul>
                           <button onClick={verifySource} disabled={verifyLoading}
-                            style={{ width: "100%", background: "none", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginTop: 10, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                            {verifyLoading ? "Searching…" : "🔎 Verify dates & location"}
+                            style={{ width: "100%", background: "none", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginTop: 10, marginBottom: 8, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {verifyLoading ? "Searching…" : "🔎 Verify dates, prices & venue names"}
+                          </button>
+                          <button onClick={googleAICheck} disabled={googleCheckLoading}
+                            style={{ width: "100%", background: "none", border: "1px solid #4285F466", color: "#8AB4F8", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {googleCheckLoading ? "Asking Google AI…" : "🔷 Ask Google AI to fact-check this"}
                           </button>
                         </div>
+
+                        {googleCheckError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 12 }}>{googleCheckError}</div>}
+                        {googleCheckResult && (
+                          <div style={{ background: C.bg, border: "1px solid #4285F444", borderRadius: 10, padding: "12px", marginBottom: 12 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", marginBottom: 8 }}>🔷 Google AI's independent check — read this, then edit the JSON above if it flags something:</div>
+                            <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: googleCheckResult.citations.length > 0 ? 10 : 0 }}>{googleCheckResult.text}</div>
+                            {googleCheckResult.citations.length > 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                {googleCheckResult.citations.map((c, i) => (
+                                  <a key={i} href={c.url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#8AB4F8", background: "#4285F418", border: "1px solid #4285F444", borderRadius: 100, padding: "3px 9px", textDecoration: "none" }}>{c.title.slice(0, 30)} ↗</a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {verifyError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 12 }}>{verifyError}</div>}
                         {verifyResults && verifyResults.length > 0 && (
