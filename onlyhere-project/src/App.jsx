@@ -936,7 +936,7 @@ const GuideRouteMap = ({ points }) => {
     L.polyline(latlngs, { color: C.gold, weight: 3, dashArray: "1,8", lineCap: "round" }).addTo(group);
     points.forEach((p, i) => {
       L.circleMarker([p.lat, p.lon], { radius: 7, color: "#0A0F1E", weight: 2, fillColor: C.gold, fillOpacity: 1 })
-        .bindTooltip(`${i + 1}. ${p.name}`, { permanent: false, direction: "top" })
+        .bindTooltip(`${i + 1}. ${p.name}`, { permanent: true, direction: "top", offset: [0, -8], className: "gemlyx-map-label" })
         .addTo(group);
     });
     map.fitBounds(latlngs, { padding: [28, 28] });
@@ -2024,14 +2024,15 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
       for (let i = 0; i < day.stops.length - 1; i++) pairs.push([day.stops[i].name, day.stops[i + 1].name]);
     });
     const found = {};
-    const apiMode = mode === "public transport" ? "transit" : mode || "bike";
+    const apiMode = mode === "public transport" ? "transit" : mode || "transit"; // safer default than assuming bike when unclear
     for (const [origin, dest] of pairs) {
       const key = `${origin}|${dest}|${mode}`;
       try {
         const res = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${apiMode}`);
         const data = await res.json();
         if (!data.error) found[key] = data;
-      } catch { /* this leg just keeps its estimate instead */ }
+        else console.warn(`Directions API: no result for ${origin} → ${dest} (${apiMode}):`, data.error, "— check GOOGLE_MAPS_KEY is set on Vercel and the Directions API is enabled on that key's project.");
+      } catch (err) { console.warn(`Directions API request failed for ${origin} → ${dest}:`, err); }
     }
     if (Object.keys(found).length > 0) setExactDurations(prev => ({ ...prev, ...found }));
   };
@@ -2132,9 +2133,9 @@ If the conversation only covers a single day or a few stops with no explicit day
       await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
       const lc = convoText.toLowerCase();
-      const travelMode = /\b(bike|cykel|cycling|cycle)\b/.test(lc) ? "bike"
+      const travelMode = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(lc) ? "public transport"
         : /\b(car|driving|drive|bil)\b/.test(lc) ? "car"
-        : /public transport|train|bus|tog\b/.test(lc) ? "public transport" : null;
+        : /\b(bike|cykel|cycling|cycle|bicycl)\b/.test(lc) ? "bike" : null;
       fetchExactDurations(parsed.days, travelMode); // fire-and-forget — legs show estimates until this resolves, then upgrade
       setGuideModal({ _gid: gid, _mode: travelMode, _grounded: !!guideGrounding, title: parsed.title || "Your Custom Route", days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode);
@@ -3877,6 +3878,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
         .hero-h { height: calc(100vh - 196px); min-height: 340px; }
         /* ── Leaflet, Gemlyx dark theme ── */
         .gemlyx-tiles { filter: invert(1) hue-rotate(189deg) brightness(0.92) contrast(1.12) saturate(0.35); }
+        .gemlyx-map-label { background: #0A0F1E; color: #D4AF37; border: 1px solid #D4AF3766; border-radius: 6px; padding: 2px 7px; font-size: 10px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+        .gemlyx-map-label::before { border-top-color: #D4AF3766 !important; }
         .leaflet-container { background: #0D1526 !important; font-family: 'Plus Jakarta Sans', sans-serif !important; }
         .leaflet-control-zoom { border: 1px solid #1E2A3A !important; border-radius: 10px !important; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.5) !important; }
         .leaflet-control-zoom a { background: rgba(10,15,30,0.92) !important; color: #E8EDF7 !important; border-bottom: 1px solid #1E2A3A !important; width: 30px !important; height: 30px !important; line-height: 30px !important; font-size: 15px !important; }
