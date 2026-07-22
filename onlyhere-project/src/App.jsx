@@ -2037,6 +2037,16 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
     setGuideModal("loading");
     setGuideError(null);
     try {
+      // One Gemini + Google Search cross-check per guide (not per chat message — the
+      // conversation itself stays fast; this only runs at the moment a real artifact
+      // gets built). Pulls out the place names mentioned so far and asks Gemini to
+      // ground them — same "grounding before writing" pattern as Studio, scoped to
+      // the single moment concrete facts actually get committed.
+      let guideGrounding = "";
+      if (import.meta.env.VITE_GEMINI_KEY) {
+        const preCheck = await askGemini(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n\n${convoText.slice(0, 3000)}`);
+        if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
+      }
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
@@ -2048,7 +2058,7 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
 {"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.` },
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
             { role: "user", content: convoText }
           ],
           max_tokens: 1800,
@@ -2062,7 +2072,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const travelMode = /\b(bike|cykel|cycling|cycle)\b/.test(lc) ? "bike"
         : /\b(car|driving|drive|bil)\b/.test(lc) ? "car"
         : /public transport|train|bus|tog\b/.test(lc) ? "public transport" : null;
-      setGuideModal({ _gid: gid, _mode: travelMode, title: parsed.title || "Your Custom Route", days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _grounded: !!guideGrounding, title: parsed.title || "Your Custom Route", days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode);
       fetchGuideWeather(parsed.days, gid);
     } catch {
@@ -4076,8 +4086,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                   <button onClick={() => setGuideModal(null)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
                 </div>
-                <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 18 }}>{guideModal.title}</div>
-
+                <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{guideModal.title}</div>
+                {guideModal._grounded && <div style={{ fontSize: 10, color: "#8AB4F8", marginBottom: 14 }}>✦ Place names cross-checked with Google AI</div>}
+                {!guideModal._grounded && <div style={{ marginBottom: 18 }} />}
                 {guideModal.days.map((day, dayIdx) => (
                   <div key={day.day} style={{ marginBottom: 20 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
