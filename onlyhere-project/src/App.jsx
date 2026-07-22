@@ -1014,11 +1014,27 @@ const PageHero = ({ src, emoji, color }) => (
 
 
 
-const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearYou, requestLocation, setEventDetail, setFreeDetail, setFoodDetail }) => {
+const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearYou, requestLocation, setEventDetail, setFreeDetail, setFoodDetail, userCoords }) => {
   const [openEvent, setOpenEvent] = useState(null);
   const allTracked = [...events, ...majorEvents, ...vikingEvents];
   const currentlyLive = allTracked.filter(e => isCurrentlyLive(e.date, e.dateEnd));
-  const comingSoon = allTracked.filter(e => isUpcoming(e.date) && !isCurrentlyLive(e.date, e.dateEnd)).sort((a, b) => new Date(a.date) - new Date(b.date));
+  const kmFromUserToTown = (locStr) => {
+    if (!isInDenmark(userCoords) || !locStr) return null;
+    const key = Object.keys(TOWN_COORDS).find(t => locStr.includes(t));
+    if (!key) return null;
+    const [tLat, tLon] = TOWN_COORDS[key];
+    const dLat = (tLat - userCoords.lat) * 111.32;
+    const dLon = (tLon - userCoords.lon) * 62.06;
+    return Math.sqrt(dLat * dLat + dLon * dLon);
+  };
+  const comingSoon = allTracked.filter(e => isUpcoming(e.date) && !isCurrentlyLive(e.date, e.dateEnd))
+    .sort((a, b) => {
+      if (isInDenmark(userCoords)) {
+        const kmA = kmFromUserToTown(a.town) ?? 9999, kmB = kmFromUserToTown(b.town) ?? 9999;
+        if (kmA !== kmB) return kmA - kmB;
+      }
+      return new Date(a.date) - new Date(b.date);
+    });
   const showList = currentlyLive.length > 0 ? currentlyLive : comingSoon.slice(0, 6);
   const isLive = currentlyLive.length > 0;
 
@@ -1028,7 +1044,7 @@ const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearY
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: isLive ? "0 0 6px #4CAF50" : "none" }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: isLive ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5 }}>{isLive ? "Live Events" : "Coming Events"}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: isLive ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5 }}>{isLive ? "Live Events" : isInDenmark(userCoords) ? "Coming Up Near You" : "Coming Events"}</span>
           </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, marginBottom: 8 }}>
             {showList.map(e => (
@@ -1101,7 +1117,7 @@ const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearY
 
 
 
-const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather }) => {
+const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, compact }) => {
   const [openCity, setOpenCity] = useState(null);
   useEffect(() => {
     WEATHER_CITIES.forEach(c => { if (!weather[c.key] && weatherLoading !== c.key) checkWeather(c.key, c.lat, c.lon); });
@@ -1111,15 +1127,15 @@ const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather }) => {
   const openCityData = WEATHER_CITIES.find(c => c.key === openCity);
 
   return (
-    <div style={{ display: "flex", gap: 14, overflowX: "auto", padding: "10px 0", marginTop: 4 }}>
+    <div style={{ display: "flex", gap: compact ? 10 : 14, overflowX: "auto", padding: compact ? "0 4px" : "10px 0", marginTop: compact ? 0 : 4 }}>
       {WEATHER_CITIES.map(c => {
         const d = weather[c.key];
         return (
           <button key={c.key} onClick={() => setOpenCity(c.key)}
-            style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            <span style={{ fontSize: 15 }}>{d && !d.error ? weatherIcon(d.condition) : "⏳"}</span>
-            <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{c.label}</span>
-            <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{d && !d.error ? `${Math.round(d.temperature_c)}°` : "--"}</span>
+            style={{ display: "flex", alignItems: "center", gap: compact ? 3 : 6, flexShrink: 0, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <span style={{ fontSize: compact ? 12 : 15 }}>{d && !d.error ? weatherIcon(d.condition) : "⏳"}</span>
+            {!compact && <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{c.label}</span>}
+            <span style={{ fontSize: compact ? 11 : 13, color: C.text, fontWeight: 700 }}>{d && !d.error ? `${Math.round(d.temperature_c)}°` : "--"}</span>
           </button>
         );
       })}
@@ -1992,11 +2008,56 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
   };
 
   // Resolve a guide stop name to real coordinates (content data first, then town list), or null.
+  const [geocodedCoords, setGeocodedCoords] = useState({}); // name -> {lat,lon}, filled in once per guide
+  const [exactDurations, setExactDurations] = useState({}); // "origin|dest|mode" -> {durationText, durationMinutes}
+  // Real Google-matched travel time (not a straight-line estimate) for every leg in a
+  // guide, fetched once before it's shown. Needs /api/directions.js + GOOGLE_MAPS_KEY —
+  // if either is missing, this silently no-ops and legs fall back to the km estimate,
+  // same graceful-degradation pattern as the Gemini pre-check.
+  const fetchExactDurations = async (days, mode) => {
+    const pairs = [];
+    days.forEach((day, di) => {
+      if (day.stops.length === 1 && di > 0) {
+        const prevLast = days[di - 1].stops[days[di - 1].stops.length - 1];
+        pairs.push([prevLast.name, day.stops[0].name]);
+      }
+      for (let i = 0; i < day.stops.length - 1; i++) pairs.push([day.stops[i].name, day.stops[i + 1].name]);
+    });
+    const found = {};
+    const apiMode = mode === "public transport" ? "transit" : mode || "bike";
+    for (const [origin, dest] of pairs) {
+      const key = `${origin}|${dest}|${mode}`;
+      try {
+        const res = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${apiMode}`);
+        const data = await res.json();
+        if (!data.error) found[key] = data;
+      } catch { /* this leg just keeps its estimate instead */ }
+    }
+    if (Object.keys(found).length > 0) setExactDurations(prev => ({ ...prev, ...found }));
+  };
   const resolveStopCoords = (name) => {
     const real = lookupRealPlace(name);
     if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
     const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
-    return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
+    if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
+    return geocodedCoords[name] || null;
+  };
+  // Free geocoding for specific landmarks (museums, attractions) that only towns have
+  // coordinates for otherwise — no API key, no billing, unlike Google's Geocoding API.
+  // Runs once per guide, before it's shown, so every downstream render (maps, legs)
+  // can stay simple/synchronous.
+  const geocodeStopsForGuide = async (days) => {
+    const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !resolveStopCoords(n));
+    const found = {};
+    for (const name of names) {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name + ", Denmark")}&format=json&limit=1`);
+        const data = await res.json();
+        if (data?.[0]) found[name] = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+      } catch { /* leave this one unresolved — map/leg for it just won't show, no crash */ }
+      await new Promise(r => setTimeout(r, 250)); // be a polite, low-volume client to a free public service
+    }
+    if (Object.keys(found).length > 0) setGeocodedCoords(prev => ({ ...prev, ...found }));
   };
   const kmBetween = (a, b) => {
     const dLat = (a.lat - b.lat) * 111.32;
@@ -2057,6 +2118,7 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
             { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
 {"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
+CRITICAL: NEVER state a specific ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and a single bare number is misleading without that context. If cost is worth mentioning, say "check current ticket prices online" instead, or describe the price tier qualitatively ("budget-friendly", "a bit of a splurge") without a specific number.
 CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
             { role: "user", content: convoText }
@@ -2067,11 +2129,13 @@ If the conversation only covers a single day or a few stops with no explicit day
       const data = await res.json();
       const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
+      await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
       const lc = convoText.toLowerCase();
       const travelMode = /\b(bike|cykel|cycling|cycle)\b/.test(lc) ? "bike"
         : /\b(car|driving|drive|bil)\b/.test(lc) ? "car"
         : /public transport|train|bus|tog\b/.test(lc) ? "public transport" : null;
+      fetchExactDurations(parsed.days, travelMode); // fire-and-forget — legs show estimates until this resolves, then upgrade
       setGuideModal({ _gid: gid, _mode: travelMode, _grounded: !!guideGrounding, title: parsed.title || "Your Custom Route", days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode);
       fetchGuideWeather(parsed.days, gid);
@@ -2547,10 +2611,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
 
                 {aiMessages.length > 2 && !aiLoading && (
-                  <button onClick={generateGuide}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 12 }}>
-                    📖 I got you — turn this into a guide
-                  </button>
+                  <>
+                    <button onClick={generateGuide}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 4 }}>
+                      📖 I got you — turn this into a guide
+                    </button>
+                    <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>Takes a few seconds — checking real places and routes</div>
+                  </>
                 )}
                 {guideError && (
                   <div style={{ fontSize: 12, color: "#FFB347", textAlign: "center", marginBottom: 12 }}>{guideError}</div>
@@ -3841,24 +3908,27 @@ You also have a web_search tool. Use it whenever someone asks about something th
       <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {/* Logo */}
-          <div onClick={() => goTab("home")} style={{ cursor: "pointer" }}>
+          <div onClick={() => goTab("home")} style={{ cursor: "pointer", flexShrink: 0 }}>
             <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, letterSpacing: -0.5 }}>◆ Gemlyx</div>
-            <div style={{ fontSize: 9, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase" }}>It exists nowhere else</div>
           </div>
 
-          {/* Right icons */}
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {/* Search — compact icon, expands the bar below on tap */}
-            <button onClick={() => setShowSearch(v => !v)}
-              style={{ background: showSearch ? `${C.gold}22` : "none", border: `1px solid ${showSearch ? C.gold : C.border}`, color: showSearch ? C.gold : C.muted, fontSize: 15, cursor: "pointer", padding: "6px 9px", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }} title="Search">
-              🔍
-            </button>
-            
-            {/* Login (mobile only — sits next to hamburger nav) */}
-            <button className="mobile-only" onClick={() => { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }}
-              style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 8 }} title="Login">
-              👤
-            </button>
+          {/* Weather — moved onto the logo row to save vertical space, still scrollable if it overflows */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} compact />
+          </div>
+
+          {/* Right: small persistent search pill (always visible, not a toggle) + hamburger */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <div style={{ position: "relative" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2.5" strokeLinecap="round"
+                style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+                <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.2" y2="16.2" />
+              </svg>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search"
+                style={{ width: 92, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "7px 10px 7px 26px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                onFocus={e => { e.target.style.width = "150px"; }}
+                onBlur={e => { e.target.style.width = "92px"; }} />
+            </div>
             {/* Hamburger menu — full navigation on mobile */}
             <button onClick={() => setShowMenu(!showMenu)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "6px 10px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
               <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
@@ -3868,20 +3938,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
           </div>
         </div>
 
-        {/* Search bar — collapsed by default, toggled from the icon above to save header height */}
-        {showSearch && (
-          <div style={{ marginTop: 12, position: "relative" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2" strokeLinecap="round"
-              style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-              <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.2" y2="16.2" />
-            </svg>
-            <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search cities, businesses, finds..."
-              style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px 12px 40px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-          </div>
-        )}
-
-        {/* Weather — always visible, multiple cities, auto-loads */}
-        <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
         {(userCoords === null || userCoords === "denied") && (
           <button onClick={requestLocation}
             style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 4, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left" }}>
@@ -3900,7 +3956,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
         {userCoords === "requesting" && (
           <div style={{ fontSize: 12, color: C.muted, padding: "8px 0" }}>📍 Getting your location...</div>
         )}
-        <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} />
+        <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
 
         {/* Search results */}
         {search.length > 1 && searchResults.length > 0 && (
@@ -4073,9 +4129,21 @@ You also have a web_search tool. Use it whenever someone asks about something th
         <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.85)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
           <div style={{ maxWidth: 480, margin: "0 auto", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20, padding: "22px" }} onClick={e => e.stopPropagation()}>
             {guideModal === "loading" ? (
-              <div style={{ textAlign: "center", padding: "40px 0" }}>
-                <div style={{ fontSize: 30, marginBottom: 10 }}>📖</div>
-                <div style={{ fontSize: 14, color: C.muted }}>Building your guide...</div>
+              <div style={{ textAlign: "center", padding: "50px 20px" }}>
+                <div style={{ fontSize: 34, marginBottom: 14, animation: "gemlyxPulse 1.6s ease-in-out infinite" }}>📖</div>
+                <div style={{ fontSize: 15, color: C.text, fontWeight: 700, marginBottom: 6, fontFamily: "'Cormorant Garamond', serif" }}>Building your guide…</div>
+                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, maxWidth: 280, margin: "0 auto" }}>
+                  Checking real places, routes and travel times — this takes a few seconds, not a bug 🙂
+                </div>
+                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 18 }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: C.gold, animation: `gemlyxDot 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                  ))}
+                </div>
+                <style>{`
+                  @keyframes gemlyxPulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+                  @keyframes gemlyxDot { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4px); } }
+                `}</style>
               </div>
             ) : (
               <>
@@ -4107,15 +4175,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : "🚆";
                       const a = resolveStopCoords(prevStop.name), b = resolveStopCoords(day.stops[0].name);
                       const km = a && b ? kmBetween(a, b) : null;
+                      const exact = exactDurations[`${prevStop.name}|${day.stops[0].name}|${guideModal._mode}`];
                       const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(prevStop.name + ", Denmark")}&destination=${encodeURIComponent(day.stops[0].name + ", Denmark")}&travelmode=${mode}`;
                       return (
                         <a href={mapsUrl} target="_blank" rel="noreferrer"
                           style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginBottom: 12 }}>
                           <span style={{ fontSize: 12 }}>{icon}</span>
                           <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
-                            {km !== null ? `~${Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}` : how || "Route from yesterday"}
+                            {exact ? `${exact.durationText} ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
+                              : km !== null ? `~${Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}` : how || "Route from yesterday"}
                           </span>
-                          <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· Exact route ↗</span>
+                          <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· {exact ? "Google Maps ↗" : "Exact route ↗"}</span>
                         </a>
                       );
                     })()}
@@ -4164,10 +4234,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>{stop.name}</div>
                             <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginBottom: real ? 4 : 0 }}>{stop.note}</div>
-                            {real && (
+                            {real && real.name === stop.name && (
                               <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
                                 {real.price ? `${real.price}` : real.popularityTag === "Hidden Gem" ? "◆ Free — Hidden Gem" : real._src === "free" ? "Free entry" : ""}
-
                               </div>
                             )}
                           </div>
@@ -4180,6 +4249,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
                             const a = resolveStopCoords(stop.name), b = resolveStopCoords(nextStop.name);
                             const km = a && b ? kmBetween(a, b) : null;
+                            const exact = exactDurations[`${stop.name}|${nextStop.name}|${guideModal._mode}`];
                             const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(stop.name + ", Denmark")}&destination=${encodeURIComponent(nextStop.name + ", Denmark")}&travelmode=${mode}`;
                             return (
                               <div style={{ borderLeft: `2px dashed ${C.border}`, marginLeft: 31, padding: "7px 0 9px 14px", minHeight: 14 }}>
@@ -4190,10 +4260,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                     style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
                                     <span style={{ fontSize: 12 }}>{icon}</span>
                                     <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
-                                      {km !== null
+                                      {exact
+                                        ? `${exact.durationText} ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
+                                        : km !== null
                                         ? `~${Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
                                         : how || "Route"}
                                     </span>
+                                    {exact && <span style={{ fontSize: 9, color: "#4CAF50", fontWeight: 700 }}>✓</span>}
                                     <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· Exact route ↗</span>
                                   </a>
                                 )}
