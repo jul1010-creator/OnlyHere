@@ -2401,7 +2401,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const season = getSeason();
 
       const sysPrompt = `You are Gemlyx — Denmark's insider guide. You speak as Gemlyx itself: warm, confident, like a well-travelled Danish friend, never like a generic AI assistant. Never call yourself an AI or a language model. Today is ${monthName} (${season} season in Denmark). Be concise and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
-Transport matters: if the person hasn't said how they're getting around, ask — car, bike, or public transport — before proposing a route, since it changes everything. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine.
+Transport matters: if the person hasn't said how they're getting around, ask — car, bike, or public transport — before proposing a route, since it changes everything. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself.
 
 ASK BEFORE YOU PLAN — this matters more than anything else here. If someone asks for a plan, route, or itinerary and you don't already know their budget, how much time they actually have, and roughly what they enjoy (history, nature, food, nightlife, a mix), do NOT generate a full itinerary yet. Ask ONE short, warm question that covers those three things together — for example: "Happy to help! Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — history, nature, food, nightlife, or a bit of everything?" Keep it to one message, not three separate questions. Only build the actual plan once you know these, either from their answer or because they already told you in their first message.
 
@@ -3898,6 +3898,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
         @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(6px); } }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }
+        @media (min-width: 900px) {
+          .gemlyx-search-input { width: 130px !important; font-size: 14px !important; padding: 9px 14px 9px 32px !important; }
+          .gemlyx-search-input:focus { width: 210px !important; }
+          .gemlyx-search-icon { left: 12px !important; width: 14px !important; height: 14px !important; }
+          .gemlyx-burger { padding: 9px 13px !important; }
+          .gemlyx-burger-bar { width: 19px !important; }
+        }
         .products-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (min-width: 600px) { .products-grid { grid-template-columns: 1fr 1fr 1fr; } }
         @media (min-width: 900px) { .products-grid { grid-template-columns: 1fr 1fr 1fr 1fr; } }
@@ -3912,28 +3919,28 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, letterSpacing: -0.5 }}>◆ Gemlyx</div>
           </div>
 
-          {/* Weather — moved onto the logo row to save vertical space, still scrollable if it overflows */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} compact />
+          {/* Weather — back to full size (with town labels), same row as logo, truly centered */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
+            <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
           </div>
 
           {/* Right: small persistent search pill (always visible, not a toggle) + hamburger */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <div style={{ position: "relative" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2.5" strokeLinecap="round"
-                style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+              <svg className="gemlyx-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2.5" strokeLinecap="round"
+                style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
                 <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.2" y2="16.2" />
               </svg>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search"
-                style={{ width: 92, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "7px 10px 7px 26px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                onFocus={e => { e.target.style.width = "150px"; }}
-                onBlur={e => { e.target.style.width = "92px"; }} />
+              <input className="gemlyx-search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search"
+                style={{ width: 104, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "8px 12px 8px 29px", fontSize: 12.5, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "width 0.18s ease" }}
+                onFocus={e => { if (window.innerWidth < 900) e.target.style.width = "170px"; }}
+                onBlur={e => { if (window.innerWidth < 900) e.target.style.width = "104px"; }} />
             </div>
             {/* Hamburger menu — full navigation on mobile */}
-            <button onClick={() => setShowMenu(!showMenu)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "6px 10px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
-              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
-              <div style={{ width: 16, height: 2, background: C.muted, borderRadius: 2 }} />
+            <button className="gemlyx-burger" onClick={() => setShowMenu(!showMenu)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, fontSize: 14, cursor: "pointer", padding: "7px 11px", borderRadius: 8, display: "flex", gap: 4, flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
+              <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
+              <div className="gemlyx-burger-bar" style={{ width: 17, height: 2, background: C.muted, borderRadius: 2 }} />
             </button>
           </div>
         </div>
