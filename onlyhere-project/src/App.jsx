@@ -1447,6 +1447,30 @@ export default function Gemlyx() {
   const [studioResult, setStudioResult] = useState(null);
   const [studioError, setStudioError] = useState(null);
   const [studioDraft, setStudioDraft] = useState(null);
+  const [studioDraftText, setStudioDraftText] = useState(""); // editable JSON — what actually gets published
+  const [draftEditError, setDraftEditError] = useState(null);
+  const [verifyResults, setVerifyResults] = useState(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState(null);
+  const verifySource = async () => {
+    if (!studioDraft || verifyLoading) return;
+    setVerifyLoading(true); setVerifyError(null); setVerifyResults(null);
+    try {
+      const q = `${studioDraft.name} official dates location 2026 2027 Denmark`;
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      const results = (data.results || []).slice(0, 5).map(r => ({
+        title: r.title || r.url || "Source",
+        url: r.url || "",
+        snippet: (r.content || r.snippet || "").slice(0, 220),
+      }));
+      if (results.length === 0) { setVerifyError("No results found — try checking manually."); }
+      setVerifyResults(results);
+    } catch {
+      setVerifyError("Couldn't search — check your connection and try again.");
+    }
+    setVerifyLoading(false);
+  };
   const [publishStatus, setPublishStatus] = useState(null); // null | "sending" | "sent" | "error"
 
   // ── Scan a Source: paste a listing page, Tally-style extraction via /api/scan-source
@@ -1513,7 +1537,7 @@ export default function Gemlyx() {
   const [publishErrorDetail, setPublishErrorDetail] = useState(null);
   const [studioPhotoName, setStudioPhotoName] = useState("");
 
-  const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences.';
+  const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences. If the search context includes real visitor/local opinions (e.g. from Reddit or forums), fold that texture into "Things to Know" or "What Travelers Love" as plain observed fact — write "the queue regularly runs over an hour in summer" or "locals tend to avoid it on weekends", NOT "Reddit users say..." or "according to visitors online...". Never name the source or platform. Never quote anyone directly — always paraphrase in your own words, and only include a specific claim if multiple sources agree or one source is clearly credible; a single offhand comment isn\'t worth repeating as fact.';
 
   const slugify = (s) => s.toLowerCase().replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "aa").replace(/[^a-z0-9]/g, "");
   const J = (v) => JSON.stringify(v ?? "");
@@ -1537,14 +1561,15 @@ export default function Gemlyx() {
     const name = studioTown.trim();
     if (!name || studioLoading) return;
     setStudioLoading(true); setStudioResult(null); setStudioError(null);
+    setVerifyResults(null); setVerifyError(null);
     try {
       const cfg = {
-        town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`] },
-        festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup`, `${name} festival Denmark atmosphere who goes accommodation nearest station`] },
-        free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`] },
-        food: { queries: [`${name} Denmark what to order prices history reviews`, `${name} Denmark local tips address`] },
-        night: { queries: [`${name} Denmark bar atmosphere crowd prices reviews`, `${name} Denmark local tips address`] },
-        booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`] },
+        town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`] },
+        festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`] },
+        free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`] },
+        food: { queries: [`${name} Denmark what to order prices history reviews`, `${name} Denmark local tips address`, `${name} reddit r/Denmark r/food worth it locals think`] },
+        night: { queries: [`${name} Denmark bar atmosphere crowd prices reviews`, `${name} Denmark local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`] },
+        booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`] },
       }[studioType];
       let context = "";
       for (const q of cfg.queries) {
@@ -1637,6 +1662,8 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       setStudioResult(code);
       setScanHint(null);
       setStudioDraft(t);
+      setStudioDraftText(JSON.stringify(t, null, 2));
+      setDraftEditError(null);
       setStudioPhotoName(`${slugify(name)}.jpg`);
       setPublishStatus(null);
       setPublishErrorDetail(null);
@@ -1648,9 +1675,17 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
 
   const publishDraft = async () => {
     if (!studioDraft || !studioSession) return;
+    let editedDraft;
+    try {
+      editedDraft = JSON.parse(studioDraftText);
+    } catch {
+      setDraftEditError("The edited draft isn't valid JSON — check for a missing comma or quote before publishing.");
+      return;
+    }
+    setDraftEditError(null);
     setPublishStatus("sending");
     try {
-      const shaped = shapeForLive(studioType, studioDraft);
+      const shaped = shapeForLive(studioType, editedDraft);
       if (studioPhotoName) shaped.photo = `/${{ town: "towns", festival: "events", free: "free", food: "food", night: "nightlife", booking: "craft" }[studioType]}/${studioPhotoName}`;
       const body = JSON.stringify({ type: studioType, payload: shaped, published: true });
       const attempt = (token) => fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content`, {
@@ -2462,7 +2497,46 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {studioError && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 8 }}>{studioError}</div>}
                     {studioResult && (
                       <>
-                        <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", fontSize: 10.5, color: C.light, whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6, maxHeight: 260, overflowY: "auto", fontFamily: "monospace", margin: "0 0 10px" }}>{studioResult}</pre>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
+                        <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); }}
+                          rows={12}
+                          style={{ width: "100%", background: C.bg, border: `1px solid ${draftEditError ? "#C8102E" : C.border}`, borderRadius: 10, padding: "12px", fontSize: 11, color: C.light, lineHeight: 1.6, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
+                        {draftEditError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 10 }}>{draftEditError}</div>}
+
+                        <div style={{ background: "#FFB34712", border: "1px solid #FFB34744", borderRadius: 10, padding: "11px 13px", marginBottom: 12 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", letterSpacing: 0.5, marginBottom: 6 }}>⚠️ AI MIGHT BE WRONG ABOUT — CHECK BEFORE PUBLISHING:</div>
+                          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 10.5, color: C.light, lineHeight: 1.7 }}>
+                            <li><b>Dates</b> — could be fabricated, from the wrong year, or already in the past. Verify against the event's own site.</li>
+                            <li><b>Town/region attached to a station or address</b> — the station name itself can be right while the town is wrong (Denmark has similarly-named places in different regions).</li>
+                            {studioType === "festival" && <li><b>Major vs. Local scale</b> — a judgment call the AI made; double-check it matches how well-known this actually is.</li>}
+                            {studioType === "town" && <li><b>Map coordinates (lat/lon)</b> — check the pin would actually land on the right town.</li>}
+                            {(studioType === "food" || studioType === "night" || studioType === "booking") && <li><b>Prices and opening details</b> — can go stale fast; verify the place still operates as described.</li>}
+                            <li><b>Specific named details</b> in the description (a shop, dish, or landmark) — can be invented if the search results were thin. If in doubt, search the name yourself.</li>
+                            <li><b>rating</b> defaults to a placeholder (4.5) — it isn't a real rating unless you set one.</li>
+                          </ul>
+                          <button onClick={verifySource} disabled={verifyLoading}
+                            style={{ width: "100%", background: "none", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginTop: 10, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {verifyLoading ? "Searching…" : "🔎 Verify dates & location"}
+                          </button>
+                        </div>
+
+                        {verifyError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 12 }}>{verifyError}</div>}
+                        {verifyResults && verifyResults.length > 0 && (
+                          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", marginBottom: 12 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 8 }}>Real search results — check these yourself, then edit the JSON above if anything's wrong:</div>
+                            {verifyResults.map((r, i) => (
+                              <div key={i} style={{ marginBottom: i < verifyResults.length - 1 ? 10 : 0, paddingBottom: i < verifyResults.length - 1 ? 10 : 0, borderBottom: i < verifyResults.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                                {r.url ? (
+                                  <a href={r.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>{r.title} ↗</a>
+                                ) : (
+                                  <div style={{ fontSize: 11.5, fontWeight: 700, color: C.text }}>{r.title}</div>
+                                )}
+                                <div style={{ fontSize: 11, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{r.snippet}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>PHOTO FILENAME (drop the matching file in the public folder)</div>
                         <input value={studioPhotoName} onChange={e => setStudioPhotoName(e.target.value)}
                           style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "monospace", marginBottom: 12, boxSizing: "border-box" }} />
@@ -2480,6 +2554,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             {publishErrorDetail && <div style={{ marginTop: 4, fontFamily: "monospace", fontSize: 10, color: C.muted, wordBreak: "break-word" }}>{publishErrorDetail}</div>}
                           </div>
                         )}
+                        <div style={{ fontSize: 9.5, color: C.muted, textAlign: "center", marginBottom: 6 }}>Copy code below reflects the original draft, not your edits above</div>
                         <button onClick={() => { try { navigator.clipboard.writeText(studioResult); setToast("📋 Copied"); setTimeout(() => setToast(null), 1800); } catch { /* ignore */ } }}
                           style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.muted, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           📋 Or copy code (manual paste into App.jsx)
