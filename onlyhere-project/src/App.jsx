@@ -44,6 +44,20 @@ export default function Gemlyx() {
   useEffect(() => {
     const v = heroVideoRef.current;
     if (v) { v.muted = true; v.play().catch(() => {}); }
+    // Ultimate fallback: some in-app/embedded browsers block even muted+playsInline
+    // autoplay entirely until the very first user interaction anywhere on the page —
+    // this makes sure that first tap (on ANYTHING, not just the video) starts it,
+    // instead of the person having to specifically find and tap the play button.
+    const primeOnFirstInteraction = () => {
+      const el = heroVideoRef.current;
+      if (el && el.paused) { el.muted = true; el.play().catch(() => {}); }
+    };
+    document.addEventListener("touchstart", primeOnFirstInteraction, { once: true, passive: true });
+    document.addEventListener("click", primeOnFirstInteraction, { once: true });
+    return () => {
+      document.removeEventListener("touchstart", primeOnFirstInteraction);
+      document.removeEventListener("click", primeOnFirstInteraction);
+    };
   }, []);
 
   // Pull in anything published via Content Studio and fold it into the shared content
@@ -1759,7 +1773,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {/* Hero */}
               <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: `url('/picture3.png') center/cover no-repeat` }}>
                 {!videoError && (
-                  <video ref={heroVideoRef} src="/video1.mp4" autoPlay muted defaultMuted loop playsInline
+                  <video ref={heroVideoRef} src="/video1.mp4" autoPlay muted defaultMuted loop playsInline webkit-playsinline="true" preload="auto"
                     onCanPlay={(e) => { e.target.muted = true; setVideoReady(true); e.target.play().catch(() => {}); }}
                     onError={() => setVideoError(true)}
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
@@ -2852,11 +2866,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, letterSpacing: -0.5 }}>◆ Gemlyx</div>
           </div>
 
-          {/* Weather — compact icon+temp per city so more than one fits on a phone header; tap any city for full detail */}
-          <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
-            <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} compact />
-          </div>
-
           {/* Right: small persistent search pill (always visible, not a toggle) + hamburger */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <div style={{ position: "relative" }}>
@@ -2878,6 +2887,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
           </div>
         </div>
 
+        {/* Weather — own row below logo/search, full width, so all cities' labels stay readable instead of being squeezed into one crowded row */}
+        <div style={{ marginTop: 8 }}>
+          <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+        </div>
+
         {(userCoords === null || userCoords === "denied") && (
           <button onClick={requestLocation}
             style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 4, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left" }}>
@@ -2894,12 +2908,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
           </button>
         )}
 
-        <button onClick={() => goTab("essentials")}
-          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: `${C.accent}14`, border: `1px solid ${C.accent}55`, borderRadius: 10, padding: "9px 12px", marginBottom: 4, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left" }}>
-          <span style={{ fontSize: 14 }}>📖</span>
-          <span style={{ fontSize: 12, color: "#FF8A8A", fontWeight: 700 }}>Read Essentials before visiting — real tickets, fines and etiquette to know first</span>
-          <span style={{ marginLeft: "auto", color: "#FF8A8A", fontSize: 13 }}>→</span>
-        </button>
         {userCoords === "requesting" && (
           <div style={{ fontSize: 12, color: C.muted, padding: "8px 0" }}>📍 Getting your location...</div>
         )}
