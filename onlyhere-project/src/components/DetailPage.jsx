@@ -93,6 +93,20 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             { icon: "🚆", label: "Nearest Station", value: item.nearestStation },
           ]} />
         )}
+        {kind === "food" && (
+          <AtAGlanceCard rows={[
+            { icon: "🍽️", label: "Serves", value: item.category },
+            { icon: "💰", label: "Price", value: item.price },
+            { icon: "📍", label: "Neighbourhood", value: item.location },
+          ]} />
+        )}
+        {kind === "nightlife" && (
+          <AtAGlanceCard rows={[
+            { icon: "👥", label: "Crowd", value: item.crowd },
+            { icon: "🍺", label: "Type", value: item.category },
+            { icon: "📍", label: "Neighbourhood", value: item.location },
+          ]} />
+        )}
         {item.gemlyxFind && <GemlyxFindCard text={item.gemlyxFind} />}
 
         <div style={{ fontSize: 14, color: C.light, lineHeight: 1.75, marginBottom: 20 }}>{item.desc}</div>

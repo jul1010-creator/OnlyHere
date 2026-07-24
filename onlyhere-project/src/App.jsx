@@ -15,7 +15,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import { C } from "./utils/theme";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
-  isInDenmark, travelLabel, isFullPlanText, stripMarkdown, daysUntil,
+  isInDenmark, travelLabel, isFullPlanText, stripMarkdown, daysUntil, detectLegMode,
 } from "./utils/helpers";
 
 import { DetailPage } from "./components/DetailPage";
@@ -483,8 +483,17 @@ export default function Gemlyx() {
         ...bbData([["Why People Love It", t.special], ["Perfect For", t.whoFor]]),
         ...bulletsBlock("Good to Know", t.thingsToKnow),
       ] };
-    if (type === "food") return { name: t.name, type: t.type || "Local", emoji: t.emoji || "🍽", category: t.category || "", location: t.location || "", price: t.price || "See website", photo: `/food/${slugify(t.name)}.jpg`, desc: t.desc, tip: t.tip || "", mapHint: t.mapHint || "", color: t.color || "#D4AF37" };
-    if (type === "night") return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", location: t.location || "", desc: t.desc, tip: t.tip || "", mapHint: t.mapHint || "", color: t.color || "#5D4037" };
+    if (type === "food") return { name: t.name, type: t.type || "Local", emoji: t.emoji || "🍽", category: t.category || "", location: t.location || "", price: t.price || "See website", photo: `/food/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#D4AF37", gemlyxFind: t.gemlyxFind || "",
+      blogBody: [
+        ...bbData([["Why Visit", t.whyVisit], ["Who Is It For", t.whoFor], ["What Do They Serve", t.whatServe], ["Best Arrival Time", t.bestArrival]]),
+        ...bulletsBlock("Essential to Know", t.thingsToKnow),
+      ] };
+    if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", location: t.location || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
+      blogBody: [
+        ...bbData(isClub ? [["Who Is It For", t.whoFor], ["When Do People Enter", t.whenEnter]]
+                          : [["Who Is It For", t.whoFor], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark]]),
+        ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
+      ] }; }
     if (type === "booking") return { name: t.name, type: t.type || "Local", what: Array.isArray(t.what) ? t.what : [t.what].filter(Boolean), rating: t.rating ? Number(t.rating) : null, location: t.location || "", price: t.price || "See website", priceNote: t.priceNote || "", travelTime: t.travelTime || "", bookingType: t.bookingType || "contact", popularityTag: t.popularityTag || "", transportWarning: !!t.transportWarning, emoji: t.emoji || "🔨", photo: `/craft/${slugify(t.name)}.jpg`, color: t.color || "#8E6B1F", desc: t.desc,
       timeNeeded: t.timeNeeded || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
       blogBody: [
@@ -504,8 +513,8 @@ export default function Gemlyx() {
         town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`, `${name} quora google reviews honest opinion worth it`] },
         festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
         free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
-        food: { queries: [`${name} Denmark what to order prices history reviews`, `${name} Denmark local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
-        night: { queries: [`${name} Denmark bar atmosphere crowd prices reviews`, `${name} Denmark local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
+        food: { queries: [`${name} Denmark what to order menu prices history`, `${name} Denmark best time to visit busy hours local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
+        night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[studioType];
       let context = "";
@@ -546,12 +555,14 @@ CRITICAL GEOGRAPHY CHECK — small/underground/local festivals are the highest-r
 Real example: {"name": "The Greenhouses, Botanical Garden", "city": "Aarhus", "type": "Botanical garden", "popularityTag": "Hidden Gem", "desc": "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free."}
 ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "city": "which Danish city", "type": "short category", "emoji": "one emoji", "popularityTag": "Hidden Gem / Local Favourite / Popular", "desc": "two card sentences — say clearly what is free", "website": "official URL ONLY if present in context, else empty string", "color": "#hex", "ticketsGlance": "e.g. 'Free' or 'Free, donations welcome' — for At a Glance", "timeNeeded": "e.g. '1-2 hours' — for At a Glance", "budgetGlance": "e.g. 'Free' or 'Low (café on site)' — for At a Glance", "accessibility": "short accessibility note if known, else empty string — for At a Glance", "nearestStation": "short — for At a Glance", "special": "the experience of being there — focus on EXPERIENCE not history, real specific detail", "whoFor": "who this genuinely suits", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
-        food: `Draft a complete Gemlyx food entry for ${name}, matching this REAL example: {"name": "Harry's Place", "type": "Local", "category": "Hot dog stand", "location": "Nørrebro/Nordvest, Copenhagen", "price": "40–70 DKK", "desc": "A hot dog cart since 1965, run by the same kind of hands-on owners the whole time. Order the \\"Børge med krudt\\" — the local's move — or the flæskesteg (roast pork) sandwich. Cash or Dankort only. No frills, no seats, just stand and eat like generations before you.", "tip": "Ask for it \\"the traditional way\\" and the person behind the counter will usually tell you exactly how to eat it."}
+        food: `Draft a complete Gemlyx food entry for ${name}, Denmark, following this EXACT structure (a premium travel editor's voice, never Wikipedia — focus on the actual EXPERIENCE of eating there, not a restaurant-guide history lesson): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field — do NOT write a separate Overview, that would just repeat it) -> Why Visit -> Who Is It For -> What Do They Serve -> Best Arrival Time -> Essential to Know (EXACTLY 3 short bullets). Total word count across WhyVisit+WhoFor+WhatServe+BestArrival+EssentialToKnow+GemlyxFind should land around 220-350 words — short paragraphs, 1-3 sentences each, never encyclopedic. Every section answers a different question; never repeat what's already in At a Glance or Intro.
+Real example: {"name": "Harry's Place", "type": "Local", "category": "Hot dog stand", "location": "Nørrebro/Nordvest, Copenhagen", "price": "40–70 DKK", "desc": "A hot dog cart since 1965, run by the same kind of hands-on owners the whole time. Order the \\"Børge med krudt\\" — the local's move — or the flæskesteg (roast pork) sandwich. Cash or Dankort only. No frills, no seats, just stand and eat like generations before you.", "whatServe": "Classic Danish pølser (hot dogs) with the full topping bar — remoulade, crispy onions, sweet mustard. The flæskesteg sandwich is the one regulars actually order most.", "bestArrival": "Lunchtime on a weekday — evenings can mean a short queue after bars close nearby."}
 ${STUDIO_VOICE}
-Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "category": "e.g. Bakery, est. 1652", "location": "Neighbourhood, City", "price": "range like '40–70 DKK' ONLY from context, else 'See website'", "emoji": "one emoji", "desc": "3-4 sentences in the voice above — what to order, history, quirks", "tip": "one insider tip a local would give", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
-        night: `Draft a complete Gemlyx nightlife entry for ${name}, matching this REAL example: {"name": "Toga Vinstue", "type": "Local", "crowd": "Almost entirely Danish", "category": "Brown bar (bodega)", "location": "Indre By, Copenhagen", "desc": "A classic \\"brown bar\\" — old wood interior, low light, walls covered in political cartoons. Sits five minutes from the Danish Parliament, and actual lawmakers drink here. Cheap beer (around 45 DKK), smoking still allowed indoors, genuinely local despite the central address.", "tip": "Don't expect English menus or tourist-friendly service — this is a real neighbourhood bodega, not a show."}
+Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "category": "e.g. Bakery, est. 1652", "location": "Neighbourhood, City", "price": "range like '40–70 DKK' ONLY from context, else 'See website'", "emoji": "one emoji", "desc": "2-4 sentences in the voice above — the intro, what to order, history, quirks", "whyVisit": "describe the actual character of this place honestly, as if telling a friend what it's really like — NOT a persuasive case for why someone should go", "whoFor": "who this genuinely suits — e.g. quick casual bite vs a proper sit-down splurge", "whatServe": "concretely what's on the menu/what people actually order — real dishes, not generic 'delicious food'", "bestArrival": "when to actually go and why — quietest time, best time for a specific dish, or a queue warning if relevant", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag — a real dish, table, or detail, distinct from whatServe", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
+        night: `Draft a complete Gemlyx nightlife venue entry for ${name}, Denmark, following this EXACT structure (a premium travel editor's voice, never Wikipedia — focus on the actual EXPERIENCE and atmosphere, not history): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field — do NOT write a separate Overview, that would just repeat it) -> Who Is It For -> Before Dark (bars only) / After Dark (bars only) OR When Do People Enter (clubs only, use ONLY this one section instead of Before/After Dark) -> What to Be Aware Of (EXACTLY 3 short bullets). First decide isClub honestly from the search context — a dedicated dance club/nightclub is a club, an ordinary bar/pub/bodega is not, even if it gets lively late. Total word count across WhoFor+(BeforeDark+AfterDark OR WhenEnter)+ThingsToKnow+GemlyxFind should land around 220-350 words — short paragraphs, never encyclopedic.
+Real example (bar): {"name": "Toga Vinstue", "type": "Local", "crowd": "Almost entirely Danish", "category": "Brown bar (bodega)", "location": "Indre By, Copenhagen", "isClub": false, "desc": "A classic \\"brown bar\\" — old wood interior, low light, walls covered in political cartoons. Sits five minutes from the Danish Parliament, and actual lawmakers drink here. Cheap beer (around 45 DKK), smoking still allowed indoors, genuinely local despite the central address.", "beforeDark": "Quiet through the afternoon — a handful of regulars reading the paper over a beer.", "afterDark": "Fills up after 8pm with a real mix of ages, loud conversation over the bar's own political cartoons on the walls."}
 ${STUDIO_VOICE}
-Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "crowd": "who actually drinks here", "category": "short category", "location": "Neighbourhood, City", "emoji": "one emoji", "desc": "3-4 sentences in the voice above", "tip": "one insider tip", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
+Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "crowd": "who actually goes here — locals, students, tourists, mixed", "category": "short category, e.g. 'Brown bar (bodega)' or 'Nightclub'", "location": "Neighbourhood, City", "isClub": "true only if this is genuinely a dedicated dance club/nightclub, false for an ordinary bar/pub even if it's lively late", "emoji": "one emoji", "desc": "2-4 sentences in the voice above — the intro, what it's actually like", "whoFor": "who this genuinely suits — real and specific, not generic positivity", "beforeDark": "what it's like earlier in the day/evening — EMPTY STRING if isClub is true", "afterDark": "what it's actually like once it picks up — EMPTY STRING if isClub is true", "whenEnter": "when people actually show up and when it peaks — ONLY if isClub is true, else empty string", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
         booking: `Draft a complete Gemlyx Booking (bookable craft/experience) entry for ${name}, Denmark, following the same Attraction structure Gemlyx uses for its experiences (a premium travel editor's voice, never Wikipedia — focus on the EXPERIENCE, not history): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field — do NOT write a separate Overview, that would just repeat it) -> Why People Love It -> Perfect For -> Things to Know (EXACTLY 3 short bullets). Total word count across WhyPeopleLoveIt+PerfectFor+ThingsToKnow+GemlyxFind should land around 220-350 words — short paragraphs, never encyclopedic. Never repeat what's already in the Price block or At a Glance.
 Real example: {"name": "Viking Center Ribe", "type": "Major", "what": ["blacksmithing", "leather", "textiles"], "location": "Ribe", "price": "180 DKK", "bookingType": "online", "desc": "Artisans craft authentic Viking jewellery, leather and textiles on site — watch smithing demonstrations and try archery in the reconstructed village."}
 ${STUDIO_VOICE}
@@ -625,10 +636,11 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, timeNeeded: ${J(t.timeNeeded)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
       } else if (studioType === "food") {
         const nextId = Math.max(...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.desc)},\n  tip: ${J(t.tip)}, mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D4AF37")} },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D4AF37")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Why Visit", t.whyVisit], ["Who Is It For", t.whoFor], ["What Do They Serve", t.whatServe], ["Best Arrival Time", t.bestArrival]])}\n${bbBullets("Essential to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
       } else {
         const nextId = Math.max(...nightlifeSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, desc: ${J(t.desc)}, tip: ${J(t.tip)}, mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")} },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
+        const isClub = !!t.isClub;
+        code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who Is It For", t.whoFor], ["When Do People Enter", t.whenEnter]] : [["Who Is It For", t.whoFor], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
       }
       setStudioResult(code);
       setScanHint(null);
@@ -725,7 +737,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
     });
   };
 
-  const enrichGuideDays = (days, gid, travelMode) => {
+  const enrichGuideDays = (days, gid, travelMode, mixedModes) => {
     setGlancePending(days.length);
     days.forEach(async (day, idx) => {
       try {
@@ -747,7 +759,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
             messages: [
               { role: "system", content: `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day."}
-Rules: always prefix times with ~. ${travelMode ? `The traveler is getting around BY ${travelMode.toUpperCase()} — every leg must use that mode (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more).` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
+Rules: always prefix times with ~. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
               { role: "user", content: context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks." }
             ],
             max_tokens: 350,
@@ -759,6 +771,30 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
           setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
             ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, glance } : d) }
             : prev);
+          // The first duration fetch (fired before this resolved) had no real leg text to
+          // work from, so it guessed every leg was the trip's primary mode. Now that we
+          // know what each leg actually is (e.g. "ferry" for a Bornholm crossing on an
+          // otherwise-bike trip), re-fetch just this day's legs with their real per-leg
+          // modes — this is what lets mixed-mode trips show a correct route instead of a
+          // failed bike-route-across-water guess silently falling back to a wrong km estimate.
+          if (Array.isArray(glance.legs) && glance.legs.length > 0) {
+            const dayLegTriples = [];
+            if (names.length === 1 && idx > 0) {
+              const prevLast = days[idx - 1]?.stops?.[days[idx - 1].stops.length - 1];
+              if (prevLast) dayLegTriples.push([prevLast.name, names[0], glance.legs[0]?.how || ""]);
+            }
+            for (let i = 0; i < names.length - 1; i++) dayLegTriples.push([names[i], names[i + 1], glance.legs[i]?.how || ""]);
+            const foundExact = {};
+            for (const [origin, dest, how] of dayLegTriples) {
+              const legMode = detectLegMode(how, travelMode);
+              try {
+                const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}`);
+                const d2 = await res2.json();
+                if (!d2.error) foundExact[`${origin}|${dest}|${legMode}`] = d2;
+              } catch { /* falls back to km estimate / AI text, same as always */ }
+            }
+            if (Object.keys(foundExact).length > 0) setExactDurations(prev => ({ ...prev, ...foundExact }));
+          }
         }
       } catch { /* leave this day without travel details */ }
       finally { setGlancePending(p => Math.max(0, p - 1)); }
@@ -808,24 +844,30 @@ Rules: always prefix times with ~. ${travelMode ? `The traveler is getting aroun
   // guide, fetched once before it's shown. Needs /api/directions.js + GOOGLE_MAPS_KEY —
   // if either is missing, this silently no-ops and legs fall back to the km estimate,
   // same graceful-degradation pattern as the Gemini pre-check.
-  const fetchExactDurations = async (days, mode) => {
-    const pairs = [];
+  const fetchExactDurations = async (days, primaryMode) => {
+    // Build (origin, dest, how-text) triples instead of flat pairs, so each leg can be
+    // routed with ITS OWN mode — e.g. a mostly-bike trip that needs a ferry to Bornholm
+    // gets that one leg queried as transit, not bicycling (which has no route across
+    // open water and used to silently fall back to a wrong straight-line km guess).
+    const legs = [];
     days.forEach((day, di) => {
       if (day.stops.length === 1 && di > 0) {
         const prevLast = days[di - 1].stops[days[di - 1].stops.length - 1];
-        pairs.push([prevLast.name, day.stops[0].name]);
+        legs.push([prevLast.name, day.stops[0].name, day.glance?.legs?.[0]?.how || ""]);
       }
-      for (let i = 0; i < day.stops.length - 1; i++) pairs.push([day.stops[i].name, day.stops[i + 1].name]);
+      for (let i = 0; i < day.stops.length - 1; i++) {
+        legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || ""]);
+      }
     });
     const found = {};
-    const apiMode = mode === "public transport" ? "transit" : mode || "transit"; // safer default than assuming bike when unclear
-    for (const [origin, dest] of pairs) {
-      const key = `${origin}|${dest}|${mode}`;
+    for (const [origin, dest, how] of legs) {
+      const legMode = detectLegMode(how, primaryMode);
+      const key = `${origin}|${dest}|${legMode}`;
       try {
-        const res = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${apiMode}`);
+        const res = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}`);
         const data = await res.json();
         if (!data.error) found[key] = data;
-        else console.warn(`Directions API: no result for ${origin} → ${dest} (${apiMode}):`, data.error, "— check GOOGLE_MAPS_KEY is set on Vercel and the Directions API is enabled on that key's project.");
+        else console.warn(`Directions API: no result for ${origin} → ${dest} (${legMode}):`, data.error, "— check GOOGLE_MAPS_KEY is set on Vercel and the Directions API is enabled on that key's project.");
       } catch (err) { console.warn(`Directions API request failed for ${origin} → ${dest}:`, err); }
     }
     if (Object.keys(found).length > 0) setExactDurations(prev => ({ ...prev, ...found }));
@@ -927,12 +969,19 @@ If the conversation only covers a single day or a few stops with no explicit day
       await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
       const lc = convoText.toLowerCase();
-      const travelMode = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(lc) ? "public transport"
-        : /\b(car|driving|drive|bil)\b/.test(lc) ? "car"
-        : /\b(bike|cykel|cycling|cycle|bicycl)\b/.test(lc) ? "bike" : null;
+      const mentionsTransit = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(lc);
+      const mentionsCar = /\b(car|driving|drive|bil)\b/.test(lc);
+      const mentionsBike = /\b(bike|cykel|cycling|cycle|bicycl)\b/.test(lc);
+      const mentionedModes = [mentionsBike && "bike", mentionsCar && "car", mentionsTransit && "public transport"].filter(Boolean);
+      // When more than one mode is mentioned, this is a genuine mixed-mode trip (e.g.
+      // "bike some days, train for the long stretches") — travelMode stays the single
+      // best default for legs the plan doesn't specify, but mixedModes carries the full
+      // set through to the per-day prompt so it stops treating one mode as dominant.
+      const travelMode = mentionedModes[0] || null;
+      const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
       fetchExactDurations(parsed.days, travelMode); // fire-and-forget — legs show estimates until this resolves, then upgrade
       setGuideModal({ _gid: gid, _mode: travelMode, _grounded: !!guideGrounding, title: parsed.title || "Your Custom Route", days: parsed.days });
-      enrichGuideDays(parsed.days, gid, travelMode);
+      enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid);
     } catch {
       setGuideModal(null);
@@ -1201,12 +1250,18 @@ If the conversation only covers a single day or a few stops with no explicit day
       const monthName = now.toLocaleString("en", { month: "long" });
       const season = getSeason();
 
-      const sysPrompt = `You are Gemlyx — Denmark's insider guide. You speak as Gemlyx itself: warm, confident, like a well-travelled Danish friend, never like a generic AI assistant. Never call yourself an AI or a language model. Today is ${monthName} (${season} season in Denmark). Be concise and specific — recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
-Transport matters: if the person hasn't said how they're getting around, ask — car, bike, or public transport — before proposing a route, since it changes everything. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself.
+      const sysPrompt = `You are Gemlyx — Denmark's insider guide. You speak as Gemlyx itself: warm, confident, like a well-travelled Danish friend, never like a generic AI assistant. Never call yourself an AI or a language model. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
-ASK BEFORE YOU PLAN — this matters more than anything else here. If someone asks for a plan, route, or itinerary and you don't already know their budget, how much time they actually have, and roughly what they enjoy (history, nature, food, nightlife, a mix), do NOT generate a full itinerary yet. Ask ONE short, warm question that covers those three things together — for example: "Happy to help! Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — history, nature, food, nightlife, or a bit of everything?" Keep it to one message, not three separate questions. Only build the actual plan once you know these, either from their answer or because they already told you in their first message.
+BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
+Transport matters: if the person hasn't said how they're getting around, ask — car, bike, public transport, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
 
-SCOPE THE ANSWER TO WHAT THEY ASKED — once you do have enough to plan, match the plan's size to what they actually requested. Someone with a few hours doesn't need a 3-day, 3-city itinerary. Someone who said "budget-friendly" shouldn't get a plan stacked with 230 DKK museum tickets without at least flagging the cost. Don't pad a short trip into a long one just to showcase more of Gemlyx's content.
+ASK BEFORE YOU PLAN — ONLY WHEN THEY'VE ACTUALLY ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary — not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately — never redirect a simple question into an intake questionnaire. Only when they're asking you to actually build a route or plan, and you don't yet know their budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those three things together — for example: "Happy to help! Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — history, nature, food, nightlife, or a bit of everything?" Keep it to one message, not three separate questions, and don't re-ask anything they've already told you. Build the actual plan once you know these, either from their answer or because they already told you in their first message.
+
+NARROW DOWN GENUINE INTEREST, DON'T JUST ACCEPT THE FIRST BROAD CATEGORY — a broad answer like "nature" or "history" still fits dozens of very different places in Denmark, and defaulting to the same handful of famous spots for every "nature" answer is exactly how everyone ends up at the same places. If someone gives a broad category and you have room for one more question before committing to a full plan, ask ONE specific, real follow-up that actually changes the plan — e.g. for "nature": "coastal walks, forest and lakes, or the wilder Wadden Sea/island side?"; for "history": "Viking-era sites, WWII history, or old market towns?"; for "food": "casual local spots or something worth planning a splurge around?" Skip this if they've already been specific, or if they've made clear they just want you to pick for them — don't turn a simple "surprise me" into another round of questions.
+
+SCOPE THE ANSWER TO WHAT THEY ASKED — once you do have enough to plan, match the plan's size to what they actually requested. Someone with a few hours doesn't need a 3-day, 3-city itinerary. Someone who said "budget-friendly" shouldn't get a plan stacked with 230 DKK museum tickets without at least flagging the cost. Don't pad a short trip into a long one just to showcase more of Gemlyx's content. This is about SCOPE (how much ground the plan covers), not detail — still give real costs and specifics within whatever size plan fits their ask.
+
+BE CONCRETE ABOUT MONEY — "budget", "moderate", or "expensive" mean different things to different people, so back them up with actual DKK figures whenever you can (ticket prices, a realistic meal cost, a rough per-day total) rather than leaving it at a vague tier. If you genuinely don't know a number, say that plainly rather than guessing one.
 
 FORMATTING — this is critical: write in plain conversational text only. This is a mobile chat bubble, not a document. Never use markdown — no # headings, no ** for bold, no bullet-point dashes, no numbered lists with periods. If you're listing a few things, write them into a flowing sentence ("Try Harry's Place for a hot dog, then walk to Torvehallerne for something more substantial") rather than a list. Use line breaks between short paragraphs instead of headers to organize longer answers.
 
@@ -1249,7 +1304,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
       const callOpenAI = (messages) => fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
-        body: JSON.stringify({ model: "gpt-4o-mini", messages, tools, max_tokens: 600 }),
+        body: JSON.stringify({ model: "gpt-4o-mini", messages, tools, max_tokens: 900 }),
       }).then(r => r.json());
 
       let data = await callOpenAI(baseMessages);
@@ -2987,12 +3042,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       const prevStop = prevDay?.stops?.[prevDay.stops.length - 1];
                       if (!prevStop) return null;
                       const how = day.glance?.legs?.[0]?.how || "";
-                      const mode = /bike|cycl/i.test(how) ? "bicycling" : /drive|car\b/i.test(how) ? "driving" : /walk/i.test(how) ? "walking" : /train|bus|transit/i.test(how) ? "transit"
-                        : guideModal._mode === "bike" ? "bicycling" : guideModal._mode === "car" ? "driving" : "transit";
-                      const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : "🚆";
+                      const mode = detectLegMode(how, guideModal._mode);
+                      const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
                       const a = resolveStopCoords(prevStop.name), b = resolveStopCoords(day.stops[0].name);
                       const km = a && b ? kmBetween(a, b) : null;
-                      const exact = exactDurations[`${prevStop.name}|${day.stops[0].name}|${guideModal._mode}`];
+                      const exact = exactDurations[`${prevStop.name}|${day.stops[0].name}|${mode}`];
                       const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(prevStop.name + ", Denmark")}&destination=${encodeURIComponent(day.stops[0].name + ", Denmark")}&travelmode=${mode}`;
                       return (
                         <a href={mapsUrl} target="_blank" rel="noreferrer"
@@ -3061,12 +3115,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           {i < day.stops.length - 1 ? (() => {
                             const nextStop = day.stops[i + 1];
                             const how = day.glance?.legs?.[i]?.how || "";
-                            const mode = /bike|cycl/i.test(how) ? "bicycling" : /drive|car\b/i.test(how) ? "driving" : /walk/i.test(how) ? "walking" : /train|bus|transit/i.test(how) ? "transit"
-                              : guideModal._mode === "bike" ? "bicycling" : guideModal._mode === "car" ? "driving" : "transit";
+                            const mode = detectLegMode(how, guideModal._mode);
                             const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
                             const a = resolveStopCoords(stop.name), b = resolveStopCoords(nextStop.name);
                             const km = a && b ? kmBetween(a, b) : null;
-                            const exact = exactDurations[`${stop.name}|${nextStop.name}|${guideModal._mode}`];
+                            const exact = exactDurations[`${stop.name}|${nextStop.name}|${mode}`];
                             const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(stop.name + ", Denmark")}&destination=${encodeURIComponent(nextStop.name + ", Denmark")}&travelmode=${mode}`;
                             return (
                               <div style={{ borderLeft: `2px dashed ${C.border}`, marginLeft: 31, padding: "7px 0 9px 14px", minHeight: 14 }}>

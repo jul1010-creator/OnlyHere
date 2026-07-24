@@ -1,5 +1,20 @@
 import { TOWN_COORDS } from "../data/towns";
 
+// Works out the real travel mode for ONE leg of a guide, instead of assuming
+// the traveler's whole-trip primary mode applies to every leg. This is what
+// lets a mostly-bike trip correctly show/fetch a ferry leg to Bornholm (etc.)
+// instead of asking Google Directions for a "bike route" across open water,
+// which fails and silently falls back to a wrong straight-line estimate.
+export const detectLegMode = (how, primaryMode) => {
+  const text = how || "";
+  if (/ferry|boat/i.test(text)) return "transit"; // closest Directions API mode — transit itineraries can include ferry legs
+  if (/bike|cycl/i.test(text)) return "bicycling";
+  if (/drive|car\b/i.test(text)) return "driving";
+  if (/walk/i.test(text)) return "walking";
+  if (/train|bus|transit/i.test(text)) return "transit";
+  return primaryMode === "bike" ? "bicycling" : primaryMode === "car" ? "driving" : "transit";
+};
+
 export const getSeason = () => {
   const m = new Date().getMonth(); // 0=Jan
   if ([11, 0, 1].includes(m)) return "winter";

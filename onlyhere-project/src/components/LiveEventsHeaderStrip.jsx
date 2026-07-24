@@ -33,7 +33,8 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
       {showList.length > 0 && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: isLive ? "0 0 6px #4CAF50" : "none" }} />
+            {isLive && <style>{`@keyframes gemlyxLiveDotPulse { 0% { box-shadow: 0 0 0 0 rgba(76,175,80,0.6); } 70% { box-shadow: 0 0 0 6px rgba(76,175,80,0); } 100% { box-shadow: 0 0 0 0 rgba(76,175,80,0); } }`}</style>}
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: isLive ? "0 0 6px #4CAF50" : "none", animation: isLive ? "gemlyxLiveDotPulse 1.6s ease-in-out infinite" : "none" }} />
             <span style={{ fontSize: 11, fontWeight: 700, color: isLive ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5 }}>{isLive ? "Live Events" : isInDenmark(userCoords) ? "Coming Up Near You" : "Coming Events"}</span>
           </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, marginBottom: 8 }}>
