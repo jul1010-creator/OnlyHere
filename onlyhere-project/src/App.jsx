@@ -36,6 +36,15 @@ import "leaflet/dist/leaflet.css";
 
 export default function Gemlyx() {
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
+  // Belt-and-suspenders for hero video autoplay — React's `muted` JSX prop doesn't
+  // always set the real DOM `.muted` property before the browser's autoplay-eligibility
+  // check runs (a known cross-browser quirk, worst on iOS Safari), which silently falls
+  // back to showing a play button instead of just playing. Setting it imperatively here
+  // covers the case where the video was already cached and onCanPlay never re-fires.
+  useEffect(() => {
+    const v = heroVideoRef.current;
+    if (v) { v.muted = true; v.play().catch(() => {}); }
+  }, []);
 
   // Pull in anything published via Content Studio and fold it into the shared content
   // arrays. towns/majorEvents/freeEntrance/foodSpots/nightlifeSpots are module-level
@@ -46,6 +55,7 @@ export default function Gemlyx() {
   const [, bumpLiveContent] = useState(0);
   const fetchedLiveContent = useRef(false);
   const mergedContentIds = useRef(new Set());
+  const heroVideoRef = useRef(null);
   const loadLiveContent = async () => {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true`, {
@@ -935,6 +945,14 @@ Rules: always prefix times with ~. ${mixedModes ? `The traveler explicitly wants
     setGuideModal("loading");
     setGuideError(null);
     try {
+      // The person's own stated trip length (e.g. "I'm here for 4 days") is the source of
+      // truth for day count — NOT whether the assistant's chat reply happened to format
+      // itself with explicit "Day 1:" headers for every day. Relying on that formatting
+      // was silently collapsing real multi-day requests into a single day whenever the
+      // wording varied even slightly. Detect it directly from the conversation and pass
+      // it through as a hard requirement instead.
+      const dayCountMatch = convoText.match(/\b(\d{1,2})\s*(?:-|–|to)?\s*(?:day|days)\b/i);
+      const requestedDays = dayCountMatch ? Math.min(parseInt(dayCountMatch[1], 10), 14) : null;
       // One Gemini + Google Search cross-check per guide (not per chat message — the
       // conversation itself stays fast; this only runs at the moment a real artifact
       // gets built). Pulls out the place names mentioned so far and asks Gemini to
@@ -957,7 +975,7 @@ Rules: always prefix times with ~. ${mixedModes ? `The traveler explicitly wants
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a specific ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and a single bare number is misleading without that context. If cost is worth mentioning, say "check current ticket prices online" instead, or describe the price tier qualitatively ("budget-friendly", "a bit of a splurge") without a specific number.
 CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day. Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
             { role: "user", content: convoText }
           ],
           max_tokens: 1800,
@@ -1071,9 +1089,9 @@ If the conversation only covers a single day or a few stops with no explicit day
   ]);
   const [aiInput, setAiInput] = useState("");
   const [intakeTime, setIntakeTime] = useState(null);
-  const [intakeBudget, setIntakeBudget] = useState(null);
+  const [intakeBudgetText, setIntakeBudgetText] = useState("");
   const [intakeInterest, setIntakeInterest] = useState(null);
-  const [intakeTransport, setIntakeTransport] = useState(null);
+  const [intakeTransport, setIntakeTransport] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -1466,7 +1484,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 )}
 
-                {aiMessages.length > 2 && !aiLoading && (
+                {(() => {
+                  const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
+                  const readyToBuild = lastAssistantMsg && isFullPlanText(lastAssistantMsg.text);
+                  return readyToBuild && !aiLoading;
+                })() && (
                   <>
                     <button onClick={generateGuide}
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 4 }}>
@@ -1735,8 +1757,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {/* Hero */}
               <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: `url('/picture3.png') center/cover no-repeat` }}>
                 {!videoError && (
-                  <video src="/video1.mp4" autoPlay muted loop playsInline
-                    onCanPlay={() => setVideoReady(true)}
+                  <video ref={heroVideoRef} src="/video1.mp4" autoPlay muted defaultMuted loop playsInline
+                    onCanPlay={(e) => { e.target.muted = true; setVideoReady(true); e.target.play().catch(() => {}); }}
                     onError={() => setVideoError(true)}
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
                 )}
@@ -2397,10 +2419,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Budget</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  {["Keep it cheap", "Moderate", "Money's not the issue"].map(b => (
-                    <Pill key={b} label={b} active={intakeBudget === b} onClick={() => setIntakeBudget(intakeBudget === b ? null : b)} />
-                  ))}
+                <div style={{ marginBottom: 14 }}>
+                  <input value={intakeBudgetText} onChange={e => setIntakeBudgetText(e.target.value)}
+                    placeholder="e.g. 500 kr/day, or 'backpacker budget'"
+                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: "border-box" }} />
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>Type a real number if you have one — "moderate" means something different in Denmark than it does everywhere else.</div>
                 </div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into</div>
@@ -2410,21 +2433,21 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   ))}
                 </div>
 
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeTime || intakeBudget || intakeInterest || intakeTransport ? 16 : 0 }}>
-                  {["🚗 Car", "🚲 Bike", "🚆 Public transport"].map(tr => (
-                    <Pill key={tr} label={tr} active={intakeTransport === tr} onClick={() => setIntakeTransport(intakeTransport === tr ? null : tr)} />
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeTime || intakeBudgetText || intakeInterest || intakeTransport.length ? 16 : 0 }}>
+                  {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car"].map(tr => (
+                    <Pill key={tr} label={tr} active={intakeTransport.includes(tr)} onClick={() => setIntakeTransport(intakeTransport.includes(tr) ? intakeTransport.filter(x => x !== tr) : [...intakeTransport, tr])} />
                   ))}
                 </div>
 
-                {(intakeTime || intakeBudget || intakeInterest || intakeTransport) && (
+                {(intakeTime || intakeBudgetText || intakeInterest || intakeTransport.length > 0) && (
                   <button
                     onClick={() => {
                       const parts = [];
                       if (intakeTime) parts.push(`I have ${intakeTime.toLowerCase()}`);
-                      if (intakeBudget) parts.push(intakeBudget === "Keep it cheap" ? "on a tight budget" : intakeBudget === "Moderate" ? "with a moderate budget" : "with a flexible budget");
+                      if (intakeBudgetText.trim()) parts.push(`with a budget of ${intakeBudgetText.trim()}`);
                       if (intakeInterest) parts.push(intakeInterest === "A bit of everything" ? "and I like a bit of everything" : `and I'm mainly into ${intakeInterest.toLowerCase()}`);
-                      if (intakeTransport) parts.push(`getting around by ${intakeTransport.replace(/^\S+\s/, "").toLowerCase()}`);
+                      if (intakeTransport.length) parts.push(`getting around ${intakeTransport.length > 1 ? "by a mix of " : "by "}${intakeTransport.map(t => t.replace(/^\S+\s/, "").toLowerCase()).join(" and ")}`);
                       setAiInput(parts.join(", ") + ". Plan me something.");
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
                     }}
@@ -3002,10 +3025,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ maxWidth: 480, margin: "0 auto", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20, padding: "22px" }} onClick={e => e.stopPropagation()}>
             {guideModal === "loading" ? (
               <div style={{ textAlign: "center", padding: "50px 20px" }}>
-                <div style={{ fontSize: 34, marginBottom: 14, animation: "gemlyxPulse 1.6s ease-in-out infinite" }}>📖</div>
+                <div style={{ fontSize: 34, marginBottom: 14, animation: "gemlyxPulse 1.6s ease-in-out infinite" }}>🗺️</div>
                 <div style={{ fontSize: 15, color: C.text, fontWeight: 700, marginBottom: 6, fontFamily: "'Cormorant Garamond', serif" }}>Building your guide…</div>
                 <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, maxWidth: 280, margin: "0 auto" }}>
-                  Checking real places, routes and travel times — this takes a few seconds, not a bug 🙂
+                  Checking real places, routes and travel times — this takes a few seconds.
                 </div>
                 <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 18 }}>
                   {[0, 1, 2].map(i => (
