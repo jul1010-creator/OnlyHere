@@ -15,7 +15,7 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
 
   return (
     <div style={{ position: "relative", flex: compact ? 1 : "none", minWidth: 0 }}>
-      <div style={{ display: "flex", gap: compact ? 10 : 14, overflowX: "auto", padding: compact ? "0 4px" : "10px 0", marginTop: compact ? 0 : 4 }}>
+      <div style={{ display: "flex", gap: compact ? 10 : 14, overflowX: "auto", padding: compact ? "0 4px" : "4px 0", marginTop: 0 }}>
         {WEATHER_CITIES.map(c => {
           const d = weather[c.key];
           return (

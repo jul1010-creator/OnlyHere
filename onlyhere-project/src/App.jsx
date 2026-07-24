@@ -5,6 +5,7 @@ import { events, majorEvents, vikingEvents } from "./data/events";
 import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
+import { nightlifeTowns } from "./data/nightlifeTowns";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
 import { roadTrips, seasonalItineraries } from "./data/roadtrips";
@@ -92,6 +93,7 @@ export default function Gemlyx() {
         else if (row.type === "free") freeEntrance.push({ id, ...item });
         else if (row.type === "food") foodSpots.push({ id, ...item });
         else if (row.type === "night") nightlifeSpots.push({ id, ...item });
+        else if (row.type === "nightTown") nightlifeTowns.push({ id, ...item });
         else if (row.type === "booking") bookingRows.push({ id, ...item });
       });
       if (bookingRows.length > 0) setCraftItems(prev => [...prev, ...bookingRows]);
@@ -519,6 +521,11 @@ export default function Gemlyx() {
                           : [["Who Is It For", t.whoFor], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark]]),
         ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
       ] }; }
+    if (type === "nightTown") return { name: t.name, emoji: t.emoji || "🌃", photo: `/nightlife-towns/${slugify(t.name)}.jpg`, desc: t.desc, color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
+      blogBody: [
+        ...bbData([["Who Is It Perfect For", t.whoFor], ["After Dark", t.afterDark]]),
+        ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
+      ] };
     if (type === "booking") return { name: t.name, type: t.type || "Local", what: Array.isArray(t.what) ? t.what : [t.what].filter(Boolean), rating: t.rating ? Number(t.rating) : null, location: t.location || "", price: t.price || "See website", priceNote: t.priceNote || "", travelTime: t.travelTime || "", bookingType: t.bookingType || "contact", popularityTag: t.popularityTag || "", transportWarning: !!t.transportWarning, emoji: t.emoji || "🔨", photo: `/craft/${slugify(t.name)}.jpg`, color: t.color || "#8E6B1F", desc: t.desc,
       timeNeeded: t.timeNeeded || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
       blogBody: [
@@ -540,6 +547,7 @@ export default function Gemlyx() {
         free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
         food: { queries: [`${name} Denmark what to order menu prices history`, `${name} Denmark best time to visit busy hours local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
         night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
+        nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[studioType];
       let context = "";
@@ -588,6 +596,10 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "ca
 Real example (bar): {"name": "Toga Vinstue", "type": "Local", "crowd": "Almost entirely Danish", "category": "Brown bar (bodega)", "location": "Indre By, Copenhagen", "isClub": false, "desc": "A classic \\"brown bar\\" — old wood interior, low light, walls covered in political cartoons. Sits five minutes from the Danish Parliament, and actual lawmakers drink here. Cheap beer (around 45 DKK), smoking still allowed indoors, genuinely local despite the central address.", "beforeDark": "Quiet through the afternoon — a handful of regulars reading the paper over a beer.", "afterDark": "Fills up after 8pm with a real mix of ages, loud conversation over the bar's own political cartoons on the walls."}
 ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "crowd": "who actually goes here — locals, students, tourists, mixed", "category": "short category, e.g. 'Brown bar (bodega)' or 'Nightclub'", "location": "Neighbourhood, City", "isClub": "true only if this is genuinely a dedicated dance club/nightclub, false for an ordinary bar/pub even if it's lively late", "emoji": "one emoji", "desc": "2-4 sentences in the voice above — the intro, what it's actually like", "whoFor": "who this genuinely suits — real and specific, not generic positivity", "beforeDark": "what it's like earlier in the day/evening — EMPTY STRING if isClub is true", "afterDark": "what it's actually like once it picks up — EMPTY STRING if isClub is true", "whenEnter": "when people actually show up and when it peaks — ONLY if isClub is true, else empty string", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
+        nightTown: `Draft a complete Gemlyx nightlife TOWN overview for ${name}, Denmark — this describes the town's whole nightlife scene as an introduction before someone browses individual bars/clubs there, following this EXACT structure (a premium travel editor's voice, never Wikipedia — focus on the actual FEEL of a night out in this town): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field) -> Who Is It Perfect For -> After Dark -> What to Be Aware Of (EXACTLY 3 short bullets). Total word count across WhoFor+AfterDark+ThingsToKnow+GemlyxFind should land around 180-280 words — this is an overview, not a single-venue page, so keep it a level more general than a bar/club entry while still being concrete and specific to THIS town's scene, not generic nightlife platitudes.
+Real example (structure only, invent nothing): {"name": "Aarhus", "desc": "Denmark's second city punches well above its weight after dark — a dense student population (Aarhus University alone has ~40,000 students) keeps the bar scene busy on weeknights, not just weekends, and the whole nightlife area is compact enough to walk between venues.", "whoFor": "Best for people who want a real mixed local/student crowd without the tourist density of Copenhagen's main strips — less polished, more genuinely Danish.", "afterDark": "Picks up noticeably later than a typical night out elsewhere — many venues don't fill until 11pm, and weeknight energy rivals weekends thanks to the student population."}
+${STUDIO_VOICE}
+Respond with ONLY strict JSON: {"name": ${J(name)}, "emoji": "one emoji", "desc": "2-4 sentences in the voice above — the intro, what a night out here is actually like, with a real concrete detail (student population size, bar density, a real street name) not vague atmosphere words", "whoFor": "who this town's nightlife genuinely suits — real and specific, not generic positivity", "afterDark": "describe the actual FEEL and rhythm of a night out here — when it picks up, what the energy is like, real specific detail", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag — a real street, area, or local habit, distinct from individual bar listings", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
         booking: `Draft a complete Gemlyx Booking (bookable craft/experience) entry for ${name}, Denmark, following the same Attraction structure Gemlyx uses for its experiences (a premium travel editor's voice, never Wikipedia — focus on the EXPERIENCE, not history): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field — do NOT write a separate Overview, that would just repeat it) -> Why People Love It -> Perfect For -> Things to Know (EXACTLY 3 short bullets). Total word count across WhyPeopleLoveIt+PerfectFor+ThingsToKnow+GemlyxFind should land around 220-350 words — short paragraphs, never encyclopedic. Never repeat what's already in the Price block or At a Glance.
 Real example: {"name": "Viking Center Ribe", "type": "Major", "what": ["blacksmithing", "leather", "textiles"], "location": "Ribe", "price": "180 DKK", "bookingType": "online", "desc": "Artisans craft authentic Viking jewellery, leather and textiles on site — watch smithing demonstrations and try archery in the reconstructed village."}
 ${STUDIO_VOICE}
@@ -659,6 +671,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       } else if (studioType === "booking") {
         const nextId = Math.max(...craftItems.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, timeNeeded: ${J(t.timeNeeded)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
+      } else if (studioType === "nightTown") {
+        const nextId = Math.max(0, ...nightlifeTowns.map(x => x.id)) + 1;
+        code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who Is It Perfect For", t.whoFor], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
       } else if (studioType === "food") {
         const nextId = Math.max(...foodSpots.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D4AF37")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Why Visit", t.whyVisit], ["Who Is It For", t.whoFor], ["What Do They Serve", t.whatServe], ["Best Arrival Time", t.bestArrival]])}\n${bbBullets("Essential to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
@@ -1631,7 +1646,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Festival"], ["free", "🎟 Free Entrance"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["festival", "🎪 Festival"], ["free", "🎟 Free Entrance"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {label}
@@ -1640,13 +1655,45 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade" }[studioType]}
+                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightTown: "Town name, e.g. Aarhus" }[studioType]}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
                       <button onClick={generateArea} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
                         {studioLoading ? "Researching…" : "Draft it"}
                       </button>
                     </div>
+                    {(() => {
+                      // Live "did you mean an existing one?" check — a generic name like "Old Irish
+                      // Pub" genuinely exists in multiple Danish towns, so a plain name match alone
+                      // isn't enough to flag; only warn if the typed text doesn't ALSO include a
+                      // town/city that would disambiguate it (so "Old Irish Pub Odense" stays silent).
+                      const typed = studioTown.trim();
+                      if (typed.length < 3) return null;
+                      const norm = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, "").trim();
+                      const typedNorm = norm(typed);
+                      const sourceArrays = {
+                        town: towns, festival: [...events, ...majorEvents], free: freeEntrance,
+                        food: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns,
+                      };
+                      const arr = sourceArrays[studioType] || [];
+                      const cityWords = ["copenhagen", "aarhus", "aalborg", "odense", "esbjerg", "randers", "kolding", "horsens", "vejle", "roskilde"];
+                      const typedHasCity = cityWords.some(c => typedNorm.includes(c));
+                      const matches = arr.filter(item => {
+                        const itemNorm = norm(item.name);
+                        return itemNorm === typedNorm || itemNorm.includes(typedNorm) || typedNorm.includes(itemNorm);
+                      });
+                      if (matches.length === 0 || typedHasCity) return null;
+                      return (
+                        <div style={{ background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 10, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#FFB347", lineHeight: 1.6 }}>
+                          Did you mean one of these already-published entries? A name like this can genuinely exist in more than one town — if this is a different one, add the city to the name (e.g. "{typed} Aarhus") so it's clearly distinct.
+                          <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                            {matches.slice(0, 5).map((m, i) => (
+                              <div key={i} style={{ color: "#FFD9A0" }}>• {m.name}{m.location ? ` — ${m.location}` : m.town ? ` — ${m.town}` : m.region ? ` — ${m.region}` : m.city ? ` — ${m.city}` : ""}</div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {studioError && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 8 }}>{studioError}</div>}
                     {studioResult && (
                       <>
@@ -2186,9 +2233,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     const spots = townGroups[t];
                     const localCount = spots.filter(s => s.type === "Local").length;
                     const majorCount = spots.filter(s => s.type === "Major").length;
+                    const townContent = nightlifeTowns.find(nt => nt.name === t);
                     return (
                       <div key={t} onClick={() => setNightlifeTownView(t)} style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${C.border}`, padding: "16px 0", cursor: "pointer" }}>
-                        <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🍺</div>
+                        <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, overflow: "hidden" }}>
+                          {townContent?.photo ? (
+                            <img src={townContent.photo} alt={t} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (townContent?.emoji || "🍺")}
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{t}</div>
                           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
@@ -2207,6 +2259,28 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.muted, fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 14, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     ‹ All towns
                   </button>
+
+                  {(() => {
+                    const townContent = nightlifeTowns.find(nt => nt.name === nightlifeTownView);
+                    if (!townContent) return null;
+                    return (
+                      <div style={{ marginBottom: 18 }}>
+                        {townContent.photo && (
+                          <div style={{ height: 160, borderRadius: 14, overflow: "hidden", marginBottom: 12, background: C.surface }}>
+                            <img src={townContent.photo} alt={townContent.name} onError={e => { e.target.style.display = "none"; }}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          </div>
+                        )}
+                        <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7 }}>{townContent.desc}</div>
+                        {townContent.gemlyxFind && (
+                          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginTop: 12, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+                            ◆ <b>Gemlyx Find:</b> {townContent.gemlyxFind}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 14 }}>Bars &amp; clubs in {nightlifeTownView}</div>
 
                   <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
@@ -2887,8 +2961,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
           </div>
         </div>
 
-        {/* Weather — own row below logo/search, full width, so all cities' labels stay readable instead of being squeezed into one crowded row */}
-        <div style={{ marginTop: 8 }}>
+        {/* Weather — own row below logo/search, full width, centered, so all cities' labels stay readable instead of being squeezed into one crowded row */}
+        <div style={{ marginTop: 2, display: "flex", justifyContent: "center" }}>
           <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
         </div>
 
