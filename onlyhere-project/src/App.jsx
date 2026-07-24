@@ -416,6 +416,7 @@ const foodSpots = [
 ];
 
 const essentials = [
+  { id: 300, name: "Overtourism in Central Copenhagen", category: "Culture & Etiquette", emoji: "🚶", desc: "Copenhagen's inner city, especially Strøget (the main pedestrian shopping street), has grown genuinely crowded with tourism in recent years. Some restaurants along the busiest stretches cater so heavily to visitors that staff may not speak Danish at all — a real shift from a few years ago, and a sign you're in a tourist-facing zone rather than a local one.", howTo: "Strøget itself is still worth a walk for the architecture and people-watching, but treat it as a thoroughfare, not a destination. For food and a more genuine feel, step a few streets off it into Indre By's side streets, or head to neighbourhoods like Nørrebro or Vesterbro where day-to-day Danish life is more visible.", price: "Free — just a mindset shift", link: null, tip: "If a restaurant's menu is only in English with photos of every dish, that's usually a reliable sign it's built for tourist volume rather than local regulars — not necessarily bad food, just worth knowing what you're walking into." },
   { id: 1, name: "DOT Tickets App", category: "Transport", emoji: "🎫", desc: "Buy metro, bus and train tickets for the Copenhagen area straight from your phone. Works with any international card — no Danish accounts needed.", howTo: "Download DOT Tickets, pick your zones and pay with any Visa or Mastercard. Show the ticket on your screen.", price: "From 24 DKK per ticket", link: "https://dinoffentligetransport.dk/en", tip: "A City Pass (24h–120h) gives unlimited travel in Copenhagen including the airport metro — usually the best deal for visitors." },
   { id: 7, name: "Avoid the Transit Fine", category: "Transport", emoji: "⚠️", desc: "Denmark's transport fine (kontrolafgift) is real and common among tourists — issued on the spot for an invalid ticket, even by accident. It's 750 DKK on the Metro and light rail, and 1,000 DKK on DSB trains and Movia buses. The physical Rejsekort card was discontinued on 28 May 2026 — a new \"Basiskort\" now exists for physical-card users, but a digital ticket is far simpler for a short visit.", howTo: "The 3 mistakes that catch tourists most: (1) Installing a ticket app isn't the same as buying a ticket — you must actually purchase and activate it before boarding. (2) If using a check-in/check-out app, forgetting to check OUT at the end is the single most common tourist fine. (3) A dead phone battery mid-journey means no valid ticket — inspectors don't make exceptions.", price: "750–1,000 DKK if fined", link: "https://dinoffentligetransport.dk/en", tip: "Simplest fix for visitors: buy a fixed ticket in the DOT app or Rejsebillet before you travel, rather than a check-in/check-out card — nothing to forget to end." },
   { id: 2, name: "Rent a Bike", category: "Transport", emoji: "🚲", desc: "Copenhagen has 390km of cycle lanes. Renting a bike is the best way to see the city.", howTo: "Bycyklen electric bikes available across Copenhagen via app. Or rent from shops from 100 DKK/day.", price: "From 100 DKK/day", link: "https://apps.apple.com/dk/app/bycyklen/id985075832", linkAndroid: "https://play.google.com/store/apps/details?id=dk.bycyklen.app", tip: "Cycle on the right, signal with your arm, always lock up." },
@@ -797,6 +798,8 @@ const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveI
           style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
           ↗ Get Directions
         </a>
+
+        <ReviewsSection itemType={kind} itemName={item.name} />
       </div>
     </div>
   );
@@ -981,6 +984,83 @@ const GemlyxFindCard = ({ text }) => {
     <div style={{ background: `linear-gradient(135deg, ${C.gold}14, ${C.accent}0A)`, border: `1px solid ${C.gold}44`, borderRadius: 14, padding: "16px", marginBottom: 20 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>✦ Gemlyx Find</div>
       <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{text}</div>
+    </div>
+  );
+};
+
+// A real, public reviews section attachable to any detail page — same trust
+// pattern as the Suggestions feature (anonymous, public insert, publicly
+// readable — genuine visitor opinion, not a factual claim Gemlyx is vouching for).
+const ReviewsSection = ({ itemType, itemName }) => {
+  const [reviews, setReviews] = useState(null);
+  const [name, setName] = useState("");
+  const [text, setText] = useState("");
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews?select=*&item_type=eq.${encodeURIComponent(itemType)}&item_name=eq.${encodeURIComponent(itemName)}&order=created_at.desc`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        });
+        const data = await res.json();
+        if (!cancelled) setReviews(Array.isArray(data) ? data : []);
+      } catch { if (!cancelled) setReviews([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [itemType, itemName]);
+
+  const submit = async () => {
+    if (!text.trim() || status === "sending") return;
+    setStatus("sending");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ item_type: itemType, item_name: itemName, author: name.trim() || "Anonymous", text: text.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.[0]) {
+        setReviews(prev => [data[0], ...(prev || [])]);
+        setText(""); setStatus("sent");
+        setTimeout(() => setStatus(null), 1800);
+      } else setStatus("error");
+    } catch { setStatus("error"); }
+  };
+
+  return (
+    <div style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>💬 What travelers say</div>
+      <div style={{ fontSize: 11, color: C.muted, marginBottom: 16 }}>Real visitor comments — not edited or verified by Gemlyx, shown as written.</div>
+
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Name (optional)"
+          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 8, boxSizing: "border-box" }} />
+        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Been here? Share what it was really like…" rows={3}
+          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
+        <button onClick={submit} disabled={status === "sending" || !text.trim()}
+          style={{ background: C.gold, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          {status === "sending" ? "Posting…" : status === "sent" ? "✓ Posted" : "Post comment"}
+        </button>
+        {status === "error" && <div style={{ fontSize: 11, color: "#FFB347", marginTop: 6 }}>Couldn't post — try again.</div>}
+      </div>
+
+      {reviews === null ? (
+        <div style={{ fontSize: 12, color: C.muted }}>Loading comments…</div>
+      ) : reviews.length === 0 ? (
+        <div style={{ fontSize: 12, color: C.muted }}>No comments yet — be the first to share your experience.</div>
+      ) : (
+        reviews.map((r, i) => (
+          <div key={r.id || i} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: i < reviews.length - 1 ? `1px solid ${C.border}` : "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{r.author || "Anonymous"}</div>
+              <div style={{ fontSize: 10, color: C.muted }}>{r.created_at ? new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : ""}</div>
+            </div>
+            <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{r.text}</div>
+          </div>
+        ))
+      )}
     </div>
   );
 };
@@ -1405,6 +1485,7 @@ export default function Gemlyx() {
 
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
   const [glancePending, setGlancePending] = useState(0);
+  const [weatherPending, setWeatherPending] = useState(0);
 
   // ── Founder studio (visible only at /#studio): Tavily+OpenAI drafts complete
   // entries — card + long-form blogBody — for any content type, following the
@@ -1650,7 +1731,7 @@ export default function Gemlyx() {
   const [publishErrorDetail, setPublishErrorDetail] = useState(null);
   const [studioPhotoName, setStudioPhotoName] = useState("");
 
-  const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Also BANNED outright, no exceptions: "nestled in the heart", "captivates with", "a tapestry of culture", "intertwines with stories" — these are cliché AI-travel-writing tells, not real description. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences. If the search context includes real visitor/local opinions (e.g. from Reddit or forums), fold that texture into "Things to Know" or "What Travelers Love" as plain observed fact — write "the queue regularly runs over an hour in summer" or "locals tend to avoid it on weekends", NOT "Reddit users say..." or "according to visitors online...". Never name the source or platform. Never quote anyone directly — always paraphrase in your own words, and only include a specific claim if multiple sources agree or one source is clearly credible; a single offhand comment isn\'t worth repeating as fact. NEVER name a specific sub-venue, stage, room, or named feature (e.g. a stage name at a festival, a specific gallery room in a museum) unless that EXACT name appears in the search context — a plausible-sounding invented name (like a fake stage name) is a serious factual error, not a stylistic risk; if you cannot name a specific spot with confidence, describe the experience generically instead ("the main stage", "the indoor venue") rather than inventing a proper name. PRICES: always state prices in the currency actually found in the search context first (Danish prices are in kr./DKK) — you may add an approximate EUR/USD conversion in parentheses ONLY if the search context itself provides one; never calculate or invent a conversion yourself. If no real price is found, write "See website" rather than estimating one. GEMLYX FIND: this is a premium signature feature — it must be a genuinely specific, verified insider tip pulled from the search context (a real side-street spot, a real quiet corner, a real local tradition), never a generic restatement of the main attraction. If the search context has nothing that specific, OMIT gemlyxFind entirely (leave it an empty string) rather than filling it with a plausible-sounding placeholder — an empty section is honest, a fabricated one risks the brand. UNCERTAINTIES: every response MUST include an "uncertainties" array field (can be empty if genuinely nothing is unclear). If your own research and the Google AI cross-check (when provided) disagree with each other, or if BOTH leave something genuinely unconfirmed (a price, a date, whether a specific place still operates), list it as a short plain sentence in "uncertainties" — this is shown directly to the founder as a flag to check personally, so be specific ("Ticket price unconfirmed — Tavily found no number, Google AI search found none either") rather than vague ("some details may be wrong").';
+  const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Also BANNED outright, no exceptions: "nestled in the heart", "captivates with", "a tapestry of culture", "intertwines with stories", "vibrant", "electrifying", "must-see", "hidden treasure", "off the beaten path", "a feast for the senses" — these are cliché AI-travel-writing tells, not real description. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences. If the search context includes real visitor/local opinions (e.g. from Reddit, Quora, or Google/TripAdvisor-style reviews), fold that texture into "Things to Know" or "What Travelers Love" as plain observed fact — write "the queue regularly runs over an hour in summer" or "locals tend to avoid it on weekends", NOT "Reddit users say..." or "according to reviews..." or "according to visitors online...". Never name the source or platform, whichever it was. Never quote anyone directly — always paraphrase in your own words, and only include a specific claim if multiple sources agree or one source is clearly credible; a single offhand comment isn\'t worth repeating as fact. NEVER name a specific sub-venue, stage, room, or named feature (e.g. a stage name at a festival, a specific gallery room in a museum) unless that EXACT name appears in the search context — a plausible-sounding invented name (like a fake stage name) is a serious factual error, not a stylistic risk; if you cannot name a specific spot with confidence, describe the experience generically instead ("the main stage", "the indoor venue") rather than inventing a proper name. PRICES: always state prices in the currency actually found in the search context first (Danish prices are in kr./DKK) — you may add an approximate EUR/USD conversion in parentheses ONLY if the search context itself provides one; never calculate or invent a conversion yourself. If no real price is found, write "See website" rather than estimating one. GEMLYX FIND: this is a premium signature feature — it must be a genuinely specific, verified insider tip pulled from the search context (a real side-street spot, a real quiet corner, a real local tradition), never a generic restatement of the main attraction. If the search context has nothing that specific, OMIT gemlyxFind entirely (leave it an empty string) rather than filling it with a plausible-sounding placeholder — an empty section is honest, a fabricated one risks the brand. UNCERTAINTIES: every response MUST include an "uncertainties" array field (can be empty if genuinely nothing is unclear). If your own research and the Google AI cross-check (when provided) disagree with each other, or if BOTH leave something genuinely unconfirmed (a price, a date, whether a specific place still operates), list it as a short plain sentence in "uncertainties" — this is shown directly to the founder as a flag to check personally, so be specific ("Ticket price unconfirmed — Tavily found no number, Google AI search found none either") rather than vague ("some details may be wrong"). HONEST TIERS: be genuinely conservative with "Can\'t Miss Out" or similarly strong recommendation labels — reserve them for places that truly are exceptional or unique, not every town or place you draft. A quiet residential suburb or an ordinary neighborhood is NOT "Can\'t Miss Out" just because it exists; call it what it is ("Worth Considering" or lower) rather than inflating every entry\'s importance, which is exactly the brochure salesmanship this voice exists to avoid. TONE: write like a well-travelled local giving a friend the real, slightly blunt version — closer to a good Reddit or Google review than a tourism board — never trying to "sell" a place, and always willing to say a place is fine-but-not-special if that\'s the truth.';
 
   const slugify = (s) => s.toLowerCase().replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "aa").replace(/[^a-z0-9]/g, "");
   const J = (v) => JSON.stringify(v ?? "");
@@ -1709,12 +1790,12 @@ export default function Gemlyx() {
     setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     try {
       const cfg = {
-        town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`] },
-        festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`] },
-        free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`] },
-        food: { queries: [`${name} Denmark what to order prices history reviews`, `${name} Denmark local tips address`, `${name} reddit r/Denmark r/food worth it locals think`] },
-        night: { queries: [`${name} Denmark bar atmosphere crowd prices reviews`, `${name} Denmark local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`] },
-        booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`] },
+        town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`, `${name} quora google reviews honest opinion worth it`] },
+        festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
+        free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
+        food: { queries: [`${name} Denmark what to order prices history reviews`, `${name} Denmark local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
+        night: { queries: [`${name} Denmark bar atmosphere crowd prices reviews`, `${name} Denmark local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
+        booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[studioType];
       let context = "";
       for (const q of cfg.queries) {
@@ -1909,6 +1990,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
   // (a) how to travel between consecutive stops and (b) where to stay. Never invents —
   // falls back to "Check Rejseplanen" wording when the context doesn't support a claim.
   const fetchGuideWeather = (days, gid) => {
+    setWeatherPending(days.length);
     days.forEach(async (day, idx) => {
       try {
         const point = day.stops.map(s => {
@@ -1928,6 +2010,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
           ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, weather: { icon: weatherIcon(slot.condition), temp: Math.round(slot.temperature_c), risk } } : d) }
           : prev);
       } catch { /* weather is a nice-to-have — leave this day without it */ }
+      finally { setWeatherPending(p => Math.max(0, p - 1)); }
     });
   };
 
@@ -2149,11 +2232,17 @@ If the conversation only covers a single day or a few stops with no explicit day
 
   const saveCurrentGuide = () => {
     if (!guideModal || guideModal === "loading") return;
+    const weatherMissing = guideModal.days.some(d => !d.weather);
+    if (weatherMissing && weatherPending > 0) {
+      setToast("⏳ Still checking weather for this trip — try Save again in a few seconds");
+      setTimeout(() => setToast(null), 2600);
+      return;
+    }
     const newGuide = { id: Date.now(), title: guideModal.title, days: guideModal.days, savedAt: new Date().toISOString() };
     const updated = [newGuide, ...savedGuides].slice(0, 20);
     setSavedGuides(updated);
     try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
-    setToast("📖 Guide saved");
+    setToast("📖 Guide saved — weather included for each day");
     setTimeout(() => setToast(null), 2200);
   };
 
@@ -2257,7 +2346,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const NAV_ITEMS = [
     { id: "home", label: "🧭 Explore" },
     { id: "essentials", label: "✓ Essentials" },
-    { id: "craft", label: "◈ Booking" },
+    // { id: "craft", label: "◈ Booking" }, // shelved per Oliver — "crafting part gotta go for now, completely"
     { id: "attractions", label: "🆓 Free Entrance" },
     { id: "events", label: "◈ Events" },
     { id: "food", label: "🍽 Food" },
@@ -2615,7 +2704,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <>
                     <button onClick={generateGuide}
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 4 }}>
-                      📖 I got you — turn this into a guide
+                      📖 Turn this into a guide
                     </button>
                     <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>Takes a few seconds — checking real places and routes</div>
                   </>
@@ -2738,7 +2827,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Festival"], ["free", "🎟 Free Entrance"], ["booking", "🔨 Booking"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["festival", "🎪 Festival"], ["free", "🎟 Free Entrance"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {label}
@@ -2905,7 +2994,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", icon: "🍺" },
                 { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", icon: "🚗" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
-                { id: "craft", img: "/picture9.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" },
+                // { id: "craft", img: "/picture9.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" }, // shelved per Oliver
                 { id: "attractions", img: "/picture7.jpg", title: "Free Entrance", sub: "Genuinely free places worth your time, city by city", icon: "🆓" },
                 { id: "ai", img: "/picture9.jpg", title: "Ask Gemlyx", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
               ].map((section, i) => (
@@ -3963,6 +4052,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
             </span>
           </button>
         )}
+
+        <button onClick={() => goTab("essentials")}
+          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: `${C.accent}14`, border: `1px solid ${C.accent}55`, borderRadius: 10, padding: "9px 12px", marginBottom: 4, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", textAlign: "left" }}>
+          <span style={{ fontSize: 14 }}>📖</span>
+          <span style={{ fontSize: 12, color: "#FF8A8A", fontWeight: 700 }}>Read Essentials before visiting — real tickets, fines and etiquette to know first</span>
+          <span style={{ marginLeft: "auto", color: "#FF8A8A", fontSize: 13 }}>→</span>
+        </button>
         {userCoords === "requesting" && (
           <div style={{ fontSize: 12, color: C.muted, padding: "8px 0" }}>📍 Getting your location...</div>
         )}
@@ -4556,6 +4652,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               style={{ display: "block", textAlign: "center", marginTop: 14, color: C.light, fontSize: 13, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "4px" }}>
               Get Directions →
             </a>
+            <ReviewsSection itemType="booking" itemName={craftDetail.name} />
           </div>
         </div>
       )}
