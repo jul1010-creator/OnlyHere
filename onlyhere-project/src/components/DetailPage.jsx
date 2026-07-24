@@ -167,7 +167,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           </div>
         )}
 
-        {kind === "free" && item.website && (
+        {(kind === "free" || kind === "event") && item.website && (
           <a href={item.website} target="_blank" rel="noreferrer"
             style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
             🌐 Visit website

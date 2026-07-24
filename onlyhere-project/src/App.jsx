@@ -117,6 +117,7 @@ export default function Gemlyx() {
   const [craftKind, setCraftKind] = useState(null);
   const [foodTab, setFoodTab] = useState("Local");
   const [nightlifeTab, setNightlifeTab] = useState("Local");
+  const [nightlifeTownView, setNightlifeTownView] = useState(null); // null = showing towns; a town name = showing that town's venues
   const [attractionCity, setAttractionCity] = useState("Copenhagen");
   const [craftModal, setCraftModal] = useState(null);
   const [expandedPlan, setExpandedPlan] = useState(null);
@@ -482,7 +483,7 @@ export default function Gemlyx() {
         ...bbData([["Getting There", t.gettingThere], ["Why Visit", t.whyVisit], ["What Travelers Love", t.travelersLove]]),
         ...bulletsBlock("Good to Know", t.thingsToKnow),
       ] };
-    if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", camping: t.camping || "", accommodationTip: t.accommodationTip || "", budgetLevel: t.budgetLevel || "", travelTime: t.travelTime || "", ticketStatus: t.ticketStatus || "on_sale", town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", gemlyxFind: t.gemlyxFind || "",
+    if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", camping: t.camping || "", accommodationTip: t.accommodationTip || "", budgetLevel: t.budgetLevel || "", travelTime: t.travelTime || "", ticketStatus: t.ticketStatus || "on_sale", town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", website: t.website || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", gemlyxFind: t.gemlyxFind || "",
       blogBody: [
         ...bbData([["Atmosphere", t.atmosphere], ["Perfect For", t.perfectFor]]),
         ...bulletsBlock("Good to Know", t.thingsToKnow),
@@ -521,7 +522,7 @@ export default function Gemlyx() {
     try {
       const cfg = {
         town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`, `${name} quora google reviews honest opinion worth it`] },
-        festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
+        festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup official website`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
         free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
         food: { queries: [`${name} Denmark what to order menu prices history`, `${name} Denmark best time to visit busy hours local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
         night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
@@ -558,7 +559,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "region": "...", "emoji": "o
         festival: `Draft a complete Gemlyx festival entry for ${name}, Denmark, following this EXACT structure (a premium travel editor's voice, never Wikipedia): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field — do NOT write a separate Overview, that would just repeat it) -> Atmosphere (describe the FEELING of the event) -> Perfect For (also cover why someone should go — don't split this into a separate Why Go section) -> Things to Know (EXACTLY 3 short bullets). Total word count across Atmosphere+PerfectFor+ThingsToKnow+GemlyxFind should land around 220-350 words — short paragraphs, never encyclopedic. Every section answers a different question; never repeat what's already in At a Glance.
 Real example: {"name": "Distortion", "town": "Copenhagen", "nearestStation": "Nørreport Station, Copenhagen Central Station or nearby Metro stations", "ticketInfo": "Street parties are free. Distortion X and Distortion Ø require tickets.", "accommodationTip": "Stay in central Copenhagen and book several months in advance.", "budgetLevel": "Moderate–High.", "desc": "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods."}
 ${STUDIO_VOICE}
-Respond with ONLY strict JSON: {"name": ${J(name)}, "scale": "Major (large, well-known, city-wide/national draw — e.g. a festival with thousands+ attendees, mainstream press coverage) or Local (smaller, niche, community, underground, or regional — most festivals are this)", "town": "host town", "type": "Music / Festival / Market / Culture", "emoji": "one emoji", "dateStart": "STRICTLY the format YYYY-MM-DD (4-digit year FIRST, e.g. '2027-06-30' for 30 June 2027) — never DD-MM-YYYY or any other order — or empty string if not in context", "dateEnd": "same STRICT YYYY-MM-DD format, or empty", "tier": "Can't miss out / Highly Recommended / Worth Considering / Best If You're Already Nearby", "nearestStation": "short — for At a Glance", "ticketInfo": "short — for At a Glance, never invent prices", "camping": "short camping note if relevant, else empty string — for At a Glance", "accommodationTip": "short — for At a Glance", "budgetLevel": "Very Low / Low / Moderate / High — for At a Glance", "travelTime": "from Copenhagen like '1h 10min 🚂', or 'In Copenhagen 🚇'", "ticketStatus": "free / on_sale / limited / sold_out", "desc": "two card sentences", "mapHint": "Venue/street, postcode Town, Denmark", "tags": ["two", "tags"], "color": "#hex fitting the vibe", "atmosphere": "describe the FEELING — sound, crowd energy, what a day there is actually like", "perfectFor": "who this genuinely suits, described honestly — not a persuasive pitch for why someone SHOULD go. If this festival is genuinely niche, low-key, or not for everyone, say so plainly. Combine who it suits with an honest read on the actual pull, but the goal is accuracy about fit, not convincing the reader to buy a ticket", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]} If the context doesn't clearly show this is a major, mainstream-known event, default "scale" to "Local" — most festivals are, and Gemlyx only calls something Major when the evidence genuinely supports it.
+Respond with ONLY strict JSON: {"name": ${J(name)}, "scale": "Major (large, well-known, city-wide/national draw — e.g. a festival with thousands+ attendees, mainstream press coverage) or Local (smaller, niche, community, underground, or regional — most festivals are this)", "town": "host town", "type": "Music / Festival / Market / Culture", "emoji": "one emoji", "dateStart": "STRICTLY the format YYYY-MM-DD (4-digit year FIRST, e.g. '2027-06-30' for 30 June 2027) — never DD-MM-YYYY or any other order — or empty string if not in context", "dateEnd": "same STRICT YYYY-MM-DD format, or empty", "tier": "Can't miss out / Highly Recommended / Worth Considering / Best If You're Already Nearby", "nearestStation": "short — for At a Glance", "ticketInfo": "short — for At a Glance, never invent prices", "camping": "short camping note if relevant, else empty string — for At a Glance", "accommodationTip": "short — for At a Glance", "budgetLevel": "Very Low / Low / Moderate / High — for At a Glance", "travelTime": "from Copenhagen like '1h 10min 🚂', or 'In Copenhagen 🚇'", "ticketStatus": "free / on_sale / limited / sold_out", "desc": "two card sentences", "mapHint": "Venue/street, postcode Town, Denmark", "website": "official festival/event website URL ONLY if present in context, else empty string — this matters more here than for other content types, since festival grounds and temporary event sites are often poorly mapped and the official site is where people actually find accurate directions", "tags": ["two", "tags"], "color": "#hex fitting the vibe", "atmosphere": "describe the FEELING — sound, crowd energy, what a day there is actually like", "perfectFor": "who this genuinely suits, described honestly — not a persuasive pitch for why someone SHOULD go. If this festival is genuinely niche, low-key, or not for everyone, say so plainly. Combine who it suits with an honest read on the actual pull, but the goal is accuracy about fit, not convincing the reader to buy a ticket", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]} If the context doesn't clearly show this is a major, mainstream-known event, default "scale" to "Local" — most festivals are, and Gemlyx only calls something Major when the evidence genuinely supports it.
 Dates: ONLY from the context — empty string beats a guess.
 CRITICAL GEOGRAPHY CHECK — small/underground/local festivals are the highest-risk case for this: verify the town/region named in "nearestStation", "accommodationTip", and "mapHint" is ACTUALLY where this specific event happens, not a same-named or similar-sounding place elsewhere in Denmark. A real station or stop name can exist in multiple regions — Denmark has several places with overlapping or similar names (e.g. a "Hemmet" in West Jutland is unrelated to unrelated locations elsewhere). Getting the STATION NAME right is not enough if the TOWN attached to it is wrong. If the search context doesn't clearly confirm which town/region the venue is in, say so honestly (e.g. "Check the festival's own website for directions") rather than guessing a nearby-sounding place.`,
         free: `Draft a complete Gemlyx Attraction entry for ${name} (a free-entrance attraction), following this EXACT structure (a premium travel editor's voice, never Wikipedia — focus on the EXPERIENCE, not history): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field — do NOT write a separate Overview, that would just repeat it) -> Why People Love It -> Perfect For -> Things to Know (EXACTLY 3 short bullets). Total word count across WhyPeopleLoveIt+PerfectFor+ThingsToKnow+GemlyxFind should land around 220-350 words — short paragraphs, 1-3 sentences each, never encyclopedic. Every section answers a different question; never repeat what's already in At a Glance.
@@ -637,7 +638,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
         const targetArr = isMajor ? majorEvents : events;
         const targetName = isMajor ? "majorEvents" : "events";
         const nextId = Math.max(...targetArr.map(x => x.id)) + 1;
-        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Perfect For", t.perfectFor]])}\n${bbBullets("Good to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
+        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Perfect For", t.perfectFor]])}\n${bbBullets("Good to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (studioType === "free") {
         const nextId = Math.max(...freeEntrance.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, timeNeeded: ${J(t.timeNeeded)}, budgetGlance: ${J(t.budgetGlance)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
@@ -971,10 +972,11 @@ Rules: always prefix times with ~. ${mixedModes ? `The traveler explicitly wants
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+{"title": "Short evocative title for this trip", "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a specific ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and a single bare number is misleading without that context. If cost is worth mentioning, say "check current ticket prices online" instead, or describe the price tier qualitatively ("budget-friendly", "a bit of a splurge") without a specific number.
 CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
+CRITICAL: make each day's arrivalTime sequence internally consistent — each stop's arrivalTime should follow realistically from the previous stop's arrivalTime + its suggestedStay + a sensible travel gap between them, using well-established Danish geography. Don't just space stops out evenly by habit; a genuinely quick stop should be followed soon after, a long museum visit should push the next arrivalTime later. If a day has too many stops to fit in a reasonable day (roughly 9am-9pm), that's a signal to trim rather than compress every stay time unrealistically.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
             { role: "user", content: convoText }
           ],
@@ -988,7 +990,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const gid = Date.now();
       const lc = convoText.toLowerCase();
       const mentionsTransit = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(lc);
-      const mentionsCar = /\b(car|driving|drive|bil)\b/.test(lc);
+      const mentionsCar = /\b(car|driving|drive|bil|camper ?van|rv\b)\b/.test(lc);
       const mentionsBike = /\b(bike|cykel|cycling|cycle|bicycl)\b/.test(lc);
       const mentionedModes = [mentionsBike && "bike", mentionsCar && "car", mentionsTransit && "public transport"].filter(Boolean);
       // When more than one mode is mentioned, this is a genuine mixed-mode trip (e.g.
@@ -1271,7 +1273,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const sysPrompt = `You are Gemlyx — Denmark's insider guide. You speak as Gemlyx itself: warm, confident, like a well-travelled Danish friend, never like a generic AI assistant. Never call yourself an AI or a language model. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
-Transport matters: if the person hasn't said how they're getting around, ask — car, bike, public transport, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
+Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
 
 ASK BEFORE YOU PLAN — ONLY WHEN THEY'VE ACTUALLY ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary — not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately — never redirect a simple question into an intake questionnaire. Only when they're asking you to actually build a route or plan, and you don't yet know their budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those three things together — for example: "Happy to help! Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — history, nature, food, nightlife, or a bit of everything?" Keep it to one message, not three separate questions, and don't re-ask anything they've already told you. Build the actual plan once you know these, either from their answer or because they already told you in their first message.
 
@@ -2140,7 +2142,21 @@ You also have a web_search tool. Use it whenever someone asks about something th
           )}
 
           {/* ── NIGHTLIFE ────────────────────────────────────── */}
-          {tab === "nightlife" && (
+          {tab === "nightlife" && (() => {
+            // Group venues by town — most locations are "Neighbourhood, City" (take the
+            // part after the last comma) or just a city name/phrase; match against the
+            // known nightlife cities first since a plain substring match is more reliable
+            // than trusting comma placement alone (e.g. "Copenhagen city centre" has no comma).
+            const KNOWN_NIGHTLIFE_CITIES = ["Copenhagen", "Aarhus", "Aalborg", "Odense", "Esbjerg", "Randers", "Kolding", "Horsens", "Vejle", "Roskilde"];
+            const townOf = (loc) => KNOWN_NIGHTLIFE_CITIES.find(c => loc.includes(c)) || (loc.includes(",") ? loc.split(",").pop().trim() : loc);
+            const townGroups = {};
+            nightlifeSpots.forEach(s => {
+              const t = townOf(s.location);
+              (townGroups[t] = townGroups[t] || []).push(s);
+            });
+            const townList = Object.keys(townGroups).sort((a, b) => townGroups[b].length - townGroups[a].length);
+
+            return (
             <div className={pageAnim} style={{ padding: "16px" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
@@ -2148,35 +2164,72 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
               <PageHero src="/tuborg.jpg" emoji="🍺" color="#C8102E" />
 
-              <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
-                {[{ id: "Local", label: "🇩🇰 Local" }, { id: "Major", label: "🌍 Major" }].map(t => (
-                  <button key={t.id} onClick={() => setNightlifeTab(t.id)}
-                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${nightlifeTab === t.id ? C.accent : "transparent"}`, color: nightlifeTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {t.label}
+              {!nightlifeTownView ? (
+                // ── LEVEL 1: pick a town ──────────────────────────
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Pick a town</div>
+                  {townList.map(t => {
+                    const spots = townGroups[t];
+                    const localCount = spots.filter(s => s.type === "Local").length;
+                    const majorCount = spots.filter(s => s.type === "Major").length;
+                    return (
+                      <div key={t} onClick={() => setNightlifeTownView(t)} style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${C.border}`, padding: "16px 0", cursor: "pointer" }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🍺</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{t}</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                            {spots.length} spot{spots.length !== 1 ? "s" : ""}{localCount > 0 && majorCount > 0 ? ` · ${localCount} local, ${majorCount} major` : ""}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 18, color: C.muted }}>›</span>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                // ── LEVEL 2: venues in the chosen town ────────────
+                <>
+                  <button onClick={() => setNightlifeTownView(null)}
+                    style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.muted, fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 14, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    ‹ All towns
                   </button>
-                ))}
-              </div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 14 }}>Bars &amp; clubs in {nightlifeTownView}</div>
 
-              {nightlifeSpots.filter(f => f.type === nightlifeTab).map(spot => (
-                <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                    <span style={{ fontSize: 22 }}>{spot.emoji}</span>
-                    <div>
-                      <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{spot.name}</div>
-                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
+                  <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
+                    {[{ id: "Local", label: "🇩🇰 Local" }, { id: "Major", label: "🌍 Major" }].map(t => (
+                      <button key={t.id} onClick={() => setNightlifeTab(t.id)}
+                        style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${nightlifeTab === t.id ? C.accent : "transparent"}`, color: nightlifeTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).length === 0 && (
+                    <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet — try the other tab.</div>
+                  )}
+                  {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).map(spot => (
+                    <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                        <span style={{ fontSize: 22 }}>{spot.emoji}</span>
+                        <div>
+                          <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{spot.name}</div>
+                          <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
+                        👥 {spot.crowd}
+                      </div>
+                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{spot.desc.slice(0, 100)}{spot.desc.length > 100 ? "…" : ""}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
+                        Read more <span style={{ fontSize: 15 }}>›</span>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
-                    👥 {spot.crowd}
-                  </div>
-                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{spot.desc.slice(0, 100)}{spot.desc.length > 100 ? "…" : ""}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
-                    Read more <span style={{ fontSize: 15 }}>›</span>
-                  </div>
-                </div>
-              ))}
+                  ))}
+                </>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {/* ── ROAD TRIPS ───────────────────────────────────── */}
           {tab === "roadtrips" && (
@@ -2423,7 +2476,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <input value={intakeBudgetText} onChange={e => setIntakeBudgetText(e.target.value)}
                     placeholder="e.g. 500 kr/day, or 'backpacker budget'"
                     style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: "border-box" }} />
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>Type a real number if you have one — "moderate" means something different in Denmark than it does everywhere else.</div>
                 </div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into</div>
@@ -2435,7 +2487,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeTime || intakeBudgetText || intakeInterest || intakeTransport.length ? 16 : 0 }}>
-                  {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car"].map(tr => (
+                  {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car", "🚐 Camper van", "⛺ Tent"].map(tr => (
                     <Pill key={tr} label={tr} active={intakeTransport.includes(tr)} onClick={() => setIntakeTransport(intakeTransport.includes(tr) ? intakeTransport.filter(x => x !== tr) : [...intakeTransport, tr])} />
                   ))}
                 </div>
@@ -2800,9 +2852,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text, letterSpacing: -0.5 }}>◆ Gemlyx</div>
           </div>
 
-          {/* Weather — back to full size (with town labels), same row as logo, truly centered */}
+          {/* Weather — compact icon+temp per city so more than one fits on a phone header; tap any city for full detail */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
-            <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+            <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} compact />
           </div>
 
           {/* Right: small persistent search pill (always visible, not a toggle) + hamburger */}
@@ -3126,7 +3178,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             </div>
                           )}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>{stop.name}</div>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{stop.name}</div>
+                              {(stop.arrivalTime || stop.suggestedStay) && (
+                                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, whiteSpace: "nowrap" }}>
+                                  {stop.arrivalTime ? `⏰ ${stop.arrivalTime}` : ""}{stop.arrivalTime && stop.suggestedStay ? " · " : ""}{stop.suggestedStay ? `${stop.suggestedStay}` : ""}
+                                </div>
+                              )}
+                            </div>
                             <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginBottom: real ? 4 : 0 }}>{stop.note}</div>
                             {real && real.name === stop.name && (
                               <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>

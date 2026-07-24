@@ -5,7 +5,7 @@ import { events, majorEvents, vikingEvents } from "../data/events";
 import { TOWN_COORDS } from "../data/towns";
 
 export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearYou, requestLocation, setEventDetail, setFreeDetail, setFoodDetail, userCoords }) => {
-  const [openEvent, setOpenEvent] = useState(null);
+  const [segment, setSegment] = useState(null); // null = default (live if any, else coming); "live" or "coming" once the person picks
   const allTracked = [...events, ...majorEvents, ...vikingEvents];
   const currentlyLive = allTracked.filter(e => isCurrentlyLive(e.date, e.dateEnd));
   const kmFromUserToTown = (locStr) => {
@@ -25,21 +25,37 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
       }
       return new Date(a.date) - new Date(b.date);
     });
-  const showList = currentlyLive.length > 0 ? currentlyLive : comingSoon.slice(0, 6);
-  const isLive = currentlyLive.length > 0;
+  const showBoth = currentlyLive.length > 0 && comingSoon.length > 0;
+  const activeSegment = segment || (currentlyLive.length > 0 ? "live" : "coming");
+  const showList = activeSegment === "live" ? currentlyLive : comingSoon.slice(0, 6);
+  const isLive = activeSegment === "live";
+  const comingLabel = isInDenmark(userCoords) ? "Coming Up Near You" : "Coming Events";
 
   return (
     <div style={{ marginTop: 4, marginBottom: 2 }}>
-      {showList.length > 0 && (
+      {(currentlyLive.length > 0 || comingSoon.length > 0) && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-            {isLive && <style>{`@keyframes gemlyxLiveDotPulse { 0% { box-shadow: 0 0 0 0 rgba(76,175,80,0.6); } 70% { box-shadow: 0 0 0 6px rgba(76,175,80,0); } 100% { box-shadow: 0 0 0 0 rgba(76,175,80,0); } }`}</style>}
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#4CAF50" : C.gold, flexShrink: 0, boxShadow: isLive ? "0 0 6px #4CAF50" : "none", animation: isLive ? "gemlyxLiveDotPulse 1.6s ease-in-out infinite" : "none" }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: isLive ? "#4CAF50" : C.gold, textTransform: "uppercase", letterSpacing: 0.5 }}>{isLive ? "Live Events" : isInDenmark(userCoords) ? "Coming Up Near You" : "Coming Events"}</span>
+            {currentlyLive.length > 0 && <style>{`@keyframes gemlyxLiveDotPulse { 0% { box-shadow: 0 0 0 0 rgba(76,175,80,0.6); } 70% { box-shadow: 0 0 0 6px rgba(76,175,80,0); } 100% { box-shadow: 0 0 0 0 rgba(76,175,80,0); } }`}</style>}
+            {currentlyLive.length > 0 && (
+              <button onClick={() => setSegment("live")} disabled={!showBoth}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: showBoth ? "pointer" : "default", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4CAF50", flexShrink: 0, boxShadow: "0 0 6px #4CAF50", animation: "gemlyxLiveDotPulse 1.6s ease-in-out infinite" }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#4CAF50", textTransform: "uppercase", letterSpacing: 0.5, opacity: showBoth && !isLive ? 0.5 : 1 }}>Live Events</span>
+              </button>
+            )}
+            {showBoth && <span style={{ fontSize: 11, color: C.border, fontWeight: 700 }}>|</span>}
+            {comingSoon.length > 0 && (
+              <button onClick={() => setSegment("coming")} disabled={!showBoth}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: showBoth ? "pointer" : "default", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {currentlyLive.length === 0 && <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.gold, flexShrink: 0 }} />}
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.5, opacity: showBoth && isLive ? 0.5 : 1 }}>{comingLabel}</span>
+              </button>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, marginBottom: 8 }}>
             {showList.map(e => (
-              <button key={e.name} onClick={() => setOpenEvent(e)}
+              <button key={e.name} onClick={() => setEventDetail(e)}
                 style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 <span style={{ fontSize: 13 }}>{e.emoji}</span>
                 <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{e.name}</span>
@@ -81,25 +97,6 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {openEvent && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpenEvent(null)}>
-          <div style={{ width: "100%", maxWidth: 420, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px" }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{openEvent.emoji} {openEvent.name}</div>
-              <button onClick={() => checkLiveInfo(openEvent)} disabled={liveInfoLoading === openEvent.name}
-                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 100, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
-                {liveInfoLoading === openEvent.name ? "Checking..." : "🔍 Check"}
-              </button>
-            </div>
-            <div style={{ fontSize: 12, color: C.gold, fontWeight: 600, marginBottom: liveInfo?.[openEvent.name] ? 12 : 4 }}>{getEventDate(openEvent.date, openEvent.dateEnd)}</div>
-            {liveInfo?.[openEvent.name] && <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 14 }}>{liveInfo[openEvent.name]}</div>}
-            <button onClick={() => setOpenEvent(null)} style={{ display: "block", width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Close
-            </button>
-          </div>
         </div>
       )}
     </div>
