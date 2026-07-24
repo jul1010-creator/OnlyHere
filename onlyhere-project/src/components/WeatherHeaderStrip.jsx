@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { C } from "../utils/theme";
 import { weatherIcon } from "../utils/helpers";
+import { WEATHER_CITIES } from "../data/mapShapes";
+import { WeatherStrip } from "./WeatherStrip";
 
 export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, compact }) => {
   const [openCity, setOpenCity] = useState(null);

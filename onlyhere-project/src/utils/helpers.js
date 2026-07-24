@@ -1,3 +1,5 @@
+import { TOWN_COORDS } from "../data/towns";
+
 export const getSeason = () => {
   const m = new Date().getMonth(); // 0=Jan
   if ([11, 0, 1].includes(m)) return "winter";

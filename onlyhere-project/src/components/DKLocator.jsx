@@ -1,5 +1,6 @@
 import { C } from "../utils/theme";
-import { DK_PATHS } from "../data/mapShapes";
+import { DK_PATHS, dkProject } from "../data/mapShapes";
+import { TOWN_COORDS } from "../data/towns";
 
 export const DKLocator = ({ town, color }) => {
   const coords = TOWN_COORDS[town];

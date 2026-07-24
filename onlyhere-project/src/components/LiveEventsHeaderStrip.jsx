@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { getEventDate, isUpcoming, isCurrentlyLive, isInDenmark } from "../utils/helpers";
+import { events, majorEvents, vikingEvents } from "../data/events";
+import { TOWN_COORDS } from "../data/towns";
 
 export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearYou, requestLocation, setEventDetail, setFreeDetail, setFoodDetail, userCoords }) => {
   const [openEvent, setOpenEvent] = useState(null);

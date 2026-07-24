@@ -1,3 +1,5 @@
+import { C } from "../utils/theme";
+
 export const cities = [
   { id: 4, name: "Copenhagen", country: "Denmark", flagCode: "dk", color: C.accent, tag: "Nordic Minimal", vibe: "Quiet luxury, built to last forever", photo: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=800&q=80",
     products: [
