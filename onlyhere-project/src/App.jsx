@@ -224,6 +224,17 @@ export default function Gemlyx() {
   });
 
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
+  const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
+  useEffect(() => {
+    // Mirror any real (non-loading, non-null) guide into the cache as it updates —
+    // enrichGuideDays/fetchGuideWeather keep patching guideModal in over time, so this
+    // keeps the cache current with whatever's actually been resolved so far, not just
+    // the first draft. Keyed by the convo text that produced it, since that's the
+    // reliable "is this still the right guide" check for whether it's safe to reuse.
+    if (guideModal && typeof guideModal === "object" && guideModal._convoText) {
+      setLastBuiltGuide({ convoText: guideModal._convoText, guide: guideModal });
+    }
+  }, [guideModal]);
   const [glancePending, setGlancePending] = useState(0);
   const [weatherPending, setWeatherPending] = useState(0);
 
@@ -1053,6 +1064,13 @@ Rules: always prefix times with ~. ${mixedModes ? `The traveler explicitly wants
   const generateGuide = async () => {
     const convoText = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
     if (!convoText.trim()) return;
+    // Reopen instantly if this exact conversation already built a guide — avoids
+    // forcing a full rebuild + loading wait just because the person accidentally
+    // closed the guide and tapped back into it, with nothing new to plan.
+    if (lastBuiltGuide && lastBuiltGuide.convoText === convoText) {
+      setGuideModal(lastBuiltGuide.guide);
+      return;
+    }
     setGuideModal("loading");
     setGuideError(null);
     try {
@@ -1094,7 +1112,31 @@ If the conversation only covers a single day or a few stops with no explicit day
         }),
       });
       const data = await res.json();
-      const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      let parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      // The day-count instruction above is stated as a hard requirement, but the model
+      // can still occasionally under-comply — that's what was causing "only day 1 shows,
+      // click again and it's fine": pure model variance, not a rendering bug. Retry once
+      // automatically instead of making the person notice and click a second time.
+      if (requestedDays && (!parsed.days || parsed.days.length < requestedDays)) {
+        const retryRes = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation.` },
+              { role: "user", content: convoText }
+            ],
+            max_tokens: 1800,
+          }),
+        });
+        const retryData = await retryRes.json();
+        try {
+          const retryParsed = JSON.parse(retryData.choices?.[0]?.message?.content || "{}");
+          if (retryParsed.days && retryParsed.days.length >= (parsed.days?.length || 0)) parsed = retryParsed;
+        } catch { /* keep the first attempt if the retry itself fails to parse */ }
+      }
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
       await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
@@ -1110,7 +1152,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
       fetchExactDurations(parsed.days, travelMode); // fire-and-forget — legs show estimates until this resolves, then upgrade
-      setGuideModal({ _gid: gid, _mode: travelMode, _grounded: !!guideGrounding, title: parsed.title || "Your Custom Route", days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _grounded: !!guideGrounding, _convoText: convoText, title: parsed.title || "Your Custom Route", days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid);
     } catch {
@@ -1571,13 +1613,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
     .sort((a,b) => new Date(a.date) - new Date(b.date));
 
   const aiHelperBlock = () => (
-    <div id="ai-helper-anchor" style={{ marginTop: 28 }}>
-              {/* AI at the end of the journey */}
-              <div style={{ padding: "36px 20px 28px", borderTop: `1px solid ${C.border}`, background: C.surface }}>
-                <div style={{ textAlign: "center", marginBottom: 16 }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>✦ Gemlyx</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Cormorant Garamond', serif", color: C.text }}>Overwhelmed? Let me help you.</div>
-                </div>
+    <div id="ai-helper-anchor" style={{ marginTop: 8 }}>
+              <div style={{ padding: "0 0 28px" }}>
 
                 {aiMessages.length > 1 && (
                   <div className="ai-msgs" style={{ maxHeight: 300, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
@@ -1610,14 +1647,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 )}
                 {guideError && (
                   <div style={{ fontSize: 12, color: "#FFB347", textAlign: "center", marginBottom: 12 }}>{guideError}</div>
-                )}
-
-                {aiMessages.length <= 1 && (
-                  <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                    {["Plan my 3 days in Denmark", "Exclusive fashion in Copenhagen", "Best craft to commission"].map(s => (
-                      <button key={s} onClick={() => setAiInput(s)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, color: C.light, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>{s}</button>
-                    ))}
-                  </div>
                 )}
 
                 <div style={{ display: "flex", gap: 8 }}>
@@ -2647,11 +2676,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <span style={{ fontSize: 13 }}>✦</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Gemlyx Intelligence</span>
                 </div>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Ask Gemlyx</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Your personal Denmark guide — plans your trip, and can check what's actually happening right now. Live events are tracked in the header on every page.</div>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Gemlyx Tourism Guide</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Tap what applies below, or just tell Gemlyx what you're after — plans your trip, and can check what's actually happening right now.</div>
               </div>
 
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 20 }}>
+              <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Quick start — tap what applies, then let Gemlyx build it</div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Time</div>
