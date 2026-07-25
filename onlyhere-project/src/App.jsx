@@ -1131,18 +1131,25 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [showMenu, setShowMenu] = useState(false);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   useEffect(() => {
-    // Auto-hide the weather/live-events row once the person starts scrolling down,
-    // so it doesn't permanently eat screen space — only the slim logo/search/menu
-    // row stays put. Reappears once they scroll back up near the very top.
-    let lastY = window.scrollY;
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (y > lastY && y > 60) setHeaderCollapsed(true);
-      else if (y < lastY && y < 40) setHeaderCollapsed(false);
-      lastY = y;
+    // This app uses a horizontal swipe-pager where each tab is its own
+    // independently-scrolling div (overflowY: auto) — the window/body itself
+    // never scrolls (root is height:100vh + overflow:hidden), so a plain
+    // window scroll listener never fires. 'scroll' events don't bubble, but
+    // capture-phase listening on document still intercepts them from any
+    // descendant as they travel down to their target, so this works for
+    // whichever tab div is actually being scrolled.
+    let lastY = {};
+    const onScroll = (e) => {
+      const el = e.target;
+      if (!el || typeof el.scrollTop !== "number") return;
+      const y = el.scrollTop;
+      const prev = lastY[el] ?? 0;
+      if (y > prev && y > 60) setHeaderCollapsed(true);
+      else if (y < prev && y < 40) setHeaderCollapsed(false);
+      lastY[el] = y;
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    document.addEventListener("scroll", onScroll, true);
+    return () => document.removeEventListener("scroll", onScroll, true);
   }, []);
   const [showSearch, setShowSearch] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -2897,6 +2904,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
         }
         .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
+        .page-hero-box { height: 130px; }
+        @media (min-width: 600px) { .page-hero-box { height: 200px; } }
+        @media (min-width: 900px) { .page-hero-box { height: 280px; } }
         .app-root { height: 100vh; }
         .hero-h { height: calc(100vh - 196px); min-height: 340px; }
         /* ── Leaflet, Gemlyx dark theme ── */
