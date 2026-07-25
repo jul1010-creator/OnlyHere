@@ -134,7 +134,9 @@ export default function Gemlyx() {
   const [foodTab, setFoodTab] = useState("Local");
   const [nightlifeTab, setNightlifeTab] = useState("Local");
   const [nightlifeTownView, setNightlifeTownView] = useState(null); // null = showing towns; a town name = showing that town's venues
-  const [attractionCity, setAttractionCity] = useState("Copenhagen");
+  const [attractionCity, setAttractionCity] = useState("All");
+  const [priceFilter, setPriceFilter] = useState("all"); // "all" | "free" | "paid"
+  const [hiddenGemOnly, setHiddenGemOnly] = useState(false);
   const [craftModal, setCraftModal] = useState(null);
   const [expandedPlan, setExpandedPlan] = useState(null);
   const [liveInfo, setLiveInfo] = useState({});
@@ -469,7 +471,7 @@ export default function Gemlyx() {
   const [publishErrorDetail, setPublishErrorDetail] = useState(null);
   const [studioPhotoName, setStudioPhotoName] = useState("");
 
-  const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Also BANNED outright, no exceptions: "nestled in the heart", "captivates with", "a tapestry of culture", "intertwines with stories", "vibrant", "electrifying", "must-see", "hidden treasure", "off the beaten path", "a feast for the senses" — these are cliché AI-travel-writing tells, not real description. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences. If the search context includes real visitor/local opinions (e.g. from Reddit, Quora, or Google/TripAdvisor-style reviews), fold that texture into "Things to Know" or "What Travelers Love" as plain observed fact — write "the queue regularly runs over an hour in summer" or "locals tend to avoid it on weekends", NOT "Reddit users say..." or "according to reviews..." or "according to visitors online...". Never name the source or platform, whichever it was. Never quote anyone directly — always paraphrase in your own words, and only include a specific claim if multiple sources agree or one source is clearly credible; a single offhand comment isn\'t worth repeating as fact. NEVER name a specific sub-venue, stage, room, or named feature (e.g. a stage name at a festival, a specific gallery room in a museum) unless that EXACT name appears in the search context — a plausible-sounding invented name (like a fake stage name) is a serious factual error, not a stylistic risk; if you cannot name a specific spot with confidence, describe the experience generically instead ("the main stage", "the indoor venue") rather than inventing a proper name. PRICES: always state prices in the currency actually found in the search context first (Danish prices are in kr./DKK) — you may add an approximate EUR/USD conversion in parentheses ONLY if the search context itself provides one; never calculate or invent a conversion yourself. If no real price is found, write "See website" rather than estimating one. GEMLYX FIND: this is a premium signature feature — it must be a genuinely specific, verified insider tip pulled from the search context (a real side-street spot, a real quiet corner, a real local tradition), never a generic restatement of the main attraction. If the search context has nothing that specific, OMIT gemlyxFind entirely (leave it an empty string) rather than filling it with a plausible-sounding placeholder — an empty section is honest, a fabricated one risks the brand. UNCERTAINTIES: every response MUST include an "uncertainties" array field (can be empty if genuinely nothing is unclear). If your own research and the Google AI cross-check (when provided) disagree with each other, or if BOTH leave something genuinely unconfirmed (a price, a date, whether a specific place still operates), list it as a short plain sentence in "uncertainties" — this is shown directly to the founder as a flag to check personally, so be specific ("Ticket price unconfirmed — Tavily found no number, Google AI search found none either") rather than vague ("some details may be wrong"). HONEST TIERS: be genuinely conservative with "Can\'t Miss Out" or similarly strong recommendation labels — reserve them for places that truly are exceptional or unique, not every town or place you draft. A quiet residential suburb or an ordinary neighborhood is NOT "Can\'t Miss Out" just because it exists; call it what it is ("Worth Considering" or lower) rather than inflating every entry\'s importance, which is exactly the brochure salesmanship this voice exists to avoid. TONE: write like a well-travelled local giving a friend the real, slightly blunt version — closer to a good Reddit or Google review than a tourism board — never trying to "sell" a place, and always willing to say a place is fine-but-not-special if that\'s the truth.';
+  const STUDIO_VOICE = 'Voice rules from Gemlyx editorial docs: concrete facts over adjectives — dates, prices, distances, names, materials. Generic words like "charming", "picturesque", "rich history", "beautiful", "known for" are BANNED unless immediately followed by the specific thing that makes them true. Also BANNED outright, no exceptions: "nestled in the heart", "captivates with", "a tapestry of culture", "intertwines with stories", "vibrant", "electrifying", "must-see", "hidden treasure", "off the beaten path", "a feast for the senses" — these are cliché AI-travel-writing tells, not real description. Address the reader as "you". Warm but honest: every "Things to Know" section must include at least one real downside. NEVER invent facts, prices, dates, ratings or websites — write "See website" or "Check locally" when the search context does not clearly support a claim. Each section 2-4 full sentences. If the search context includes real visitor/local opinions (e.g. from Reddit, Quora, or Google/TripAdvisor-style reviews), fold that texture into "Things to Know" or "What Travelers Love" as plain observed fact — write "the queue regularly runs over an hour in summer" or "locals tend to avoid it on weekends", NOT "Reddit users say..." or "according to reviews..." or "according to visitors online...". Never name the source or platform, whichever it was. Never quote anyone directly — always paraphrase in your own words, and only include a specific claim if multiple sources agree or one source is clearly credible; a single offhand comment isn\'t worth repeating as fact. NEVER name a specific sub-venue, stage, room, or named feature (e.g. a stage name at a festival, a specific gallery room in a museum) unless that EXACT name appears in the search context — a plausible-sounding invented name (like a fake stage name) is a serious factual error, not a stylistic risk; if you cannot name a specific spot with confidence, describe the experience generically instead ("the main stage", "the indoor venue") rather than inventing a proper name. PRICES: always state prices in the currency actually found in the search context first (Danish prices are in kr./DKK) — you may add an approximate EUR/USD conversion in parentheses ONLY if the search context itself provides one; never calculate or invent a conversion yourself. If no real price is found, write "See website" rather than estimating one. TRANSPORT & LOGISTICS: treat claims about how well-connected a place is, night bus/rail/ferry availability, or how "limited" or "excellent" transport is with the exact same rigor as prices — never characterize transport as good or bad, limited or excellent, unless the search context names a specific real service (an actual operator, route, or night-bus system) that supports that claim; if the search context is silent on transport, write "Check local transport options" rather than guessing in either direction. Do not guess sequencing or timing details for dramatic effect either — if you don\'t have search-confirmed timing for when something actually peaks or picks up, describe it in general, honestly-hedged terms rather than presenting an invented specific hour as fact. TONE WORDS: any word describing energy, atmosphere or vibe ("chaotic", "electric", "wild", "buzzing", etc.) must be earned by a specific supporting fact in the same sentence, and must not overstate what the search context actually shows — Danish nightlife and public life in general tends to be safe, orderly and low-key even when busy or crowded, so avoid words implying disorder or intensity unless something specific in the research genuinely supports it. GEMLYX FIND: this is a premium signature feature — it must be a genuinely specific, verified insider tip pulled from the search context (a real side-street spot, a real quiet corner, a real local tradition), never a generic restatement of the main attraction. If the search context has nothing that specific, OMIT gemlyxFind entirely (leave it an empty string) rather than filling it with a plausible-sounding placeholder — an empty section is honest, a fabricated one risks the brand. UNCERTAINTIES: every response MUST include an "uncertainties" array field (can be empty if genuinely nothing is unclear). If your own research and the Google AI cross-check (when provided) disagree with each other, or if BOTH leave something genuinely unconfirmed (a price, a date, whether a specific place still operates), list it as a short plain sentence in "uncertainties" — this is shown directly to the founder as a flag to check personally, so be specific ("Ticket price unconfirmed — Tavily found no number, Google AI search found none either") rather than vague ("some details may be wrong"). HONEST TIERS: be genuinely conservative with "Can\'t Miss Out" or similarly strong recommendation labels — reserve them for places that truly are exceptional or unique, not every town or place you draft. A quiet residential suburb or an ordinary neighborhood is NOT "Can\'t Miss Out" just because it exists; call it what it is ("Worth Considering" or lower) rather than inflating every entry\'s importance, which is exactly the brochure salesmanship this voice exists to avoid. TONE: write like a well-travelled local giving a friend the real, slightly blunt version — closer to a good Reddit or Google review than a tourism board — never trying to "sell" a place, and always willing to say a place is fine-but-not-special if that\'s the truth.';
 
   const slugify = (s) => s.toLowerCase().replace(/æ/g, "ae").replace(/ø/g, "o").replace(/å/g, "aa").replace(/[^a-z0-9]/g, "");
   const J = (v) => JSON.stringify(v ?? "");
@@ -1150,13 +1152,12 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (aiMessages.length > 1) document.querySelectorAll(".ai-msgs").forEach(el => { el.scrollTop = el.scrollHeight; });
   }, [aiMessages]);
 
-  const TAB_ORDER = ["home", "essentials", "craft", "attractions", "events", "food", "nightlife", "roadtrips", "visits", "ai"];
+  const TAB_ORDER = ["home", "essentials", "attractions", "events", "food", "nightlife", "roadtrips", "visits", "ai"];
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   const NAV_ITEMS = [
     { id: "home", label: "🧭 Explore" },
     { id: "essentials", label: "✓ Essentials" },
-    // { id: "craft", label: "◈ Booking" }, // shelved per Oliver — "crafting part gotta go for now, completely"
-    { id: "attractions", label: "🆓 Free Entrance" },
+    { id: "attractions", label: "🎟 Free & Booking" },
     { id: "events", label: "◈ Events" },
     { id: "food", label: "🍽 Food" },
     { id: "nightlife", label: "🍺 Nightlife" },
@@ -1845,8 +1846,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", icon: "🍺" },
                 { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", icon: "🚗" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
-                // { id: "craft", img: "/picture9.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" }, // shelved per Oliver
-                { id: "attractions", img: "/picture7.jpg", title: "Free Entrance", sub: "Genuinely free places worth your time, city by city", icon: "🆓" },
+                // { id: "craft", img: "/picture9.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" }, // merged into attractions below
+                { id: "attractions", img: "/picture7.jpg", title: "Free & Booking", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", icon: "🎟" },
                 { id: "ai", img: "/picture9.jpg", title: "Ask Gemlyx", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
               ].map((section, i) => (
                 <div key={section.id} onClick={() => { goTab(section.id); window.scrollTo(0,0); }}
@@ -1921,134 +1922,92 @@ You also have a web_search tool. Use it whenever someone asks about something th
           {/* ── EXPLORE ──────────────────────────────────────── */}
 
           {/* ── CRAFT ────────────────────────────────────────── */}
-          {tab === "craft" && (
+          {/* ── FREE & BOOKING (merged) ─────────────────────────── */}
+          {tab === "attractions" && (() => {
+            const KNOWN_CITIES = ["Copenhagen", "Aarhus", "Aalborg", "Odense", "Esbjerg", "Randers", "Kolding", "Horsens", "Vejle", "Roskilde"];
+            const cityOf = (item) => item.city || KNOWN_CITIES.find(c => (item.location || "").includes(c)) || "Other";
+            const combined = [
+              ...freeEntrance.map(a => ({ ...a, _kind: "free", _price: "Free", _city: cityOf(a) })),
+              ...craftItems.map(c => ({ ...c, _kind: "craft", _price: c.price || "See website", _city: cityOf(c) })),
+            ];
+            const cityOptions = ["All", ...KNOWN_CITIES.filter(c => combined.some(i => i._city === c))];
+            const kindKeys = { Blacksmithing: ["blacksmith"], Ceramics: ["ceramic", "pottery"], Jewellery: ["jewellery"], Leather: ["leather"], Textiles: ["textile", "dyeing", "felting"], Woodwork: ["wood"], Candy: ["candy"] };
+
+            const filtered = combined.filter(item => {
+              if (attractionCity !== "All" && attractionCity !== "🍬 Handmade" && item._city !== attractionCity) return false;
+              if (priceFilter === "free" && item._kind !== "free") return false;
+              if (priceFilter === "paid" && item._kind !== "craft") return false;
+              if (craftType && item._kind === "craft" && item.type !== craftType) return false;
+              if (craftKind && item._kind === "craft" && !(item.what || []).some(w => (kindKeys[craftKind] || []).some(k => w.toLowerCase().includes(k)))) return false;
+              if (bookableOnly && item._kind === "craft" && item.bookingType !== "online") return false;
+              if (hiddenGemOnly && item.popularityTag !== "Hidden Gem") return false;
+              return true;
+            }).sort((a, b) => (craftSort === "near" && isInDenmark(userCoords))
+              ? (townKmFromUser(a._kind === "craft" ? a.location : a.city) ?? 9999) - (townKmFromUser(b._kind === "craft" ? b.location : b.city) ?? 9999)
+              : (b.rating || 0) - (a.rating || 0));
+
+            return (
             <div className={pageAnim} style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 20, paddingTop: 8 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>✓ Curated & Bookable</div>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Booking</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560, marginBottom: 12 }}>Worth pre-booking — museums, workshops and tickets that sell out or need advance planning. Prices are per person unless noted.</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#4CAF50", background: "#4CAF5015", border: "1px solid #4CAF5044", borderRadius: 10, padding: "9px 13px" }}>
-                  <span style={{ fontSize: 13 }}>✦</span> Looking for something free instead? Check Free Entrance.
-                </div>
+              <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Free &amp; Booking</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal — genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
               </div>
 
               {/* Filters */}
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 16px 14px", marginBottom: 18 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>City</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
-                  {["All", "Major", "Local"].map(t => (
-                    <Pill key={t} label={t} active={(t === "All" && !craftType) || craftType === t} onClick={() => setCraftType(t === "All" ? null : (craftType === t ? null : t))} />
+                  {[...cityOptions, "🍬 Handmade"].map(c => (
+                    <Pill key={c} label={c} active={attractionCity === c} onClick={() => setAttractionCity(c)} color={c === "🍬 Handmade" ? "#E91E63" : undefined} />
                   ))}
                 </div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
-                  {["All", "Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"].map(k => (
-                    <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
-                  ))}
-                </div>
-                <div style={{ height: 1, background: C.border, margin: "2px 0 14px" }} />
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
-                  <div>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Speed</div>
-                    <Pill label="⚡ Bookable online" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Sort</div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
-                      <Pill label="📍 Closest" active={craftSort === "near"} color={C.gold}
-                        onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
+
+                {attractionCity !== "🍬 Handmade" && (
+                  <>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Price</div>
+                    <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
+                      {[["all", "All"], ["free", "🆓 Free"], ["paid", "🎟 Booking"]].map(([k, label]) => (
+                        <Pill key={k} label={label} active={priceFilter === k} onClick={() => setPriceFilter(k)} />
+                      ))}
                     </div>
-                  </div>
-                </div>
-                {craftSort === "near" && !isInDenmark(userCoords) && (
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you're in Denmark with location enabled — showing recommended order for now.</div>
-                )}
-              </div>
 
-              {/* Grid */}
-              {(() => {
-                const kindKeys = { Blacksmithing: ["blacksmith"], Ceramics: ["ceramic", "pottery"], Jewellery: ["jewellery"], Leather: ["leather"], Textiles: ["textile", "dyeing", "felting"], Woodwork: ["wood"], Candy: ["candy"] };
-                const filtered = craftItems.filter(cr => {
-                  const typeOk = !craftType || cr.type === craftType;
-                  const kindOk = !craftKind || cr.what.some(w => (kindKeys[craftKind] || []).some(k => w.toLowerCase().includes(k)));
-                  const bookOk = !bookableOnly || cr.bookingType === "online";
-                  return typeOk && kindOk && bookOk;
-                }).sort((a, b) => (craftSort === "near" && isInDenmark(userCoords))
-                  ? (townKmFromUser(a.location) ?? 9999) - (townKmFromUser(b.location) ?? 9999)
-                  : (b.rating || 0) - (a.rating || 0));
-                if (craftLoading) return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>Loading craft spots…</div>;
-                if (filtered.length === 0) return (
-                  <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
-                    <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
-                    <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>Nothing matches those filters</div>
-                    <div style={{ fontSize: 12 }}>Try clearing one — Denmark still has plenty to offer.</div>
-                  </div>
-                );
-                return (
-                  <div>
-                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, paddingLeft: 2 }}>{filtered.length} experience{filtered.length !== 1 ? "s" : ""}{craftSort === "near" && isInDenmark(userCoords) ? " · nearest first" : ""}</div>
-                    {filtered.map(craft => (
-                      <div key={craft.id} onClick={() => setCraftDetail(craft)} style={{ background: C.surface, borderRadius: 20, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 16, cursor: "pointer", boxShadow: "0 4px 18px rgba(0,0,0,0.18)" }}>
-                        <div style={{ height: 172, position: "relative", background: `linear-gradient(135deg, ${craft.color}40 0%, #0A0F1E 100%)` }}>
-                          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, opacity: 0.22 }}>{craft.emoji}</span>
-                          {craft.photo && <img src={craft.photo} alt={craft.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />}
-                          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(10,15,30,0.75) 100%)" }} />
-
-                          <div style={{ position: "absolute", top: 10, left: 10, display: "flex", gap: 6, alignItems: "center" }}>
-                            <span style={{ background: craft.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>{craft.type}</span>
-                            {craft.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.85)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, backdropFilter: "blur(4px)" }}>◆ Hidden Gem</span>}
-                          </div>
-
-                          <button onClick={(e) => { e.stopPropagation(); toggleSavePlace("craft", craft, craft.location); }}
-                            style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved("craft", craft.id) ? "#E91E63" : "#ffffffaa" }}>
-                            {isPlaceSaved("craft", craft.id) ? "♥" : "♡"}
-                          </button>
-
-                          <div style={{ position: "absolute", bottom: 10, left: 12, right: 12, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
-                            <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.1, textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>{craft.name}</div>
-                            {craft.rating && <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: C.gold, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", padding: "4px 9px", borderRadius: 100 }}>★ {craft.rating}</div>}
-                          </div>
-                          {craft.transportWarning && <div style={{ position: "absolute", top: 10, right: 48 }} title="Limited public transport"><span style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 12, padding: "5px 8px", borderRadius: 100 }}>🚲</span></div>}
+                    {priceFilter !== "free" && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
+                        <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
+                          {["All", "Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"].map(k => (
+                            <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
+                          ))}
                         </div>
-                        <div style={{ padding: "14px 16px 16px" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-                            <div style={{ fontSize: 12, color: C.muted }}>{craft.location} · {travelLabel(userCoords, craft.location, craft.travelTime)}{craft.priceNote ? ` · ${craft.priceNote}` : ""}</div>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", flexShrink: 0 }}>{craft.price || "On request"}</div>
-                          </div>
-                          <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: craft.gemlyxFind ? 6 : 12 }}>{craft.desc.slice(0, 110)}{craft.desc.length > 110 ? "…" : ""}</div>
-                          {craft.gemlyxFind && <div style={{ fontSize: 11.5, color: C.gold, lineHeight: 1.5, marginBottom: 12 }}><b>✦ Gemlyx Find:</b> {craft.gemlyxFind.slice(0, 90)}{craft.gemlyxFind.length > 90 ? "…" : ""}</div>}
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            {craft.bookingType === "online" ? (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "5px 10px", borderRadius: 100 }}>⚡ Book online</span>
-                            ) : (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, background: `${C.border}55`, padding: "5px 10px", borderRadius: 100 }}>Contact to book</span>
-                            )}
-                            <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.gold, fontSize: 12.5, fontWeight: 700 }}>
-                              Details <span style={{ fontSize: 15 }}>›</span>
-                            </div>
-                          </div>
+                      </>
+                    )}
+
+                    <div style={{ height: 1, background: C.border, margin: "2px 0 14px" }} />
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Popularity</div>
+                        <Pill label="◆ Hidden Gem" active={hiddenGemOnly} onClick={() => setHiddenGemOnly(v => !v)} color={C.gold} />
+                      </div>
+                      {priceFilter !== "free" && (
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Speed</div>
+                          <Pill label="⚡ Bookable online" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Sort</div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
+                          <Pill label="📍 Closest" active={craftSort === "near"} color={C.gold}
+                            onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
                         </div>
                       </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* ── ATTRACTIONS ──────────────────────────────────── */}
-          {tab === "attractions" && (
-            <div className={pageAnim} style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Free Entrance</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Genuinely free places worth your time, city by city. Anything ticketed — like Tivoli or Den Gamle By — lives under Booking instead.</div>
-              </div>
-
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 18 }}>
-                {["Copenhagen", "Aarhus", "Aalborg", "🍬 Handmade"].map(c => (
-                  <Pill key={c} label={c} active={attractionCity === c} onClick={() => setAttractionCity(c)} color={c === "🍬 Handmade" ? "#E91E63" : undefined} />
-                ))}
+                    </div>
+                    {craftSort === "near" && !isInDenmark(userCoords) && (
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you're in Denmark with location enabled — showing recommended order for now.</div>
+                    )}
+                  </>
+                )}
               </div>
 
               {attractionCity === "🍬 Handmade" ? (
@@ -2080,47 +2039,70 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
                   ))}
                 </>
+              ) : filtered.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted, background: C.surface, borderRadius: 16, border: `1px dashed ${C.border}` }}>
+                  <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
+                  <div style={{ fontSize: 14, color: C.light, fontWeight: 600, marginBottom: 4 }}>Nothing matches those filters</div>
+                  <div style={{ fontSize: 12 }}>Try clearing one — Denmark still has plenty to offer.</div>
+                </div>
               ) : (
-              freeEntrance.filter(a => a.city === attractionCity).map(a => (
-                <div key={a.id} onClick={() => setFreeDetail(a)} style={{ borderTop: `1px solid ${C.border}`, padding: "16px 0 20px", cursor: "pointer" }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", background: `${a.color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{a.emoji}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{a.name}</div>
-                        <div style={{ marginLeft: "auto", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
-                          <button onClick={(e) => { e.stopPropagation(); toggleSavePlace("free", a, a.city); }}
-                            style={{ background: "none", border: "none", padding: 0, fontSize: 15, cursor: "pointer", color: isPlaceSaved("free", a.id) ? "#E91E63" : C.muted }}>
-                            {isPlaceSaved("free", a.id) ? "♥" : "♡"}
-                          </button>
-                          {a.popularityTag && (
-                            <span style={{ fontSize: 9, fontWeight: 700, color: a.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: a.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.bg, padding: "3px 8px", borderRadius: 100 }}>
-                              {a.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"}
-                            </span>
+                <div>
+                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, paddingLeft: 2 }}>{filtered.length} place{filtered.length !== 1 ? "s" : ""}{craftSort === "near" && isInDenmark(userCoords) ? " · nearest first" : ""}</div>
+                  {filtered.map(item => (
+                    <div key={`${item._kind}-${item.id}`} onClick={() => item._kind === "free" ? setFreeDetail(item) : setCraftDetail(item)}
+                      style={{ background: C.surface, borderRadius: 20, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 16, cursor: "pointer", boxShadow: "0 4px 18px rgba(0,0,0,0.18)" }}>
+                      <div style={{ height: 172, position: "relative", background: `linear-gradient(135deg, ${item.color}40 0%, #0A0F1E 100%)` }}>
+                        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, opacity: 0.22 }}>{item.emoji}</span>
+                        {item.photo && <img src={item.photo} alt={item.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />}
+                        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(10,15,30,0.75) 100%)" }} />
+
+                        <div style={{ position: "absolute", top: 10, left: 10, display: "flex", gap: 6, alignItems: "center" }}>
+                          <span style={{ background: item._kind === "free" ? "#2E7D32" : item.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                            {item._kind === "free" ? "Free" : item.type}
+                          </span>
+                          {item.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.85)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, backdropFilter: "blur(4px)" }}>◆ Hidden Gem</span>}
+                        </div>
+
+                        <button onClick={(e) => { e.stopPropagation(); toggleSavePlace(item._kind, item, item._kind === "craft" ? item.location : item.city); }}
+                          style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
+                          {isPlaceSaved(item._kind, item.id) ? "♥" : "♡"}
+                        </button>
+
+                        <div style={{ position: "absolute", bottom: 10, left: 12, right: 12, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.1, textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>{item.name}</div>
+                          {item.rating && <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: C.gold, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", padding: "4px 9px", borderRadius: 100 }}>★ {item.rating}</div>}
+                        </div>
+                        {item.transportWarning && <div style={{ position: "absolute", top: 10, right: 48 }} title="Limited public transport"><span style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 12, padding: "5px 8px", borderRadius: 100 }}>🚲</span></div>}
+                      </div>
+                      <div style={{ padding: "14px 16px 16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                          <div style={{ fontSize: 12, color: C.muted }}>{item._kind === "craft" ? item.location : item.city}{item._kind === "craft" ? ` · ${travelLabel(userCoords, item.location, item.travelTime)}` : ""}{item.priceNote ? ` · ${item.priceNote}` : ""}</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", flexShrink: 0 }}>{item._kind === "free" ? "Free" : (item.price || "On request")}</div>
+                        </div>
+                        <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: item.gemlyxFind ? 6 : 12 }}>{item.desc.slice(0, 110)}{item.desc.length > 110 ? "…" : ""}</div>
+                        {item.gemlyxFind && <div style={{ fontSize: 11.5, color: C.gold, lineHeight: 1.5, marginBottom: 12 }}><b>✦ Gemlyx Find:</b> {item.gemlyxFind.slice(0, 90)}{item.gemlyxFind.length > 90 ? "…" : ""}</div>}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          {item._kind === "craft" ? (
+                            item.bookingType === "online" ? (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "5px 10px", borderRadius: 100 }}>⚡ Book online</span>
+                            ) : (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, background: `${C.border}55`, padding: "5px 10px", borderRadius: 100 }}>Contact to book</span>
+                            )
+                          ) : (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "5px 10px", borderRadius: 100 }}>🆓 Walk in, free</span>
                           )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.gold, fontSize: 12.5, fontWeight: 700 }}>
+                            Details <span style={{ fontSize: 15 }}>›</span>
+                          </div>
                         </div>
                       </div>
-                      <div style={{ fontSize: 10, color: a.color, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 }}>
-                        {a.type}
-                        {isInDenmark(userCoords) && TOWN_COORDS[a.city] && (() => {
-                          const [tLat, tLon] = TOWN_COORDS[a.city];
-                          const dLat = (tLat - userCoords.lat) * 111.32;
-                          const dLon = (tLon - userCoords.lon) * 62.06;
-                          const km = Math.round(Math.sqrt(dLat * dLat + dLon * dLon));
-                          return ` · ~${km < 2 ? 2 : km} km from you`;
-                        })()}
-                      </div>
-                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: a.gemlyxFind ? 4 : 10 }}>{a.desc.slice(0, 100)}{a.desc.length > 100 ? "…" : ""}</div>
-                      {a.gemlyxFind && <div style={{ fontSize: 11.5, color: C.gold, lineHeight: 1.5, marginBottom: 10 }}><b>✦ Gemlyx Find:</b> {a.gemlyxFind.slice(0, 90)}{a.gemlyxFind.length > 90 ? "…" : ""}</div>}
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 12, fontWeight: 700 }}>
-                        Read more <span style={{ fontSize: 14 }}>›</span>
-                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              )))}
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {/* ── EVENTS ───────────────────────────────────────── */}
           {tab === "events" && (
