@@ -568,12 +568,39 @@ export default function Gemlyx() {
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[studioType];
       let context = "";
+      let candidateUrls = [];
       for (const q of cfg.queries) {
         try {
           const sRes = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
           const sData = await sRes.json();
           context = (context + " " + (sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 6).join(" ")).trim();
+          candidateUrls.push(...(sData.results || []).map(r => r.url).filter(Boolean));
         } catch { /* continue with what we have */ }
+      }
+
+      // Tavily's snippets are short excerpts — they often miss a specific price sitting
+      // in a menu page that just wasn't the bit Tavily happened to quote. If a result URL
+      // looks like the venue's OWN official site (its hostname shares a real word from the
+      // name, not just any site that mentions it), actually fetch that page's real text via
+      // the existing scan-source tool and fold it in — this is what turns "See website"
+      // from a lazy default into an actual last resort, not a first one.
+      if (["food", "night", "booking", "free"].includes(studioType) && candidateUrls.length > 0) {
+        const nameWords = name.toLowerCase().replace(/[^a-z0-9æøå ]/g, "").split(" ").filter(w => w.length >= 4);
+        const officialUrl = candidateUrls.find(u => {
+          try {
+            const host = new URL(u).hostname.replace(/^www\./, "").split(".")[0].toLowerCase();
+            return nameWords.some(w => host.includes(w) || w.includes(host));
+          } catch { return false; }
+        });
+        if (officialUrl) {
+          try {
+            const scanRes = await fetch(`/api/scan-source?url=${encodeURIComponent(officialUrl)}`);
+            const scanData = await scanRes.json();
+            if (scanData.text) {
+              context += ` OFFICIAL WEBSITE CONTENT (fetched directly from ${officialUrl}, more reliable than a search snippet for exact current prices/menu — prefer this over a vaguer search result if they conflict): ${scanData.text.slice(0, 3000)}`;
+            }
+          } catch { /* scan failed — draft proceeds on search snippets alone, same as before */ }
+        }
       }
 
       // Automatic Gemini + Google Search pre-check, BEFORE OpenAI writes a word — a second,
