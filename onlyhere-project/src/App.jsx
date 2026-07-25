@@ -743,7 +743,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       });
       const data = await res.json();
       const t = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-      if (!t.name || !t.desc) throw new Error("empty");
+      if (!t.name || (studioType === "food" ? !t.vibeLocation : !t.desc)) throw new Error("empty");
       // The AI is told to use YYYY-MM-DD but sometimes drifts into DD-MM-YYYY (likely
       // European/Danish habit bleeding through). new Date("30-06-2027") can't parse —
       // "30" isn't a valid month — and fails silently (Invalid Date, no error thrown),
@@ -810,7 +810,8 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       setStudioPhotoName(`${slugify(name)}.jpg`);
       setPublishStatus(null);
       setPublishErrorDetail(null);
-    } catch {
+    } catch (err) {
+      console.error("Studio draft failed:", err);
       setStudioError("Couldn't draft that — try again, or check the name.");
     }
     setStudioLoading(false);
