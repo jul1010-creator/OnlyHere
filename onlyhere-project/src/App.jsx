@@ -1129,6 +1129,21 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeTransport, setIntakeTransport] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  useEffect(() => {
+    // Auto-hide the weather/live-events row once the person starts scrolling down,
+    // so it doesn't permanently eat screen space — only the slim logo/search/menu
+    // row stays put. Reappears once they scroll back up near the very top.
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > lastY && y > 60) setHeaderCollapsed(true);
+      else if (y < lastY && y < 40) setHeaderCollapsed(false);
+      lastY = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const [showSearch, setShowSearch] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
@@ -2078,7 +2093,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       </div>
                       <div style={{ padding: "14px 16px 16px" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-                          <div style={{ fontSize: 12, color: C.muted }}>{item._kind === "craft" ? item.location : item.city}{item._kind === "craft" ? ` · ${travelLabel(userCoords, item.location, item.travelTime)}` : ""}{item.priceNote ? ` · ${item.priceNote}` : ""}</div>
+                          <div style={{ fontSize: 12, color: C.muted }}>{item._kind === "craft" ? item.location : item.city}{item._kind === "craft" ? ` · ${travelLabel(userCoords, item.location, item.travelTime)}` : ""}{item.priceNote ? ` · ${item.priceNote}` : ""}{craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item._kind === "craft" ? item.location : item.city); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}</div>
                           <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, fontFamily: "'Cormorant Garamond', serif", flexShrink: 0 }}>{item._kind === "free" ? "Free" : (item.price || "On request")}</div>
                         </div>
                         <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: item.gemlyxFind ? 6 : 12 }}>{item.desc.slice(0, 110)}{item.desc.length > 110 ? "…" : ""}</div>
@@ -2203,15 +2218,15 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
             return (
             <div className={pageAnim} style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers — but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
-              </div>
-              <PageHero src="/tuborg.jpg" emoji="🍺" color="#C8102E" />
-
               {!nightlifeTownView ? (
                 // ── LEVEL 1: pick a town ──────────────────────────
                 <>
+                  <div style={{ marginBottom: 18, paddingTop: 8 }}>
+                    <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
+                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers — but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
+                  </div>
+                  <PageHero src="/tuborg.jpg" emoji="🍺" color="#C8102E" />
+
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Pick a town</div>
                   {townList.map(t => {
                     const spots = townGroups[t];
@@ -2246,22 +2261,28 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                   {(() => {
                     const townContent = nightlifeTowns.find(nt => nt.name === nightlifeTownView);
-                    if (!townContent) return null;
+                    if (townContent) {
+                      return (
+                        <div style={{ marginBottom: 18 }}>
+                          {townContent.photo && (
+                            <div style={{ height: 160, borderRadius: 14, overflow: "hidden", marginBottom: 12, background: C.surface }}>
+                              <img src={townContent.photo} alt={townContent.name} onError={e => { e.target.style.display = "none"; }}
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            </div>
+                          )}
+                          <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 8 }}>{townContent.emoji} {townContent.name}</div>
+                          <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7 }}>{townContent.desc}</div>
+                          {townContent.gemlyxFind && (
+                            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginTop: 12, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+                              ◆ <b>Gemlyx Find:</b> {townContent.gemlyxFind}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    // No curated town content yet — still show a proper title instead of nothing
                     return (
-                      <div style={{ marginBottom: 18 }}>
-                        {townContent.photo && (
-                          <div style={{ height: 160, borderRadius: 14, overflow: "hidden", marginBottom: 12, background: C.surface }}>
-                            <img src={townContent.photo} alt={townContent.name} onError={e => { e.target.style.display = "none"; }}
-                              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          </div>
-                        )}
-                        <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7 }}>{townContent.desc}</div>
-                        {townContent.gemlyxFind && (
-                          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginTop: 12, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
-                            ◆ <b>Gemlyx Find:</b> {townContent.gemlyxFind}
-                          </div>
-                        )}
-                      </div>
+                      <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 18 }}>🍺 {nightlifeTownView}</div>
                     );
                   })()}
 
@@ -2945,6 +2966,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
           </div>
         </div>
 
+        {/* Weather + live/coming events collapse away on scroll down, freeing space for
+            actual content — only the logo/search/menu row above stays permanently visible */}
+        <div style={{ maxHeight: headerCollapsed ? 0 : 400, opacity: headerCollapsed ? 0 : 1, overflow: "hidden", transition: "max-height 0.25s ease, opacity 0.2s ease" }}>
         {/* Weather — own row below logo/search, full width, centered, so all cities' labels stay readable instead of being squeezed into one crowded row */}
         <div style={{ marginTop: 2, display: "flex", justifyContent: "center" }}>
           <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
@@ -2970,6 +2994,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ fontSize: 12, color: C.muted, padding: "8px 0" }}>📍 Getting your location...</div>
         )}
         <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
+        </div>
 
         {/* Search results */}
         {search.length > 1 && searchResults.length > 0 && (
