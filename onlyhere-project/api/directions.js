@@ -5,7 +5,7 @@
 // server-only, never exposed to the browser, unlike the VITE_ keys).
 
 export default async function handler(req, res) {
-  const { origin, destination, mode } = req.query;
+  const { origin, destination, mode, departure_time } = req.query;
   if (!origin || !destination) {
     return res.status(400).json({ error: "origin and destination required" });
   }
@@ -16,7 +16,13 @@ export default async function handler(req, res) {
   const travelMode = mode === "car" ? "driving" : mode === "walk" ? "walking" : mode === "transit" ? "transit" : "bicycling";
 
   try {
-    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin + ", Denmark")}&destination=${encodeURIComponent(destination + ", Denmark")}&mode=${travelMode}&key=${key}`;
+    let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin + ", Denmark")}&destination=${encodeURIComponent(destination + ", Denmark")}&mode=${travelMode}&key=${key}`;
+    // departure_time is optional — only transit/driving use it (transit for real
+    // schedule-based predictions like late-night checks, driving for live traffic).
+    // Must be a future Unix timestamp in seconds; Google rejects a past one.
+    if (departure_time && (travelMode === "transit" || travelMode === "driving")) {
+      url += `&departure_time=${departure_time}`;
+    }
     const r = await fetch(url);
     const data = await r.json();
     if (data.status !== "OK" || !data.routes?.[0]) {
