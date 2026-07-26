@@ -1075,24 +1075,21 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     const resolveFresh = (name) => resolveStopCoords(name) || freshGeo[name] || null;
     const found = {};
     for (const [origin, dest, how] of legs) {
-      let legMode = detectLegMode(how, primaryMode);
-      // Geographic sanity check: an AI-written "how" (e.g. "on foot") can be
-      // confidently wrong about distance in a way regex text-matching alone
-      // can't catch — a real ~350km Copenhagen→Aalborg jump mislabeled as
-      // walking is exactly this bug. Override using real known coordinates
-      // whenever we have them, regardless of what the plan text said.
-      const distKm = haversineKm(resolveFresh(origin), resolveFresh(dest));
-      if (distKm != null) {
-        // Roughly 5km/h walking pace → 30 minutes ≈ 2.5km. Unless the traveler's
-        // entire trip is walking-only (their explicit choice), no walking leg should
-        // ever run longer than that — beyond it, hop to biking or transit instead.
-        const walkCapKm = onlyWalking ? Infinity : 2.5;
-        if (legMode === "walking" && distKm > walkCapKm) legMode = distKm > 60 ? "transit" : "bicycling";
-        else if (legMode === "bicycling" && distKm > 60) legMode = "transit";
-      }
+      // Same shared function the render uses — guarantees fetch and display can
+      // never disagree on mode, and therefore never miss each other's cache entry.
+      const legMode = resolveLegMode(how, primaryMode, origin, dest, onlyWalking, freshGeo);
       const key = `${origin}|${dest}|${legMode}`;
+      // Pass real coordinates when known instead of a bare name — a bare "Bones"
+      // or "Rosenborg Castle" leaves Google's own geocoder (inside the Directions
+      // API, entirely separate from our own coordinate check above) free to match
+      // a same-named place anywhere, including a different branch of a restaurant
+      // chain 50km away. Coordinates are unambiguous; append ", Denmark" as the
+      // next-best disambiguator only when we truly don't have coordinates yet.
+      const originCoord = resolveFresh(origin), destCoord = resolveFresh(dest);
+      const originParam = originCoord ? `${originCoord.lat},${originCoord.lon}` : `${origin}, Denmark`;
+      const destParam = destCoord ? `${destCoord.lat},${destCoord.lon}` : `${dest}, Denmark`;
       try {
-        const res = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}`);
+        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}`);
         const data = await res.json();
         if (!data.error) found[key] = data;
         else console.warn(`Directions API: no result for ${origin} → ${dest} (${legMode}):`, data.error, "— check GOOGLE_MAPS_KEY is set on Vercel and the Directions API is enabled on that key's project.");
@@ -1106,6 +1103,28 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
     if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
     return geocodedCoords[name] || null;
+  };
+  // SINGLE SOURCE OF TRUTH for leg transport mode — used by fetchExactDurations
+  // (the background fetch) AND both render sites. Previously each computed mode
+  // independently: the fetch could correctly override "walking" to "transit" for
+  // a genuinely far pair, store the result under the "transit" cache key, while
+  // the render recalculated mode fresh with no distance check, still said
+  // "walking", and looked for a "walking" cache entry that was never created —
+  // silently falling through to a real Directions API result fetched separately
+  // for mode=walking between two names Google's OWN geocoder may have resolved
+  // completely differently than our Nominatim-based distance check did.
+  const resolveLegMode = (how, primaryMode, originName, destName, onlyWalking = false, extraGeo = {}) => {
+    let mode = detectLegMode(how, primaryMode);
+    const distKm = haversineKm(
+      resolveStopCoords(originName) || extraGeo[originName] || null,
+      resolveStopCoords(destName) || extraGeo[destName] || null
+    );
+    if (distKm != null) {
+      const walkCapKm = onlyWalking ? Infinity : 2.5;
+      if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
+      else if (mode === "bicycling" && distKm > 60) mode = "transit";
+    }
+    return mode;
   };
   // Free geocoding for specific landmarks (museums, attractions) that only towns have
   // coordinates for otherwise — no API key, no billing, unlike Google's Geocoding API.
@@ -1324,6 +1343,7 @@ CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN
 CRITICAL: make each day's arrivalTime sequence internally consistent — each stop's arrivalTime should follow realistically from the previous stop's arrivalTime + its suggestedStay + a sensible travel gap between them, using well-established Danish geography. Don't just space stops out evenly by habit; a genuinely quick stop should be followed soon after, a long museum visit should push the next arrivalTime later. If a day has too many stops to fit in a reasonable day (roughly 9am-9pm), that's a signal to trim rather than compress every stay time unrealistically.
 CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop name across every single day must be genuinely distinct — once a place has appeared as a stop on one day, it never appears again as a stop on any other day of this same plan (e.g. if Amalienborg is a stop on Day 1, it must not also appear as a stop on Day 3). If the traveler wants to revisit somewhere, that's a choice for THEM to make later, not something to build into the itinerary by default.
 CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are genuinely close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a genuinely long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to actually explore once they arrive, not a long haul tacked onto the end of an already-full day.
+CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
             { role: "user", content: convoText }
           ],
@@ -1376,7 +1396,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
       fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking); // fire-and-forget — legs show estimates until this resolves, then upgrade
-      setGuideModal({ _gid: gid, _mode: travelMode, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid, arrivalDate);
     } catch {
@@ -1695,7 +1715,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const monthName = now.toLocaleString("en", { month: "long" });
       const season = getSeason();
 
-      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
 Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
@@ -3684,7 +3704,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       const prevStop = prevDay?.stops?.[prevDay.stops.length - 1];
                       if (!prevStop) return null;
                       const how = day.glance?.legs?.[0]?.how || "";
-                      const mode = detectLegMode(how, guideModal._mode);
+                      const mode = resolveLegMode(how, guideModal._mode, prevStop.name, day.stops[0].name, guideModal._onlyWalking);
                       const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
                       const a = resolveStopCoords(prevStop.name), b = resolveStopCoords(day.stops[0].name);
                       const km = a && b ? kmBetween(a, b) : null;
@@ -3764,7 +3784,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           {i < day.stops.length - 1 ? (() => {
                             const nextStop = day.stops[i + 1];
                             const how = day.glance?.legs?.[i]?.how || "";
-                            const mode = detectLegMode(how, guideModal._mode);
+                            const mode = resolveLegMode(how, guideModal._mode, stop.name, nextStop.name, guideModal._onlyWalking);
                             const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
                             const a = resolveStopCoords(stop.name), b = resolveStopCoords(nextStop.name);
                             const km = a && b ? kmBetween(a, b) : null;
