@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { C } from "../utils/theme";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -10,7 +10,11 @@ const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); retur
 // greyed out, cursor not-allowed), not just soft-validated like a native
 // <input type="date">, which still lets you tap any day and only complains
 // on submit. This is what actually gives Skyscanner-style behavior.
-export const DateTimePicker = ({ value, onChange, minDate, label, hint }) => {
+//
+// forwardRef + useImperativeHandle so a PARENT field (e.g. Arrival) can tell
+// a SIBLING field (e.g. Departure) to open itself once a day is picked here —
+// see openPicker() below, used for the auto-advance-to-departure behavior.
+export const DateTimePicker = forwardRef(({ value, onChange, minDate, label, hint, onDaySelected }, ref) => {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const selected = value ? new Date(value) : null;
@@ -20,6 +24,10 @@ export const DateTimePicker = ({ value, onChange, minDate, label, hint }) => {
     return `${String(selected.getHours()).padStart(2, "0")}:${String(selected.getMinutes()).padStart(2, "0")}`;
   });
   const min = startOfDay(minDate || new Date());
+
+  useImperativeHandle(ref, () => ({
+    openPicker: () => setOpen(true),
+  }));
 
   useEffect(() => {
     const onClickOutside = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
@@ -60,7 +68,7 @@ export const DateTimePicker = ({ value, onChange, minDate, label, hint }) => {
       </button>
 
       {open && (
-        <div style={{ position: "absolute", zIndex: 50, top: "calc(100% + 6px)", left: 0, right: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}>
+        <div style={{ position: "absolute", zIndex: 50, top: "calc(100% + 6px)", left: 0, width: 300, maxWidth: "90vw", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <button type="button" disabled={!canGoPrevMonth} onClick={() => setViewMonth(new Date(year, month - 1, 1))}
               style={{ background: "none", border: "none", color: canGoPrevMonth ? C.text : C.border, fontSize: 16, cursor: canGoPrevMonth ? "pointer" : "not-allowed", padding: "4px 10px" }}>‹</button>
@@ -83,7 +91,12 @@ export const DateTimePicker = ({ value, onChange, minDate, label, hint }) => {
               const isSelected = selected && startOfDay(selected).getTime() === thisDate.getTime();
               return (
                 <button type="button" key={i} disabled={disabled}
-                  onClick={() => { commit(thisDate, timeValue); setViewMonth(thisDate); }}
+                  onClick={() => {
+                    commit(thisDate, timeValue);
+                    setViewMonth(thisDate);
+                    setOpen(false);
+                    if (onDaySelected) onDaySelected();
+                  }}
                   style={{
                     aspectRatio: "1", borderRadius: 8, border: "none", fontSize: 12.5, fontFamily: "'Plus Jakarta Sans', sans-serif",
                     background: isSelected ? C.accent : "transparent",
@@ -110,4 +123,4 @@ export const DateTimePicker = ({ value, onChange, minDate, label, hint }) => {
       )}
     </div>
   );
-};
+});

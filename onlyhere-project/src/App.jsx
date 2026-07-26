@@ -956,7 +956,8 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
         const numbered = names.map((n, i) => `${i + 1}. ${n}`).join("; ");
         let context = "";
         try {
-          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} Denmark train bus travel time where to stay overnight`)}`);
+          const nowMonth = new Date().toLocaleString("en", { month: "long" });
+          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} Denmark train bus travel time hotel hostel prices per night ${nowMonth} ${new Date().getFullYear()}`)}`);
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down — OpenAI will fall back to safe wording */ }
@@ -968,7 +969,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
             response_format: { type: "json_object" },
             messages: [
               { role: "system", content: `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
-{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day."}
+{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented."}
 Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
               { role: "user", content: context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks." }
             ],
@@ -1344,6 +1345,7 @@ CRITICAL: make each day's arrivalTime sequence internally consistent — each st
 CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop name across every single day must be genuinely distinct — once a place has appeared as a stop on one day, it never appears again as a stop on any other day of this same plan (e.g. if Amalienborg is a stop on Day 1, it must not also appear as a stop on Day 3). If the traveler wants to revisit somewhere, that's a choice for THEM to make later, not something to build into the itinerary by default.
 CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are genuinely close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a genuinely long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to actually explore once they arrive, not a long haul tacked onto the end of an already-full day.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
+CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
             { role: "user", content: convoText }
           ],
@@ -1487,12 +1489,14 @@ If the conversation only covers a single day or a few stops with no explicit day
   ]);
   const [aiInput, setAiInput] = useState("");
   const [intakeArrival, setIntakeArrival] = useState("");
+  const departurePickerRef = useRef(null);
   const [intakeDeparture, setIntakeDeparture] = useState("");
   const [intakeStartPoint, setIntakeStartPoint] = useState("");
   const [intakeBudgetText, setIntakeBudgetText] = useState("");
   const [intakeInterest, setIntakeInterest] = useState([]);
   const [intakeGemPref, setIntakeGemPref] = useState(null);
   const [intakePlacePref, setIntakePlacePref] = useState(null);
+  const [intakeTravelers, setIntakeTravelers] = useState("");
   const [intakeTransport, setIntakeTransport] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -3025,11 +3029,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     value={intakeArrival}
                     onChange={setIntakeArrival}
                     minDate={new Date()}
+                    onDaySelected={() => departurePickerRef.current?.openPicker()}
                   />
                 </div>
 
                 <div style={{ marginBottom: 14 }}>
                   <DateTimePicker
+                    ref={departurePickerRef}
                     label="Departure"
                     hint="(date & time)"
                     value={intakeDeparture}
@@ -3073,6 +3079,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   ))}
                 </div>
 
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Who's traveling</div>
+                <div style={{ marginBottom: 14 }}>
+                  <input value={intakeTravelers} onChange={e => setIntakeTravelers(e.target.value)}
+                    placeholder="e.g. 4 friends, or 2 people + 1 joining a few days later"
+                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: "border-box" }} />
+                </div>
+
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeArrival || intakeBudgetText || intakeInterest.length || intakeTransport.length ? 16 : 0 }}>
                   {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car", "🚐 Camper van", "⛺ Tent"].map(tr => (
@@ -3080,7 +3093,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   ))}
                 </div>
 
-                {(intakeArrival || intakeDeparture || intakeStartPoint.trim() || intakeBudgetText || intakeInterest.length || intakeGemPref || intakePlacePref || intakeTransport.length > 0) && (
+                {(intakeArrival || intakeDeparture || intakeStartPoint.trim() || intakeBudgetText || intakeInterest.length || intakeGemPref || intakePlacePref || intakeTravelers.trim() || intakeTransport.length > 0) && (
                   <button
                     onClick={() => {
                       const parts = [];
@@ -3101,6 +3114,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       if (intakeInterest.length) parts.push(`Interests: ${intakeInterest.join(", ")}`);
                       if (intakeGemPref) parts.push(`Travel style: ${intakeGemPref}`);
                       if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
+                      if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
                       if (intakeTransport.length) parts.push(`Getting around: ${intakeTransport.map(t => t.replace(/^\S+\s/, "")).join(", ")}`);
                       sendAI(parts.join(" | "), { hidden: true });
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
@@ -3823,6 +3837,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
                           <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
                           <span style={{ color: C.light }}>{day.glance.accommodation}</span>
+                          {day.glance.stayArea && (
+                            // NOT an affiliate link yet — plain Booking.com search, works today.
+                            // Once the Booking.com Affiliate Partner Program account is approved,
+                            // add "&aid=YOUR_AID_HERE" to this URL and every one of these becomes
+                            // a real earning link with zero other changes needed.
+                            <a href={`https://www.booking.com/searchresults.html?ss=${encodeURIComponent(day.glance.stayArea + ", Denmark")}`} target="_blank" rel="noreferrer"
+                              style={{ display: "block", marginTop: 4, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                              🔎 Search stays near {day.glance.stayArea} ↗
+                            </a>
+                          )}
                         </div>
                       </div>
                     ) : glancePending > 0 ? (
