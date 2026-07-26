@@ -1053,7 +1053,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // guide, fetched once before it's shown. Needs /api/directions.js + GOOGLE_MAPS_KEY —
   // if either is missing, this silently no-ops and legs fall back to the km estimate,
   // same graceful-degradation pattern as the Gemini pre-check.
-  const fetchExactDurations = async (days, primaryMode) => {
+  const fetchExactDurations = async (days, primaryMode, freshGeo = {}, onlyWalking = false) => {
     // Build (origin, dest, how-text) triples instead of flat pairs, so each leg can be
     // routed with ITS OWN mode — e.g. a mostly-bike trip that needs a ferry to Bornholm
     // gets that one leg queried as transit, not bicycling (which has no route across
@@ -1068,6 +1068,10 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || ""]);
       }
     });
+    // Resolves BOTH already-known coords (towns/landmarks/prior geocodes) and this
+    // guide's freshly-geocoded ones passed in directly — never the stale geocodedCoords
+    // state var, which isn't updated in this closure until the next re-render.
+    const resolveFresh = (name) => resolveStopCoords(name) || freshGeo[name] || null;
     const found = {};
     for (const [origin, dest, how] of legs) {
       let legMode = detectLegMode(how, primaryMode);
@@ -1076,9 +1080,13 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // can't catch — a real ~350km Copenhagen→Aalborg jump mislabeled as
       // walking is exactly this bug. Override using real known coordinates
       // whenever we have them, regardless of what the plan text said.
-      const distKm = haversineKm(resolveStopCoords(origin), resolveStopCoords(dest));
+      const distKm = haversineKm(resolveFresh(origin), resolveFresh(dest));
       if (distKm != null) {
-        if (legMode === "walking" && distKm > 3) legMode = distKm > 60 ? "transit" : "bicycling";
+        // Roughly 5km/h walking pace → 30 minutes ≈ 2.5km. Unless the traveler's
+        // entire trip is walking-only (their explicit choice), no walking leg should
+        // ever run longer than that — beyond it, hop to biking or transit instead.
+        const walkCapKm = onlyWalking ? Infinity : 2.5;
+        if (legMode === "walking" && distKm > walkCapKm) legMode = distKm > 60 ? "transit" : "bicycling";
         else if (legMode === "bicycling" && distKm > 60) legMode = "transit";
       }
       const key = `${origin}|${dest}|${legMode}`;
@@ -1114,6 +1122,9 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       await new Promise(r => setTimeout(r, 250)); // be a polite, low-volume client to a free public service
     }
     if (Object.keys(found).length > 0) setGeocodedCoords(prev => ({ ...prev, ...found }));
+    return found; // returned directly too — setGeocodedCoords won't be visible in this same closure until
+                   // a re-render happens, so any caller needing the fresh coords right away (not next render)
+                   // must use this return value instead of reading the geocodedCoords state variable.
   };
   const kmBetween = (a, b) => {
     const dLat = (a.lat - b.lat) * 111.32;
@@ -1310,6 +1321,8 @@ CRITICAL — NO REPETITIVE DEFINITIONS: don't name what something is and then im
 CRITICAL — CADENCE: vary sentence length within each note — a short blunt statement next to a longer one reads as human; two same-length sentences in a row (e.g. "The restaurant is well-regarded and has been a staple in Copenhagen for over 100 years") reads as flat, generated filler.
 CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN stop — sights, museums, food spots, bars and evening/nightlife included. A full day is usually 2-5 stops (morning sight, afternoon sight, food, evening). Never collapse a day to a single stop if the plan mentioned more, and never bury an evening venue inside another stop's note — give it its own stop in order.
 CRITICAL: make each day's arrivalTime sequence internally consistent — each stop's arrivalTime should follow realistically from the previous stop's arrivalTime + its suggestedStay + a sensible travel gap between them, using well-established Danish geography. Don't just space stops out evenly by habit; a genuinely quick stop should be followed soon after, a long museum visit should push the next arrivalTime later. If a day has too many stops to fit in a reasonable day (roughly 9am-9pm), that's a signal to trim rather than compress every stay time unrealistically.
+CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop name across every single day must be genuinely distinct — once a place has appeared as a stop on one day, it never appears again as a stop on any other day of this same plan (e.g. if Amalienborg is a stop on Day 1, it must not also appear as a stop on Day 3). If the traveler wants to revisit somewhere, that's a choice for THEM to make later, not something to build into the itinerary by default.
+CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are genuinely close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a genuinely long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to actually explore once they arrive, not a long haul tacked onto the end of an already-full day.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
             { role: "user", content: convoText }
           ],
@@ -1343,20 +1356,25 @@ If the conversation only covers a single day or a few stops with no explicit day
         } catch { /* keep the first attempt if the retry itself fails to parse */ }
       }
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
-      await geocodeStopsForGuide(parsed.days);
+      const freshGeo = await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
       const lc = convoText.toLowerCase();
       const mentionsTransit = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(lc);
       const mentionsCar = /\b(car|driving|drive|bil|camper ?van|rv\b)\b/.test(lc);
       const mentionsBike = /\b(bike|cykel|cycling|cycle|bicycl)\b/.test(lc);
+      const mentionsWalking = /\bwalk(ing)?\b/.test(lc);
       const mentionedModes = [mentionsBike && "bike", mentionsCar && "car", mentionsTransit && "public transport"].filter(Boolean);
+      // Only relax the 30-minute walking cap when walking is genuinely the traveler's
+      // ONLY selected mode — if anything else is mixed in too, that's the signal they
+      // expect faster transport to kick in once a distance stops being a real walk.
+      const onlyWalking = mentionsWalking && mentionedModes.length === 0;
       // When more than one mode is mentioned, this is a genuine mixed-mode trip (e.g.
       // "bike some days, train for the long stretches") — travelMode stays the single
       // best default for legs the plan doesn't specify, but mixedModes carries the full
       // set through to the per-day prompt so it stops treating one mode as dominant.
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
-      fetchExactDurations(parsed.days, travelMode); // fire-and-forget — legs show estimates until this resolves, then upgrade
+      fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking); // fire-and-forget — legs show estimates until this resolves, then upgrade
       setGuideModal({ _gid: gid, _mode: travelMode, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid, arrivalDate);
