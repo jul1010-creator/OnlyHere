@@ -97,6 +97,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           <AtAGlanceCard rows={[
             { icon: "🍽️", label: "Serves", value: item.category },
             { icon: "💰", label: "Price", value: item.price },
+            { icon: "⏱️", label: "Time Needed", value: item.timeNeeded },
             { icon: "📍", label: "Neighbourhood", value: item.location },
           ]} />
         )}
