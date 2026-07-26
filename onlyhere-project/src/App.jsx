@@ -16,7 +16,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import { C } from "./utils/theme";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
-  isInDenmark, travelLabel, isFullPlanText, stripMarkdown, daysUntil, detectLegMode, haversineKm,
+  isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm,
 } from "./utils/helpers";
 
 import { DetailPage } from "./components/DetailPage";
@@ -957,7 +957,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
         let context = "";
         try {
           const nowMonth = new Date().toLocaleString("en", { month: "long" });
-          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} Denmark train bus travel time hotel hostel prices per night ${nowMonth} ${new Date().getFullYear()}`)}`);
+          const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} Denmark train bus travel time best hotel hostel names and prices per night ${nowMonth} ${new Date().getFullYear()}`)}`);
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down — OpenAI will fall back to safe wording */ }
@@ -969,7 +969,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
             response_format: { type: "json_object" },
             messages: [
               { role: "system", content: `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
-{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented."}
+{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
 Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
               { role: "user", content: context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks." }
             ],
@@ -1333,7 +1333,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food) — if a specific leg is genuinely expensive at full price (e.g. a long train trip), mention the real cheaper alternative (DSB Orange billetter — discount advance-purchase tickets — or Flixbus/Kombardo Expresbus for intercity routes) rather than just quoting the expensive default fare.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\', \'vibrant\', \'bustling\', \'nestled\', \'picturesque\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food) — if a specific leg is genuinely expensive at full price (e.g. a long train trip), mention the real cheaper alternative (DSB Orange billetter — discount advance-purchase tickets — or Flixbus/Kombardo Expresbus for intercity routes) rather than just quoting the expensive default fare.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\', \'vibrant\', \'bustling\', \'nestled\', \'picturesque\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
@@ -1366,7 +1366,7 @@ If the conversation only covers a single day or a few stops with no explicit day
             model: "gpt-4o-mini",
             response_format: { type: "json_object" },
             messages: [
-              { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation.` },
+              { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation.` },
               { role: "user", content: convoText }
             ],
             max_tokens: 1800,
@@ -1398,7 +1398,8 @@ If the conversation only covers a single day or a few stops with no explicit day
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
       fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking); // fire-and-forget — legs show estimates until this resolves, then upgrade
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
+      const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid, arrivalDate);
     } catch {
@@ -1735,6 +1736,8 @@ HIDDEN GEMS ARE A BASELINE, NOT A NICHE PICK: regardless of what "Preference" sa
 
 Once you've sent that Applied+question reply, the traveler's very next message — whatever it says, even just "yes" or "go ahead" — is your green light to build the actual plan (still following the existing map/route/guide-building system exactly as before), using everything known: all tick-boxes, plus any extra detail they added in that reply. Don't ask a third round of questions first — default to a full, clear day-by-day plan unless they've specifically asked for something lighter or simpler. Any detail folded into a skip-style reply (e.g. "just build it, I'm also staying in Aarhus a couple days") counts as real signal for the plan, exactly like anything else they've told you.
 
+WHAT "BUILDING THE PLAN" ACTUALLY MEANS IN THIS CHAT REPLY — THIS IS A HARD FORMAT RULE: when you're ready to build (whether from the tick-box flow above or the freeform flow below), your reply in THIS CONVERSATION is NEVER a day-by-day breakdown — no "Day 1: ... Day 2: ..." listing of stops, times, or activities here. That level of detail belongs to the real guide (with actual verified routes, maps, and times) that gets built separately once the traveler taps "Turn this into a guide" — writing it out again in plain chat text is pure duplication and is exactly the "wall of text" feeling that makes this feel like a generic chatbot instead of a real planner handing off a finished itinerary. Instead, your ready-to-build reply is short — a genuine local planner's handoff, not a list: 2-4 sentences describing the KIND of trip you've put together (the vibe, the balance — e.g. "This leans into real local nightlife and food, mixing well-known spots with a couple of places most tourists never find, at a relaxed pace so nothing feels rushed") plus the essentials worth knowing before they see it — budget reality, the one most important practical thing, and a transport tip if relevant — the same essentials system the guide itself uses, just spoken aloud here first. Never itemize individual stops or times in this reply. End this exact reply, and ONLY a genuinely ready-to-build reply, with this exact string on its own line so the interface knows to show the "Turn this into a guide" button — it's invisible to the traveler, never explain what it is, never mention it exists, just include it silently: [[GEMLYX_READY_TO_BUILD]]
+
 NARROW DOWN GENUINE INTEREST, DON'T JUST ACCEPT THE FIRST BROAD CATEGORY — a broad answer like "nature" or "history" still fits dozens of very different places in Denmark, and defaulting to the same handful of famous spots for every "nature" answer is exactly how everyone ends up at the same places. If someone gives a broad category and you have room for one more question before committing to a full plan, ask ONE specific, real follow-up that actually changes the plan — e.g. for "nature": "coastal walks, forest and lakes, or the wilder Wadden Sea/island side?"; for "history": "Viking-era sites, WWII history, or old market towns?"; for "food": "casual local spots or something worth planning a splurge around?" Skip this if they've already been specific, or if they've made clear they just want you to pick for them — don't turn a simple "surprise me" into another round of questions.
 
 SCOPE THE ANSWER TO WHAT THEY ASKED — once you do have enough to plan, match the plan's size to what they actually requested. Someone with a few hours doesn't need a 3-day, 3-city itinerary. Someone who said "budget-friendly" shouldn't get a plan stacked with 230 DKK museum tickets without at least flagging the cost. Don't pad a short trip into a long one just to showcase more of Gemlyx's content. This is about SCOPE (how much ground the plan covers), not detail — still give real costs and specifics within whatever size plan fits their ask.
@@ -1934,7 +1937,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
                         )}
                         <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
-                          {m.role === "assistant" ? stripMarkdown(m.text) : m.text}
+                          {m.role === "assistant" ? stripMarkdown(stripReadyMarker(m.text)) : m.text}
                         </div>
                       </div>
                     ))}
@@ -1944,7 +1947,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 {(() => {
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
-                  const readyToBuild = lastAssistantMsg && isFullPlanText(lastAssistantMsg.text);
+                  const readyToBuild = lastAssistantMsg && isReadyToBuild(lastAssistantMsg.text);
                   return readyToBuild && !aiLoading;
                 })() && (
                   <>
@@ -3690,12 +3693,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
                 <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{guideModal.title}</div>
                 <div style={{ marginBottom: 14 }} />
-                {guideModal.essentials && (guideModal.essentials.budgetReality || guideModal.essentials.keepInMind) && (
+                {guideModal.essentials && (guideModal.essentials.budgetReality || guideModal.essentials.keepInMind || guideModal.essentials.transportTip) && (
                   <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Essentials</div>
                     {guideModal.essentials.budgetReality && (
-                      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: guideModal.essentials.keepInMind ? 8 : 0 }}>
+                      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: (guideModal.essentials.keepInMind || guideModal.essentials.transportTip) ? 8 : 0 }}>
                         💰 {guideModal.essentials.budgetReality}
+                      </div>
+                    )}
+                    {guideModal.essentials.transportTip && (
+                      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: guideModal.essentials.keepInMind ? 8 : 0 }}>
+                        🚆 {guideModal.essentials.transportTip}
                       </div>
                     )}
                     {guideModal.essentials.keepInMind && (
@@ -3831,25 +3839,48 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         </div>
                       );
                     })}
-                    {day.glance?.accommodation ? (
-                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "10px 12px", marginTop: 2 }}>
-                        <span style={{ fontSize: 13, flexShrink: 0 }}>🏡</span>
-                        <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
-                          <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
-                          <span style={{ color: C.light }}>{day.glance.accommodation}</span>
-                          {day.glance.stayArea && (
-                            // NOT an affiliate link yet — plain Booking.com search, works today.
-                            // Once the Booking.com Affiliate Partner Program account is approved,
-                            // add "&aid=YOUR_AID_HERE" to this URL and every one of these becomes
-                            // a real earning link with zero other changes needed.
-                            <a href={`https://www.booking.com/searchresults.html?ss=${encodeURIComponent(day.glance.stayArea + ", Denmark")}`} target="_blank" rel="noreferrer"
-                              style={{ display: "block", marginTop: 4, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
-                              🔎 Search stays near {day.glance.stayArea} ↗
-                            </a>
-                          )}
+                    {day.glance?.accommodation ? (() => {
+                      // Real checkin/checkout for this specific day, not "today" —
+                      // Booking.com's own default (as seen live) silently ignores a
+                      // bare destination-only URL and falls back to "near me, today",
+                      // which is exactly the wrong result for a trip being planned
+                      // for a future date.
+                      const dayDate = guideModal._arrivalDate ? new Date(guideModal._arrivalDate) : null;
+                      if (dayDate) dayDate.setDate(dayDate.getDate() + (day.day - 1));
+                      const nextDate = dayDate ? new Date(dayDate) : null;
+                      if (nextDate) nextDate.setDate(nextDate.getDate() + 1);
+                      const fmt = (d) => d ? d.toISOString().slice(0, 10) : null;
+                      const adultsMatch = (guideModal._travelers || "").match(/\d+/);
+                      const adults = adultsMatch ? adultsMatch[0] : "2";
+                      const searchTerm = day.glance.recommendedStay || day.glance.stayArea;
+                      const bookingUrl = searchTerm
+                        ? `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(searchTerm + ", Denmark")}` +
+                          (fmt(dayDate) ? `&checkin=${fmt(dayDate)}&checkout=${fmt(nextDate)}` : "") +
+                          `&group_adults=${adults}&no_rooms=1`
+                        : null;
+                      return (
+                        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "10px 12px", marginTop: 2 }}>
+                          <span style={{ fontSize: 13, flexShrink: 0 }}>🏡</span>
+                          <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+                            <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
+                            <span style={{ color: C.light }}>{day.glance.accommodation}</span>
+                            {day.glance.recommendedStay && (
+                              <div style={{ marginTop: 2 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
+                            )}
+                            {bookingUrl && (
+                              // NOT an affiliate link yet — plain Booking.com search, works today.
+                              // Once the Booking.com Affiliate Partner Program account is approved,
+                              // add "&aid=YOUR_AID_HERE" to this URL and every one of these becomes
+                              // a real earning link with zero other changes needed.
+                              <a href={bookingUrl} target="_blank" rel="noreferrer"
+                                style={{ display: "block", marginTop: 4, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                                🔎 {day.glance.recommendedStay ? `See ${day.glance.recommendedStay} on Booking.com` : `Search stays near ${day.glance.stayArea}`} ↗
+                              </a>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ) : glancePending > 0 ? (
+                      );
+                    })() : glancePending > 0 ? (
                       <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>✨ Checking travel times & where to stay…</div>
                     ) : null}
                   </div>

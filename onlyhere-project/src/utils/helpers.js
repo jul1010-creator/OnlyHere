@@ -84,6 +84,16 @@ export const travelLabel = (userCoords, townName, fallbackTravelTime) => {
 
 // A message counts as a "full plan" once it lays out 2+ days — these get collapsed
 // to a short line in chat; the real detail only appears inside the generated guide.
+// The chat reply no longer needs to BE a day-by-day breakdown to signal "ready to
+// build" — that forced a full itinerary into the plain-text chat, duplicating what
+// the actual guide (with real routes/maps) shows once built. Instead the model ends
+// a genuinely-ready summary with a hidden marker string; this checks for that marker
+// instead of counting "Day N:" occurrences. isFullPlanText is kept for any content
+// that still uses the old day-by-day format (e.g. already-sent messages).
+export const READY_MARKER = "[[GEMLYX_READY_TO_BUILD]]";
+export const isReadyToBuild = (text) => !!text && text.includes(READY_MARKER);
+export const stripReadyMarker = (text) => text ? text.replaceAll(READY_MARKER, "").trim() : text;
+
 export const isFullPlanText = (text) => {
   if (!text) return false;
   const dayHeaders = (text.match(/day\s*\d+\s*[:\-–]/gi) || []).length;
