@@ -56,6 +56,19 @@ export const weatherIcon = (code) => {
 export const isInDenmark = (coords) => coords && typeof coords === "object" &&
   coords.lat >= 54.4 && coords.lat <= 57.9 && coords.lon >= 7.9 && coords.lon <= 15.3;
 
+// Straight-line km between two {lat,lon} points — used as a sanity check on leg
+// transport mode, since an AI-written "how" description (e.g. "on foot") can be
+// geographically wrong in a way regex text-matching alone can never catch.
+export const haversineKm = (a, b) => {
+  if (!a || !b) return null;
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLon = (b.lon - a.lon) * Math.PI / 180;
+  const lat1 = a.lat * Math.PI / 180, lat2 = b.lat * Math.PI / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+
 // Straight-line km distance from the user to a named town, falling back to the
 // existing "from Copenhagen" travel-time string whenever it can't be resolved.
 export const travelLabel = (userCoords, townName, fallbackTravelTime) => {
