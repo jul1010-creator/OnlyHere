@@ -1437,11 +1437,13 @@ If the conversation only covers a single day or a few stops with no explicit day
     { role: "assistant", text: "Hi! I'm your Local Assist ◆ Tell me where you're heading — or what you're after — and I'll find you something that exists nowhere else." }
   ]);
   const [aiInput, setAiInput] = useState("");
-  const [intakeTime, setIntakeTime] = useState(null);
+  const [intakeArrival, setIntakeArrival] = useState("");
+  const [intakeDeparture, setIntakeDeparture] = useState("");
+  const [intakeStartPoint, setIntakeStartPoint] = useState("");
   const [intakeBudgetText, setIntakeBudgetText] = useState("");
-  const [intakeDate, setIntakeDate] = useState("");
   const [intakeInterest, setIntakeInterest] = useState([]);
   const [intakeGemPref, setIntakeGemPref] = useState(null);
+  const [intakePlacePref, setIntakePlacePref] = useState(null);
   const [intakeTransport, setIntakeTransport] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -1658,7 +1660,8 @@ If the conversation only covers a single day or a few stops with no explicit day
       const upcomingMajor = majorEvents.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
       const upcomingViking = vikingEvents.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
       const craftList = craftItems.map(c => `${c.name} in ${c.location} (${c.price}${c.rating ? ", ★" + c.rating : ""})`).join("; ");
-      const townsList = towns.map(t => `${t.name}${t.region ? ` (${t.region})` : ""}${t.highlight ? ` — ${t.highlight}` : ""}`).join("; ");
+      const shuffledTowns = [...towns].sort(() => Math.random() - 0.5);
+      const townsList = shuffledTowns.map(t => `${t.name}${t.region ? ` (${t.region})` : ""}${t.highlight ? ` — ${t.highlight}` : ""}`).join("; ");
       const now = new Date();
       const monthName = now.toLocaleString("en", { month: "long" });
       const season = getSeason();
@@ -1670,7 +1673,13 @@ Transport matters: if the person hasn't said how they're getting around, ask —
 
 ASK BEFORE YOU PLAN — ONLY WHEN THEY'VE ACTUALLY ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary — not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately — never redirect a simple question into an intake questionnaire. Only when they're asking you to actually build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together — for example: "Happy to help! Where are you starting from — flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — real hidden gems, the well-known popular spots, or a mix?" A genuinely minimal request like "I wanna go to Denmark, plan me something" gives you ZERO of those things — this is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for actually knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip actually begins — a guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. Once you know enough to build, your LAST question before actually building should always be: "Want a simple plan you can glance at, or a full hour-by-hour schedule?" — build the actual plan once you have that answer, either from what they've said or because they already told you everything in their first message.
 IF SOMEONE NAMES A SPECIFIC PLACE, IT MUST BE IN THE PLAN: if the traveler explicitly says they want to visit somewhere specific (e.g. "I really want to see King's Garden"), that place is not optional — work it into the itinerary for real, don't quietly drop it in favor of your own picks.
-IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arriving date, days, budget, interests, travel style, transport listed together, not written as a natural sentence) — this came from someone ticking boxes on the intake form, not typing. The tick-boxes are just quick context-gathering, exactly like this conversation is — NEVER treat "Apply these" as an instant command to dump a full plan with zero acknowledgment. Open your reply by naturally acknowledging what they picked, casual and warm, like a friend noticing what someone's into — "So you're landing the 10th, five days, sounds like nightlife and nature are the move" — never a robotic form-confirmation ("I have received your preferences: ..."). If "Travel style" is included in what they ticked (Bucket-list classics / Hidden gems / Wander at my own pace), you already know enough on that front — don't ask about it again, just weave it into the plan: bucket-list classics means lean on the famous, well-known sights; hidden gems means actively favor the lesser-known towns/spots list over famous ones; wander at my own pace means a looser town-to-town structure rather than a packed sightseeing schedule. If "Travel style" was NOT included in the ticked preferences, ask for it in this same acknowledgment message before building anything, phrased simply — e.g. "Are you after the classic bucket-list sights, real hidden gems, or more of an open-ended wander from town to town?" — and mention they can just say to skip ahead and build from what's already known if they'd rather not answer. Once travel style is known (ticked, answered, or explicitly skipped), move to the existing simple-plan-vs-full-schedule question, then build. Any free-text reply — including a skip request bundled with extra detail like "skip, I'm also staying in Aarhus a couple days" — should have that detail folded into the plan as real signal; a skip request means build now from everything known so far, without assuming or defaulting to any particular travel style if it was never actually given.
+IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence) — this came from someone ticking boxes on the intake form, not typing. The tick-boxes are just quick context-gathering, exactly like this conversation is — NEVER treat "Apply these" as an instant command to dump a full plan with zero acknowledgment. Reply with a short, warm "Applied: ..." style line naturally restating what they picked (not robotic form-confirmation) — e.g. "Applied: 6 days from the 10th, a relaxed pace, mostly hidden gems" — followed immediately, in the SAME message, by ONE combined question covering whatever's still genuinely missing (rare now, since arrival/departure give an exact trip length automatically and starting point always has a value, real or assumed), ending with the option to skip straight to building if there's nothing left to ask. TRIP LENGTH is now always exact — "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified — assume Copenhagen Airport", genuinely build the plan starting from Copenhagen Airport (Kastrup) — do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan — e.g. suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or simply mentioning buying a ticket via the DOT/DSB app before boarding — never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
+
+TRAVEL STYLE AND PREFERENCE ARE TWO SEPARATE AXES, DON'T CONFLATE THEM. "Travel style" (Bucket-list classics / Relaxed / Wander yourself) is purely about PACING — how tightly scheduled the days are: bucket-list classics means a full, efficiently-packed day-by-day schedule hitting the major sights; relaxed means fewer things per day with real breathing room; wander yourself means a loose, open-ended town-to-town structure with minimal fixed planning. "Preference" (Mostly hidden gems / A mix of both / Mostly popular attractions) is purely about WHAT KIND OF PLACES get chosen, independent of pacing — someone can absolutely want a tightly-scheduled bucket-list trip that's built almost entirely from hidden gems, or a loose wander-yourself trip through famous spots; don't assume one implies the other. If either is ticked, don't ask about it again — just apply it directly. If either is missing, fold asking for it into the combined question.
+
+HIDDEN GEMS ARE A BASELINE, NOT A NICHE PICK: regardless of what "Preference" says, every plan should include real hidden-gem towns from the list — "Mostly popular attractions" still means working in at least one genuine hidden gem, "Mostly hidden gems" means the large majority of stops are from that list, "a mix of both" is a genuine 50/50 balance. GENUINE VARIETY MATTERS — Gemlyx's whole differentiator is routes that feel personally discovered, not a script everyone gets handed identically, so actively avoid defaulting to the same one or two "signature" hidden-gem towns every single time preference allows it; treat the hidden-gem list as a real pool to pick meaningfully from (not just whichever appears first), and let genuinely different combinations emerge across different plans rather than converging on one repeated favorite.
+
+Once everything essential is known (answered, ticked, defaulted, or explicitly skipped), move to the existing simple-plan-vs-full-schedule question, then build. Any free-text reply — including a skip request bundled with extra detail like "skip, I'm also staying in Aarhus a couple days" — should have that detail folded into the plan as real signal; a skip request means build now from everything actually known, including any defaults already given.
 
 NARROW DOWN GENUINE INTEREST, DON'T JUST ACCEPT THE FIRST BROAD CATEGORY — a broad answer like "nature" or "history" still fits dozens of very different places in Denmark, and defaulting to the same handful of famous spots for every "nature" answer is exactly how everyone ends up at the same places. If someone gives a broad category and you have room for one more question before committing to a full plan, ask ONE specific, real follow-up that actually changes the plan — e.g. for "nature": "coastal walks, forest and lakes, or the wilder Wadden Sea/island side?"; for "history": "Viking-era sites, WWII history, or old market towns?"; for "food": "casual local spots or something worth planning a splurge around?" Skip this if they've already been specific, or if they've made clear they just want you to pick for them — don't turn a simple "surprise me" into another round of questions.
 
@@ -2959,18 +2968,25 @@ You also have a web_search tool. Use it whenever someone asks about something th
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Quick start — tap what applies, then let Gemlyx build it</div>
 
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Time</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  {["A few hours", "One day", "A weekend", "A week or more"].map(t => (
-                    <Pill key={t} label={t} active={intakeTime === t} onClick={() => setIntakeTime(intakeTime === t ? null : t)} />
-                  ))}
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Arrival <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(date & time — lets Gemlyx check real weather and events for those exact days)</span></div>
+                <div style={{ marginBottom: 14 }}>
+                  <input type="datetime-local" value={intakeArrival} onChange={e => setIntakeArrival(e.target.value)}
+                    min={new Date().toISOString().slice(0, 16)}
+                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: "border-box", colorScheme: "dark" }} />
                 </div>
 
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>When are you visiting? <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(optional — lets Gemlyx check real weather and events for those exact days)</span></div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Departure <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(date & time)</span></div>
                 <div style={{ marginBottom: 14 }}>
-                  <input type="date" value={intakeDate} onChange={e => setIntakeDate(e.target.value)}
-                    min={new Date().toISOString().slice(0, 10)}
+                  <input type="datetime-local" value={intakeDeparture} onChange={e => setIntakeDeparture(e.target.value)}
+                    min={intakeArrival || new Date().toISOString().slice(0, 16)}
                     style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: "border-box", colorScheme: "dark" }} />
+                </div>
+
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Starting point <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(optional — if left blank, Gemlyx assumes Copenhagen Airport)</span></div>
+                <div style={{ marginBottom: 14 }}>
+                  <input value={intakeStartPoint} onChange={e => setIntakeStartPoint(e.target.value)}
+                    placeholder="e.g. Billund Airport, Aarhus, or leave blank"
+                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: "border-box" }} />
                 </div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Budget</div>
@@ -2989,27 +3005,46 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Travel style</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  {["Bucket-list classics", "Hidden gems", "Wander at my own pace"].map(g => (
+                  {["Bucket-list classics", "Relaxed", "Wander yourself"].map(g => (
                     <Pill key={g} label={g} active={intakeGemPref === g} onClick={() => setIntakeGemPref(intakeGemPref === g ? null : g)} />
                   ))}
                 </div>
 
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Preference</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  {["Mostly hidden gems", "A mix of both", "Mostly popular attractions"].map(p => (
+                    <Pill key={p} label={p} active={intakePlacePref === p} onClick={() => setIntakePlacePref(intakePlacePref === p ? null : p)} />
+                  ))}
+                </div>
+
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeTime || intakeBudgetText || intakeInterest.length || intakeTransport.length ? 16 : 0 }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeArrival || intakeBudgetText || intakeInterest.length || intakeTransport.length ? 16 : 0 }}>
                   {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car", "🚐 Camper van", "⛺ Tent"].map(tr => (
                     <Pill key={tr} label={tr} active={intakeTransport.includes(tr)} onClick={() => setIntakeTransport(intakeTransport.includes(tr) ? intakeTransport.filter(x => x !== tr) : [...intakeTransport, tr])} />
                   ))}
                 </div>
 
-                {(intakeTime || intakeDate || intakeBudgetText || intakeInterest.length || intakeGemPref || intakeTransport.length > 0) && (
+                {(intakeArrival || intakeDeparture || intakeStartPoint.trim() || intakeBudgetText || intakeInterest.length || intakeGemPref || intakePlacePref || intakeTransport.length > 0) && (
                   <button
                     onClick={() => {
                       const parts = [];
-                      if (intakeDate) parts.push(`Arriving: ${new Date(intakeDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`);
-                      if (intakeTime) parts.push(`Trip length: ${intakeTime}`);
+                      if (intakeArrival) parts.push(`Arriving: ${new Date(intakeArrival).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`);
+                      if (intakeDeparture) parts.push(`Departing: ${new Date(intakeDeparture).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`);
+                      if (intakeArrival && intakeDeparture) {
+                        const ms = new Date(intakeDeparture) - new Date(intakeArrival);
+                        if (ms > 0) {
+                          const totalHours = ms / (1000 * 60 * 60);
+                          const days = Math.floor(totalHours / 24);
+                          const hours = Math.round(totalHours % 24);
+                          const lengthStr = [days ? `${days} day${days !== 1 ? "s" : ""}` : "", hours ? `${hours}h` : ""].filter(Boolean).join(" ");
+                          parts.push(`Exact trip length: ${lengthStr || "under 1 hour"}`);
+                        }
+                      }
+                      parts.push(intakeStartPoint.trim() ? `Starting point: ${intakeStartPoint.trim()}` : `Starting point: not specified — assume Copenhagen Airport`);
                       if (intakeBudgetText.trim()) parts.push(`Budget: ${intakeBudgetText.trim()}`);
                       if (intakeInterest.length) parts.push(`Interests: ${intakeInterest.join(", ")}`);
                       if (intakeGemPref) parts.push(`Travel style: ${intakeGemPref}`);
+                      if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
                       if (intakeTransport.length) parts.push(`Getting around: ${intakeTransport.map(t => t.replace(/^\S+\s/, "")).join(", ")}`);
                       sendAI(parts.join(" | "), { hidden: true });
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
