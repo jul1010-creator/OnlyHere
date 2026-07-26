@@ -16,7 +16,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import { C } from "./utils/theme";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
-  isInDenmark, travelLabel, isFullPlanText, stripMarkdown, daysUntil, detectLegMode,
+  isInDenmark, travelLabel, isFullPlanText, stripMarkdown, daysUntil, detectLegMode, haversineKm,
 } from "./utils/helpers";
 
 import { DetailPage } from "./components/DetailPage";
@@ -1070,7 +1070,17 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     });
     const found = {};
     for (const [origin, dest, how] of legs) {
-      const legMode = detectLegMode(how, primaryMode);
+      let legMode = detectLegMode(how, primaryMode);
+      // Geographic sanity check: an AI-written "how" (e.g. "on foot") can be
+      // confidently wrong about distance in a way regex text-matching alone
+      // can't catch — a real ~350km Copenhagen→Aalborg jump mislabeled as
+      // walking is exactly this bug. Override using real known coordinates
+      // whenever we have them, regardless of what the plan text said.
+      const distKm = haversineKm(resolveStopCoords(origin), resolveStopCoords(dest));
+      if (distKm != null) {
+        if (legMode === "walking" && distKm > 3) legMode = distKm > 60 ? "transit" : "bicycling";
+        else if (legMode === "bicycling" && distKm > 60) legMode = "transit";
+      }
       const key = `${origin}|${dest}|${legMode}`;
       try {
         const res = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}`);
@@ -1666,7 +1676,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const monthName = now.toLocaleString("en", { month: "long" });
       const season = getSeason();
 
-      const sysPrompt = `You are Gemlyx — Denmark's insider guide. You speak as Gemlyx itself: warm, confident, like a well-travelled Danish friend, never like a generic AI assistant. Never call yourself an AI or a language model. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
 Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
@@ -1880,7 +1890,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
                         )}
                         <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
-                          {m.role === "assistant" ? (isFullPlanText(m.text) ? "I've got you — your plan's ready. Tap \"Turn this into a guide\" below, or tell me if you'd like anything changed first." : stripMarkdown(m.text)) : m.text}
+                          {m.role === "assistant" ? stripMarkdown(m.text) : m.text}
                         </div>
                       </div>
                     ))}
