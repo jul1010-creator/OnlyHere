@@ -1075,6 +1075,11 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // guide's freshly-geocoded ones passed in directly — never the stale geocodedCoords
     // state var, which isn't updated in this closure until the next re-render.
     const resolveFresh = (name) => resolveStopCoords(name) || freshGeo[name] || null;
+    // Same ambiguity problem as geocoding — a bare name can match the wrong
+    // same-named place in a different town, so include real town context in the
+    // text fallback too whenever coordinates genuinely aren't available yet.
+    const townByName = {};
+    days.forEach(d => d.stops.forEach(s => { if (s.town && !townByName[s.name]) townByName[s.name] = s.town; }));
     const found = {};
     const failed = {};
     for (const [origin, dest, how] of legs) {
@@ -1086,11 +1091,11 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // or "Rosenborg Castle" leaves Google's own geocoder (inside the Directions
       // API, entirely separate from our own coordinate check above) free to match
       // a same-named place anywhere, including a different branch of a restaurant
-      // chain 50km away. Coordinates are unambiguous; append ", Denmark" as the
-      // next-best disambiguator only when we truly don't have coordinates yet.
+      // chain 50km away. Coordinates are unambiguous; include town + ", Denmark"
+      // as the next-best disambiguator only when we truly don't have coordinates yet.
       const originCoord = resolveFresh(origin), destCoord = resolveFresh(dest);
-      const originParam = originCoord ? `${originCoord.lat},${originCoord.lon}` : `${origin}, Denmark`;
-      const destParam = destCoord ? `${destCoord.lat},${destCoord.lon}` : `${dest}, Denmark`;
+      const originParam = originCoord ? `${originCoord.lat},${originCoord.lon}` : `${origin}${townByName[origin] ? `, ${townByName[origin]}` : ""}, Denmark`;
+      const destParam = destCoord ? `${destCoord.lat},${destCoord.lon}` : `${dest}${townByName[dest] ? `, ${townByName[dest]}` : ""}, Denmark`;
       try {
         const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}`);
         const data = await res.json();
@@ -1135,11 +1140,18 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // Runs once per guide, before it's shown, so every downstream render (maps, legs)
   // can stay simple/synchronous.
   const geocodeStopsForGuide = async (days) => {
+    // A name alone is genuinely ambiguous for generic terms (several Danish towns
+    // each have their own "Strøget" — it's the generic word for a pedestrian
+    // shopping street, not unique to Copenhagen). Build a name→town map so the
+    // geocoding query can include real town context and land in the right place.
+    const townByName = {};
+    days.forEach(d => d.stops.forEach(s => { if (s.town && !townByName[s.name]) townByName[s.name] = s.town; }));
     const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !resolveStopCoords(n));
     const found = {};
     for (const name of names) {
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name + ", Denmark")}&format=json&limit=1&countrycodes=dk`);
+        const query = townByName[name] ? `${name}, ${townByName[name]}, Denmark` : `${name}, Denmark`;
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=dk`);
         const data = await res.json();
         if (data?.[0]) found[name] = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
       } catch { /* leave this one unresolved — map/leg for it just won't show, no crash */ }
@@ -1336,7 +1348,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food) — if a specific leg is genuinely expensive at full price (e.g. a long train trip), mention the real cheaper alternative (DSB Orange billetter — discount advance-purchase tickets — or Flixbus/Kombardo Expresbus for intercity routes) rather than just quoting the expensive default fare.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\', \'vibrant\', \'bustling\', \'nestled\', \'picturesque\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food) — if a specific leg is genuinely expensive at full price (e.g. a long train trip), mention the real cheaper alternative (DSB Orange billetter — discount advance-purchase tickets — or Flixbus/Kombardo Expresbus for intercity routes) rather than just quoting the expensive default fare.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\', \'vibrant\', \'bustling\', \'nestled\', \'picturesque\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
@@ -1369,7 +1381,7 @@ If the conversation only covers a single day or a few stops with no explicit day
             model: "gpt-4o-mini",
             response_format: { type: "json_object" },
             messages: [
-              { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation.` },
+              { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation.` },
               { role: "user", content: convoText }
             ],
             max_tokens: 1800,
