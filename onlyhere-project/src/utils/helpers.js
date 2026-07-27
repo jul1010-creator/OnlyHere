@@ -56,6 +56,20 @@ export const weatherIcon = (code) => {
 export const isInDenmark = (coords) => coords && typeof coords === "object" &&
   coords.lat >= 54.4 && coords.lat <= 57.9 && coords.lon >= 7.9 && coords.lon <= 15.3;
 
+// Budget filter for Food — prefers an explicit AI-given budgetLevel (new drafts),
+// falls back to parsing the price text for older entries that predate that field,
+// so existing listings still filter sensibly without needing to be re-drafted.
+export const deriveBudgetLevel = (priceStr, explicitLevel) => {
+  if (explicitLevel) return explicitLevel;
+  if (!priceStr) return "Mid-range";
+  const nums = (priceStr.match(/\d+/g) || []).map(Number);
+  if (nums.length === 0) return "Mid-range"; // "See website", "Varies by stall" etc — unknown, don't hide it from any filter
+  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+  if (avg < 100) return "Budget";
+  if (avg <= 250) return "Mid-range";
+  return "Splurge";
+};
+
 // Straight-line km between two {lat,lon} points — used as a sanity check on leg
 // transport mode, since an AI-written "how" description (e.g. "on foot") can be
 // geographically wrong in a way regex text-matching alone can never catch.
