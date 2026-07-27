@@ -5,7 +5,7 @@ import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
 import { ReviewsSection } from "./ReviewsSection";
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords }) => {
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   return (
@@ -20,7 +20,15 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           ‹ Back
         </button>
-        {item.type && <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", right: 14, background: color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{item.type}</div>}
+        <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", right: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          {onToggleSave && (
+            <button onClick={onToggleSave}
+              style={{ background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isSaved ? "#E91E63" : "#ffffffaa" }}>
+              {isSaved ? "♥" : "♡"}
+            </button>
+          )}
+          {item.type && <div style={{ background: color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{item.type}</div>}
+        </div>
       </div>
       <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>

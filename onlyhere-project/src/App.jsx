@@ -1514,6 +1514,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakePlacePref, setIntakePlacePref] = useState(null);
   const [intakeTravelers, setIntakeTravelers] = useState("");
   const [intakeIncludeSaved, setIntakeIncludeSaved] = useState(false);
+  const [detourTab, setDetourTab] = useState("sightseeing");
   const [intakeTransport, setIntakeTransport] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -3038,7 +3039,36 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>Try out our special feature and let Gemlyx be your free tour guide. Tell it your dates, your budget, what you're into — it plans a real route, checks the weather and events for your actual days, and steers you off the obvious path.</div>
               </div>
 
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
+                {[["sightseeing", "🗺️ Sightseeing"], ["roadtrip", "🚗 Road Trip"]].map(([key, label]) => (
+                  <button key={key} onClick={() => setDetourTab(key)}
+                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${detourTab === key ? C.accent : "transparent"}`, color: detourTab === key ? C.text : C.muted, fontWeight: 700, fontSize: 13.5, padding: "10px 4px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {detourTab === "roadtrip" && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Pick a route — Gemlyx builds it around real stops along the way</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Sets you up with a car and this route's real detours — you can still add dates, budget, and anything else after.</div>
+                  {roadTrips.map(rt => (
+                    <button key={rt.id} onClick={() => {
+                      setIntakeTransport(prev => prev.includes("🚗 Car") ? prev : [...prev, "🚗 Car"]);
+                      const stopsList = rt.stops.map(s => `${s.name} (${s.note})`).join("; ");
+                      sendAI(`Plan me the "${rt.name}" road trip — ${rt.region}, roughly ${rt.duration} / ${rt.distance}. Real stops along the way: ${stopsList}. I'll be driving.`);
+                      setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
+                    }}
+                      style={{ display: "block", width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 10, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 3 }}>{rt.emoji} {rt.name}</div>
+                      <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 4 }}>{rt.region} · {rt.duration} · {rt.distance}</div>
+                      <div style={{ fontSize: 11.5, color: C.gold }}>{rt.vibe}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ marginBottom: 20, display: detourTab === "roadtrip" ? "none" : "block" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Quick start — tap what applies, then let Gemlyx build it</div>
 
                 <div style={{ marginBottom: 14 }}>
@@ -3681,11 +3711,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
         </div>
       )}
 
-      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
-      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
-      <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
-      <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
-      <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} />
+      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} />
+      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} />
+      <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
+      <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
+      <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
 
       {guideModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.85)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
@@ -4041,7 +4071,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
               style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               ‹ Back
             </button>
-            <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", right: 14, background: craftDetail.color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{craftDetail.type}</div>
+            <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", right: 14, display: "flex", alignItems: "center", gap: 8 }}>
+              <button onClick={() => toggleSavePlace("craft", craftDetail, craftDetail.location)}
+                style={{ background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved("craft", craftDetail.id) ? "#E91E63" : "#ffffffaa" }}>
+                {isPlaceSaved("craft", craftDetail.id) ? "♥" : "♡"}
+              </button>
+              <div style={{ background: craftDetail.color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{craftDetail.type}</div>
+            </div>
           </div>
 
           <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
