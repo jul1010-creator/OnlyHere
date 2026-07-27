@@ -1513,6 +1513,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeGemPref, setIntakeGemPref] = useState(null);
   const [intakePlacePref, setIntakePlacePref] = useState(null);
   const [intakeTravelers, setIntakeTravelers] = useState("");
+  const [intakeIncludeSaved, setIntakeIncludeSaved] = useState(false);
   const [intakeTransport, setIntakeTransport] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -1749,7 +1750,7 @@ TRAVEL STYLE AND PREFERENCE ARE TWO SEPARATE AXES, DON'T CONFLATE THEM. "Travel 
 
 HIDDEN GEMS ARE A BASELINE, NOT A NICHE PICK: regardless of what "Preference" says, every plan should include real hidden-gem towns from the list — "Mostly popular attractions" still means working in at least one genuine hidden gem, "Mostly hidden gems" means the large majority of stops are from that list, "a mix of both" is a genuine 50/50 balance. GENUINE VARIETY MATTERS — Gemlyx's whole differentiator is routes that feel personally discovered, not a script everyone gets handed identically, so actively avoid defaulting to the same one or two "signature" hidden-gem towns every single time preference allows it; treat the hidden-gem list as a real pool to pick meaningfully from (not just whichever appears first), and let genuinely different combinations emerge across different plans rather than converging on one repeated favorite.
 
-Once you've sent that Applied+question reply, the traveler's very next message — whatever it says, even just "yes" or "go ahead" — is your green light to build the actual plan (still following the existing map/route/guide-building system exactly as before), using everything known: all tick-boxes, plus any extra detail they added in that reply. Don't ask a third round of questions first — default to a full, clear day-by-day plan unless they've specifically asked for something lighter or simpler. Any detail folded into a skip-style reply (e.g. "just build it, I'm also staying in Aarhus a couple days") counts as real signal for the plan, exactly like anything else they've told you.
+If the message includes "Also include these saved places: ...", those are specific real places the traveler has already favorited elsewhere in the app — treat them as genuine must-include stops in the plan, worked into whichever day(s) makes geographic sense given everything else, not just name-dropped in passing. Once you've sent that Applied+question reply, the traveler's very next message — whatever it says, even just "yes" or "go ahead" — is your green light to build the actual plan (still following the existing map/route/guide-building system exactly as before), using everything known: all tick-boxes, plus any extra detail they added in that reply. Don't ask a third round of questions first — default to a full, clear day-by-day plan unless they've specifically asked for something lighter or simpler. Any detail folded into a skip-style reply (e.g. "just build it, I'm also staying in Aarhus a couple days") counts as real signal for the plan, exactly like anything else they've told you.
 
 WHAT "BUILDING THE PLAN" ACTUALLY MEANS IN THIS CHAT REPLY — THIS IS A HARD FORMAT RULE: when you're ready to build (whether from the tick-box flow above or the freeform flow below), your reply in THIS CONVERSATION is NEVER a day-by-day breakdown — no "Day 1: ... Day 2: ..." listing of stops, times, or activities here. That level of detail belongs to the real guide (with actual verified routes, maps, and times) that gets built separately once the traveler taps "Turn this into a guide" — writing it out again in plain chat text is pure duplication and is exactly the "wall of text" feeling that makes this feel like a generic chatbot instead of a real planner handing off a finished itinerary. Instead, your ready-to-build reply is short — a genuine local planner's handoff, not a list: 2-4 sentences describing the KIND of trip you've put together (the vibe, the balance — e.g. "This leans into real local nightlife and food, mixing well-known spots with a couple of places most tourists never find, at a relaxed pace so nothing feels rushed") plus the essentials worth knowing before they see it — budget reality, the one most important practical thing, and a transport tip if relevant — the same essentials system the guide itself uses, just spoken aloud here first. Never itemize individual stops or times in this reply. THE MARKER IS A PROMISE, NOT A CASUAL SIGN-OFF — GET THIS RIGHT: only include it when you have genuinely enough concrete specifics on the table to actually construct a real multi-day itinerary from RIGHT NOW — a real starting point, a real trip length, and real direction on interests/style. A reply that's still discussing budget, still weighing options, still mid-conversation, or that could just as easily be followed by more back-and-forth is NOT ready — do not attach the marker to those, even if it sounds like a natural-feeling wrap-up sentence ("Looking forward to turning this into a guide!" is exactly the kind of line that sounds final but isn't — never a substitute for actually having enough to build). If you're at all unsure whether there's enough to build a real itinerary from, that uncertainty itself means: no marker, ask instead. End this exact reply, and ONLY a genuinely ready-to-build reply meeting that bar, with this exact string on its own line so the interface knows to show the "Turn this into a guide" button — it's invisible to the traveler, never explain what it is, never mention it exists, just include it silently: [[GEMLYX_READY_TO_BUILD]]
 
@@ -3105,11 +3106,19 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intakeArrival || intakeBudgetText || intakeInterest.length || intakeTransport.length ? 16 : 0 }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
                   {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car", "🚐 Camper van", "⛺ Tent"].map(tr => (
                     <Pill key={tr} label={tr} active={intakeTransport.includes(tr)} onClick={() => setIntakeTransport(intakeTransport.includes(tr) ? intakeTransport.filter(x => x !== tr) : [...intakeTransport, tr])} />
                   ))}
                 </div>
+
+                {savedPlaces.length > 0 && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, cursor: "pointer" }}>
+                    <input type="checkbox" checked={intakeIncludeSaved} onChange={e => setIntakeIncludeSaved(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
+                    <span style={{ fontSize: 12.5, color: C.text }}>♥ Include my {savedPlaces.length} saved place{savedPlaces.length !== 1 ? "s" : ""}</span>
+                  </label>
+                )}
 
                 {(intakeArrival || intakeDeparture || intakeStartPoint.trim() || intakeBudgetText || intakeInterest.length || intakeGemPref || intakePlacePref || intakeTravelers.trim() || intakeTransport.length > 0) && (
                   <button
@@ -3133,6 +3142,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       if (intakeGemPref) parts.push(`Travel style: ${intakeGemPref}`);
                       if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
                       if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
+                      if (intakeIncludeSaved && savedPlaces.length > 0) parts.push(`Also include these saved places: ${savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ")}`);
                       if (intakeTransport.length) parts.push(`Getting around: ${intakeTransport.map(t => t.replace(/^\S+\s/, "")).join(", ")}`);
                       sendAI(parts.join(" | "), { hidden: true });
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
