@@ -533,7 +533,7 @@ export default function Gemlyx() {
       ] };
     if (type === "food") return { name: t.name, type: t.type || "Local", emoji: t.emoji || "🍽", category: t.category || "", location: t.location || "", price: t.price || "See website", timeNeeded: t.timeNeeded || "", photo: `/food/${slugify(t.name)}.jpg`, desc: t.vibeLocation, mapHint: t.mapHint || "", color: t.color || "#D4AF37", gemlyxFind: t.gemlyxFind || "",
       blogBody: [
-        ...bbData([["The Food Mechanics", t.foodMechanics], ["The Reality Check", t.realityCheck]]),
+        ...bbData([["How It's Made", t.foodMechanics], ["The Reality Check", t.realityCheck]]),
       ] };
     if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", location: t.location || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
       blogBody: [
@@ -813,7 +813,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who Is It Perfect For", t.whoFor], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
       } else if (studioType === "food") {
         const nextId = Math.max(...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D4AF37")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["The Food Mechanics", t.foodMechanics], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D4AF37")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.foodMechanics], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
       } else {
         const nextId = Math.max(...nightlifeSpots.map(x => x.id)) + 1;
         const isClub = !!t.isClub;
@@ -835,8 +835,43 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
   };
 
   const runAITellScan = () => {
-    setAiTellFlags(scanForAITells(studioDraftText));
+    // Phrase-list flags are tagged source:"phrase" so they render/merge distinctly
+    // from the AI-judgment flags below.
+    setAiTellFlags(scanForAITells(studioDraftText).map(f => ({ ...f, source: "phrase" })));
     setRephraseSuggestions({});
+  };
+
+  const [aiVoiceScanLoading, setAiVoiceScanLoading] = useState(false);
+  // A real second pass using judgment, not string matching — catches tone/rhythm/
+  // structure problems (hedging, over-smooth phrasing, suspiciously tidy symmetry)
+  // that no fixed phrase list can, since there's no exact string to match against.
+  // Costs one real API call, unlike the free instant phrase scan above.
+  const runAIVoiceScan = async () => {
+    if (!studioDraftText.trim()) return;
+    setAiVoiceScanLoading(true);
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{
+            role: "user",
+            content: `Read this draft travel-guide content and find sentences that genuinely read as generic AI writing — not because they use an obvious cliché word, but because of tone, rhythm, or structure: unnecessary hedging ("it could be argued", "some might say"), suspiciously tidy three-item lists, over-smooth even-toned phrasing with no real edge or specificity, sentences that could describe any place rather than THIS one. Be selective — only flag genuine problems, not every sentence, and don't invent issues if the writing is actually fine. For each real problem, quote the EXACT sentence as it appears in the text (verbatim, so it can be found) and give a short reason.\n\nRespond with ONLY a JSON array, no other text: [{"sentence": "exact sentence from the text", "reason": "short reason"}] — return [] if nothing genuine stands out.\n\nDraft:\n${studioDraftText}`
+          }],
+          max_tokens: 800,
+        }),
+      });
+      const data = await res.json();
+      let raw = data.choices?.[0]?.message?.content?.trim() || "[]";
+      raw = raw.replace(/^```json\s*|\s*```$/g, "");
+      const results = JSON.parse(raw);
+      const newFlags = (Array.isArray(results) ? results : [])
+        .map(r => ({ phrase: r.reason, match: r.sentence, index: studioDraftText.indexOf(r.sentence), source: "ai" }))
+        .filter(f => f.index !== -1); // only keep ones we can actually locate verbatim in the text
+      setAiTellFlags(prev => [...prev.filter(f => f.source !== "ai"), ...newFlags].sort((a, b) => a.index - b.index));
+    } catch (err) { console.error("AI voice scan failed:", err); }
+    setAiVoiceScanLoading(false);
   };
 
   // Rewrites just the ONE flagged sentence in isolation, not the whole draft —
@@ -847,12 +882,15 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
   const rephraseFlag = async (flag, idx) => {
     setRephraseLoadingIdx(idx);
     try {
-      // Grab a reasonable sentence-ish window around the flagged phrase, not
-      // the whole draft — keeps the rewrite focused and cheap.
+      // Grab a reasonable sentence-ish window around the flagged text, not
+      // the whole draft — keeps the rewrite focused and cheap. Uses match.length
+      // (the actual located text) not phrase.length — for AI-judgment flags,
+      // "phrase" holds the REASON, not matched text, so phrase.length would be wrong here.
       const start = Math.max(0, studioDraftText.lastIndexOf(".", flag.index) + 1);
-      const endDot = studioDraftText.indexOf(".", flag.index + flag.phrase.length);
+      const endDot = studioDraftText.indexOf(".", flag.index + flag.match.length);
       const end = endDot === -1 ? Math.min(studioDraftText.length, flag.index + 200) : endDot + 1;
       const original = studioDraftText.slice(start, end).trim();
+      const issueDescription = flag.source === "ai" ? `it reads as generic AI writing (${flag.phrase})` : `it uses the generic AI-sounding phrase "${flag.match}" or any similar cliché filler`;
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
@@ -860,7 +898,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
           model: "gpt-4o",
           messages: [{
             role: "user",
-            content: `Rewrite ONLY this one sentence so it no longer uses the generic AI-sounding phrase "${flag.match}" or any similar cliché filler. Keep every real fact, name, price, and date exactly as given — change wording only, never content. Write direct, concrete, confident sentences — the way a knowledgeable local would actually talk, not smooth marketing copy. Avoid tidy "not just X but Y" constructions, avoid hedging phrases, avoid symmetrical list-like phrasing. Respond with ONLY the rewritten sentence, nothing else.\n\nSentence: "${original}"`
+            content: `Rewrite ONLY this one sentence so ${issueDescription} no longer applies. Keep every real fact, name, price, and date exactly as given — change wording only, never content. Write direct, concrete, confident sentences — the way a knowledgeable local would actually talk, not smooth marketing copy. Avoid tidy "not just X but Y" constructions, avoid hedging phrases, avoid symmetrical list-like phrasing. Respond with ONLY the rewritten sentence, nothing else.\n\nSentence: "${original}"`
           }],
           max_tokens: 200,
         }),
@@ -877,8 +915,13 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
     if (!s) return;
     setStudioDraftText(prev => prev.replace(s.original, s.suggestion));
     setRephraseSuggestions(prev => { const next = { ...prev }; delete next[idx]; return next; });
-    // Re-scan after applying — the text shifted, so old flag indices are stale.
-    setTimeout(() => setAiTellFlags(scanForAITells(studioDraftText.replace(s.original, s.suggestion))), 0);
+    // Every remaining flag's index is now stale (text length shifted) — for
+    // phrase flags we could re-run the free scan instantly, but AI-judgment
+    // flags have no cheap way to re-locate without another API call. Clearest
+    // and safest: clear everything and let the person re-run whichever scan(s)
+    // they want, rather than silently keep wrong positions or quietly drop
+    // the AI flags like the old version of this did.
+    setAiTellFlags([]);
   };
 
   const publishDraft = async () => {
@@ -2225,24 +2268,40 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         {draftEditError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 10 }}>{draftEditError}</div>}
 
                         <div style={{ marginBottom: 12 }}>
-                          <button onClick={runAITellScan}
-                            style={{ display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 8 }}>
-                            🔍 Scan for AI phrases
-                          </button>
+                          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                            <button onClick={runAITellScan}
+                              style={{ display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              🔍 Scan for AI phrases
+                            </button>
+                            <button onClick={runAIVoiceScan} disabled={aiVoiceScanLoading}
+                              style={{ display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              {aiVoiceScanLoading ? "Reading…" : "🤖 Deep AI-voice scan"}
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 9.5, color: C.muted, marginBottom: 8 }}>Phrase scan is instant and free — catches known cliché words. Deep scan uses real judgment to catch tone/rhythm issues the phrase list can't, but costs one API call.</div>
                           {aiTellFlags.length === 0 && studioDraftText && (
-                            <div style={{ fontSize: 10.5, color: C.muted }}>Run the scan to check for generic AI-sounding phrases before publishing.</div>
+                            <div style={{ fontSize: 10.5, color: C.muted }}>Run a scan to check for AI-sounding writing before publishing.</div>
                           )}
                           {aiTellFlags.length > 0 && (
                             <div style={{ background: "#FFB34712", border: "1px solid #FFB34744", borderRadius: 10, padding: "11px 13px" }}>
                               <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", letterSpacing: 0.5, marginBottom: 8 }}>
-                                ⚠️ {aiTellFlags.length} FLAGGED PHRASE{aiTellFlags.length !== 1 ? "S" : ""} — review before publishing:
+                                ⚠️ {aiTellFlags.length} FLAGGED{aiTellFlags.length !== 1 ? "" : ""} — review before publishing:
                               </div>
                               {aiTellFlags.map((flag, idx) => {
                                 const suggestion = rephraseSuggestions[idx];
                                 return (
                                   <div key={idx} style={{ marginBottom: idx < aiTellFlags.length - 1 ? 10 : 0, paddingBottom: idx < aiTellFlags.length - 1 ? 10 : 0, borderBottom: idx < aiTellFlags.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                                      <span style={{ fontSize: 11, color: C.light }}>"<span style={{ color: "#FFB347", fontWeight: 700 }}>{flag.match}</span>"</span>
+                                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                                      <div style={{ fontSize: 11, color: C.light, lineHeight: 1.5 }}>
+                                        {flag.source === "ai" ? (
+                                          <>
+                                            <div style={{ fontStyle: "italic", marginBottom: 2 }}>"{flag.match}"</div>
+                                            <div style={{ fontSize: 10, color: "#FFB347" }}>🤖 {flag.phrase}</div>
+                                          </>
+                                        ) : (
+                                          <span>"<span style={{ color: "#FFB347", fontWeight: 700 }}>{flag.match}</span>"</span>
+                                        )}
+                                      </div>
                                       {!suggestion && (
                                         <button onClick={() => rephraseFlag(flag, idx)} disabled={rephraseLoadingIdx === idx}
                                           style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: C.text, cursor: "pointer", flexShrink: 0 }}>
