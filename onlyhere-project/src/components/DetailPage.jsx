@@ -27,7 +27,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               {isSaved ? "♥" : "♡"}
             </button>
           )}
-          {item.type && <div style={{ background: color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{item.type}</div>}
+          {item.type && kind !== "food" && <div style={{ background: color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{item.type}</div>}
         </div>
       </div>
       <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
