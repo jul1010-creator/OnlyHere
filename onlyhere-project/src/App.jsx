@@ -16,7 +16,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import { C } from "./utils/theme";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
-  isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm,
+  isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells,
 } from "./utils/helpers";
 
 import { DetailPage } from "./components/DetailPage";
@@ -351,6 +351,9 @@ export default function Gemlyx() {
   const [studioError, setStudioError] = useState(null);
   const [studioDraft, setStudioDraft] = useState(null);
   const [studioDraftText, setStudioDraftText] = useState(""); // editable JSON — what actually gets published
+  const [aiTellFlags, setAiTellFlags] = useState([]); // results of the last scan
+  const [rephraseSuggestions, setRephraseSuggestions] = useState({}); // flag index -> { original, suggestion }
+  const [rephraseLoadingIdx, setRephraseLoadingIdx] = useState(null);
   const [draftEditError, setDraftEditError] = useState(null);
   const [verifyResults, setVerifyResults] = useState(null);
   const [verifyLoading, setVerifyLoading] = useState(false);
@@ -829,6 +832,53 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       setStudioError("Couldn't draft that — try again, or check the name.");
     }
     setStudioLoading(false);
+  };
+
+  const runAITellScan = () => {
+    setAiTellFlags(scanForAITells(studioDraftText));
+    setRephraseSuggestions({});
+  };
+
+  // Rewrites just the ONE flagged sentence in isolation, not the whole draft —
+  // keeps the blast radius small so a rewrite can't accidentally shift a fact
+  // elsewhere in the draft. Shows the suggestion for approval (visible diff),
+  // never auto-applies — same "you see what changed before it's live" pattern
+  // Studio already uses everywhere else (uncertainties panel, editable JSON).
+  const rephraseFlag = async (flag, idx) => {
+    setRephraseLoadingIdx(idx);
+    try {
+      // Grab a reasonable sentence-ish window around the flagged phrase, not
+      // the whole draft — keeps the rewrite focused and cheap.
+      const start = Math.max(0, studioDraftText.lastIndexOf(".", flag.index) + 1);
+      const endDot = studioDraftText.indexOf(".", flag.index + flag.phrase.length);
+      const end = endDot === -1 ? Math.min(studioDraftText.length, flag.index + 200) : endDot + 1;
+      const original = studioDraftText.slice(start, end).trim();
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{
+            role: "user",
+            content: `Rewrite ONLY this one sentence so it no longer uses the generic AI-sounding phrase "${flag.match}" or any similar cliché filler. Keep every real fact, name, price, and date exactly as given — change wording only, never content. Write direct, concrete, confident sentences — the way a knowledgeable local would actually talk, not smooth marketing copy. Avoid tidy "not just X but Y" constructions, avoid hedging phrases, avoid symmetrical list-like phrasing. Respond with ONLY the rewritten sentence, nothing else.\n\nSentence: "${original}"`
+          }],
+          max_tokens: 200,
+        }),
+      });
+      const data = await res.json();
+      const suggestion = data.choices?.[0]?.message?.content?.trim();
+      if (suggestion) setRephraseSuggestions(prev => ({ ...prev, [idx]: { original, suggestion } }));
+    } catch (err) { console.error("Rephrase failed:", err); }
+    setRephraseLoadingIdx(null);
+  };
+
+  const applyRephrase = (idx) => {
+    const s = rephraseSuggestions[idx];
+    if (!s) return;
+    setStudioDraftText(prev => prev.replace(s.original, s.suggestion));
+    setRephraseSuggestions(prev => { const next = { ...prev }; delete next[idx]; return next; });
+    // Re-scan after applying — the text shifted, so old flag indices are stale.
+    setTimeout(() => setAiTellFlags(scanForAITells(studioDraftText.replace(s.original, s.suggestion))), 0);
   };
 
   const publishDraft = async () => {
@@ -2173,6 +2223,55 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           rows={12}
                           style={{ width: "100%", background: C.bg, border: `1px solid ${draftEditError ? "#C8102E" : C.border}`, borderRadius: 10, padding: "12px", fontSize: 11, color: C.light, lineHeight: 1.6, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
                         {draftEditError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 10 }}>{draftEditError}</div>}
+
+                        <div style={{ marginBottom: 12 }}>
+                          <button onClick={runAITellScan}
+                            style={{ display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: C.text, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 8 }}>
+                            🔍 Scan for AI phrases
+                          </button>
+                          {aiTellFlags.length === 0 && studioDraftText && (
+                            <div style={{ fontSize: 10.5, color: C.muted }}>Run the scan to check for generic AI-sounding phrases before publishing.</div>
+                          )}
+                          {aiTellFlags.length > 0 && (
+                            <div style={{ background: "#FFB34712", border: "1px solid #FFB34744", borderRadius: 10, padding: "11px 13px" }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", letterSpacing: 0.5, marginBottom: 8 }}>
+                                ⚠️ {aiTellFlags.length} FLAGGED PHRASE{aiTellFlags.length !== 1 ? "S" : ""} — review before publishing:
+                              </div>
+                              {aiTellFlags.map((flag, idx) => {
+                                const suggestion = rephraseSuggestions[idx];
+                                return (
+                                  <div key={idx} style={{ marginBottom: idx < aiTellFlags.length - 1 ? 10 : 0, paddingBottom: idx < aiTellFlags.length - 1 ? 10 : 0, borderBottom: idx < aiTellFlags.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                      <span style={{ fontSize: 11, color: C.light }}>"<span style={{ color: "#FFB347", fontWeight: 700 }}>{flag.match}</span>"</span>
+                                      {!suggestion && (
+                                        <button onClick={() => rephraseFlag(flag, idx)} disabled={rephraseLoadingIdx === idx}
+                                          style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: C.text, cursor: "pointer", flexShrink: 0 }}>
+                                          {rephraseLoadingIdx === idx ? "Rewriting…" : "🔄 Rephrase"}
+                                        </button>
+                                      )}
+                                    </div>
+                                    {suggestion && (
+                                      <div style={{ marginTop: 6, fontSize: 10.5, lineHeight: 1.6 }}>
+                                        <div style={{ color: "#E57373", textDecoration: "line-through", marginBottom: 3 }}>{suggestion.original}</div>
+                                        <div style={{ color: "#81C784", marginBottom: 6 }}>{suggestion.suggestion}</div>
+                                        <div style={{ display: "flex", gap: 8 }}>
+                                          <button onClick={() => applyRephrase(idx)}
+                                            style={{ background: C.accent, border: "none", borderRadius: 8, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
+                                            ✓ Apply
+                                          </button>
+                                          <button onClick={() => setRephraseSuggestions(prev => { const next = { ...prev }; delete next[idx]; return next; })}
+                                            style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, color: C.muted, cursor: "pointer" }}>
+                                            Dismiss
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
 
                         <div style={{ marginBottom: 12 }}>
                           <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 0.5, marginBottom: 5 }}>📸 INSTAGRAM POST/REEL URL (optional)</label>

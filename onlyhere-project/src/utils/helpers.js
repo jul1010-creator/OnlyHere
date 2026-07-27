@@ -94,6 +94,34 @@ export const READY_MARKER = "[[GEMLYX_READY_TO_BUILD]]";
 export const isReadyToBuild = (text) => !!text && text.includes(READY_MARKER);
 export const stripReadyMarker = (text) => text ? text.replaceAll(READY_MARKER, "").trim() : text;
 
+// Common AI-writing tells — surface-level phrases that read as generic AI filler
+// rather than a real person's voice. Case-insensitive, checked as whole phrases
+// so "great" alone doesn't false-positive on "Great Belt Bridge" etc.
+export const AI_TELL_PHRASES = [
+  "great!", "certainly!", "absolutely!", "i'd be happy to", "you're in for a",
+  "it's worth noting", "it is worth noting", "in today's world", "in this day and age",
+  "not just", "but also", "elevate", "unparalleled", "nestled", "vibrant",
+  "boasts a", "a testament to", "delve into", "dive into", "unlock", "unleash",
+  "whether you're", "look no further", "when it comes to", "in conclusion",
+  "moreover", "furthermore", "additionally", "it's important to note",
+  "rich history", "hidden gem" /* ironic here, but still an overused shorthand */,
+  "picture this", "imagine", "let's explore", "journey through", "tapestry of",
+];
+
+export const scanForAITells = (text) => {
+  if (!text) return [];
+  const found = [];
+  const lower = text.toLowerCase();
+  for (const phrase of AI_TELL_PHRASES) {
+    let idx = lower.indexOf(phrase);
+    while (idx !== -1) {
+      found.push({ phrase, index: idx, match: text.slice(idx, idx + phrase.length) });
+      idx = lower.indexOf(phrase, idx + phrase.length);
+    }
+  }
+  return found.sort((a, b) => a.index - b.index);
+};
+
 export const isFullPlanText = (text) => {
   if (!text) return false;
   const dayHeaders = (text.match(/day\s*\d+\s*[:\-–]/gi) || []).length;
