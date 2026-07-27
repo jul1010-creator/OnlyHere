@@ -114,12 +114,22 @@ export const stripReadyMarker = (text) => text ? text.replaceAll(READY_MARKER, "
 export const AI_TELL_PHRASES = [
   "great!", "certainly!", "absolutely!", "i'd be happy to", "you're in for a",
   "it's worth noting", "it is worth noting", "in today's world", "in this day and age",
-  "not just", "but also", "elevate", "unparalleled", "nestled", "vibrant",
-  "boasts a", "a testament to", "delve into", "dive into", "unlock", "unleash",
+  "not just", "but also", "elevate", "elevated", "unparalleled", "nestled", "vibrant",
+  "boasts a", "boasts", "a testament to", "delve into", "dive into", "unlock", "unleash",
   "whether you're", "look no further", "when it comes to", "in conclusion",
   "moreover", "furthermore", "additionally", "it's important to note",
   "rich history", "hidden gem" /* ironic here, but still an overused shorthand */,
   "picture this", "imagine", "let's explore", "journey through", "tapestry of",
+  // From the editorial style guide (fancy adjectives, travel clichés, corporate language):
+  "meticulously", "artisanal", "curated", "handcrafted", "refined", "sophisticated",
+  "nuanced", "intricate", "exemplary", "exceptional", "remarkable", "outstanding",
+  "world-class", "unforgettable", "seamless", "ultimate", "premium",
+  "immerse", "immerse yourself", "iconic", "bustling", "picturesque", "quaint",
+  "enchanting", "captivating", "renowned", "must-visit", "timeless charm",
+  "breathtaking", "perfect blend", "not to be missed", "leaves a lasting impression",
+  "something for everyone", "leverage", "facilitate", "optimise", "optimize",
+  "maximise", "maximize", "holistic", "dynamic", "innovative", "robust",
+  "comprehensive", "enhance", "delicately", "lively energy", "to perfection",
 ];
 
 export const scanForAITells = (text) => {
