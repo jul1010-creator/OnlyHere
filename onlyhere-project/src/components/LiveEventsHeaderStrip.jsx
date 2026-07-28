@@ -53,7 +53,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
               </button>
             )}
           </div>
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, marginBottom: 8, WebkitOverflowScrolling: "touch" }}>
             {showList.map(e => (
               <button key={e.name} onClick={() => setEventDetail(e)}
                 style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -85,7 +85,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
             <div style={{ fontSize: 11, color: C.muted }}>No upcoming events near {nearYou.town} right now — browse all under Events.</div>
           )}
           {nearYou.matches.length > 0 && (
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
               {nearYou.matches.map(item => (
                 <button key={`${item._kind}-${item.name}`}
                   onClick={() => { item._kind === "event" ? setEventDetail(item) : item._kind === "free" ? setFreeDetail(item) : setFoodDetail(item); }}
