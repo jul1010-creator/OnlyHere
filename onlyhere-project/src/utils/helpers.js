@@ -132,11 +132,11 @@ export const AI_TELL_PHRASES = [
   "comprehensive", "enhance", "delicately", "lively energy", "to perfection",
 ];
 
-export const scanForAITells = (text) => {
+export const scanForAITells = (text, extraPhrases = []) => {
   if (!text) return [];
   const found = [];
   const lower = text.toLowerCase();
-  for (const phrase of AI_TELL_PHRASES) {
+  for (const phrase of [...AI_TELL_PHRASES, ...extraPhrases.map(p => p.toLowerCase())]) {
     let idx = lower.indexOf(phrase);
     while (idx !== -1) {
       found.push({ phrase, index: idx, match: text.slice(idx, idx + phrase.length) });
