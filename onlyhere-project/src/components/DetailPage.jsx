@@ -53,17 +53,29 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           </div>
         )}
 
+        {(kind === "event" || kind === "town") && item.tier && (
+          <div style={{ marginBottom: 12 }}>
+            {(() => {
+              const t = item.tier.toLowerCase();
+              const tierStyle = t.includes("can't miss") || t.includes("cant miss")
+                ? { icon: "⭐", label: "Can't Miss Out", color: "#0A0F1E", bg: C.gold }
+                : t.includes("highly recommended")
+                ? { icon: "👍", label: "Highly Recommended", color: "#4CAF50", bg: "#4CAF5022" }
+                : t.includes("worth considering")
+                ? { icon: "◷", label: "Worth Considering", color: "#FFB347", bg: "#FFB34722" }
+                : t.includes("already nearby")
+                ? { icon: "📍", label: "Best If Already Nearby", color: C.muted, bg: `${C.border}44` }
+                : { icon: "👍", label: item.tier, color: "#4CAF50", bg: "#4CAF5022" }; // unrecognized value — show it verbatim rather than silently hiding it
+              return (
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100, marginRight: 8, display: "inline-block", marginBottom: 8, color: tierStyle.color, background: tierStyle.bg }}>
+                  {tierStyle.icon} {tierStyle.label}
+                </span>
+              );
+            })()}
+          </div>
+        )}
         {kind === "event" && (
           <div style={{ marginBottom: 12 }}>
-            {item.tier && (
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100, marginRight: 8, display: "inline-block", marginBottom: 8,
-                color: item.tier === "Can't miss out" ? "#0A0F1E" : item.tier === "Worth it for longer stays" ? "#FFB347" : "#4CAF50",
-                background: item.tier === "Can't miss out" ? C.gold : item.tier === "Worth it for longer stays" ? "#FFB34722" : "#4CAF5022",
-              }}>
-                {item.tier === "Can't miss out" ? "⭐ Can't miss out" : item.tier === "Worth it for longer stays" ? "◷ Worth it for longer stays" : "👍 Recommended"}
-              </span>
-            )}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>{getEventDate(item.date, item.dateEnd)}</span>
               <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>

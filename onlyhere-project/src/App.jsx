@@ -350,6 +350,7 @@ export default function Gemlyx() {
   const [studioResult, setStudioResult] = useState(null);
   const [studioError, setStudioError] = useState(null);
   const [studioDraft, setStudioDraft] = useState(null);
+  const [studioIdentityWarning, setStudioIdentityWarning] = useState(null);
   const [studioDraftText, setStudioDraftText] = useState(""); // editable JSON — what actually gets published
   const [aiTellFlags, setAiTellFlags] = useState([]); // results of the last scan
   const [rephraseSuggestions, setRephraseSuggestions] = useState({}); // flag index -> { original, suggestion }
@@ -557,7 +558,7 @@ export default function Gemlyx() {
   const generateArea = async () => {
     const name = studioTown.trim();
     if (!name || studioLoading) return;
-    setStudioLoading(true); setStudioResult(null); setStudioError(null);
+    setStudioLoading(true); setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null);
     setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     setStudioInstagramUrl(""); setStudioFrozenGeo(null);
     try {
@@ -634,9 +635,19 @@ CHARACTER/FIT FACTS: founding date or defining historical fact, its region, what
 WHAT TO DO FACTS: specific real streets, buildings, museums, or activities — named and concrete, not generic.
 GETTING THERE/REALITY FACTS: real transit routes and times from Copenhagen, how long a visit genuinely takes, any real logistical downside (limited dining, seasonal closures, etc).
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
+          : studioType === "festival"
+          ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
           : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`;
         const preCheck = await askGemini(precheckPrompt);
-        if (!preCheck.error && preCheck.text) googleFindings = preCheck.text;
+        if (!preCheck.error && preCheck.text) {
+          googleFindings = preCheck.text;
+          // Surface an identity mismatch as its own clearly-visible warning, separate
+          // from the general findings text, so it can't get lost in a wall of facts —
+          // this is what actually gives the founder a "did you mean...?" moment before
+          // publishing, without needing a full extra confirmation step in the flow.
+          const warningMatch = preCheck.text.match(/^IDENTITY WARNING:\s*(.+?)(?:\n|$)/);
+          if (warningMatch) setStudioIdentityWarning(warningMatch[1].trim());
+        }
       }
       setGooglePrecheckRan(!!googleFindings);
 
@@ -700,12 +711,12 @@ PARAGRAPH 3 \u2014 "gettingThereReality": 2-3 blunt sentences MAXIMUM. How to ac
 
 SHAPE-ONLY EXAMPLE (structure and rhythm reference \u2014 apply the generic-sentence test and sentence-mechanics rules independently of how this reads): {"name": "Ribe", "region": "South Jutland", "emoji": "\u26ea", "tag": "Denmark\'s oldest town", "characterAndFit": "Ribe has been a town since around 700 AD \u2014 the oldest in Scandinavia \u2014 and it still centers on a working medieval cathedral rather than a recreated one. It suits people who want real history without a crowd; it\'s not the place for nightlife or a fast-paced day.", "whatToDo": "The cathedral tower is climbable for a real view over the marshland. Ribe VikingeCenter, just outside town, has artisans working leather and jewellery on site using period techniques. The cobbled streets around Puggaardsgade are the actual medieval core, not a rebuilt tourist version.", "gettingThereReality": "About 3h15 by train from Copenhagen with one change, or a manageable half-day trip from Esbjerg. Most of the real sights fit into a half day. Little in the way of nightlife or late dining if you\'re staying over \u2014 this is an early-to-bed kind of town."}
 ${STUDIO_VOICE}
-Respond with ONLY strict JSON: {"name": ${J(name)}, "region": "...", "emoji": "one emoji", "tag": "3-5 word hook", "characterAndFit": "paragraph 1, per the rules above \u2014 2-3 sentences max, also serves as the card-preview text", "whatToDo": "paragraph 2, per the rules above \u2014 3 sentences max, concrete and physical", "gettingThereReality": "PARAGRAPH 3, THE REALITY CHECK \u2014 real getting-there logistics (how, how long) AND a genuine blunt downside, both required, not just travel times dressed up as one section. A downside means something a traveler would actually be disappointed by if nobody told them first: nightlife/dining genuinely limited, the town is quieter or smaller than photos suggest, a real crowd/cost issue, whatever is ACTUALLY true here \u2014 stated as its own direct sentence, not softened or buried at the end of a logistics sentence. 2-4 sentences, matching the same blunt standard as the Reality Check used for restaurants and festivals \u2014 this needs to read as an honest reality check, not a transit schedule with one disclaimer tacked on", "highlight": "one specific real place/experience with a concrete detail, or empty string", "travelTime": "EXACT format like \'3h 15min \ud83d\ude82\' or \'45min \ud83d\ude8c\' or \'2h + ferry \u26f4\' \u2014 duration + one emoji, NO other words", "mapHint": "Town, postcode Town, Denmark", "lat": 56.09, "lon": 8.24, "nomiPotential": "High / Very High / Medium", "tier": "Can\'t Miss Out / Highly Recommended / Worth Considering / Best If You\'re Already Nearby", "nearestStation": "short \u2014 just the station name, for the At a Glance card", "recommendedStayGlance": "e.g. \'Half day\' or \'Overnight\' \u2014 short, for At a Glance, must match the real pacing implied in gettingThereReality", "bestTimeGlance": "e.g. \'May\u2013Sept\' \u2014 short, for At a Glance", "accommodationGlance": "e.g. \'Day trip from Copenhagen\' \u2014 short, for At a Glance", "typicalCosts": "REAL representative costs ONLY if the search context actually supports specific numbers \u2014 e.g. \'Museum entry ~100 DKK, dinner 150-250 DKK\' \u2014 never a vague category like \'Low\' or \'Moderate\'. Same discipline as everywhere else here: if the context doesn\'t support real numbers, leave this an empty string rather than guessing or inventing a category \u2014 empty is the correct, expected answer when nothing concrete turns up", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag \u2014 a real place/experience with a concrete detail, distinct from highlight and whatToDo", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
+Respond with ONLY strict JSON: {"name": ${J(name)}, "region": "...", "emoji": "one emoji", "tag": "3-5 word hook", "characterAndFit": "paragraph 1, per the rules above \u2014 2-3 sentences max, also serves as the card-preview text", "whatToDo": "paragraph 2, per the rules above \u2014 3 sentences max, concrete and physical", "gettingThereReality": "PARAGRAPH 3, THE REALITY CHECK \u2014 real getting-there logistics (how, how long) AND a genuine blunt downside, both required, not just travel times dressed up as one section. A downside means something a traveler would actually be disappointed by if nobody told them first: nightlife/dining genuinely limited, the town is quieter or smaller than photos suggest, a real crowd/cost issue, whatever is ACTUALLY true here \u2014 stated as its own direct sentence, not softened or buried at the end of a logistics sentence. 2-4 sentences, matching the same blunt standard as the Reality Check used for restaurants and festivals \u2014 this needs to read as an honest reality check, not a transit schedule with one disclaimer tacked on", "highlight": "one specific real place/experience with a concrete detail, or empty string", "travelTime": "ONLY if you are genuinely confident of the real travel time — otherwise leave this an empty string, never guess (a real error happened before: a town genuinely 4+ hours from Copenhagen was once guessed at 1.5 hours). EXACT format like \'3h 15min \ud83d\ude82\' or \'45min \ud83d\ude8c\' or \'2h + ferry \u26f4\' \u2014 duration + one emoji, NO other words", "mapHint": "Town, postcode Town, Denmark", "lat": 56.09, "lon": 8.24, "nomiPotential": "High / Very High / Medium", "tier": "Can\'t Miss Out / Highly Recommended / Worth Considering / Best If You\'re Already Nearby", "nearestStation": "short \u2014 just the station name, for the At a Glance card", "recommendedStayGlance": "e.g. \'Half day\' or \'Overnight\' \u2014 short, for At a Glance, must match the real pacing implied in gettingThereReality", "bestTimeGlance": "e.g. \'May\u2013Sept\' \u2014 short, for At a Glance", "accommodationGlance": "e.g. \'Day trip from Copenhagen\' \u2014 short, for At a Glance", "typicalCosts": "REAL representative costs ONLY if the search context actually supports specific numbers \u2014 e.g. \'Museum entry ~100 DKK, dinner 150-250 DKK\' \u2014 never a vague category like \'Low\' or \'Moderate\'. Same discipline as everywhere else here: if the context doesn\'t support real numbers, leave this an empty string rather than guessing or inventing a category \u2014 empty is the correct, expected answer when nothing concrete turns up", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag \u2014 a real place/experience with a concrete detail, distinct from highlight and whatToDo", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
         festival: `Draft a complete Gemlyx festival entry for ${name}, Denmark, following this EXACT structure (a premium travel editor's voice, never Wikipedia): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field — do NOT write a separate Overview, that would just repeat it) -> Atmosphere (the feeling) -> Who It's For (honest fit, also covering why someone should go — don't split into a separate Why Go section) -> Reality Check (the practical downsides, as flowing prose, not bullets). Total word count across Atmosphere+WhoItsFor+RealityCheck+GemlyxFind should land around 220-350 words — short paragraphs, never encyclopedic. Every section answers a different question; never repeat what's already in At a Glance.
-GEMLYX FIND — DON'T FORCE A "HIDDEN GEM" WHERE NONE EXISTS: if this is a genuinely massive, mainstream event with no quiet corners or alternative experience (a huge street festival, a major mainstream music festival), do NOT invent a "quiet alternative" or claim part of it is secretly intimate — that's actively misleading (e.g. telling someone Vesterbro is a quiet escape during Distortion, when it's the middle of a 100,000-person block party, is a real factual error, not just weak writing). Instead pivot Gemlyx Find into a genuinely useful insider PRACTICAL tip for surviving/enjoying a big event as it actually is — a specific sound system or DJ area worth seeking out, specific gear worth bringing (windproof layers for an exposed coastal site), a specific logistical trick (which entrance has shorter queues, a wristband/token system to know about) — something concrete and actionable, not a false claim about the event being smaller or calmer than it is.
+GEMLYX FIND — DON'T FORCE A "HIDDEN GEM" WHERE NONE EXISTS: if this is a genuinely massive, mainstream event with no quiet corners or alternative experience (a huge street festival, a major mainstream music festival), do NOT invent a "quiet alternative" or claim part of it is secretly intimate — that's actively misleading (e.g. telling someone Vesterbro is a quiet escape during Distortion, when it's the middle of a 100,000-person block party, is a real factual error, not just weak writing). Instead pivot Gemlyx Find into a genuinely useful insider PRACTICAL tip for surviving/enjoying a big event as it actually is — a specific sound system or DJ area worth seeking out, specific gear worth bringing (windproof layers for an exposed coastal site), a specific logistical trick (which entrance has shorter queues, a wristband/token system to know about) — something concrete and actionable, not a false claim about the event being smaller or calmer than it is. EVENT IDENTITY \u2014 THIS HAS CAUSED A REAL, SERIOUS ERROR BEFORE: a small church event was once drafted using facts from a completely different, much larger city-wide festival that happened to share part of its name and season, making a quiet event sound like a major party. The search context may contain results about a DIFFERENT event that shares a similar name, the same host town, or overlapping dates \u2014 do not assume everything in the context is about the one event you were actually asked to draft. Before writing, check: does the scale/atmosphere/venue described in the context genuinely match what a search for exactly this name would return, or does some of it sound like it belongs to a bigger, separately-named event nearby? If you have ANY doubt about which real event the context is actually describing, do not silently blend the facts \u2014 add an explicit uncertainty stating exactly what seems mixed up (e.g. \'Some context may describe [other event name] rather than this one \u2014 verify scale and venue before publishing\'), and default to the more conservative, smaller-scale reading rather than the more exciting-sounding one.
 SHAPE-ONLY EXAMPLE (structure reference, not a prose quality bar): {"name": "Distortion", "town": "Copenhagen", "nearestStation": "Nørreport Station, Copenhagen Central Station or nearby Metro stations", "ticketInfo": "Street parties are free. Distortion X and Distortion Ø require tickets.", "accommodationTip": "Stay in central Copenhagen and book several months in advance.", "desc": "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods."}
 ${STUDIO_VOICE}
-Respond with ONLY strict JSON: {"name": ${J(name)}, "scale": "Major (large, well-known, city-wide/national draw — e.g. a festival with thousands+ attendees, mainstream press coverage) or Local (smaller, niche, community, underground, or regional — most festivals are this)", "town": "host town", "type": "Music / Festival / Market / Culture", "emoji": "one emoji", "dateStart": "STRICTLY the format YYYY-MM-DD (4-digit year FIRST, e.g. '2027-06-30' for 30 June 2027) — never DD-MM-YYYY or any other order — or empty string if not in context", "dateEnd": "same STRICT YYYY-MM-DD format, or empty", "tier": "Can't miss out / Highly Recommended / Worth Considering / Best If You're Already Nearby", "nearestStation": "short — for At a Glance", "ticketInfo": "short — for At a Glance, never invent prices", "camping": "short camping note if relevant, else empty string — for At a Glance", "accommodationTip": "short — for At a Glance", "travelTime": "from Copenhagen like '1h 10min 🚂', or 'In Copenhagen 🚇'", "ticketStatus": "free / on_sale / limited / sold_out", "desc": "two card sentences", "mapHint": "Venue/street, postcode Town, Denmark", "website": "official festival/event website URL ONLY if present in context, else empty string — this matters more here than for other content types, since festival grounds and temporary event sites are often poorly mapped and the official site is where people actually find accurate directions", "tags": ["two", "tags"], "color": "#hex fitting the vibe", "atmosphere": "PARAGRAPH 1 — the FEELING: sound, crowd energy, a concrete detail of what a day there is actually like. 2-3 sentences, per the STUDIO_VOICE rules above (no cliché words, no generic-sentence-test failures)", "whoItsFor": "PARAGRAPH 2 — who this genuinely suits, described honestly as flowing prose, not a persuasive pitch for why someone SHOULD go. If this festival is genuinely niche, low-key, or not for everyone, say so plainly. 2-3 sentences — accuracy about fit, never convincing the reader to buy a ticket", "realityCheck": "PARAGRAPH 3 — the practical reality stated plainly as flowing prose, not bullets: crowds, ticket/entry friction, a real logistical downside, weather exposure, whatever actually matters for THIS festival. 2-4 sentences, at least one genuine downside stated directly, matching the blunt Reality Check tone used elsewhere in Gemlyx", "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]} If the context doesn't clearly show this is a major, mainstream-known event, default "scale" to "Local" — most festivals are, and Gemlyx only calls something Major when the evidence genuinely supports it.
+Respond with ONLY strict JSON: {"name": ${J(name)}, "scale": "Major (large, well-known, city-wide/national draw — e.g. a festival with thousands+ attendees, mainstream press coverage) or Local (smaller, niche, community, underground, or regional — most festivals are this)", "town": "host town", "type": "Music / Festival / Market / Culture", "emoji": "one emoji", "dateStart": "STRICTLY the format YYYY-MM-DD (4-digit year FIRST, e.g. '2027-06-30' for 30 June 2027) — never DD-MM-YYYY or any other order — or empty string if not in context", "dateEnd": "same STRICT YYYY-MM-DD format, or empty", "tier": "Can't miss out / Highly Recommended / Worth Considering / Best If You're Already Nearby", "nearestStation": "short — for At a Glance", "ticketInfo": "short — for At a Glance, never invent prices", "camping": "short camping note if relevant, else empty string — for At a Glance", "accommodationTip": "short — for At a Glance", "travelTime": "from Copenhagen, ONLY if the real distance/route is genuinely known to you with confidence (e.g. a well-established train route) — format like '1h 10min 🚂' or 'In Copenhagen 🚇'. DO NOT GUESS OR ESTIMATE: this has caused a real, embarrassing error before (a town genuinely 4+ hours away was once guessed at 1.5 hours). If you are not genuinely confident of the real travel time for this specific town, leave this an empty string — empty is the correct, expected, SAFE answer here, never a rough guess dressed up as a real figure", "ticketStatus": "free / on_sale / limited / sold_out", "desc": "two card sentences", "mapHint": "Venue/street, postcode Town, Denmark", "website": "official festival/event website URL ONLY if present in context, else empty string — this matters more here than for other content types, since festival grounds and temporary event sites are often poorly mapped and the official site is where people actually find accurate directions", "tags": ["two", "tags"], "color": "#hex fitting the vibe", "atmosphere": "PARAGRAPH 1 — the FEELING: sound, crowd energy, a concrete detail of what a day there is actually like. 2-3 sentences, per the STUDIO_VOICE rules above (no cliché words, no generic-sentence-test failures)", "whoItsFor": "PARAGRAPH 2 — who this genuinely suits, described honestly as flowing prose, not a persuasive pitch for why someone SHOULD go. If this festival is genuinely niche, low-key, or not for everyone, say so plainly. 2-3 sentences — accuracy about fit, never convincing the reader to buy a ticket", "realityCheck": "PARAGRAPH 3 — the practical reality stated plainly as flowing prose, not bullets: crowds, ticket/entry friction, a real logistical downside, weather exposure, whatever actually matters for THIS festival. 2-4 sentences, at least one genuine downside stated directly, matching the blunt Reality Check tone used elsewhere in Gemlyx", "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]} If the context doesn't clearly show this is a major, mainstream-known event, default "scale" to "Local" — most festivals are, and Gemlyx only calls something Major when the evidence genuinely supports it.
 Dates: ONLY from the context — empty string beats a guess.
 CRITICAL GEOGRAPHY CHECK — small/underground/local festivals are the highest-risk case for this: verify the town/region named in "nearestStation", "accommodationTip", and "mapHint" is ACTUALLY where this specific event happens, not a same-named or similar-sounding place elsewhere in Denmark. A real station or stop name can exist in multiple regions — Denmark has several places with overlapping or similar names (e.g. a "Hemmet" in West Jutland is unrelated to unrelated locations elsewhere). Getting the STATION NAME right is not enough if the TOWN attached to it is wrong. If the search context doesn't clearly confirm which town/region the venue is in, say so honestly (e.g. "Check the festival's own website for directions") rather than guessing a nearby-sounding place.
 ISLAND ACCESS: if this festival is on an island only reachable by ferry or flight (Bornholm, Ærø, Samsø, etc.), and the search context supports it, fold a booking-ahead note into "accommodationTip" — name the real ferry operator/route if known (e.g. Molslinjen), and mention that both travel and accommodation can sell out well in advance during festival week. If the search context doesn't confirm specifics, still flag generically that early booking matters for island access rather than omitting it entirely.`,
@@ -831,6 +842,45 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       setStudioError("Couldn't draft that — try again, or check the name.");
     }
     setStudioLoading(false);
+  };
+
+  const [manualPriceInputs, setManualPriceInputs] = useState({}); // fieldName -> typed value, before saving
+  const [manualPricePolishing, setManualPricePolishing] = useState(null); // which field is mid-polish
+  // Which field in this content type's schema is the "price we might not have found"
+  // one — matches what the schema/render code above actually asks for per type.
+  const PRICE_FIELD_BY_TYPE = { town: "typicalCosts", free: "extraCosts", food: "price", festival: "ticketInfo", booking: "price" };
+  const saveManualPriceField = (fieldName, rawValue) => {
+    const value = rawValue.trim();
+    if (!value) return;
+    const safe = value.replace(/"/g, "'"); // never let a typed quote break the surrounding JSON
+    const emptyPattern = new RegExp(`"${fieldName}"\\s*:\\s*""`);
+    if (emptyPattern.test(studioDraftText)) {
+      setStudioDraftText(prev => prev.replace(emptyPattern, `"${fieldName}": "${safe}"`));
+      setManualPriceInputs(prev => ({ ...prev, [fieldName]: "" }));
+    }
+  };
+  const polishManualPriceField = async (fieldName) => {
+    const raw = (manualPriceInputs[fieldName] || "").trim();
+    if (!raw) return;
+    setManualPricePolishing(fieldName);
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{
+            role: "user",
+            content: `Lightly polish this short price/cost note into Gemlyx's plain, direct voice — keep every number, currency, and fact EXACTLY as given, change only phrasing if it genuinely needs it. If it already reads fine as-is, return it completely unchanged. Respond with ONLY the final text, no quotes, no explanation.\n\nText: "${raw}"`
+          }],
+          max_tokens: 100,
+        }),
+      });
+      const data = await res.json();
+      const polished = data.choices?.[0]?.message?.content?.trim().replace(/^["']|["']$/g, "");
+      if (polished) setManualPriceInputs(prev => ({ ...prev, [fieldName]: polished }));
+    } catch (err) { console.error("Polish failed:", err); }
+    setManualPricePolishing(null);
   };
 
   const runAITellScan = () => {
@@ -1791,16 +1841,23 @@ If the conversation only covers a single day or a few stops with no explicit day
       if ((st.overflowX === "auto" || st.overflowX === "scroll") && el.scrollWidth > el.clientWidth + 5) { skip = true; break; }
       el = el.parentElement;
     }
-    dragRef.current = { x: t.clientX, y: t.clientY, dx: 0, dragging: false, skip };
+    dragRef.current = { x: t.clientX, y: t.clientY, dx: 0, dragging: false, skip, verticalLocked: false };
   };
   const onSwipeMove = (e) => {
     const d = dragRef.current;
-    if (d.skip) return;
+    if (d.skip || d.verticalLocked) return;
     const t = e.touches[0];
     const dx = t.clientX - d.x, dy = t.clientY - d.y;
     if (!d.dragging) {
-      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4) d.dragging = true;
-      else return;
+      // Decide ONCE which direction this whole gesture is, then lock it for the
+      // rest of the touch. Without this lock, a finger drifting even slightly
+      // sideways partway through a vertical scroll (completely normal with a real
+      // thumb) could flip the gesture into horizontal-swipe mode mid-scroll —
+      // that's the reported "bounces around when scrolling up". Now it's a clean
+      // either/or: swipe left/right OR scroll up/down, decided once, never both.
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return; // not enough movement yet to tell
+      if (Math.abs(dx) > Math.abs(dy) * 1.4) { d.dragging = true; }
+      else { d.verticalLocked = true; return; } // this touch is a vertical scroll — never reconsider
     }
     let out = dx;
     if ((tabIdx === 0 && dx > 0) || (tabIdx === TAB_ORDER.length - 1 && dx < 0)) out = dx * 0.3;
@@ -2329,6 +2386,36 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {studioError && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 8 }}>{studioError}</div>}
                     {studioResult && (
                       <>
+                        {(() => {
+                          const priceField = PRICE_FIELD_BY_TYPE[studioType];
+                          if (!priceField) return null;
+                          const emptyPattern = new RegExp(`"${priceField}"\\s*:\\s*""`);
+                          if (!emptyPattern.test(studioDraftText)) return null; // already has real content — nothing to fill
+                          return (
+                            <div style={{ background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 0.5, marginBottom: 4 }}>💰 COULDN'T FIND A REAL {priceField === "price" ? "PRICE" : priceField === "ticketInfo" ? "TICKET PRICE" : "COST"} — KNOW IT? FILL IT IN</div>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <input value={manualPriceInputs[priceField] || ""} onChange={e => setManualPriceInputs(prev => ({ ...prev, [priceField]: e.target.value }))}
+                                  placeholder="Type the real price/cost you know"
+                                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+                                <button onClick={() => polishManualPriceField(priceField)} disabled={manualPricePolishing === priceField || !manualPriceInputs[priceField]}
+                                  style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 11.5, fontWeight: 700, color: C.text, cursor: "pointer", whiteSpace: "nowrap" }}>
+                                  {manualPricePolishing === priceField ? "…" : "🔄 Polish"}
+                                </button>
+                                <button onClick={() => saveManualPriceField(priceField, manualPriceInputs[priceField] || "")} disabled={!manualPriceInputs[priceField]}
+                                  style={{ background: C.accent, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, color: "#fff", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                  ✓ Save
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {studioIdentityWarning && (
+                          <div style={{ background: "#D3232322", border: "2px solid #D32323", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#FF6B6B", letterSpacing: 0.5, marginBottom: 4 }}>⚠️ DID YOU MEAN A DIFFERENT EVENT? VERIFY BEFORE PUBLISHING</div>
+                            <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{studioIdentityWarning}</div>
+                          </div>
+                        )}
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
                         <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
                           {googlePrecheckRan ? "✦ Written with a Google AI cross-check folded in before drafting" : "Google AI pre-check didn't run (no key set, or the call failed) — Tavily research only"}
