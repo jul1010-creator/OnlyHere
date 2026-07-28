@@ -86,7 +86,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               { icon: "🛏️", label: "Recommended Stay", value: item.recommendedStayGlance },
               { icon: "☀️", label: "Best Time", value: item.bestTimeGlance },
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
-              { icon: "💰", label: "Budget", value: item.budgetGlance },
+              { icon: "💰", label: "Typical Costs", value: item.typicalCosts },
             ]} />
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{travelLabel(userCoords, item.name, item.travelTime)}</div>
           </>
@@ -95,7 +95,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           <AtAGlanceCard rows={[
             { icon: "🎟️", label: "Tickets", value: item.ticketsGlance },
             { icon: "⏱️", label: "Time Needed", value: item.timeNeeded },
-            { icon: "💰", label: "Budget", value: item.budgetGlance },
+            { icon: "💰", label: "Extra Costs", value: item.extraCosts },
             { icon: "♿", label: "Accessibility", value: item.accessibility },
             { icon: "🚆", label: "Nearest Station", value: item.nearestStation },
           ]} />
