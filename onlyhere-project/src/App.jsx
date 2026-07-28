@@ -1822,7 +1822,6 @@ If the conversation only covers a single day or a few stops with no explicit day
     setActive(id);
   };
   const stripRef = useRef(null);
-  const dragRef = useRef({ x: 0, y: 0, dx: 0, dragging: false, skip: false });
   const tabIdx = TAB_ORDER.indexOf(active);
 
   const setStrip = (dx, animate) => {
@@ -1832,47 +1831,6 @@ If the conversation only covers a single day or a few stops with no explicit day
   };
 
   useEffect(() => { setStrip(0, true); }, [active]);
-
-  const onSwipeStart = (e) => {
-    const t = e.touches[0];
-    let el = e.target, skip = false;
-    while (el && el !== e.currentTarget) {
-      const st = window.getComputedStyle(el);
-      if ((st.overflowX === "auto" || st.overflowX === "scroll") && el.scrollWidth > el.clientWidth + 5) { skip = true; break; }
-      el = el.parentElement;
-    }
-    dragRef.current = { x: t.clientX, y: t.clientY, dx: 0, dragging: false, skip, verticalLocked: false };
-  };
-  const onSwipeMove = (e) => {
-    const d = dragRef.current;
-    if (d.skip || d.verticalLocked) return;
-    const t = e.touches[0];
-    const dx = t.clientX - d.x, dy = t.clientY - d.y;
-    if (!d.dragging) {
-      // Decide ONCE which direction this whole gesture is, then lock it for the
-      // rest of the touch. Without this lock, a finger drifting even slightly
-      // sideways partway through a vertical scroll (completely normal with a real
-      // thumb) could flip the gesture into horizontal-swipe mode mid-scroll —
-      // that's the reported "bounces around when scrolling up". Now it's a clean
-      // either/or: swipe left/right OR scroll up/down, decided once, never both.
-      if (Math.abs(dx) < 15 && Math.abs(dy) < 15) return; // not enough movement yet to tell — was 12, small jitter could tip the ratio either way this early
-      if (Math.abs(dx) > Math.abs(dy) * 2.2) { d.dragging = true; } // was 1.4 — now requires a clearly, deliberately horizontal gesture, not just "slightly more horizontal than vertical"
-      else { d.verticalLocked = true; return; } // this touch is a vertical scroll — never reconsider
-    }
-    let out = dx;
-    if ((tabIdx === 0 && dx > 0) || (tabIdx === TAB_ORDER.length - 1 && dx < 0)) out = dx * 0.3;
-    d.dx = out;
-    setStrip(out, false);
-  };
-  const onSwipeEnd = () => {
-    const d = dragRef.current;
-    if (d.skip || !d.dragging) return;
-    const w = window.innerWidth;
-    if (d.dx < -Math.min(90, w * 0.22) && tabIdx < TAB_ORDER.length - 1) goTab(TAB_ORDER[tabIdx + 1]);
-    else if (d.dx > Math.min(90, w * 0.22) && tabIdx > 0) goTab(TAB_ORDER[tabIdx - 1]);
-    else setStrip(0, true);
-    d.dragging = false; d.dx = 0;
-  };
 
   const toggleSave = (id) => setSavedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const savedProducts = allProducts.filter(p => savedItems.includes(p.id));
@@ -3974,8 +3932,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
       {/* ── PAGER ──────────────────────────────────────────── */}
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
         <div ref={stripRef}
-          onTouchStart={onSwipeStart} onTouchMove={onSwipeMove} onTouchEnd={onSwipeEnd}
-          style={{ display: "flex", height: "100%", width: `${TAB_ORDER.length * 100}%`, transform: `translateX(${-tabIdx * (100/TAB_ORDER.length)}%)`, transition: "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)", touchAction: "pan-y" }}>
+          style={{ display: "flex", height: "100%", width: `${TAB_ORDER.length * 100}%`, transform: `translateX(${-tabIdx * (100/TAB_ORDER.length)}%)`, transition: "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)" }}>
           {TAB_ORDER.map((tabId, i) => (
             <div key={tabId} style={{ width: `${100/TAB_ORDER.length}%`, height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 20 }}>
               {Math.abs(i - tabIdx) <= 1 && renderTab(tabId)}
