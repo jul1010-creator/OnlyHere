@@ -77,7 +77,6 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             { icon: "🎟️", label: "Tickets", value: item.ticketInfo },
             { icon: "⛺", label: "Camping", value: item.camping },
             { icon: "🏡", label: "Accommodation", value: item.accommodationTip },
-            { icon: "💰", label: "Budget", value: item.budgetLevel },
           ]} />
         )}
         {kind === "town" && (
