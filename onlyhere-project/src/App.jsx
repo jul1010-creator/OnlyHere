@@ -1855,8 +1855,8 @@ If the conversation only covers a single day or a few stops with no explicit day
       // thumb) could flip the gesture into horizontal-swipe mode mid-scroll —
       // that's the reported "bounces around when scrolling up". Now it's a clean
       // either/or: swipe left/right OR scroll up/down, decided once, never both.
-      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return; // not enough movement yet to tell
-      if (Math.abs(dx) > Math.abs(dy) * 1.4) { d.dragging = true; }
+      if (Math.abs(dx) < 15 && Math.abs(dy) < 15) return; // not enough movement yet to tell — was 12, small jitter could tip the ratio either way this early
+      if (Math.abs(dx) > Math.abs(dy) * 2.2) { d.dragging = true; } // was 1.4 — now requires a clearly, deliberately horizontal gesture, not just "slightly more horizontal than vertical"
       else { d.verticalLocked = true; return; } // this touch is a vertical scroll — never reconsider
     }
     let out = dx;
