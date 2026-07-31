@@ -12,9 +12,11 @@ export const InstagramEmbed = ({ url }) => {
     document.body.appendChild(s);
   }, [url]);
   return (
-    <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
-      style={{ width: "100%", margin: "0 0 16px", background: "#111827", border: "1px solid #1E2A3A", borderRadius: 14, minWidth: 0 }}>
-      <a href={url} target="_blank" rel="noreferrer" style={{ display: "block", padding: 14, fontSize: 12, color: "#9AA5BE" }}>View on Instagram ↗</a>
-    </blockquote>
+    <div style={{ background: "#0A0F1E", border: "1px solid #1E2A3A", borderRadius: 16, padding: 10, marginBottom: 16 }}>
+      <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14"
+        style={{ width: "100%", margin: 0, background: "#111827", border: "1px solid #1E2A3A", borderRadius: 10, minWidth: 0, overflow: "hidden" }}>
+        <a href={url} target="_blank" rel="noreferrer" style={{ display: "block", padding: 14, fontSize: 12, color: "#9AA5BE" }}>View on Instagram ↗</a>
+      </blockquote>
+    </div>
   );
 };

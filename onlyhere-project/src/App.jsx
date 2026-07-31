@@ -391,12 +391,10 @@ export default function Gemlyx() {
   // and wrong currency for Skagen Festival). Never edits the draft automatically —
   // shows a synthesized answer with real citations for Oliver to read and act on himself.
   const askGemini = async (prompt) => {
-    const key = import.meta.env.VITE_GEMINI_KEY;
-    if (!key) return { error: "No Gemini API key set — add VITE_GEMINI_KEY in Vercel's environment variables (free key from aistudio.google.com)." };
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`, {
+      const res = await fetch("/api/gemini", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ google_search: {} }] }),
       });
       const data = await res.json();
@@ -451,9 +449,9 @@ export default function Gemlyx() {
       }
       if (!pageRes.ok || !pageData.text) { setScanError(pageData.error || "Couldn't read that page."); setScanLoading(false); return; }
 
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-4o",
           response_format: { type: "json_object" },
@@ -614,8 +612,7 @@ export default function Gemlyx() {
       // draft, not as a rewrite — OpenAI still writes every word. If the key's missing or
       // the call fails, this just skips silently — drafting must never depend on Gemini.
       let googleFindings = "";
-      const geminiKey = import.meta.env.VITE_GEMINI_KEY;
-      if (geminiKey) {
+      {
         // For Food and Town: Gemini's job is no longer just "fact-check" — it's the
         // actual "Data Clerk" step (per Oliver's proposed pipeline). It organizes real,
         // searched facts into the SAME narrative buckets the final draft uses, so
@@ -749,9 +746,9 @@ ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, e.g. a named museum/center) or Local (small independent workshop)", "what": ["1-3 lowercase craft keywords from: blacksmith, ceramic/pottery, jewellery, leather, textile/dyeing/felting, wood, candy — only include what's genuinely true"], "rating": "a real rating if found in reviews, else omit", "location": "Town name", "price": "exact price if the context gives one, else 'See website'", "priceNote": "e.g. 'per person' or 'family ticket available', else empty string", "travelTime": "EXACT format like '3h 15min 🚂' from Copenhagen, or empty string", "bookingType": "'online' only if you can book/buy tickets on a website, otherwise 'contact'", "popularityTag": "'Hidden Gem' if genuinely under-the-radar, else empty string", "transportWarning": "true only if it's genuinely hard to reach without a car", "emoji": "one fitting emoji", "color": "#hex fitting the craft", "timeNeeded": "e.g. '2-3 hours' — for At a Glance", "accessibility": "short accessibility note if known, else empty string — for At a Glance", "nearestStation": "short — for At a Glance", "special": "the experience itself — what happens, what you'll actually make or see, real specific detail", "whoFor": "who this genuinely suits", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
       };
 
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-4o",
           response_format: { type: "json_object" },
@@ -864,9 +861,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
     if (!raw) return;
     setManualPricePolishing(fieldName);
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-4o",
           messages: [{
@@ -881,6 +878,35 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       if (polished) setManualPriceInputs(prev => ({ ...prev, [fieldName]: polished }));
     } catch (err) { console.error("Polish failed:", err); }
     setManualPricePolishing(null);
+  };
+
+  const [danishTranslation, setDanishTranslation] = useState(null);
+  const [translatingToDanish, setTranslatingToDanish] = useState(false);
+  // Read-only translation for review purposes — the real draft that gets
+  // published stays exactly as-is in English underneath. This just gives someone
+  // more comfortable in Danish a way to actually read and verify the facts,
+  // not a second version of the content that could drift from what's published.
+  const translateDraftToDanish = async () => {
+    if (!studioDraftText.trim()) return;
+    setTranslatingToDanish(true);
+    try {
+      const res = await fetch("/api/openai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{
+            role: "user",
+            content: `Translate the natural-language text content of this draft into natural, everyday Danish — the kind an ordinary Dane actually speaks, not stiff textbook Danish. Keep every number, price, date, and proper name exactly as given, never translate a real place/venue name. Ignore the JSON structure and field names entirely — just give a clean, readable Danish translation of what the draft actually says, organized so it's easy to read (you can drop the JSON punctuation and just write it as normal paragraphs with the same headings). This is for reading and fact-checking only, not for publishing.\n\nDraft:\n${studioDraftText}`
+          }],
+          max_tokens: 2000,
+        }),
+      });
+      const data = await res.json();
+      const translation = data.choices?.[0]?.message?.content?.trim();
+      if (translation) setDanishTranslation(translation);
+    } catch (err) { console.error("Translation failed:", err); }
+    setTranslatingToDanish(false);
   };
 
   const runAITellScan = () => {
@@ -932,9 +958,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
     if (!studioDraftText.trim()) return;
     setAiVoiceScanLoading(true);
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-4o",
           messages: [{
@@ -993,9 +1019,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       const avoidNote = avoidList.length > 0
         ? ` Give a GENUINELY DIFFERENT rewrite than ${avoidList.length > 1 ? "any of these you already tried" : "this one you already tried"} — vary the actual wording and sentence structure, not just swap one word: ${avoidList.map(a => `"${a}"`).join(" / ")}.`
         : "";
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-4o",
           messages: [{
@@ -1162,9 +1188,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down — OpenAI will fall back to safe wording */ }
-        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        const res = await fetch("/api/openai", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "gpt-4o-mini",
             response_format: { type: "json_object" },
@@ -1551,13 +1577,13 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // ground them — same "grounding before writing" pattern as Studio, scoped to
       // the single moment concrete facts actually get committed.
       let guideGrounding = "";
-      if (import.meta.env.VITE_GEMINI_KEY) {
+      {
         const preCheck = await askGemini(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n\n${convoText.slice(0, 3000)}`);
         if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
       }
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-4o-mini",
           response_format: { type: "json_object" },
@@ -1575,7 +1601,7 @@ CRITICAL: make each day's arrivalTime sequence internally consistent — each st
 CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop name across every single day must be genuinely distinct — once a place has appeared as a stop on one day, it never appears again as a stop on any other day of this same plan (e.g. if Amalienborg is a stop on Day 1, it must not also appear as a stop on Day 3). If the traveler wants to revisit somewhere, that's a choice for THEM to make later, not something to build into the itinerary by default.
 CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are genuinely close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a genuinely long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to actually explore once they arrive, not a long haul tacked onto the end of an already-full day.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
-CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock.
+CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
             { role: "user", content: convoText }
           ],
@@ -1589,9 +1615,9 @@ If the conversation only covers a single day or a few stops with no explicit day
       // click again and it's fine": pure model variance, not a rendering bug. Retry once
       // automatically instead of making the person notice and click a second time.
       if (requestedDays && (!parsed.days || parsed.days.length < requestedDays)) {
-        const retryRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        const retryRes = await fetch("/api/openai", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "gpt-4o-mini",
             response_format: { type: "json_object" },
@@ -1676,9 +1702,9 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (routeStops.length < 2) return;
     setRouteSummaryLoading(true);
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "gpt-4o-mini",
           messages: [
@@ -1729,6 +1755,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakePlacePref, setIntakePlacePref] = useState(null);
   const [intakeTravelers, setIntakeTravelers] = useState("");
   const [intakeIncludeSaved, setIntakeIncludeSaved] = useState(false);
+  const [intakeFamilyMode, setIntakeFamilyMode] = useState(false);
   const [detourTab, setDetourTab] = useState("sightseeing");
   const [intakeTransport, setIntakeTransport] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -1982,9 +2009,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
         { role: "user", content: msg },
       ];
 
-      const callOpenAI = (messages) => fetch("https://api.openai.com/v1/chat/completions", {
+      const callOpenAI = (messages) => fetch("/api/openai", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + import.meta.env.VITE_OPENAI_KEY },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "gpt-4o-mini", messages, tools, max_tokens: 900 }),
       }).then(r => r.json());
 
@@ -2374,7 +2401,22 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{studioIdentityWarning}</div>
                           </div>
                         )}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: C.muted }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
+                          <button onClick={translateDraftToDanish} disabled={translatingToDanish}
+                            style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: C.text, cursor: "pointer", whiteSpace: "nowrap" }}>
+                            {translatingToDanish ? "…" : "🇩🇰 Read in Danish"}
+                          </button>
+                        </div>
+                        {danishTranslation && (
+                          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 0.5 }}>FOR READING ONLY — the real draft below (in English) is what actually gets published, this is just a translation to help check it</div>
+                              <button onClick={() => setDanishTranslation(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13 }}>✕</button>
+                            </div>
+                            <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{danishTranslation}</div>
+                          </div>
+                        )}
                         <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
                           {googlePrecheckRan ? "✦ Written with a Google AI cross-check folded in before drafting" : "Google AI pre-check didn't run (no key set, or the call failed) — Tavily research only"}
                         </div>
@@ -3460,6 +3502,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   ))}
                 </div>
 
+                <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, cursor: "pointer" }}>
+                  <input type="checkbox" checked={intakeFamilyMode} onChange={e => setIntakeFamilyMode(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
+                  <span style={{ fontSize: 12.5, color: C.text }}>👨‍👩‍👧‍👦 Traveling with kids</span>
+                </label>
+
                 {savedPlaces.length > 0 && (
                   <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, cursor: "pointer" }}>
                     <input type="checkbox" checked={intakeIncludeSaved} onChange={e => setIntakeIncludeSaved(e.target.checked)}
@@ -3491,6 +3539,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       if (intakePlacePref) parts.push(`Preference: ${intakePlacePref}`);
                       if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
                       if (intakeIncludeSaved && savedPlaces.length > 0) parts.push(`Also include these saved places: ${savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ")}`);
+                      if (intakeFamilyMode) parts.push(`Traveling with kids — family-friendly plan`);
                       if (intakeTransport.length) parts.push(`Getting around: ${intakeTransport.map(t => t.replace(/^\S+\s/, "")).join(", ")}`);
                       sendAI(parts.join(" | "), { hidden: true });
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
