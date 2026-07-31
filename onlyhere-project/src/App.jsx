@@ -407,14 +407,62 @@ export default function Gemlyx() {
       return { error: "Couldn't reach Gemini — check the API key and your connection." };
     }
   };
+  // Claude is the actual WRITER in Gemlyx's pipeline — every rewrite/rephrase/
+  // fix task routes through here, never OpenAI. OpenAI's role is narrowed to
+  // structuring research into the schema during the initial draft; once real
+  // prose needs to be written or fixed, it's Claude's job specifically.
+  const askClaude = async (prompt, maxTokens = 500) => {
+    try {
+      const res = await fetch("/api/anthropic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-5",
+          max_tokens: maxTokens,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { error: data.error?.message || `Request failed (${res.status})` };
+      const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
+      if (!text) return { error: "Empty response from Claude" };
+      return { text };
+    } catch (err) {
+      return { error: "Couldn't reach Claude — check the API key and your connection." };
+    }
+  };
   const [googlePrecheckRan, setGooglePrecheckRan] = useState(false);
   const [googleCheckLoading, setGoogleCheckLoading] = useState(false);
   const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
   const [googleCheckError, setGoogleCheckError] = useState(null);
+  const [factCheckFixLoading, setFactCheckFixLoading] = useState(false);
+  const [factCheckFixPreview, setFactCheckFixPreview] = useState(null); // proposed corrected JSON text, awaiting Apply
+  const [factCheckFixError, setFactCheckFixError] = useState(null);
+  // Claude reads Gemini's fact-check findings + the current draft, and rewrites
+  // ONLY what's actually flagged as wrong — never a from-scratch regeneration.
+  // Returns the full corrected JSON so the fix stays internally consistent, but
+  // it's validated as real JSON and shown as a preview before anything is
+  // applied — same "you see it before it's live" pattern as every other rewrite
+  // tool in Studio, never a silent overwrite.
+  const fixFactCheckWithClaude = async () => {
+    if (!googleCheckResult?.text || !studioDraftText.trim()) return;
+    setFactCheckFixLoading(true); setFactCheckFixError(null); setFactCheckFixPreview(null);
+    const prompt = `Here is a draft (JSON) and a list of factual issues an independent fact-checker found in it. Rewrite ONLY the specific parts that are actually flagged as wrong, fixing them to match the fact-checker's findings. Leave every other field completely untouched — same structure, same keys, same wording for anything not flagged. If the fact-checker didn't find real numbers/dates to replace a wrong value with, leave that field an honest empty string rather than guessing. Respond with ONLY the complete corrected JSON, valid JSON, nothing else — no explanation, no markdown code fences.\n\nFact-checker's findings:\n${googleCheckResult.text}\n\nCurrent draft:\n${studioDraftText}`;
+    const result = await askClaude(prompt, 3000);
+    if (result.error) { setFactCheckFixError(result.error); setFactCheckFixLoading(false); return; }
+    const cleaned = result.text.replace(/^```json\s*|\s*```$/g, "").trim();
+    try {
+      JSON.parse(cleaned); // validate before ever showing it as applyable — never trust blind
+      setFactCheckFixPreview(cleaned);
+    } catch {
+      setFactCheckFixError("Claude's fix didn't come back as valid JSON — try again, or fix it manually below.");
+    }
+    setFactCheckFixLoading(false);
+  };
   const googleAICheck = async () => {
     if (!studioDraft || googleCheckLoading) return;
     setGoogleCheckLoading(true); setGoogleCheckError(null); setGoogleCheckResult(null);
-    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. List anything wrong or unverifiable, and give the correct real facts where you find them. Be concise — bullet points, not an essay.\n\nDraft: ${JSON.stringify(studioDraft)}`;
+    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askGemini(prompt);
     if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
     setGoogleCheckResult({ text: result.text, citations: result.citations });
@@ -861,52 +909,11 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
     if (!raw) return;
     setManualPricePolishing(fieldName);
     try {
-      const res = await fetch("/api/openai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [{
-            role: "user",
-            content: `Lightly polish this short price/cost note into Gemlyx's plain, direct voice — keep every number, currency, and fact EXACTLY as given, change only phrasing if it genuinely needs it. If it already reads fine as-is, return it completely unchanged. Respond with ONLY the final text, no quotes, no explanation.\n\nText: "${raw}"`
-          }],
-          max_tokens: 100,
-        }),
-      });
-      const data = await res.json();
-      const polished = data.choices?.[0]?.message?.content?.trim().replace(/^["']|["']$/g, "");
+      const result = await askClaude(`Lightly polish this short price/cost note into Gemlyx's plain, direct voice — keep every number, currency, and fact EXACTLY as given, change only phrasing if it genuinely needs it. If it already reads fine as-is, return it completely unchanged. Respond with ONLY the final text, no quotes, no explanation.\n\nText: "${raw}"`, 100);
+      const polished = result.text?.replace(/^["']|["']$/g, "");
       if (polished) setManualPriceInputs(prev => ({ ...prev, [fieldName]: polished }));
     } catch (err) { console.error("Polish failed:", err); }
     setManualPricePolishing(null);
-  };
-
-  const [danishTranslation, setDanishTranslation] = useState(null);
-  const [translatingToDanish, setTranslatingToDanish] = useState(false);
-  // Read-only translation for review purposes — the real draft that gets
-  // published stays exactly as-is in English underneath. This just gives someone
-  // more comfortable in Danish a way to actually read and verify the facts,
-  // not a second version of the content that could drift from what's published.
-  const translateDraftToDanish = async () => {
-    if (!studioDraftText.trim()) return;
-    setTranslatingToDanish(true);
-    try {
-      const res = await fetch("/api/openai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [{
-            role: "user",
-            content: `Translate the natural-language text content of this draft into natural, everyday Danish — the kind an ordinary Dane actually speaks, not stiff textbook Danish. Keep every number, price, date, and proper name exactly as given, never translate a real place/venue name. Ignore the JSON structure and field names entirely — just give a clean, readable Danish translation of what the draft actually says, organized so it's easy to read (you can drop the JSON punctuation and just write it as normal paragraphs with the same headings). This is for reading and fact-checking only, not for publishing.\n\nDraft:\n${studioDraftText}`
-          }],
-          max_tokens: 2000,
-        }),
-      });
-      const data = await res.json();
-      const translation = data.choices?.[0]?.message?.content?.trim();
-      if (translation) setDanishTranslation(translation);
-    } catch (err) { console.error("Translation failed:", err); }
-    setTranslatingToDanish(false);
   };
 
   const runAITellScan = () => {
@@ -1019,21 +1026,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       const avoidNote = avoidList.length > 0
         ? ` Give a GENUINELY DIFFERENT rewrite than ${avoidList.length > 1 ? "any of these you already tried" : "this one you already tried"} — vary the actual wording and sentence structure, not just swap one word: ${avoidList.map(a => `"${a}"`).join(" / ")}.`
         : "";
-      const res = await fetch("/api/openai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [{
-            role: "user",
-            content: `Rewrite ONLY this one sentence so ${issueDescription} no longer applies. Keep every real fact, name, price, and date exactly as given — change wording only, never content. This is a fragment from inside a JSON string field — respond with PLAIN TEXT only, no quote marks around your answer, no JSON syntax, nothing but the rewritten words themselves, since your answer gets inserted directly back into the surrounding JSON. Write direct, concrete, confident sentences — the way a knowledgeable local would actually talk, not smooth marketing copy. Avoid tidy "not just X but Y" constructions, avoid hedging phrases, avoid symmetrical list-like phrasing.${avoidNote}\n\nText: "${original}"`
-          }],
-          max_tokens: 200,
-          temperature: avoidList.length > 0 ? 1 : 0.7, // push harder for variety on repeat requests
-        }),
-      });
-      const data = await res.json();
-      let suggestion = data.choices?.[0]?.message?.content?.trim();
+      const prompt = `Rewrite ONLY this one sentence so ${issueDescription} no longer applies. Keep every real fact, name, price, and date exactly as given — change wording only, never content. This is a fragment from inside a JSON string field — respond with PLAIN TEXT only, no quote marks around your answer, no JSON syntax, nothing but the rewritten words themselves, since your answer gets inserted directly back into the surrounding JSON. Write direct, concrete, confident sentences — the way a knowledgeable local would actually talk, not smooth marketing copy. Avoid tidy "not just X but Y" constructions, avoid hedging phrases, avoid symmetrical list-like phrasing.${avoidNote}\n\nText: "${original}"`;
+      const result = await askClaude(prompt, 200);
+      let suggestion = result.text;
       // Belt-and-suspenders: strip any wrapping quotes the model added anyway,
       // and any literal " inside the suggestion that would break the JSON on Apply.
       if (suggestion) {
@@ -1756,6 +1751,7 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakeTravelers, setIntakeTravelers] = useState("");
   const [intakeIncludeSaved, setIntakeIncludeSaved] = useState(false);
   const [intakeFamilyMode, setIntakeFamilyMode] = useState(false);
+  const [intakeIncludeEvents, setIntakeIncludeEvents] = useState(false);
   const [detourTab, setDetourTab] = useState("sightseeing");
   const [intakeTransport, setIntakeTransport] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -2401,22 +2397,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{studioIdentityWarning}</div>
                           </div>
                         )}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: C.muted }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
-                          <button onClick={translateDraftToDanish} disabled={translatingToDanish}
-                            style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: C.text, cursor: "pointer", whiteSpace: "nowrap" }}>
-                            {translatingToDanish ? "…" : "🇩🇰 Read in Danish"}
-                          </button>
-                        </div>
-                        {danishTranslation && (
-                          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 0.5 }}>FOR READING ONLY — the real draft below (in English) is what actually gets published, this is just a translation to help check it</div>
-                              <button onClick={() => setDanishTranslation(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13 }}>✕</button>
-                            </div>
-                            <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{danishTranslation}</div>
-                          </div>
-                        )}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
                         <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
                           {googlePrecheckRan ? "✦ Written with a Google AI cross-check folded in before drafting" : "Google AI pre-check didn't run (no key set, or the call failed) — Tavily research only"}
                         </div>
@@ -2579,10 +2560,32 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             <div style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", marginBottom: 8 }}>🔷 Google AI's independent check — read this, then edit the JSON above if it flags something:</div>
                             <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: googleCheckResult.citations.length > 0 ? 10 : 0 }}>{googleCheckResult.text}</div>
                             {googleCheckResult.citations.length > 0 && (
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                                 {googleCheckResult.citations.map((c, i) => (
                                   <a key={i} href={c.url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#8AB4F8", background: "#4285F418", border: "1px solid #4285F444", borderRadius: 100, padding: "3px 9px", textDecoration: "none" }}>{c.title.slice(0, 30)} ↗</a>
                                 ))}
+                              </div>
+                            )}
+                            <button onClick={fixFactCheckWithClaude} disabled={factCheckFixLoading}
+                              style={{ background: "none", border: `1px solid ${C.gold}66`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: C.gold, cursor: "pointer" }}>
+                              {factCheckFixLoading ? "Claude is fixing…" : "✍️ Fix these with Claude"}
+                            </button>
+                            {factCheckFixError && <div style={{ fontSize: 11, color: "#FFB347", marginTop: 8 }}>{factCheckFixError}</div>}
+                            {factCheckFixPreview && (
+                              <div style={{ marginTop: 10, background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 10, padding: "10px 12px" }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, marginBottom: 6 }}>Claude's proposed fix — review before applying:</div>
+                                <textarea readOnly value={factCheckFixPreview} rows={8}
+                                  style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, fontSize: 10.5, color: C.light, lineHeight: 1.5, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box" }} />
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <button onClick={() => { setStudioDraftText(factCheckFixPreview); setFactCheckFixPreview(null); setGoogleCheckResult(null); }}
+                                    style={{ background: C.accent, border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
+                                    ✓ Apply to draft
+                                  </button>
+                                  <button onClick={() => setFactCheckFixPreview(null)}
+                                    style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: C.muted, cursor: "pointer" }}>
+                                    Discard
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -3469,7 +3472,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  {["History", "Nature", "Food", "Nightlife", "Craft & Shopping"].map(i => (
+                  {["History", "Nature", "Food", "Nightlife"].map(i => (
                     <Pill key={i} label={i} active={intakeInterest.includes(i)} onClick={() => setIntakeInterest(intakeInterest.includes(i) ? intakeInterest.filter(x => x !== i) : [...intakeInterest, i])} />
                   ))}
                 </div>
@@ -3502,11 +3505,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   ))}
                 </div>
 
-                <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, cursor: "pointer" }}>
-                  <input type="checkbox" checked={intakeFamilyMode} onChange={e => setIntakeFamilyMode(e.target.checked)}
-                    style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
-                  <span style={{ fontSize: 12.5, color: C.text }}>👨‍👩‍👧‍👦 Traveling with kids</span>
-                </label>
+                <div style={{ display: "flex", gap: 20, marginBottom: 16, flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input type="checkbox" checked={intakeFamilyMode} onChange={e => setIntakeFamilyMode(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
+                    <span style={{ fontSize: 12.5, color: C.text }}>👨‍👩‍👧‍👦 Traveling with kids</span>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input type="checkbox" checked={intakeIncludeEvents} onChange={e => setIntakeIncludeEvents(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
+                    <span style={{ fontSize: 12.5, color: C.text }}>🎉 Include events</span>
+                  </label>
+                </div>
 
                 {savedPlaces.length > 0 && (
                   <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, cursor: "pointer" }}>
@@ -3540,6 +3550,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       if (intakeTravelers.trim()) parts.push(`Who's traveling: ${intakeTravelers.trim()}`);
                       if (intakeIncludeSaved && savedPlaces.length > 0) parts.push(`Also include these saved places: ${savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ")}`);
                       if (intakeFamilyMode) parts.push(`Traveling with kids — family-friendly plan`);
+                      if (intakeIncludeEvents) parts.push(`Include real events happening during the trip dates, if any genuinely fit`);
                       if (intakeTransport.length) parts.push(`Getting around: ${intakeTransport.map(t => t.replace(/^\S+\s/, "")).join(", ")}`);
                       sendAI(parts.join(" | "), { hidden: true });
                       setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
