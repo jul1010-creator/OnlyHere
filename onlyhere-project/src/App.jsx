@@ -427,7 +427,12 @@ export default function Gemlyx() {
         body: JSON.stringify({
           model: "gpt-5.6-sol",
           messages: [{ role: "user", content: prompt }],
-          max_tokens: maxTokens,
+          // CONFIRMED BUG (from live console error): "gpt-5.6-sol" rejects
+          // max_tokens with "Unsupported parameter... Use 'max_completion_tokens'
+          // instead" — this is the real OpenAI reasoning-model behavior (o1/o3-style
+          // models dropped max_tokens entirely). This was silently killing Stage 1
+          // (research planning) and Stage 4 (note structuring) on every single draft.
+          max_completion_tokens: maxTokens,
         }),
       });
       const data = await res.json();
@@ -898,13 +903,17 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // flag the way OpenAI's response_format does, so the instruction is reinforced
       // explicitly here and the response is stripped of any stray markdown fencing
       // before parsing.
-      // Bumped from 2200 — the full schema for town/festival/booking types alone
-      // (a dozen+ fields, several multi-sentence) can genuinely run past 2200
-      // output tokens once you account for JSON structure overhead, and a budget
-      // that runs out mid-response is indistinguishable from "empty" to the caller.
+      // CONFIRMED via live console log: stop_reason was genuinely "max_tokens" at
+      // 4096 — the previous bump wasn't enough. Pushed further to 8192. (Also worth
+      // knowing: the OpenAI structuring bug above meant Claude had been drafting
+      // from raw, unorganized research every time, not the clean organized notes —
+      // fixing that should itself reduce how much Claude has to write to get to a
+      // clean final JSON. If 8192 still isn't enough after that fix lands, the next
+      // real signal is the actual usage/stop_reason object logged to console —
+      // expand it (don't let devtools collapse it) and send me the numbers.)
       const draftResult = await askClaude(
         `${prompts[studioType]}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, no explanation before or after, nothing but the JSON itself, starting with { and ending with }.\n\n${userContent}`,
-        4096
+        8192
       );
       if (draftResult.error) throw new Error(draftResult.error);
       const cleanedDraft = draftResult.text.replace(/^```json\s*|\s*```$/g, "").trim();

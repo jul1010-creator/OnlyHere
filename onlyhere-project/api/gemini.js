@@ -13,7 +13,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "GEMINI_API_KEY not set on the server" });
   }
   try {
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent", {
+    // CONFIRMED BUG (from live console error): "gemini-3.1-pro" 404s — Google's
+    // v1beta generateContent endpoint wants the "-preview" suffix per their own
+    // current docs. If Google renames/promotes this again, check
+    // https://ai.google.dev/gemini-api/docs/generate-content/gemini-3 for the
+    // current model ID.
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify(req.body),
