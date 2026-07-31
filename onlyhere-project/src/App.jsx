@@ -978,7 +978,12 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       } catch { /* final check failed — draft already shown, this just skips silently rather than blocking */ }
     } catch (err) {
       console.error("Studio draft failed:", err);
-      setStudioError("Couldn't draft that — try again, or check the name.");
+      // Surface the real underlying error alongside the friendly message —
+      // "Couldn't draft that" alone was swallowing the actual API/parse error,
+      // making it impossible to tell a bad API key, a rejected model name, or a
+      // JSON-parse failure apart from each other without opening devtools.
+      const detail = err?.message && err.message !== "empty" ? err.message : null;
+      setStudioError(`Couldn't draft that — try again, or check the name.${detail ? ` (${detail})` : ""}`);
     }
     setStudioLoading(false);
   };
@@ -1535,7 +1540,13 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       const placeRes = await fetch(`/api/places?lat=${lat}&lon=${lon}&type=transit_station`);
       const place = await placeRes.json();
       if (place.error || !place.name) return null;
-      const dirRes = await fetch(`/api/directions?origin=${lat},${lon}&destination=${place.lat},${place.lon}&mode=walk`);
+      // BUG FIX: this was sending mode=walk, which isn't one of api/directions.js's
+      // validModes (driving/walking/bicycling/transit) — an invalid mode silently
+      // fell back to "transit", so every "walking distance to nearest station"
+      // shown across the app (Studio's frozen facts, Detour's highlight-distance
+      // check) was actually a TRANSIT time mislabeled as a walk — real source of
+      // wildly-off-looking estimates.
+      const dirRes = await fetch(`/api/directions?origin=${lat},${lon}&destination=${place.lat},${place.lon}&mode=walking`);
       const dir = await dirRes.json();
       return dir.error ? place.name : `${place.name} (${dir.durationText} walk)`;
     } catch { return null; }
@@ -2379,7 +2390,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Festival"], ["free", "🎟 Free Entrance"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {label}
@@ -3252,7 +3263,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {savedPlaces.length > 0 && (
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 18 }}>
                   <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>♥ Your Saved Places</div>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Saved from Free Entrance and Booking — tap ✕ to remove.</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Saved from Attractions and Booking — tap ✕ to remove.</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
                     {savedPlaces.map(p => (
                       <span key={`${p.kind}-${p.id}`} style={{ display: "flex", alignItems: "center", gap: 6, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px" }}>
@@ -3541,7 +3552,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Into <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  {["History", "Nature", "Food", "Nightlife"].map(i => (
+                  {["History", "Nature", "Food", "Nightlife", "Shopping"].map(i => (
                     <Pill key={i} label={i} active={intakeInterest.includes(i)} onClick={() => setIntakeInterest(intakeInterest.includes(i) ? intakeInterest.filter(x => x !== i) : [...intakeInterest, i])} />
                   ))}
                 </div>
@@ -4243,7 +4254,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <span style={{ fontSize: 12 }}>{icon}</span>
                           <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
                             {exact ? `${exact.durationText} ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
-                              : km !== null ? `~${Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}` : how || "Route from yesterday"}
+                              : km !== null ? `${Math.round(km) === 0 ? "<1" : "~" + Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}` : how || "Route from yesterday"}
                           </span>
                           <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· {exact ? "Google Maps ↗" : "Exact route ↗"}</span>
                         </a>
@@ -4356,7 +4367,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                       {exact
                                         ? `${exact.durationText} ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
                                         : km !== null
-                                        ? `~${Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
+                                        ? `${Math.round(km) === 0 ? "<1" : "~" + Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
                                         : how || "Route"}
                                     </span>
                                     {exact && <span style={{ fontSize: 9, color: "#4CAF50", fontWeight: 700 }}>✓</span>}
@@ -4487,7 +4498,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 }}>TYPE</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  {["Event", "Town", "Free Entrance", "Food", "Nightlife", "Craft"].map(t => (
+                  {["Event", "Town", "Attractions", "Food", "Nightlife", "Shopping"].map(t => (
                     <Pill key={t} label={t} active={suggestForm.type === t} onClick={() => setSuggestForm(f => ({ ...f, type: t }))} />
                   ))}
                 </div>
