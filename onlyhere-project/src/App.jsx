@@ -351,6 +351,7 @@ export default function Gemlyx() {
   const [studioError, setStudioError] = useState(null);
   const [studioDraft, setStudioDraft] = useState(null);
   const [studioIdentityWarning, setStudioIdentityWarning] = useState(null);
+  const [studioInventedWarning, setStudioInventedWarning] = useState(null);
   const [studioDraftText, setStudioDraftText] = useState(""); // editable JSON — what actually gets published
   const [aiTellFlags, setAiTellFlags] = useState([]); // results of the last scan
   const [rephraseSuggestions, setRephraseSuggestions] = useState({}); // flag index -> { original, suggestion }
@@ -411,6 +412,28 @@ export default function Gemlyx() {
   // fix task routes through here, never OpenAI. OpenAI's role is narrowed to
   // structuring research into the schema during the initial draft; once real
   // prose needs to be written or fixed, it's Claude's job specifically.
+  // OpenAI's role is narrowed to planning + structuring — research query planning
+  // (Stage 1) and organizing raw research into notes (Stage 4), never final prose.
+  const askOpenAI = async (prompt, maxTokens = 800) => {
+    try {
+      const res = await fetch("/api/openai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: maxTokens,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { error: data.error?.message || `Request failed (${res.status})` };
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (!text) return { error: "Empty response from OpenAI" };
+      return { text };
+    } catch (err) {
+      return { error: "Couldn't reach OpenAI — check the API key and your connection." };
+    }
+  };
   const askClaude = async (prompt, maxTokens = 500) => {
     try {
       const res = await fetch("/api/anthropic", {
@@ -604,10 +627,28 @@ export default function Gemlyx() {
   const generateArea = async () => {
     const name = studioTown.trim();
     if (!name || studioLoading) return;
-    setStudioLoading(true); setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null);
+    setStudioLoading(true); setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null); setStudioInventedWarning(null);
     setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     setStudioInstagramUrl(""); setStudioFrozenGeo(null);
     try {
+      // STAGE 1 — OpenAI plans what to research. The fixed queries below are a
+      // proven baseline (reddit/quora/reviews angle catches honest opinions
+      // reliably across almost any place) — this adds 2-3 EXTRA queries tailored
+      // to this specific name/type, rather than replacing the baseline, so a
+      // planning miss can't leave a draft with less research than before.
+      let plannedQueries = [];
+      try {
+        const planResult = await askOpenAI(
+          `Planning research for a Danish travel guide entry: "${name}" (type: ${studioType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a genuine downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
+          300
+        );
+        if (planResult.text) {
+          const cleaned = planResult.text.replace(/^```json\s*|\s*```$/g, "").trim();
+          const parsed = JSON.parse(cleaned);
+          if (Array.isArray(parsed)) plannedQueries = parsed.filter(q => typeof q === "string").slice(0, 3);
+        }
+      } catch { /* planning failed — proceeds on the fixed baseline alone, same as before this stage existed */ }
+
       const cfg = {
         town: { queries: [`${name} Denmark travel guide history attractions what makes it special`, `${name} Denmark getting there by train best time to visit where to stay what travelers say`, `${name} reddit r/Denmark r/travel what locals visitors really think`, `${name} quora google reviews honest opinion worth it`] },
         festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup official website`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
@@ -617,9 +658,10 @@ export default function Gemlyx() {
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[studioType];
+      const allQueries = [...cfg.queries, ...plannedQueries];
       let context = "";
       let candidateUrls = [];
-      for (const q of cfg.queries) {
+      for (const q of allQueries) {
         try {
           const sRes = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
           const sData = await sRes.json();
@@ -794,28 +836,63 @@ ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, e.g. a named museum/center) or Local (small independent workshop)", "what": ["1-3 lowercase craft keywords from: blacksmith, ceramic/pottery, jewellery, leather, textile/dyeing/felting, wood, candy — only include what's genuinely true"], "rating": "a real rating if found in reviews, else omit", "location": "Town name", "price": "exact price if the context gives one, else 'See website'", "priceNote": "e.g. 'per person' or 'family ticket available', else empty string", "travelTime": "EXACT format like '3h 15min 🚂' from Copenhagen, or empty string", "bookingType": "'online' only if you can book/buy tickets on a website, otherwise 'contact'", "popularityTag": "'Hidden Gem' if genuinely under-the-radar, else empty string", "transportWarning": "true only if it's genuinely hard to reach without a car", "emoji": "one fitting emoji", "color": "#hex fitting the craft", "timeNeeded": "e.g. '2-3 hours' — for At a Glance", "accessibility": "short accessibility note if known, else empty string — for At a Glance", "nearestStation": "short — for At a Glance", "special": "the experience itself — what happens, what you'll actually make or see, real specific detail", "whoFor": "who this genuinely suits", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
       };
 
-      const res = await fetch("/api/openai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: prompts[studioType] },
-            { role: "user", content: (scanHint && (scanHint.town || scanHint.dates)
-              ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[scanHint.town && `town/city = ${scanHint.town}`, scanHint.dates && `dates = ${scanHint.dates}`].filter(Boolean).join(", ")}\n\n`
-              : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? ((studioType === "food" || studioType === "town")
-                ? `PRE-ORGANIZED FACTS FROM GEMINI (already sorted into the three narrative buckets you're writing — your job here is ONLY to turn these into flowing prose following the sentence-mechanics rules below, not to re-research or re-organize them; if something's missing from a bucket, write less for that paragraph rather than inventing to fill it):\n${googleFindings}\n\n`
-                : `GOOGLE AI CROSS-CHECK (a second, independent search — weigh this alongside your own research below; if it conflicts with your own findings, prefer whichever is more specific/recent, and if you still can't tell, that's exactly the kind of thing "uncertainties" is for):\n${googleFindings}\n\n`
-              ) : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.") },
-          ],
-          max_tokens: 2200,
-        }),
-      });
-      const data = await res.json();
-      const t = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+      const rawResearch = (scanHint && (scanHint.town || scanHint.dates)
+        ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[scanHint.town && `town/city = ${scanHint.town}`, scanHint.dates && `dates = ${scanHint.dates}`].filter(Boolean).join(", ")}\n\n`
+        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `GOOGLE AI FACT-CHECK (a second, independent search — weigh this alongside the research below; if it conflicts, prefer whichever is more specific/recent):\n${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
+
+      // STAGE 4 — OpenAI structures the raw research into organized notes per
+      // schema field, BEFORE Claude ever writes a word. This is the actual
+      // "OpenAI structures, Claude writes" split — OpenAI's job narrows to
+      // organizing what was found, never producing final polished prose. Falls
+      // back to the raw research directly if this step fails for any reason,
+      // so a structuring miss can never block the whole draft.
+      let userContent = rawResearch;
+      try {
+        const structureResult = await askOpenAI(
+          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${studioType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts actually present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.\n\nRaw research:\n${rawResearch}`,
+          1200
+        );
+        if (structureResult.text && !structureResult.error) {
+          userContent = `ORGANIZED RESEARCH NOTES (already sorted by OpenAI — your job is turning these into flowing prose per the rules below, not re-researching or re-organizing; if a heading is sparse, write less for that part rather than inventing to fill it):\n${structureResult.text}`;
+        }
+      } catch { /* structuring failed — Claude writes from the raw research directly, same as before this stage existed */ }
+
+      // Claude is the actual writer now, not OpenAI — same exact prompt content as
+      // before, just a different model receiving it. Claude has no native JSON-mode
+      // flag the way OpenAI's response_format does, so the instruction is reinforced
+      // explicitly here and the response is stripped of any stray markdown fencing
+      // before parsing.
+      const draftResult = await askClaude(
+        `${prompts[studioType]}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, no explanation before or after, nothing but the JSON itself, starting with { and ending with }.\n\n${userContent}`,
+        2200
+      );
+      if (draftResult.error) throw new Error(draftResult.error);
+      const cleanedDraft = draftResult.text.replace(/^```json\s*|\s*```$/g, "").trim();
+      const t = JSON.parse(cleanedDraft || "{}");
       const noContentField = studioType === "food" ? !t.vibeLocation : studioType === "town" ? !t.characterAndFit : !t.desc;
       if (!t.name || noContentField) throw new Error("empty");
+      // Verify the route to the AI's own highlighted attraction specifically —
+      // this is the actual bug behind the Gentofte/Ordrupgaard case: the frozen-
+      // facts system above correctly finds the real station for the TOWN CENTER,
+      // but a highlighted attraction can genuinely be kilometers from that same
+      // station, and the AI's prose about how to actually reach IT was never
+      // checked against anything real. Not a silent rewrite of free-form prose
+      // (unsafe) — a clear, verified warning so the specific real station is
+      // right there to swap in by hand before publishing.
+      if (studioType === "town" && t.highlight) {
+        try {
+          const hlCoords = await geocodePlace(t.highlight);
+          if (hlCoords && frozenGeo) {
+            const distFromTownCenter = haversineKm(hlCoords, frozenGeo);
+            if (distFromTownCenter > 1.5) { // walking-friction threshold — beyond this, "the town's station" stops being a useful answer for THIS specific place
+              const hlStation = await findRealNearestStation(hlCoords.lat, hlCoords.lon);
+              setStudioIdentityWarning(
+                `"${t.highlight}" is ${distFromTownCenter.toFixed(1)} km from ${name}'s town-center station (verified) — that's too far to describe reaching it the same way as the town center. ${hlStation ? `The real nearest station to "${t.highlight}" specifically is ${hlStation}.` : "Couldn't verify its actual nearest station — check this manually."} Compare this against what "Getting There & Reality" actually says before publishing.`
+              );
+            }
+          }
+        } catch { /* verification failed — draft proceeds without it, same fallback pattern as the frozen-facts lookup above */ }
+      }
       // The AI is told to use YYYY-MM-DD but sometimes drifts into DD-MM-YYYY (likely
       // European/Danish habit bleeding through). new Date("30-06-2027") can't parse —
       // "30" isn't a valid month — and fails silently (Invalid Date, no error thrown),
@@ -882,6 +959,22 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       setStudioPhotoName(`${slugify(name)}.jpg`);
       setPublishStatus(null);
       setPublishErrorDetail(null);
+
+      // FINAL STAGE — Gemini checks the finished draft against the actual research
+      // gathered above, specifically hunting for anything that reads like it was
+      // invented rather than grounded in what was actually found. This is separate
+      // from the "Ask Google AI to fact-check" button (which re-searches the web
+      // fresh) — this compares the draft against the SAME research it was written
+      // from, catching the specific failure mode of prose drifting from its own
+      // source material during writing.
+      try {
+        const inventedCheck = await askGemini(
+          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
+        );
+        if (!inventedCheck.error && inventedCheck.text && !/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
+          setStudioInventedWarning(inventedCheck.text);
+        }
+      } catch { /* final check failed — draft already shown, this just skips silently rather than blocking */ }
     } catch (err) {
       console.error("Studio draft failed:", err);
       setStudioError("Couldn't draft that — try again, or check the name.");
@@ -2395,6 +2488,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <div style={{ background: "#D3232322", border: "2px solid #D32323", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
                             <div style={{ fontSize: 11, fontWeight: 700, color: "#FF6B6B", letterSpacing: 0.5, marginBottom: 4 }}>⚠️ DID YOU MEAN A DIFFERENT EVENT? VERIFY BEFORE PUBLISHING</div>
                             <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{studioIdentityWarning}</div>
+                          </div>
+                        )}
+                        {studioInventedWarning && (
+                          <div style={{ background: "#FFB34722", border: "2px solid #FFB347", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", letterSpacing: 0.5, marginBottom: 4 }}>⚠️ POSSIBLY INVENTED — GEMINI COMPARED THIS DRAFT AGAINST ITS OWN RESEARCH</div>
+                            <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{studioInventedWarning}</div>
                           </div>
                         )}
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
