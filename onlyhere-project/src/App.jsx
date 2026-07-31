@@ -225,6 +225,7 @@ export default function Gemlyx() {
   });
 
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
+  const [guideBuildStage, setGuideBuildStage] = useState(""); // shown during "loading" — real progress, not a static message
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
   useEffect(() => {
     // Mirror any real (non-loading, non-null) guide into the cache as it updates —
@@ -420,7 +421,7 @@ export default function Gemlyx() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: "gpt-5.6-sol",
           messages: [{ role: "user", content: prompt }],
           max_tokens: maxTokens,
         }),
@@ -434,13 +435,13 @@ export default function Gemlyx() {
       return { error: "Couldn't reach OpenAI — check the API key and your connection." };
     }
   };
-  const askClaude = async (prompt, maxTokens = 500) => {
+  const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-5") => {
     try {
       const res = await fetch("/api/anthropic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-5",
+          model,
           max_tokens: maxTokens,
           messages: [{ role: "user", content: prompt }],
         }),
@@ -524,7 +525,7 @@ export default function Gemlyx() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: "gpt-5.6-sol",
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: `Extract every distinct Danish festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items ACTUALLY present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
@@ -1062,7 +1063,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: "gpt-5.6-sol",
           messages: [{
             role: "user",
             content: `Read this draft travel-guide content and find sentences that genuinely read as generic AI writing — not because they use an obvious cliché word, but because of tone, rhythm, or structure: unnecessary hedging ("it could be argued", "some might say"), suspiciously tidy three-item lists, over-smooth even-toned phrasing with no real edge or specificity, sentences that could describe any place rather than THIS one. Be selective — only flag genuine problems, not every sentence, and don't invent issues if the writing is actually fine. For each real problem, quote the EXACT sentence as it appears in the text (verbatim, so it can be found) and give a short reason.\n\nRespond with ONLY a JSON array, no other text: [{"sentence": "exact sentence from the text", "reason": "short reason"}] — return [] if nothing genuine stands out.\n\nDraft:\n${studioDraftText}`
@@ -1276,23 +1277,15 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down — OpenAI will fall back to safe wording */ }
-        const res = await fetch("/api/openai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
+        const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with genuinely leaving for a new town (a departure/travel leg to somewhere the traveler will actually be based from for the following day(s)), the accommodation for THIS day must reflect where they'll ACTUALLY be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
-Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.` },
-              { role: "user", content: context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks." }
-            ],
-            max_tokens: 350,
-          }),
-        });
-        const data = await res.json();
-        const glance = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
+        const enrichResult = await askClaude(
+          `${enrichPrompt}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
+          350,
+          "claude-opus-4-8"
+        );
+        const glance = JSON.parse(enrichResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
         if ((Array.isArray(glance.legs) && glance.legs.length > 0) || glance.accommodation) {
           setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
             ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, glance } : d) }
@@ -1619,6 +1612,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       return;
     }
     setGuideModal("loading");
+    setGuideBuildStage("🔍 Gathering data — checking real places and facts");
     setGuideError(null);
     try {
       // The person's own stated trip length (e.g. "I'm here for 4 days") is the source of
@@ -1669,15 +1663,9 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         const preCheck = await askGemini(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n\n${convoText.slice(0, 3000)}`);
         if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
       }
-      const res = await fetch("/api/openai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food) — if a specific leg is genuinely expensive at full price (e.g. a long train trip), mention the real cheaper alternative (DSB Orange billetter — discount advance-purchase tickets — or Flixbus/Kombardo Expresbus for intercity routes) rather than just quoting the expensive default fare.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like \'charming\', \'colorful houses\', \'cozy streets\', \'steeped in history\', \'quaint\', \'vibrant\', \'bustling\', \'nestled\', \'picturesque\' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+      setGuideBuildStage("📝 Putting together your guide");
+      const guideSystemPrompt = `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
+{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food) — if a specific leg is genuinely expensive at full price (e.g. a long train trip), mention the real cheaper alternative (DSB Orange billetter — discount advance-purchase tickets — or Flixbus/Kombardo Expresbus for intercity routes) rather than just quoting the expensive default fare.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
@@ -1690,39 +1678,36 @@ CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop
 CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are genuinely close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a genuinely long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to actually explore once they arrive, not a long haul tacked onto the end of an already-full day.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}` },
-            { role: "user", content: convoText }
-          ],
-          max_tokens: 1800,
-        }),
-      });
-      const data = await res.json();
-      let parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
+      // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
+      // duplicates, family-mode adjustments) — this is the one call in Detour worth
+      // Opus's extra reasoning depth, and it already has a loading screen the person
+      // expects to wait through, unlike the live chat replies.
+      const guideResult = await askClaude(
+        `${guideSystemPrompt}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
+        1800,
+        "claude-opus-4-8"
+      );
+      if (guideResult.error) throw new Error(guideResult.error);
+      let parsed = JSON.parse(guideResult.text.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
       // The day-count instruction above is stated as a hard requirement, but the model
       // can still occasionally under-comply — that's what was causing "only day 1 shows,
       // click again and it's fine": pure model variance, not a rendering bug. Retry once
       // automatically instead of making the person notice and click a second time.
       if (requestedDays && (!parsed.days || parsed.days.length < requestedDays)) {
-        const retryRes = await fetch("/api/openai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation.` },
-              { role: "user", content: convoText }
-            ],
-            max_tokens: 1800,
-          }),
-        });
-        const retryData = await retryRes.json();
+        setGuideBuildStage("📝 Filling in the remaining days");
+        const retryResult = await askClaude(
+          `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
+          1800,
+          "claude-opus-4-8"
+        );
         try {
-          const retryParsed = JSON.parse(retryData.choices?.[0]?.message?.content || "{}");
+          const retryParsed = JSON.parse(retryResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
           if (retryParsed.days && retryParsed.days.length >= (parsed.days?.length || 0)) parsed = retryParsed;
         } catch { /* keep the first attempt if the retry itself fails to parse */ }
       }
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
+      setGuideBuildStage("📍 Checking exact locations and routes");
       const freshGeo = await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
       const lc = convoText.toLowerCase();
@@ -1790,20 +1775,11 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (routeStops.length < 2) return;
     setRouteSummaryLoading(true);
     try {
-      const res = await fetch("/api/openai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: "You write short, warm, specific 2-sentence route descriptions for a Denmark travel app called Gemlyx, in plain conversational text with no markdown formatting, no headers, no asterisks." },
-            { role: "user", content: `Write a short, appealing 2-sentence description for a self-planned road trip starting near the traveler's current location, stopping at these towns in this order: ${routeStops.join(" → ")}. Mention the character of the route, not just the list.` }
-          ],
-          max_tokens: 150,
-        }),
-      });
-      const data = await res.json();
-      setRouteSummary(stripMarkdown(data.choices?.[0]?.message?.content) || "A custom route through " + routeStops.join(", ") + ".");
+      const result = await askClaude(
+        `You write short, warm, specific 2-sentence route descriptions for a Denmark travel app called Gemlyx, in plain conversational text with no markdown formatting, no headers, no asterisks.\n\nWrite a short, appealing 2-sentence description for a self-planned road trip starting near the traveler's current location, stopping at these towns in this order: ${routeStops.join(" → ")}. Mention the character of the route, not just the list.`,
+        150
+      );
+      setRouteSummary(stripMarkdown(result.text) || "A custom route through " + routeStops.join(", ") + ".");
     } catch {
       setRouteSummary("A custom route through " + routeStops.join(", ") + ".");
     }
@@ -2079,39 +2055,33 @@ If asked for a plan or itinerary, structure it day by day using only the above, 
 
 You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.`;
 
-      const tools = [{
-        type: "function",
-        function: {
-          name: "web_search",
-          description: "Search the live web for current information — opening hours, event schedules, ticket availability — for anything not already in your provided lists.",
-          parameters: {
-            type: "object",
-            properties: { query: { type: "string", description: "The search query" } },
-            required: ["query"],
-          },
+      const claudeTools = [{
+        name: "web_search",
+        description: "Search the live web for current information — opening hours, event schedules, ticket availability — for anything not already in your provided lists.",
+        input_schema: {
+          type: "object",
+          properties: { query: { type: "string", description: "The search query" } },
+          required: ["query"],
         },
       }];
 
       const baseMessages = [
-        { role: "system", content: sysPrompt },
         ...aiMessages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
         { role: "user", content: msg },
       ];
 
-      const callOpenAI = (messages) => fetch("/api/openai", {
+      const callClaudeChat = (messages) => fetch("/api/anthropic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gpt-4o-mini", messages, tools, max_tokens: 900 }),
+        body: JSON.stringify({ model: "claude-sonnet-5", system: sysPrompt, messages, tools: claudeTools, max_tokens: 900 }),
       }).then(r => r.json());
 
-      let data = await callOpenAI(baseMessages);
-      let choice = data.choices?.[0]?.message;
-      const toolCalls = choice?.tool_calls;
+      let data = await callClaudeChat(baseMessages);
+      let toolUseBlock = data.content?.find(b => b.type === "tool_use");
 
-      if (toolCalls && toolCalls.length > 0) {
+      if (toolUseBlock) {
         // Model wants to search — run it, then ask again with results
-        const call = toolCalls[0];
-        const { query } = JSON.parse(call.function.arguments || "{}");
+        const { query } = toolUseBlock.input || {};
         let searchSummary = "No results found.";
         try {
           const searchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
@@ -2121,14 +2091,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
         const followUpMessages = [
           ...baseMessages,
-          choice,
-          { role: "tool", tool_call_id: call.id, content: searchSummary },
+          { role: "assistant", content: data.content },
+          { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseBlock.id, content: searchSummary }] },
         ];
-        data = await callOpenAI(followUpMessages);
-        choice = data.choices?.[0]?.message;
+        data = await callClaudeChat(followUpMessages);
       }
 
-      setAiMessages(prev => [...prev, { role: "assistant", text: choice?.content || data.error?.message || "Something went wrong!" }]);
+      const replyText = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
+      setAiMessages(prev => [...prev, { role: "assistant", text: replyText || data.error?.message || "Something went wrong!" }]);
     } catch { setAiMessages(prev => [...prev, { role: "assistant", text: "Connection error — try again!" }]); }
     setAiLoading(false);
   };
@@ -4201,7 +4171,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 34, marginBottom: 14, animation: "gemlyxPulse 1.6s ease-in-out infinite" }}>🗺️</div>
                 <div style={{ fontSize: 15, color: C.text, fontWeight: 700, marginBottom: 6, fontFamily: "'Cormorant Garamond', serif" }}>Building your guide…</div>
                 <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, maxWidth: 280, margin: "0 auto" }}>
-                  Checking real places, routes and travel times — this takes a few seconds.
+                  {guideBuildStage || "Checking real places, routes and travel times — this takes a few seconds."}
                 </div>
                 <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 18 }}>
                   {[0, 1, 2].map(i => (

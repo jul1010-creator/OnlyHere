@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "GEMINI_API_KEY not set on the server" });
   }
   try {
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent", {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify(req.body),
