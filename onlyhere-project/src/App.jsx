@@ -92,7 +92,7 @@ export default function Gemlyx() {
           if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
         } else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
         else if (row.type === "free") freeEntrance.push({ id, ...item });
-        else if (row.type === "food") foodSpots.push({ id, ...item });
+        else if (row.type === "food" || row.type === "foodStreet") foodSpots.push({ id, ...item });
         else if (row.type === "night") nightlifeSpots.push({ id, ...item });
         else if (row.type === "nightTown") nightlifeTowns.push({ id, ...item });
         else if (row.type === "booking") bookingRows.push({ id, ...item });
@@ -133,6 +133,7 @@ export default function Gemlyx() {
   const [craftType, setCraftType] = useState(null);
   const [craftKind, setCraftKind] = useState(null);
   const [foodTab, setFoodTab] = useState("All");
+  const [foodKind, setFoodKind] = useState("All"); // "All" | "Restaurants" | "Food Streets"
   const [nightlifeTab, setNightlifeTab] = useState("Local");
   const [nightlifeTownView, setNightlifeTownView] = useState(null); // null = showing towns; a town name = showing that town's venues
   const [attractionCity, setAttractionCity] = useState("All");
@@ -400,7 +401,10 @@ export default function Gemlyx() {
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ google_search: {} }] }),
       });
       const data = await res.json();
-      if (!res.ok) return { error: data.error?.message || `Request failed (${res.status})` };
+      // Log the REAL error to console even though every call site here treats a
+      // Gemini failure as non-fatal (silent skip) — otherwise a broken model name
+      // or bad key just reads as "Gemini found nothing", never as "Gemini is broken".
+      if (!res.ok) { console.warn("Gemini call failed:", res.status, data.error?.message || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
       const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "No response text.";
       const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
       const citations = chunks.map(c => ({ title: c.web?.title || c.web?.uri || "Source", url: c.web?.uri || "" })).filter(c => c.url);
@@ -427,7 +431,13 @@ export default function Gemlyx() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) return { error: data.error?.message || `Request failed (${res.status})` };
+      // Same reasoning as askGemini: planning (Stage 1) and structuring (Stage 4)
+      // both swallow OpenAI failures silently by design (a miss here just degrades
+      // to raw research, never blocks the draft) — but that means a genuinely
+      // broken OpenAI call (wrong model string, a param the model doesn't accept)
+      // could fail on EVERY single draft forever without ever surfacing anywhere.
+      // Logging it here is the only way to actually notice that.
+      if (!res.ok) { console.warn("OpenAI call failed:", res.status, data.error?.message || data.error || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
       const text = data.choices?.[0]?.message?.content?.trim();
       if (!text) return { error: "Empty response from OpenAI" };
       return { text };
@@ -447,9 +457,18 @@ export default function Gemlyx() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) return { error: data.error?.message || `Request failed (${res.status})` };
+      if (!res.ok) { console.warn("Claude call failed:", res.status, data.error?.message || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
       const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
-      if (!text) return { error: "Empty response from Claude" };
+      if (!text) {
+        // A 200 with no usable text is almost always the response getting cut off
+        // before it produced any actual text block — most commonly the max_tokens
+        // budget running out (stop_reason "max_tokens") on a long, detailed prompt,
+        // not a real "nothing to say" case. Log stop_reason + whatever block types
+        // DID come back so this is diagnosable from the console instead of a dead end.
+        console.warn("Claude returned no text block.", { stop_reason: data.stop_reason, blockTypes: data.content?.map(b => b.type), usage: data.usage });
+        const hint = data.stop_reason === "max_tokens" ? " (response was cut off — ran out of tokens)" : "";
+        return { error: `Empty response from Claude${hint}` };
+      }
       return { text };
     } catch (err) {
       return { error: "Couldn't reach Claude — check the API key and your connection." };
@@ -601,7 +620,7 @@ export default function Gemlyx() {
         ...bbData([["Why People Love It", t.special], ["Perfect For", t.whoFor]]),
         ...bulletsBlock("Good to Know", t.thingsToKnow),
       ] };
-    if (type === "food") return { name: t.name, budgetLevel: t.budgetLevel || "", emoji: t.emoji || "🍽", category: t.category || "", location: t.location || "", price: t.price || "See website", timeNeeded: t.timeNeeded || "", photo: `/food/${slugify(t.name)}.jpg`, desc: t.vibeLocation, mapHint: t.mapHint || "", color: t.color || "#D4AF37", gemlyxFind: t.gemlyxFind || "",
+    if (type === "food" || type === "foodStreet") return { name: t.name, isFoodStreet: type === "foodStreet", budgetLevel: t.budgetLevel || "", emoji: t.emoji || (type === "foodStreet" ? "🍜" : "🍽"), category: t.category || (type === "foodStreet" ? "Food market" : ""), location: t.location || "", price: t.price || "See website", timeNeeded: t.timeNeeded || "", photo: `/food/${slugify(t.name)}.jpg`, desc: t.vibeLocation, mapHint: t.mapHint || "", color: t.color || "#D4AF37", gemlyxFind: t.gemlyxFind || "",
       blogBody: [
         ...bbData([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]]),
       ] };
@@ -655,6 +674,7 @@ export default function Gemlyx() {
         festival: { queries: [`${name} festival Denmark 2026 dates tickets prices lineup official website`, `${name} festival Denmark atmosphere who goes accommodation nearest station`, `${name} reddit r/Denmark experience worth it crowds queue`, `${name} quora google reviews honest opinion worth it`] },
         free: { queries: [`${name} free entry what makes it special history opening hours`, `${name} Denmark visitor tips things to know best time to visit`, `${name} Denmark getting there how to reach`, `${name} reddit r/Denmark hidden gem overrated worth it`, `${name} quora google reviews honest opinion overrated`] },
         food: { queries: [`${name} Denmark what to order menu prices history`, `${name} Denmark best time to visit busy hours local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
+        foodStreet: { queries: [`${name} Denmark food street market vendors stalls what's there`, `${name} Denmark food market opening hours best time to visit how to get there`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
         night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
@@ -677,7 +697,7 @@ export default function Gemlyx() {
       // name, not just any site that mentions it), actually fetch that page's real text via
       // the existing scan-source tool and fold it in — this is what turns "See website"
       // from a lazy default into an actual last resort, not a first one.
-      if (["food", "night", "booking", "free"].includes(studioType) && candidateUrls.length > 0) {
+      if (["food", "foodStreet", "night", "booking", "free"].includes(studioType) && candidateUrls.length > 0) {
         const nameWords = name.toLowerCase().replace(/[^a-z0-9æøå ]/g, "").split(" ").filter(w => w.length >= 4);
         const officialUrl = candidateUrls.find(u => {
           try {
@@ -711,10 +731,10 @@ export default function Gemlyx() {
         // material, instead of also having to research AND organize AND write at once.
         // Other content types still get the general fact-check version until this
         // approach is validated on these two.
-        const precheckPrompt = studioType === "food"
+        const precheckPrompt = (studioType === "food" || studioType === "foodStreet")
           ? `Using real, current web search, find accurate facts about "${name}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
 VIBE/LOCATION FACTS: its exact address or a real nearby landmark, why locals actually go there.
-FOOD MECHANICS FACTS: how the food is actually made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order.
+FOOD MECHANICS FACTS: ${studioType === "foodStreet" ? "what vendors/stalls are actually there, the range of cuisines/dishes on offer, how it's organized (indoor hall, outdoor stalls, etc.)" : "how the food is actually made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order"}.
 REALITY CHECK FACTS: real current prices, typical wait times, seating situation, anything else logistically true.
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : studioType === "town"
@@ -778,7 +798,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // time in publishDraft, so nothing OpenAI does to them survives regardless.
       let frozenGeo = null;
       let frozenFactsText = "";
-      if (["town", "festival", "free", "booking", "food"].includes(studioType)) {
+      if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(studioType)) {
         try {
           const coords = await geocodePlace(name);
           if (coords) {
@@ -835,6 +855,21 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "emoji": "one emoji", "desc"
 SHAPE-ONLY EXAMPLE (structure reference, not a prose quality bar): {"name": "Viking Center Ribe", "type": "Major", "what": ["blacksmithing", "leather", "textiles"], "location": "Ribe", "price": "180 DKK", "bookingType": "online", "desc": "Artisans craft authentic Viking jewellery, leather and textiles on site — watch smithing demonstrations and try archery in the reconstructed village."}
 ${STUDIO_VOICE}
 Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, e.g. a named museum/center) or Local (small independent workshop)", "what": ["1-3 lowercase craft keywords from: blacksmith, ceramic/pottery, jewellery, leather, textile/dyeing/felting, wood, candy — only include what's genuinely true"], "rating": "a real rating if found in reviews, else omit", "location": "Town name", "price": "exact price if the context gives one, else 'See website'", "priceNote": "e.g. 'per person' or 'family ticket available', else empty string", "travelTime": "EXACT format like '3h 15min 🚂' from Copenhagen, or empty string", "bookingType": "'online' only if you can book/buy tickets on a website, otherwise 'contact'", "popularityTag": "'Hidden Gem' if genuinely under-the-radar, else empty string", "transportWarning": "true only if it's genuinely hard to reach without a car", "emoji": "one fitting emoji", "color": "#hex fitting the craft", "timeNeeded": "e.g. '2-3 hours' — for At a Glance", "accessibility": "short accessibility note if known, else empty string — for At a Glance", "nearestStation": "short — for At a Glance", "special": "the experience itself — what happens, what you'll actually make or see, real specific detail", "whoFor": "who this genuinely suits", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
+        // FOOD STREET — a distinct category from a single restaurant: a street, hall,
+        // or market with MULTIPLE vendors/stalls under one roof or one stretch of
+        // street. Same three-paragraph fluid-narrative discipline as "food", but every
+        // paragraph is about the COLLECTION of vendors, not one kitchen's process.
+        foodStreet: `Draft a complete Gemlyx food street/market entry for ${name}, Denmark, as a FLUID EDITORIAL NARRATIVE in exactly three paragraphs, not a category-slot template — this is a fixed structural constraint, not a stylistic suggestion: rigid slots force generic filler even when facts are accurate, because there is only so much genuine content that fits a narrow question before it becomes padding. This is a FOOD STREET/MARKET — multiple vendors or stalls in one place, not a single restaurant — never write as if there's one kitchen or one menu.
+
+PARAGRAPH 1 — "vibeLocation": 2-3 sentences MAXIMUM. Must start immediately with the place's name, its exact proximity to a real nearby landmark from the search context, and the actual reason locals go there (this also serves as the card-preview text, so it must work standalone).
+PARAGRAPH 2 — "howItsMade": 3 sentences MAXIMUM. Concrete, physical, and specific to the COLLECTION: what kinds of vendors/cuisines are actually there (named where the context supports it), how the space is organized (indoor hall, open-air stalls, a stretch of street), what a visitor actually does — walk between stalls, share a table, etc. Never describe it as if it were one restaurant's kitchen.
+PARAGRAPH 3 — "realityCheck": 2-3 blunt sentences MAXIMUM. Real price range across the vendors (not one dish), typical wait times or how busy it gets, seating situation (shared tables are common at markets — say so if true), stated plainly as its own direct sentence, not softened by an immediate positive spin.
+
+NEVER REPEAT THE SAME SPECIFIC FACT ACROSS PARAGRAPHS: if a specific vendor or dish is named in one paragraph, it must not be named again in either of the other two.
+
+SHAPE-ONLY EXAMPLE (structure and rhythm reference — apply the generic-sentence test and sentence-mechanics rules independently of how this reads): {"name": "Reffen", "vibeLocation": "Reffen sits on a former shipyard peninsula across the harbour from central Copenhagen, a fifteen-minute ferry from Nyhavn. Locals go for the sheer range under one roof — fifty-plus street food vendors in converted shipping containers, not one kitchen's take on anything.", "howItsMade": "Stalls run the full range — Danish smørrebrød next to Vietnamese banh mi next to wood-fired pizza — each container its own small operation with its own menu. Seating is shared long tables scattered between the containers, no reservations, no table service. Most people build a meal from two or three different stalls rather than sticking to one.", "realityCheck": "Individual dishes run 60-120 DKK, so a full meal across a couple of stalls lands closer to restaurant pricing than a quick snack. Weekend evenings get genuinely crowded — expect to hunt for a seat. It's outdoor and semi-covered, so a rainy day changes the experience."}
+${STUDIO_VOICE}
+Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food market' or 'Street food hall', not a single-restaurant category", "location": "Neighbourhood, City", "price": "range like '60-120 DKK per dish' ONLY from context, else 'See website' — this is a RANGE across vendors, never one restaurant's menu price", "budgetLevel": "your honest read given the real price info: 'Budget' (roughly under 100 DKK a person), 'Mid-range' (roughly 100-250 DKK), or 'Splurge' (roughly 250+ DKK)", "timeNeeded": "realistic time a visit actually takes — markets invite lingering more than a quick meal, give your honest best estimate", "emoji": "one emoji fitting a market/street-food place (not a single dish)", "vibeLocation": "paragraph 1, per the rules above — 2-3 sentences max", "howItsMade": "paragraph 2, per the rules above — 3 sentences max, about the COLLECTION of vendors, never one kitchen", "realityCheck": "paragraph 3, per the rules above — 2-3 blunt sentences, price range/wait/seating stated plainly", "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag — a specific stall or vendor worth seeking out, distinct from howItsMade", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
       };
 
       const rawResearch = (scanHint && (scanHint.town || scanHint.dates)
@@ -863,14 +898,18 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       // flag the way OpenAI's response_format does, so the instruction is reinforced
       // explicitly here and the response is stripped of any stray markdown fencing
       // before parsing.
+      // Bumped from 2200 — the full schema for town/festival/booking types alone
+      // (a dozen+ fields, several multi-sentence) can genuinely run past 2200
+      // output tokens once you account for JSON structure overhead, and a budget
+      // that runs out mid-response is indistinguishable from "empty" to the caller.
       const draftResult = await askClaude(
         `${prompts[studioType]}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, no explanation before or after, nothing but the JSON itself, starting with { and ending with }.\n\n${userContent}`,
-        2200
+        4096
       );
       if (draftResult.error) throw new Error(draftResult.error);
       const cleanedDraft = draftResult.text.replace(/^```json\s*|\s*```$/g, "").trim();
       const t = JSON.parse(cleanedDraft || "{}");
-      const noContentField = studioType === "food" ? !t.vibeLocation : studioType === "town" ? !t.characterAndFit : !t.desc;
+      const noContentField = (studioType === "food" || studioType === "foodStreet") ? !t.vibeLocation : studioType === "town" ? !t.characterAndFit : !t.desc;
       if (!t.name || noContentField) throw new Error("empty");
       // Verify the route to the AI's own highlighted attraction specifically —
       // this is the actual bug behind the Gentofte/Ordrupgaard case: the frozen-
@@ -947,6 +986,13 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       } else if (studioType === "food") {
         const nextId = Math.max(...foodSpots.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D4AF37")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
+      } else if (studioType === "foodStreet") {
+        // Lands in the SAME foodSpots array as regular Food entries — Food Street is a
+        // distinct Studio category to WRITE (its own tailored research/prompt), but the
+        // live site's Food page filters restaurants vs. food streets by isFoodStreet on
+        // one shared list, not a separate array — see the "Food Streets" tab on /food.
+        const nextId = Math.max(...foodSpots.map(x => x.id)) + 1;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D4AF37")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
       } else {
         const nextId = Math.max(...nightlifeSpots.map(x => x.id)) + 1;
         const isClub = !!t.isClub;
@@ -992,7 +1038,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
   const [manualPricePolishing, setManualPricePolishing] = useState(null); // which field is mid-polish
   // Which field in this content type's schema is the "price we might not have found"
   // one — matches what the schema/render code above actually asks for per type.
-  const PRICE_FIELD_BY_TYPE = { town: "typicalCosts", free: "extraCosts", food: "price", festival: "ticketInfo", booking: "price" };
+  const PRICE_FIELD_BY_TYPE = { town: "typicalCosts", free: "extraCosts", food: "price", foodStreet: "price", festival: "ticketInfo", booking: "price" };
   const saveManualPriceField = (fieldName, rawValue) => {
     const value = rawValue.trim();
     if (!value) return;
@@ -1170,7 +1216,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Major (well-known, 
       // Drafting fresh: shape the raw AI draft into the final object first, as before.
       const isEditing = editingId !== null;
       const shaped = isEditing ? editedDraft : shapeForLive(studioType, editedDraft);
-      if (!isEditing && studioPhotoName) shaped.photo = `/${{ town: "towns", festival: "events", free: "free", food: "food", night: "nightlife", booking: "craft" }[studioType]}/${studioPhotoName}`;
+      if (!isEditing && studioPhotoName) shaped.photo = `/${{ town: "towns", festival: "events", free: "free", food: "food", foodStreet: "food", night: "nightlife", booking: "craft" }[studioType]}/${studioPhotoName}`;
       // Force-override with the real pre-computed values from generateArea, regardless
       // of what OpenAI's own draft says — this is the actual enforcement step, not
       // just an instruction the model could ignore. Only applies to a fresh draft;
@@ -1563,6 +1609,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       if (/bakery|café|coffee|ice cream/.test(c)) return "30–45 mins";
       return "60–90 mins"; // casual dining / restaurant chains / pub strips — a real sit-down meal, not a quick bite
     }
+    if (studioType === "foodStreet") return "60–120 mins"; // grazing across multiple vendors, longer than a single sit-down meal
     if (studioType === "free") {
       if (/palace|slot|castle|museum|exhibition/.test(c)) return "2–3 hours"; // historic interiors, real exhibitions
       if (/square|plaza|torv|park|garden|viewpoint/.test(c)) return "30–45 mins"; // outdoor public spaces, a look-around not a tour
@@ -2390,7 +2437,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {label}
@@ -2399,7 +2446,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightTown: "Town name, e.g. Aarhus" }[studioType]}
+                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market/street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightTown: "Town name, e.g. Aarhus" }[studioType]}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
                       <button onClick={generateArea} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", flexShrink: 0 }}>
@@ -2417,7 +2464,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       const typedNorm = norm(typed);
                       const sourceArrays = {
                         town: towns, festival: [...events, ...majorEvents], free: freeEntrance,
-                        food: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns,
+                        food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns,
                       };
                       const arr = sourceArrays[studioType] || [];
                       const cityWords = ["copenhagen", "aarhus", "aalborg", "odense", "esbjerg", "randers", "kolding", "horsens", "vejle", "roskilde"];
@@ -2619,7 +2666,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             <li><b>Town/region attached to a station or address</b> — the station name itself can be right while the town is wrong (Denmark has similarly-named places in different regions).</li>
                             {studioType === "festival" && <li><b>Major vs. Local scale</b> — a judgment call the AI made; double-check it matches how well-known this actually is.</li>}
                             {studioType === "town" && <li><b>Map coordinates (lat/lon)</b> — check the pin would actually land on the right town.</li>}
-                            {(studioType === "food" || studioType === "night" || studioType === "booking") && <li><b>Prices and opening details</b> — can go stale fast; verify the place still operates as described.</li>}
+                            {(studioType === "food" || studioType === "foodStreet" || studioType === "night" || studioType === "booking") && <li><b>Prices and opening details</b> — can go stale fast; verify the place still operates as described.</li>}
                             <li><b>Named sub-venues/stages</b> (e.g. a specific stage or room name) — the AI has invented a plausible-sounding fake name before. Verify any specific venue name actually exists.</li>
                             <li><b>Prices</b> — check the currency and the actual number. A converted price is a guess, not a fact.</li>
                             <li><b>Specific named details</b> in the description (a shop, dish, or landmark) — can be invented if the search results were thin. If in doubt, search the name yourself.</li>
@@ -3094,6 +3141,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market — the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
               </div>
 
+              <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                {["All", "Restaurants", "Food Streets"].map(k => (
+                  <Pill key={k} label={k} active={foodKind === k} onClick={() => setFoodKind(k)} />
+                ))}
+              </div>
+
               <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}`, flexWrap: "wrap" }}>
                 {[{ id: "All", label: "All" }, { id: "Budget", label: "💸 Budget" }, { id: "Mid-range", label: "💰 Mid-range" }, { id: "Splurge", label: "💎 Splurge" }].map(t => (
                   <button key={t.id} onClick={() => setFoodTab(t.id)}
@@ -3103,7 +3156,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 ))}
               </div>
 
-              {foodSpots.filter(f => foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab).map(spot => (
+              {foodSpots.filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet))).map(spot => (
                 <div key={spot.id} onClick={() => setFoodDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
                   {spot.photo && (
                     <div style={{ height: 140, borderRadius: 12, overflow: "hidden", marginBottom: 14, position: "relative", background: `linear-gradient(135deg, ${spot.color}33 0%, #0A0F1E 100%)` }}>
