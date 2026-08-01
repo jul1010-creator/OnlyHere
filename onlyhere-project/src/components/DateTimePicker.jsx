@@ -63,7 +63,7 @@ export const DateTimePicker = forwardRef(({ value, onChange, minDate, label, hin
     <div ref={wrapRef} style={{ position: "relative" }}>
       {label && <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>{label} {hint && <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>{hint}</span>}</div>}
       <button type="button" onClick={() => setOpen(o => !o)}
-        style={{ width: "100%", textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: selected ? C.text : C.muted, fontFamily: "'Plus Jakarta Sans', sans-serif", cursor: "pointer" }}>
+        style={{ width: "100%", textAlign: "left", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: selected ? C.text : C.muted, fontFamily: "'Inter', sans-serif", cursor: "pointer" }}>
         {displayText}
       </button>
 
@@ -98,7 +98,7 @@ export const DateTimePicker = forwardRef(({ value, onChange, minDate, label, hin
                     if (onDaySelected) onDaySelected();
                   }}
                   style={{
-                    aspectRatio: "1", borderRadius: 8, border: "none", fontSize: 12.5, fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    aspectRatio: "1", borderRadius: 8, border: "none", fontSize: 12.5, fontFamily: "'Inter', sans-serif",
                     background: isSelected ? C.accent : "transparent",
                     color: disabled ? C.border : isSelected ? "#fff" : C.text,
                     cursor: disabled ? "not-allowed" : "pointer",
@@ -115,7 +115,7 @@ export const DateTimePicker = forwardRef(({ value, onChange, minDate, label, hin
             <input type="time" value={timeValue} onChange={e => {
               setTimeValue(e.target.value);
               if (selected) commit(selected, e.target.value);
-            }} style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 10px", fontSize: 13, color: C.text, colorScheme: "dark", fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+            }} style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 10px", fontSize: 13, color: C.text, colorScheme: "dark", fontFamily: "'Inter', sans-serif" }} />
             <button type="button" onClick={() => setOpen(false)}
               style={{ background: C.accent, border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, color: "#fff", cursor: "pointer" }}>Done</button>
           </div>

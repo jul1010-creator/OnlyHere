@@ -1,11 +1,11 @@
 export const C = {
   bg: "#0A0F1E",         // deep navy
-  surface: "#111827",    // card background
-  border: "#1E2A3A",     // border
-  accent: "#C8102E",     // Danish red
-  gold: "#D4AF37",       // gold accent
-  text: "#F0F4FF",       // primary text
-  muted: "#6B7A99",      // muted text
-  light: "#9AA5BE",      // light text
+  surface: "#0F1628",    // card background
+  border: "#212C44",     // border
+  accent: "#E23B4E",     // Danish red
+  gold: "#D9A441",       // gold accent
+  text: "#EDF0F7",       // primary text
+  muted: "#64708C",      // muted text
+  light: "#A6B0C6",      // light text
 };
 

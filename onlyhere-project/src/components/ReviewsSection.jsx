@@ -42,16 +42,16 @@ export const ReviewsSection = ({ itemType, itemName }) => {
 
   return (
     <div style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid ${C.border}` }}>
-      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>💬 What travelers say</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>💬 What travelers say</div>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 16 }}>Real visitor comments — not edited or verified by Gemlyx, shown as written.</div>
 
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Name (optional)"
-          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 8, boxSizing: "border-box" }} />
+          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 8, boxSizing: "border-box" }} />
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Been here? Share what it was really like…" rows={3}
-          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
+          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
         <button onClick={submit} disabled={status === "sending" || !text.trim()}
-          style={{ background: C.gold, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          style={{ background: C.gold, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
           {status === "sending" ? "Posting…" : status === "sent" ? "✓ Posted" : "Post comment"}
         </button>
         {status === "error" && <div style={{ fontSize: 11, color: "#FFB347", marginTop: 6 }}>Couldn't post — try again.</div>}

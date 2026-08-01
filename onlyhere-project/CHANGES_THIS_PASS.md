@@ -1,4 +1,28 @@
-# LATEST: tightened the auto-image-finder tool's photo verification after finding a real miss (a Union Jack flag accepted for a Danish festival photo)
+# LATEST: the redesign pass — new fonts, refreshed palette, one chip style everywhere, a calmer Detour, a nicer guide page, and reframed Instagram embeds
+
+This is the first real implementation pass of the redesign we agreed on (the one from the preview HTML you liked). Everything below compiles; none of it has been clicked through live, so please look around the whole app after deploying — a global font/color swap touches literally every screen.
+
+**1. Fonts: Cormorant Garamond → Fraunces, Plus Jakarta Sans → Inter, app-wide.** Cormorant is a lovely font but very thin at small sizes, which was a big part of the muddy "old blog" feel. Fraunces is the same editorial-serif idea with real weight — it's what the preview used. Inter replaces Jakarta for all UI text. One import URL changed, then every fontFamily reference swapped across App.jsx, GuidePage, and all components.
+
+**2. Palette refresh, same soul.** Deep navy stays. The red went from #C8102E to a slightly warmer #E23B4E (reads better on dark), gold went from #D4AF37 to a calmer #D9A441, surfaces went bluer-darker, borders slightly lighter, and text tones were tuned. All via utils/theme.js plus a sweep of the hardcoded hex copies of those same colors (map labels, scrollbars, etc.) so nothing is left showing the old palette.
+
+**3. One chip language.** The Pill component (used for every filter across towns, events, food, Detour) is now the design-system chip: quiet outline when idle, solid light fill with dark text when selected, fully round. The colored-dot-per-chip look is gone.
+
+**4. Gemlyx Detour reads calm now.** The intake was ~10 fields stacked in one long wall, all visible at once — that was the "overwhelming" you named. Now it's one card titled "When are you coming?": arrival + departure side by side (on wider screens), starting point, and a "Fine-tune the plan" fold that hides budget/interests/style/travelers/transport until tapped. Nothing was removed — every field still exists and feeds the exact same prompt — it's purely presentation. The apply button ("✦ Build my trip" now, was "✦ Apply these") got the proper gradient treatment. Also rewrote the awkward intro line ("Try out our special feature and let Gemlyx be your free tour guide…" → "Your personal Denmark guide…").
+
+**5. The guide page (saved/shareable guides) got the calm-down treatment too.** A small gold kicker above a bigger, roomier title; the three anonymous "◆ tip" lines became a labeled "Before you go" card (Money / Getting around / Keep in mind); day headers went from cramped gold uppercase micro-text to a real serif heading with a hairline rule; and each stop is now an actual card with the designed monogram plate (the place's initial in italic serif on a layered gradient) instead of a lone ◆ floating in a gray void.
+
+**6. Instagram embeds reframed.** Instagram gives us no dark mode for embeds — the white iframe is theirs and can't be recolored. What changed: the embed now sits inside a proper media card with a header row (a drawn Instagram glyph, "FROM INSTAGRAM", an Open link), clipped corners, and a 420px width cap so it reads as an intentional piece of media instead of a raw 2015-blog paste.
+
+**7. Small copy fixes for awkward English:** "Tap to calculate distances from you" → "Tap to see travel times from where you are"; "It's a recognised issue, even in Danish media" → "Even the Danish press writes about it"; "Be first when we launch new cities" → "Be the first to know when new cities launch"; "Feel free to mention who's traveling —" → "Mention who's traveling…". More of these exist deeper in the app — flag any you spot and I'll sweep again.
+
+**Not done yet, deliberately:** the emoji-to-drawn-icon swap across the whole app (hundreds of call sites — next pass), the 3D tilt cards from the preview, the max-width container on wide desktop screens, and the home-page section redesign. One at a time, so each step stays testable.
+
+**Please test before trusting**: open every main tab and look for anything that renders oddly — a global font and color swap is exactly the kind of change where one forgotten hardcoded value shows up as a visual glitch somewhere I didn't look. The Detour fold and the guide page especially, since those had real JSX restructuring, not just style values.
+
+---
+
+# EARLIER: tightened the auto-image-finder tool's photo verification after finding a real miss (a Union Jack flag accepted for a Danish festival photo)
 
 You asked "where are all the images on towns" — that's a real, pre-existing gap (10 of 12 town photos point at a `public/towns/` folder that doesn't exist yet), and it turns out there's already a separate tool built earlier (`tools/image-finder/`, not part of the live app itself — a standalone script you run or schedule) that searches Unsplash/Pexels/Pixabay and uses Gemini to check each candidate photo before downloading it, meant to fill exactly this kind of gap gradually over time (10/day cap). It ran tonight and filled 10 festival photos before hitting that daily cap — hadn't reached the towns yet. While checking its work I opened one of the photos it accepted for "Præstø Litteraturfestival" and it has a Union Jack flag clearly visible in the background — Gemini approved it because the old prompt only asked "does this loosely represent the theme" (a book market, in this case), never "is this actually Denmark."
 

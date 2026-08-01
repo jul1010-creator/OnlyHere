@@ -8,7 +8,7 @@ export const StoreBadge = ({ type, href }) => (
     )}
     <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
       <span style={{ fontSize: 8, color: "#ccc", letterSpacing: 0.4 }}>{type === "ios" ? "Download on the" : "GET IT ON"}</span>
-      <span style={{ fontSize: 13, color: "#fff", fontWeight: 700, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{type === "ios" ? "App Store" : "Google Play"}</span>
+      <span style={{ fontSize: 13, color: "#fff", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>{type === "ios" ? "App Store" : "Google Play"}</span>
     </span>
   </a>
 );

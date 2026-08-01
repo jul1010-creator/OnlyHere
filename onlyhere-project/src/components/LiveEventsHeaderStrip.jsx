@@ -39,7 +39,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
             {currentlyLive.length > 0 && <style>{`@keyframes gemlyxLiveDotPulse { 0% { box-shadow: 0 0 0 0 rgba(76,175,80,0.6); } 70% { box-shadow: 0 0 0 6px rgba(76,175,80,0); } 100% { box-shadow: 0 0 0 0 rgba(76,175,80,0); } }`}</style>}
             {currentlyLive.length > 0 && (
               <button onClick={() => setSegment("live")} disabled={!showBoth}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: showBoth ? "pointer" : "default", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: showBoth ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4CAF50", flexShrink: 0, boxShadow: "0 0 6px #4CAF50", animation: "gemlyxLiveDotPulse 1.6s ease-in-out infinite" }} />
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#4CAF50", textTransform: "uppercase", letterSpacing: 0.5, opacity: showBoth && !isLive ? 0.5 : 1 }}>Live Events</span>
               </button>
@@ -47,7 +47,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
             {showBoth && <span style={{ fontSize: 11, color: C.border, fontWeight: 700 }}>|</span>}
             {comingSoon.length > 0 && (
               <button onClick={() => setSegment("coming")} disabled={!showBoth}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: showBoth ? "pointer" : "default", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: showBoth ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
                 {currentlyLive.length === 0 && <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.gold, flexShrink: 0 }} />}
                 <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.5, opacity: showBoth && isLive ? 0.5 : 1 }}>{comingLabel}</span>
               </button>
@@ -56,7 +56,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, marginBottom: 8, WebkitOverflowScrolling: "touch" }}>
             {showList.map(e => (
               <button key={e.name} onClick={() => setEventDetail(e)}
-                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                 <span style={{ fontSize: 13 }}>{e.emoji}</span>
                 <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{e.name}</span>
                 <span style={{ fontSize: 10, color: C.muted, whiteSpace: "nowrap" }}>{getEventDate(e.date, e.dateEnd)}</span>
@@ -67,7 +67,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
       )}
 
       {!nearYou && (
-        <button onClick={requestLocation} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <button onClick={requestLocation} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
           <span style={{ fontSize: 12, color: C.light, fontWeight: 600 }}>📍 What's closest to me?</span>
         </button>
       )}
@@ -75,7 +75,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
       {nearYou === "denied" && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
           <span style={{ fontSize: 12, color: C.muted }}>Couldn't get your location.</span>
-          <button onClick={requestLocation} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Try again</button>
+          <button onClick={requestLocation} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Try again</button>
         </div>
       )}
       {nearYou && typeof nearYou === "object" && (
@@ -89,7 +89,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
               {nearYou.matches.map(item => (
                 <button key={`${item._kind}-${item.name}`}
                   onClick={() => { item._kind === "event" ? setEventDetail(item) : item._kind === "free" ? setFreeDetail(item) : setFoodDetail(item); }}
-                  style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   <span style={{ fontSize: 13 }}>{item.emoji}</span>
                   <span style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{item.name}</span>
                   <span style={{ fontSize: 10, color: C.muted, whiteSpace: "nowrap" }}>{item._kind === "event" ? getEventDate(item.date, item.dateEnd) : `~${Math.round(item._km)} km`}</span>

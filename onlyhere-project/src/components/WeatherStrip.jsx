@@ -12,7 +12,7 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
   return (
     <div style={{ background: C.surface, borderRadius: 16, padding: "16px", border: `1px solid ${C.border}`, marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif" }}>{label}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{label}</div>
         {weatherLoading === weatherKey && <span style={{ fontSize: 11, color: C.muted }}>Loading...</span>}
       </div>
 
@@ -21,7 +21,7 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
             <span style={{ fontSize: 40 }}>{weatherIcon(data.condition)}</span>
             <div>
-              <div style={{ fontSize: 30, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1 }}>{Math.round(data.temperature_c)}°C</div>
+              <div style={{ fontSize: 30, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1 }}>{Math.round(data.temperature_c)}°C</div>
               <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Wind {data.wind_speed_ms} m/s · Humidity {data.humidity_percent}%</div>
             </div>
           </div>
