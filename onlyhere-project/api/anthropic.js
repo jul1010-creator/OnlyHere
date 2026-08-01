@@ -13,6 +13,59 @@ export default async function handler(req, res) {
   if (!key) {
     return res.status(500).json({ error: "ANTHROPIC_API_KEY not set on the server" });
   }
+
+  // STREAMING PATH — used by Detour's chat so replies arrive token-by-token
+  // the same way Claude/Cowork itself streams text, instead of appearing all
+  // at once. Only taken when the caller explicitly asks for it
+  // (body.stream === true); every other caller (Studio's drafting pipeline,
+  // the fact-check/rewrite tools) still gets the original buffered JSON
+  // response below, unchanged — those all `await res.json()` a single object
+  // and would break if this endpoint always streamed.
+  if (req.body?.stream === true) {
+    try {
+      const upstream = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(req.body),
+      });
+
+      if (!upstream.ok || !upstream.body) {
+        // Anthropic rejected the request itself (bad key, bad model, etc) —
+        // this is still JSON, not an event stream, so read and forward it
+        // as a normal error response rather than piping nothing.
+        let errBody;
+        try { errBody = await upstream.json(); } catch { errBody = { error: { message: `Anthropic request failed (${upstream.status})` } }; }
+        return res.status(upstream.status).json(errBody);
+      }
+
+      // Pipe Anthropic's Server-Sent Events straight through to the browser,
+      // chunk by chunk, as they arrive — no buffering the whole reply first.
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      });
+      const reader = upstream.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+        if (typeof res.flush === "function") res.flush();
+      }
+      return res.end();
+    } catch (err) {
+      // If headers haven't gone out yet, respond normally; if streaming had
+      // already started, just end the connection — a half-sent SSE stream
+      // is the best we can do, the client's reader loop will simply stop.
+      if (!res.headersSent) return res.status(500).json({ error: String(err) });
+      return res.end();
+    }
+  }
+
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
