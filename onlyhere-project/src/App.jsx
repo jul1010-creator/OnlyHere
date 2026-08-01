@@ -486,7 +486,19 @@ function GemlyxApp() {
       // Logging it here is the only way to actually notice that.
       if (!res.ok) { console.warn("OpenAI call failed:", res.status, data.error?.message || data.error || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
       const text = data.choices?.[0]?.message?.content?.trim();
-      if (!text) return { error: "Empty response from OpenAI" };
+      if (!text) {
+        // DIAGNOSTIC: "gpt-5.6-sol" is a reasoning-tier model — max_completion_tokens
+        // is shared between its INTERNAL reasoning tokens and the actual visible
+        // reply, unlike older models where every token you pay for shows up in the
+        // response. On a tight budget (this project's smaller calls were 300-500),
+        // it can burn the entire budget thinking and leave zero left to write the
+        // actual answer, which reads as "Empty response" even though nothing
+        // actually failed — finish_reason: "length" with reasoning_tokens > 0 in
+        // usage is the fingerprint of exactly this. Logging both here so a future
+        // empty-response report shows which cause it actually was.
+        console.warn("OpenAI returned no text.", { finish_reason: data.choices?.[0]?.finish_reason, usage: data.usage });
+        return { error: "Empty response from OpenAI" };
+      }
       return { text };
     } catch (err) {
       return { error: "Couldn't reach OpenAI — check the API key and your connection." };
@@ -743,7 +755,12 @@ function GemlyxApp() {
       const planResult = await withRetry(
         () => askOpenAI(
           `Planning research for a Danish travel guide entry: "${name}" (type: ${studioType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a genuine downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
-          300
+          // BUG FIX: 300 was almost certainly the actual cause of the "Empty
+          // response from OpenAI" errors on town/event drafts and Discover runs —
+          // gpt-5.6-sol is a reasoning model, and 300 tokens is tight enough that
+          // its internal reasoning alone can eat the whole budget, leaving nothing
+          // for the actual visible answer. Bumped to give real headroom.
+          1400
         ),
         r => !!r.error,
         "Research planning (OpenAI)"
@@ -1251,9 +1268,20 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
       const typeLabel = DISCOVER_TYPE_LABEL[type] || "places in Denmark";
 
-      const planResult = await askOpenAI(
-        `You're helping a Danish travel guide find genuinely new candidates to research next: ${typeLabel}. Generate 5 diverse, SPECIFIC search queries (not generic categories) that would actually surface real, named candidates — vary the angle: one aimed at forum/Reddit-style discussion, one at "hidden gem" or "underrated" roundup articles, one at local/regional tourism sources, one at recent listings, one broad. ${extraFraming || ""}Respond with ONLY a JSON array of 5 search query strings, nothing else.`,
-        500
+      // BUG FIX: this was capped at 500 and, on a plain failure, threw immediately
+      // with no retry — the same "Empty response from OpenAI" cause as Stage 1's
+      // query planning above (gpt-5.6-sol is a reasoning model; a tight budget can
+      // get entirely eaten by its internal reasoning before it writes anything
+      // visible). This is almost certainly what you hit searching for town/event
+      // candidates. Bumped the budget and added the same retry-before-fail used
+      // in generateArea(), instead of a single try dying on one flaky response.
+      const planResult = await withRetry(
+        () => askOpenAI(
+          `You're helping a Danish travel guide find genuinely new candidates to research next: ${typeLabel}. Generate 5 diverse, SPECIFIC search queries (not generic categories) that would actually surface real, named candidates — vary the angle: one aimed at forum/Reddit-style discussion, one at "hidden gem" or "underrated" roundup articles, one at local/regional tourism sources, one at recent listings, one broad. ${extraFraming || ""}Respond with ONLY a JSON array of 5 search query strings, nothing else.`,
+          1400
+        ),
+        r => !!r.error,
+        "Discover query planning (OpenAI)"
       );
       if (planResult.error) throw new Error(planResult.error);
       let queries;
@@ -1278,8 +1306,9 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       if (!combinedText.trim()) throw new Error("Tavily returned nothing usable for these queries");
 
       const existingList = existing.length ? existing.join("; ") : "(nothing yet)";
-      const synthResult = await askOpenAI(
-        `From the raw search results below, extract real, SPECIFICALLY NAMED ${typeLabel} — genuine candidates worth someone researching and writing a full guide entry about next. Only include something if it is actually named in the search results below — never invent a plausible-sounding name. Skip anything vague or generic (a category, not a specific named place).
+      const synthResult = await withRetry(
+        () => askOpenAI(
+          `From the raw search results below, extract real, SPECIFICALLY NAMED ${typeLabel} — genuine candidates worth someone researching and writing a full guide entry about next. Only include something if it is actually named in the search results below — never invent a plausible-sounding name. Skip anything vague or generic (a category, not a specific named place).
 
 DO NOT include anything already on this existing list (match loosely — different spelling/capitalization of the same real place still counts as already covered): ${existingList}
 
@@ -1288,7 +1317,10 @@ For each real candidate found, give its exact name, the town/region it's in (emp
 Respond with ONLY a JSON array: [{"name": "...", "region": "...", "hook": "..."}]
 
 Raw search results:\n${combinedText.slice(0, 14000)}`,
-        2200
+          2200
+        ),
+        r => !!r.error,
+        "Discover candidate extraction (OpenAI)"
       );
       if (synthResult.error) throw new Error(synthResult.error);
       let candidates;
