@@ -225,13 +225,6 @@ function GemlyxApp() {
     return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches };
   })() : (userCoords === "denied" ? "denied" : userCoords === "requesting" ? "loading" : null);
 
-  const [routeStops, setRouteStops] = useState([]); // array of town names, in order
-  const [routeSummary, setRouteSummary] = useState(null);
-  const [routeSummaryLoading, setRouteSummaryLoading] = useState(false);
-  const [savedRoutes, setSavedRoutes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("gemlyx_saved_routes") || "[]"); } catch { return []; }
-  });
-
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
   const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } shown during "loading" — real progress, not a static message
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
@@ -2062,46 +2055,10 @@ If the conversation only covers a single day or a few stops with no explicit day
     try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
   };
 
-  const nearbyTownsRanked = (isInDenmark(userCoords)) ? Object.entries(TOWN_COORDS).map(([name, [tLat, tLon]]) => {
-    const dLat = (tLat - userCoords.lat) * 111.32;
-    const dLon = (tLon - userCoords.lon) * 62.06;
-    return { name, km: Math.round(Math.sqrt(dLat * dLat + dLon * dLon)) };
-  }).sort((a, b) => a.km - b.km).slice(0, 12) : [];
-
-  const toggleRouteStop = (townName) => {
-    setRouteSummary(null);
-    setRouteStops(prev => prev.includes(townName) ? prev.filter(t => t !== townName) : [...prev, townName]);
-  };
-
-  const generateRouteSummary = async () => {
-    if (routeStops.length < 2) return;
-    setRouteSummaryLoading(true);
-    try {
-      const result = await askClaude(
-        `You write short, warm, specific 2-sentence route descriptions for a Denmark travel app called Gemlyx, in plain conversational text with no markdown formatting, no headers, no asterisks.\n\nWrite a short, appealing 2-sentence description for a self-planned road trip starting near the traveler's current location, stopping at these towns in this order: ${routeStops.join(" → ")}. Mention the character of the route, not just the list.`,
-        150
-      );
-      setRouteSummary(stripMarkdown(result.text) || "A custom route through " + routeStops.join(", ") + ".");
-    } catch {
-      setRouteSummary("A custom route through " + routeStops.join(", ") + ".");
-    }
-    setRouteSummaryLoading(false);
-  };
-
-  const saveCurrentRoute = () => {
-    const newRoute = { id: Date.now(), stops: routeStops, summary: routeSummary, savedAt: new Date().toISOString() };
-    const updated = [newRoute, ...savedRoutes].slice(0, 20);
-    setSavedRoutes(updated);
-    try { localStorage.setItem("gemlyx_saved_routes", JSON.stringify(updated)); } catch { /* storage unavailable, route still shown this session */ }
-    setToast("💾 Route saved");
-    setTimeout(() => setToast(null), 2200);
-  };
-
-  const deleteSavedRoute = (id) => {
-    const updated = savedRoutes.filter(r => r.id !== id);
-    setSavedRoutes(updated);
-    try { localStorage.setItem("gemlyx_saved_routes", JSON.stringify(updated)); } catch { /* ignore */ }
-  };
+  // Custom route builder (nearbyTownsRanked/toggleRouteStop/generateRouteSummary/
+  // saveCurrentRoute/deleteSavedRoute) removed — Detour's AI chat already covers
+  // this conversationally (describe your own route, Gemlyx builds it), so having
+  // a separate manual tap-to-build tool was two ways to do the same thing.
 
 
   const [craftStatus, setCraftStatus] = useState(null);
@@ -2195,7 +2152,10 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (aiMessages.length > 1) document.querySelectorAll(".ai-msgs").forEach(el => { el.scrollTop = el.scrollHeight; });
   }, [aiMessages]);
 
-  const TAB_ORDER = ["home", "essentials", "attractions", "events", "food", "nightlife", "roadtrips", "visits", "ai"];
+  // "roadtrips" removed as its own tab — folded into Gemlyx Detour's existing
+  // "🚗 Road Trip" quick-start (same roadTrips data), per Oliver's call to stop
+  // having two separate places to find a road trip.
+  const TAB_ORDER = ["home", "essentials", "attractions", "events", "food", "nightlife", "visits", "ai"];
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
   const NAV_ITEMS = [
     { id: "home", label: "🧭 Explore" },
@@ -2204,7 +2164,6 @@ If the conversation only covers a single day or a few stops with no explicit day
     { id: "events", label: "◈ Events" },
     { id: "food", label: "🍽 Food" },
     { id: "nightlife", label: "🍺 Nightlife" },
-    { id: "roadtrips", label: "🚗 Road Trips" },
     { id: "visits", label: "◉ Towns" },
     { id: "ai", label: "✦ Gemlyx Detour" },
   ];
@@ -3235,7 +3194,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 { id: "attractions", img: "/picture7.jpg", title: "Attractions", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", icon: "🎟" },
                 { id: "ai", img: "/picture9.jpg", title: "Gemlyx Detour", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
               ].map((section, i) => (
-                <div key={section.id} onClick={() => { goTab(section.id); window.scrollTo(0,0); }}
+                <div key={section.id} onClick={() => {
+                  // "roadtrips" isn't its own tab anymore — it now lives inside
+                  // Gemlyx Detour's Road Trip picker, so route there directly
+                  // with that sub-tab preselected instead of a dead tab id.
+                  if (section.id === "roadtrips") { setDetourTab("roadtrip"); goTab("ai"); } else { goTab(section.id); }
+                  window.scrollTo(0,0);
+                }}
                   style={{ height: 280, position: "relative", overflow: "hidden", cursor: "pointer" }}>
                   <img src={section.img} alt={section.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s" }}
                     onMouseOver={e => e.target.style.transform = "scale(1.04)"}
@@ -3255,7 +3220,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               <div style={{ padding: "32px 24px", background: C.surface, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
                 <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 10 }}>Most tourists see Denmark for 3–4 days. All of it in Copenhagen.</div>
                 <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 16px" }}>It's a recognised issue, even in Danish media — the rest of the country, especially Jutland and North Zealand, barely gets seen. Gemlyx exists to change that: real places, real routes, worth the extra hour outside the capital.</div>
-                <button onClick={() => goTab("roadtrips")}
+                <button onClick={() => { setDetourTab("roadtrip"); goTab("ai"); }}
                   style={{ background: C.accent, border: "none", borderRadius: 100, padding: "10px 22px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   See a Road Trip →
                 </button>
@@ -3699,181 +3664,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
           })()}
 
           {/* ── ROAD TRIPS ───────────────────────────────────── */}
-          {tab === "roadtrips" && (
-            <div className={pageAnim} style={{ padding: "16px" }}>
-              <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Road Trips</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark rewards the drive as much as the destination. These routes turn a transit day into the best part of the trip — real stops, real detours, worth the extra hour.</div>
-              </div>
-
-              {savedPlaces.length > 0 && (
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginBottom: 18 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>♥ Your Saved Places</div>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Saved from Attractions and Booking — tap ✕ to remove.</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-                    {savedPlaces.map(p => (
-                      <span key={`${p.kind}-${p.id}`} style={{ display: "flex", alignItems: "center", gap: 6, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px" }}>
-                        <span style={{ fontSize: 12 }}>{p.emoji}</span>
-                        <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{p.name}</span>
-                        {p.town && <span style={{ fontSize: 10, color: C.muted }}>{p.town}</span>}
-                        <button onClick={() => toggleSavePlace(p.kind, p)} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
-                      </span>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      const list = savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ");
-                      goTab("ai");
-                      sendAI(`Plan me a road trip that includes these places I've saved: ${list}. Suggest a sensible order, roughly how long I need, and one or two things worth seeing along the way.`);
-                    }}
-                    style={{ width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    ✦ Ask Gemlyx for a road trip from these
-                  </button>
-                </div>
-              )}
-
-              <div style={{ background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 16, padding: "18px", marginBottom: 24 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>🧭 Build a Route From Here</div>
-                {!isInDenmark(userCoords) ? (
-                  <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>This builds a real route starting from wherever you are — works once you're in Denmark with location enabled.</div>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 14 }}>Tap towns to add them to your route, in the order you'd visit them — closest to you first.</div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: routeStops.length > 0 ? 16 : 0 }}>
-                      {nearbyTownsRanked.map(t => (
-                        <button key={t.name} onClick={() => toggleRouteStop(t.name)}
-                          style={{ display: "flex", alignItems: "center", gap: 6, background: routeStops.includes(t.name) ? C.accent : C.bg, border: `1px solid ${routeStops.includes(t.name) ? C.accent : C.border}`, borderRadius: 100, padding: "7px 13px", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          <span style={{ fontSize: 12, color: routeStops.includes(t.name) ? "#fff" : C.text, fontWeight: 600 }}>{t.name}</span>
-                          <span style={{ fontSize: 10, color: routeStops.includes(t.name) ? "#ffffffaa" : C.muted }}>~{t.km} km</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {routeStops.length > 0 && (
-                      <div style={{ background: C.bg, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Your Route</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: routeSummary ? 12 : 0 }}>
-                          <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>📍 You</span>
-                          {routeStops.map((stop, i) => (
-                            <span key={stop} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ color: C.muted, fontSize: 12 }}>→</span>
-                              <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{stop}</span>
-                              <button onClick={() => toggleRouteStop(stop)} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
-                            </span>
-                          ))}
-                        </div>
-                        {routeSummary && <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, fontStyle: "italic" }}>{routeSummary}</div>}
-                      </div>
-                    )}
-
-                    {routeStops.length >= 2 && (
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={generateRouteSummary} disabled={routeSummaryLoading}
-                          style={{ flex: 1, background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          {routeSummaryLoading ? "Writing..." : "✦ Describe this route"}
-                        </button>
-                        <button onClick={saveCurrentRoute}
-                          style={{ flex: 1, background: C.accent, border: "none", color: "#fff", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          💾 Save Route
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {savedRoutes.length > 0 && (
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Routes</div>
-                  {savedRoutes.map(r => (
-                    <div key={r.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>📍 You → {r.stops.join(" → ")}</div>
-                        <button onClick={() => deleteSavedRoute(r.id)} style={{ background: "none", border: "none", color: C.muted, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>✕</button>
-                      </div>
-                      {r.summary && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, fontStyle: "italic" }}>{r.summary}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {roadTrips.map(trip => (
-                <div key={trip.id} style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0 26px" }}>
-                  {trip.photo && (
-                    <div style={{ height: 160, borderRadius: 14, overflow: "hidden", marginBottom: 16, position: "relative", background: `linear-gradient(135deg, ${trip.color}33 0%, #0A0F1E 100%)` }}>
-                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, opacity: 0.25 }}>{trip.emoji}</span>
-                      <img src={trip.photo} alt={trip.name} onError={e => { e.target.style.display = "none"; }}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
-                    </div>
-                  )}
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                    <span style={{ fontSize: 22 }}>{trip.emoji}</span>
-                    <div>
-                      <div style={{ fontSize: 23, fontWeight: 600, color: C.text, fontFamily: "'Cormorant Garamond', serif", lineHeight: 1.15 }}>{trip.name}</div>
-                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1 }}>{trip.region}</div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 14, marginBottom: 14 }}>
-                    <span style={{ fontSize: 12, color: trip.color, fontWeight: 700 }}>🕐 {trip.duration}</span>
-                    <span style={{ fontSize: 12, color: C.muted }}>📍 {trip.distance}</span>
-                  </div>
-                  <WeatherStrip label={`Weather along the route`} weatherKey={trip.name} lat={trip.lat} lon={trip.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
-                  {trip.vibe && (
-                    <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: trip.color, background: `${trip.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 14 }}>
-                      {trip.vibe}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, marginBottom: 16, maxWidth: 560 }}>{trip.desc}</div>
-
-                  <div style={{ fontSize: 10, fontWeight: 700, color: trip.color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Stops along the way</div>
-                  <div style={{ marginBottom: 16 }}>
-                    {trip.stops.map((stop, i) => (
-                      <div key={stop.name} style={{ display: "flex", gap: 12, marginBottom: i < trip.stops.length - 1 ? 14 : 0 }}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: trip.color, marginTop: 4 }} />
-                          {i < trip.stops.length - 1 && <div style={{ width: 1, flex: 1, background: C.border, marginTop: 4 }} />}
-                        </div>
-                        <div style={{ paddingBottom: 2 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{stop.name}</div>
-                          <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 2 }}>{stop.note}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(trip.mapHint)}`} target="_blank" rel="noreferrer"
-                    style={{ color: C.text, fontSize: 13, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "4px" }}>
-                    Open Route →
-                  </a>
-                </div>
-              ))}
-
-              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 22, marginTop: 4 }}>
-                <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 6 }}>⛺ Camping & Tent Spots</div>
-                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 16, maxWidth: 560 }}>Denmark's shelters and coastal campsites are one of its best-kept secrets — many are completely free. Perfect stops to break up any of the routes above.</div>
-                <div className="products-grid">
-                  {campingSpots.map(spot => (
-                    <div key={spot.id} onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`, "_blank")}
-                      style={{ background: C.surface, borderRadius: 16, padding: "14px", border: `1px solid ${C.border}`, cursor: "pointer" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                        <span style={{ fontSize: 20 }}>{spot.emoji}</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: spot.color, background: `${spot.color}22`, padding: "3px 8px", borderRadius: 100 }}>{spot.type}</span>
-                      </div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 3 }}>{spot.name}</div>
-                      <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>{spot.region} · {spot.travelTime}</div>
-                      {spot.vibe && (
-                        <div style={{ fontSize: 10, fontWeight: 700, color: spot.color, marginBottom: 8 }}>{spot.vibe}</div>
-                      )}
-                      <div style={{ fontSize: 12, color: C.light, lineHeight: 1.55 }}>{spot.desc}</div>
-                      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 10, textDecoration: "underline", textUnderlineOffset: "3px" }}>Get Directions →</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-          )}
-
           {tab === "visits" && (
             <div className={pageAnim} style={{ padding: "16px" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
@@ -3954,6 +3744,58 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       <div style={{ fontSize: 11.5, color: C.gold }}>{rt.vibe}</div>
                     </button>
                   ))}
+
+                  {/* Moved from the old standalone Road Trips tab — build a trip
+                      request straight from whatever the traveler's already saved. */}
+                  {savedPlaces.length > 0 && (
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px", marginTop: 16, marginBottom: 4 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 4 }}>♥ Your Saved Places</div>
+                      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Saved from Attractions and Booking — tap ✕ to remove.</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                        {savedPlaces.map(p => (
+                          <span key={`${p.kind}-${p.id}`} style={{ display: "flex", alignItems: "center", gap: 6, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 12px" }}>
+                            <span style={{ fontSize: 12 }}>{p.emoji}</span>
+                            <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{p.name}</span>
+                            {p.town && <span style={{ fontSize: 10, color: C.muted }}>{p.town}</span>}
+                            <button onClick={() => toggleSavePlace(p.kind, p)} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
+                          </span>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const list = savedPlaces.map(p => p.town ? `${p.name} (${p.town})` : p.name).join(", ");
+                          sendAI(`Plan me a road trip that includes these places I've saved: ${list}. Suggest a sensible order, roughly how long I need, and one or two things worth seeing along the way.`);
+                          setTimeout(() => document.getElementById("ai-helper-anchor")?.scrollIntoView({ behavior: "smooth", block: "end" }), 100);
+                        }}
+                        style={{ width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        ✦ Ask Gemlyx for a road trip from these
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Moved from the old standalone Road Trips tab, unchanged. */}
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 22, marginTop: 22 }}>
+                    <div style={{ fontSize: 18, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 6 }}>⛺ Camping & Tent Spots</div>
+                    <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 16 }}>Denmark's shelters and coastal campsites are one of its best-kept secrets — many are completely free. Perfect stops to break up any road trip.</div>
+                    <div className="products-grid">
+                      {campingSpots.map(spot => (
+                        <div key={spot.id} onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`, "_blank")}
+                          style={{ background: C.surface, borderRadius: 16, padding: "14px", border: `1px solid ${C.border}`, cursor: "pointer" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                            <span style={{ fontSize: 20 }}>{spot.emoji}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: spot.color, background: `${spot.color}22`, padding: "3px 8px", borderRadius: 100 }}>{spot.type}</span>
+                          </div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Cormorant Garamond', serif", marginBottom: 3 }}>{spot.name}</div>
+                          <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>{spot.region} · {spot.travelTime}</div>
+                          {spot.vibe && (
+                            <div style={{ fontSize: 10, fontWeight: 700, color: spot.color, marginBottom: 8 }}>{spot.vibe}</div>
+                          )}
+                          <div style={{ fontSize: 12, color: C.light, lineHeight: 1.55 }}>{spot.desc}</div>
+                          <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 10, textDecoration: "underline", textUnderlineOffset: "3px" }}>Get Directions →</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
