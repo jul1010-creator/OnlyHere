@@ -224,7 +224,18 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
   // on each side, Gemlyx AI in the middle/top. Regenerating replaces the guide's
   // days in place (whichever step you're on keeps showing, just with updated data);
   // Gemlyx AI opens a small scoped help chat about this specific trip.
-  const GuideToolbar = () => (
+  // IMPORTANT: this is a plain JSX value, NOT a component function (no "() =>" wrapping
+  // it, not called as <GuideToolbar />) — that was a real, confirmed bug. Defining it as
+  // a function INSIDE this component's render body meant React saw a brand-new component
+  // type on every single re-render (a fresh function reference each time), which forced
+  // React to unmount and remount the whole toolbar — including the chat <input> — on
+  // every keystroke, since typing updates assistInput state and re-renders this component.
+  // That's exactly what "can't write without being thrown off the keyboard" was: the
+  // input element itself got destroyed and recreated after every character, losing focus
+  // each time. Keeping this as plain JSX (computed fresh each render, same as any other
+  // element below) means React diffs it in place instead of remounting it — same content,
+  // stable DOM nodes, no more lost focus.
+  const guideToolbar = (
     <div style={{ position: "sticky", top: 57, zIndex: 9, background: `${C.bg}ee`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.border}`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
       <button onClick={() => regenerateGuide("simpler")} disabled={!!regenerating}
         style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: regenerating ? "default" : "pointer", opacity: regenerating ? 0.6 : 1 }}>
@@ -301,7 +312,7 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 100 }}>
         <TopBar onBackClick={() => (onBack ? onBack() : navigate(-1))} backLabel="‹ Back to chat" />
-        {isUnsaved && <GuideToolbar />}
+        {isUnsaved && guideToolbar}
         <div style={{ maxWidth: 960, margin: "0 auto", padding: "28px 16px" }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 22, flexWrap: "wrap" }}>
             <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05 }}>{guide.title || "Your Denmark Guide"}</div>
@@ -389,7 +400,7 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 100 }}>
         <TopBar onBackClick={() => setStep("preview")} />
-        {isUnsaved && <GuideToolbar />}
+        {isUnsaved && guideToolbar}
         <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px" }}>
           <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, marginBottom: 18 }}>Before you go</div>
 
@@ -447,7 +458,7 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 60 }}>
       <TopBar onBackClick={() => (isUnsaved ? setStep("essentials") : (onBack ? onBack() : navigate("/")))} />
-      {isUnsaved && <GuideToolbar />}
+      {isUnsaved && guideToolbar}
 
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "28px 16px" }}>
         <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>{guide.title || "Your Denmark Guide"}</div>

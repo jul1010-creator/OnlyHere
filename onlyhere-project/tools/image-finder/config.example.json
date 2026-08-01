@@ -1,0 +1,8 @@
+{
+  "UNSPLASH_ACCESS_KEY": "paste-your-unsplash-access-key-here",
+  "PEXELS_API_KEY": "paste-your-pexels-api-key-here",
+  "PIXABAY_API_KEY": "paste-your-pixabay-api-key-here",
+  "GEMINI_API_KEY": "paste-your-gemini-api-key-here",
+  "geminiModel": "gemini-3.5-flash",
+  "dailyCap": 10
+}
