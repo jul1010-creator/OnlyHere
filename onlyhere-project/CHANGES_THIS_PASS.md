@@ -1,4 +1,14 @@
-# LATEST: the front door — a living "adventure select" entrance before Denmark, with your animated logo intro
+# LATEST: the entrance is a full adventure scene now — no more "space"
+
+Your Hearthstone / forest-arch references landed. The entrance background went from "dark sky with stars" to an actual place: spruce silhouettes framing both corners (the forest-arch effect from your painting reference), a castle with warm lit windows on the far left ridge, the tiny traveler on the crest below gazing up at it, a hamlet with flickering gold windows and the blinking lighthouse on the right, a path winding in from the bottom of the screen, and a warm hearth-glow on the horizon pushing back against the cool aurora — which is now noticeably stronger and fills the sky properly. Stars only live in the upper sky now; below that it's land. Iterated on this visually five times against real renders (the first castle was invisible, the first trees looked like flames — both caught by looking, not guessing) before porting the final version into the app.
+
+Same honest caveats as before: the animated version (aurora drifting, windows flickering, lighthouse blinking, logo intro) compiles but I could only verify the still composition. Load it fresh and watch it move.
+
+Next agreed step: the Denmark page itself — using the plan from the start of the session (max-width container, card grids for Events/Food instead of stretched rows, the data-driven emoji sweep, 3D tilt cards).
+
+---
+
+# EARLIER: the front door — a living "adventure select" entrance before Denmark, with your animated logo intro
 
 You said it yourself: "Beyond the destination" was front-page material that had leaked onto Denmark's page, and you wanted a page BEFORE the explore page — with a breathing, Hearthstone-adventure feel. Built:
 

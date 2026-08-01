@@ -4571,8 +4571,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
         <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflowY: "auto", background: "linear-gradient(180deg,#070B16 0%,#0A0F1E 55%,#0C1524 100%)" }}>
           <style>{`
             .gxa-aur { position:absolute; inset:-25%; will-change:transform; pointer-events:none; }
-            .gxa-aur1 { background: radial-gradient(ellipse 48% 20% at 32% 38%, rgba(45,212,191,.26) 0%, rgba(45,212,191,.10) 45%, transparent 72%), radial-gradient(ellipse 40% 16% at 66% 30%, rgba(20,184,166,.18) 0%, rgba(20,184,166,.07) 48%, transparent 74%); animation: gxaDrift1 26s ease-in-out infinite alternate; }
-            .gxa-aur2 { background: radial-gradient(ellipse 46% 18% at 60% 56%, rgba(94,234,212,.13) 0%, rgba(94,234,212,.05) 48%, transparent 75%), radial-gradient(ellipse 38% 15% at 24% 62%, rgba(13,148,136,.16) 0%, rgba(13,148,136,.06) 50%, transparent 76%); animation: gxaDrift2 34s ease-in-out infinite alternate; }
+            .gxa-aur1 { background: radial-gradient(ellipse 48% 20% at 32% 38%, rgba(45,212,191,.36) 0%, rgba(45,212,191,.15) 45%, transparent 72%), radial-gradient(ellipse 40% 16% at 66% 30%, rgba(20,184,166,.26) 0%, rgba(20,184,166,.11) 48%, transparent 74%); animation: gxaDrift1 26s ease-in-out infinite alternate; }
+            .gxa-aur2 { background: radial-gradient(ellipse 46% 18% at 60% 56%, rgba(94,234,212,.20) 0%, rgba(94,234,212,.08) 48%, transparent 75%), radial-gradient(ellipse 38% 15% at 24% 62%, rgba(13,148,136,.24) 0%, rgba(13,148,136,.10) 50%, transparent 76%); animation: gxaDrift2 34s ease-in-out infinite alternate; }
             @keyframes gxaDrift1 { from { transform:translate3d(-4%,-2%,0) rotate(-6deg) scale(1); } to { transform:translate3d(5%,3%,0) rotate(5deg) scale(1.12); } }
             @keyframes gxaDrift2 { from { transform:translate3d(3%,2%,0) rotate(4deg) scale(1.08); } to { transform:translate3d(-4%,-3%,0) rotate(-5deg) scale(1); } }
             .gxa-star { position:absolute; width:2px; height:2px; border-radius:50%; background:#F0F4FF; opacity:.35; animation: gxaTw 4.5s ease-in-out infinite; }
@@ -4586,6 +4586,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
             @keyframes gxaRise { 0% { transform:translateY(0); opacity:0; } 12% { opacity:.55; } 70% { opacity:.3; } 100% { transform:translateY(-46vh); opacity:0; } }
             .gxa-light { animation: gxaBlink 3.2s ease-in-out infinite; }
             @keyframes gxaBlink { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+            .gxa-win { animation: gxaFlicker 5.5s ease-in-out infinite; }
+            .gxa-win:nth-of-type(2n) { animation-delay: 2.3s; }
+            @keyframes gxaFlicker { 0%,100% { opacity:.75; } 47% { opacity:1; } 53% { opacity:.6; } 60% { opacity:.95; } }
             .gxa-ring { animation: gxaRingdraw 1.2s cubic-bezier(.45,.05,.35,.95) 1.9s both; }
             @keyframes gxaRingdraw { from { stroke-dashoffset:339.3; } to { stroke-dashoffset:0; } }
             .gxa-pop { transform-box:fill-box; transform-origin:center; animation: gxaPop .5s cubic-bezier(.2,.9,.3,1.18) 1.5s both; }
@@ -4611,36 +4614,92 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
             <div className="gxa-aur gxa-aur1" />
             <div className="gxa-aur gxa-aur2" />
-            {[[2,4],[9,62],[13,28],[17,71],[22,12],[26,49],[31,80],[35,22],[39,58],[44,8],[48,38],[52,68],[57,17],[61,45],[66,77],[70,8],[74,33],[78,61],[83,20],[87,52],[91,74],[95,13],[98,41],[6,86],[19,90],[42,84],[64,88],[86,84],[28,5],[55,3],[81,6],[12,44],[33,66],[69,26],[93,60],[47,92]].map(([l, t], i) => (
+            {/* stars only in the upper sky — below that it's land, not space */}
+            {[[2,4],[13,28],[22,12],[35,22],[44,8],[48,38],[57,17],[70,8],[74,33],[83,20],[95,13],[98,41],[28,5],[55,3],[81,6],[12,44],[69,26]].map(([l, t], i) => (
               <span key={i} className="gxa-star" style={{ left: `${l}%`, top: `${t}%` }} />
             ))}
+            {/* warm horizon glow — distant hearth-light against the cool aurora */}
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "58vh", background: "radial-gradient(60% 55% at 50% 100%, rgba(217,164,65,0.20) 0%, rgba(217,164,65,0.08) 45%, transparent 75%)" }} />
             <div className="gxa-breathe" style={{ position: "absolute", top: "8%", left: "50%", marginLeft: "-40vmax", width: "80vmax", height: "50vmax", background: "radial-gradient(ellipse 50% 40% at 50% 45%, rgba(45,212,191,0.12), transparent 65%)" }} />
             {[[8, 0], [18, 4.2], [29, 8.5], [41, 2.1], [53, 6.4], [63, 10.7], [72, 1.3], [81, 5.6], [90, 9.1], [96, 3.4]].map(([l, d], i) => (
               <span key={i} className="gxa-ember" style={{ left: `${l}%`, animationDelay: `${d}s` }} />
             ))}
           </div>
 
-          {/* Silhouette hills, tiny traveler, blinking lighthouse — the "scene" */}
+          {/* The landscape — a full adventure scene, all silhouettes (Oliver's
+              reference: Hearthstone / the forest-arch painting, not "space"):
+              spruces framing both corners, a castle with lit windows on the far
+              left ridge with the tiny traveler on the crest below gazing at it,
+              a hamlet with flickering windows and a blinking lighthouse on the
+              right, and a path winding in from the bottom. Visually verified via
+              a static render before shipping. */}
           <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, pointerEvents: "none" }}>
-            <svg viewBox="0 0 1440 320" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "26vh" }} aria-hidden="true">
-              <path d="M0,220 C240,150 480,240 720,190 C960,140 1200,230 1440,180 L1440,320 L0,320 Z" fill="#0B1322" opacity="0.85" />
-              <path d="M0,260 C200,200 420,262 640,236 C900,206 1150,266 1440,226 L1440,320 L0,320 Z" fill="#060C18" />
-              {/* tiny traveler, sitting on the front hill watching the sky */}
-              <g fill="#03060E">
-                <circle cx="303" cy="223" r="4.2" />
-                <path d="M295 242 C295 231 311 231 311 240 L317 244 L316 246 L308 243 L295 244 Z" />
+            <svg viewBox="0 0 1440 430" preserveAspectRatio="xMidYMax slice" style={{ display: "block", width: "100%", height: "44vh" }} aria-hidden="true">
+              <defs>
+                <linearGradient id="gxaSkyfade" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#0C1524" stopOpacity="0" /><stop offset="1" stopColor="#0C1524" stopOpacity="0.9" />
+                </linearGradient>
+              </defs>
+              <rect x="0" y="0" width="1440" height="430" fill="url(#gxaSkyfade)" />
+              {/* far hills */}
+              <path d="M0,215 C180,168 340,208 520,186 C700,164 840,196 1010,178 C1180,160 1310,196 1440,180 L1440,430 L0,430 Z" fill="#16233F" opacity="0.75" />
+              {/* castle on the far ridge, windows lit */}
+              <g transform="translate(-855,-109) scale(1.62)" fill="#2A3D66">
+                <path d="M652,182 L652,150 L658,150 L658,143 L661,143 L661,150 L667,150 L667,182 Z" />
+                <path d="M667,182 L667,158 L697,158 L697,182 Z" />
+                <path d="M697,182 L697,146 L703,146 L703,139 L706,139 L706,146 L712,146 L712,182 Z" />
+                <path d="M657,150 L661.5,132 L666,150 Z" />
+                <path d="M700,146 L704.5,126 L709,146 Z" />
+                <path d="M678,158 L682,144 L686,158 Z" />
+                <rect className="gxa-win" x="676" y="166" width="3" height="4" fill="#E8B75A" />
+                <rect className="gxa-win" x="687" y="166" width="3" height="4" fill="#E8B75A" />
+                <rect className="gxa-win" x="702" y="158" width="2.6" height="3.6" fill="#E8B75A" />
               </g>
-              {/* lighthouse on the far hill */}
+              {/* mid hills */}
+              <path d="M0,268 C220,214 430,272 640,246 C880,216 1120,276 1440,238 L1440,430 L0,430 Z" fill="#0D1729" />
+              {/* hamlet with flickering windows + church */}
               <g>
-                <path d="M1176,240 L1180,204 L1190,204 L1194,240 Z" fill="#03060E" />
-                <rect x="1177" y="197" width="16" height="7" rx="2" fill="#03060E" />
-                <circle className="gxa-light" cx="1185" cy="200.5" r="3" fill="#2DD4BF" />
+                <path d="M980,246 L980,232 L992,224 L1004,232 L1004,246 Z" fill="#0A1220" />
+                <path d="M1008,246 L1008,235 L1017,229 L1026,235 L1026,246 Z" fill="#0A1220" />
+                <rect className="gxa-win" x="987" y="234" width="5" height="6.5" fill="#E8B75A" />
+                <rect className="gxa-win" x="1013" y="236" width="4.5" height="6" fill="#E8B75A" />
+                <path d="M962,246 L962,222 L967,222 L967,216 L970,216 L970,222 L975,222 L975,246 Z" fill="#0A1220" />
+                <path d="M961,222 L968.5,206 L976,222 Z" fill="#0A1220" />
+              </g>
+              {/* lighthouse */}
+              <g>
+                <path d="M1258,258 L1263,214 L1275,214 L1280,258 Z" fill="#070D18" />
+                <rect x="1259" y="206" width="20" height="8" rx="2.5" fill="#070D18" />
+                <circle className="gxa-light" cx="1269" cy="210" r="3.5" fill="#2DD4BF" />
+              </g>
+              {/* near ground + winding path */}
+              <path d="M0,330 C260,286 520,336 780,310 C1040,284 1240,340 1440,306 L1440,430 L0,430 Z" fill="#05080F" />
+              <path d="M700,430 C712,392 690,366 706,330 C712,318 720,314 726,312 C720,318 716,324 714,332 C704,364 730,392 716,430 Z" fill="#0C1526" opacity="0.85" />
+              {/* traveler: head, cloaked body, walking stick — gazing toward the castle */}
+              <g fill="#02040A">
+                <circle cx="332" cy="299" r="4.4" />
+                <path d="M324 320 C324 306 340 306 340 320 Z" />
+                <rect x="343" y="297" width="1.8" height="23" rx="0.9" />
+              </g>
+              {/* framing spruces, left */}
+              <g fill="#03060D">
+                <path d="M28,246 L5.8,322 L50.2,322 Z" /><path d="M28,287.8 L-1.6,379 L57.6,379 Z" /><path d="M28,337.2 L-9,436 L65,436 Z" /><rect x="26.5" y="434" width="3" height="6" />
+                <path d="M74,286 L56,346 L92,346 Z" /><path d="M74,319 L50,391 L98,391 Z" /><path d="M74,358 L44,436 L104,436 Z" /><rect x="72.5" y="434" width="3" height="6" />
+                <path d="M118,320 L104.2,364 L131.8,364 Z" /><path d="M118,344.2 L99.6,397 L136.4,397 Z" /><path d="M118,372.8 L95,430 L141,430 Z" /><rect x="116.5" y="428" width="3" height="6" />
+                <path d="M154,348 L143.8,378.4 L164.2,378.4 Z" /><path d="M154,364.72 L140.4,401.2 L167.6,401.2 Z" /><path d="M154,384.48 L137,424 L171,424 Z" /><rect x="152.5" y="422" width="3" height="6" />
+              </g>
+              {/* framing spruces, right */}
+              <g fill="#03060D">
+                <path d="M1412,236 L1388.6,316 L1435.4,316 Z" /><path d="M1412,280 L1380.8,376 L1443.2,376 Z" /><path d="M1412,332 L1373,436 L1451,436 Z" /><rect x="1410.5" y="434" width="3" height="6" />
+                <path d="M1364,280 L1345.4,342.4 L1382.6,342.4 Z" /><path d="M1364,314.32 L1339.2,389.2 L1388.8,389.2 Z" /><path d="M1364,354.88 L1333,436 L1395,436 Z" /><rect x="1362.5" y="434" width="3" height="6" />
+                <path d="M1318,314 L1303.6,360.4 L1332.4,360.4 Z" /><path d="M1318,339.52 L1298.8,395.2 L1337.2,395.2 Z" /><path d="M1318,369.68 L1294,430 L1342,430 Z" /><rect x="1316.5" y="428" width="3" height="6" />
+                <path d="M1280,344 L1269.2,376 L1290.8,376 Z" /><path d="M1280,361.6 L1265.6,400 L1294.4,400 Z" /><path d="M1280,382.4 L1262,424 L1298,424 Z" /><rect x="1278.5" y="422" width="3" height="6" />
               </g>
             </svg>
           </div>
 
-          {/* Vignette frame */}
-          <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 42%, transparent 52%, rgba(3,6,14,0.6) 100%)" }} />
+          {/* Vignette frame — slightly deeper now that the scene is richer */}
+          <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(115% 95% at 50% 40%, transparent 48%, rgba(4,5,12,0.72) 100%)" }} />
 
           {/* Center: animated logo intro + tagline + country pick */}
           <div style={{ position: "relative", minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "48px 20px 120px" }}>
