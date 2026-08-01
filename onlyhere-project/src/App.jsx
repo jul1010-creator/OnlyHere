@@ -29,6 +29,9 @@ import { AtAGlanceCard } from "./components/AtAGlanceCard";
 import { GemlyxFindCard } from "./components/GemlyxFindCard";
 import { ReviewsSection } from "./components/ReviewsSection";
 import { InstagramEmbed } from "./components/InstagramEmbed";
+import { Ico, EmojiIcon, FlagDK } from "./components/Icon";
+import { GemlyxLogo, GemlyxMark, GemlyxLoader } from "./components/GemlyxLogo";
+import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
 import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip";
@@ -2346,15 +2349,17 @@ If the conversation only covers a single day or a few stops with no explicit day
   // having two separate places to find a road trip.
   const TAB_ORDER = ["home", "essentials", "attractions", "events", "food", "nightlife", "visits", "ai"];
   // Single source of truth for nav labels — same order as TAB_ORDER, so swipe and nav can never drift apart again.
+  // Redesign pass: emoji removed from nav — `ico` names map to the drawn icon
+  // set in components/Icon.jsx, rendered next to the plain-text label.
   const NAV_ITEMS = [
-    { id: "home", label: "🧭 Explore" },
-    { id: "essentials", label: "✓ Essentials" },
-    { id: "attractions", label: "🎟 Attractions" },
-    { id: "events", label: "◈ Events" },
-    { id: "food", label: "🍽 Food" },
-    { id: "nightlife", label: "🍺 Nightlife" },
-    { id: "visits", label: "◉ Towns" },
-    { id: "ai", label: "✦ Gemlyx Detour" },
+    { id: "home", label: "Explore", ico: "compass" },
+    { id: "essentials", label: "Essentials", ico: "map" },
+    { id: "attractions", label: "Attractions", ico: "ticket" },
+    { id: "events", label: "Events", ico: "calendar" },
+    { id: "food", label: "Food", ico: "utensils" },
+    { id: "nightlife", label: "Nightlife", ico: "beer" },
+    { id: "visits", label: "Towns", ico: "town" },
+    { id: "ai", label: "✦ Gemlyx Detour", ico: null },
   ];
   const [slideDir, setSlideDir] = useState(null);
   const pageAnim = "";
@@ -3435,7 +3440,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {(userCoords === null || userCoords === "denied") && (
                   <button onClick={requestLocation}
                     style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 8, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
-                    <span style={{ fontSize: 13 }}>📍</span>
+                    <Ico name="pin" size={15} color={userCoords === "denied" ? "#FFB347" : C.gold} />
                     <span style={{ flex: 1 }}>
                       <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
                         {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? Tap to see travel times from where you are"}
@@ -3448,7 +3453,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </button>
                 )}
                 {userCoords === "requesting" && (
-                  <div style={{ fontSize: 12, color: C.muted, padding: "0 0 8px" }}>📍 Getting your location...</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, padding: "0 0 8px" }}><Ico name="pin" size={13} /> Getting your location…</div>
                 )}
                 <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
               </div>
@@ -3462,28 +3467,84 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
                 )}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(10,15,30,0.3) 0%, rgba(10,15,30,0.7) 100%)" }} />
+                {/* Redesign pass, per Oliver's inspiration mock: one confident message
+                    and one action, instead of brand-name + two taglines stacked. The
+                    brand mark goes small up top; the headline does the talking. */}
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 24px" }}>
-                  <div style={{ fontSize: 44, fontWeight: 700, fontFamily: "'Fraunces', serif", color: "#fff", marginBottom: 8, textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>◆ Gemlyx</div>
-                  <div style={{ fontSize: 16, color: "rgba(255,255,255,0.9)", marginBottom: 6, textShadow: "0 1px 10px rgba(0,0,0,0.5)" }}>Discover Denmark's hidden gems</div>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", letterSpacing: 2, textTransform: "uppercase" }}>It exists nowhere else</div>
-                  <div style={{ position: "absolute", bottom: 40, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,0.7)", fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, animation: "bounce 2s infinite" }}>
+                  <GemlyxLogo size={26} color="rgba(255,255,255,0.92)" style={{ marginBottom: 16, filter: "drop-shadow(0 1px 10px rgba(0,0,0,0.5))" }} />
+                  <div style={{ fontSize: "clamp(34px, 6vw, 54px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.08, marginBottom: 12, textShadow: "0 2px 24px rgba(0,0,0,0.55)" }}>
+                    Beyond the<br />destination<span style={{ color: C.gold }}>.</span>
+                  </div>
+                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Denmark's hidden gems — every one visited and verified. It exists nowhere else.</div>
+                  <button onClick={() => { goTab("ai"); window.scrollTo(0, 0); }}
+                    style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
+                    ✦ Plan my trip
+                  </button>
+                  <div style={{ position: "absolute", bottom: 34, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,0.65)", fontSize: 12.5, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, animation: "bounce 2s infinite" }}>
                     <span>Scroll to explore</span>
-                    <span style={{ fontSize: 18 }}>↓</span>
+                    <span style={{ fontSize: 17 }}>↓</span>
                   </div>
                 </div>
               </div>
 
+              {/* ── COUNTRIES — DENMARK IN THE MIDDLE ─────────────
+                  Oliver's actual vision: Gemlyx is meant to hold multiple
+                  countries; Denmark is just the first. So this reads as a
+                  country row — Denmark live in the center (real coastline,
+                  a gold dot at every verified town's coordinates, tap → Towns),
+                  flanked by two empty slots that make the ambition visible
+                  without promising any specific country. New countries slot
+                  in beside it when they're real. */}
+              <div style={{ padding: "52px 24px 46px", textAlign: "center", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>Where Gemlyx lives</div>
+                <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 22, lineHeight: 1.2 }}>One country at a time.<br /><span style={{ fontSize: 15, fontWeight: 400, color: C.light, fontFamily: "'Inter', sans-serif" }}>Every dot is a place we've stood.</span></div>
+                <div className="country-row">
+                  <div className="country-ghost">
+                    <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: C.muted, opacity: 0.7 }}>?</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
+                  </div>
+                  <div onClick={() => { goTab("visits"); window.scrollTo(0, 0); }}
+                    style={{ flex: "0 1 460px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: "20px 18px 16px", cursor: "pointer" }}>
+                    <svg viewBox="-12 -12 477 397" style={{ width: "100%", display: "block" }} aria-label="Map of Denmark with Gemlyx's verified towns">
+                      {DK_PATHS.map((p, i) => <polygon key={i} points={p} fill="#121B30" stroke="#2A3A55" strokeWidth="2.5" />)}
+                      {Object.entries(TOWN_COORDS).map(([name, [la, lo]]) => {
+                        const [x, y] = dkProject(la, lo);
+                        return (
+                          <g key={name}>
+                            <circle cx={x} cy={y} r="13" fill={`${C.gold}22`} />
+                            <circle cx={x} cy={y} r="5.5" fill={C.gold} stroke={C.bg} strokeWidth="2" />
+                          </g>
+                        );
+                      })}
+                    </svg>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 14 }}>
+                      <FlagDK height={12} />
+                      <span style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Denmark</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#6ECF97", background: "rgba(110,207,151,0.1)", border: "1px solid rgba(110,207,151,0.25)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
+                    </div>
+                    <div style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 7, color: C.light, fontSize: 12.5, fontWeight: 600 }}>
+                      <Ico name="town" size={14} color={C.gold} /> See the hidden towns →
+                    </div>
+                  </div>
+                  <div className="country-ghost">
+                    <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: C.muted, opacity: 0.7 }}>?</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 18 }}>More countries when they're ready — done the same way: in person, every place verified.</div>
+              </div>
+
               {/* Navigation sections */}
               {[
-                { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", icon: "✓" },
-                { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", icon: "◈" },
-                { id: "food", img: "/picture5.jpg", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", icon: "🍽" },
-                { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", icon: "🍺" },
-                { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", icon: "🚗" },
-                { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", icon: "◉" },
-                // { id: "craft", img: "/picture9.jpg", title: "Booking", sub: "Book workshops, tickets & commissions", icon: "◈" }, // merged into attractions below
-                { id: "attractions", img: "/picture7.jpg", title: "Attractions", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", icon: "🎟" },
-                { id: "ai", img: "/picture9.jpg", title: "Gemlyx Detour", sub: "Your personal Denmark guide — plans trips, checks what's live", icon: "✦" },
+                { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", ico: "map" },
+                { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", ico: "calendar" },
+                { id: "food", img: "/picture5.jpg", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", ico: "utensils" },
+                { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", ico: "beer" },
+                { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", ico: "car" },
+                { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", ico: "town" },
+                // { id: "craft", ... } merged into attractions below
+                { id: "attractions", img: "/picture7.jpg", title: "Attractions", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", ico: "ticket" },
+                { id: "ai", img: "/picture9.jpg", title: "Gemlyx Detour", sub: "Your personal Denmark guide — plans trips, checks what's live", ico: null, glyph: "✦" },
               ].map((section, i) => (
                 <div key={section.id} onClick={() => {
                   // "roadtrips" isn't its own tab anymore — it now lives inside
@@ -3498,21 +3559,27 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     onMouseOut={e => e.target.style.transform = "scale(1)"} />
                   <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.85) 0%, rgba(10,15,30,0.2) 60%)" }} />
                   <div style={{ position: "absolute", bottom: 24, left: 24, right: 24 }}>
-                    <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: "#fff", marginBottom: 4 }}>{section.icon} {section.title}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                      {section.ico ? <Ico name={section.ico} size={20} color="rgba(255,255,255,0.85)" strokeWidth={1.8} /> : <span style={{ fontSize: 18, color: "#fff" }}>{section.glyph}</span>}
+                      <span style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: "#fff" }}>{section.title}</span>
+                    </div>
                     <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>{section.sub}</div>
-                    <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(200,16,46,0.9)", color: "#fff", borderRadius: 100, padding: "8px 18px", fontSize: 12, fontWeight: 700 }}>
+                    <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", borderRadius: 100, padding: "8px 18px", fontSize: 12, fontWeight: 700, boxShadow: "0 4px 14px rgba(226,59,78,0.3)" }}>
                       Explore →
                     </div>
                   </div>
                 </div>
               ))}
 
-              {/* Mission callout */}
-              <div style={{ padding: "32px 24px", background: C.surface, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
-                <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 10 }}>Most tourists see Denmark for 3–4 days. All of it in Copenhagen.</div>
-                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 16px" }}>Even the Danish press writes about it — the rest of the country, especially Jutland and North Zealand, hardly gets visited. Gemlyx exists to change that: real places, real routes, worth the extra hour outside the capital.</div>
+              {/* ── WHAT INSPIRED US ──────────────────────────────
+                  Oliver's structure: hero, then Denmark, then the reason this
+                  app exists — told as a story, not a callout box. */}
+              <div style={{ padding: "56px 24px", background: C.surface, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>Why Gemlyx exists</div>
+                <div style={{ fontSize: "clamp(24px, 4vw, 30px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 14, lineHeight: 1.25, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>Most tourists see Denmark for 3–4 days. All of it in Copenhagen.</div>
+                <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.75, maxWidth: 480, margin: "0 auto 22px" }}>Even the Danish press writes about it — the rest of the country, especially Jutland and North Zealand, hardly gets visited. Gemlyx exists to change that: real places, real routes, worth the extra hour outside the capital.</div>
                 <button onClick={() => { setDetourTab("roadtrip"); goTab("ai"); }}
-                  style={{ background: C.accent, border: "none", borderRadius: 100, padding: "10px 22px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", borderRadius: 100, padding: "12px 24px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 16px rgba(226,59,78,0.26)" }}>
                   See a Road Trip →
                 </button>
               </div>
@@ -3524,7 +3591,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <div key={g.id} onClick={() => setGuideModal({ title: g.title, days: g.days })}
                       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>📖 {g.title}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: C.text }}><Ico name="book" size={14} color={C.gold} /> {g.title}</div>
                         <div style={{ fontSize: 11, color: C.muted }}>{g.days.length} day{g.days.length > 1 ? "s" : ""}</div>
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); deleteSavedGuide(g.id); }} style={{ background: "none", border: "none", color: C.muted, fontSize: 14, cursor: "pointer", flexShrink: 0 }}>✕</button>
@@ -3552,8 +3619,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 ) : (
                   <div style={{ fontSize: 13, color: "#4CAF50", fontWeight: 700, marginBottom: 28 }}>✓ You're on the list — we'll be in touch.</div>
                 )}
-                <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 4 }}>◆ Gemlyx</div>
-                <div style={{ fontSize: 11, color: C.muted }}>Every find personally verified · Denmark 🇩🇰</div>
+                <GemlyxLogo size={18} color={C.text} style={{ marginBottom: 6 }} />
+                <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>Every find personally verified · Denmark <FlagDK height={10} /></div>
                 <div onClick={() => setShowPrivacy(true)} style={{ fontSize: 11, color: C.muted, marginTop: 8, textDecoration: "underline", cursor: "pointer" }}>Privacy & Data</div>
                 <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 — Jul 2026</div>
               </div>
@@ -4010,10 +4077,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
 
               <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
-                {[["sightseeing", "🗺️ Sightseeing"], ["roadtrip", "🚗 Road Trip"]].map(([key, label]) => (
+                {[["sightseeing", "Sightseeing", "map"], ["roadtrip", "Road Trip", "car"]].map(([key, label, ico]) => (
                   <button key={key} onClick={() => setDetourTab(key)}
-                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${detourTab === key ? C.accent : "transparent"}`, color: detourTab === key ? C.text : C.muted, fontWeight: 700, fontSize: 13.5, padding: "10px 4px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    {label}
+                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "none", border: "none", borderBottom: `2px solid ${detourTab === key ? C.accent : "transparent"}`, color: detourTab === key ? C.text : C.muted, fontWeight: 700, fontSize: 13.5, padding: "10px 4px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    <Ico name={ico} size={15} /> {label}
                   </button>
                 ))}
               </div>
@@ -4179,12 +4246,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                     <input type="checkbox" checked={intakeFamilyMode} onChange={e => setIntakeFamilyMode(e.target.checked)}
                       style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
-                    <span style={{ fontSize: 12.5, color: C.text }}>👨‍👩‍👧‍👦 Traveling with kids</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: C.text }}><Ico name="family" size={14} color={C.light} /> Traveling with kids</span>
                   </label>
                   <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                     <input type="checkbox" checked={intakeIncludeEvents} onChange={e => setIntakeIncludeEvents(e.target.checked)}
                       style={{ width: 16, height: 16, accentColor: C.accent, cursor: "pointer" }} />
-                    <span style={{ fontSize: 12.5, color: C.text }}>🎉 Include events</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: C.text }}><Ico name="party" size={14} color={C.light} /> Include events</span>
                   </label>
                 </div>
 
@@ -4236,8 +4303,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {aiHelperBlock()}
 
               <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 14, padding: "16px", margin: "26px 0 4px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 22 }}>💡</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <Ico name="bulb" size={22} color={C.gold} strokeWidth={1.8} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Know a place we're missing?</div>
                     <div style={{ fontSize: 11.5, color: C.muted }}>Tell us — every Gemlyx entry is personally checked, so this helps us find the next one.</div>
@@ -4477,6 +4544,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
         .detour-2col { display: grid; grid-template-columns: 1fr; gap: 10px; }
         @media (min-width: 600px) { .detour-2col { grid-template-columns: 1fr 1fr; } }
+        .country-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
+        .country-ghost { flex: 0 0 110px; border: 1.5px dashed #2A3A55; border-radius: 18px; padding: 26px 10px; opacity: 0.75; display: none; }
+        @media (min-width: 760px) { .country-ghost { display: block; } }
         .page-hero-box { height: 130px; }
         @media (min-width: 600px) { .page-hero-box { height: 200px; } }
         @media (min-width: 900px) { .page-hero-box { height: 280px; } }
@@ -4529,7 +4599,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {/* Logo */}
           <div onClick={() => goTab("home")} style={{ cursor: "pointer", flexShrink: 0 }}>
-            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, letterSpacing: -0.5 }}>◆ Gemlyx</div>
+            <GemlyxLogo size={22} color={C.text} />
           </div>
 
           {/* Right: small persistent search pill (always visible, not a toggle) + hamburger */}
@@ -4590,23 +4660,25 @@ You also have a web_search tool. Use it whenever someone asks about something th
             ) : (
               <button key={item.id} onClick={() => { setShowMenu(false); goTab(item.id); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: active === item.id ? `${C.accent}22` : "transparent", color: active === item.id ? C.text : C.light, border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${i * 0.04}s both` }}>
+                {item.ico && <Ico name={item.ico} size={15} color={active === item.id ? C.text : C.muted} />}
                 {item.label}
               </button>
             ))}
             <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
             {[
-              { id: "login", label: "👤 Login", action: "login" },
-              { id: "faq", label: "❓ FAQ", action: "faq" },
-              { id: "support", label: "✉ Support", action: "mail" },
+              { id: "login", label: "Login", ico: "user", action: "login" },
+              { id: "faq", label: "FAQ", ico: "help", action: "faq" },
+              { id: "support", label: "Support", ico: "mail", action: "mail" },
             ].map((item, i) => (
               <button key={item.id}
                 onClick={() => {
                   setShowMenu(false);
                   if (item.action === "faq") setActive("essentials");
                   else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
-                  else if (item.action === "login") { setToast("👤 Login coming soon"); setTimeout(() => setToast(null), 2200); }
+                  else if (item.action === "login") { setToast("Login coming soon"); setTimeout(() => setToast(null), 2200); }
                 }}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 11) * 0.04}s both` }}>
+                <Ico name={item.ico} size={15} color={C.muted} />
                 {item.label}
               </button>
             ))}
@@ -4749,7 +4821,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <div aria-hidden style={{ position: "absolute", top: -30, left: -20, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.10), transparent 70%)", pointerEvents: "none" }} />
                   <div aria-hidden style={{ position: "absolute", bottom: -40, right: -30, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.08), transparent 70%)", pointerEvents: "none" }} />
                   <div style={{ position: "relative" }}>
-                    <div style={{ fontSize: 30, marginBottom: 12, display: "inline-block", animation: "gemlyxCompassSway 3.4s ease-in-out infinite" }}>🧭</div>
+                    <div style={{ marginBottom: 12 }}><GemlyxLoader size={44} /></div>
                     <div style={{ fontSize: 10.5, color: "#D9A441", letterSpacing: 2.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>A Dispatch From Gemlyx</div>
                     <div style={{ fontSize: 20, color: "#F2E8CE", fontWeight: 600, fontFamily: "'Fraunces', serif", fontStyle: "italic", marginBottom: 10, lineHeight: 1.25 }}>
                       {copy.title}

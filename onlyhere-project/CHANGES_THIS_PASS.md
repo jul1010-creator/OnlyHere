@@ -1,4 +1,34 @@
-# LATEST: the redesign pass — new fonts, refreshed palette, one chip style everywhere, a calmer Detour, a nicer guide page, and reframed Instagram embeds
+# LATEST: your new logo is live everywhere — nav, hero, footer, favicon, and as the loading icon
+
+Extracted the compass-rose gem and your custom GEMLYX letterforms from the animated hero file you sent (gemlyxhero_2.html) into a real component (`src/components/GemlyxLogo.jsx`), so every part of the app renders the identical artwork.
+
+**Where it now lives:** the top-left header (gem + wordmark lockup, replacing the ◆ Gemlyx text), the home hero (above "Beyond the destination"), the footer, and a new browser-tab favicon (`public/favicon.svg` — the gem on the navy, linked from index.html).
+
+**And the loading icon, per your ask.** `GemlyxLoader` is your logo doing work: the gem spins with the same easing feel as your hero intro while the ring becomes a teal chasing arc. It replaced the 🧭 emoji on the guide-building "travel journal" screen and the plain spinner circle on the shared-guide loading page. It respects reduced-motion settings (stops animating for users who've turned animations off). Any future loading state can just drop `<GemlyxLoader />` in.
+
+**One design question your logo raises — flagging it rather than deciding for you.** The gem is aurora teal; the app's accents are red (actions) and gold (editorial finds). Right now that coexists fine: teal = brand (logo, loader), red = buttons, gold = finds. But if you love the teal, there's a bolder move where teal becomes the app's primary accent and red retreats to just the Danish-flag moments. That's a real identity decision — sleep on it, look at the deployed site, tell me which world you want.
+
+**Not done:** the full animated intro from your hero file (letters fading in, ring drawing itself) isn't used as an app splash screen yet — it'd fit as a one-time entry animation on first load. Say the word if you want it.
+
+**Please test before trusting**: check the header, footer, home hero, the browser tab icon (may need a hard refresh to show), and — most fun — build a guide and watch your gem spin on the loading screen.
+
+---
+
+# EARLIER: Explore rebuilt around your inspiration (hero → Denmark → why we exist), and the emoji purge has begun
+
+**1. The Explore page now follows the structure you sketched.** The hero is one confident message and one action, like your reference: small ◆ Gemlyx mark, a big "Beyond the destination." headline (borrowed the line straight from your mock — it's good), one sentence, one "✦ Plan my trip" button into Detour. Your video hero stays underneath it. I deliberately did NOT copy two things from the mock: the "Maximizing your experience while minimizing your effort" tagline (that's corporate-brochure language — your own "It exists nowhere else" is far stronger, so it's in the subtitle instead), and the bright blue-sky look (Gemlyx's dark editorial identity is a real asset; the cinematic-photo feel works inside it).
+
+**2. "The middle is Denmark" — as slot one of a country row, per your follow-up.** The section is now framed as "Where Gemlyx lives · One country at a time": the Denmark card in the center (real coastline, a gold dot at every verified town's actual coordinates, a Danish flag + green LIVE badge, tap → Towns), flanked on wider screens by two dashed empty slots marked "Someday" — the multi-country ambition made visible without promising any specific country. When country #2 becomes real, it replaces a ghost slot. As Studio publishes more towns, the Denmark dots appear automatically — the map fills in as the product grows, which IS the pitch. On phones the ghost slots hide and Denmark stands alone.
+
+**3. Underneath: "Why Gemlyx exists."** Your 3-4-days-in-Copenhagen story, promoted from a cramped callout box to a proper editorial section with a kicker, bigger type and room to breathe.
+
+**4. Emoji → drawn icons, first sweep.** New `src/components/Icon.jsx`: ~30 hand-drawn stroke icons (all inherit text color, consistent weight), a drawn Danish flag to replace 🇩🇰, and an EmojiIcon helper that maps data-driven emoji to drawn icons with safe fallback. Replaced in: the nav menu (all items + Login/FAQ/Support), the home category strips, Detour's tabs and checkboxes, the "Know a place we're missing?" bulb, location banners, saved guides, and the footer flag. Typographic glyphs (◆ ✦ ◈ ✓ ♥ ★) are kept on purpose — they're text, not emoji, and they render consistently. NOT yet swept: emoji inside content cards on Events/Food/Nightlife/Essentials pages (they come from the data files' emoji fields) — that's the next bite, using the EmojiIcon helper that's now in place.
+
+**Please test before trusting**: the Explore page had real structural surgery — scroll it top to bottom, tap the Denmark map, tap every category strip, open the nav menu. Compiles clean; not clicked through live from here.
+
+---
+
+# EARLIER: the redesign pass — new fonts, refreshed palette, one chip style everywhere, a calmer Detour, a nicer guide page, and reframed Instagram embeds
 
 This is the first real implementation pass of the redesign we agreed on (the one from the preview HTML you liked). Everything below compiles; none of it has been clicked through live, so please look around the whole app after deploying — a global font/color swap touches literally every screen.
 

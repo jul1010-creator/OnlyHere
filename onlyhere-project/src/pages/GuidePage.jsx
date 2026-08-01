@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+import { GemlyxLoader } from "../components/GemlyxLogo";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
 // The full-page replacement for the old "little book" guide modal, per Oliver's
@@ -81,8 +82,7 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 36, height: 36, borderRadius: "50%", border: `3px solid ${C.border}`, borderTopColor: C.gold, animation: "gemlyxSpin 0.9s linear infinite" }} />
-        <style>{`@keyframes gemlyxSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+        <GemlyxLoader size={44} label="Loading guide" />
       </div>
     );
   }
