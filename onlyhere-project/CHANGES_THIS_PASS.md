@@ -1,4 +1,54 @@
-# LATEST: real streaming chat, hard-fail pipeline with retry, em-dash ban, awkward-phrasing scanner
+# LATEST: guide-flow redesign built — routes straight to a full page (preview → essentials → roadmap)
+
+**The guide-building flow now matches your notes exactly**: "drop 'view full page' at the end... push us onto a new page... just show towns, attractions, diners with short descriptions... THEN essentials and recommended stay areas... THEN the roadmap." Confirmed the two open architecture questions via quick questions before building (see GEMLYX_HANDOFF_2.md for the full writeup):
+
+**1. `generateGuide()` in Detour now navigates straight to `/guide/new` the instant a guide is ready** — no more building it, showing it in the chat popup, and making you click "View as full page ↗" to see the real page. The chat popup itself is unchanged in code (still there, still used when you reopen a previously-saved guide from "My Guides"), but for a freshly-built guide from chat, it now only ever shows the vintage-parchment loading screen — the moment loading finishes, you land on the real page.
+
+**2. One real wrinkle I caught and fixed before building**: the guide used to get progressively better in the background AFTER it was already shown — real travel times between stops, where-to-stay suggestions, and the actual weather forecast all patched in over a few seconds via calls that don't block anything. Since navigating to a new page unmounts the component holding that in-progress state, routing away the instant the base guide is ready would have meant landing on a guide missing all of that. Fixed by having the loading screen wait through that same enrichment (added a new "Sealing the Letter" loading stage for it) before navigating, so the page you land on already has real travel times, stay suggestions, and weather — nothing missing, just a few extra seconds on the loading screen.
+
+**3. `src/pages/GuidePage.jsx` now has three real steps for a freshly-built guide**: **Preview** — every distinct town/attraction/diner across the whole trip, deduped, shown as photo cards with just a name and a short description (no times, no route, no hotel info), with a small "Gemlyx" note in the top-right corner explaining what's coming next. **Essentials** — the existing budget/transport/keep-in-mind/weather summary, PLUS a new "Recommended areas to stay" section built from the unique towns in the plan. **Roadmap** — the full day-by-day plan exactly as before (route maps, exact travel times, weather badges, where-to-stay cards), ending in the same "Looks good — save my guide" button that creates the real shareable link. A guide opened from a saved `/guide/:id` link skips straight to the roadmap step — the preview/essentials steps are onboarding for the person who just built it, not something someone opening a shared link needs to click through.
+
+**4. New shared file: `src/utils/guideLookup.js`** — pulled the "match a guide stop name to Gemlyx's own real content" logic (and the travel-mode/distance helpers that depend on it) out of App.jsx into something GuidePage.jsx could import too, without touching or duplicating App.jsx's own closures over its component state. App.jsx's own copies of these functions are untouched — this was purely additive, lowest-risk way to give the new page the same "real photo + real price + click-through" matching the chat popup already had.
+
+**Known small thing, not worth engineering around**: right at the moment a fresh guide finishes and navigates away, there can be a single-frame flash of the old chat-popup's full (non-loading) view before the page swap completes, since the guide data has to be set on that component's state for the "reopen instantly if you ask again" shortcut to keep working. In practice this should be imperceptible — React batches the state update and the navigation together — but flagging it since I haven't seen this live yet.
+
+**Not touched this pass, exactly as scoped**: the "gemlyxFind" naming question (that's intentional Gemlyx branding, not a typo — nothing to fix there) and the per-tab-URL routing work (still needs its own scoping conversation before starting, per the last handoff).
+
+**Please test before trusting this**: build a real guide through Detour chat start to finish, confirm it lands on the preview page automatically, click through all three steps, and save it to get a real link. This is the biggest structural change to the guide flow so far this session-arc — I haven't seen it run live.
+
+---
+
+# EARLIER: real weather + Flixbus/Kombardo actually mentioned, vintage loading screen built
+
+**1. Real weather now shows up in the guide's Essentials, not just as day badges.** Turns out Gemlyx already fetches real forecasts (Yr.no, up to 9 days out) for the per-day weather badges on the guide page — it just never surfaced anywhere in the essentials/handoff summary, so it was easy to miss. Now, once every day's real forecast is back, if rain is genuinely likely on any day, a line gets added to Essentials: "Real forecast currently shows rain likely on Day 2 — worth packing a light rain layer." If nothing's genuinely worth flagging, it says nothing rather than a generic filler line. This is real forecast data, not a guess — I didn't wire in the separate OpenWeatherMap proxy for this since Yr.no was already live and working; two weather sources for the same job would just be redundant.
+
+**2. Flixbus and Kombardo Expresbus now actually get named**, not just mentioned when a fare happens to be expensive. The guide-building prompt used to only bring them up as a fallback for a "genuinely expensive" train leg — which is why you never saw them. Now, any real intercity leg (moving between two different towns, not just getting around within one) gets Flixbus/Kombardo named as the real budget alternative, since that's useful information regardless of whether the train fare is steep that day.
+
+**3. The "Building your guide" loading screen — full redesign, not just copy.** Replaced the plain spinner + progress bar with something that actually reads like a travel journal being written: a parchment/ink background (built with CSS gradients + a subtle paper-grain texture, no image download needed), a swaying compass instead of a spinner, and real per-stage copy written like a line from a dispatch — "Charting the Route," "Penning the Itinerary," "Checking Every Road and Door" — tied to the same real pipeline stages as before (nothing about the actual progress tracking changed, only how it's shown). The progress bar became a thin ink line with a small glowing marker, labeled "X% of the journey mapped."
+
+---
+
+# EARLIER: from your Gemini notes — the map "34 min vs 7 min" bug fixed, weekly event check automated
+
+**1. Found and fixed the map distance bug from your screenshot** (Odense Flower Festival showing "34 mins on foot ✓" in the guide, but 7 minutes when you clicked through to real Google Maps). Root cause: a stop's coordinates get resolved in a few possible ways, and the code was checking a crude fallback (matching the town's generic city-center point, because "Odense Flower Festival" contains the word "Odense") BEFORE it checked for a real, precise geocode of the actual venue. Once that generic match hit, the code stopped looking — so the walking time got calculated from Odense's town center to Munke Mose, not from the festival's actual location to Munke Mose. Clicking "Exact route" opened real Google Maps, which geocodes "Odense Flower Festival, Odense, Denmark" itself and finds the real venue, giving the correct 7 minutes.
+
+Two changes fix this at the source: precise coordinates (real data on file, or an actual geocode of the specific venue) now always win over the generic town-center fallback, and the background geocoding step no longer skips a stop just because that crude fallback happened to match something — it now geocodes anything that doesn't have a genuinely precise coordinate yet, using the place's own real address (`mapHint`) when Gemlyx already has one on file, which is far more precise than just guessing "name + town." This should fix the "wildly off" walking/biking times you've flagged a few times now, not just this one festival.
+
+**2. The weekly "Update current events" check now runs on its own, every Monday** — no need to open the app or click the button yourself. New `api/update-events-check.js` does the exact same Perplexity re-verification as the in-app button, but as a plain server endpoint a schedule can call directly. I've set up a scheduled task that runs it every Monday morning and sends you a push notification with a report of anything that changed (cancelled, rescheduled, ticket status changed) — or a quick "all clear" if nothing did. Nothing gets auto-edited in your data; you still update `src/data/events.js` by hand from the report, same as before.
+
+**One thing you need to do in Vercel before this works**: add a new environment variable named exactly `UPDATE_EVENTS_SECRET` with this value: `Y5Hx7N9i10USdlqmL0PEB502ig4sa4Gt` (any random string works, this one's already wired into the scheduled task, so use this exact one). This just stops a random visitor who finds the URL from running up Perplexity calls on your key — without it set, every call to the new endpoint fails safely with an error instead of running.
+
+**Also on your notes:** the "Hit a snag on my end" chat error you saw was almost certainly the `/api/perplexity` 405 bug from earlier in this pass (that error path is one of the places askPerplexity gets called from during guide-building) — should already be resolved now that the missing file's in place. Still queued from this same odt: Flixbus/Kombardo Expresbus mentioned more prominently + real weather worked into the chat essentials (not just the guide page), the vintage-journal/parchment loading screen restyle, and the "show towns/attractions/diners first, essentials after, full route last" guide-flow redesign. I'll keep going on those next.
+
+---
+
+# EARLIER: found the actual /api/perplexity 405 — the file was just never in your repo
+
+Root cause, confirmed by looking directly at your local folder: `api/perplexity.js` didn't exist there at all. It was in the zip from the Gemini→Perplexity swap, but it never actually made it into `api/` on disk (or GitHub/Vercel). Every call to `/api/perplexity` was hitting nothing — Vercel's SPA catch-all rewrite (`vercel.json`, routes everything to `/`) caught the request instead and served the static `index.html`, which rejects a POST with exactly the 405 you saw. `askPerplexity`'s error handling then swallowed the real detail because a 405 HTML page isn't valid JSON, so `res.json()` threw and you got the generic "Couldn't reach Perplexity" fallback instead of anything pointing at the actual cause. Written straight into your `api/` folder now — just needs committing to GitHub with everything else.
+
+---
+
+# EARLIER: real streaming chat, hard-fail pipeline with retry, em-dash ban, awkward-phrasing scanner
 
 From the newest odt round:
 

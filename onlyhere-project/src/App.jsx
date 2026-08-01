@@ -1654,36 +1654,72 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     const startOffset = arrivalDate
       ? Math.max(0, Math.round((new Date(arrivalDate).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000))
       : 0;
-    days.forEach(async (day, idx) => {
-      try {
-        const forecastIdx = startOffset + idx;
-        // Yr.no's forecast only reliably covers about 9 days out — showing something
-        // for day 12 of a trip booked months ahead would just be wrong, not helpful.
-        if (forecastIdx > 8) { setWeatherPending(p => Math.max(0, p - 1)); return; }
-        const point = day.stops.map(s => {
-          const real = lookupRealPlace(s.name);
-          if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
-          const key = Object.keys(TOWN_COORDS).find(t => s.name.includes(t));
-          return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
-        }).find(Boolean);
-        if (!point) return;
-        const res = await fetch(`/api/weather?lat=${point.lat}&lon=${point.lon}`);
-        const data = await res.json();
-        const slot = data?.forecast?.[forecastIdx];
-        if (!slot) return;
-        const cond = (slot.condition || "").toLowerCase();
-        const risk = /rain|sleet|thunder|snow/.test(cond) ? "high" : /cloudy|fog/.test(cond) ? "low" : "none";
-        setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
-          ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, weather: { icon: weatherIcon(slot.condition), temp: Math.round(slot.temperature_c), risk } } : d) }
-          : prev);
-      } catch { /* weather is a nice-to-have — leave this day without it */ }
-      finally { setWeatherPending(p => Math.max(0, p - 1)); }
-    });
+    // Per Oliver's note ("it could give me some information about the weather
+    // too... Openweathermap or whatever, is literally made for this"): real
+    // per-day forecasts were already being fetched here (Yr.no, not
+    // OpenWeatherMap — same idea, already real data, no need for a second
+    // weather source) and shown as small badges on the guide page, but never
+    // surfaced anywhere in the essentials/handoff summary itself, so it was
+    // easy to miss. Once every day's forecast is back, this now also builds a
+    // short REAL weather note (only for the rain/snow days it's actually
+    // confident about, never a made-up general forecast) and merges it into
+    // essentials as `weatherNote`, rendered alongside budgetReality/
+    // transportTip/keepInMind. Rewritten from forEach to Promise.allSettled so
+    // there's a single, reliable "every day has now been checked" point to
+    // build that summary from, instead of no way to know when the last one lands.
+    const results = new Array(days.length).fill(null);
+    // NOTE: returns a promise resolving to { results, weatherNote } — added so
+    // generateGuide() can await full weather enrichment before navigating to the
+    // new full-page guide flow (state is unmounted the instant that navigation
+    // happens, so the setGuideModal patches below are best-effort/legacy-modal-only;
+    // the returned value is the real source of truth the caller merges in itself).
+    return Promise.allSettled(days.map(async (day, idx) => {
+      const forecastIdx = startOffset + idx;
+      // Yr.no's forecast only reliably covers about 9 days out — showing something
+      // for day 12 of a trip booked months ahead would just be wrong, not helpful.
+      if (forecastIdx > 8) return;
+      const point = day.stops.map(s => {
+        const real = lookupRealPlace(s.name);
+        if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+        const key = Object.keys(TOWN_COORDS).find(t => s.name.includes(t));
+        return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
+      }).find(Boolean);
+      if (!point) return;
+      const res = await fetch(`/api/weather?lat=${point.lat}&lon=${point.lon}`);
+      const data = await res.json();
+      const slot = data?.forecast?.[forecastIdx];
+      if (!slot) return;
+      const cond = (slot.condition || "").toLowerCase();
+      const risk = /rain|sleet|thunder|snow/.test(cond) ? "high" : /cloudy|fog/.test(cond) ? "low" : "none";
+      const weather = { icon: weatherIcon(slot.condition), temp: Math.round(slot.temperature_c), risk };
+      results[idx] = weather;
+      setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
+        ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, weather } : d) }
+        : prev);
+    })).then(() => {
+      const rainyDayNums = results.map((w, i) => (w?.risk === "high" ? i + 1 : null)).filter(Boolean);
+      if (rainyDayNums.length === 0) return { results, weatherNote: null }; // nothing genuinely worth flagging — say nothing, rather than a generic "check the forecast" filler line
+      const dayList = rainyDayNums.length === 1 ? `Day ${rainyDayNums[0]}` : `Days ${rainyDayNums.slice(0, -1).join(", ")} and ${rainyDayNums[rainyDayNums.length - 1]}`;
+      const weatherNote = `Real forecast currently shows rain likely on ${dayList} — worth packing a light rain layer.`;
+      setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid)
+        ? { ...prev, essentials: { ...(prev.essentials || {}), weatherNote } }
+        : prev);
+      return { results, weatherNote };
+    }).finally(() => setWeatherPending(0));
   };
 
   const enrichGuideDays = (days, gid, travelMode, mixedModes) => {
     setGlancePending(days.length);
-    days.forEach(async (day, idx) => {
+    // NOTE: returns a promise resolving to { glanceByIdx, exactByKey } — added so
+    // generateGuide() can await full enrichment (travel legs + accommodation, plus
+    // any refined exact-duration lookups made once real leg text is known) before
+    // navigating to the new full-page guide flow. The setGuideModal/setExactDurations
+    // patches below are kept as-is (best-effort/legacy-modal-only — harmless no-ops
+    // once this component has unmounted after navigation); the returned value is
+    // what the caller actually merges into the guide it navigates with.
+    const glanceByIdx = new Array(days.length).fill(null);
+    const exactByKey = {};
+    const promises = days.map(async (day, idx) => {
       try {
         const names = (day.stops || []).map(s => s.name);
         if (names.length === 0) return;
@@ -1705,6 +1741,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         );
         const glance = JSON.parse(enrichResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
         if ((Array.isArray(glance.legs) && glance.legs.length > 0) || glance.accommodation) {
+          glanceByIdx[idx] = glance;
           setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
             ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, glance } : d) }
             : prev);
@@ -1730,12 +1767,16 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
                 if (!d2.error) foundExact[`${origin}|${dest}|${legMode}`] = d2;
               } catch { /* falls back to km estimate / AI text, same as always */ }
             }
-            if (Object.keys(foundExact).length > 0) setExactDurations(prev => ({ ...prev, ...foundExact }));
+            if (Object.keys(foundExact).length > 0) {
+              Object.assign(exactByKey, foundExact);
+              setExactDurations(prev => ({ ...prev, ...foundExact }));
+            }
           }
         }
       } catch { /* leave this day without travel details */ }
       finally { setGlancePending(p => Math.max(0, p - 1)); }
     });
+    return Promise.all(promises).then(() => ({ glanceByIdx, exactByKey }));
   };
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -1831,13 +1872,33 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     }
     if (Object.keys(found).length > 0) setExactDurations(prev => ({ ...prev, ...found }));
     if (Object.keys(failed).length > 0) setNoRouteFound(prev => ({ ...prev, ...failed }));
+    // Returned directly (not just patched into state) so generateGuide() can merge
+    // these straight into what it navigates to the new full-page guide flow with —
+    // same reasoning as geocodeStopsForGuide's return value above.
+    return { found, failed };
   };
+  // BUG FIX (the "34 min walk that's really 7 min" report): this used to check
+  // the crude TOWN_COORDS substring match BEFORE geocodedCoords — so a stop
+  // like "Odense Flower Festival" (whose name contains the town "Odense")
+  // would match Odense's generic TOWN CENTER coordinate and stop right there,
+  // even when a real, precise geocode of the actual venue existed or could
+  // have been fetched. The town-center point can be a real walking distance
+  // away from the actual venue, which is exactly why the in-app leg said "34
+  // min" while clicking through to real Google Maps (which geocodes the venue
+  // by name/address directly, not by this shortcut) said "7 min" — two
+  // different, disagreeing coordinate sources for the same stop. Precise
+  // sources (a real lat/lon on file, or an actual Nominatim geocode of the
+  // specific venue) now both take priority over the generic town-center
+  // fallback, which is only used as an absolute last resort when neither
+  // exists — see geocodeStopsForGuide below for the matching fix on the
+  // geocoding-eligibility side of this same bug.
   const resolveStopCoords = (name) => {
     const real = lookupRealPlace(name);
     if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+    if (geocodedCoords[name]) return geocodedCoords[name];
     const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
     if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
-    return geocodedCoords[name] || null;
+    return null;
   };
   // SINGLE SOURCE OF TRUTH for leg transport mode — used by fetchExactDurations
   // (the background fetch) AND both render sites. Previously each computed mode
@@ -1872,11 +1933,25 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // geocoding query can include real town context and land in the right place.
     const townByName = {};
     days.forEach(d => d.stops.forEach(s => { if (s.town && !townByName[s.name]) townByName[s.name] = s.town; }));
-    const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !resolveStopCoords(n));
+    // BUG FIX: this used to skip geocoding any stop `resolveStopCoords` already
+    // returned SOMETHING for — but that included the crude TOWN_COORDS
+    // substring fallback (e.g. "Odense Flower Festival" silently matching
+    // Odense's generic town-center point). A stop shouldn't count as "already
+    // resolved" unless it has a genuinely PRECISE coordinate (real data, or an
+    // actual geocode of the specific venue) — otherwise the crude fallback
+    // permanently blocks ever fetching the real, precise location. Only a
+    // precise `real.lat/lon` on file now counts as already resolved here.
+    const hasPreciseCoords = (n) => { const real = lookupRealPlace(n); return !!(real?.lat && real?.lon); };
+    const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !hasPreciseCoords(n));
     const found = {};
     for (const name of names) {
       try {
-        const query = townByName[name] ? `${name}, ${townByName[name]}, Denmark` : `${name}, Denmark`;
+        // Prefer the place's own real mapHint ("Venue/street, postcode Town,
+        // Denmark") when Gemlyx already has one on file — it's the actual
+        // address, not just a name + town guess, so Nominatim can geocode the
+        // real venue instead of landing somewhere generic nearby.
+        const real = lookupRealPlace(name);
+        const query = real?.mapHint || (townByName[name] ? `${name}, ${townByName[name]}, Denmark` : `${name}, Denmark`);
         const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=dk`);
         const data = await res.json();
         if (data?.[0]) found[name] = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
@@ -2033,7 +2108,11 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // forcing a full rebuild + loading wait just because the person accidentally
     // closed the guide and tapped back into it, with nothing new to plan.
     if (lastBuiltGuide && lastBuiltGuide.convoText === convoText) {
+      // Same "always route to the full page" rule as a fresh build below — this used to
+      // just reopen the old in-chat popup, which would have been the one place the popup
+      // still showed up on its own instead of routing straight to GuidePage.jsx.
       setGuideModal(lastBuiltGuide.guide);
+      navigate("/guide/new", { state: { guide: lastBuiltGuide.guide, exactDurations, noRouteFound, geocodedCoords } });
       return;
     }
     setGuideModal("loading");
@@ -2090,7 +2169,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       }
       setGuideBuildStage({ label: "Structuring your itinerary", percent: 45 });
       const guideSystemPrompt = `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food) — if a specific leg is genuinely expensive at full price (e.g. a long train trip), mention the real cheaper alternative (DSB Orange billetter — discount advance-purchase tickets — or Flixbus/Kombardo Expresbus for intercity routes) rather than just quoting the expensive default fare.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — whenever the plan has ANY genuine intercity leg (moving between two different towns/cities, not just getting around within one), name Flixbus or Kombardo Expresbus by name as the real budget alternative to a DSB train for that leg (often meaningfully cheaper on longer routes) — this is real, current, useful information, not a footnote to add only when a fare happens to be steep. If a specific train leg is also genuinely expensive at full price, additionally mention DSB Orange billetter (discount advance-purchase train tickets) as the cheaper way to book that same train instead. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
@@ -2156,11 +2235,45 @@ If the conversation only covers a single day or a few stops with no explicit day
       // set through to the per-day prompt so it stops treating one mode as dominant.
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
-      fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking); // fire-and-forget — legs show estimates until this resolves, then upgrade
       const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
-      enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
-      fetchGuideWeather(parsed.days, gid, arrivalDate);
+      // Per Oliver's call: the guide flow now routes straight to the new full-page view
+      // (src/pages/GuidePage.jsx) the instant a guide is ready — no more "build it, show
+      // the chat-popup preview, click a button to see the full page" detour. That means
+      // the loading screen needs to stay up through the SAME travel-time/accommodation/
+      // weather enrichment that used to happen quietly in the background after the popup
+      // was already showing — otherwise the new page would land with blank legs/weather
+      // for several seconds. fetchExactDurations/enrichGuideDays/fetchGuideWeather all
+      // still patch guideModal/exactDurations state as a side effect (kept so the legacy
+      // in-modal path — and any code still reading those state vars this tick — keeps
+      // working), but the real merge below uses their RETURN values directly, since this
+      // component may already be unmounted (navigated away from) by the time any of those
+      // state patches would otherwise land.
+      setGuideBuildStage({ label: "Finishing touches — travel times, stays & weather", percent: 96 });
+      const [exactRes, enrichRes, weatherRes] = await Promise.all([
+        fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking),
+        enrichGuideDays(parsed.days, gid, travelMode, mixedModes),
+        fetchGuideWeather(parsed.days, gid, arrivalDate),
+      ]);
+      const finalDays = parsed.days.map((day, idx) => ({
+        ...day,
+        glance: enrichRes?.glanceByIdx?.[idx] || day.glance || null,
+        weather: weatherRes?.results?.[idx] || day.weather || null,
+      }));
+      const finalExactDurations = { ...(exactRes?.found || {}), ...(enrichRes?.exactByKey || {}) };
+      const finalGuide = {
+        _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking,
+        _travelers: travelersMatch ? travelersMatch[1].trim() : "",
+        _grounded: !!guideGrounding, _convoText: convoText,
+        _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null,
+        title: parsed.title || "Your Custom Route",
+        essentials: { ...(parsed.essentials || {}), ...(weatherRes?.weatherNote ? { weatherNote: weatherRes.weatherNote } : {}) },
+        days: finalDays,
+      };
+      // Still set so the "reopen instantly if this exact conversation already built a
+      // guide" cache-hit branch above (and lastBuiltGuide's own effect) keep working —
+      // this component is about to unmount from the navigate() call right below either way.
+      setGuideModal(finalGuide);
+      navigate("/guide/new", { state: { guide: finalGuide, exactDurations: finalExactDurations, noRouteFound: exactRes?.failed || {}, geocodedCoords: freshGeo } });
     } catch {
       setGuideModal(null);
       setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
@@ -4649,29 +4762,56 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
       {guideModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.85)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
-          <div style={{ maxWidth: 480, margin: "0 auto", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20, padding: "22px" }} onClick={e => e.stopPropagation()}>
-            {guideModal === "loading" ? (
-              <div style={{ textAlign: "center", padding: "50px 20px" }}>
-                {/* Professional loading state, no emoji — a plain spinner + a real progress
-                    bar tied to guideBuildStage.percent (actual pipeline stages, not a fake
-                    animation), so it reads as "here's exactly what's happening" rather than
-                    a generic spinner someone might mistake for the app being stuck. */}
-                <div style={{ width: 36, height: 36, margin: "0 auto 16px", borderRadius: "50%", border: `3px solid ${C.border}`, borderTopColor: C.gold, animation: "gemlyxSpin 0.9s linear infinite" }} />
-                <div style={{ fontSize: 15, color: C.text, fontWeight: 700, marginBottom: 6, fontFamily: "'Cormorant Garamond', serif" }}>Building your guide</div>
-                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, maxWidth: 280, margin: "0 auto 16px" }}>
-                  {guideBuildStage?.label || "Checking real places, routes and travel times — this takes a moment."}
-                </div>
-                <div style={{ maxWidth: 200, margin: "0 auto" }}>
-                  <div style={{ height: 4, borderRadius: 100, background: C.border, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${guideBuildStage?.percent || 5}%`, background: C.gold, borderRadius: 100, transition: "width 0.5s ease" }} />
+          <div style={{ maxWidth: 480, margin: "0 auto", background: guideModal === "loading" ? "transparent" : C.bg, border: guideModal === "loading" ? "none" : `1px solid ${C.border}`, borderRadius: 20, padding: guideModal === "loading" ? 0 : "22px", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+            {guideModal === "loading" ? (() => {
+              // VINTAGE TRAVEL-JOURNAL LOADING SCREEN — per Oliver's call ("Building
+              // your guide is still unchanged in letters" — he wanted the full
+              // visual redesign, not just new copy). This is meant to read like a
+              // hand-written dispatch being drafted, not a generic app spinner: a
+              // parchment/ink background, a compass instead of a loading ring, and
+              // per-stage copy written like a line from a travel letter rather than
+              // a status label. guideBuildStage itself is untouched (same 4 real
+              // pipeline stages, same percent values) — only how each stage's label
+              // gets DISPLAYED changes here, so nothing about the actual build logic
+              // needed to move.
+              const STAGE_COPY = {
+                "Gathering real places and facts": { title: "Charting the Route", body: "Gathering real places worth the detour, straight from Gemlyx's own research — not a guess, not a brochure." },
+                "Structuring your itinerary": { title: "Penning the Itinerary", body: "Sorting everything into a real day-by-day route, the way a local would actually walk it." },
+                "Finishing the remaining days": { title: "Finishing the Last Pages", body: "A few more days still need writing — nearly there." },
+                "Verifying exact locations and routes": { title: "Checking Every Road and Door", body: "Confirming real distances, opening hours, and the roads between each stop before the ink dries." },
+                "Finishing touches — travel times, stays & weather": { title: "Sealing the Letter", body: "Adding real travel times between stops, where to stay each night, and the actual forecast — the last details before it's ready to read." },
+              };
+              const copy = STAGE_COPY[guideBuildStage?.label] || { title: "Drafting Your Travel Journal", body: "Checking real places, routes and travel times — this takes a moment." };
+              return (
+                <div style={{ textAlign: "center", padding: "54px 20px 42px", position: "relative", overflow: "hidden", borderRadius: 20, border: "1px solid #4A3D22", background: "linear-gradient(160deg, #221B10 0%, #16110A 100%)" }}>
+                  {/* Subtle paper grain, laid over the gradient via an inline SVG turbulence filter — no external image/font download needed. */}
+                  <div aria-hidden style={{ position: "absolute", inset: 0, opacity: 0.5, mixBlendMode: "overlay", pointerEvents: "none",
+                    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E\")" }} />
+                  {/* Two soft ink-stain blotches, like a well-used map */}
+                  <div aria-hidden style={{ position: "absolute", top: -30, left: -20, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.10), transparent 70%)", pointerEvents: "none" }} />
+                  <div aria-hidden style={{ position: "absolute", bottom: -40, right: -30, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.08), transparent 70%)", pointerEvents: "none" }} />
+                  <div style={{ position: "relative" }}>
+                    <div style={{ fontSize: 30, marginBottom: 12, display: "inline-block", animation: "gemlyxCompassSway 3.4s ease-in-out infinite" }}>🧭</div>
+                    <div style={{ fontSize: 10.5, color: "#D4AF37", letterSpacing: 2.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>A Dispatch From Gemlyx</div>
+                    <div style={{ fontSize: 20, color: "#F2E8CE", fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", marginBottom: 10, lineHeight: 1.25 }}>
+                      {copy.title}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#BBA778", lineHeight: 1.7, maxWidth: 290, margin: "0 auto 26px", fontFamily: "'Cormorant Garamond', serif" }}>
+                      {copy.body}
+                    </div>
+                    <div style={{ maxWidth: 220, margin: "0 auto" }}>
+                      <div style={{ height: 1, background: "linear-gradient(90deg, transparent, #D4AF3766 15%, #D4AF3766 85%, transparent)", position: "relative", marginBottom: 10 }}>
+                        <div style={{ position: "absolute", top: -3.5, left: `calc(${guideBuildStage?.percent || 5}% - 4px)`, width: 8, height: 8, borderRadius: "50%", background: "#D4AF37", transition: "left 0.6s ease", boxShadow: "0 0 8px rgba(212,175,55,0.7)" }} />
+                      </div>
+                      <div style={{ fontSize: 9.5, color: "#8A7A54", letterSpacing: 1.2, fontWeight: 700 }}>{guideBuildStage?.percent || 5}% OF THE JOURNEY MAPPED</div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontWeight: 700, letterSpacing: 0.5 }}>{guideBuildStage?.percent || 5}%</div>
+                  <style>{`
+                    @keyframes gemlyxCompassSway { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
+                  `}</style>
                 </div>
-                <style>{`
-                  @keyframes gemlyxSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                `}</style>
-              </div>
-            ) : (
+              );
+            })() : (
               <>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                   <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "4px 12px" }}>
@@ -4682,26 +4822,29 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
                 <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Cormorant Garamond', serif", color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{guideModal.title}</div>
                 <div style={{ marginBottom: 14 }} />
-                {guideModal.essentials && (guideModal.essentials.budgetReality || guideModal.essentials.keepInMind || guideModal.essentials.transportTip) && (
-                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Essentials</div>
-                    {guideModal.essentials.budgetReality && (
-                      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: (guideModal.essentials.keepInMind || guideModal.essentials.transportTip) ? 8 : 0 }}>
-                        💰 {guideModal.essentials.budgetReality}
-                      </div>
-                    )}
-                    {guideModal.essentials.transportTip && (
-                      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: guideModal.essentials.keepInMind ? 8 : 0 }}>
-                        🚆 {guideModal.essentials.transportTip}
-                      </div>
-                    )}
-                    {guideModal.essentials.keepInMind && (
-                      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>
-                        ✦ {guideModal.essentials.keepInMind}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {guideModal.essentials && (guideModal.essentials.budgetReality || guideModal.essentials.keepInMind || guideModal.essentials.transportTip || guideModal.essentials.weatherNote) && (() => {
+                  // weatherNote is added client-side, after real per-day forecasts come
+                  // back (see fetchGuideWeather) — not part of what Claude writes, since
+                  // Claude has no real forecast data to draw from at build time. Listed
+                  // last on purpose: it can arrive a moment after everything else in this
+                  // card is already showing.
+                  const lines = [
+                    guideModal.essentials.budgetReality && { icon: "💰", text: guideModal.essentials.budgetReality },
+                    guideModal.essentials.transportTip && { icon: "🚆", text: guideModal.essentials.transportTip },
+                    guideModal.essentials.keepInMind && { icon: "✦", text: guideModal.essentials.keepInMind },
+                    guideModal.essentials.weatherNote && { icon: "🌧", text: guideModal.essentials.weatherNote },
+                  ].filter(Boolean);
+                  return (
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Essentials</div>
+                      {lines.map((line, i) => (
+                        <div key={i} style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: i < lines.length - 1 ? 8 : 0 }}>
+                          {line.icon} {line.text}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {guideModal.days.map((day, dayIdx) => (
                   <div key={day.day} style={{ marginBottom: 20 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
