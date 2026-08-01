@@ -917,7 +917,30 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       );
       if (draftResult.error) throw new Error(draftResult.error);
       const cleanedDraft = draftResult.text.replace(/^```json\s*|\s*```$/g, "").trim();
-      const t = JSON.parse(cleanedDraft || "{}");
+      let t;
+      try {
+        t = JSON.parse(cleanedDraft || "{}");
+      } catch (parseErr) {
+        // NEW — SELF-REPAIR PASS. This is the "SyntaxError: Expected ',' or '}'"
+        // failure mode: Claude's prose almost always contains a stray unescaped
+        // double-quote or control character inside a string value (e.g. quoting a
+        // phrase or nickname), which breaks strict JSON. Rather than a brittle regex
+        // guess at which quote is the culprit, hand the EXACT parser error back to
+        // Claude — it can see precisely what's wrong and fix only the syntax, not
+        // the content. One retry only, to avoid a silent infinite-cost loop.
+        console.warn("Draft JSON failed to parse — attempting one repair pass.", parseErr.message);
+        const repairResult = await askClaude(
+          `The JSON below is invalid. A strict parser reports this exact error: "${parseErr.message}". This is almost always ONE unescaped double-quote or stray control character inside a prose string value — find it and fix ONLY that syntax problem. Do not reword, shorten, or otherwise change any content, facts, or structure. Respond with ONLY the corrected, complete, valid JSON — no markdown fences, no explanation before or after.\n\n${cleanedDraft}`,
+          8192
+        );
+        if (repairResult.error) throw new Error(`${parseErr.message} (repair attempt also failed: ${repairResult.error})`);
+        const repairedCleaned = repairResult.text.replace(/^```json\s*|\s*```$/g, "").trim();
+        try {
+          t = JSON.parse(repairedCleaned || "{}");
+        } catch (secondErr) {
+          throw new Error(`Invalid JSON even after a repair attempt: ${secondErr.message}`);
+        }
+      }
       const noContentField = (studioType === "food" || studioType === "foodStreet") ? !t.vibeLocation : studioType === "town" ? !t.characterAndFit : !t.desc;
       if (!t.name || noContentField) throw new Error("empty");
       // Verify the route to the AI's own highlighted attraction specifically —
