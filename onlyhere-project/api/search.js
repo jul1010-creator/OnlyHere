@@ -12,7 +12,7 @@
 // fetch('/api/search?q=Den Gamle By opening hours 2026')
 
 export default async function handler(req, res) {
-  const { q } = req.query;
+  const { q, domains } = req.query;
 
   if (!q) {
     return res.status(400).json({ error: "Missing 'q' query param" });
@@ -32,6 +32,9 @@ export default async function handler(req, res) {
         search_depth: "basic",
         max_results: 4,
         include_answer: true, // Tavily gives a short synthesized answer, cheap to use directly
+        // Optional: restrict this specific call to a fixed set of domains (e.g. Wikipedia).
+        // Backward compatible — omitted entirely when the caller doesn't pass ?domains=.
+        ...(domains ? { include_domains: domains.split(",").map(d => d.trim()).filter(Boolean) } : {}),
       }),
     });
 
