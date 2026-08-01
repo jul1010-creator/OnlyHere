@@ -1,4 +1,34 @@
-# LATEST: guide-flow redesign built — routes straight to a full page (preview → essentials → roadmap)
+# LATEST: Studio's "Craft" content type now has a selector pill — search/discover works for every type, not just Events/Towns
+
+You asked for "search for" to work across all navigations, like it already does for Events and Towns. Turns out that discover/search button (`🔍 Discover new [type]`) was already fully built to work for every Studio content type — the label, the search queries, the photo folder, the price field, all of it already had a "booking" (Craft) entry wired in — EXCEPT there was no actual pill/button in the type picker to select "Craft" in the first place, so it was invisible/unreachable in the UI even though everything behind it worked. Added the missing pill (🎨 Craft, next to Attractions since craft experiences show up merged into the Attractions page). Now every type — Town, Events, Attractions, Craft, Food, Food Street, Nightlife, Nightlife (Town) — has the same "type a name to draft it" input plus the "🔍 Discover new [type]" search button.
+
+**Please check**: click the new Craft pill in Studio and confirm both the manual draft input and the Discover button work end to end — I haven't run this live.
+
+---
+
+# EARLIER: feedback-note round 2 — travel-time fix, airport start, Booking link, grouped preview, loading facts, Include more/Simpler/Gemlyx AI
+
+From your "From Gemini about Google Maps API.odt" note, plus the extra ask about guide controls. Didn't get to everything in the note — see "Not done yet" below.
+
+**1. The "says 15 min, actually 30" bug — Google Maps is now genuinely first priority.** The roadmap step used to show a straight-line km-based guess (or the AI's own text guess) as if it were a real number whenever the real Google Directions result wasn't available yet. That's exactly what you caught — a straight line between two points is never the real walking distance once actual streets are involved. Now: a real Directions-API number only shows when Directions actually confirmed it (marked with a ✓); otherwise it just says "Check exact route · Google Maps ↗" with NO number claimed, so nothing false-confident gets shown. Rome2Rio stays as the true last-resort alternative only when Google Maps genuinely has no route (island ferry crossings etc.) — exactly the "Maps first, alternative page if Maps doesn't work" order you asked for.
+
+**2. Day 1 now starts at the actual arrival point (the airport), not a sight like Nyhavn.** Added an explicit rule to the guide-building prompt: whichever airport the trip starts from becomes Day 1's first stop itself, with a short practical note on getting into the city and a realistic arrival-buffer time — since that's genuinely where someone lands and needs the most help, not something to skip past for a photo spot.
+
+**3. Booking.com link added to the essentials page's "recommended areas to stay" section** — same search-link pattern as the roadmap step's accommodation cards. Not an affiliate link yet (see the existing note in the code for how to turn it into one once your Booking Affiliate account is approved).
+
+**4. Preview page redesigned**: towns, sights, food/drink, nightlife, and events now group into their own labeled sections instead of one flat mixed list — "pour the towns and attractions together," as you put it. Photos are now small square thumbnails (64×64) instead of stretching your very-wide/horizontal source photos across a whole card, which was the "extremely horizontal" issue.
+
+**5. Real facts now show while a guide builds.** Rotates through true content while you wait — real town highlights (from your own already-vetted town data) and real events happening in the next 60 days — with a picture when one's on file. I deliberately did NOT invent "wild king facts" — you were explicit these need to be true, and there's no existing fact-checked source of royal trivia in the repo to draw from safely. If you want that category, point me at real sources (or confirm a few you already trust) and I'll build a small verified data file for it next round, rather than risk something plausible-sounding but wrong. Also: this rotates general Denmark-wide facts, not ones tied to THIS specific trip's towns — the itinerary doesn't exist yet at the point the loading screen shows, so it can't know which towns are relevant.
+
+**6. New: "Include more" / "Make it simpler" / "Gemlyx AI" controls on every step of a freshly-built guide** (preview, essentials, roadmap) — your newest ask, added alongside the note above. "Include more" asks Claude to add genuinely worthwhile real stops without touching what's already there; "Make it simpler" trims to 2-3 relaxed stops a day; "Gemlyx AI" opens a small scoped help chat about that specific trip (ask about a stop, the route, whether something's worth the detour). Scoped to a guide you haven't saved yet — once it's saved and shared as a real link, these controls don't apply, since editing a guide someone already has a link to would need its own re-save flow; flagging that scoping choice rather than silently building it in too.
+
+**Not done yet, from the same note** — flagging so nothing gets lost: nothing yet on "why does building the map take so long" (I didn't investigate this — would need to watch it run live or get timing logs from you, can't diagnose blind). The Shopping page taxonomy (stores vs. streets vs. centres) — you asked what I think: streets + centres, matching how Towns/Nightlife are already framed (real, durable, findable places rather than individual stores that open/close/rebrand often) — but nothing's built yet, this was just a scoping answer, the Shopping page itself isn't part of this pass.
+
+**Please test before trusting**: build a real guide through Detour chat, check a route link actually only shows a time when it's real, try "Include more"/"Make it simpler" and Gemlyx AI on all three steps, and check the loading screen's fact panel shows something real. I haven't run any of this live.
+
+---
+
+# EARLIER: guide-flow redesign built — routes straight to a full page (preview → essentials → roadmap)
 
 **The guide-building flow now matches your notes exactly**: "drop 'view full page' at the end... push us onto a new page... just show towns, attractions, diners with short descriptions... THEN essentials and recommended stay areas... THEN the roadmap." Confirmed the two open architecture questions via quick questions before building (see GEMLYX_HANDOFF_2.md for the full writeup):
 

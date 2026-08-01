@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
@@ -35,6 +35,7 @@ import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
 import { GuidePage } from "./pages/GuidePage";
+import { askClaude, parseClaudeJSON } from "./utils/aiClient";
 
 import "leaflet/dist/leaflet.css";
 
@@ -227,6 +228,46 @@ function GemlyxApp() {
 
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
   const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } shown during "loading" — real progress, not a static message
+  // Real facts shown while a guide builds, per your note that waiting is more
+  // tolerable with something true and interesting to read. ONLY drawn from
+  // Gemlyx's own already-vetted content (town highlight/desc, real upcoming
+  // events) — deliberately NOT inventing "wild king facts" from scratch, since
+  // you were explicit that these need to actually be true and this repo has no
+  // curated, fact-checked source of royal trivia to draw from yet. If you want
+  // that specific category, it needs its own small verified data file first —
+  // happy to build one from sources you point me at, rather than risk something
+  // plausible-sounding but wrong. This isn't tailored to THIS trip's actual towns
+  // (the guide doesn't exist yet at this point in the build), so it rotates
+  // through real Denmark-wide facts/events instead — still true, just general.
+  const loadingFacts = useMemo(() => {
+    const townFacts = towns.filter(t => t.highlight).map(t => ({
+      kind: "town", label: t.name, body: t.highlight, photo: t.photo, emoji: t.emoji,
+    }));
+    const now = new Date();
+    const soon = new Date(now);
+    soon.setDate(soon.getDate() + 60);
+    const eventFacts = [...events, ...majorEvents, ...vikingEvents]
+      .filter(e => e.date && new Date(e.date) >= now && new Date(e.date) <= soon)
+      .map(e => ({
+        kind: "event", label: `Happening soon${e.town ? ` in ${e.town}` : ""}`,
+        body: `${e.name}${e.desc ? ` — ${e.desc}` : ""}`, photo: e.photo, emoji: e.emoji,
+      }));
+    const pool = [...townFacts, ...eventFacts];
+    // Shuffled once per mount so the order isn't identical every time the loading
+    // screen shows — display-only, nothing persisted or replayed, so Math.random() here is fine.
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, 14); // plenty for a build that only takes ~15-30s
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [loadingFactIdx, setLoadingFactIdx] = useState(0);
+  useEffect(() => {
+    if (guideModal !== "loading" || loadingFacts.length === 0) return;
+    const id = setInterval(() => setLoadingFactIdx(i => (i + 1) % loadingFacts.length), 5000);
+    return () => clearInterval(id);
+  }, [guideModal, loadingFacts.length]);
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
   useEffect(() => {
     // Mirror any real (non-loading, non-null) guide into the cache as it updates —
@@ -504,61 +545,10 @@ function GemlyxApp() {
       return { error: "Couldn't reach OpenAI — check the API key and your connection." };
     }
   };
-  const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-5") => {
-    try {
-      const res = await fetch("/api/anthropic", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { console.warn("Claude call failed:", res.status, data.error?.message || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
-      const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
-      if (!text) {
-        // A 200 with no usable text is almost always the response getting cut off
-        // before it produced any actual text block — most commonly the max_tokens
-        // budget running out (stop_reason "max_tokens") on a long, detailed prompt,
-        // not a real "nothing to say" case. Log stop_reason + whatever block types
-        // DID come back so this is diagnosable from the console instead of a dead end.
-        console.warn("Claude returned no text block.", { stop_reason: data.stop_reason, blockTypes: data.content?.map(b => b.type), usage: data.usage });
-        const hint = data.stop_reason === "max_tokens" ? " (response was cut off — ran out of tokens)" : "";
-        return { error: `Empty response from Claude${hint}` };
-      }
-      return { text };
-    } catch (err) {
-      return { error: "Couldn't reach Claude — check the API key and your connection." };
-    }
-  };
-  // Shared self-repair pass for any Claude-produced JSON — Claude's prose
-  // occasionally slips a literal unescaped double-quote or control character into
-  // a string value (quoting a phrase, a nickname), which breaks strict JSON.parse.
-  // Rather than a brittle regex guess, hand the exact parser error back to Claude
-  // and ask it to fix ONLY the syntax. One retry only, to bound cost. Used by both
-  // the Studio draft parse and the Detour guide-build parse — same failure mode,
-  // same fix, in one place.
-  const parseClaudeJSON = async (rawText, maxTokens = 8192) => {
-    const cleaned = rawText.replace(/^```json\s*|\s*```$/g, "").trim();
-    try {
-      return JSON.parse(cleaned || "{}");
-    } catch (parseErr) {
-      console.warn("Claude JSON failed to parse — attempting one repair pass.", parseErr.message);
-      const repairResult = await askClaude(
-        `The JSON below is invalid. A strict parser reports this exact error: "${parseErr.message}". This is almost always ONE unescaped double-quote or stray control character inside a prose string value — find it and fix ONLY that syntax problem. Do not reword, shorten, or otherwise change any content, facts, or structure. Respond with ONLY the corrected, complete, valid JSON — no markdown fences, no explanation before or after.\n\n${cleaned}`,
-        maxTokens
-      );
-      if (repairResult.error) throw new Error(`${parseErr.message} (repair attempt also failed: ${repairResult.error})`);
-      const repairedCleaned = repairResult.text.replace(/^```json\s*|\s*```$/g, "").trim();
-      try {
-        return JSON.parse(repairedCleaned || "{}");
-      } catch (secondErr) {
-        throw new Error(`Invalid JSON even after a repair attempt: ${secondErr.message}`);
-      }
-    }
-  };
+  // askClaude/parseClaudeJSON now live in src/utils/aiClient.js (imported above) —
+  // pulled out so GuidePage.jsx's new "Include more"/"Make it simpler"/"Gemlyx AI"
+  // controls can call Claude the same way, without duplicating this logic. Same
+  // bodies, same behavior, just defined once.
   const [googlePrecheckRan, setGooglePrecheckRan] = useState(false);
   const [googleCheckLoading, setGoogleCheckLoading] = useState(false);
   const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
@@ -2171,6 +2161,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       const guideSystemPrompt = `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
 {"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — whenever the plan has ANY genuine intercity leg (moving between two different towns/cities, not just getting around within one), name Flixbus or Kombardo Expresbus by name as the real budget alternative to a DSB train for that leg (often meaningfully cheaper on longer routes) — this is real, current, useful information, not a footnote to add only when a fare happens to be steep. If a specific train leg is also genuinely expensive at full price, additionally mention DSB Orange billetter (discount advance-purchase train tickets) as the cheaper way to book that same train instead. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
+CRITICAL — DAY 1's FIRST STOP IS THE ACTUAL ARRIVAL POINT, NOT A SIGHT: whichever airport/point the trip actually starts from (Copenhagen/Kastrup by default, or whatever else was determined above), Day 1's FIRST stop must be that real arrival point itself — e.g. "Copenhagen Airport (Kastrup)" — not straight to a sight like Nyhavn. That's genuinely where a traveler lands and needs the most help (getting into the city, checking in, first bearings), not an afterthought. Give it a short, practically useful note (e.g. how to get from the airport into the city — Metro, train), a realistic arrivalTime reflecting actual landing + immigration/baggage buffer (see the arrival-day timing rule below), and a short suggestedStay just for getting oriented. The first REAL sight of the day comes after that, not instead of it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
 CRITICAL — NO MARKETING VERBS: phrases like "soak in the vibrant scene", "embrace the vibe", "experience the magic", "indulge in" are banned outright — they carry zero real information about the place.
@@ -3033,7 +3024,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </div>
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"]].map(([k, label]) => (
+                      {/* "booking" (Craft) was fully wired everywhere else in Studio's pipeline
+                          (prompts, Discover queries, photo folder, price field) but had no
+                          selector pill here — meaning "🔍 Discover new craft experiences" was
+                          unreachable from the UI even though the button's own label already
+                          knew what to call it. Added so every content type has the same
+                          search/discover/draft flow, not just Events and Towns. */}
+                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["booking", "🎨 Craft"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {label}
@@ -4805,6 +4802,25 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       </div>
                       <div style={{ fontSize: 9.5, color: "#8A7A54", letterSpacing: 1.2, fontWeight: 700 }}>{guideBuildStage?.percent || 5}% OF THE JOURNEY MAPPED</div>
                     </div>
+                    {/* Real facts/events while you wait — per your note that it makes the
+                        wait less annoying. Only real, already-vetted content (town
+                        highlights, real upcoming events), rotating every few seconds. */}
+                    {loadingFacts.length > 0 && (() => {
+                      const fact = loadingFacts[loadingFactIdx % loadingFacts.length];
+                      return (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: 300, margin: "22px auto 0", padding: "10px 12px", background: "rgba(212,175,55,0.08)", border: "1px solid #4A3D22", borderRadius: 12, textAlign: "left" }}>
+                          {fact.photo ? (
+                            <img src={fact.photo} alt="" onError={e => { e.target.style.display = "none"; }} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                          ) : (
+                            <span style={{ fontSize: 20, flexShrink: 0 }}>{fact.emoji || "✦"}</span>
+                          )}
+                          <div>
+                            <div style={{ fontSize: 9.5, color: "#D4AF37", letterSpacing: 0.8, textTransform: "uppercase", fontWeight: 700, marginBottom: 2 }}>{fact.label}</div>
+                            <div style={{ fontSize: 11.5, color: "#E8DDC0", lineHeight: 1.5 }}>{fact.body}</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <style>{`
                     @keyframes gemlyxCompassSway { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
