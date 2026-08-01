@@ -1,4 +1,20 @@
-# LATEST: your new logo is live everywhere — nav, hero, footer, favicon, and as the loading icon
+# LATEST: the front door — a living "adventure select" entrance before Denmark, with your animated logo intro
+
+You said it yourself: "Beyond the destination" was front-page material that had leaked onto Denmark's page, and you wanted a page BEFORE the explore page — with a breathing, Hearthstone-adventure feel. Built:
+
+**1. The entrance.** On every fresh load, the app now opens on a full-screen scene before Denmark: a Nordic night sky with your logo file's aurora drifting and breathing, twinkling stars, teal light motes rising like embers, silhouette hills along the bottom with a tiny traveler sitting on the crest and a lighthouse blinking teal on the far side, and a soft vignette framing it all like a game's adventure-select screen. All CSS/SVG — zero images, zero load cost, and every animation respects reduced-motion settings.
+
+**2. Your full animated logo intro plays here** — straight from your hero file: the ring draws itself, the gem pops in and does its spin, the GEMLYX letters fade in one by one, then "IT EXISTS NOWHERE ELSE" appears. Then: "WHERE ARE YOU GOING?" and the Denmark card (real coastline, gold dots at every verified town, flag + LIVE badge, "Enter Denmark →"), flanked by the dashed "Someday" slots. Click Denmark and you're in the app. When country #2 exists, it joins the row here — this page IS the country picker.
+
+**3. Denmark's explore page got its own identity back.** "Beyond the destination" is gone from it (it belonged to the front door, and its subtitle now works as the brand entrance instead). Denmark's hero now opens with a small Danish flag + DENMARK kicker and the headline "Beyond the guidebooks." — Denmark-specific, and it echoes your towns page's "the ones the guidebooks skip." Also fixed the bug from your screenshot: "Scroll to explore" was absolutely positioned and collided with the Plan-my-trip button on shorter screens — it now sits in normal flow below the button and can't overlap anything. The "Where Gemlyx lives" country section moved off the explore page entirely (it lives at the front door now, where it belongs).
+
+**A judgment call to check:** the entrance shows on every fresh page load, not once-ever — it's the brand moment and one click to pass. If you'd rather returning visitors skip straight into Denmark, that's a small change (remember the choice in the browser) — tell me and I'll add it.
+
+**Please test before trusting**: load the site fresh — watch the intro, click Enter Denmark, confirm you land on the explore page with the new "Beyond the guidebooks" hero and no overlapping text. I rendered a static replica of the entrance and checked it visually at desktop and phone sizes (composition confirmed good), but the animated version and the click-through I could not run live.
+
+---
+
+# EARLIER: your new logo is live everywhere — nav, hero, footer, favicon, and as the loading icon
 
 Extracted the compass-rose gem and your custom GEMLYX letterforms from the animated hero file you sent (gemlyxhero_2.html) into a real component (`src/components/GemlyxLogo.jsx`), so every part of the app renders the identical artwork.
 

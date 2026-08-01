@@ -30,7 +30,7 @@ import { GemlyxFindCard } from "./components/GemlyxFindCard";
 import { ReviewsSection } from "./components/ReviewsSection";
 import { InstagramEmbed } from "./components/InstagramEmbed";
 import { Ico, EmojiIcon, FlagDK } from "./components/Icon";
-import { GemlyxLogo, GemlyxMark, GemlyxLoader } from "./components/GemlyxLogo";
+import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader } from "./components/GemlyxLogo";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
@@ -2274,6 +2274,11 @@ If the conversation only covers a single day or a few stops with no explicit day
   // Redesign pass: the intake form was one long wall of fields. Dates + starting
   // point stay visible; everything else lives behind this "fine-tune" toggle.
   const [intakeMoreOpen, setIntakeMoreOpen] = useState(false);
+  // THE FRONT DOOR — Oliver's vision: a brand page BEFORE Denmark's explore
+  // page. Full-screen entrance with his animated logo (from gemlyxhero_2.html)
+  // and the country picker; choosing Denmark drops you into the app. Shown on
+  // every fresh load — it's the brand moment, and it's one click to pass.
+  const [entered, setEntered] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -3467,71 +3472,28 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
                 )}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(10,15,30,0.3) 0%, rgba(10,15,30,0.7) 100%)" }} />
-                {/* Redesign pass, per Oliver's inspiration mock: one confident message
-                    and one action, instead of brand-name + two taglines stacked. The
-                    brand mark goes small up top; the headline does the talking. */}
+                {/* This is DENMARK's page now — the brand moment moved to the front
+                    door (the country-select entrance). Headline is Denmark-specific;
+                    the scroll cue sits in-flow so it can never overlap the CTA again
+                    (the old absolute-positioned one collided on short viewports). */}
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 24px" }}>
-                  <GemlyxLogo size={26} color="rgba(255,255,255,0.92)" style={{ marginBottom: 16, filter: "drop-shadow(0 1px 10px rgba(0,0,0,0.5))" }} />
-                  <div style={{ fontSize: "clamp(34px, 6vw, 54px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.08, marginBottom: 12, textShadow: "0 2px 24px rgba(0,0,0,0.55)" }}>
-                    Beyond the<br />destination<span style={{ color: C.gold }}>.</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, filter: "drop-shadow(0 1px 8px rgba(0,0,0,0.5))" }}>
+                    <FlagDK height={13} />
+                    <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2.5, textTransform: "uppercase", color: "rgba(255,255,255,0.85)" }}>Denmark</span>
                   </div>
-                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Denmark's hidden gems — every one visited and verified. It exists nowhere else.</div>
+                  <div style={{ fontSize: "clamp(32px, 5.5vw, 50px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, marginBottom: 12, textShadow: "0 2px 24px rgba(0,0,0,0.55)" }}>
+                    Beyond the<br />guidebooks<span style={{ color: C.gold }}>.</span>
+                  </div>
+                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Hidden gems across the whole country — every one visited and verified.</div>
                   <button onClick={() => { goTab("ai"); window.scrollTo(0, 0); }}
                     style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
                     ✦ Plan my trip
                   </button>
-                  <div style={{ position: "absolute", bottom: 34, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,0.65)", fontSize: 12.5, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, animation: "bounce 2s infinite" }}>
+                  <div style={{ marginTop: 26, color: "rgba(255,255,255,0.6)", fontSize: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                     <span>Scroll to explore</span>
-                    <span style={{ fontSize: 17 }}>↓</span>
+                    <span style={{ fontSize: 15, animation: "bounceInline 2s infinite", display: "inline-block" }}>↓</span>
                   </div>
                 </div>
-              </div>
-
-              {/* ── COUNTRIES — DENMARK IN THE MIDDLE ─────────────
-                  Oliver's actual vision: Gemlyx is meant to hold multiple
-                  countries; Denmark is just the first. So this reads as a
-                  country row — Denmark live in the center (real coastline,
-                  a gold dot at every verified town's coordinates, tap → Towns),
-                  flanked by two empty slots that make the ambition visible
-                  without promising any specific country. New countries slot
-                  in beside it when they're real. */}
-              <div style={{ padding: "52px 24px 46px", textAlign: "center", borderBottom: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>Where Gemlyx lives</div>
-                <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 22, lineHeight: 1.2 }}>One country at a time.<br /><span style={{ fontSize: 15, fontWeight: 400, color: C.light, fontFamily: "'Inter', sans-serif" }}>Every dot is a place we've stood.</span></div>
-                <div className="country-row">
-                  <div className="country-ghost">
-                    <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: C.muted, opacity: 0.7 }}>?</div>
-                    <div style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
-                  </div>
-                  <div onClick={() => { goTab("visits"); window.scrollTo(0, 0); }}
-                    style={{ flex: "0 1 460px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: "20px 18px 16px", cursor: "pointer" }}>
-                    <svg viewBox="-12 -12 477 397" style={{ width: "100%", display: "block" }} aria-label="Map of Denmark with Gemlyx's verified towns">
-                      {DK_PATHS.map((p, i) => <polygon key={i} points={p} fill="#121B30" stroke="#2A3A55" strokeWidth="2.5" />)}
-                      {Object.entries(TOWN_COORDS).map(([name, [la, lo]]) => {
-                        const [x, y] = dkProject(la, lo);
-                        return (
-                          <g key={name}>
-                            <circle cx={x} cy={y} r="13" fill={`${C.gold}22`} />
-                            <circle cx={x} cy={y} r="5.5" fill={C.gold} stroke={C.bg} strokeWidth="2" />
-                          </g>
-                        );
-                      })}
-                    </svg>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 14 }}>
-                      <FlagDK height={12} />
-                      <span style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Denmark</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: "#6ECF97", background: "rgba(110,207,151,0.1)", border: "1px solid rgba(110,207,151,0.25)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
-                    </div>
-                    <div style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 7, color: C.light, fontSize: 12.5, fontWeight: 600 }}>
-                      <Ico name="town" size={14} color={C.gold} /> See the hidden towns →
-                    </div>
-                  </div>
-                  <div className="country-ghost">
-                    <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: C.muted, opacity: 0.7 }}>?</div>
-                    <div style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 18 }}>More countries when they're ready — done the same way: in person, every place verified.</div>
               </div>
 
               {/* Navigation sections */}
@@ -4575,6 +4537,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
         @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
         @keyframes nudge { 0%, 100% { transform: translateX(0); opacity: 0.6; } 50% { transform: translateX(4px); opacity: 1; } }
         @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(6px); } }
+        @keyframes bounceInline { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
         @keyframes gemlyxDotPulse { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
         @keyframes gemlyxMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .gemlyx-msg-in { animation: gemlyxMsgIn 0.28s ease both; }
@@ -4595,6 +4558,156 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
       <div style={{ flexShrink: 0, position: "relative", zIndex: 100 }}>
       {/* ── HEADER ─────────────────────────────────────────── */}
+      {/* ── THE FRONT DOOR ──────────────────────────────────────────
+          Oliver's vision: a page BEFORE Denmark's explore page — a living
+          "adventure select" entrance (his reference: Hearthstone adventure
+          screens / the WoW gates). Everything here is CSS/SVG, no images:
+          a breathing aurora sky with twinkling stars and rising light motes,
+          silhouette hills with a tiny traveler watching from the crest and a
+          lighthouse blinking teal, a soft vignette framing the scene — and
+          his animated logo intro (ring draws, gem pops and spins, letters
+          fade) above the Denmark card that takes you in. */}
+      {!entered && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflowY: "auto", background: "linear-gradient(180deg,#070B16 0%,#0A0F1E 55%,#0C1524 100%)" }}>
+          <style>{`
+            .gxa-aur { position:absolute; inset:-25%; will-change:transform; pointer-events:none; }
+            .gxa-aur1 { background: radial-gradient(ellipse 48% 20% at 32% 38%, rgba(45,212,191,.26) 0%, rgba(45,212,191,.10) 45%, transparent 72%), radial-gradient(ellipse 40% 16% at 66% 30%, rgba(20,184,166,.18) 0%, rgba(20,184,166,.07) 48%, transparent 74%); animation: gxaDrift1 26s ease-in-out infinite alternate; }
+            .gxa-aur2 { background: radial-gradient(ellipse 46% 18% at 60% 56%, rgba(94,234,212,.13) 0%, rgba(94,234,212,.05) 48%, transparent 75%), radial-gradient(ellipse 38% 15% at 24% 62%, rgba(13,148,136,.16) 0%, rgba(13,148,136,.06) 50%, transparent 76%); animation: gxaDrift2 34s ease-in-out infinite alternate; }
+            @keyframes gxaDrift1 { from { transform:translate3d(-4%,-2%,0) rotate(-6deg) scale(1); } to { transform:translate3d(5%,3%,0) rotate(5deg) scale(1.12); } }
+            @keyframes gxaDrift2 { from { transform:translate3d(3%,2%,0) rotate(4deg) scale(1.08); } to { transform:translate3d(-4%,-3%,0) rotate(-5deg) scale(1); } }
+            .gxa-star { position:absolute; width:2px; height:2px; border-radius:50%; background:#F0F4FF; opacity:.35; animation: gxaTw 4.5s ease-in-out infinite; }
+            .gxa-star:nth-child(3n) { animation-delay:1.4s; width:1.5px; height:1.5px; }
+            .gxa-star:nth-child(4n) { animation-delay:2.6s; opacity:.22; }
+            .gxa-star:nth-child(5n) { animation-delay:3.4s; }
+            @keyframes gxaTw { 0%,100% { opacity:.14; } 50% { opacity:.5; } }
+            .gxa-breathe { animation: gxaBreathe 6s ease-in-out infinite alternate; will-change:transform,opacity; }
+            @keyframes gxaBreathe { from { transform: scale(1); opacity:.45; } to { transform: scale(1.08); opacity:.8; } }
+            .gxa-ember { position:absolute; bottom:18%; width:3px; height:3px; border-radius:50%; background:rgba(45,212,191,.7); opacity:0; animation: gxaRise 13s linear infinite; pointer-events:none; }
+            @keyframes gxaRise { 0% { transform:translateY(0); opacity:0; } 12% { opacity:.55; } 70% { opacity:.3; } 100% { transform:translateY(-46vh); opacity:0; } }
+            .gxa-light { animation: gxaBlink 3.2s ease-in-out infinite; }
+            @keyframes gxaBlink { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+            .gxa-ring { animation: gxaRingdraw 1.2s cubic-bezier(.45,.05,.35,.95) 1.9s both; }
+            @keyframes gxaRingdraw { from { stroke-dashoffset:339.3; } to { stroke-dashoffset:0; } }
+            .gxa-pop { transform-box:fill-box; transform-origin:center; animation: gxaPop .5s cubic-bezier(.2,.9,.3,1.18) 1.5s both; }
+            @keyframes gxaPop { from { opacity:0; transform:scale(.4); } to { opacity:1; transform:scale(1); } }
+            .gxa-spin { transform-box:fill-box; transform-origin:center; animation: gxaSpin1 1.2s cubic-bezier(.45,.05,.35,.95) 1.9s both, gxaSway 9s ease-in-out 4.4s infinite; }
+            @keyframes gxaSpin1 { 0% { transform:rotate(0deg); } 82% { transform:rotate(366deg); } 100% { transform:rotate(360deg); } }
+            @keyframes gxaSway { 0%,100% { transform:rotate(-1.5deg); } 50% { transform:rotate(1.5deg); } }
+            .gxa-word svg path { opacity:0; animation: gxaFadein .9s cubic-bezier(.45,.05,.35,.95) both; }
+            .gxa-word svg path:nth-child(1){animation-delay:.25s} .gxa-word svg path:nth-child(2){animation-delay:.37s}
+            .gxa-word svg path:nth-child(3){animation-delay:.49s} .gxa-word svg path:nth-child(4){animation-delay:.61s}
+            .gxa-word svg path:nth-child(5){animation-delay:.73s} .gxa-word svg path:nth-child(6){animation-delay:.85s}
+            @keyframes gxaFadein { from { opacity:0; } to { opacity:1; } }
+            .gxa-tag { animation: gxaFadein 1.2s cubic-bezier(.45,.05,.35,.95) 3.2s both; }
+            .gxa-choose { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) 2.7s both; }
+            @media (prefers-reduced-motion: reduce) {
+              .gxa-aur, .gxa-star, .gxa-breathe, .gxa-ember, .gxa-light, .gxa-ring, .gxa-pop, .gxa-spin, .gxa-tag, .gxa-choose { animation: none !important; }
+              .gxa-word svg path { animation: none !important; opacity: 1; }
+              .gxa-ring { stroke-dashoffset: 0 !important; }
+            }
+          `}</style>
+
+          {/* Sky: aurora + stars + breathing glow behind the logo */}
+          <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+            <div className="gxa-aur gxa-aur1" />
+            <div className="gxa-aur gxa-aur2" />
+            {[[2,4],[9,62],[13,28],[17,71],[22,12],[26,49],[31,80],[35,22],[39,58],[44,8],[48,38],[52,68],[57,17],[61,45],[66,77],[70,8],[74,33],[78,61],[83,20],[87,52],[91,74],[95,13],[98,41],[6,86],[19,90],[42,84],[64,88],[86,84],[28,5],[55,3],[81,6],[12,44],[33,66],[69,26],[93,60],[47,92]].map(([l, t], i) => (
+              <span key={i} className="gxa-star" style={{ left: `${l}%`, top: `${t}%` }} />
+            ))}
+            <div className="gxa-breathe" style={{ position: "absolute", top: "8%", left: "50%", marginLeft: "-40vmax", width: "80vmax", height: "50vmax", background: "radial-gradient(ellipse 50% 40% at 50% 45%, rgba(45,212,191,0.12), transparent 65%)" }} />
+            {[[8, 0], [18, 4.2], [29, 8.5], [41, 2.1], [53, 6.4], [63, 10.7], [72, 1.3], [81, 5.6], [90, 9.1], [96, 3.4]].map(([l, d], i) => (
+              <span key={i} className="gxa-ember" style={{ left: `${l}%`, animationDelay: `${d}s` }} />
+            ))}
+          </div>
+
+          {/* Silhouette hills, tiny traveler, blinking lighthouse — the "scene" */}
+          <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, pointerEvents: "none" }}>
+            <svg viewBox="0 0 1440 320" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "26vh" }} aria-hidden="true">
+              <path d="M0,220 C240,150 480,240 720,190 C960,140 1200,230 1440,180 L1440,320 L0,320 Z" fill="#0B1322" opacity="0.85" />
+              <path d="M0,260 C200,200 420,262 640,236 C900,206 1150,266 1440,226 L1440,320 L0,320 Z" fill="#060C18" />
+              {/* tiny traveler, sitting on the front hill watching the sky */}
+              <g fill="#03060E">
+                <circle cx="303" cy="223" r="4.2" />
+                <path d="M295 242 C295 231 311 231 311 240 L317 244 L316 246 L308 243 L295 244 Z" />
+              </g>
+              {/* lighthouse on the far hill */}
+              <g>
+                <path d="M1176,240 L1180,204 L1190,204 L1194,240 Z" fill="#03060E" />
+                <rect x="1177" y="197" width="16" height="7" rx="2" fill="#03060E" />
+                <circle className="gxa-light" cx="1185" cy="200.5" r="3" fill="#2DD4BF" />
+              </g>
+            </svg>
+          </div>
+
+          {/* Vignette frame */}
+          <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 42%, transparent 52%, rgba(3,6,14,0.6) 100%)" }} />
+
+          {/* Center: animated logo intro + tagline + country pick */}
+          <div style={{ position: "relative", minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "48px 20px 120px" }}>
+            <svg viewBox="0 0 120 120" style={{ width: "min(34vw, 150px)", height: "auto", display: "block" }} aria-label="Gemlyx">
+              <circle className="gxa-ring" cx="60" cy="60" r="54" fill="none" stroke="#F0F4FF" strokeWidth="2.6" strokeDasharray="339.3" strokeLinecap="round" transform="rotate(-90 60 60)" />
+              <g className="gxa-pop"><g className="gxa-spin"><g transform="translate(12,12) scale(0.8)">
+                {[45, 135, 225, 315].map(r => (
+                  <g key={r} transform={`rotate(${r} 60 60)`}>
+                    <path d="M 60 30 L 70 60 L 60 60 Z" fill="#0E9384" />
+                    <path d="M 60 30 L 50 60 L 60 60 Z" fill="#0E9384" opacity="0.55" />
+                  </g>
+                ))}
+                {[0, 90, 180, 270].map(r => (
+                  <g key={r} transform={`rotate(${r} 60 60)`}>
+                    <path d="M 60 8 L 75 60 L 60 60 Z" fill="#2DD4BF" />
+                    <path d="M 60 8 L 45 60 L 60 60 Z" fill="#14B8A6" />
+                  </g>
+                ))}
+                <g transform="rotate(45 60 60)"><rect x="51.5" y="51.5" width="17" height="17" fill="rgba(10,15,30,0.5)" stroke="#2DD4BF" strokeWidth="3" /></g>
+              </g></g></g>
+            </svg>
+            <div className="gxa-word" style={{ marginTop: 22 }}>
+              <GemlyxWordmark height={26} color="#F0F4FF" />
+            </div>
+            <div className="gxa-tag" style={{ marginTop: 20, color: "#7E8CAD", fontSize: 12, letterSpacing: "0.34em", textTransform: "uppercase" }}>It exists nowhere else</div>
+
+            <div className="gxa-choose" style={{ marginTop: 44, width: "100%", maxWidth: 720 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Where are you going?</div>
+              <div className="country-row">
+                <div className="country-ghost">
+                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: C.muted, opacity: 0.7 }}>?</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
+                </div>
+                <div onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
+                  style={{ flex: "0 1 340px", background: "rgba(15,22,40,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 18, padding: "16px 16px 14px", cursor: "pointer", boxShadow: "0 20px 60px -20px rgba(0,0,0,0.8)" }}>
+                  <svg viewBox="-12 -12 477 397" style={{ width: "100%", maxHeight: 150, display: "block", margin: "0 auto" }} aria-label="Map of Denmark with Gemlyx's verified towns">
+                    {DK_PATHS.map((p, i) => <polygon key={i} points={p} fill="#121B30" stroke="#2A3A55" strokeWidth="2.5" />)}
+                    {Object.entries(TOWN_COORDS).map(([name, [la, lo]]) => {
+                      const [x, y] = dkProject(la, lo);
+                      return (
+                        <g key={name}>
+                          <circle cx={x} cy={y} r="13" fill={`${C.gold}22`} />
+                          <circle cx={x} cy={y} r="5.5" fill={C.gold} stroke={C.bg} strokeWidth="2" />
+                        </g>
+                      );
+                    })}
+                  </svg>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 12 }}>
+                    <FlagDK height={12} />
+                    <span style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Denmark</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#6ECF97", background: "rgba(110,207,151,0.1)", border: "1px solid rgba(110,207,151,0.25)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
+                  </div>
+                  <div style={{ marginTop: 10, background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", borderRadius: 100, padding: "11px", fontSize: 13, fontWeight: 700, boxShadow: "0 4px 16px rgba(226,59,78,0.3)" }}>
+                    Enter Denmark →
+                  </div>
+                </div>
+                <div className="country-ghost">
+                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: C.muted, opacity: 0.7 }}>?</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 16 }}>Every dot is a place we've stood. More countries when they're ready.</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "calc(14px + env(safe-area-inset-top)) 16px 10px", position: "relative" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {/* Logo */}
