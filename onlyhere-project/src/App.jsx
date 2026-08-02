@@ -345,6 +345,16 @@ function GemlyxApp() {
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days } (build buffer only, see above)
   const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } — shown inline near the "Turn this into a guide" button while building
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
+  // BUG FIX (real production crash, "Cannot access before initialization"):
+  // these two used to be declared ~1600 lines further down, but the
+  // guidePendingNav handoff effect below reads them (in its own body AND its
+  // dependency array) on every render — a dependency array is evaluated
+  // eagerly as part of the useEffect() call itself, so referencing a const
+  // that hasn't executed its own declaration line yet is a real temporal-
+  // dead-zone ReferenceError, not just a lint nitpick. Declared here now,
+  // before anything in this component can reach for them.
+  const [exactDurations, setExactDurations] = useState({}); // "origin|dest|mode" -> {durationText, durationMinutes}
+  const [noRouteFound, setNoRouteFound] = useState({}); // "origin|dest|mode" -> true, when Google genuinely found nothing (e.g. islands needing ferry+train+taxi combos no single mode covers)
   useEffect(() => {
     // Mirror any real (non-loading, non-null) guide into the cache as it updates —
     // enrichGuideDays/fetchGuideWeather keep patching guideModal in over time, so this
@@ -1947,8 +1957,9 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // utils/guideEnrichment.js (imported above) so pages/GuidePage.jsx can use
   // the exact same logic when rendering/enriching a finished guide, instead
   // of a second hand-copied version that could quietly drift out of sync.
-  const [exactDurations, setExactDurations] = useState({}); // "origin|dest|mode" -> {durationText, durationMinutes}
-  const [noRouteFound, setNoRouteFound] = useState({}); // "origin|dest|mode" -> true, when Google genuinely found nothing (e.g. islands needing ferry+train+taxi combos no single mode covers)
+  // (exactDurations/noRouteFound themselves now declared up near guideModal —
+  // see the comment there — since the guidePendingNav handoff effect reads
+  // them and needs them initialized before it does, not after.)
   // Real Google-matched travel time (not a straight-line estimate) for every leg in a
   // guide, fetched once before it's shown. Needs /api/directions.js + GOOGLE_MAPS_KEY —
   // if either is missing, this silently no-ops and legs fall back to the km estimate,
@@ -4905,10 +4916,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
           fixed above it. Animated: only light — the painting breathes very
           slowly, painted lanterns/torch pulse, the arch sunset breathes,
           blue mushrooms pulse cool, and golden dust drifts through the air.
-          The middle is the country picker: Denmark's card carries a real
-          photo (the Little Mermaid) and its own line — each country gets
-          its own. Served from a 2x-upscaled export (front-page-2x.jpg) to
-          cut the phone blur from the 1024px original. */}
+          The middle is the country picker: Denmark's card carries its own
+          photo and line — each country gets its own. Painting served from a
+          2x-upscaled export (front-page-2x.jpg) to cut the phone blur from
+          the 1024px original. Card photo currently unset, see the "BUG/RISK
+          FIX" comment further down for why. */}
       {!entered && (
         <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
           <style>{`
@@ -5027,10 +5039,28 @@ You also have a web_search tool. Use it whenever someone asks about something th
           {introDone && (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "70px 20px 84px", pointerEvents: "none" }}>
             <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto" }}>
-              {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "68% 42%" }].map(cn => (
+              {/* RISK FIX: this card's photo used to be denmark-hero.jpg, a photo
+                  of the Little Mermaid statue — pulled per Oliver's flag that using
+                  it commercially can be a real legal risk (the statue's copyright,
+                  held by sculptor Edvard Eriksen's estate, is actively enforced
+                  against commercial use of its likeness in Denmark, unlike most
+                  public statues). Same filename now points at a real Nyhavn harbor
+                  photo Oliver supplied instead — landscape shot, no statue, no
+                  identifiable living/trademarked subject. Still falls back to the
+                  plain gradient + flag if the photo ever fails to load. */}
+              {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "50% 62%" }].map(cn => (
                 <div key={cn.id} style={{ background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, overflow: "hidden", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
                   <div style={{ height: 158, position: "relative", overflow: "hidden" }}>
-                    <img src={cn.photo} alt={cn.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: cn.photoPos }} />
+                    {/* Gradient + flag always rendered underneath, not just as a
+                        fallback when photo is unset — the img (when present) sits on
+                        top and hides itself on load failure, so a missing/broken
+                        photo file never leaves a blank or broken-image icon here. */}
+                    <div style={{ position: "absolute", inset: 0, background: `radial-gradient(120% 90% at 20% 10%, #2A2015 0%, transparent 60%), radial-gradient(100% 80% at 85% 100%, #1B140D 0%, transparent 55%), #0F0D08`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <FlagDK height={40} />
+                    </div>
+                    {cn.photo && (
+                      <img src={cn.photo} alt={cn.name} onError={e => { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: cn.photoPos }} />
+                    )}
                     <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(12,11,7,0.72), transparent 55%)" }} />
                     <div style={{ position: "absolute", bottom: 10, left: 14, display: "flex", alignItems: "center", gap: 8 }}>
                       <FlagDK height={12} />

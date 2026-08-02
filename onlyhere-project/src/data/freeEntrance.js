@@ -71,8 +71,8 @@ export const freeEntrance = [
       { type: "paragraph", content: "May–September — the gardens are at their most colourful, with blooming flowers and plenty of sunny spots to relax." },
       { type: "image", src: "/librarygarden4.jpg" },
     ] },
-  { id: 11, name: "Medical Herb Garden, Kastellet", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Hidden garden", emoji: "🌱", desc: "A tiny, secluded herb patch inside the star-fortress of Kastellet — bypassed by most tourists rushing to the Little Mermaid.", website: "https://www.kastelletsvenner.dk/", color: "#558B2F" },
-  { id: 12, name: "Kastellet", popularityTag: "Common Attraction", city: "Copenhagen", type: "Star fortress & waterfront walk", emoji: "🛡", desc: "One of Europe's best-preserved star fortresses — centuries of military history combined with some of Copenhagen's best waterfront walks. Completely free, and a genuinely better use of your time than just photographing the Little Mermaid next door.", website: null, color: "#455A64",
+  { id: 11, name: "Medical Herb Garden, Kastellet", popularityTag: "Hidden Gem", city: "Copenhagen", type: "Hidden garden", emoji: "🌱", desc: "A tiny, secluded herb patch inside the star-fortress of Kastellet, bypassed by most tourists rushing toward the harbourfront next door.", website: "https://www.kastelletsvenner.dk/", color: "#558B2F" },
+  { id: 12, name: "Kastellet", popularityTag: "Common Attraction", city: "Copenhagen", type: "Star fortress & waterfront walk", emoji: "🛡", desc: "One of Europe's best-preserved star fortresses, combining centuries of military history with some of Copenhagen's best waterfront walks. Completely free, and a genuinely better use of your time than most people give it.", website: null, color: "#455A64",
     blogBody: [
       { type: "heading", content: "What Makes It Special" },
       { type: "paragraph", content: "Kastellet isn't just a historic fortress — it's an active military site that's also one of Copenhagen's most scenic public spaces. Walk the grassy ramparts, admire the bright red barracks, visit the historic windmill and enjoy panoramic views across the moats and harbour." },
