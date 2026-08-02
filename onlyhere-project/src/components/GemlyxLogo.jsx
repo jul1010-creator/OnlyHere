@@ -14,26 +14,37 @@ const TEAL_BRIGHT = "#2DD4BF";
 const TEAL_MID = "#14B8A6";
 const TEAL_DEEP = "#0E9384";
 
+// Gold variant of the compass — used in gold-dominant contexts (the parchment
+// guide-building screen, gold-accented panels) where the cyan gem clashed.
+// Oliver's call: adventure yes, but cyan floating in a sea of gold looked off.
+const TONES = {
+  teal: { bright: TEAL_BRIGHT, mid: TEAL_MID, deep: TEAL_DEEP },
+  gold: { bright: "#E8C25E", mid: "#D9A441", deep: "#A87B26" },
+};
+
 // The gem itself, drawn in the logo file's 120×120 coordinate space.
-const GemCore = () => (
-  <g transform="translate(12,12) scale(0.8)">
-    {[45, 135, 225, 315].map(r => (
-      <g key={r} transform={`rotate(${r} 60 60)`}>
-        <path d="M 60 30 L 70 60 L 60 60 Z" fill={TEAL_DEEP} />
-        <path d="M 60 30 L 50 60 L 60 60 Z" fill={TEAL_DEEP} opacity="0.55" />
+const GemCore = ({ tone = "teal" }) => {
+  const t = TONES[tone] || TONES.teal;
+  return (
+    <g transform="translate(12,12) scale(0.8)">
+      {[45, 135, 225, 315].map(r => (
+        <g key={r} transform={`rotate(${r} 60 60)`}>
+          <path d="M 60 30 L 70 60 L 60 60 Z" fill={t.deep} />
+          <path d="M 60 30 L 50 60 L 60 60 Z" fill={t.deep} opacity="0.55" />
+        </g>
+      ))}
+      {[0, 90, 180, 270].map(r => (
+        <g key={r} transform={`rotate(${r} 60 60)`}>
+          <path d="M 60 8 L 75 60 L 60 60 Z" fill={t.bright} />
+          <path d="M 60 8 L 45 60 L 60 60 Z" fill={t.mid} />
+        </g>
+      ))}
+      <g transform="rotate(45 60 60)">
+        <rect x="51.5" y="51.5" width="17" height="17" fill="rgba(10,15,30,0.5)" stroke={t.bright} strokeWidth="3" />
       </g>
-    ))}
-    {[0, 90, 180, 270].map(r => (
-      <g key={r} transform={`rotate(${r} 60 60)`}>
-        <path d="M 60 8 L 75 60 L 60 60 Z" fill={TEAL_BRIGHT} />
-        <path d="M 60 8 L 45 60 L 60 60 Z" fill={TEAL_MID} />
-      </g>
-    ))}
-    <g transform="rotate(45 60 60)">
-      <rect x="51.5" y="51.5" width="17" height="17" fill="rgba(10,15,30,0.5)" stroke={TEAL_BRIGHT} strokeWidth="3" />
     </g>
-  </g>
-);
+  );
+};
 
 export const GemlyxMark = ({ size = 24, ring = true, ringColor = "#EDF0F7", style }) => (
   <svg width={size} height={size} viewBox="0 0 120 120" style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} aria-label="Gemlyx">
@@ -62,26 +73,21 @@ export const GemlyxLogo = ({ size = 20, color = "#EDF0F7", gap = 8, style }) => 
   </span>
 );
 
-// The loading icon — Oliver's ask: the logo IS the loader. The gem spins with
-// the same easing feel as his hero intro, and the ring becomes a chasing arc.
-// Keyframes are injected once per mount under gx- names to avoid collisions.
-export const GemlyxLoader = ({ size = 40, label, style }) => (
-  <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 10, ...style }}>
+// The loading icon — per Oliver: ONLY the compass turning. No chasing arc, no
+// label — just the gem rotating inside its quiet static ring. `tone="gold"`
+// renders the gold compass for gold-dominant contexts.
+export const GemlyxLoader = ({ size = 40, tone = "teal", ring = true, label, style }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", ...style }}>
     <style>{`
       @keyframes gxGemSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-      @keyframes gxRingChase { 0% { transform: rotate(-90deg); } 100% { transform: rotate(270deg); } }
-      @media (prefers-reduced-motion: reduce) { .gx-spin, .gx-chase { animation: none !important; } }
+      @media (prefers-reduced-motion: reduce) { .gx-spin { animation: none !important; } }
     `}</style>
     <svg width={size} height={size} viewBox="0 0 120 120" style={{ display: "block" }} aria-label={label || "Loading"} role="img">
-      <circle cx="60" cy="60" r="54" fill="none" stroke="#EDF0F7" strokeWidth="4" opacity="0.15" />
-      <g className="gx-chase" style={{ transformOrigin: "60px 60px", animation: "gxRingChase 1.4s linear infinite" }}>
-        <circle cx="60" cy="60" r="54" fill="none" stroke={TEAL_BRIGHT} strokeWidth="4" strokeLinecap="round" strokeDasharray="90 249.3" />
-      </g>
-      <g className="gx-spin" style={{ transformOrigin: "60px 60px", animation: "gxGemSpin 2.8s cubic-bezier(0.45, 0.05, 0.35, 0.95) infinite" }}>
-        <GemCore />
+      {ring && <circle cx="60" cy="60" r="54" fill="none" stroke="#EDF0F7" strokeWidth="4" opacity="0.16" />}
+      <g className="gx-spin" style={{ transformOrigin: "60px 60px", animation: "gxGemSpin 2.4s cubic-bezier(0.45, 0.05, 0.35, 0.95) infinite" }}>
+        <GemCore tone={tone} />
       </g>
     </svg>
-    {label && <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.2, textTransform: "uppercase", color: "#64708C" }}>{label}</span>}
   </span>
 );
 

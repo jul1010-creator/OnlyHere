@@ -82,7 +82,7 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <GemlyxLoader size={44} label="Loading guide" />
+        <GemlyxLoader size={44} />
       </div>
     );
   }

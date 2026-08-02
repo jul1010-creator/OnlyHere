@@ -1,4 +1,36 @@
-# LATEST: the entrance is DAYTIME now — a sunlit storybook forest, per your reference
+# LATEST: your painted front page is in — with living light on top of it
+
+Your art (public/Front Page.jpg) is now the entrance, and it's exactly what the code-drawn versions couldn't be. What I layered on top follows one strict rule to keep it from ever looking off: **only light gets animated, never objects.** Nothing moves that the artist didn't paint as glowing.
+
+**The living effects:** the painting itself breathes with a very slow zoom (4.6%, 46 seconds each way — barely conscious); the five painted lanterns and the stair torch each pulse with a soft warm glow, gently out of sync with each other; the sunset behind the arch breathes brighter and dimmer on a 9-second cycle; the glowing blue mushrooms (all three clusters) answer with a slow cool pulse; and a handful of fireflies drift up through the lower half. The glow positions are pinned to a wrapper that scales exactly with the image, so they stay glued to the painted lanterns at every screen size — I verified the alignment against a real render before shipping. Reduced-motion users get the still painting.
+
+**The UI you asked for:** Log in and Sign up top right (dark glass + red; they show a polite "accounts are coming soon" note since there's no account system yet — the buttons are ready for when there is), Customer Support bottom center (opens a support email), and the explorer in the middle: your logo intro plays inside the stone arch, and beneath it a compact glass panel with the Denmark map (gold dots for every verified town), the flag, the LIVE badge, and "Enter Denmark →".
+
+**Please test before trusting**: load it fresh at a couple of window sizes and on your phone — check the glows sit on the lanterns, the mushroom pulses look natural, the arch panel doesn't cover anything you care about, and the top/bottom buttons work. If any glow looks misplaced on some screen size, screenshot it and I'll retune the position.
+
+---
+
+# EARLIER: Denmark page catch-up begins (Events + Food are real cards now), loader is compass-only, the AI thinks with a turning compass, and the teal-in-gold clash is fixed
+
+**1. The loader is ONLY the compass turning, as ordered.** The chasing ring arc and text label are gone — just your gem rotating inside its quiet ring (ring removable per spot). Used on the guide-building screen and shared-guide loading.
+
+**2. The color clash is fixed with a gold compass, not by repainting your logo.** The awkwardness you named — cyan gem sitting in the middle of the gold parchment "travel journal" screen — is real, and the fix follows one rule: the compass adapts to its surroundings. There's now a gold-toned variant of the gem (same shape, gold family) used in gold-dominant contexts: the parchment guide-building screen and the AI chat. On dark navy (where teal looks right at home), it stays teal — the entrance, the nav, the favicon are untouched. Your logo's identity stays teal; the loading compass is context-aware.
+
+**3. When Gemlyx is thinking, the compass turns.** The three pulsing dots in the Detour chat are replaced by a small spinning gold compass + "Thinking…" — the brand doing the waiting.
+
+**4. Events page: from 2005 rows to real cards.** Every event is now a proper card: media plate on top (real photo when it exists, an elegant serif monogram plate when it doesn't — no more giant emoji floating in a void), a date badge (month + day) in the corner, the "days away" pill, your little Denmark minimap kept but tucked neatly beside the title, tier/ticket status as clean text pills (🔴🟡🟢 dots gone), station and ticket info with drawn train/ticket icons, and NO "Read more ›" — the whole card is tappable. On desktop they sit in a two-column grid instead of stretching wall-to-wall, and they tilt in 3D toward your cursor (the preview effect — phones unaffected). Tab emoji (🏘🌟⚔️) replaced with drawn icons.
+
+**5. Food page: same treatment.** Cards with photo/monogram plates, price as a badge on the image, category + location kicker, clean two-column desktop grid, tilt. The 💸💰💎 tab emoji are gone.
+
+**6. Every content page now holds a max-width container (1120px)** — Essentials, Attractions, Events, Food, Nightlife, Towns, and Detour no longer stretch edge-to-edge on wide screens. This single change kills most of the "2005 full-bleed" feel.
+
+**Still on the list (next pass):** Nightlife's rows, Attractions' list, the Essentials colored-emoji quick-jump grid, and the remaining content-card emoji. Also your painted entrance background — waiting on the art you're generating; drop it in whenever.
+
+**Please test before trusting**: Events and Food had the real JSX surgery — check both tabs, tap into a detail page from each, try the filters, and on desktop hover the cards for the tilt. Then build a guide and watch the gold compass on the parchment screen, and ask the chat something to see the thinking compass.
+
+---
+
+# EARLIER: the entrance is DAYTIME now — a sunlit storybook forest, per your reference
 
 You were right to say no to the night version — your forest painting reference (the mossy cottage in sunbeams) is a completely different feeling: alive, warm, adventurous. Rebuilt the whole entrance scene in daylight:
 

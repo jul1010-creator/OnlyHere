@@ -2279,6 +2279,13 @@ If the conversation only covers a single day or a few stops with no explicit day
   // and the country picker; choosing Denmark drops you into the app. Shown on
   // every fresh load — it's the brand moment, and it's one click to pass.
   const [entered, setEntered] = useState(false);
+  // Small note chip on the front door (login/signup are placeholders for now).
+  const [landingNote, setLandingNote] = useState(null);
+  useEffect(() => {
+    if (!landingNote) return;
+    const t = setTimeout(() => setLandingNote(null), 3200);
+    return () => clearTimeout(t);
+  }, [landingNote]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -2743,61 +2750,76 @@ You also have a web_search tool. Use it whenever someone asks about something th
     </div>
   );
 
+  // ── 3D TILT (shared) ─────────────────────────────────────────
+  // Redesign pass: cards tilt toward the cursor in real 3D with no library and
+  // no re-renders — handlers write transforms straight onto the element. Touch
+  // devices never fire mousemove, so phones are unaffected.
+  const tiltMove = (e) => {
+    const el = e.currentTarget, r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+    el.style.transform = `perspective(950px) rotateX(${((0.5 - py) * 5).toFixed(2)}deg) rotateY(${((px - 0.5) * 7).toFixed(2)}deg) translateY(-2px)`;
+  };
+  const tiltLeave = (e) => { e.currentTarget.style.transform = ""; };
+
   // ── EVENT CARD ───────────────────────────────────────────────
-  const EventCard = ({ event }) => (
-    <div onClick={() => setEventDetail(event)} style={{ borderTop: `1px solid ${C.border}`, padding: "20px 0 24px", cursor: "pointer" }}>
-      {event.photo && (
-        <div style={{ height: 130, borderRadius: 12, overflow: "hidden", marginBottom: 14, position: "relative", background: `linear-gradient(135deg, ${event.color}33 0%, #0A0F1E 100%)` }}>
-          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44, opacity: 0.25 }}>{event.emoji}</span>
-          <img src={event.photo} alt={event.name} onError={e => { e.target.style.display = "none"; }}
-            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+  // Redesign pass: the old full-width text rows ("2005 blog") became real
+  // cards — media plate with a date badge, monogram fallback instead of a
+  // floating emoji, drawn icons, one-line status pills, whole card tappable.
+  const EventCard = ({ event }) => {
+    const d = event.date ? new Date(event.date + "T00:00:00") : null;
+    const away = !event.date ? "" : daysUntil(event.date) <= 0 ? "Happening now" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)} days away`;
+    return (
+      <div onClick={() => setEventDetail(event)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
+        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease, border-color 0.18s ease", willChange: "transform" }}>
+        <div style={{ height: 136, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${event.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 52, fontWeight: 500, color: "rgba(148,163,199,0.3)" }}>{(event.name || "◆").slice(0, 1)}</span>
+          {event.photo && (
+            <img src={event.photo} alt={event.name} onError={e => { e.target.style.display = "none"; }}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          )}
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
+          {d && (
+            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, color: C.accent, textTransform: "uppercase", lineHeight: 1 }}>{d.toLocaleString("en-GB", { month: "short" })}</div>
+              <div style={{ fontSize: 21, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{d.getDate()}</div>
+            </div>
+          )}
+          {away && (
+            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
+          )}
         </div>
-      )}
-      <div style={{ display: "flex", gap: 14, marginBottom: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: event.color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>{event.type} · {event.town}</div>
-          <div style={{ fontSize: 23, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, marginBottom: 6 }}>{event.emoji} {event.name}</div>
-          <div style={{ fontSize: 12, color: C.gold, fontWeight: 600 }}>{getEventDate(event.date, event.dateEnd)}</div>
-        </div>
-        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-          <div style={{ width: 88, height: 88, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}` }}>
-            <DKLocator town={event.town} color={event.color} />
+        <div style={{ padding: "14px 16px 15px" }}>
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: event.color, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 5 }}>{event.type} · {event.town}</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, marginBottom: 4 }}>{event.name}</div>
+              <div style={{ fontSize: 12, color: C.gold, fontWeight: 600 }}>{getEventDate(event.date, event.dateEnd)}</div>
+            </div>
+            <div style={{ flexShrink: 0, width: 62, height: 62, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.border}` }}>
+              <DKLocator town={event.town} color={event.color} />
+            </div>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>
-            {!event.date ? "" : daysUntil(event.date) <= 0 ? "Happening now" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)} days away`}
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginTop: 11 }}>
+            {event.tier === "Can't miss out" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#0A0F1E", background: C.gold }}>★ Can't miss out</span>}
+            {event.tier === "Worth it for longer stays" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#FFB347", background: "#FFB34722" }}>Worth a longer stay</span>}
+            {event.tier === "Recommended" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#6ECF97", background: "rgba(110,207,151,0.12)" }}>Recommended</span>}
+            {event.rating && <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>}
+            <span style={{ fontSize: 11.5, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime)}</span>
+            {event.ticketStatus === "sold_out" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FF6B6B", background: "rgba(255,107,107,0.12)", padding: "3px 9px", borderRadius: 100 }}>Sold out</span>}
+            {event.ticketStatus === "selling_fast" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "3px 9px", borderRadius: 100 }}>Selling fast</span>}
+            {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#6ECF97", background: "rgba(110,207,151,0.12)", padding: "3px 9px", borderRadius: 100 }}>Tickets available</span>}
+            {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#6ECF97", background: "rgba(110,207,151,0.12)", padding: "3px 9px", borderRadius: 100 }}>Free entry</span>}
           </div>
+          {(event.nearestStation || event.ticketInfo) && (
+            <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 12, paddingTop: 11, display: "flex", flexDirection: "column", gap: 5 }}>
+              {event.nearestStation && <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: C.light }}><Ico name="train" size={13} color={C.muted} /> {event.nearestStation}</div>}
+              {event.ticketInfo && <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: C.light }}><Ico name="ticket" size={13} color={C.muted} /> {event.ticketInfo}</div>}
+            </div>
+          )}
         </div>
       </div>
-      {event.tier && (
-        <div style={{ marginBottom: 10 }}>
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100,
-            color: event.tier === "Can't miss out" ? "#0A0F1E" : event.tier === "Worth it for longer stays" ? "#FFB347" : "#4CAF50",
-            background: event.tier === "Can't miss out" ? C.gold : event.tier === "Worth it for longer stays" ? "#FFB34722" : "#4CAF5022",
-          }}>
-            {event.tier === "Can't miss out" ? "⭐ Can't miss out" : event.tier === "Worth it for longer stays" ? "◷ Worth it for longer stays" : "👍 Recommended"}
-          </span>
-        </div>
-      )}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-        {event.rating && <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>}
-        <span style={{ fontSize: 12, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime)}</span>
-        {event.ticketStatus === "sold_out" && <span style={{ fontSize: 10, fontWeight: 700, color: "#ff4444", background: "#ff444422", padding: "3px 9px", borderRadius: 100 }}>🔴 Sold out</span>}
-        {event.ticketStatus === "selling_fast" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "3px 9px", borderRadius: 100 }}>🟡 Selling fast</span>}
-        {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>🟢 Available</span>}
-        {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5022", padding: "3px 9px", borderRadius: 100 }}>✓ Free entry</span>}
-      </div>
-      {(event.nearestStation || event.ticketInfo || event.accommodationTip) && (
-        <div style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 12, display: "flex", flexDirection: "column", gap: 5 }}>
-          {event.nearestStation && <div style={{ fontSize: 11, color: C.light }}>🚆 <span style={{ color: C.muted }}>Station:</span> {event.nearestStation}</div>}
-          {event.ticketInfo && <div style={{ fontSize: 11, color: C.light }}>🎟️ <span style={{ color: C.muted }}>Tickets:</span> {event.ticketInfo}</div>}
-        </div>
-      )}
-      <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
-        Read more <span style={{ fontSize: 15 }}>›</span>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const filteredEvents = (eventTab === "local" ? events : eventTab === "viking" ? vikingEvents : majorEvents)
     .filter(e => isUpcoming(e.date))
@@ -2826,10 +2848,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {aiLoading && (
                       <div className="gemlyx-msg-in" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", marginBottom: 10 }}>
                         <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
-                        <div style={{ background: C.bg, borderRadius: "18px 18px 18px 4px", padding: "12px 16px", border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.gold}`, display: "inline-block" }}>
-                          <span className="gemlyx-thinking-dot" style={{ animationDelay: "0s" }} />
-                          <span className="gemlyx-thinking-dot" style={{ animationDelay: "0.15s" }} />
-                          <span className="gemlyx-thinking-dot" style={{ animationDelay: "0.3s" }} />
+                        {/* Per Oliver: while Gemlyx is thinking, the compass turns. */}
+                        <div style={{ background: C.bg, borderRadius: "18px 18px 18px 4px", padding: "10px 14px", border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.gold}`, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <GemlyxLoader size={20} tone="gold" ring={false} />
+                          <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Thinking…</span>
                         </div>
                       </div>
                     )}
@@ -3617,7 +3639,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               : (b.rating || 0) - (a.rating || 0));
 
             return (
-            <div className={pageAnim} style={{ padding: "16px" }}>
+            <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Attractions</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal — genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
@@ -3776,17 +3798,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           {/* ── EVENTS ───────────────────────────────────────── */}
           {tab === "events" && (
-            <div className={pageAnim} style={{ padding: "16px" }}>
+            <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Events</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about — we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
 
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
-                {[{ id: "local", label: "🏘 Local" }, { id: "major", label: "🌟 Major" }, { id: "viking", label: "⚔️ Viking" }].map(t => (
+                {[{ id: "local", label: "Local", ico: "town" }, { id: "major", label: "Major", ico: "ticket" }, { id: "viking", label: "Viking", ico: "ferry" }].map(t => (
                   <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
-                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    {t.label}
+                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    <Ico name={t.ico} size={14} /> {t.label}
                   </button>
                 ))}
               </div>
@@ -3806,14 +3828,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
               {filteredEvents.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No upcoming events — try a different filter</div>
-              ) : filteredEvents.map(e => <EventCard key={e.id} event={e} />)}
+              ) : (
+                <div className="cards-grid">
+                  {filteredEvents.map(e => <EventCard key={e.id} event={e} />)}
+                </div>
+              )}
             </div>
           )}
 
           {/* ── TOWNS ────────────────────────────────────────── */}
           {/* ── FOOD ─────────────────────────────────────────── */}
           {tab === "food" && (
-            <div className={pageAnim} style={{ padding: "16px" }}>
+            <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Food</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market — the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
@@ -3826,7 +3852,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </div>
 
               <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}`, flexWrap: "wrap" }}>
-                {[{ id: "All", label: "All" }, { id: "Budget", label: "💸 Budget" }, { id: "Mid-range", label: "💰 Mid-range" }, { id: "Splurge", label: "💎 Splurge" }].map(t => (
+                {[{ id: "All", label: "All" }, { id: "Budget", label: "Budget" }, { id: "Mid-range", label: "Mid-range" }, { id: "Splurge", label: "Splurge" }].map(t => (
                   <button key={t.id} onClick={() => setFoodTab(t.id)}
                     style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${foodTab === t.id ? C.accent : "transparent"}`, color: foodTab === t.id ? C.text : C.muted, padding: "12px 6px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
                     {t.label}
@@ -3834,29 +3860,30 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 ))}
               </div>
 
-              {foodSpots.filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet))).map(spot => (
-                <div key={spot.id} onClick={() => setFoodDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
-                  {spot.photo && (
-                    <div style={{ height: 140, borderRadius: 12, overflow: "hidden", marginBottom: 14, position: "relative", background: `linear-gradient(135deg, ${spot.color}33 0%, #0A0F1E 100%)` }}>
-                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44, opacity: 0.25 }}>{spot.emoji}</span>
-                      <img src={spot.photo} alt={spot.name} onError={e => { e.target.style.display = "none"; }}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+              {/* Redesign pass: text rows with dangling "Read more" links became
+                  real cards — media plate (photo or monogram), name, meta, price,
+                  two-sentence description, whole card tappable, tilt on hover. */}
+              <div className="cards-grid">
+                {foodSpots.filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet))).map(spot => (
+                  <div key={spot.id} onClick={() => setFoodDetail(spot)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease", willChange: "transform" }}>
+                    <div style={{ height: 128, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${spot.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
+                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 48, fontWeight: 500, color: "rgba(148,163,199,0.3)" }}>{(spot.name || "◆").slice(0, 1)}</span>
+                      {spot.photo && (
+                        <img src={spot.photo} alt={spot.name} onError={e => { e.target.style.display = "none"; }}
+                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                      )}
+                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
+                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{spot.price}</div>
                     </div>
-                  )}
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                    <span style={{ fontSize: 22 }}>{spot.emoji}</span>
-                    <div>
-                      <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}>{spot.name}</div>
-                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
+                    <div style={{ padding: "13px 15px 15px" }}>
+                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>{spot.category} · {spot.location}</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, marginBottom: 6 }}>{spot.name}</div>
+                      <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>{(spot.desc || "").slice(0, 110)}{(spot.desc || "").length > 110 ? "…" : ""}</div>
                     </div>
-                    <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: spot.color, flexShrink: 0 }}>{spot.price}</span>
                   </div>
-                  <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{(spot.desc || "").slice(0, 100)}{(spot.desc || "").length > 100 ? "…" : ""}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
-                    Read more <span style={{ fontSize: 15 }}>›</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
@@ -3876,7 +3903,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
             const townList = Object.keys(townGroups).sort((a, b) => townGroups[b].length - townGroups[a].length);
 
             return (
-            <div className={pageAnim} style={{ padding: "16px" }}>
+            <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               {!nightlifeTownView ? (
                 // ── LEVEL 1: pick a town ──────────────────────────
                 <>
@@ -3985,7 +4012,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           {/* ── ROAD TRIPS ───────────────────────────────────── */}
           {tab === "visits" && (
-            <div className={pageAnim} style={{ padding: "16px" }}>
+            <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Hidden Towns</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — every one of them visited and verified in person.</div>
@@ -4028,7 +4055,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           {/* ── AI (dedicated page) ─────────────────────────────── */}
           {tab === "ai" && (
-            <div className={pageAnim} style={{ padding: "16px" }}>
+            <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 22, paddingTop: 8, textAlign: "center" }}>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "6px 16px", marginBottom: 16 }}>
                   <span style={{ fontSize: 13 }}>✦</span>
@@ -4282,7 +4309,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           {/* ── ESSENTIALS ───────────────────────────────────── */}
           {tab === "essentials" && (
-            <div className={pageAnim} style={{ padding: "16px" }}>
+            <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text }}>✓ Travel Essentials</div>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Everything you need to travel Denmark like a local</div>
@@ -4506,6 +4533,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
         @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
         .detour-2col { display: grid; grid-template-columns: 1fr; gap: 10px; }
         @media (min-width: 600px) { .detour-2col { grid-template-columns: 1fr 1fr; } }
+        .cards-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+        @media (min-width: 860px) { .cards-grid { grid-template-columns: 1fr 1fr; gap: 18px; } }
         .country-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
         .country-ghost { flex: 0 0 110px; border: 1.5px dashed #2A3A55; border-radius: 18px; padding: 26px 10px; opacity: 0.75; display: none; }
         @media (min-width: 760px) { .country-ghost { display: block; } }
@@ -4567,21 +4596,31 @@ You also have a web_search tool. Use it whenever someone asks about something th
           lighthouse blinking teal, a soft vignette framing the scene — and
           his animated logo intro (ring draws, gem pops and spins, letters
           fade) above the Denmark card that takes you in. */}
+      {/* ── THE FRONT DOOR ──────────────────────────────────────────
+          Oliver's own painted scene (public/Front Page.jpg): a mossy castle
+          gate in an enchanted forest. Rule for animating over a painting:
+          only animate LIGHT — never add moving objects the artist didn't
+          paint. So: a very slow breathing zoom on the painting itself, warm
+          pulsing glows pinned to the painted lanterns/torch, a soft breathe
+          on the sunset behind the arch, cool pulses on the blue mushrooms,
+          and a handful of drifting fireflies. Everything else is still.
+          Glow positions are % of a fixed-aspect wrapper that matches the
+          image exactly, so they stay glued to the painted lanterns at any
+          screen size. UI: Log in / Sign up top right, the explorer panel in
+          the middle (under the arch), Customer Support at the bottom. */}
       {!entered && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflowY: "auto", background: "linear-gradient(180deg,#122B10 0%, #2E5A1F 26%, #6FA93A 55%, #8FC24E 78%, #7DB443 100%)" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
           <style>{`
-            .gxa-canopy, .gxa-trunks { position:absolute; top:0; left:0; right:0; pointer-events:none; }
-            .gxa-trunks { opacity:.9; }
-            .gxa-ray { position:absolute; top:-12vh; height:130vh; pointer-events:none; background:linear-gradient(180deg, rgba(255,250,205,0.30) 0%, rgba(255,250,205,0.10) 55%, rgba(255,250,205,0) 80%); transform:rotate(16deg); transform-origin:top center; filter:blur(9px); animation: gxaRayPulse 9s ease-in-out infinite alternate; will-change:opacity; }
-            @keyframes gxaRayPulse { from { opacity:.7; } to { opacity:1; } }
-            .gxa-pol { position:absolute; bottom:26%; width:4px; height:4px; border-radius:50%; background:rgba(250,236,150,.85); box-shadow:0 0 6px rgba(250,236,150,.6); opacity:0; animation: gxaFloat 16s linear infinite; pointer-events:none; }
-            @keyframes gxaFloat { 0% { transform:translate(0,0); opacity:0; } 12% { opacity:.8; } 75% { opacity:.4; } 100% { transform:translate(3vw,-38vh); opacity:0; } }
-            .gxa-bird { position:absolute; left:-6%; pointer-events:none; animation: gxaFly 46s linear infinite; }
-            .gxa-bird2 { animation-duration: 63s; animation-delay: -24s; }
-            @keyframes gxaFly { 0% { transform: translate(0, 0); } 25% { transform: translate(30vw, -2.5vh); } 50% { transform: translate(60vw, 1.5vh); } 75% { transform: translate(90vw, -2vh); } 100% { transform: translate(125vw, 0); } }
-            .gxa-smoke { animation: gxaSmokeUp 4.5s ease-out infinite; will-change:transform,opacity; }
-            .gxa-smoke2 { animation-delay: 1.5s; } .gxa-smoke3 { animation-delay: 3s; }
-            @keyframes gxaSmokeUp { 0% { transform:translateY(6px); opacity:.7; } 100% { transform:translateY(-34px); opacity:0; } }
+            .gxa-kb { position:absolute; top:50%; left:50%; width:max(100vw, 175.04vh); aspect-ratio: 1024 / 585; animation: gxaKb 46s ease-in-out infinite alternate; will-change:transform; }
+            @keyframes gxaKb { from { transform:translate(-50%,-50%) scale(1); } to { transform:translate(-50%,-50%) scale(1.05); } }
+            .gxa-glow { position:absolute; border-radius:50%; pointer-events:none; animation: gxaGlowPulse 4.2s ease-in-out infinite; }
+            @keyframes gxaGlowPulse { 0%,100% { opacity:.55; } 50% { opacity:1; } }
+            .gxa-shroom { position:absolute; border-radius:50%; pointer-events:none; animation: gxaShroomPulse 6.5s ease-in-out infinite; }
+            @keyframes gxaShroomPulse { 0%,100% { opacity:.35; } 50% { opacity:.8; } }
+            .gxa-archlight { position:absolute; border-radius:50%; pointer-events:none; animation: gxaArchBreathe 9s ease-in-out infinite alternate; }
+            @keyframes gxaArchBreathe { from { opacity:.35; transform:scale(1); } to { opacity:.7; transform:scale(1.12); } }
+            .gxa-fly { position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(255,224,130,.9); box-shadow:0 0 7px rgba(255,214,110,.75); opacity:0; animation: gxaFirefly 11s ease-in-out infinite; pointer-events:none; }
+            @keyframes gxaFirefly { 0% { transform:translate(0,0); opacity:0; } 12% { opacity:.9; } 45% { transform:translate(2.2vw,-6vh); opacity:.35; } 70% { transform:translate(-1.2vw,-11vh); opacity:.75; } 100% { transform:translate(1vw,-16vh); opacity:0; } }
             .gxa-ring { animation: gxaRingdraw 1.2s cubic-bezier(.45,.05,.35,.95) 1.9s both; }
             @keyframes gxaRingdraw { from { stroke-dashoffset:339.3; } to { stroke-dashoffset:0; } }
             .gxa-pop { transform-box:fill-box; transform-origin:center; animation: gxaPop .5s cubic-bezier(.2,.9,.3,1.18) 1.5s both; }
@@ -4596,115 +4635,64 @@ You also have a web_search tool. Use it whenever someone asks about something th
             @keyframes gxaFadein { from { opacity:0; } to { opacity:1; } }
             .gxa-tag { animation: gxaFadein 1.2s cubic-bezier(.45,.05,.35,.95) 3.2s both; }
             .gxa-choose { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) 2.7s both; }
+            .gxa-topbar { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) 2.2s both; }
             @media (prefers-reduced-motion: reduce) {
-              .gxa-ray, .gxa-pol, .gxa-bird, .gxa-smoke, .gxa-ring, .gxa-pop, .gxa-spin, .gxa-tag, .gxa-choose { animation: none !important; }
-              .gxa-pol, .gxa-smoke { opacity: 0 !important; }
-              .gxa-bird { left: 30% !important; }
+              .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-ring, .gxa-pop, .gxa-spin, .gxa-tag, .gxa-choose, .gxa-topbar { animation: none !important; }
+              .gxa-fly { opacity: 0 !important; }
               .gxa-word svg path { animation: none !important; opacity: 1; }
               .gxa-ring { stroke-dashoffset: 0 !important; }
+              .gxa-tag, .gxa-choose, .gxa-topbar { opacity: 1 !important; }
             }
           `}</style>
 
-          {/* The forest, upper half: canopy overhead, tree trunks, blurred sun
-              shafts breathing through, golden pollen motes drifting up, two
-              birds slowly crossing the sky. Daylight, alive — Oliver's forest
-              reference, not night. */}
-          <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-            <div className="gxa-trunks">
-              <svg viewBox="0 0 1440 500" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "56vh" }} aria-hidden="true">
-                <g fill="#2A5220" opacity="0.55">
-                  <path d="M150,0 L162,0 L174,500 L134,500 Z" /><path d="M395,0 L404,0 L414,500 L382,500 Z" />
-                  <path d="M1050,0 L1060,0 L1072,500 L1034,500 Z" /><path d="M1290,0 L1300,0 L1314,500 L1272,500 Z" />
-                </g>
-                <g fill="#1F4218" opacity="0.7">
-                  <path d="M70,0 L86,0 L102,500 L50,500 Z" /><path d="M1380,0 L1394,0 L1410,500 L1360,500 Z" />
-                </g>
-              </svg>
-            </div>
-            <div className="gxa-canopy">
-              <svg viewBox="0 0 1440 300" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "30vh" }} aria-hidden="true">
-                <g fill="#14310F">
-                  <ellipse cx="120" cy="10" rx="330" ry="150" /><ellipse cx="480" cy="-40" rx="340" ry="170" />
-                  <ellipse cx="820" cy="-20" rx="360" ry="185" /><ellipse cx="1180" cy="0" rx="360" ry="165" />
-                  <ellipse cx="1440" cy="30" rx="300" ry="150" />
-                </g>
-                <g fill="#1B3E14">
-                  <ellipse cx="240" cy="-30" rx="260" ry="120" /><ellipse cx="700" cy="-60" rx="300" ry="140" />
-                  <ellipse cx="1120" cy="-40" rx="280" ry="125" />
-                </g>
-                <g fill="#245018" opacity="0.8">
-                  <ellipse cx="90" cy="-10" rx="150" ry="80" /><ellipse cx="1360" cy="-5" rx="160" ry="85" />
-                </g>
-              </svg>
-            </div>
-            <div className="gxa-ray" style={{ left: "16%", width: "9vw" }} />
-            <div className="gxa-ray" style={{ left: "34%", width: "5vw", animationDelay: "3s" }} />
-            <div className="gxa-ray" style={{ left: "58%", width: "9vw", animationDelay: "6s" }} />
-            <div className="gxa-ray" style={{ left: "78%", width: "6vw", animationDelay: "1.5s" }} />
-            {[[12, 0], [24, 3.5], [37, 7], [52, 1.8], [64, 5.2], [77, 8.6], [88, 2.7], [45, 10]].map(([l, d], i) => (
-              <span key={i} className="gxa-pol" style={{ left: `${l}%`, animationDelay: `${d}s` }} />
+          {/* The painting, breathing slowly, with light effects pinned to it */}
+          <div className="gxa-kb">
+            <img src="/Front%20Page.jpg" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "fill" }} />
+            {/* painted lanterns on the gate + the torch on the left stair */}
+            {[[41.6, 41.5, 7], [42.2, 27.5, 6], [62.4, 34.5, 6.5], [63.2, 46.5, 7], [25.7, 41.5, 7.5]].map(([x, y, s], i) => (
+              <div key={i} className="gxa-glow" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.874}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(255,190,90,0.5) 0%, rgba(255,160,60,0.18) 45%, transparent 70%)", animationDelay: `${i * 0.9}s` }} />
             ))}
-            <div className="gxa-bird" style={{ top: "19%" }}>
-              <svg width="26" height="10" viewBox="0 0 26 10"><path d="M1 8 Q7 1 13 7 Q19 1 25 8" stroke="#1B3A14" strokeWidth="2" fill="none" strokeLinecap="round" /></svg>
-            </div>
-            <div className="gxa-bird gxa-bird2" style={{ top: "26%" }}>
-              <svg width="18" height="8" viewBox="0 0 26 10"><path d="M1 8 Q7 1 13 7 Q19 1 25 8" stroke="#1B3A14" strokeWidth="2.4" fill="none" strokeLinecap="round" /></svg>
-            </div>
+            {/* sunset through the arch, breathing */}
+            <div className="gxa-archlight" style={{ left: "43%", top: "18%", width: "18%", aspectRatio: "1.2", background: "radial-gradient(circle, rgba(255,214,140,0.4) 0%, rgba(255,190,110,0.14) 50%, transparent 72%)" }} />
+            {/* the glowing blue mushrooms answer with a cool pulse */}
+            {[[12.5, 63, 7], [74.5, 67, 7.5], [93, 57.5, 6.5]].map(([x, y, s], i) => (
+              <div key={i} className="gxa-shroom" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.874}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(110,225,255,0.4) 0%, rgba(90,190,240,0.14) 48%, transparent 72%)", animationDelay: `${i * 2.1}s` }} />
+            ))}
           </div>
 
-          {/* The meadow — sunlit storybook clearing: light-dappled grass, a
-              winding dirt path to a moss-roofed cottage with smoking chimney
-              and lit round window, the tiny traveler walking the path, bushes,
-              a stump, grass tufts. Visually iterated against real renders. */}
-          <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, pointerEvents: "none" }}>
-            <svg viewBox="0 0 1440 430" preserveAspectRatio="xMidYMax slice" style={{ display: "block", width: "100%", height: "42vh" }} aria-hidden="true">
-              <path d="M0,150 C240,110 480,160 720,135 C960,110 1200,155 1440,125 L1440,430 L0,430 Z" fill="#8CC24F" />
-              <ellipse cx="380" cy="185" rx="150" ry="26" fill="#9ED45F" opacity="0.7" />
-              <ellipse cx="1020" cy="205" rx="190" ry="30" fill="#9ED45F" opacity="0.6" />
-              <path d="M0,240 C260,196 560,250 840,222 C1100,198 1300,248 1440,224 L1440,430 L0,430 Z" fill="#6FB03B" />
-              {/* cottage */}
-              <g transform="translate(1005,84) scale(1.06)">
-                <rect x="18" y="76" width="150" height="76" rx="3" fill="#CFC0A0" />
-                <path d="M4,80 L93,18 L182,80 C182,80 158,70 93,70 C28,70 4,80 4,80 Z" fill="#5D9C2E" />
-                <path d="M0,84 C30,66 156,66 186,84 C186,92 160,80 93,80 C26,80 0,92 0,84 Z" fill="#6FB03B" />
-                <rect x="132" y="20" width="16" height="34" fill="#A98D6B" />
-                <rect x="129" y="16" width="22" height="7" rx="2" fill="#8E7355" />
-                <circle cx="93" cy="52" r="9" fill="#F5E9C8" stroke="#8E7355" strokeWidth="3" />
-                <rect x="76" y="102" width="34" height="50" rx="3" fill="#9C6B36" />
-                <rect x="79" y="105" width="28" height="44" rx="2" fill="#7E5429" />
-                <rect x="32" y="100" width="26" height="22" rx="2" fill="#F5E9C8" stroke="#8E7355" strokeWidth="3" />
-                <rect x="126" y="100" width="26" height="22" rx="2" fill="#F5E9C8" stroke="#8E7355" strokeWidth="3" />
-                <circle className="gxa-smoke" cx="140" cy="10" r="6" fill="rgba(240,244,235,0.7)" />
-                <circle className="gxa-smoke gxa-smoke2" cx="143" cy="-6" r="8" fill="rgba(240,244,235,0.55)" />
-                <circle className="gxa-smoke gxa-smoke3" cx="147" cy="-24" r="10" fill="rgba(240,244,235,0.4)" />
-              </g>
-              <path d="M0,330 C300,290 620,340 900,314 C1140,292 1330,338 1440,316 L1440,430 L0,430 Z" fill="#529727" />
-              {/* winding dirt path to the cottage door */}
-              <path d="M640,430 C660,392 700,368 780,348 C880,326 1010,330 1078,268 L1092,276 C1020,342 884,342 796,360 C716,378 678,398 662,430 Z" fill="#C7A86B" opacity="0.9" />
-              {/* traveler walking the path */}
-              <g fill="#2E511C">
-                <circle cx="700" cy="368" r="5" />
-                <path d="M691 392 C691 377 709 377 709 392 Z" />
-                <rect x="712" y="366" width="2" height="26" rx="1" />
-              </g>
-              {/* bushes, stump, grass tufts */}
-              <ellipse cx="180" cy="330" rx="60" ry="24" fill="#3F7C20" />
-              <ellipse cx="240" cy="342" rx="44" ry="18" fill="#4A8A26" />
-              <ellipse cx="1300" cy="350" rx="70" ry="26" fill="#3F7C20" />
-              <circle cx="1210" cy="332" r="10" fill="#8E7355" /><ellipse cx="1210" cy="326" rx="10" ry="4" fill="#C9AE83" />
-              <g fill="#39701C">
-                <path d="M90,430 C92,404 96,398 98,394 C99,402 98,410 96,418 C102,406 106,402 112,398 C108,410 104,420 100,430 Z" />
-                <path d="M1352,430 C1354,406 1358,400 1360,396 C1361,404 1360,412 1358,420 C1364,408 1368,404 1374,400 C1370,412 1366,422 1362,430 Z" />
-              </g>
-            </svg>
+          {/* fireflies drifting up through the lower half */}
+          {[[14, 76, 0], [27, 82, 3.4], [44, 79, 6.8], [58, 84, 1.7], [71, 78, 5.1], [86, 81, 8.5], [36, 88, 9.9], [64, 90, 2.6]].map(([l, t, d], i) => (
+            <span key={i} className="gxa-fly" style={{ left: `${l}%`, top: `${t}%`, animationDelay: `${d}s` }} />
+          ))}
+
+          {/* legibility gradients + gentle vignette */}
+          <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 130, background: "linear-gradient(to bottom, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 110, background: "linear-gradient(to top, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(10,9,5,0.5) 100%)" }} />
+
+          {/* top bar: brand left, Log in / Sign up right */}
+          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0" }}>
+            <GemlyxLogo size={19} color="#F0EFE6" />
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
+                style={{ background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                Log in
+              </button>
+              <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
+                style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 14px rgba(0,0,0,0.35)" }}>
+                Sign up
+              </button>
+            </div>
           </div>
+          {landingNote && (
+            <div style={{ position: "absolute", top: "calc(64px + env(safe-area-inset-top))", right: 18, background: "rgba(12,11,7,0.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#F0EFE6", borderRadius: 12, padding: "10px 14px", fontSize: 12, maxWidth: 250, lineHeight: 1.5 }}>
+              {landingNote}
+            </div>
+          )}
 
-          {/* Vignette — deep forest-green frame */}
-          <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(115% 95% at 50% 40%, transparent 50%, rgba(16,36,12,0.55) 100%)" }} />
-
-          {/* Center: animated logo intro + tagline + country pick */}
-          <div style={{ position: "relative", minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "48px 20px 120px" }}>
-            <svg viewBox="0 0 120 120" style={{ width: "min(34vw, 150px)", height: "auto", display: "block" }} aria-label="Gemlyx">
+          {/* center: logo intro above, the explorer under the gate */}
+          <div style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "70px 20px 84px" }}>
+            <svg viewBox="0 0 120 120" style={{ width: "min(22vw, 92px)", height: "auto", display: "block", filter: "drop-shadow(0 2px 14px rgba(8,8,4,0.75))" }} aria-label="Gemlyx">
               <circle className="gxa-ring" cx="60" cy="60" r="54" fill="none" stroke="#F0F4FF" strokeWidth="2.6" strokeDasharray="339.3" strokeLinecap="round" transform="rotate(-90 60 60)" />
               <g className="gxa-pop"><g className="gxa-spin"><g transform="translate(12,12) scale(0.8)">
                 {[45, 135, 225, 315].map(r => (
@@ -4722,48 +4710,46 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <g transform="rotate(45 60 60)"><rect x="51.5" y="51.5" width="17" height="17" fill="rgba(10,15,30,0.5)" stroke="#2DD4BF" strokeWidth="3" /></g>
               </g></g></g>
             </svg>
-            <div className="gxa-word" style={{ marginTop: 22 }}>
-              <GemlyxWordmark height={26} color="#F0F4FF" />
+            <div className="gxa-word" style={{ marginTop: 14, filter: "drop-shadow(0 2px 10px rgba(8,8,4,0.8))" }}>
+              <GemlyxWordmark height={22} color="#F0F4FF" />
             </div>
-            <div className="gxa-tag" style={{ marginTop: 20, color: "#EAF6D3", fontSize: 12, letterSpacing: "0.34em", textTransform: "uppercase", textShadow: "0 1px 8px rgba(16,40,12,0.6)" }}>It exists nowhere else</div>
+            <div className="gxa-tag" style={{ marginTop: 12, color: "#EFE9D6", fontSize: 11, letterSpacing: "0.32em", textTransform: "uppercase", textShadow: "0 1px 8px rgba(8,8,4,0.85)" }}>It exists nowhere else</div>
 
-            <div className="gxa-choose" style={{ marginTop: 44, width: "100%", maxWidth: 720 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#FFE9A8", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16, textShadow: "0 1px 6px rgba(16,40,12,0.55)" }}>Where are you going?</div>
-              <div className="country-row">
-                <div className="country-ghost" style={{ borderColor: "rgba(24,50,16,0.5)" }}>
-                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: "#2F5220", opacity: 0.85 }}>?</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: "#2F5220", letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
+            <div className="gxa-choose" style={{ marginTop: 30, width: "100%", maxWidth: 340 }}>
+              <div style={{ background: "rgba(12,11,7,0.62)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, padding: "16px 16px 15px", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#FFE9A8", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>Where are you going?</div>
+                <svg viewBox="-12 -12 477 397" style={{ width: "72%", maxHeight: 110, display: "block", margin: "0 auto" }} aria-label="Map of Denmark with Gemlyx's verified towns">
+                  {DK_PATHS.map((p, i) => <polygon key={i} points={p} fill="rgba(18,27,48,0.85)" stroke="#3A4A66" strokeWidth="2.5" />)}
+                  {Object.entries(TOWN_COORDS).map(([name, [la, lo]]) => {
+                    const [x, y] = dkProject(la, lo);
+                    return (
+                      <g key={name}>
+                        <circle cx={x} cy={y} r="13" fill={`${C.gold}26`} />
+                        <circle cx={x} cy={y} r="5.5" fill={C.gold} stroke="#0A0F1E" strokeWidth="2" />
+                      </g>
+                    );
+                  })}
+                </svg>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
+                  <FlagDK height={12} />
+                  <span style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#F5F2E8" }}>Denmark</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "#8FE3AF", background: "rgba(110,207,151,0.14)", border: "1px solid rgba(110,207,151,0.3)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
                 </div>
-                <div onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
-                  style={{ flex: "0 1 340px", background: "rgba(15,22,40,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 18, padding: "16px 16px 14px", cursor: "pointer", boxShadow: "0 20px 60px -20px rgba(0,0,0,0.8)" }}>
-                  <svg viewBox="-12 -12 477 397" style={{ width: "100%", maxHeight: 150, display: "block", margin: "0 auto" }} aria-label="Map of Denmark with Gemlyx's verified towns">
-                    {DK_PATHS.map((p, i) => <polygon key={i} points={p} fill="#121B30" stroke="#2A3A55" strokeWidth="2.5" />)}
-                    {Object.entries(TOWN_COORDS).map(([name, [la, lo]]) => {
-                      const [x, y] = dkProject(la, lo);
-                      return (
-                        <g key={name}>
-                          <circle cx={x} cy={y} r="13" fill={`${C.gold}22`} />
-                          <circle cx={x} cy={y} r="5.5" fill={C.gold} stroke={C.bg} strokeWidth="2" />
-                        </g>
-                      );
-                    })}
-                  </svg>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 12 }}>
-                    <FlagDK height={12} />
-                    <span style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Denmark</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "#6ECF97", background: "rgba(110,207,151,0.1)", border: "1px solid rgba(110,207,151,0.25)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
-                  </div>
-                  <div style={{ marginTop: 10, background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", borderRadius: 100, padding: "11px", fontSize: 13, fontWeight: 700, boxShadow: "0 4px 16px rgba(226,59,78,0.3)" }}>
-                    Enter Denmark →
-                  </div>
-                </div>
-                <div className="country-ghost" style={{ borderColor: "rgba(24,50,16,0.5)" }}>
-                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: "#2F5220", opacity: 0.85 }}>?</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: "#2F5220", letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
-                </div>
+                <button onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
+                  style={{ display: "block", width: "100%", marginTop: 11, background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}>
+                  Enter Denmark →
+                </button>
               </div>
-              <div style={{ fontSize: 11.5, color: "#EAF6D3", marginTop: 16, textShadow: "0 1px 6px rgba(16,40,12,0.5)" }}>Every dot is a place we've stood. More countries when they're ready.</div>
+              <div style={{ fontSize: 11, color: "#EFE9D6", marginTop: 12, textShadow: "0 1px 6px rgba(8,8,4,0.8)" }}>Every dot is a place we've stood. More countries someday.</div>
             </div>
+          </div>
+
+          {/* bottom: customer support */}
+          <div className="gxa-topbar" style={{ position: "absolute", bottom: "calc(12px + env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center" }}>
+            <button onClick={() => window.open("mailto:hello@gemlyx.com?subject=" + encodeURIComponent("Gemlyx support"))}
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#EFE9D6", borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              <Ico name="mail" size={13} /> Customer Support
+            </button>
           </div>
         </div>
       )}
@@ -4994,7 +4980,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <div aria-hidden style={{ position: "absolute", top: -30, left: -20, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.10), transparent 70%)", pointerEvents: "none" }} />
                   <div aria-hidden style={{ position: "absolute", bottom: -40, right: -30, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.08), transparent 70%)", pointerEvents: "none" }} />
                   <div style={{ position: "relative" }}>
-                    <div style={{ marginBottom: 12 }}><GemlyxLoader size={44} /></div>
+                    <div style={{ marginBottom: 12 }}><GemlyxLoader size={44} tone="gold" ring={false} /></div>
                     <div style={{ fontSize: 10.5, color: "#D9A441", letterSpacing: 2.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>A Dispatch From Gemlyx</div>
                     <div style={{ fontSize: 20, color: "#F2E8CE", fontWeight: 600, fontFamily: "'Fraunces', serif", fontStyle: "italic", marginBottom: 10, lineHeight: 1.25 }}>
                       {copy.title}
