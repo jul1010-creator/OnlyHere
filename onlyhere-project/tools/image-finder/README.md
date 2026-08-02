@@ -6,8 +6,90 @@ to double-check the photo actually matches the place, and saves it straight to
 the exact path the site already expects. No code changes needed; the broken
 image just starts working.
 
-Runs up to **10 new images per day** by default, so it works through the
-backlog gradually instead of hammering the free API rate limits.
+Runs up to **20 new images per day** by default (configurable via `dailyCap`
+in `config.json`), so it works through the backlog gradually instead of
+hammering the free API rate limits.
+
+**Major festivals, nightlife/bars, and towns are deliberately left out of the
+automatic search.** Stock photo sites are a poor fit for a specific named
+festival (Roskilde, Distortion, Aalborg Karneval, ...) or a specific bar/club
+— either there's no real photo of that exact place on a free stock site, or
+what comes back is a generic "crowd at a festival" shot that could be
+anywhere, or (as happened once) a photo that's simply the wrong country. For
+these, a genuinely lively, specific photo is worth more than a "technically
+Denmark, technically a festival" stock photo, so they're flagged in the
+console output as "left for manual photos on purpose" instead of being
+auto-filled.
+
+Towns briefly went on that same manual-only list after a real, confirmed
+miss: Gemini accepted a stock photo of a completely different town (Nysted)
+as a match for Præstø, and separately a photo with a sign literally reading
+"Stadtverwaltung Plön" (a real town hall, in Germany, not Denmark) got
+accepted for Fåborg. Both slipped past the verification prompt's own "hunt
+for non-Danish evidence" step. The problem wasn't fixable by asking the AI
+to look harder — a specific named town is exactly the case where
+"generically Denmark-consistent" isn't good enough, and no amount of prompt
+tuning changes that a vision model without real-world grounding can
+genuinely mistake one small Northern European harbor town for another.
+
+**Towns now come from Wikipedia/Wikimedia Commons instead of
+Unsplash/Pexels/Pixabay, never from stock sites.** Unsplash/Pexels/Pixabay
+only match on keywords, so "Fåborg Denmark" can return literally anything
+that mentions those words. For each town it tries, in order:
+
+1. **The town's own Wikipedia article's lead image** (Danish Wikipedia
+   first, English as a fallback) — this is a human editor's pick for the
+   single photo that best represents the place, which is a much stronger
+   "this is actually a good photo" signal than a raw geosearch, and is why
+   this is tried first, not just for correctness but for quality.
+2. **Wikimedia Commons geosearch**, using the town's real coordinates from
+   `TOWN_COORDS` in `src/data/towns.js` — finds files a human actually
+   geotagged AT that spot.
+3. **Commons name search** as a last resort, if a town has no known
+   coordinates or nothing's geotagged there — still scoped to Commons' own
+   place-categorized files, weaker than the other two but still a
+   fundamentally different (and safer) source than a generic stock site.
+
+Either way, the correctness comes from the source itself being tied to the
+real place, not from asking an AI to guess whether a photo "looks right"
+after the fact — Gemini still gets a final look (a cheap extra check, not
+the main safeguard anymore), and it's now also asked to reject photos that
+are technically correct but boring or generic (dim interiors, plain
+building facades, anything that "could be an average neighborhood
+anywhere") — a real, confirmed miss from Oliver ("man, some boring ass
+pictures") on top of the earlier wrong-place misses. Files over 4MB (old
+archival scans, common on Commons) are skipped outright too, no image
+library in this project to resize them, so an oversized candidate is just
+rejected rather than downloaded and left bloating `public/`.
+
+**On copyright:** a Wikipedia article's lead image isn't automatically
+public domain, English Wikipedia in particular allows non-free/fair-use
+images hosted locally (album covers, logos, a person's photo with no free
+alternative) — a real thing Oliver flagged. This script never queries
+Wikipedia's own file storage though, it only ever resolves a file through
+Commons' own imageinfo API, so a locally-hosted non-free file just isn't
+found there at all and gets skipped automatically. That's still treated as
+an implicit protection, not a guarantee: every candidate, from Wikipedia's
+lead image or Commons search alike, also has its license metadata checked
+directly now, and anything with no license tag, or one that reads like
+fair-use/non-free/all-rights-reserved/restricted, is rejected outright
+before it ever reaches Gemini or gets downloaded. Commons photos need real
+attribution regardless (logged in `image-credits.json`'s `license` field,
+they're Creative Commons licensed, not just courtesy-credited like the
+stock sites). No API key needed for either Wikipedia or Commons, both are
+public, unauthenticated, read-only access.
+
+Major festivals and nightlife/bars are still manual-only (see above, that's
+a "no good photo exists" problem, not a "the AI can't verify" problem, so
+this doesn't help there the same way).
+
+Configurable via `manualOnlyArrays` in `config.json` (defaults to
+`["majorEvents", "nightlifeSpots"]`) if you want to exclude other arrays
+too. If you ever see a wrong-place photo from a category still running
+(regular `events`, `freeEntrance`, `foodSpots`, or even a bad Commons pick
+for a town), it's worth adding that array here rather than trusting the
+verification to always catch it, the check is a real backstop, not a
+guarantee.
 
 ## 1. One-time setup
 
@@ -18,7 +100,9 @@ Vite). No extra packages to install — the script only uses Node's built-ins.
 
 1. **Unsplash** — https://unsplash.com/developers → "New Application" →
    accept API guidelines → copy the **Access Key**.
-   Free/demo apps get 50 requests/hour, which is plenty for 10 images/day.
+   Free/demo apps get 50 requests/hour, which is plenty for 20 images/day
+   (each image only spends one Unsplash search call, so a full run stays
+   well under the hourly limit).
 2. **Pexels** — https://www.pexels.com/api/ → sign up → copy your **API Key**.
    Free tier: 200 requests/hour, 20,000/month.
 3. **Pixabay** — https://pixabay.com/api/docs/ → sign up → your API key is on
@@ -86,22 +170,30 @@ attempts (logged as "permanently skipped") rather than retrying forever.
    soon as possible after a scheduled start is missed"** so a day your laptop
    is off doesn't just get skipped forever.
 
-That's it — from then on it checks in once a day, fills in up to 10 missing
+That's it — from then on it checks in once a day, fills in up to 20 missing
 photos, and leaves a log of what happened in that run's console output (Task
 Scheduler keeps history under the task's "History" tab if you want to check
 on it later without watching it run).
 
 ## How it decides a photo is "right"
 
-For each missing image, it builds a search query from the place/event's name
-+ region (e.g. `"Dragør Copenhagen Area Denmark"`), pulls the top 3 results
-from Unsplash first, then Pexels, then Pixabay as a fallback. Each candidate
-photo is sent to Gemini with the place's name/region/description and a strict
-yes/no question — the first one Gemini confirms is downloaded; if none of the
-9 candidates convincingly match, it's left for the next run (or permanently
-skipped after 5 failed runs, so it won't loop forever on something no stock
-site actually has a photo of — you'll see those in the "permanently skipped"
-list and may need to add a photo yourself).
+For a town, it first checks the town's own Wikipedia article for its lead
+image (a human editor's pick), then falls back to looking up the town's
+real coordinates and asking Wikimedia Commons for photos genuinely
+geotagged near that spot, then finally a plain Commons name search if
+neither of those finds anything — the correctness comes from the source,
+not a judgment call.
+
+For everything else (regular festivals, attractions, food spots), it builds
+a search query from the place/event's name + region (e.g. `"Dragør
+Copenhagen Area Denmark"`), pulls the top 3 results from Unsplash first,
+then Pexels, then Pixabay as a fallback. Either way, each candidate photo is
+still sent to Gemini with the place's name/region/description and a strict
+yes/no question as a final check — the first one Gemini confirms is
+downloaded; if nothing convincingly matches, it's left for the next run (or
+permanently skipped after 5 failed runs, so it won't loop forever on
+something no source actually has a photo of — you'll see those in the
+"permanently skipped" list and may need to add a photo yourself).
 
 ## Files
 

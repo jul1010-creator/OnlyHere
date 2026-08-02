@@ -135,6 +135,9 @@ function extractTopLevelObjectBlocks(source) {
   // shape; nested arrays (e.g. "stops": [...]) are captured as raw text
   // inside the block, which is fine since we only regex the first match of
   // each field, and those appear before nested arrays in every file here.
+  // Returns {text, start} pairs (not just text) so parseCandidatesFromFile
+  // can work out which exported array each block actually lives in — see
+  // findExportedArrayRanges below, needed for MANUAL_ONLY_ARRAYS.
   const blocks = [];
   let depth = 0;
   let start = -1;
@@ -146,12 +149,48 @@ function extractTopLevelObjectBlocks(source) {
     } else if (ch === "}") {
       depth--;
       if (depth === 0 && start !== -1) {
-        blocks.push(source.slice(start, i + 1));
+        blocks.push({ text: source.slice(start, i + 1), start });
         start = -1;
       }
     }
   }
   return blocks;
+}
+
+// Finds every `export const NAME = [ ... ]` span in a data file (by
+// tracking [ ] depth from the array's own opening bracket), so each parsed
+// object block can be attributed to the actual exported array it lives in —
+// e.g. distinguishing majorEvents from events within the same events.js
+// file, which sourceFile (the filename alone) can't do. Used so
+// MANUAL_ONLY_ARRAYS can exclude specific arrays like majorEvents or
+// nightlifeSpots from automatic search, not just whole files.
+function findExportedArrayRanges(source) {
+  const ranges = [];
+  const re = /export\s+const\s+([A-Za-z0-9_]+)\s*=\s*\[/g;
+  let m;
+  while ((m = re.exec(source))) {
+    const name = m[1];
+    const bracketStart = m.index + m[0].length - 1; // position of the "["
+    let depth = 0;
+    let end = -1;
+    for (let i = bracketStart; i < source.length; i++) {
+      if (source[i] === "[") depth++;
+      else if (source[i] === "]") {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end !== -1) ranges.push({ name, start: bracketStart, end });
+  }
+  return ranges;
+}
+
+function arrayNameForPosition(ranges, pos) {
+  const r = ranges.find((r) => pos >= r.start && pos <= r.end);
+  return r ? r.name : null;
 }
 
 function firstMatch(block, regex) {
@@ -162,9 +201,10 @@ function firstMatch(block, regex) {
 function parseCandidatesFromFile(filePath) {
   const source = fs.readFileSync(filePath, "utf8");
   const blocks = extractTopLevelObjectBlocks(source);
+  const arrayRanges = findExportedArrayRanges(source);
   const candidates = [];
 
-  for (const block of blocks) {
+  for (const { text: block, start } of blocks) {
     const photo = firstMatch(block, /\bphoto:\s*["']([^"']+)["']/);
     if (!photo || photo.startsWith("http")) continue; // hot-linked, e.g. shop.js
 
@@ -172,6 +212,7 @@ function parseCandidatesFromFile(filePath) {
     const region = firstMatch(block, /\bregion:\s*["']([^"']+)["']/);
     const mapHint = firstMatch(block, /\bmapHint:\s*["']([^"']+)["']/);
     const tag = firstMatch(block, /\btag:\s*["']([^"']+)["']/);
+    const arrayName = arrayNameForPosition(arrayRanges, start);
 
     candidates.push({
       sourceFile: path.basename(filePath),
@@ -181,6 +222,7 @@ function parseCandidatesFromFile(filePath) {
       region,
       mapHint,
       tag,
+      arrayName, // e.g. "events", "majorEvents", "nightlifeSpots"
     });
   }
   return candidates;
@@ -360,6 +402,195 @@ async function searchPixabay(query, key, page = 1) {
   }));
 }
 
+// --- Wikimedia Commons: a fundamentally different, more trustworthy source
+// for towns specifically. Unsplash/Pexels/Pixabay only match on keywords, so
+// a search for "Fåborg Denmark" can return literally anything vaguely
+// European that mentions those words — that's how a photo of Plön, Germany
+// ended up accepted for Fåborg. Commons photos carry real geographic
+// coordinates (geosearch finds files actually geotagged near the town's own
+// coordinates, from TOWN_COORDS in src/data/towns.js) or are filed under a
+// real place category by a human editor — the correctness comes from the
+// SOURCE, not from asking an AI to guess whether a photo "looks right".
+// No API key needed, this is public, unauthenticated, read-only access —
+// Wikimedia's API etiquette just asks for a descriptive User-Agent instead
+// of anonymous traffic, which is set below.
+const WIKIMEDIA_USER_AGENT =
+  "Gemlyx-ImageFinder/1.0 (https://only-here-three.vercel.app; hobby travel app, low-volume automated photo search)";
+const WIKIMEDIA_API = "https://commons.wikimedia.org/w/api.php";
+
+async function wikimediaImageInfo(titles) {
+  if (!titles.length) return {};
+  const url = `${WIKIMEDIA_API}?action=query&titles=${encodeURIComponent(
+    titles.join("|")
+  )}&prop=imageinfo&iiprop=url|size|extmetadata|mime&format=json&origin=*`;
+  const res = await fetch(url, { headers: { "User-Agent": WIKIMEDIA_USER_AGENT } });
+  if (!res.ok) throw new Error(`Wikimedia imageinfo failed: ${res.status}`);
+  const data = await res.json();
+  const pages = data.query?.pages || {};
+  const byTitle = {};
+  for (const page of Object.values(pages)) {
+    const info = page.imageinfo?.[0];
+    if (info) byTitle[page.title] = info;
+  }
+  return byTitle;
+}
+
+// Filters out non-photo Commons files (maps, coats of arms, flags, logos,
+// documents) before spending a Gemini call on them — cheap, and these show
+// up constantly in place-based Commons categories/geosearch alongside real
+// photos.
+const MAX_COMMONS_FILE_BYTES = 4 * 1024 * 1024; // 4MB — Commons has genuine
+// full-resolution archival scans (old slides, huge TIFFs re-saved as JPEG)
+// that are technically fine photos but far too heavy for a web page; there's
+// no image-resizing library in this project, so oversized candidates are
+// rejected up front rather than downloaded and left bloating public/.
+
+// Commons is supposed to only host freely-licensed content, but not every
+// file on there is perfectly tagged, and a Wikipedia article's "lead image"
+// (found via prop=pageimages) isn't guaranteed to actually live on Commons
+// at all — English Wikipedia in particular allows non-free/fair-use images
+// hosted locally on wikipedia.org itself (album covers, logos, screenshots,
+// occasionally a person's photo with no free alternative). This script only
+// ever resolves a file through Commons' OWN imageinfo API though, never
+// Wikipedia's local file API, so a locally-hosted non-free file simply
+// won't be found here at all (the title lookup comes back empty) — but
+// that's an implicit protection, not a guarantee, so it's checked
+// explicitly too: no license metadata, or a license that reads like
+// fair-use/non-free/all-rights-reserved, is rejected outright rather than
+// assumed safe.
+function hasFreeLicense(info) {
+  const meta = info?.extmetadata || {};
+  const license = (meta.LicenseShortName?.value || "").trim();
+  if (!license) return false; // can't confirm it's free — don't risk it
+  if (/fair use|non-free|nonfree|all rights reserved|copyright(ed)?|permission required/i.test(license)) return false;
+  const restrictions = (meta.Restrictions?.value || "").trim();
+  if (restrictions) return false; // e.g. trademarked logos, still flagged even under a free license
+  return true;
+}
+
+function looksLikeARealPhoto(title, info) {
+  if (!info?.url) return false;
+  if (info.mime && !/^image\/(jpeg|png)$/i.test(info.mime)) return false; // skip svg/pdf/etc
+  if ((info.width || 0) < 500 || (info.height || 0) < 350) return false; // skip icons/thumbnails
+  if (info.size && info.size > MAX_COMMONS_FILE_BYTES) return false; // skip oversized scans
+  if (!hasFreeLicense(info)) return false; // skip anything not clearly freely licensed
+  const lower = title.toLowerCase();
+  if (/\b(map|karte|logo|wappen|coat[_ ]of[_ ]arms|flag|seal|icon|diagram|plan\b|routekaart)\b/.test(lower)) return false;
+  return true;
+}
+
+// A town's own Wikipedia article (Danish first, English as a fallback) has
+// a human editor's pick for the single lead/infobox image — that's a much
+// stronger "this is actually a good representative photo" signal than a raw
+// Commons geosearch or category listing, which returns everything tagged
+// near the coordinates regardless of whether it's dull (a church interior)
+// or striking (a harbor view). Wikipedia's own images are pulled from the
+// same Commons repository, so once we have the file name we reuse the
+// existing wikimediaImageInfo() call to get the real URL, license, and
+// photographer credit — same attribution path as the geosearch results.
+async function fetchWikipediaLeadImageTitle(name, lang) {
+  const url = `https://${lang}.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
+    name
+  )}&prop=pageimages&piprop=name&redirects=1&format=json&origin=*`;
+  const res = await fetch(url, { headers: { "User-Agent": WIKIMEDIA_USER_AGENT } });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const pages = data.query?.pages || {};
+  for (const page of Object.values(pages)) {
+    if (page.pageimage) return `File:${page.pageimage}`;
+  }
+  return null;
+}
+
+async function searchWikipediaLeadPhoto(townName) {
+  for (const lang of ["da", "en"]) {
+    let title = null;
+    try {
+      title = await fetchWikipediaLeadImageTitle(townName, lang);
+    } catch {
+      continue;
+    }
+    if (!title) continue;
+    let infoByTitle;
+    try {
+      infoByTitle = await wikimediaImageInfo([title]);
+    } catch {
+      continue;
+    }
+    const info = infoByTitle[title];
+    if (!looksLikeARealPhoto(title, info)) continue;
+    const meta = info.extmetadata || {};
+    const stripHtml = (s) => (s || "").replace(/<[^>]+>/g, "").trim();
+    return [
+      {
+        source: "wikipedia-lead",
+        verifyUrl: info.url,
+        downloadUrl: info.url,
+        photographer: stripHtml(meta.Artist?.value) || null,
+        pageUrl: `https://commons.wikimedia.org/wiki/${encodeURIComponent(title)}`,
+        license: stripHtml(meta.LicenseShortName?.value) || null,
+      },
+    ];
+  }
+  return [];
+}
+
+async function searchWikimediaCommons(query, page, lat, lon) {
+  // Try 1: geosearch around the town's real coordinates (most reliable —
+  // the file is only found here because someone tagged it AT that spot).
+  let titles = [];
+  if (lat != null && lon != null) {
+    const radiusM = 3000; // 3km, generous enough for a small town's built-up area
+    const geoUrl = `${WIKIMEDIA_API}?action=query&list=geosearch&gscoord=${lat}|${lon}&gsradius=${radiusM}&gsnamespace=6&gslimit=15&format=json&origin=*`;
+    const geoRes = await fetch(geoUrl, { headers: { "User-Agent": WIKIMEDIA_USER_AGENT } });
+    if (geoRes.ok) {
+      const geoData = await geoRes.json();
+      titles = (geoData.query?.geosearch || []).map((g) => g.title);
+    }
+  }
+  // Try 2: fall back to a plain file-namespace search by name if geosearch
+  // found nothing (town has no known coordinates, or nothing's geotagged
+  // there yet) — weaker than geosearch since it's back to keyword matching,
+  // but still scoped to Commons' own file descriptions/categories, not a
+  // generic stock site.
+  if (!titles.length) {
+    const searchUrl = `${WIKIMEDIA_API}?action=query&list=search&srsearch=${encodeURIComponent(
+      query
+    )}&srnamespace=6&srlimit=10&format=json&origin=*`;
+    const searchRes = await fetch(searchUrl, { headers: { "User-Agent": WIKIMEDIA_USER_AGENT } });
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      titles = (searchData.query?.search || []).map((s) => s.title);
+    }
+  }
+  if (!titles.length) return [];
+
+  // Paginate through the combined candidate list on retries, same idea as
+  // the stock searchers' own `page` param — a rejected batch shouldn't be
+  // shown to Gemini again on the next attempt.
+  const perPage = 3;
+  const pageTitles = titles.slice((page - 1) * perPage, page * perPage);
+  if (!pageTitles.length) return [];
+
+  const infoByTitle = await wikimediaImageInfo(pageTitles);
+  const candidates = [];
+  for (const title of pageTitles) {
+    const info = infoByTitle[title];
+    if (!looksLikeARealPhoto(title, info)) continue;
+    const meta = info.extmetadata || {};
+    const stripHtml = (s) => (s || "").replace(/<[^>]+>/g, "").trim();
+    candidates.push({
+      source: "wikimedia",
+      verifyUrl: info.url,
+      downloadUrl: info.url,
+      photographer: stripHtml(meta.Artist?.value) || null,
+      pageUrl: `https://commons.wikimedia.org/wiki/${encodeURIComponent(title)}`,
+      license: stripHtml(meta.LicenseShortName?.value) || null,
+    });
+  }
+  return candidates;
+}
+
 // --- verify with Gemini ---
 
 async function verifyWithGemini(imageUrl, context, key, model) {
@@ -381,9 +612,11 @@ STEP 1 — ACTIVELY HUNT FOR EVIDENCE THIS IS NOT DENMARK: look closely for any 
 
 STEP 2 — IF NOTHING DISQUALIFIES IT, JUDGE THE ACTUAL MATCH: for a specific, well-known named place (a particular town, landmark, or venue), the photo should plausibly show that actual place, or at minimum an unmistakably Nordic/Danish scene consistent with its description — not a generic "could be absolutely anywhere" stock photo. For a smaller or more generic gathering (a small local festival, market stall, or event with no distinctive visual signature of its own, where a literal photo may not exist on free stock sites), a genuinely Denmark-consistent atmosphere photo of the right general activity is acceptable even if it isn't literally that exact event — but it must still look like it could believably be Denmark specifically, not just "a market" or "a crowd" that could be from any country.
 
-If you are not genuinely confident, reject — a false "no match" just means this tool tries again on a later run with fresh candidates; a false "match" puts a wrong or wrong-country photo permanently on a real travel guide someone is trusting.
+STEP 3 — REJECT ANYTHING BORING OR GENERIC, EVEN IF IT'S TECHNICALLY THE RIGHT PLACE: this is a travel-inspiration site, a technically-correct photo that looks like it could be an average neighborhood anywhere is still a bad result. Reject dim indoor shots (church interiors, room interiors, close-ups of a single object or plaque), plain building facades with nothing distinctive going on, empty parking lots or generic streets, and old-looking low-quality scans or snapshots. Prefer, and only accept, photos that look like something worth showing a traveler: a recognizable wide view of the town or place, water/harbor/coastline, a lively or characterful street scene, a landmark actually visible in frame, good natural light. When in doubt between "technically fine but dull" and "reject", reject — a false "no match" just means this tool tries again on a later run with fresh candidates.
 
-Reply with strict JSON only: {"match": true|false, "reason": "one short sentence", "redFlags": "any specific disqualifying detail you noticed (a flag, sign, architecture style, etc.), or empty string if genuinely none"}.`;
+If you are not genuinely confident, reject — a false "no match" just means this tool tries again on a later run with fresh candidates; a false "match" puts a wrong, wrong-country, or genuinely boring photo permanently on a real travel guide someone is trusting.
+
+Reply with strict JSON only: {"match": true|false, "reason": "one short sentence", "redFlags": "any specific disqualifying detail you noticed (a flag, sign, architecture style, boring/generic scene, etc.), or empty string if genuinely none"}.`;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const body = {
@@ -438,7 +671,10 @@ function appendCredit(entry) {
 }
 
 async function downloadTo(publicRelPath, url) {
-  const res = await fetch(url);
+  // Wikimedia's own etiquette asks for a descriptive User-Agent on all
+  // requests, including plain file downloads from its image CDN, not just
+  // API calls — harmless to send on every download regardless of source.
+  const res = await fetch(url, { headers: { "User-Agent": WIKIMEDIA_USER_AGENT } });
   if (!res.ok) throw new Error(`download failed: ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const fullPath = path.join(PUBLIC_DIR, publicRelPath);
@@ -448,10 +684,43 @@ async function downloadTo(publicRelPath, url) {
 
 // --- main ---
 
+// Arrays whose photos we deliberately do NOT auto-search for. Stock photo
+// sites are a poor fit for these: major named festivals and nightlife/bars
+// need to actually feel lively and specific, and generic stock results
+// either don't exist for them or end up wrong-country / wrong-vibe (see the
+// verifyWithGemini comment above for the incident that started this).
+// Configurable via config.json's "manualOnlyArrays"; defaults to these two.
+const DEFAULT_MANUAL_ONLY_ARRAYS = ["majorEvents", "nightlifeSpots"];
+
+// Reads TOWN_COORDS straight out of src/data/towns.js's own source (same
+// read-the-file-as-text approach as the rest of this script, no bundler/
+// import needed for a plain data file) so Wikimedia geosearch can look up
+// real coordinates for a town by name. Tolerant of the trailing comma the
+// object literal actually has (not valid JSON) by evaluating it as JS
+// instead of JSON.parse — safe here since this is Oliver's own trusted repo
+// file, not external input.
+function loadTownCoords() {
+  const townsPath = path.join(DATA_DIR, "towns.js");
+  if (!fs.existsSync(townsPath)) return {};
+  const source = fs.readFileSync(townsPath, "utf8");
+  const m = source.match(/TOWN_COORDS\s*=\s*(\{[\s\S]*?\n\})/);
+  if (!m) return {};
+  try {
+    return new Function(`return (${m[1]})`)();
+  } catch {
+    return {};
+  }
+}
+
 async function main() {
   const dataFiles = getAllDataFiles();
   const allCandidates = dataFiles.flatMap(parseCandidatesFromFile);
   const state = loadState();
+  // Loaded early (not just before the search step) because MANUAL_ONLY_ARRAYS
+  // needs to be known before we split missing/manualOnly below, and dry-run
+  // needs to be able to show the manual-only list too.
+  const config = loadConfig();
+  const MANUAL_ONLY_ARRAYS = new Set(config.manualOnlyArrays || DEFAULT_MANUAL_ONLY_ARRAYS);
 
   // 1. Fix up anything already downloaded under an old-style generic name.
   const existingForRename = walkExistingFiles(PUBLIC_DIR);
@@ -477,10 +746,23 @@ async function main() {
     : allCandidates;
   const existing = renames.length && !DRY_RUN ? walkExistingFiles(PUBLIC_DIR) : existingForRename;
 
-  // 2. Find gaps.
-  const { missing, mismatches } = findGaps(candidates, existing);
+  // 2. Find gaps, then split off anything in a manual-only array so it's
+  // never spent an API/Gemini call on — it's reported separately below
+  // instead, so it doesn't just silently look "done" or "stuck".
+  const { missing: allMissing, mismatches } = findGaps(candidates, existing);
+  const missing = allMissing.filter((c) => !MANUAL_ONLY_ARRAYS.has(c.arrayName));
+  const manualOnly = allMissing.filter((c) => MANUAL_ONLY_ARRAYS.has(c.arrayName));
 
-  console.log(`Found ${missing.length} missing image(s), ${mismatches.length} mismatch(es).`);
+  console.log(
+    `Found ${missing.length} missing image(s) to auto-search, ${manualOnly.length} left for manual photos (${[...MANUAL_ONLY_ARRAYS].join(", ")}), ${mismatches.length} mismatch(es).`
+  );
+
+  if (manualOnly.length) {
+    console.log("\nLeft for manual photos on purpose (stock sites aren't a good fit for these):");
+    for (const m of manualOnly) {
+      console.log(`  [${m.arrayName}] ${m.sourceFile}: ${m.photoPath}  (${m.name || "unnamed"})`);
+    }
+  }
 
   if (mismatches.length) {
     console.log("\nExtension/filename mismatches (fix by hand, not auto-downloaded):");
@@ -489,17 +771,27 @@ async function main() {
     }
   }
 
+  // Towns get a completely different, Commons-only searcher (see
+  // searchWikimediaCommons above for why) — never the stock sites, even if
+  // Unsplash/Pexels/Pixabay keys are configured. No API key needed for
+  // Commons, so this works even if Oliver never sets up the stock keys.
+  // Loaded before the dry-run branch too, so a dry run can show which path
+  // each item will actually take.
+  const townCoords = loadTownCoords();
+
   if (DRY_RUN) {
-    console.log("\n--dry-run: not calling any APIs. Missing images:");
+    console.log("\n--dry-run: not calling any APIs. Missing images (auto-searchable):");
     for (const c of missing) {
       const reserved = new Set(existing);
       const target = computeTargetRelPath(c, reserved);
-      console.log(`  [${c.sourceFile}] ${c.photoPath}  ->  /${target}   query: "${buildQuery(c)}"`);
+      const via = c.arrayName === "towns"
+        ? `wikipedia lead image, falling back to wikimedia commons (${townCoords[c.name] ? "geosearch" : "name search, no known coords"})`
+        : "stock sites (unsplash/pexels/pixabay)";
+      console.log(`  [${c.sourceFile}] ${c.photoPath}  ->  /${target}   via: ${via}   query: "${buildQuery(c)}"`);
     }
     return;
   }
 
-  const config = loadConfig();
   const dailyCap = RUN_LIMIT ?? config.dailyCap ?? DEFAULT_DAILY_CAP;
   const geminiModel = config.geminiModel || "gemini-3.5-flash";
   const remainingToday = Math.max(0, dailyCap - state.downloadsToday);
@@ -528,8 +820,25 @@ async function main() {
     },
   ].filter(Boolean);
 
-  if (searchers.length === 0) {
-    console.error("No API keys configured in config.json — nothing to search with.");
+  const wikipediaLeadSearcherFor = (c) => ({
+    name: "wikipedia-lead",
+    // Wikipedia's own page-image search ignores the `page` param — it only
+    // ever has one lead image per language, so pagination beyond page 1
+    // just returns nothing further (harmless, the geosearch fallback below
+    // still runs on later pages/attempts).
+    fn: (q, page) => (page === 1 ? searchWikipediaLeadPhoto(c.name) : Promise.resolve([])),
+  });
+
+  const wikimediaSearcherFor = (c) => {
+    const coords = townCoords[c.name];
+    return {
+      name: "wikimedia",
+      fn: (q, page) => searchWikimediaCommons(q, page, coords?.[0], coords?.[1]),
+    };
+  };
+
+  if (searchers.length === 0 && missing.some((c) => c.arrayName !== "towns")) {
+    console.error("No stock-site API keys configured in config.json — nothing to search non-town categories with.");
     process.exit(1);
   }
   if (!config.GEMINI_API_KEY) {
@@ -563,8 +872,14 @@ async function main() {
     // fresh candidates instead of the same ones already rejected on an earlier run.
     const page = item.attempts + 1;
 
+    const activeSearchers =
+      c.arrayName === "towns" ? [wikipediaLeadSearcherFor(c), wikimediaSearcherFor(c)] : searchers;
+    if (c.arrayName === "towns" && !townCoords[c.name]) {
+      console.log(`  (no known coordinates for "${c.name}" in TOWN_COORDS — falling back to a plain Commons name search, less reliable than geosearch)`);
+    }
+
     let accepted = null;
-    for (const searcher of searchers) {
+    for (const searcher of activeSearchers) {
       let results = [];
       try {
         results = await searcher.fn(query, page);
@@ -612,6 +927,11 @@ async function main() {
           source: accepted.source,
           photographer: accepted.photographer || null,
           sourceUrl: accepted.pageUrl || null,
+          // Commons photos are Creative Commons licensed and genuinely need
+          // attribution displayed somewhere on the site to comply with the
+          // license, not just optional credit like Unsplash/Pexels — logged
+          // explicitly so it isn't easy to miss.
+          license: accepted.license || null,
           query,
           downloadedAt: new Date().toISOString(),
         });
@@ -645,6 +965,9 @@ async function main() {
   for (const s of skippedPermanently) console.log(`  ${s.photoPath}`);
   if (mismatches.length) {
     console.log(`Mismatches needing a manual fix (${mismatches.length}) — see above.`);
+  }
+  if (manualOnly.length) {
+    console.log(`Left for manual photos on purpose (${manualOnly.length}) — see above, not counted against today's cap.`);
   }
 }
 

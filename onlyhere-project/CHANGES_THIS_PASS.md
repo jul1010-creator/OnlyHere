@@ -1,4 +1,85 @@
-# LATEST: correction, the front page "what inspired us" text was genuinely broken, fixed for real this time
+# LATEST: town photos now come from Wikimedia Commons, not stock sites, real automation is back
+
+**You asked "is there no better API for it".** Looked into the real options (Google's own landmark-recognition API, giving Gemini live search access, an actual Google-Lens-style reverse image search service) and wrote up the honest tradeoffs of each, you picked the free one: **Wikimedia Commons**, instead of Unsplash/Pexels/Pixabay for towns specifically.
+
+**Why this one's actually different, not just another AI guess:** Commons photos carry real geographic coordinates attached by whoever uploaded them, or are filed under a genuine place category by a human editor. So instead of searching "Fåborg Denmark" as keywords and hoping, the tool now looks up Fåborg's real coordinates and asks Commons "what's actually geotagged here", the same trick your phone uses to tag your own photos. Gemini still gets a final look at the result, but it's a backstop now, not the only thing standing between a wrong photo and your site.
+
+**Setup: none needed.** Wikimedia Commons is public, no API key, no account. It's on by default now, towns are back in the automatic run.
+
+**Two known-wrong photos are still sitting in `public/towns/`** from the old approach, still waiting on you to delete: `praesto.jpg` and `faaborg.jpg`. Once they're gone, the next run will refill them for real through Commons.
+
+**Being straight with you: I couldn't test the live Commons calls myself**, my sandbox can't reach outside websites like that, so I could only verify the logic reads correctly and the offline parts work (checked with `--dry-run`, confirmed every town correctly routes to Commons). Wikimedia's API is stable and well-documented so I'm fairly confident, but genuinely please run a small real test yourself before trusting it fully, `node fill-missing-images.mjs --limit=2` in `tools/image-finder` will try just 2 towns and show you exactly what it finds, cheap and quick to sanity-check before letting it run its full course.
+
+---
+
+# EARLIER: towns pulled from auto photo search entirely, confirmed a second wrong-place photo
+
+**You were right not to trust it.** Went and checked myself: the photo the tool picked for Fåborg has a sign on it that reads "Stadtverwaltung Plön", that's German for "Plön city hall", a real town in Germany, not Denmark, not Fåborg. That's a second real miss on top of the Nysted-for-Præstø one you caught, both in the exact same category: towns. The verification prompt is specifically supposed to catch foreign signage like that and reject on sight, and it still let this through, so I don't think this is a fixable-with-a-better-prompt problem, this model just isn't reliable enough at telling one small Northern European harbor town from another by sight alone, the way Google's own tools apparently can.
+
+**Towns are now off the auto-search list entirely**, same treatment as major festivals and nightlife: `manualOnlyArrays` in config.json now includes `"towns"`. No more town photos will be auto-picked by this tool going forward, ever, unless you turn it back on yourself. The real place always needs a human eyeball on it now.
+
+**Two known-wrong photos are still live on the site right now** and I can't delete files on your machine directly, could you remove these two:
+- `public/towns/praesto.jpg` (Nysted, not Præstø)
+- `public/towns/faaborg.jpg` (Plön, Germany, not Fåborg)
+
+Once they're gone the site falls back to the honest flag/emoji placeholder until you replace them for real, either dropped straight into `public/towns/` by hand, or through the new "📷 Photos" panel in Studio from your phone (see the pass above, needs the one-time Supabase setup if you haven't run that SQL yet).
+
+I spot-checked a handful of the other newly-downloaded photos too (a few festivals, Skagen's lighthouse, Ærøskøbing's cottages) and those looked genuinely correct and reasonably atmospheric, this doesn't look like every photo is wrong, just that towns specifically need a stricter standard than this tool can currently meet.
+
+---
+
+# EARLIER: upload event/attraction/food/nightlife photos live from Studio on your phone, entrance card pushed toward center
+
+**The photo hassle, actually solved this time.** New "📷 Photos" panel in Studio (next to Manage Published), covering Events, Towns, Attractions, Food and Nightlife, five lists you can filter by name, each with a camera button right on the listing. Tap it, take or pick a photo on your phone, and it's live on the site immediately for everyone, no emailing yourself, no renaming, no waiting on a redeploy. This needed a small one-time setup on your end since I only ever had the read/write key baked into the site, never the admin key that could create a new storage bucket or table myself, real instructions below, should take under 5 minutes.
+
+**Why a new system instead of just fixing the existing "Edit" button:** the existing Manage Published / Edit flow only touches content you've drafted through Studio into the live database. Aalborg Karneval and the rest of majorEvents/nightlifeSpots/events/towns/attractions/food predate Studio and live as plain code in src/data, there was no live edit path for them at all before this. Rather than migrate all of that into the database (a much bigger, riskier job), photos specifically now get a lightweight override that layers on top of the existing code, everything else about these listings still comes from the code as before, just the photo can now be swapped live.
+
+**Entrance card nudged toward center.** "Enter Denmark" was pinned a fixed distance from the top regardless of screen height, fine on a short window, but reads as stuck-at-the-top on a genuinely tall phone screen since the empty space below it just kept growing. It now sits closer to true center as the screen gets taller, using a plain scroll-safe formula (not flexbox centering, which has its own history of clipping content on this exact wrapper, see the correction pass below), verified against 7 different screen heights from 568px to 1024px with a real headless-browser render, no overlap with the Support pill in any of them, including the worst case (fully expanded "Read more" text, scrolled to the very bottom).
+
+**On the front page "liveliness" ask:** still waiting on you for what "move around" should actually feel like. Worth knowing while you think about it: the background painting is technically already pannable (drag/swipe to look around the illustration), that was built in a previous pass, but the country-card overlay that appears once the intro finishes sits on top of the whole screen and swallows every touch, so in practice you can never actually reach that pan today. That's probably worth fixing regardless of what "more lively" ends up meaning.
+
+**Setup you need to do once, in your Supabase dashboard's SQL editor** (Project → SQL Editor → New query, paste, run):
+```sql
+insert into storage.buckets (id, name, public) values ('event-photos', 'event-photos', true);
+
+create policy "Public read event photos" on storage.objects for select
+  using (bucket_id = 'event-photos');
+create policy "Authenticated upload event photos" on storage.objects for insert
+  to authenticated with check (bucket_id = 'event-photos');
+create policy "Authenticated update event photos" on storage.objects for update
+  to authenticated using (bucket_id = 'event-photos');
+
+create table photo_overrides (
+  photo_path text primary key,
+  image_url text not null,
+  updated_at timestamptz default now()
+);
+alter table photo_overrides enable row level security;
+create policy "Public read photo overrides" on photo_overrides for select using (true);
+create policy "Authenticated write photo overrides" on photo_overrides for insert to authenticated with check (true);
+create policy "Authenticated update photo overrides" on photo_overrides for update to authenticated using (true);
+```
+Until you run this, the Photos panel will show an upload error (bucket/table not found) rather than silently failing, and every photo on the site keeps working exactly as it does today, this is purely additive.
+
+**Please test after you've deployed and run the SQL above:** log into Studio on your phone, open Photos, filter to Aalborg Karneval, upload the photo, confirm it shows up on the live event page.
+
+---
+
+# EARLIER: image finder tool, major festivals and nightlife left for manual photos, daily cap raised
+
+**On the British flag photo:** good call getting those 10 deleted, that lets the tool re-search them under the stricter check that was already written in (it actively hunts for non-Danish flags, signage, and architecture now, not just a loose theme match).
+
+**On your idea to only source major festivals and nightlife from Instagram Reels:** looked into it honestly, and it's not a safe path, not because of effort but because there's no good free or legal API for searching and downloading arbitrary people's reels, and using someone's personal video commercially on Gemlyx without their permission is a real copyright/rights problem, a bigger one than an occasional wrong-country stock photo. Not recommending that route.
+
+**What I did instead, matching your actual point (stock sites can't capture "genuinely lively"):** the tool now skips `majorEvents` (Roskilde, Distortion, Aalborg Karneval, Copenhagen Jazz, Smukfest, NorthSide, Aarhus Festuge, Tønder) and `nightlifeSpots` (bars/clubs) entirely, it never spends a search or Gemini call on them anymore. They show up in the console output as "left for manual photos on purpose" so you know exactly what's still waiting on you, versus what the tool is actually handling. Smaller, quieter events and festivals (the regular `events` array, the ones you said are fine with stock photos) are untouched, still auto-searched as before.
+
+**Daily cap raised from 10 to 20.** With majorEvents excluded, each run now only spends about 1 Unsplash search call per item, so 20/day stays well under Unsplash's 50-requests-per-hour free-tier limit even in a single run, and clears the real backlog (roughly two dozen auto-searchable images left) in about half the runs it would've taken before. Both numbers live in `config.json` if you ever want to change them yourself: `dailyCap` and `manualOnlyArrays`.
+
+Tested the new logic with a `--dry-run` against a mock data set before sending it back, confirmed it correctly separates auto-searchable from manual-only and respects a config override.
+
+---
+
+# EARLIER: correction, the front page "what inspired us" text was genuinely broken, fixed for real this time
 
 **You were right, that looked bad.** The "what inspired us to create this app" paragraph I added under the entrance Denmark card had nowhere to go once it got tall: the wrapper it lived in had no scroll and no real bottom boundary, so the text just spilled straight into the fixed "Customer Support" pill at the bottom of the screen, running text and button together. That is exactly what your screenshot showed.
 

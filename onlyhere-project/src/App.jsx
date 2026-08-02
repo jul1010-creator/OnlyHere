@@ -2949,6 +2949,141 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
     reader.onerror = () => { setPhotoScanError("Couldn't read that photo, try a different one."); setPhotoScanLoading(false); };
     reader.readAsDataURL(file);
   };
+
+  // ── Content photos, uploaded live from Studio on a phone ────────────────
+  // Oliver's ask: majorEvents (Roskilde, Distortion, Aalborg Karneval, ...)
+  // and nightlifeSpots got excluded from the automatic stock-photo tool
+  // (tools/image-finder) since stock sites can't capture real festival/bar
+  // energy, so he needs to attach real photos himself. He then clarified he
+  // wants this everywhere he'd naturally be "editing" a listing, not a
+  // separate one-off tool: events, towns, attractions, food, nightlife — the
+  // same five categories the app's own explore tabs use (Shopping/craft is
+  // deliberately left out here, it's already a live Supabase table with its
+  // own path, not static bundled data like the other five). All five of
+  // those are plain imported arrays, static at build time (src/data/*.js),
+  // so there was previously no way to attach a real photo without editing
+  // code and waiting for a redeploy. His phone's Claude app doesn't share
+  // this chat's history with his PC, so "just send me the photo" isn't
+  // workable for him either — he needs a real button, live, on the site.
+  //
+  // Storage: a small `photo_overrides` table in the same Supabase project
+  // already used for gemlyx_content (photo_path -> image_url), plus a
+  // `event-photos` storage bucket. Both need a one-time setup Oliver has to
+  // do himself in his Supabase dashboard (documented in the handoff doc —
+  // this app only ever had the anon key, never a service-role key that
+  // could create tables/buckets itself). Reading overrides is public (every
+  // visitor needs to see the real photo, not just Oliver), writing is
+  // restricted to an authenticated Studio session, same split already used
+  // for gemlyx_content's own RLS policies.
+  //
+  // Applying an override: these five arrays are plain imported module-level
+  // arrays, never React state, and are read directly by name in a couple
+  // dozen places across the file. Rather than hunt down and rewrite every
+  // render site (real risk of missing one, exactly the kind of miss that
+  // shipped a real bug earlier this session), the override is applied by
+  // mutating each matching item's own `.photo` field in place once overrides
+  // load — every existing read site picks the new value up automatically,
+  // since they all just read `item.photo` at render time. A dummy tick
+  // state forces a re-render after the mutation (React can't see plain
+  // object mutation on its own).
+  const CONTENT_PHOTO_ARRAYS = [events, majorEvents, towns, freeEntrance, foodSpots, nightlifeSpots];
+  const [photoOverrides, setPhotoOverrides] = useState({});
+  const [, setPhotoOverrideTick] = useState(0);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/photo_overrides?select=photo_path,image_url`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        });
+        if (!res.ok) return; // table may not exist yet if Oliver hasn't done setup — fail quiet, static photos still work
+        const rows = await res.json();
+        if (!Array.isArray(rows)) return;
+        const map = {};
+        for (const r of rows) if (r.photo_path && r.image_url) map[r.photo_path] = r.image_url;
+        setPhotoOverrides(map);
+      } catch { /* Supabase unreachable — static photos still work, nothing to fall back further to */ }
+    })();
+  }, []);
+  useEffect(() => {
+    if (!Object.keys(photoOverrides).length) return;
+    let changed = false;
+    for (const arr of CONTENT_PHOTO_ARRAYS) {
+      for (const item of arr) {
+        const override = photoOverrides[item.photo];
+        if (override && item.photo !== override) { item.photo = override; changed = true; }
+      }
+    }
+    if (changed) setPhotoOverrideTick(t => t + 1);
+  }, [photoOverrides]);
+
+  // Studio panel: browse all five categories, upload/replace a photo right
+  // on the listing itself (Oliver: "put the picture button into the
+  // individual event, attraction, etc., so when I edit [it] I can instantly
+  // input it").
+  const [contentPhotosOpen, setContentPhotosOpen] = useState(false);
+  const [contentPhotoFilter, setContentPhotoFilter] = useState("");
+  const [contentPhotoUploadKey, setContentPhotoUploadKey] = useState(null); // photo path currently uploading, for a per-row spinner
+  const [contentPhotoError, setContentPhotoError] = useState(null);
+  const contentPhotoInputRef = useRef(null);
+  const pendingContentPhotoItemRef = useRef(null); // { item, category } set right before the hidden input is opened
+  const handleContentPhotoFile = async (file) => {
+    const pending = pendingContentPhotoItemRef.current;
+    if (!file || !pending || !studioSession) return;
+    const { item, category } = pending;
+    const originalPhotoPath = item.photo; // capture before any mutation below
+    setContentPhotoError(null);
+    setContentPhotoUploadKey(originalPhotoPath);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const slug = item.name ? item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") : "photo";
+      // category prefix keeps ids from colliding across arrays (e.g. a town
+      // and an event both having id 3 would otherwise overwrite each other).
+      const storagePath = `${category}-${item.id}-${slug}.${ext}`;
+      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/event-photos/${storagePath}`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${studioSession.access_token}`,
+          "Content-Type": file.type || "image/jpeg",
+          "x-upsert": "true", // re-uploading for the same listing replaces it instead of erroring
+        },
+        body: file,
+      });
+      if (!uploadRes.ok) {
+        const detail = await uploadRes.text().catch(() => "");
+        throw new Error(`Upload failed (${uploadRes.status}). ${detail.slice(0, 150)}`);
+      }
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/event-photos/${storagePath}`;
+      const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/photo_overrides`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${studioSession.access_token}`,
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify({ photo_path: originalPhotoPath, image_url: publicUrl }),
+      });
+      if (!upsertRes.ok) {
+        const detail = await upsertRes.text().catch(() => "");
+        throw new Error(`Photo uploaded but saving the link failed (${upsertRes.status}). ${detail.slice(0, 150)}`);
+      }
+      // Reflect immediately without waiting for a full page reload — same
+      // mutate-in-place + tick pattern as the load effect above. Keyed by
+      // the ORIGINAL path, so a photo re-uploaded a second time still finds
+      // and updates the same override row instead of creating a stray one.
+      item.photo = publicUrl;
+      setPhotoOverrides(prev => ({ ...prev, [originalPhotoPath]: publicUrl }));
+      setPhotoOverrideTick(t => t + 1);
+      setToast(`✅ Photo saved for ${item.name}`);
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      setContentPhotoError(err.message || "Upload failed — try again.");
+    }
+    setContentPhotoUploadKey(null);
+    pendingContentPhotoItemRef.current = null;
+  };
+
   useEffect(() => {
     // Purely in-app "your weather changed" notice — like an Instagram-style corner
     // pop-in, not a real push notification, since that would need a service worker
@@ -3738,8 +3873,62 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {manageOpen ? "Hide" : "📋 Manage Published"}
                         </button>
+                        <button onClick={() => setContentPhotosOpen(v => !v)}
+                          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          {contentPhotosOpen ? "Hide" : "📷 Photos"}
+                        </button>
                       </div>
                     </div>
+
+                    {contentPhotosOpen && (
+                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16 }}>
+                        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+                          Events, towns, attractions, food and nightlife spots — tap the camera on any listing to attach a real photo from your phone, camera or library. It goes live for everyone right away, no code or redeploy needed. (Shopping/craft isn't listed here, that one already lives in its own live table.)
+                        </div>
+                        <input value={contentPhotoFilter} onChange={e => setContentPhotoFilter(e.target.value)}
+                          placeholder="Filter by name…"
+                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", fontSize: 12, outline: "none", background: C.surface, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 10, boxSizing: "border-box" }} />
+                        {contentPhotoError && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 10 }}>{contentPhotoError}</div>}
+                        <div style={{ maxHeight: 360, overflowY: "auto" }}>
+                          {[
+                            { label: "Events", category: "event", items: [...events, ...majorEvents] },
+                            { label: "Towns", category: "town", items: towns },
+                            { label: "Attractions", category: "attraction", items: freeEntrance },
+                            { label: "Food", category: "food", items: foodSpots },
+                            { label: "Nightlife", category: "nightlife", items: nightlifeSpots },
+                          ].map(group => {
+                            const q = contentPhotoFilter.trim().toLowerCase();
+                            const filtered = q ? group.items.filter(it => (it.name || "").toLowerCase().includes(q)) : group.items;
+                            if (!filtered.length) return null;
+                            return (
+                              <div key={group.label} style={{ marginBottom: 14 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>{group.label}</div>
+                                {filtered.map(item => (
+                                  <div key={`${group.category}-${item.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 0", borderBottom: `1px solid ${C.border}` }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                      <div style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
+                                        {item.photo ? (
+                                          <img src={item.photo} alt="" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                        ) : (item.emoji || "•")}
+                                      </div>
+                                      <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                                    </div>
+                                    <button
+                                      onClick={() => { pendingContentPhotoItemRef.current = { item, category: group.category }; contentPhotoInputRef.current?.click(); }}
+                                      disabled={contentPhotoUploadKey === item.photo}
+                                      style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                                      {contentPhotoUploadKey === item.photo ? "Uploading…" : "📷 Upload"}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <input ref={contentPhotoInputRef} type="file" accept="image/*" style={{ display: "none" }}
+                          onChange={e => { const f = e.target.files?.[0]; handleContentPhotoFile(f); e.target.value = ""; }} />
+                      </div>
+                    )}
 
                     {redraftOpen && (
                       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16, maxHeight: 320, overflowY: "auto" }}>
@@ -5567,7 +5756,22 @@ You also have a web_search tool. Use it whenever someone asks about something th
           // space, never behind scrollable text at any scroll position. Also
           // gave the paragraph its own card + a "Read more" toggle so it
           // doesn't dump a full wall of text directly onto the busy painting.
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "70px 20px 24px", pointerEvents: "auto" }}>
+          //
+          // Oliver: "push 'enter Denmark' down a bit... bothers me it isn't
+          // in the middle." A fixed 70px top padding barely registers on a
+          // short desktop window but reads as glued-to-the-top on a genuinely
+          // tall phone screen, since the card's own height (roughly 210px
+          // above its natural center) stays constant while the empty space
+          // below it grows with the screen. Using a plain viewport-relative
+          // padding-top (not flex/align-items centering, which has a known
+          // history of clipping the top of overflowing content on scroll,
+          // exactly the bug already found and fixed once in this same
+          // wrapper) keeps the same guaranteed-safe scroll behavior while
+          // actually centering on tall screens: max(70px, 50vh minus roughly
+          // half the card's own height) — never less than the original 70px
+          // floor on short windows, grows toward true center as the screen
+          // gets taller.
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "max(70px, calc(50vh - 220px)) 20px 24px", pointerEvents: "auto" }}>
             <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto", margin: "0 auto" }}>
               {/* RISK FIX: this card's photo used to be denmark-hero.jpg, a photo
                   of the Little Mermaid statue — pulled per Oliver's flag that using

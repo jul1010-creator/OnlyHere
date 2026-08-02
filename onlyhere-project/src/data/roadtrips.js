@@ -17,7 +17,7 @@ export const roadTrips = [
       { name: "Fanø", note: "Ferry crossing, dune villages, Sønderho at the southern tip" },
     ],
     color: "#2E7D32", mapHint: "Wadden Sea Ribe Denmark", vibe: "🌾 Recommended for nature & traditional life" },
-  { id: 3, name: "North Zealand Coastal Loop", region: "Zealand", emoji: "🌊", duration: "2h 30min drive", distance: "110 km", lat: 56.1223, lon: 12.3130, photo: "/tisvildevej.jpg",
+  { id: 3, name: "North Zealand Coastal Loop", region: "Zealand", emoji: "🌊", duration: "2h 30min drive", distance: "110 km", lat: 56.1223, lon: 12.3130, photo: "/north-zealand-coastal-loop.jpg",
     desc: "A half-day loop from Copenhagen through fishing villages, royal castles and beach towns — genuinely underrated compared to how much attention Copenhagen itself gets.",
     stops: [
       { name: "Dragør", note: "Yellow ochre fisherman's village, 30min from the city" },

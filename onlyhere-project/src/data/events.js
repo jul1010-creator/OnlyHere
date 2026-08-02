@@ -133,13 +133,13 @@ export const majorEvents = [
 
 
 export const vikingEvents = [
-  { id: 201, name: "Trelleborg Vikingefestival", tier: "Recommended", travelTime: "1h 15min 🚂", rating: 4.8, town: "Slagelse", type: "Battle & Market", emoji: "🛡", date: "2026-07-11", dateEnd: "2026-07-19", photo: "/viking1.jpg",
+  { id: 201, name: "Trelleborg Vikingefestival", tier: "Recommended", travelTime: "1h 15min 🚂", rating: 4.8, town: "Slagelse", type: "Battle & Market", emoji: "🛡", date: "2026-07-11", dateEnd: "2026-07-19", photo: "/trelleborg-vikingefestival.jpg",
     desc: "Denmark's largest Viking festival — over 1,000 reenactors camp on the exact UNESCO World Heritage ring fortress Harald Bluetooth built in 980. Nine days of trade, craft and everyday Viking life, building to the Battle of Trelleborg: 250 armoured warriors fighting daily at 13:00 from Thursday to Sunday. A free bus (line 909) runs from Slagelse Station all season.",
     mapHint: "Trelleborg Allé 4, 4200 Slagelse, Denmark", verified: "Jul 2026", color: "#8D6E63", tags: ["Battle Reenactment", "UNESCO Site", "Craft"], price: "150 DKK adult / 50 DKK child" },
-  { id: 202, name: "Internationalt Vikingemarked", tier: "Recommended", travelTime: "3h 15min 🚂", rating: 4.6, town: "Ribe", type: "Market", emoji: "⚔️", date: "2026-04-27", dateEnd: "2026-05-03", photo: "/viking2.jpg",
+  { id: 202, name: "Internationalt Vikingemarked", tier: "Recommended", travelTime: "3h 15min 🚂", rating: 4.6, town: "Ribe", type: "Market", emoji: "⚔️", date: "2026-04-27", dateEnd: "2026-05-03", photo: "/internationalt-vikingemarked.jpg",
     desc: "Traders and reenactors from across Europe fill Ribe VikingeCenter's marketplace — the same spot that made Ribe a trading town 1,300 years ago. Warriors, riders, archers and musicians throughout. Foreign traders take cash only (DKK/EUR); many Danish traders also accept MobilePay — no cards, no ATM on site.",
     mapHint: "Ribe VikingeCenter, Lustrupvej 4, 6760 Ribe, Denmark", verified: "Jul 2026", color: "#C8102E", tags: ["Viking Market", "Craft", "Family"] },
-  { id: 203, name: "Moesgaard Viking Moot", nearestStation: "Aarhus Central Station, then Bus 18 to Moesgaard Beach.", ticketInfo: "Paid entry. Tickets are easy to purchase online and rarely sell out.", accommodationTip: "Stay in central Aarhus and use public transport to the festival.", budgetLevel: "Moderate.", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.6, town: "Aarhus", type: "Market & Combat", emoji: "🛡", date: "2026-07-24", dateEnd: "2026-07-26", photo: "/viking3.jpg",
+  { id: 203, name: "Moesgaard Viking Moot", nearestStation: "Aarhus Central Station, then Bus 18 to Moesgaard Beach.", ticketInfo: "Paid entry. Tickets are easy to purchase online and rarely sell out.", accommodationTip: "Stay in central Aarhus and use public transport to the festival.", budgetLevel: "Moderate.", tier: "Can't miss out", travelTime: "3h 🚂", rating: 4.6, town: "Aarhus", type: "Market & Combat", emoji: "🛡", date: "2026-07-24", dateEnd: "2026-07-26", photo: "/moesgaard-viking-moot.jpg",
     desc: "Denmark's most dramatic Viking market — international warriors, mounted horse combat and craft demonstrations at Moesgaard Museum. See the full Viking Days experience details under Booking.",
     mapHint: "Moesgaard Museum, 8270 Højbjerg, Aarhus, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Horse Combat"],
     blogBody: [
@@ -150,16 +150,16 @@ export const vikingEvents = [
       { type: "heading", content: "Things to Know" },
       { type: "paragraph", content: "Expect plenty of walking across a large outdoor area. Comfortable footwear is essential, and wet weather can make parts of the grounds muddy." },
     ] },
-  { id: 204, name: "Als Vikingemarked", travelTime: "3h 30min 🚂", rating: 4.4, town: "Sønderborg", type: "Market", emoji: "🔨", date: "2026-06-13", dateEnd: "2026-06-14", photo: "/viking4.jpg",
+  { id: 204, name: "Als Vikingemarked", travelTime: "3h 30min 🚂", rating: 4.4, town: "Sønderborg", type: "Market", emoji: "🔨", date: "2026-06-13", dateEnd: "2026-06-14", photo: "/als-vikingemarked.jpg",
     desc: "A working Viking settlement for a weekend — jewellers, leatherworkers, blacksmiths, weavers and bowyers demonstrate their craft live, alongside daily combat displays, archery and activities for kids.",
     mapHint: "Als Vikingemarked, Skydebanevej, Kær Vestermark, 6400 Sønderborg, Denmark", verified: "Jul 2026", color: "#2E7D32", tags: ["Viking Market", "Craft", "Family"] },
-  { id: 205, name: "Vikingemarkedet på Lindholm Høje", travelTime: "3h 🚂", rating: 4.5, town: "Nørresundby (Aalborg)", type: "Market", emoji: "⛰", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/viking5.jpg",
+  { id: 205, name: "Vikingemarkedet på Lindholm Høje", travelTime: "3h 🚂", rating: 4.5, town: "Nørresundby (Aalborg)", type: "Market", emoji: "⛰", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/vikingemarkedet-paa-lindholm-hoje.jpg",
     desc: "Set right on Lindholm Høje — one of Scandinavia's largest Viking burial sites — this market brings reenactors and craftspeople to the very ground where Vikings once lived. Genuinely close to Aalborg, easy to combine with a city visit.",
     mapHint: "Vendilavej 11, 9400 Nørresundby, Denmark", verified: "Jul 2026", color: "#1565C0", tags: ["Viking Market", "Craft"] },
   { id: 206, name: "Ravnens Marked", travelTime: "2h 15min 🚂", rating: 4.4, town: "Jelling", type: "Market", emoji: "🐦", date: "2026-06-27", dateEnd: "2026-06-28", photo: "/jelling.jpg",
     desc: "A Viking market at Jelling — the same town where Denmark was named as a nation on the famous rune stones. Combine with a stop at the UNESCO stones themselves; this event sits right on the Copenhagen–Aalborg road trip route.",
     mapHint: "Fårupvej 25, 7300 Jelling, Denmark", verified: "Jul 2026", color: "#6A1B9A", tags: ["Viking Market", "Craft"] },
-  { id: 207, name: "Aggersborg Vikingehåndværkertræf", nearestStation: "Aalborg Station, followed by a regional bus or car journey to Aggersborg.", ticketInfo: "The fortress grounds are generally free to visit, with open access throughout the summer.", accommodationTip: "Stay in L\u00f8gst\u00f8r or Aalborg.", budgetLevel: "Very Low.", tier: "Recommended", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/viking7.jpg",
+  { id: 207, name: "Aggersborg Vikingehåndværkertræf", nearestStation: "Aalborg Station, followed by a regional bus or car journey to Aggersborg.", ticketInfo: "The fortress grounds are generally free to visit, with open access throughout the summer.", accommodationTip: "Stay in L\u00f8gst\u00f8r or Aalborg.", budgetLevel: "Very Low.", tier: "Recommended", travelTime: "3h 30min 🚂", rating: 4.3, town: "Løgstør", type: "Craftsmen Gathering", emoji: "🪓", date: "2026-08-22", dateEnd: "2026-08-23", photo: "/aggersborg-vikingehaandvaerkertraef.jpg",
     desc: "A craftsmen-only gathering at Aggersborg — one of Denmark's largest Viking ring fortresses. Less market, more workshop: expect to see smiths, carvers and weavers deep in their process rather than just selling finished goods.",
     mapHint: "Thorupvej 13, Aggersund, 9670 Løgstør, Denmark", verified: "Jul 2026", color: "#E65100", tags: ["Viking Market", "Craft"],
     blogBody: [

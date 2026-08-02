@@ -118,5 +118,144 @@
     "sourceUrl": "https://www.pexels.com/photo/a-man-in-red-and-white-uniform-holding-a-gun-27424976/",
     "query": "H.C. Andersen Festivals Denmark",
     "downloadedAt": "2026-08-02T14:01:15.402Z"
+  },
+  {
+    "file": "/trelleborg-vikingefestival.jpg",
+    "source": "pexels",
+    "photographer": "Sebastian Dziomba",
+    "sourceUrl": "https://www.pexels.com/photo/viking-reenactment-in-szczecin-poland-34732733/",
+    "query": "Trelleborg Vikingefestival Denmark",
+    "downloadedAt": "2026-08-02T14:02:41.260Z"
+  },
+  {
+    "file": "/internationalt-vikingemarked.jpg",
+    "source": "pexels",
+    "photographer": "Sebastian Sørensen",
+    "sourceUrl": "https://www.pexels.com/photo/man-standing-in-front-of-oak-barrels-1370391/",
+    "query": "Internationalt Vikingemarked Denmark",
+    "downloadedAt": "2026-08-02T14:02:51.049Z"
+  },
+  {
+    "file": "/moesgaard-viking-moot.jpg",
+    "source": "pexels",
+    "photographer": "Sebastian Dziomba",
+    "sourceUrl": "https://www.pexels.com/photo/historical-viking-battle-reenactment-in-szczecin-34732749/",
+    "query": "Moesgaard Viking Moot Denmark",
+    "downloadedAt": "2026-08-02T14:03:01.665Z"
+  },
+  {
+    "file": "/als-vikingemarked.jpg",
+    "source": "pexels",
+    "photographer": "Sebastian Sørensen",
+    "sourceUrl": "https://www.pexels.com/photo/man-standing-in-front-of-oak-barrels-1370391/",
+    "query": "Als Vikingemarked Denmark",
+    "downloadedAt": "2026-08-02T14:03:27.046Z"
+  },
+  {
+    "file": "/vikingemarkedet-paa-lindholm-hoje.jpg",
+    "source": "pexels",
+    "photographer": "Rene Terp",
+    "sourceUrl": "https://www.pexels.com/photo/man-standing-in-yellow-flower-field-334203/",
+    "query": "Vikingemarkedet på Lindholm Høje Denmark",
+    "downloadedAt": "2026-08-02T14:03:41.029Z"
+  },
+  {
+    "file": "/aggersborg-vikingehaandvaerkertraef.jpg",
+    "source": "pexels",
+    "photographer": "Alex Andrews",
+    "sourceUrl": "https://www.pexels.com/photo/house-made-of-wood-7859830/",
+    "query": "Aggersborg Vikingehåndværkertræf Denmark",
+    "downloadedAt": "2026-08-02T14:25:03.072Z"
+  },
+  {
+    "file": "/towns/dragor.jpg",
+    "source": "pexels",
+    "photographer": "Gije Cho",
+    "sourceUrl": "https://www.pexels.com/photo/old-urban-building-16112614/",
+    "query": "Dragør Copenhagen Area Denmark",
+    "downloadedAt": "2026-08-02T14:26:30.873Z"
+  },
+  {
+    "file": "/towns/aeroskobing.jpg",
+    "source": "pexels",
+    "photographer": "Frosa Katsis",
+    "sourceUrl": "https://www.pexels.com/photo/sunlit-houses-in-village-17067375/",
+    "query": "Ærøskøbing Funen Denmark",
+    "downloadedAt": "2026-08-02T14:26:49.955Z"
+  },
+  {
+    "file": "/towns/skagen.jpg",
+    "source": "pexels",
+    "photographer": "Christian Himmel",
+    "sourceUrl": "https://www.pexels.com/photo/lighthouse-at-skagen-denmark-in-spring-34458165/",
+    "query": "Skagen North Jutland Denmark",
+    "downloadedAt": "2026-08-02T14:26:59.683Z"
+  },
+  {
+    "file": "/towns/praesto.jpg",
+    "source": "unsplash",
+    "photographer": "Rasmus Andersen",
+    "sourceUrl": "https://unsplash.com/photos/a-charming-harbor-town-with-a-church-steeple-fT7f_ov4O3I",
+    "query": "Præstø Zealand Denmark",
+    "downloadedAt": "2026-08-02T14:27:08.937Z"
+  },
+  {
+    "file": "/towns/faaborg.jpg",
+    "source": "pexels",
+    "photographer": "Sıla Deniz Göktaş",
+    "sourceUrl": "https://www.pexels.com/photo/charming-red-brick-building-with-roses-in-plon-28845269/",
+    "query": "Faaborg Funen Denmark",
+    "downloadedAt": "2026-08-02T14:27:26.695Z"
+  },
+  {
+    "file": "/towns/gudhjem.jpg",
+    "source": "pexels",
+    "photographer": "Slawomir",
+    "sourceUrl": "https://www.pexels.com/photo/a-bicycle-parked-near-the-sea-5336727/",
+    "query": "Gudhjem Bornholm Denmark",
+    "downloadedAt": "2026-08-02T14:27:31.663Z"
+  },
+  {
+    "file": "/towns/thorup-strand.jpg",
+    "source": "pexels",
+    "photographer": "Peter Holmboe",
+    "sourceUrl": "https://www.pexels.com/photo/serene-beach-with-fishing-boat-and-flags-33651999/",
+    "query": "Thorup Strand North Jutland Denmark",
+    "downloadedAt": "2026-08-02T14:30:52.853Z"
+  },
+  {
+    "file": "/towns/ebeltoft.jpg",
+    "source": "pexels",
+    "photographer": "Tha Dah Baw",
+    "sourceUrl": "https://www.pexels.com/photo/green-grassland-on-sea-coast-18134307/",
+    "query": "Ebeltoft East Jutland Denmark",
+    "downloadedAt": "2026-08-02T14:30:57.504Z"
+  },
+  {
+    "file": "/north-zealand-coastal-loop.jpg",
+    "source": "pexels",
+    "photographer": "Stefan Grage",
+    "sourceUrl": "https://www.pexels.com/photo/a-sailboat-sailing-on-the-sea-during-sunrise-4282521/",
+    "license": null,
+    "query": "North Zealand Coastal Loop Zealand Denmark",
+    "downloadedAt": "2026-08-02T15:08:20.077Z"
+  },
+  {
+    "file": "/towns/mariager.jpg",
+    "source": "wikimedia",
+    "photographer": "Rüdiger Stehn from Kiel, Deutschland",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File%3A269DK%20Mariager%20(14338153378).jpg",
+    "license": "CC BY-SA 2.0",
+    "query": "Mariager North Jutland Denmark",
+    "downloadedAt": "2026-08-02T15:08:58.729Z"
+  },
+  {
+    "file": "/towns/saeby.jpg",
+    "source": "wikimedia",
+    "photographer": "Beethoven9",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AS%C3%A6byHavnebane5Rosenvej.JPG",
+    "license": "CC BY-SA 3.0",
+    "query": "Sæby North Jutland Denmark",
+    "downloadedAt": "2026-08-02T15:09:15.313Z"
   }
 ]

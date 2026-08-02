@@ -1,6 +1,6 @@
 export const foodSpots = [
   // ── LOCAL — casual, everyday, no-frills ──
-  { id: 1, name: "Harry's Place", type: "Local", emoji: "🌭", category: "Hot dog stand", location: "Nørrebro/Nordvest, Copenhagen", price: "40–70 DKK", photo: "/harrysplace1.jpg",
+  { id: 1, name: "Harry's Place", type: "Local", emoji: "🌭", category: "Hot dog stand", location: "Nørrebro/Nordvest, Copenhagen", price: "40–70 DKK", photo: "/harrysplace1.png",
     desc: "A hot dog cart since 1965, run by the same kind of hands-on owners the whole time. Order the \"Børge med krudt\" — the local's move — or the flæskesteg (roast pork) sandwich. Cash or Dankort only. No frills, no seats, just stand and eat like generations before you.",
     tip: "Ask for it \"the traditional way\" and the person behind the counter will usually tell you exactly how to eat it.", mapHint: "Harry's Place, Nordre Fasanvej 269, 2200 København N, Denmark", color: "#D4AF37" },
   { id: 2, name: "Sankt Peders Bageri", type: "Local", emoji: "🥐", category: "Bakery, est. 1652", location: "Latin Quarter, Copenhagen", price: "20–40 DKK",
