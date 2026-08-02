@@ -1,4 +1,22 @@
-# LATEST: correction pass, the guide wizard is a real full-screen experience now, not crammed into the chat panel
+# LATEST: three real bug fixes from your console log, plus the four items from your file, plus two desktop polish fixes
+
+**1. The OpenAI 400 errors you just pasted are fixed.** Your console showed three straight `/api/openai` 400s with `"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."` A previous pass fixed this for the shared `askOpenAI` helper, but three other places call `/api/openai` directly with their own `fetch` and never got the same fix: the source-scan feature (Studio's "scan a source" for festivals/events), the AI voice scan (Studio's "sounds like AI" check), and the prose scan that runs during a guide draft. All three now send `max_completion_tokens` instead of `max_tokens`. (The other line in your paste, "No Listener: tabs:outgoing.message.ready," isn't from Gemlyx, that's a Chrome extension messaging error running in your browser, unrelated to the app.)
+
+**2. Your uploaded file** (titled "From Gemini about Google Maps API.odt," though its actual contents had nothing to do with Google Maps, worth double-checking you attached the right file) **had four asks, all handled:**
+- Gemlyx AI can now use an occasional emoji in chat, the way a friend texting would, never forced into every message.
+- Added real, verified Copenhagen car-rental guidance: both the guide-build prompt and the chat AI now actively steer away from renting a car for a mostly-or-entirely-Copenhagen trip (limited/expensive parking, big pedestrianized zones, and a metro/S-train/bus/bike network that's faster and cheaper), while still treating a car as the right call for a road trip that actually leaves Copenhagen.
+- Added your "What inspired us to create this app?" paragraph under the entrance Denmark card, exactly where the old backlog item was waiting on your words. Only touched two small typos (a missing space, one truncated word), your voice and meaning are untouched.
+- Your photo-management question got a real written answer back in chat, not a code change, see that message.
+
+**3. "Fine-tune the plan" now looks clickable.** It always was a real button, it just had no background or border, so it read as plain text. Gave it the same pill-chip look the rest of the app uses, plus a hover state and a gold chevron.
+
+**4. The weather/events panel on the Denmark home page is no longer half-size on desktop.** It was capped at a fixed 760px wide with no desktop breakpoint, while the hero and the section tiles above and below it are full width, so on a wide screen it looked like a narrow strip. It now widens in two steps on bigger screens instead of staying pinned at the mobile width.
+
+**Please test:** hard refresh, try Studio's source-scan/voice-scan features and a guide draft to confirm no more OpenAI 400s, check "Fine-tune the plan" reads as a button now, and check the weather/events panel on desktop.
+
+---
+
+# EARLIER: correction pass, the guide wizard is a real full-screen experience now, not crammed into the chat panel
 
 **You were right, the previous pass shipped a version of this that wasn't what we'd agreed on, so this pass is a direct fix of exactly what you flagged, nothing more:**
 
