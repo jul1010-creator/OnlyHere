@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import { Routes, Route, useNavigate } from "react-router-dom";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
@@ -13,7 +12,6 @@ import { essentials } from "./data/essentials";
 import { roadTrips, seasonalItineraries } from "./data/roadtrips";
 import { WEATHER_CITIES } from "./data/mapShapes";
 import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
-import { denmarkFacts } from "./data/denmarkFacts";
 
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import { C } from "./utils/theme";
@@ -21,8 +19,6 @@ import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
   isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
 } from "./utils/helpers";
-import { ensureLiveContentLoaded } from "./utils/liveContent";
-import { lookupRealPlace, resolveStopCoords, resolveLegMode } from "./utils/guideEnrichment";
 
 import { DetailPage } from "./components/DetailPage";
 import { WeatherStrip } from "./components/WeatherStrip";
@@ -34,7 +30,7 @@ import { GemlyxFindCard } from "./components/GemlyxFindCard";
 import { ReviewsSection } from "./components/ReviewsSection";
 import { InstagramEmbed } from "./components/InstagramEmbed";
 import { Ico, EmojiIcon, FlagDK } from "./components/Icon";
-import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader, GemlyxIntro } from "./components/GemlyxLogo";
+import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader } from "./components/GemlyxLogo";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
@@ -49,296 +45,6 @@ import "leaflet/dist/leaflet.css";
 // "/" route below, with a new "/guide/:guideId" route alongside it for the
 // full-page shareable guide view — see INTEGRATION.md for why this is the one
 // piece that needed main.jsx to actually finish (adding <BrowserRouter> there).
-// ── Smooth chat text reveal ──────────────────────────────────────
-// Per Oliver: streamed replies looked like text being pasted in a few words at
-// a time, because network tokens arrive in uneven bursts and the bubble showed
-// them raw. The stream still writes to state as fast as it arrives; this
-// component decouples what the reader SEES from how the network delivers it,
-// revealing the text a few characters per animation frame at a steady reading
-// pace and speeding up in proportion to the backlog when a burst lands, so it
-// never trails far behind a finished reply. Messages that mount already
-// finished (history, reopening the tab) render instantly with no replay.
-function SmoothStreamText({ text, streaming }) {
-  const animateRef = useRef(!!streaming);
-  const [shown, setShown] = useState(animateRef.current ? 0 : (text || "").length);
-  const shownRef = useRef(animateRef.current ? 0 : (text || "").length);
-  useEffect(() => {
-    if (!animateRef.current) {
-      shownRef.current = (text || "").length;
-      setShown(shownRef.current);
-      return;
-    }
-    let raf;
-    let last = performance.now();
-    const tick = (now) => {
-      const dt = Math.min((now - last) / 1000, 0.1);
-      last = now;
-      const target = (text || "").length;
-      const behind = target - shownRef.current;
-      if (behind < 0) {
-        // text got shorter (e.g. the ready-marker was stripped at the end) — clamp
-        shownRef.current = target;
-        setShown(target);
-      } else if (behind > 0) {
-        const rate = 90 + behind * 2.5; // ~90 chars/s reading pace, gentle catch-up on bursts
-        shownRef.current = Math.min(target, shownRef.current + rate * dt);
-        setShown(Math.floor(shownRef.current));
-        // keep the chat pinned to the bottom while revealing, but only if the
-        // reader hasn't scrolled up to re-read something
-        document.querySelectorAll(".ai-msgs").forEach(el => {
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 140) el.scrollTop = el.scrollHeight;
-        });
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [text]);
-  return (text || "").slice(0, Math.floor(shown));
-}
-
-// ── Guide loading screen: real Denmark facts + photos ─────────────
-// Oliver's ask: instead of a bare spinner while a guide builds, real photos
-// with real facts about Denmark should pop up. Cycles through denmarkFacts
-// (module-level data, see src/data/denmarkFacts.js) on a timer. Defined at
-// module level, same reasoning as FilterChip below, so it isn't remounted
-// (and its cycle reset) on every parent re-render while the build progresses.
-// Per-category photo treatment, Oliver's idea: history facts should look and
-// feel different from attractions or nightlife facts, "it depends on their
-// taste." Picked: history = parchment (taped down like a travel journal
-// page), attractions = mapPin (pin + map backdrop), nightlife = neonGlow
-// (pulsing neon frame with floating bokeh), food = foodTray (wooden board,
-// ambient steam). "Nature" is a real interest tag in the trip intake (see
-// "Into" pills further down this file) but has no dedicated content tab of
-// its own — parks/gardens/beaches all live in the Attractions (Free
-// Entrance) data pool, so nature facts use the attractions treatment too.
-// Events don't get their OWN treatment at all — his idea, and it maps
-// cleanly onto data that already exists: events.js already tags every real
-// event with what it actually is (History, Culture, Music, Food, Craft...),
-// so an event fact just gets tagged with whichever treatment above already
-// fits it (a Viking market -> history, a beach music festival -> nightlife)
-// when it's added to denmarkFacts.js, no separate "events" style needed.
-// Animation note (his follow-up round): attractions and food both got
-// simplified from multi-step physics (pin-drop-then-rise, tray-rise) down to
-// a plain fade in/out, "odd animation... just do fade in and out probably."
-// Nightlife deliberately did NOT get simplified — "nightlife shall be like
-// more flashy" — so it keeps its neon pulse and got an added flash beat.
-const FACT_TREATMENTS = { history: "parchment", attractions: "mapPin", nature: "mapPin", nightlife: "neonGlow", food: "foodTray" };
-
-function DenmarkFactsLoader() {
-  // Oliver: "let it roll random, not always H.C. Andersen first." Starting
-  // fact is randomized on mount, and every tick picks a random fact that is
-  // NOT the one currently showing, so it never silently repeats the same
-  // photo back to back (which would look frozen since nothing would animate).
-  const randomIdx = () => Math.floor(Math.random() * denmarkFacts.length);
-  const randomIdxExcluding = (exclude) => {
-    if (denmarkFacts.length <= 1) return exclude;
-    let next = randomIdx();
-    while (next === exclude) next = randomIdx();
-    return next;
-  };
-  const [idx, setIdx] = useState(() => denmarkFacts.length ? randomIdx() : 0);
-  useEffect(() => {
-    // Oliver: "make each fact 10 sec." Was 9000ms.
-    const t = setInterval(() => setIdx(i => randomIdxExcluding(i)), 10000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const fact = denmarkFacts[idx];
-  if (!fact) return null;
-  const treatment = FACT_TREATMENTS[fact.category];
-  return (
-    <div style={{ borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg, marginBottom: 18, textAlign: "left", maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
-      {treatment === "parchment" ? (
-        // History treatment: photo taped to an aged-parchment backdrop,
-        // dropping in and settling at a slight tilt each time it swaps —
-        // "ALWAYS ANIMATION when you swap to next picture" (key={fact.id}
-        // below forces a real remount, not just a prop update, so the
-        // animation genuinely replays every single swap, never gets skipped).
-        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "radial-gradient(120% 90% at 30% 8%, #e6d3a8 0%, #cdb47c 55%, #a98c56 100%)" }}>
-          <div key={fact.id} style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: "gxPaperSettle 0.7s cubic-bezier(0.16,1,0.3,1) both" }}>
-            <div style={{ position: "relative", width: 168, background: "#fdfaf2", padding: 6, boxShadow: "0 10px 22px rgba(40,25,5,0.42)", transform: "rotate(-2deg)" }}>
-              <div style={{ position: "absolute", width: 40, height: 16, top: -8, left: -10, background: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.3)", transform: "rotate(-40deg)" }} />
-              <div style={{ position: "absolute", width: 40, height: 16, top: -8, right: -10, background: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.3)", transform: "rotate(40deg)" }} />
-              <img src={fact.photo} alt={fact.name} style={{ width: "100%", height: 148, objectFit: "contain", background: "#f4ecd9", display: "block" }} />
-            </div>
-          </div>
-          <div style={{ position: "absolute", top: 10, left: 14, fontSize: 11.5, fontWeight: 700, color: "rgba(58,40,14,0.8)", fontStyle: "italic", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
-        </div>
-      ) : treatment === "mapPin" ? (
-        // Attractions (and nature) treatment, Oliver's pick "Attractions B":
-        // a pin sits on a map backdrop with the photo as a location card
-        // underneath. Originally had a pin-drop-then-card-rise animation;
-        // simplified to a plain fade per his follow-up ("odd animation...
-        // just do fade in and out"). key={fact.id} forces a real remount on
-        // every swap so the fade genuinely replays every time, never skipped.
-        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "linear-gradient(160deg, #d8cdae, #b9a97c 75%)", backgroundImage: "repeating-linear-gradient(0deg, rgba(90,70,30,0.08) 0px, transparent 1px, transparent 26px), repeating-linear-gradient(90deg, rgba(90,70,30,0.08) 0px, transparent 1px, transparent 26px)" }}>
-          <div key={fact.id} style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: 6, animation: "gxSimpleFade 0.55s ease both" }}>
-            <div style={{ width: 20, height: 20, borderRadius: "50% 50% 50% 0", background: C.accent, transform: "rotate(-45deg)", boxShadow: "0 4px 10px rgba(0,0,0,0.35)" }} />
-            <div style={{ width: 172, background: "#fff", padding: 5, marginTop: 8, boxShadow: "0 10px 20px rgba(40,30,10,0.35)" }}>
-              <img src={fact.photo} alt={fact.name} style={{ width: "100%", height: 118, objectFit: "contain", background: "#ece4d2", display: "block" }} />
-            </div>
-          </div>
-          <div style={{ position: "absolute", top: 10, left: 14, fontSize: 11.5, fontWeight: 700, color: "rgba(50,35,10,0.75)", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
-        </div>
-      ) : treatment === "neonGlow" ? (
-        // Nightlife treatment, Oliver's pick "Nightlife A", then asked for
-        // MORE flashy rather than simplified ("nightlife shall be like more
-        // flashy") — so unlike attractions/food this one keeps real motion:
-        // a bright camera-flash beat plays first, then the frame settles
-        // into its pulsing neon glow with bokeh floating behind. The bokeh
-        // blurs and the glow's box-shadow pulse are safe here (only one
-        // loader instance is ever mounted at a time, so this doesn't run
-        // into the per-card backdrop-filter/willChange perf trap).
-        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "radial-gradient(120% 100% at 50% 0%, #241035 0%, #120a1e 60%, #0a0614 100%)" }}>
-          <div style={{ position: "absolute", width: 70, height: 70, borderRadius: "50%", filter: "blur(14px)", opacity: 0.5, background: "#ff2e88", top: 10, left: 16, animation: "gxBokehFloat 6s ease-in-out infinite" }} />
-          <div style={{ position: "absolute", width: 56, height: 56, borderRadius: "50%", filter: "blur(14px)", opacity: 0.5, background: "#22d3ee", bottom: 18, right: 14, animation: "gxBokehFloat 7s ease-in-out infinite reverse" }} />
-          <div key={fact.id} style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-            <div style={{ width: 160, padding: 5, background: "#0d0714", borderRadius: 10, animation: "gxNeonIn 0.45s ease both, gxNeonPulse 2.4s ease-in-out 0.45s infinite" }}>
-              <img src={fact.photo} alt={fact.name} style={{ width: "100%", height: 148, objectFit: "contain", background: "#150c22", display: "block", borderRadius: 6 }} />
-            </div>
-          </div>
-          <div key={`${fact.id}-flash`} style={{ position: "absolute", inset: 0, zIndex: 3, background: "#fff", pointerEvents: "none", animation: "gxFlashOut 0.5s ease-out both" }} />
-          <div style={{ position: "absolute", top: 10, left: 14, zIndex: 2, fontSize: 11.5, fontWeight: 700, color: "rgba(255,255,255,0.85)", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
-        </div>
-      ) : treatment === "foodTray" ? (
-        // Food treatment, Oliver's pick "Food A" (wooden tray with ambient
-        // steam, no crop) with the swap animation simplified to a plain fade
-        // per his follow-up, same as attractions. The steam wisps are
-        // continuous atmosphere, not the swap animation, so they keep
-        // looping independent of which fact is showing.
-        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "linear-gradient(160deg, #8a5a34, #6b4325 70%)", backgroundImage: "repeating-linear-gradient(90deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 2px, transparent 2px, transparent 30px)" }}>
-          <div style={{ position: "absolute", width: 8, height: 46, left: "44%", bottom: "58%", background: "linear-gradient(to top, rgba(255,255,255,0.5), transparent)", filter: "blur(4px)", borderRadius: "50%", animation: "gxSteamRise 3.5s ease-in-out infinite" }} />
-          <div style={{ position: "absolute", width: 8, height: 46, left: "52%", bottom: "58%", background: "linear-gradient(to top, rgba(255,255,255,0.5), transparent)", filter: "blur(4px)", borderRadius: "50%", animation: "gxSteamRise 3.5s ease-in-out 1.2s infinite" }} />
-          <div key={fact.id} style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: "gxSimpleFade 0.55s ease both" }}>
-            <div style={{ width: 190, background: "#fdfaf2", padding: 6, boxShadow: "0 14px 24px rgba(0,0,0,0.38)" }}>
-              <img src={fact.photo} alt={fact.name} style={{ width: "100%", height: 160, objectFit: "contain", background: "#f0e6d2", display: "block" }} />
-            </div>
-          </div>
-          <div style={{ position: "absolute", top: 10, left: 14, fontSize: 11.5, fontWeight: 700, color: "rgba(255,255,255,0.85)", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
-        </div>
-      ) : (
-        // Default treatment (kept for anything not yet categorized): a
-        // blurred, scaled copy of the same photo fills the box for
-        // atmosphere, the real photo sits on top at objectFit "contain" so
-        // nothing is ever cropped. Only one loader is ever mounted at a
-        // time, so this single blur() doesn't run into the per-card
-        // backdrop-filter perf trap.
-        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "#0A0F1E" }}>
-          <img key={`${fact.id}-bg`} src={fact.photo} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(18px) brightness(0.55)", transform: "scale(1.15)" }} />
-          <img key={fact.id} src={fact.photo} alt={fact.name} style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain", animation: "gxFactFade 0.5s ease" }} />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.9), transparent 45%)" }} />
-          <div style={{ position: "absolute", bottom: 10, left: 14, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
-        </div>
-      )}
-      <div style={{ padding: "12px 16px 14px", fontSize: 12.5, color: C.light, lineHeight: 1.65 }}>{fact.fact}</div>
-    </div>
-  );
-}
-
-// ── Guide preview: stops grouped by town ───────────────────────────
-// Oliver's ask, after the popup removal accidentally dropped this: before
-// the day-by-day guide, show what's actually in it grouped by town, e.g.
-// "Copenhagen: these attractions", "Ribe: just wander around". A pure
-// function, no hooks needed, so it's safe at module level regardless of
-// where it sits relative to other declarations in this file.
-const groupStopsByTown = (days) => {
-  const order = [];
-  const byTown = new Map();
-  (days || []).forEach(day => {
-    (day.stops || []).forEach(stop => {
-      const town = (stop.town || "").trim() || "Denmark";
-      if (!byTown.has(town)) { byTown.set(town, []); order.push(town); }
-      byTown.get(town).push(stop);
-    });
-  });
-  return order.map(town => {
-    const stops = byTown.get(town);
-    // A stop whose name basically IS the town (no specific attraction named)
-    // reads as "just be in this town", not a real attraction to list.
-    const namedAttractions = stops.filter(s => s.name && s.name.trim().toLowerCase() !== town.toLowerCase());
-    return { town, stops, namedAttractions, wanderOnly: namedAttractions.length === 0 };
-  });
-};
-
-// ── Modern filters (Oliver: "the filters are ridiculous on every page") ──
-// The long wrapping pill rows are replaced by one short row of compact chips.
-// A FilterChip shows its dimension and current pick ("Month · Aug"); tapping
-// it opens a bottom sheet with the options. FilterToggle is a boolean chip in
-// the same visual language. Defined at module level on purpose: components
-// declared inside GemlyxApp would get a new identity every render, and React
-// would remount them (closing the sheet) on any state change.
-const gxFilterOptStyle = (active) => ({ background: active ? "#EDF0F7" : "rgba(33,44,68,0.45)", border: `1px solid ${active ? "#EDF0F7" : C.border}`, color: active ? "#0A0F1E" : C.text, borderRadius: 100, padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" });
-
-function FilterChip({ label, value, options, onChange, allLabel = "All" }) {
-  const [open, setOpen] = useState(false);
-  const active = value !== null && value !== undefined;
-  // The sheet below is `position: fixed`, which only pins to the real
-  // viewport when EVERY ancestor is untransformed. FilterChip is rendered
-  // inside a page tab's content, and the tab pager wraps every tab in a
-  // `transform: translateX(...)` strip (for the swipe animation) — CSS spec
-  // rule: a transform on an ancestor makes IT the containing block for any
-  // fixed descendant, not the viewport. That's what caused "you click them
-  // and suddenly they're in the corner" — inset:0 was resolving against the
-  // giant multi-tab strip, not the screen, and got clipped down to a sliver.
-  // createPortal escapes the transformed strip entirely by mounting the
-  // sheet straight onto document.body, so it's viewport-fixed for real.
-  return (
-    <>
-      <button onClick={() => setOpen(true)}
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, background: active ? "#EDF0F7" : "rgba(33,44,68,0.45)", border: `1px solid ${active ? "#EDF0F7" : C.border}`, color: active ? "#0A0F1E" : C.light, borderRadius: 100, padding: "7px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
-        {active ? `${label} · ${value}` : label}
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-      </button>
-      {open && createPortal(
-        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.62)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.surface, border: `1px solid ${C.border}`, borderRadius: "20px 20px 0 0", padding: "14px 18px calc(20px + env(safe-area-inset-bottom))", animation: "gxSheetUp 0.22s cubic-bezier(0.2,0.7,0.3,1)" }}>
-            <style>{`@keyframes gxSheetUp { from { transform: translateY(44px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }`}</style>
-            <div style={{ width: 36, height: 4, borderRadius: 100, background: C.border, margin: "0 auto 14px" }} />
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>{label}</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, maxHeight: "50vh", overflowY: "auto" }}>
-              <button onClick={() => { onChange(null); setOpen(false); }} style={gxFilterOptStyle(!active)}>{allLabel}</button>
-              {options.map(o => (
-                <button key={o} onClick={() => { onChange(o === value ? null : o); setOpen(false); }} style={gxFilterOptStyle(o === value)}>{o}</button>
-              ))}
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </>
-  );
-}
-
-function FilterToggle({ label, active, onClick, icon }) {
-  return (
-    <button onClick={onClick}
-      style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, background: active ? "#EDF0F7" : "rgba(33,44,68,0.45)", border: `1px solid ${active ? "#EDF0F7" : C.border}`, color: active ? "#0A0F1E" : C.light, borderRadius: 100, padding: "7px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
-      {icon || null}{label}
-    </button>
-  );
-}
-
-// ─── RESEARCH SOURCE RULES ──────────────────────────────────────────
-// Frozen source-priority rules for every real web search Gemlyx's research
-// AIs (Perplexity only, plus the chat's own web_search tool, there is no
-// live Gemini call anywhere in this app) run. Written up by Oliver from a
-// one-time review document Gemini gave him about the research pipeline
-// (an outside opinion he asked for and pasted in, not a dependency), plus
-// his own standing rule to always check Reddit and Quora for honest
-// opinions. Spliced into every grounding, fact-check, and precheck prompt
-// so no research call skips these, not just the ones someone remembers to
-// add this to by hand.
-const RESEARCH_SOURCE_RULES = `SOURCE PRIORITY RULES FOR THIS SEARCH, apply whichever category fits what you're checking:
-ATTRACTIONS: check the attraction's own official website first for current entry prices, closed days, booking requirements, and any renovation or closure notices. For live, right now conditions like queues or partial closures, check the most recent Google Maps and TripAdvisor reviews, last 30 days only. Wikipedia and general encyclopedias are for historical and architectural background only, never for current prices or hours, and background sources never override official live data.
-FOOD (restaurants and cafes): check the official menu, prices, and whether reservations are required. Cross reference Google Maps, TripAdvisor, and Danish food press (Gastro, Politiken, Berlingske, or local food blogs) for real credibility and atmosphere. If dietary needs are relevant, check recent reviews specifically for vegetarian, vegan, or gluten free options.
-EVENTS (concerts, festivals, theatre): use only official ticket sites (Ticketmaster, Billetlugen) or the venue's own calendar to confirm date, time, and ticket availability. Always run a dedicated check of news and the venue's official social media (Facebook Events, Instagram) from the last 48 hours to catch a cancellation or a venue change.
-NIGHTLIFE (bars, clubs, lounges): check Google reviews from the last 1 to 2 months for the current crowd, age limits, dress code, and music style. Verify exact opening hours, especially night and weekend hours, and any entry price or cover charge directly from the venue's own channels or social media, since these change often.
-ALWAYS ALSO CHECK REDDIT AND QUORA (r/Denmark, r/travel, general Quora results) alongside the sources above, for honest, non marketing traveler opinions on whether a place is genuinely worth it, overrated, or a real hidden gem.
-CONFLICT RESOLUTION: if Wikipedia or any general background source disagrees with a place's own official website, the official website is always right.
-FRESHNESS: the current year is 2026. Treat prices, hours, or availability claims from articles or blog posts older than 2025 as likely stale, do not state them as current fact.
-CITE YOUR SOURCES: make clear which real source each fact came from.`;
-
 function GemlyxApp() {
   const navigate = useNavigate();
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
@@ -349,10 +55,7 @@ function GemlyxApp() {
   // covers the case where the video was already cached and onCanPlay never re-fires.
   useEffect(() => {
     const v = heroVideoRef.current;
-    // If the video was cached and is already decodable, onCanPlay may never fire —
-    // the video would then PLAY behind opacity 0 and look "stopped" (the poster
-    // image showing forever). Mark it ready here too, not just in onCanPlay.
-    if (v) { v.muted = true; if (v.readyState >= 2) setVideoReady(true); v.play().catch(() => {}); }
+    if (v) { v.muted = true; v.play().catch(() => {}); }
     // Ultimate fallback: some in-app/embedded browsers block even muted+playsInline
     // autoplay entirely until the very first user interaction anywhere on the page —
     // this makes sure that first tap (on ANYTHING, not just the video) starts it,
@@ -375,14 +78,43 @@ function GemlyxApp() {
   // every existing .map()/lookup across the whole app picks the new items up for free,
   // no need to touch dozens of call sites. bumpLiveContent forces the one re-render
   // needed after the mutation, since React can't see a plain array push on its own.
-  // The actual fetch+merge now lives in utils/liveContent.js (ensureLiveContentLoaded)
-  // so pages/GuidePage.jsx can call the exact same one-time, dedup-safe loader — see
-  // that file's comment for why the dedup set had to move to module scope for that
-  // sharing to be safe.
   const [, bumpLiveContent] = useState(0);
+  const fetchedLiveContent = useRef(false);
+  const mergedContentIds = useRef(new Set());
   const heroVideoRef = useRef(null);
+  const loadLiveContent = async () => {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      });
+      const rows = await res.json();
+      if (!Array.isArray(rows)) { console.warn("gemlyx_content fetch did not return an array:", rows); return; }
+      if (rows.length === 0) return;
+      const bookingRows = [];
+      rows.forEach(row => {
+        if (mergedContentIds.current.has(row.id)) return; // already merged this row, skip
+        const item = row.payload;
+        if (!item || !item.name) return;
+        mergedContentIds.current.add(row.id);
+        const id = 100000 + row.id; // offset keeps live IDs clear of hardcoded ones
+        if (row.type === "town") {
+          towns.push({ id, ...item });
+          if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
+        } else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
+        else if (row.type === "free") freeEntrance.push({ id, ...item });
+        else if (row.type === "food" || row.type === "foodStreet") foodSpots.push({ id, ...item });
+        else if (row.type === "night") nightlifeSpots.push({ id, ...item });
+        else if (row.type === "nightTown") nightlifeTowns.push({ id, ...item });
+        else if (row.type === "booking") bookingRows.push({ id, ...item });
+      });
+      if (bookingRows.length > 0) setCraftItems(prev => [...prev, ...bookingRows]);
+      bumpLiveContent(v => v + 1);
+    } catch (err) { console.warn("gemlyx_content fetch failed:", err); }
+  };
   useEffect(() => {
-    ensureLiveContentLoaded(bookingRows => setCraftItems(prev => [...prev, ...bookingRows])).then(() => bumpLiveContent(v => v + 1));
+    if (fetchedLiveContent.current) return;
+    fetchedLiveContent.current = true;
+    loadLiveContent();
   }, []);
   const [active, setActive] = useState("home");
   const [shopTab, setShopTab] = useState("shops");
@@ -404,12 +136,7 @@ function GemlyxApp() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [eventMonth, setEventMonth] = useState(null);
   const [eventType, setEventType] = useState(null);
-  // eventTab (the Local/Major/Viking underline tabs) is retired — the three
-  // lists now merge into one grid and scale is just another filter chip.
-  const [eventScale, setEventScale] = useState(null); // null | "Local" | "Major" | "Viking"
-  const [eventSortNear, setEventSortNear] = useState(false);
-  const [townSortNear, setTownSortNear] = useState(false);
-  const [foodSortNear, setFoodSortNear] = useState(false);
+  const [eventTab, setEventTab] = useState("local");
   const [townFilter, setTownFilter] = useState(null);
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
@@ -501,59 +228,9 @@ function GemlyxApp() {
     return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches };
   })() : (userCoords === "denied" ? "denied" : userCoords === "requesting" ? "loading" : null);
 
-  // guideModal is not a small popup and not inline chat content either —
-  // correction pass, Oliver: "this needs to be a real full-screen experience,
-  // not crammed into the chat panel." It's a full-screen createPortal
-  // overlay (same escape-the-transformed-strip reasoning as FilterChip
-  // above) with its own pages: preview (real photos + descriptions, grouped
-  // by town) -> essentials (its own page) -> map/plain choice -> loading,
-  // tracked by guideFlowStep alongside it. Once enrichGuideDays/
-  // fetchGuideWeather both finish, the handoff effect below navigates to the
-  // real full-page guide (GuidePage, "/guide/new") and clears both back to
-  // null. Search this file for "guideFlowStep ===" for the wizard's actual
-  // render branches, and "GEMLYX_WIZARD_PORTAL" for where the portal mounts.
-  const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days } (build buffer only, see above)
-  const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } — shown inline near the "Turn this into a guide" button while building
+  const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
+  const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } shown during "loading" — real progress, not a static message
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
-  // Multi-step wizard, per Oliver: preview grouped by town first, then
-  // essentials, then a map-guide-vs-plain-guide choice, THEN (only if map was
-  // picked) the expensive Google Directions calls. null while nothing is
-  // building; "preview" | "essentials" | "choice" | "enriching" while
-  // guideModal holds an in-progress guide object. generateGuide (below) is
-  // kept as ONE continuous async function that pauses at each step by
-  // awaiting a Promise these refs resolve — the local variables it already
-  // has in scope (parsed days, geo, travel mode, etc.) stay valid across each
-  // pause with no need to round-trip them through state.
-  const [guideFlowStep, setGuideFlowStep] = useState(null);
-  const guidePreviewResolveRef = useRef(null);
-  const guideEssentialsResolveRef = useRef(null);
-  const guideChoiceResolveRef = useRef(null);
-  // Which preview cards have "Read more" expanded, keyed by "town|stopName".
-  // A Set, not an array, purely so toggling is a cheap has()/add()/delete().
-  const [expandedPreviewStops, setExpandedPreviewStops] = useState(new Set());
-  // Full-screen wizard needs a real close/cancel path (a takeover with no
-  // escape hatch is a trap). Setting this flag and resolving whichever
-  // pause is currently awaited unblocks generateGuide so it can bail out
-  // cleanly instead of leaking a forever-pending promise.
-  const guideCancelledRef = useRef(false);
-  const closeGuideWizard = () => {
-    guideCancelledRef.current = true;
-    guidePreviewResolveRef.current?.();
-    guideEssentialsResolveRef.current?.();
-    guideChoiceResolveRef.current?.("plain");
-    setGuideModal(null);
-    setGuideFlowStep(null);
-  };
-  // BUG FIX (real production crash, "Cannot access before initialization"):
-  // these two used to be declared ~1600 lines further down, but the
-  // guidePendingNav handoff effect below reads them (in its own body AND its
-  // dependency array) on every render — a dependency array is evaluated
-  // eagerly as part of the useEffect() call itself, so referencing a const
-  // that hasn't executed its own declaration line yet is a real temporal-
-  // dead-zone ReferenceError, not just a lint nitpick. Declared here now,
-  // before anything in this component can reach for them.
-  const [exactDurations, setExactDurations] = useState({}); // "origin|dest|mode" -> {durationText, durationMinutes}
-  const [noRouteFound, setNoRouteFound] = useState({}); // "origin|dest|mode" -> true, when Google genuinely found nothing (e.g. islands needing ferry+train+taxi combos no single mode covers)
   useEffect(() => {
     // Mirror any real (non-loading, non-null) guide into the cache as it updates —
     // enrichGuideDays/fetchGuideWeather keep patching guideModal in over time, so this
@@ -566,24 +243,6 @@ function GemlyxApp() {
   }, [guideModal]);
   const [glancePending, setGlancePending] = useState(0);
   const [weatherPending, setWeatherPending] = useState(0);
-  // Waits for the fire-and-forget enrichGuideDays/fetchGuideWeather calls
-  // (tracked by glancePending/weatherPending) to both genuinely finish, then
-  // hands off to the real full-page guide with everything already baked in —
-  // maps, exact routes, accommodation, weather — instead of navigating early
-  // and having GuidePage show a guide that's still visibly filling itself in.
-  // _exactDurations/_noRouteFound are snapshotted onto the guide object here
-  // since GuidePage has no access to this component's exactDurations/
-  // noRouteFound state otherwise (it's a completely separate route/component).
-  const [guidePendingNav, setGuidePendingNav] = useState(null); // { gid } | null
-  useEffect(() => {
-    if (!guidePendingNav) return;
-    if (!guideModal || typeof guideModal !== "object" || guideModal._gid !== guidePendingNav.gid) return;
-    if (glancePending > 0 || weatherPending > 0) return;
-    navigate("/guide/new", { state: { guide: { ...guideModal, _exactDurations: exactDurations, _noRouteFound: noRouteFound } } });
-    setGuidePendingNav(null);
-    setGuideModal(null);
-    setGuideFlowStep(null);
-  }, [guidePendingNav, guideModal, glancePending, weatherPending, exactDurations, noRouteFound, navigate]);
 
   // ── Founder studio (visible only at /#studio): Tavily+OpenAI drafts complete
   // entries — card + long-form blogBody — for any content type, following the
@@ -645,7 +304,7 @@ function GemlyxApp() {
     setDraftEditError(null);
     setPublishStatus(null);
     setPublishErrorDetail(null);
-    setVerifyResults(null); setVerifyError(null); setPerplexityCheckResult(null); setPerplexityCheckError(null); setPerplexityPrecheckRan(false);
+    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     setManageOpen(false);
   };
 
@@ -744,16 +403,17 @@ function GemlyxApp() {
     setVerifyLoading(false);
   };
 
-  // Real independent second opinion via Perplexity's live web search, genuinely
+  // Real independent second opinion via Gemini + Google Search grounding — genuinely
   // different from Tavily+OpenAI (different search index, different model), which is
-  // why it catches things Studio's own research missed (e.g. the fabricated "Kap" stage
-  // and wrong currency for Skagen Festival). Never edits the draft automatically,
+  // why it caught things Studio's own research missed (e.g. the fabricated "Kap" stage
+  // and wrong currency for Skagen Festival). Never edits the draft automatically —
   // shows a synthesized answer with real citations for Oliver to read and act on himself.
-  // Gemini was tried here first and fully removed (Aug 2026): every call site below
-  // is a fact-check/verification task, never open-ended discovery, and Perplexity's
-  // search-first, per-claim-cited design fits that better than Gemini's end-bundled
-  // citations did. There is no live Gemini call left anywhere in this app, this
-  // comment exists only so nobody re-adds one by mistake.
+  // SWAPPED FROM GEMINI (Aug 2026): every call site here is a fact-check/
+  // verification task (never open-ended discovery), and independent
+  // comparisons found Perplexity's search-first, per-claim-cited design
+  // structurally better suited to that than Gemini's end-bundled citations —
+  // see api/perplexity.js for the full reasoning. Same signature/shape as the
+  // old askGemini so every call site below needed only a name change.
   const askPerplexity = async (prompt) => {
     try {
       const res = await fetch("/api/perplexity", {
@@ -821,7 +481,7 @@ function GemlyxApp() {
         }),
       });
       const data = await res.json();
-      // Same reasoning as askPerplexity: planning (Stage 1) and structuring (Stage 4)
+      // Same reasoning as askGemini: planning (Stage 1) and structuring (Stage 4)
       // both swallow OpenAI failures silently by design (a miss here just degrades
       // to raw research, never blocks the draft) — but that means a genuinely
       // broken OpenAI call (wrong model string, a param the model doesn't accept)
@@ -902,23 +562,23 @@ function GemlyxApp() {
       }
     }
   };
-  const [perplexityPrecheckRan, setPerplexityPrecheckRan] = useState(false);
-  const [perplexityCheckLoading, setPerplexityCheckLoading] = useState(false);
-  const [perplexityCheckResult, setPerplexityCheckResult] = useState(null); // { text, citations: [{title,url}] }
-  const [perplexityCheckError, setPerplexityCheckError] = useState(null);
+  const [googlePrecheckRan, setGooglePrecheckRan] = useState(false);
+  const [googleCheckLoading, setGoogleCheckLoading] = useState(false);
+  const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
+  const [googleCheckError, setGoogleCheckError] = useState(null);
   const [factCheckFixLoading, setFactCheckFixLoading] = useState(false);
   const [factCheckFixPreview, setFactCheckFixPreview] = useState(null); // proposed corrected JSON text, awaiting Apply
   const [factCheckFixError, setFactCheckFixError] = useState(null);
-  // Claude reads Perplexity's fact-check findings + the current draft, and rewrites
+  // Claude reads Gemini's fact-check findings + the current draft, and rewrites
   // ONLY what's actually flagged as wrong — never a from-scratch regeneration.
   // Returns the full corrected JSON so the fix stays internally consistent, but
   // it's validated as real JSON and shown as a preview before anything is
   // applied — same "you see it before it's live" pattern as every other rewrite
   // tool in Studio, never a silent overwrite.
   const fixFactCheckWithClaude = async () => {
-    if (!perplexityCheckResult?.text || !studioDraftText.trim()) return;
+    if (!googleCheckResult?.text || !studioDraftText.trim()) return;
     setFactCheckFixLoading(true); setFactCheckFixError(null); setFactCheckFixPreview(null);
-    const prompt = `Here is a draft (JSON) and a list of factual issues an independent fact-checker found in it. Rewrite ONLY the specific parts that are actually flagged as wrong, fixing them to match the fact-checker's findings. Leave every other field completely untouched — same structure, same keys, same wording for anything not flagged. If the fact-checker didn't find real numbers/dates to replace a wrong value with, leave that field an honest empty string rather than guessing. Respond with ONLY the complete corrected JSON, valid JSON, nothing else — no explanation, no markdown code fences.\n\nFact-checker's findings:\n${perplexityCheckResult.text}\n\nCurrent draft:\n${studioDraftText}`;
+    const prompt = `Here is a draft (JSON) and a list of factual issues an independent fact-checker found in it. Rewrite ONLY the specific parts that are actually flagged as wrong, fixing them to match the fact-checker's findings. Leave every other field completely untouched — same structure, same keys, same wording for anything not flagged. If the fact-checker didn't find real numbers/dates to replace a wrong value with, leave that field an honest empty string rather than guessing. Respond with ONLY the complete corrected JSON, valid JSON, nothing else — no explanation, no markdown code fences.\n\nFact-checker's findings:\n${googleCheckResult.text}\n\nCurrent draft:\n${studioDraftText}`;
     const result = await askClaude(prompt, 3000);
     if (result.error) { setFactCheckFixError(result.error); setFactCheckFixLoading(false); return; }
     const cleaned = result.text.replace(/^```json\s*|\s*```$/g, "").trim();
@@ -930,14 +590,14 @@ function GemlyxApp() {
     }
     setFactCheckFixLoading(false);
   };
-  const perplexityFactCheck = async () => {
-    if (!studioDraft || perplexityCheckLoading) return;
-    setPerplexityCheckLoading(true); setPerplexityCheckError(null); setPerplexityCheckResult(null);
-    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. ONLY report things that are actually WRONG, unverifiable, or missing, do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise, bullet points, not an essay.\n\n${RESEARCH_SOURCE_RULES}\n\nDraft: ${JSON.stringify(studioDraft)}`;
+  const googleAICheck = async () => {
+    if (!studioDraft || googleCheckLoading) return;
+    setGoogleCheckLoading(true); setGoogleCheckError(null); setGoogleCheckResult(null);
+    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
-    if (result.error) { setPerplexityCheckError(result.error); setPerplexityCheckLoading(false); return; }
-    setPerplexityCheckResult({ text: result.text, citations: result.citations });
-    setPerplexityCheckLoading(false);
+    if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
+    setGoogleCheckResult({ text: result.text, citations: result.citations });
+    setGoogleCheckLoading(false);
   };
 
   const [publishStatus, setPublishStatus] = useState(null); // null | "sending" | "sent" | "error"
@@ -978,13 +638,7 @@ function GemlyxApp() {
             { role: "system", content: `Extract every distinct Danish festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items ACTUALLY present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
             { role: "user", content: pageData.text },
           ],
-          // FIX: was `max_tokens`, which "gpt-5.6-sol" (a reasoning-tier model,
-          // same real-world behavior as OpenAI's o1/o3 line) rejects outright
-          // with "Unsupported parameter: 'max_tokens' is not supported with this
-          // model. Use 'max_completion_tokens' instead." — this was the exact
-          // error Oliver hit scanning a source. The Stage 1 planning call above
-          // already got this fix; this call (and two others below) were missed.
-          max_completion_tokens: 8000,
+          max_tokens: 8000,
         }),
       });
       const data = await res.json();
@@ -1082,7 +736,7 @@ function GemlyxApp() {
     const name = studioTown.trim();
     if (!name || studioLoading) return;
     setStudioLoading(true); setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null); setStudioInventedWarning(null);
-    setVerifyResults(null); setVerifyError(null); setPerplexityCheckResult(null); setPerplexityCheckError(null); setPerplexityPrecheckRan(false);
+    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     setStudioInstagramUrl(""); setStudioFrozenGeo(null);
     try {
       // STAGE 1 — OpenAI plans what to research. The fixed queries below are a
@@ -1180,15 +834,15 @@ function GemlyxApp() {
         }
       }
 
-      // Automatic Perplexity pre-check, BEFORE OpenAI writes a word, a second,
+      // Automatic Gemini + Google Search pre-check, BEFORE OpenAI writes a word — a second,
       // independent search pass (different index, different model than Tavily+OpenAI) that
       // caught real errors Studio's own research missed (e.g. Skagen Festival's fabricated
       // venue and wrong currency). Its findings get folded in as extra grounding for the
-      // draft, not as a rewrite, OpenAI still writes every word. If the key's missing or
-      // the call fails, this just skips silently, drafting must never depend on Perplexity.
-      let perplexityFindings = "";
+      // draft, not as a rewrite — OpenAI still writes every word. If the key's missing or
+      // the call fails, this just skips silently — drafting must never depend on Gemini.
+      let googleFindings = "";
       {
-        // For Food and Town: Perplexity's job is no longer just "fact-check", it's the
+        // For Food and Town: Gemini's job is no longer just "fact-check" — it's the
         // actual "Data Clerk" step (per Oliver's proposed pipeline). It organizes real,
         // searched facts into the SAME narrative buckets the final draft uses, so
         // OpenAI's job narrows down to pure prose transformation of already-sorted
@@ -1211,7 +865,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
           : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`;
         const preCheck = await withRetry(
-          () => askPerplexity(`${precheckPrompt}\n\n${RESEARCH_SOURCE_RULES}`),
+          () => askPerplexity(precheckPrompt),
           r => !!r.error,
           "Fact-check (Perplexity)"
         );
@@ -1222,7 +876,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // different/weaker model.)
         if (preCheck.error) throw new Error(`Fact-check failed (Perplexity): ${preCheck.error}`);
         if (preCheck.text) {
-          perplexityFindings = preCheck.text;
+          googleFindings = preCheck.text;
           // Surface an identity mismatch as its own clearly-visible warning, separate
           // from the general findings text, so it can't get lost in a wall of facts —
           // this is what actually gives the founder a "did you mean...?" moment before
@@ -1231,7 +885,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           if (warningMatch) setStudioIdentityWarning(warningMatch[1].trim());
         }
       }
-      setPerplexityPrecheckRan(!!perplexityFindings);
+      setGooglePrecheckRan(!!googleFindings);
 
       // Real, automatic night-transport check — nightlife only, since that's the one
       // content type where "can I actually get home at 3am" is load-bearing. Runs
@@ -1263,8 +917,8 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
 
       // FROZEN FACTS — real geocoding + real nearest-station lookup, computed
       // programmatically BEFORE OpenAI ever sees this draft. This is the actual
-      // architectural fix for coordinate/station hallucination (per the research
-      // pipeline's own findings): OpenAI "smooths" a real number into whichever one reads
+      // architectural fix for coordinate/station hallucination (per Gemini's
+      // pipeline report): OpenAI "smooths" a real number into whichever one reads
       // more naturally in a sentence, even when fed the correct one — so instead
       // of asking it to state these, they're computed once here, told to OpenAI
       // as facts to reference (not restate character-for-character, since it still
@@ -1371,7 +1025,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
 
       const rawResearch = (scanHint && (scanHint.town || scanHint.dates)
         ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[scanHint.town && `town/city = ${scanHint.town}`, scanHint.dates && `dates = ${scanHint.dates}`].filter(Boolean).join(", ")}\n\n`
-        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (perplexityFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below; if it conflicts, prefer whichever is more specific/recent):\n${perplexityFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
+        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below; if it conflicts, prefer whichever is more specific/recent):\n${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
 
       // STAGE 4 — OpenAI structures the raw research into organized notes per
       // schema field, BEFORE Claude ever writes a word. This is the actual
@@ -1549,7 +1203,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       setPublishStatus(null);
       setPublishErrorDetail(null);
 
-      // FINAL STAGE — Perplexity checks the finished draft against the actual research
+      // FINAL STAGE — Gemini checks the finished draft against the actual research
       // gathered above, specifically hunting for anything that reads like it was
       // invented rather than grounded in what was actually found. This is separate
       // from the "Ask Perplexity to fact-check" button (which re-searches the web
@@ -1730,7 +1384,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       for (let i = 0; i < batch.length; i++) {
         const ev = batch[i];
         setUpdateEventsProgress(`${i + 1} / ${batch.length}`);
-        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited).\n\n${RESEARCH_SOURCE_RULES}\n\nRespond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""}, dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.`;
+        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.`;
         try {
           const result = await askPerplexity(prompt);
           if (result.error) continue;
@@ -1835,8 +1489,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
             role: "user",
             content: `Read this draft travel-guide content and find sentences that genuinely read as generic AI writing — not because they use an obvious cliché word, but because of tone, rhythm, or structure: unnecessary hedging ("it could be argued", "some might say"), suspiciously tidy three-item lists, over-smooth even-toned phrasing with no real edge or specificity, sentences that could describe any place rather than THIS one. Be selective — only flag genuine problems, not every sentence, and don't invent issues if the writing is actually fine. For each real problem, quote the EXACT sentence as it appears in the text (verbatim, so it can be found) and give a short reason.\n\nRespond with ONLY a JSON array, no other text: [{"sentence": "exact sentence from the text", "reason": "short reason"}] — return [] if nothing genuine stands out.\n\nDraft:\n${studioDraftText}`
           }],
-          // FIX: same OpenAI max_tokens/max_completion_tokens issue as scan-source, see note there.
-          max_completion_tokens: 800,
+          max_tokens: 800,
         }),
       });
       const data = await res.json();
@@ -2052,7 +1705,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     }).finally(() => setWeatherPending(0));
   };
 
-  const enrichGuideDays = (days, gid, travelMode, mixedModes, freshGeo = {}, lightMode = false) => {
+  const enrichGuideDays = (days, gid, travelMode, mixedModes) => {
     setGlancePending(days.length);
     days.forEach(async (day, idx) => {
       try {
@@ -2085,38 +1738,18 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           // otherwise-bike trip), re-fetch just this day's legs with their real per-leg
           // modes — this is what lets mixed-mode trips show a correct route instead of a
           // failed bike-route-across-water guess silently falling back to a wrong km estimate.
-          // BUG FIX: this re-fetch hits /api/directions (Google) same as
-          // fetchExactDurations does — it was the one place still calling that
-          // API even when the plain (no maps/transport) guide mode was chosen,
-          // since only fetchExactDurations itself was being skipped in
-          // generateGuide. Gated on lightMode here too, now genuinely skipped.
-          if (!lightMode && Array.isArray(glance.legs) && glance.legs.length > 0) {
+          if (Array.isArray(glance.legs) && glance.legs.length > 0) {
             const dayLegTriples = [];
             if (names.length === 1 && idx > 0) {
               const prevLast = days[idx - 1]?.stops?.[days[idx - 1].stops.length - 1];
               if (prevLast) dayLegTriples.push([prevLast.name, names[0], glance.legs[0]?.how || ""]);
             }
             for (let i = 0; i < names.length - 1; i++) dayLegTriples.push([names[i], names[i + 1], glance.legs[i]?.how || ""]);
-            // BUG FIX, same root cause as the "2-3 hour transit that's really a 5
-            // minute walk" report: this used to send Google's Directions API a
-            // BARE stop name with no town or country attached, so its own
-            // geocoder was free to match a same-named place anywhere, including
-            // a different branch of a chain or a same-named spot in another
-            // town entirely, giving a plausible but wrong duration. Now uses the
-            // same coordinate-first, town-qualified-text-fallback pattern
-            // fetchExactDurations already uses, so this re-fetch can't disagree
-            // with the real route just from a lazier query.
-            const townByName = {};
-            days.forEach(d => (d.stops || []).forEach(s => { if (s.town && !townByName[s.name]) townByName[s.name] = s.town; }));
-            const asParam = (name) => {
-              const c = resolveStopCoords(name, freshGeo);
-              return c ? `${c.lat},${c.lon}` : `${name}${townByName[name] ? `, ${townByName[name]}` : ""}, Denmark`;
-            };
             const foundExact = {};
             for (const [origin, dest, how] of dayLegTriples) {
               const legMode = detectLegMode(how, travelMode);
               try {
-                const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(asParam(origin))}&destination=${encodeURIComponent(asParam(dest))}&mode=${legMode}`);
+                const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}`);
                 const d2 = await res2.json();
                 if (!d2.error) foundExact[`${origin}|${dest}|${legMode}`] = d2;
               } catch { /* falls back to km estimate / AI text, same as always */ }
@@ -2165,17 +1798,14 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     });
   };
 
-  // lookupRealPlace/resolveStopCoords/resolveLegMode/kmBetween now live in
-  // utils/guideEnrichment.js (imported above) so pages/GuidePage.jsx can use
-  // the exact same logic when rendering/enriching a finished guide, instead
-  // of a second hand-copied version that could quietly drift out of sync.
-  // (exactDurations/noRouteFound themselves now declared up near guideModal —
-  // see the comment there — since the guidePendingNav handoff effect reads
-  // them and needs them initialized before it does, not after.)
+  // Resolve a guide stop name to real coordinates (content data first, then town list), or null.
+  const [geocodedCoords, setGeocodedCoords] = useState({}); // name -> {lat,lon}, filled in once per guide
+  const [exactDurations, setExactDurations] = useState({}); // "origin|dest|mode" -> {durationText, durationMinutes}
+  const [noRouteFound, setNoRouteFound] = useState({}); // "origin|dest|mode" -> true, when Google genuinely found nothing (e.g. islands needing ferry+train+taxi combos no single mode covers)
   // Real Google-matched travel time (not a straight-line estimate) for every leg in a
   // guide, fetched once before it's shown. Needs /api/directions.js + GOOGLE_MAPS_KEY —
   // if either is missing, this silently no-ops and legs fall back to the km estimate,
-  // same graceful-degradation pattern as the Perplexity pre-check.
+  // same graceful-degradation pattern as the Gemini pre-check.
   const fetchExactDurations = async (days, primaryMode, freshGeo = {}, onlyWalking = false) => {
     // Build (origin, dest, how-text) triples instead of flat pairs, so each leg can be
     // routed with ITS OWN mode — e.g. a mostly-bike trip that needs a ferry to Bornholm
@@ -2194,7 +1824,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // Resolves BOTH already-known coords (towns/landmarks/prior geocodes) and this
     // guide's freshly-geocoded ones passed in directly — never the stale geocodedCoords
     // state var, which isn't updated in this closure until the next re-render.
-    const resolveFresh = (name) => resolveStopCoords(name, freshGeo);
+    const resolveFresh = (name) => resolveStopCoords(name) || freshGeo[name] || null;
     // Same ambiguity problem as geocoding — a bare name can match the wrong
     // same-named place in a different town, so include real town context in the
     // text fallback too whenever coordinates genuinely aren't available yet.
@@ -2226,9 +1856,51 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     if (Object.keys(found).length > 0) setExactDurations(prev => ({ ...prev, ...found }));
     if (Object.keys(failed).length > 0) setNoRouteFound(prev => ({ ...prev, ...failed }));
   };
-  // resolveStopCoords/resolveLegMode: see utils/guideEnrichment.js (imported
-  // above) for the current versions, plus the "2-3 hour transit that's really
-  // a 5 minute walk" bug history that shaped their priority order.
+  // BUG FIX (the "34 min walk that's really 7 min" report): this used to check
+  // the crude TOWN_COORDS substring match BEFORE geocodedCoords — so a stop
+  // like "Odense Flower Festival" (whose name contains the town "Odense")
+  // would match Odense's generic TOWN CENTER coordinate and stop right there,
+  // even when a real, precise geocode of the actual venue existed or could
+  // have been fetched. The town-center point can be a real walking distance
+  // away from the actual venue, which is exactly why the in-app leg said "34
+  // min" while clicking through to real Google Maps (which geocodes the venue
+  // by name/address directly, not by this shortcut) said "7 min" — two
+  // different, disagreeing coordinate sources for the same stop. Precise
+  // sources (a real lat/lon on file, or an actual Nominatim geocode of the
+  // specific venue) now both take priority over the generic town-center
+  // fallback, which is only used as an absolute last resort when neither
+  // exists — see geocodeStopsForGuide below for the matching fix on the
+  // geocoding-eligibility side of this same bug.
+  const resolveStopCoords = (name) => {
+    const real = lookupRealPlace(name);
+    if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+    if (geocodedCoords[name]) return geocodedCoords[name];
+    const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
+    if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
+    return null;
+  };
+  // SINGLE SOURCE OF TRUTH for leg transport mode — used by fetchExactDurations
+  // (the background fetch) AND both render sites. Previously each computed mode
+  // independently: the fetch could correctly override "walking" to "transit" for
+  // a genuinely far pair, store the result under the "transit" cache key, while
+  // the render recalculated mode fresh with no distance check, still said
+  // "walking", and looked for a "walking" cache entry that was never created —
+  // silently falling through to a real Directions API result fetched separately
+  // for mode=walking between two names Google's OWN geocoder may have resolved
+  // completely differently than our Nominatim-based distance check did.
+  const resolveLegMode = (how, primaryMode, originName, destName, onlyWalking = false, extraGeo = {}) => {
+    let mode = detectLegMode(how, primaryMode);
+    const distKm = haversineKm(
+      resolveStopCoords(originName) || extraGeo[originName] || null,
+      resolveStopCoords(destName) || extraGeo[destName] || null
+    );
+    if (distKm != null) {
+      const walkCapKm = onlyWalking ? Infinity : 2.5;
+      if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
+      else if (mode === "bicycling" && distKm > 60) mode = "transit";
+    }
+    return mode;
+  };
   // Free geocoding for specific landmarks (museums, attractions) that only towns have
   // coordinates for otherwise — no API key, no billing, unlike Google's Geocoding API.
   // Runs once per guide, before it's shown, so every downstream render (maps, legs)
@@ -2265,8 +1937,15 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       } catch { /* leave this one unresolved — map/leg for it just won't show, no crash */ }
       await new Promise(r => setTimeout(r, 250)); // be a polite, low-volume client to a free public service
     }
-    return found; // this guide's own freshly-geocoded coords, passed directly to whoever needs
-                   // them right away (never cached in component state — see guideEnrichment.js).
+    if (Object.keys(found).length > 0) setGeocodedCoords(prev => ({ ...prev, ...found }));
+    return found; // returned directly too — setGeocodedCoords won't be visible in this same closure until
+                   // a re-render happens, so any caller needing the fresh coords right away (not next render)
+                   // must use this return value instead of reading the geocodedCoords state variable.
+  };
+  const kmBetween = (a, b) => {
+    const dLat = (a.lat - b.lat) * 111.32;
+    const dLon = (a.lon - b.lon) * 62.06;
+    return Math.sqrt(dLat * dLat + dLon * dLon);
   };
   // Real, future Unix timestamp for the next occurrence of a given weekday+hour —
   // Directions API's departure_time must be in the future, never the past.
@@ -2304,8 +1983,8 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     return results;
   };
 
-  // Geocodes a place name to real coordinates, the "immutable data" anchor from
-  // the research pipeline's own findings. This gets computed ONCE, programmatically, and never
+  // Geocodes a place name to real coordinates — the "immutable data" anchor from
+  // Gemini's pipeline report. This gets computed ONCE, programmatically, and never
   // touched by OpenAI, instead of asking the model to state a lat/lon in its own
   // JSON (which is exactly where coordinate hallucination happens — it "smooths"
   // a real number into something that reads naturally but isn't the real one).
@@ -2371,7 +2050,21 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     return Math.sqrt(dLat * dLat + dLon * dLon);
   };
 
-  // lookupRealPlace: see utils/guideEnrichment.js (imported above).
+  // Looks up a stop name against everything real Gemlyx already knows, so the guide
+  // shows real price/hours/type instead of just repeating the AI's own prose.
+  const lookupRealPlace = (name) => {
+    if (!name) return null;
+    const norm = name.toLowerCase();
+    const pools = [
+      ...freeEntrance.map(p => ({ ...p, _src: "free" })),
+      ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
+      ...foodSpots.map(p => ({ ...p, _src: "food" })),
+      ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
+      ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event" })),
+      ...towns.map(p => ({ ...p, _src: "town" })),
+    ];
+    return pools.find(p => p.name && (norm.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(norm))) || null;
+  };
 
   // Lets a guide stop that matches something already in Gemlyx's own content
   // (a real free-entrance spot, restaurant, nightlife venue, town, or event)
@@ -2387,82 +2080,16 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     else if (real._src === "craft") setCraftDetail(real);
   };
 
-  // ── Dash ban (Oliver: "NEVER use dashes. Anywhere. Not you, not guides, not
-  // anyone.") — a deterministic scrub applied to every text field of every built
-  // guide and every chat reply, so no model slip can ever ship one. Number
-  // ranges keep a plain hyphen (2-3 hours); em/en dashes become comma pauses;
-  // a spaced hyphen between words becomes a comma pause too.
-  const deDashText = (s) => {
-    if (typeof s !== "string") return s;
-    let t = s.replace(/(\d)\s*[—–]\s*(?=\d)/g, "$1-");
-    t = t.replace(/(\d) - (?=\d)/g, "$1-");
-    t = t.replace(/\s*[—–]\s*/g, ", ");
-    t = t.replace(/([A-Za-zÀ-ÖØ-öø-ÿ)"'”’]) - (?=[A-Za-zÀ-ÖØ-öø-ÿ("'“‘])/g, "$1, ");
-    t = t.replace(/,\s*,/g, ", ");
-    return t;
-  };
-  const deDashDeep = (v) => {
-    if (typeof v === "string") return deDashText(v);
-    if (Array.isArray(v)) return v.map(deDashDeep);
-    if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) o[k] = deDashDeep(v[k]); return o; }
-    return v;
-  };
-
-  // ── Studio-only: random guide setup (Oliver's ask). Fills the Detour convo
-  // with a randomized, realistic trip brief built from REAL places already in
-  // the app's data (so the build step has concrete names to work with), marks
-  // it ready-to-build, and starts the guide build immediately. The chat step —
-  // the part that was burning credits on every test run — is skipped entirely;
-  // only the build itself (grounding + one model call) spends anything.
-  const randomGuideSetup = () => {
-    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
-    const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
-    const days = 2 + Math.floor(Math.random() * 4); // 2-5 days
-    const startTown = pick(["Copenhagen", "Aarhus", "Odense", "Aalborg", "Ribe", "Roskilde", "Helsingør"]);
-    const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const arrive = new Date(Date.now() + (7 + Math.floor(Math.random() * 45)) * 86400000);
-    const arrivalStr = `${MONTHS[arrive.getMonth()]} ${arrive.getDate()}`;
-    const interest = pick(["food and local markets", "history and Viking sites", "nightlife and live music", "nature, coastline and harbor towns", "museums and art", "castles and old towns"]);
-    const budget = pick(["on a tight budget", "on a mid-range budget", "happy to spend a bit extra"]);
-    const transport = pick(["using only public transport", "renting a car", "getting around by train and on foot"]);
-    const party = pick(["Solo trip.", "Traveling as a couple.", "Traveling with kids.", "Traveling with a friend."]);
-    // Real places from the app's own data — bias toward the start town so the
-    // random trip isn't a countrywide zigzag, then top up from anywhere.
-    const pool = [
-      ...towns.map(t => t.name),
-      ...freeEntrance.map(f => `${f.name} in ${f.city}`),
-      ...foodSpots.map(f => `${f.name} (${f.location})`),
-      ...nightlifeSpots.map(n => n.name),
-    ].filter(Boolean);
-    const near = shuffle(pool.filter(p => p.includes(startTown)));
-    const rest = shuffle(pool.filter(p => !p.includes(startTown)));
-    const picks = [...near.slice(0, 6), ...rest].slice(0, Math.min(3 + days * 2, 12));
-    const userMsg = `I'm coming to Denmark for ${days} days, starting in ${startTown}, arriving ${arrivalStr}. I'm into ${interest}, ${budget}, ${transport}. ${party}`;
-    const assistantMsg = `A ${days}-day trip built around ${startTown}, focused on ${interest} — real local picks over tourist defaults, paced so nothing feels rushed. On the table: ${picks.join(", ")}.\n\n[[GEMLYX_READY_TO_BUILD]]`;
-    const msgs = [aiMessages[0], { role: "user", text: userMsg }, { role: "assistant", text: assistantMsg }];
-    setAiMessages(msgs);
-    generateGuide(msgs);
-  };
-
-  // msgsOverride: optional message array to build from instead of the live chat
-  // state — used by the Studio "random guide setup" button, which sets the new
-  // messages and builds in the same tick (React state wouldn't have flushed yet).
-  // NOTE: when used directly as an onClick handler, the click event lands in
-  // msgsOverride — the Array.isArray check makes that fall back to aiMessages.
-  const generateGuide = async (msgsOverride) => {
-    const srcMsgs = Array.isArray(msgsOverride) ? msgsOverride : aiMessages;
-    const convoText = srcMsgs.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+  const generateGuide = async () => {
+    const convoText = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
     if (!convoText.trim()) return;
     // Reopen instantly if this exact conversation already built a guide — avoids
-    // forcing a full rebuild + loading wait just because the person tapped "build"
-    // again with nothing new to plan. No popup anymore (Oliver: "get rid of the
-    // popup") — this goes straight to the real full-page guide, same as a fresh
-    // build does once it finishes.
+    // forcing a full rebuild + loading wait just because the person accidentally
+    // closed the guide and tapped back into it, with nothing new to plan.
     if (lastBuiltGuide && lastBuiltGuide.convoText === convoText) {
-      navigate("/guide/new", { state: { guide: lastBuiltGuide.guide } });
+      setGuideModal(lastBuiltGuide.guide);
       return;
     }
-    guideCancelledRef.current = false;
     setGuideModal("loading");
     setGuideBuildStage({ label: "Gathering real places and facts", percent: 15 });
     setGuideError(null);
@@ -2505,19 +2132,19 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         if (candidate < new Date(now.toDateString())) candidate = new Date(now.getFullYear() + 1, monthIdx, day); // already passed this year — assume next year
         arrivalDate = candidate;
       }
-      // One Perplexity cross-check per guide (not per chat message, the
+      // One Gemini + Google Search cross-check per guide (not per chat message — the
       // conversation itself stays fast; this only runs at the moment a real artifact
-      // gets built). Pulls out the place names mentioned so far and asks Perplexity to
-      // ground them, same "grounding before writing" pattern as Studio, scoped to
+      // gets built). Pulls out the place names mentioned so far and asks Gemini to
+      // ground them — same "grounding before writing" pattern as Studio, scoped to
       // the single moment concrete facts actually get committed.
       let guideGrounding = "";
       {
-        const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise, short facts only.\n\n${RESEARCH_SOURCE_RULES}\n\n${convoText.slice(0, 3000)}`);
+        const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n\n${convoText.slice(0, 3000)}`);
         if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
       }
       setGuideBuildStage({ label: "Structuring your itinerary", percent: 45 });
       const guideSystemPrompt = `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — whenever the plan has ANY genuine intercity leg (moving between two different towns/cities, not just getting around within one), name Flixbus or Kombardo Expressen by name as the real budget alternative to a DSB train for that leg (often meaningfully cheaper on longer routes) — this is real, current, useful information, not a footnote to add only when a fare happens to be steep. If a specific train leg is also genuinely expensive at full price, additionally mention DSB Orange billetter (discount advance-purchase train tickets) as the cheaper way to book that same train instead. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — whenever the plan has ANY genuine intercity leg (moving between two different towns/cities, not just getting around within one), name Flixbus or Kombardo Expresbus by name as the real budget alternative to a DSB train for that leg (often meaningfully cheaper on longer routes) — this is real, current, useful information, not a footnote to add only when a fare happens to be steep. If a specific train leg is also genuinely expensive at full price, additionally mention DSB Orange billetter (discount advance-purchase train tickets) as the cheaper way to book that same train instead. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
@@ -2530,11 +2157,7 @@ CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop
 CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are genuinely close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a genuinely long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to actually explore once they arrive, not a long haul tacked onto the end of an already-full day.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.
-VERIFIED DANISH TRANSPORT FACTS, THESE OVERRIDE EVERYTHING AND MUST NEVER BE CONTRADICTED: Rejsekort is the travel card you physically check IN with when a journey starts and check OUT with when it ends. The Copenhagen Card is a sightseeing pass (unlimited public transport in the capital region plus free entry to 80+ attractions): you activate it once and show it on request, and it has NO check-in and NO check-out, ever. Tickets bought in the DOT or DSB apps are simply shown on your phone when asked. NEVER describe check-in/check-out mechanics for anything except Rejsekort, and NEVER attribute one product's mechanics to another product. The real Danish express bus operator is spelled "Kombardo Expressen", not Expressbus or Expresbus, always use that exact spelling. Get every named business, operator, or product's exact real spelling right, never an approximated or guessed version of a real name. If you are not completely certain how a ticket, card, or pass actually works, do not explain its mechanics at all: name it and tell the traveler to check the official site or app. Inventing operational details, validation steps, prices, or rules for any transport product is the single worst failure this guide can make.
-COPENHAGEN CAR REALITY, A REAL VERIFIED FACT, NOT AN OPINION: driving and parking a car within Copenhagen itself is genuinely impractical, expect limited and expensive parking, congestion, and large pedestrianized/bike-priority zones in the city center, against a metro, S-train and bus network plus citywide bike infrastructure that reaches everywhere faster and cheaper. If the plan is mostly or entirely Copenhagen-based, do not suggest renting a car for it, lean on public transport and biking instead. A rental car is genuinely the right call for a road trip that actually leaves Copenhagen and covers other regions or islands, that guidance stands, this only applies to trips that stay inside the city.
-VOICE FOR THE THREE ESSENTIALS FIELDS: write them like a knowledgeable Danish friend texting quick practical advice, never like an AI assistant writing a brochure. Short sentences. Concrete numbers and real names. Banned in essentials: "It's worth noting", "Keep in mind that", "Additionally", "Overall", "be sure to", "consider", exclamation marks, and any sentence that could apply to any trip anywhere.
-DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em dash or an en dash anywhere, and never use a hyphen as a pause between clauses. Use a comma, a period, a colon, or a plain connecting word instead. A hyphen is allowed ONLY inside compound words (check-in, open-faced) and number ranges (2-3 hours, 150-250 DKK).${guideGrounding ? `\nPERPLEXITY CROSS-CHECK (weigh this alongside the conversation, if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -2568,88 +2191,6 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
         } catch { /* keep the first attempt if the retry itself fails to parse */ }
       }
       if (!parsed.days || parsed.days.length === 0) throw new Error("empty");
-      // ── Pipeline step added per Oliver ("do whatever it takes NOT to make these
-      // errors", after a guide told a traveler to check in and out with a
-      // Copenhagen Card, which is Rejsekort behavior): the BUILT guide gets an
-      // independent web fact-check, and anything flagged gets corrected by a
-      // targeted second pass that changes only the wrong claims. Full pipeline is
-      // now: grounding search → build → day-count retry → independent fact-check
-      // → targeted correction → voice polish → dash scrub → geocode/durations/weather.
-      setGuideBuildStage({ label: "Fact-checking the guide", percent: 72 });
-      try {
-        const checkable = JSON.stringify({ essentials: parsed.essentials, days: parsed.days.map(d => ({ title: d.title, stops: (d.stops || []).map(s => ({ name: s.name, town: s.town, note: s.note })) })) });
-        const check = await askPerplexity(`Fact-check this Denmark travel guide with real, current web search. Report ONLY genuine factual errors, each with the correct fact on the same line: wrong transport card mechanics (for example, the Copenhagen Card has NO check-in or check-out, that is how Rejsekort works), invented or wrong prices, wrong opening days or hours, places that do not exist or are permanently closed, and claims that put a place in the wrong town. Ignore style, tone, and anything subjective. If everything checks out, reply with exactly: NO ERRORS\n\n${RESEARCH_SOURCE_RULES}\n\n${checkable.slice(0, 6000)}`);
-        if (!check.error && check.text && !/^\s*NO ERRORS\b/i.test(check.text.trim())) {
-          setGuideBuildStage({ label: "Correcting flagged facts", percent: 82 });
-          const fixResult = await askClaude(
-            `Below is a travel guide JSON and a fact-checker's findings from real web search. Correct ONLY the listed errors, changing the minimum text needed for each one. If a finding says a claim is unverifiable rather than wrong, REMOVE that specific claim instead of replacing it with a guess. Never use em dashes, en dashes, or hyphens as pauses anywhere. Keep the exact same JSON shape and keys, and keep every untouched sentence byte-identical. Respond with ONLY the corrected raw JSON object, no markdown fences, nothing else.\n\nFACT-CHECK FINDINGS:\n${check.text.slice(0, 2500)}\n\nGUIDE JSON:\n${JSON.stringify(parsed)}`,
-            6000,
-            "claude-opus-4-8"
-          );
-          if (!fixResult.error) {
-            try {
-              const fixed = await parseClaudeJSON(fixResult.text, 6000);
-              if (fixed && Array.isArray(fixed.days) && fixed.days.length === parsed.days.length) parsed = fixed;
-            } catch { /* keep the unfixed guide rather than failing the whole build */ }
-          }
-        }
-      } catch { /* fact-check is best-effort, never kill a build over it */ }
-      // ── Voice polish, per Oliver's architecture rule: Sonnet writes every word
-      // of a guide, ChatGPT is never the author, but if ChatGPT judges a line
-      // needs a rewrite, it flags it and Sonnet is the one who actually does the
-      // rewrite. Same split Studio already uses (runAIVoiceScan flags, Claude's
-      // rephraseFlag rewrites), applied here to the guide's real prose fields
-      // instead of a Studio draft blob. OpenAI only ever returns which fields
-      // read as generic or childish and why; it never sees or writes a
-      // replacement sentence.
-      setGuideBuildStage({ label: "Polishing the writing", percent: 86 });
-      try {
-        const proseFields = [];
-        if (parsed.essentials?.budgetReality) proseFields.push({ id: "essentials.budgetReality", text: parsed.essentials.budgetReality });
-        if (parsed.essentials?.transportTip) proseFields.push({ id: "essentials.transportTip", text: parsed.essentials.transportTip });
-        if (parsed.essentials?.keepInMind) proseFields.push({ id: "essentials.keepInMind", text: parsed.essentials.keepInMind });
-        (parsed.days || []).forEach((d, di) => (d.stops || []).forEach((s, si) => {
-          if (s.note) proseFields.push({ id: `days.${di}.stops.${si}.note`, text: s.note });
-        }));
-        if (proseFields.length > 0) {
-          const scanRes = await fetch("/api/openai", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "gpt-5.6-sol",
-              messages: [{
-                role: "user",
-                content: `Read these numbered lines from a real Denmark travel guide and flag ONLY the ones that genuinely read as generic AI writing or oversimplified, childish phrasing, not real, specific, locally informed prose written for an adult traveler: banned generic filler words, sentences that could describe any trip anywhere, flat repetitive rhythm, a tone that reads like it is explaining something to a child rather than telling a well traveled friend the real story. Never flag a line just for being short or plain if it is actually specific and true. Be selective, most lines here should already be fine. Respond with ONLY a JSON array, no other text: [{"id": "the exact id given", "reason": "short reason"}], return [] if nothing genuinely needs a rewrite.\n\n${proseFields.map(f => `${f.id}: "${f.text}"`).join("\n")}`
-              }],
-              // FIX: same OpenAI max_tokens/max_completion_tokens issue as scan-source, see note there.
-              max_completion_tokens: 500,
-            }),
-          });
-          const scanData = await scanRes.json();
-          let raw = scanData.choices?.[0]?.message?.content?.trim() || "[]";
-          raw = raw.replace(/^```json\s*|\s*```$/g, "");
-          const flagged = JSON.parse(raw);
-          if (Array.isArray(flagged) && flagged.length > 0) {
-            setGuideBuildStage({ label: "Rewriting flagged lines", percent: 88 });
-            for (const flag of flagged.slice(0, 12)) { // capped so one noisy scan can't trigger a huge rewrite chain
-              const field = proseFields.find(f => f.id === flag.id);
-              if (!field) continue;
-              const rewriteResult = await askClaude(
-                `Rewrite this one sentence or short passage from a real Denmark travel guide so it no longer reads as generic AI writing or childish phrasing (${flag.reason || "flagged as generic"}). Keep every real fact, place name, price, and time exactly as given, change only the wording. Write it the way a knowledgeable, direct local friend would actually talk to another adult, never a brochure and never a simplified children's summary. Never use an em dash, en dash, or a hyphen as a pause between clauses. Respond with ONLY the rewritten text, no quotes, no explanation.\n\nText: "${field.text}"`,
-                200
-              );
-              if (!rewriteResult.error && rewriteResult.text?.trim()) {
-                const newText = rewriteResult.text.trim().replace(/^"|"$/g, "");
-                const path = field.id.split(".");
-                if (path[0] === "essentials" && parsed.essentials) parsed.essentials[path[1]] = newText;
-                else if (path[0] === "days" && parsed.days?.[Number(path[1])]?.stops?.[Number(path[3])]) parsed.days[Number(path[1])].stops[Number(path[3])].note = newText;
-              }
-            }
-          }
-        }
-      } catch { /* voice polish is best-effort, never kill a build over it */ }
-      // Dash ban is enforced deterministically too — no model slip can ship one.
-      parsed = deDashDeep(parsed);
       setGuideBuildStage({ label: "Verifying exact locations and routes", percent: 90 });
       const freshGeo = await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
@@ -2669,66 +2210,33 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
       // set through to the per-day prompt so it stops treating one mode as dominant.
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
+      fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking); // fire-and-forget — legs show estimates until this resolves, then upgrade
       const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
-      // ── Wizard pause 1: preview, grouped by town ────────────────────
-      // Oliver: "First there will be a preview of everything you'll see."
-      // Only the geocode above has run so far, deliberately — no Google
-      // Directions calls yet, those are gated behind the map/plain choice
-      // further down so the plain path never pays for one it doesn't need.
-      // This object intentionally has NO _convoText yet, so the cache-mirror
-      // effect above (search "Mirror any real") doesn't cache it as finished
-      // — only the final object at the end of this function gets that.
-      setGuideModal({ _gid: gid, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days, _geo: freshGeo });
-      setGuideFlowStep("preview");
-      await new Promise(resolve => { guidePreviewResolveRef.current = resolve; });
-      if (guideCancelledRef.current) return;
-
-      // ── Wizard pause 2: essentials for this specific trip ───────────
-      setGuideFlowStep("essentials");
-      await new Promise(resolve => { guideEssentialsResolveRef.current = resolve; });
-      if (guideCancelledRef.current) return;
-
-      // ── Wizard pause 3: map-and-transport guide, or plain day-by-day ─
-      // Oliver's call when asked: the choice happens BEFORE building, so
-      // picking plain genuinely skips the Google Directions calls below,
-      // not just their display.
-      setGuideFlowStep("choice");
-      const chosenMode = await new Promise(resolve => { guideChoiceResolveRef.current = resolve; });
-      if (guideCancelledRef.current) return;
-
-      setGuideFlowStep("enriching");
-      setGuideBuildStage({ label: chosenMode === "map" ? "Mapping exact routes and times" : "Putting the final guide together", percent: 92 });
-      // Awaited when the map mode is chosen — the guide only hands off to the
-      // real full page once it's genuinely finished, maps/times included, not
-      // a partial draft that fills in after the person's already looking at
-      // it. Skipped entirely for the plain mode, per Oliver's choice above.
-      if (chosenMode === "map") await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking);
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _lightMode: chosenMode !== "map", title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
-      // enrichGuideDays/fetchGuideWeather still run fire-and-forget, tracked by
-      // glancePending/weatherPending — the handoff effect below (search
-      // "guidePendingNav") waits for both to hit 0 before navigating to the real
-      // full-page guide, so it always arrives fully enriched, never a partial one.
-      // Both run in the plain mode too — accommodation and weather aren't
-      // maps/transport, Oliver only asked to skip those specifically.
-      setGuidePendingNav({ gid });
-      enrichGuideDays(parsed.days, gid, travelMode, mixedModes, freshGeo, chosenMode !== "map");
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
+      enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid, arrivalDate);
     } catch {
       setGuideModal(null);
-      setGuideFlowStep(null);
-      if (!guideCancelledRef.current) {
-        setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
-        setTimeout(() => setGuideError(null), 3500);
-      }
+      setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
+      setTimeout(() => setGuideError(null), 3500);
     }
   };
 
-  // saveCurrentGuide (the old popup's "Save Guide" button handler) is gone along
-  // with the popup itself. Saving now happens on the real full-page guide
-  // (GuidePage.jsx's own saveGuide, which gets a genuine Supabase row and a
-  // real shareable /guide/:id link) — it also writes the same
-  // "gemlyx_saved_guides" localStorage list this Home-tab list reads, so a
-  // save from there still shows up here.
+  const saveCurrentGuide = () => {
+    if (!guideModal || guideModal === "loading") return;
+    const weatherMissing = guideModal.days.some(d => !d.weather);
+    if (weatherMissing && weatherPending > 0) {
+      setToast("⏳ Still checking weather for this trip — try Save again in a few seconds");
+      setTimeout(() => setToast(null), 2600);
+      return;
+    }
+    const newGuide = { id: Date.now(), title: guideModal.title, days: guideModal.days, savedAt: new Date().toISOString(), arrivalDate: guideModal._arrivalDate || null };
+    const updated = [newGuide, ...savedGuides].slice(0, 20);
+    setSavedGuides(updated);
+    try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
+    setToast("📖 Guide saved — weather included for each day");
+    setTimeout(() => setToast(null), 2200);
+  };
 
   const deleteSavedGuide = (id) => {
     const updated = savedGuides.filter(g => g.id !== id);
@@ -2771,69 +2279,6 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
   // and the country picker; choosing Denmark drops you into the app. Shown on
   // every fresh load — it's the brand moment, and it's one click to pass.
   const [entered, setEntered] = useState(false);
-  // Oliver: "animate the enter Denmark better." The whole entrance overlay
-  // lifts away like a curtain (translateY + fade) instead of vanishing
-  // instantly. enteringDenmark just drives the CSS transition below;
-  // "entered" itself still flips after the animation finishes, so nothing
-  // about the actual entered/not-entered logic elsewhere changes.
-  const [enteringDenmark, setEnteringDenmark] = useState(false);
-  const [inspiredExpanded, setInspiredExpanded] = useState(false);
-  const handleEnterDenmark = () => {
-    let reduced = false;
-    try { reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { /* no matchMedia */ }
-    if (reduced) { setEntered(true); window.scrollTo(0, 0); return; }
-    setEnteringDenmark(true);
-    setTimeout(() => { setEntered(true); window.scrollTo(0, 0); }, 650);
-  };
-  // The restored logo opening animation (Oliver: "why is that gone?"). Plays
-  // center stage over the painting, once per browser session — a repeat visit
-  // in the same tab session skips straight to the settled entrance. Reduced-
-  // motion users skip it too. Clicking anywhere during the intro skips it.
-  const [introDone, setIntroDone] = useState(() => {
-    try { if (sessionStorage.getItem("gxIntroSeen") === "1") return true; } catch { /* private mode etc. */ }
-    try { if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return true; } catch { /* no matchMedia */ }
-    return false;
-  });
-  const [introLeaving, setIntroLeaving] = useState(false);
-  const finishIntro = () => {
-    setIntroDone(true);
-    try { sessionStorage.setItem("gxIntroSeen", "1"); } catch { /* ignore */ }
-  };
-  useEffect(() => {
-    if (entered || introDone) return;
-    // Compass-only choreography: pop (0.08-0.5s) then one spin (0.5-1.9s), the
-    // same window the background reveal cover below fades out on, so the spin
-    // is what visually exposes the painting. A short beat to register the
-    // reveal, then the compass alone flies to the corner (0.9s) and SITS.
-    // Oliver's image: coming in a door and finding a chair in the corner to
-    // sit in, nothing vanishes and reappears.
-    const t1 = setTimeout(() => setIntroLeaving(true), 2400);
-    const t2 = setTimeout(finishIntro, 3400);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entered, introDone]);
-  // The flight itself, measured live: the corner brand mark is already mounted
-  // (invisible) during the flight, so the compass can aim at its exact
-  // bounding box and land pixel-on-pixel. At landing the static corner mark
-  // becomes visible in the same frame the flyer unmounts: it sits, no fade.
-  useEffect(() => {
-    if (!introLeaving || introDone) return;
-    const raf = requestAnimationFrame(() => {
-      const flyer = document.getElementById("gxi-fly-mark");
-      const target = document.getElementById("gx-corner-mark");
-      if (!flyer || !target) return;
-      const f = flyer.getBoundingClientRect();
-      const t = target.getBoundingClientRect();
-      if (!f.width || !t.width) return;
-      const s = t.width / f.width;
-      const dx = (t.left + t.width / 2) - (f.left + f.width / 2);
-      const dy = (t.top + t.height / 2) - (f.top + f.height / 2);
-      flyer.style.transformOrigin = "50% 50%";
-      flyer.style.transition = "transform 0.9s cubic-bezier(0.5,0.05,0.2,1)";
-      flyer.style.transform = `translate(${dx}px, ${dy}px) scale(${s})`;
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [introLeaving, introDone]);
   // Small note chip on the front door (login/signup are placeholders for now).
   const [landingNote, setLandingNote] = useState(null);
   useEffect(() => {
@@ -2859,231 +2304,6 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
   const [tabArrow, setTabArrow] = useState(true);
   const [toast, setToast] = useState(null);
   const [weatherAlerts, setWeatherAlerts] = useState([]);
-
-  // ── "What is this?" photo identifier ─────────────────────────────
-  // Oliver's dad's idea: point your camera at something (a building, a
-  // plant, a dish, a sign) and get told what it is, like Google Lens.
-  // Uses Claude's own vision input (already the only AI provider with a
-  // real key/proxy wired up for this — /api/anthropic is a thin passthrough,
-  // so no new server file was needed, just a request with an image block
-  // instead of only text). Soft daily cap per Oliver's call: 5 free scans a
-  // day, tracked client-side in localStorage, no signup, no accounts. This
-  // is intentionally NOT abuse-proof (clearing localStorage resets it) — a
-  // real hard limit would need accounts/a server-side counter, which Oliver
-  // explicitly didn't want yet.
-  const PHOTO_SCAN_DAILY_LIMIT = 5;
-  const getPhotoScanUsage = () => {
-    const today = new Date().toISOString().slice(0, 10);
-    try {
-      const raw = localStorage.getItem("gxPhotoScanUsage");
-      if (!raw) return { date: today, count: 0 };
-      const parsed = JSON.parse(raw);
-      return parsed.date === today ? parsed : { date: today, count: 0 };
-    } catch { return { date: today, count: 0 }; }
-  };
-  const recordPhotoScanUse = () => {
-    try {
-      const usage = getPhotoScanUsage();
-      localStorage.setItem("gxPhotoScanUsage", JSON.stringify({ date: usage.date, count: usage.count + 1 }));
-    } catch { /* localStorage unavailable — soft cap just won't persist, not worth failing the scan over */ }
-  };
-  const [photoScanOpen, setPhotoScanOpen] = useState(false);
-  const [photoScanPreview, setPhotoScanPreview] = useState(null); // data URL, shown while identifying
-  const [photoScanLoading, setPhotoScanLoading] = useState(false);
-  const [photoScanResult, setPhotoScanResult] = useState(null); // { name, description, matched }
-  const [photoScanError, setPhotoScanError] = useState(null);
-  const photoScanInputRef = useRef(null);
-  const photoScanLibraryRef = useRef(null);
-  const closePhotoScan = () => { setPhotoScanOpen(false); setPhotoScanPreview(null); setPhotoScanResult(null); setPhotoScanError(null); setPhotoScanLoading(false); };
-  const handlePhotoScanFile = (file) => {
-    if (!file) return;
-    const usage = getPhotoScanUsage();
-    if (usage.count >= PHOTO_SCAN_DAILY_LIMIT) {
-      setPhotoScanError(`You have used all ${PHOTO_SCAN_DAILY_LIMIT} free scans for today. Come back tomorrow for more.`);
-      return;
-    }
-    setPhotoScanResult(null);
-    setPhotoScanError(null);
-    setPhotoScanLoading(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result;
-      setPhotoScanPreview(dataUrl);
-      const commaIdx = dataUrl.indexOf(",");
-      const mediaType = dataUrl.slice(5, dataUrl.indexOf(";"));
-      const base64 = dataUrl.slice(commaIdx + 1);
-      try {
-        const res = await fetch("/api/anthropic", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-5",
-            max_tokens: 400,
-            messages: [{
-              role: "user",
-              content: [
-                { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-                { type: "text", text: `This photo was taken by someone traveling in Denmark. Identify what's actually shown, a landmark, building, plant, animal, dish, sign, whatever it genuinely is. Be honest: if you recognize it specifically and are genuinely confident, name it precisely; if you can only tell the general kind of thing it is, say that instead of guessing a specific name; if you truly can't tell, say so plainly rather than inventing an answer. Never invent a name, a history, or a fact you're not actually confident about. Respond with ONLY strict JSON, no markdown, no commentary: {"name": "short specific name if confident, else a short general description like \\"a half-timbered Danish farmhouse\\"", "confident": true or false, "description": "1-2 honest sentences, real facts only if you actually know them, otherwise just describe what's visibly there"}` },
-              ],
-            }],
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setPhotoScanError(data.error?.message || "Couldn't reach Claude to identify that photo."); setPhotoScanLoading(false); return; }
-        const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
-        if (!text) { setPhotoScanError("Got an empty response, try again."); setPhotoScanLoading(false); return; }
-        let parsed;
-        try { parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, "").trim()); }
-        catch { setPhotoScanError("Couldn't read the response, try again."); setPhotoScanLoading(false); return; }
-        recordPhotoScanUse();
-        // If Claude named something specific, check whether Gemlyx already has
-        // a real curated page for it, same lookup guide stops use, so a match
-        // can link straight into the app's own content instead of just text.
-        const matched = parsed.confident ? lookupRealPlace(parsed.name) : null;
-        setPhotoScanResult({ name: parsed.name, description: parsed.description, confident: !!parsed.confident, matched });
-      } catch (err) {
-        setPhotoScanError("Couldn't reach Claude, check your connection and try again.");
-      }
-      setPhotoScanLoading(false);
-    };
-    reader.onerror = () => { setPhotoScanError("Couldn't read that photo, try a different one."); setPhotoScanLoading(false); };
-    reader.readAsDataURL(file);
-  };
-
-  // ── Content photos, uploaded live from Studio on a phone ────────────────
-  // Oliver's ask: majorEvents (Roskilde, Distortion, Aalborg Karneval, ...)
-  // and nightlifeSpots got excluded from the automatic stock-photo tool
-  // (tools/image-finder) since stock sites can't capture real festival/bar
-  // energy, so he needs to attach real photos himself. He then clarified he
-  // wants this everywhere he'd naturally be "editing" a listing, not a
-  // separate one-off tool: events, towns, attractions, food, nightlife — the
-  // same five categories the app's own explore tabs use (Shopping/craft is
-  // deliberately left out here, it's already a live Supabase table with its
-  // own path, not static bundled data like the other five). All five of
-  // those are plain imported arrays, static at build time (src/data/*.js),
-  // so there was previously no way to attach a real photo without editing
-  // code and waiting for a redeploy. His phone's Claude app doesn't share
-  // this chat's history with his PC, so "just send me the photo" isn't
-  // workable for him either — he needs a real button, live, on the site.
-  //
-  // Storage: a small `photo_overrides` table in the same Supabase project
-  // already used for gemlyx_content (photo_path -> image_url), plus a
-  // `event-photos` storage bucket. Both need a one-time setup Oliver has to
-  // do himself in his Supabase dashboard (documented in the handoff doc —
-  // this app only ever had the anon key, never a service-role key that
-  // could create tables/buckets itself). Reading overrides is public (every
-  // visitor needs to see the real photo, not just Oliver), writing is
-  // restricted to an authenticated Studio session, same split already used
-  // for gemlyx_content's own RLS policies.
-  //
-  // Applying an override: these five arrays are plain imported module-level
-  // arrays, never React state, and are read directly by name in a couple
-  // dozen places across the file. Rather than hunt down and rewrite every
-  // render site (real risk of missing one, exactly the kind of miss that
-  // shipped a real bug earlier this session), the override is applied by
-  // mutating each matching item's own `.photo` field in place once overrides
-  // load — every existing read site picks the new value up automatically,
-  // since they all just read `item.photo` at render time. A dummy tick
-  // state forces a re-render after the mutation (React can't see plain
-  // object mutation on its own).
-  const CONTENT_PHOTO_ARRAYS = [events, majorEvents, towns, freeEntrance, foodSpots, nightlifeSpots];
-  const [photoOverrides, setPhotoOverrides] = useState({});
-  const [, setPhotoOverrideTick] = useState(0);
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/photo_overrides?select=photo_path,image_url`, {
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-        });
-        if (!res.ok) return; // table may not exist yet if Oliver hasn't done setup — fail quiet, static photos still work
-        const rows = await res.json();
-        if (!Array.isArray(rows)) return;
-        const map = {};
-        for (const r of rows) if (r.photo_path && r.image_url) map[r.photo_path] = r.image_url;
-        setPhotoOverrides(map);
-      } catch { /* Supabase unreachable — static photos still work, nothing to fall back further to */ }
-    })();
-  }, []);
-  useEffect(() => {
-    if (!Object.keys(photoOverrides).length) return;
-    let changed = false;
-    for (const arr of CONTENT_PHOTO_ARRAYS) {
-      for (const item of arr) {
-        const override = photoOverrides[item.photo];
-        if (override && item.photo !== override) { item.photo = override; changed = true; }
-      }
-    }
-    if (changed) setPhotoOverrideTick(t => t + 1);
-  }, [photoOverrides]);
-
-  // Studio panel: browse all five categories, upload/replace a photo right
-  // on the listing itself (Oliver: "put the picture button into the
-  // individual event, attraction, etc., so when I edit [it] I can instantly
-  // input it").
-  const [contentPhotosOpen, setContentPhotosOpen] = useState(false);
-  const [contentPhotoFilter, setContentPhotoFilter] = useState("");
-  const [contentPhotoUploadKey, setContentPhotoUploadKey] = useState(null); // photo path currently uploading, for a per-row spinner
-  const [contentPhotoError, setContentPhotoError] = useState(null);
-  const contentPhotoInputRef = useRef(null);
-  const pendingContentPhotoItemRef = useRef(null); // { item, category } set right before the hidden input is opened
-  const handleContentPhotoFile = async (file) => {
-    const pending = pendingContentPhotoItemRef.current;
-    if (!file || !pending || !studioSession) return;
-    const { item, category } = pending;
-    const originalPhotoPath = item.photo; // capture before any mutation below
-    setContentPhotoError(null);
-    setContentPhotoUploadKey(originalPhotoPath);
-    try {
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-      const slug = item.name ? item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") : "photo";
-      // category prefix keeps ids from colliding across arrays (e.g. a town
-      // and an event both having id 3 would otherwise overwrite each other).
-      const storagePath = `${category}-${item.id}-${slug}.${ext}`;
-      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/event-photos/${storagePath}`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${studioSession.access_token}`,
-          "Content-Type": file.type || "image/jpeg",
-          "x-upsert": "true", // re-uploading for the same listing replaces it instead of erroring
-        },
-        body: file,
-      });
-      if (!uploadRes.ok) {
-        const detail = await uploadRes.text().catch(() => "");
-        throw new Error(`Upload failed (${uploadRes.status}). ${detail.slice(0, 150)}`);
-      }
-      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/event-photos/${storagePath}`;
-      const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/photo_overrides`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${studioSession.access_token}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify({ photo_path: originalPhotoPath, image_url: publicUrl }),
-      });
-      if (!upsertRes.ok) {
-        const detail = await upsertRes.text().catch(() => "");
-        throw new Error(`Photo uploaded but saving the link failed (${upsertRes.status}). ${detail.slice(0, 150)}`);
-      }
-      // Reflect immediately without waiting for a full page reload — same
-      // mutate-in-place + tick pattern as the load effect above. Keyed by
-      // the ORIGINAL path, so a photo re-uploaded a second time still finds
-      // and updates the same override row instead of creating a stray one.
-      item.photo = publicUrl;
-      setPhotoOverrides(prev => ({ ...prev, [originalPhotoPath]: publicUrl }));
-      setPhotoOverrideTick(t => t + 1);
-      setToast(`✅ Photo saved for ${item.name}`);
-      setTimeout(() => setToast(null), 2500);
-    } catch (err) {
-      setContentPhotoError(err.message || "Upload failed — try again.");
-    }
-    setContentPhotoUploadKey(null);
-    pendingContentPhotoItemRef.current = null;
-  };
-
   useEffect(() => {
     // Purely in-app "your weather changed" notice — like an Instagram-style corner
     // pop-in, not a real push notification, since that would need a service worker
@@ -3266,10 +2486,10 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
       const monthName = now.toLocaleString("en", { month: "long" });
       const season = getSeason();
 
-      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You may use an emoji here and there in your replies the way a friend texting would, a genuine touch of warmth is welcome, but never force one into every sentence or every list item, and never let emoji replace an actual answer. NEVER use an em dash or an en dash in your replies, and never use a hyphen as a pause between clauses: use a comma, a period, a colon, or a plain connecting word instead (hyphens stay only inside compound words and number ranges). NEVER invent how a ticket, card, or pass works: Rejsekort is the card with physical check-in and check-out; the Copenhagen Card has no check-in or check-out, it is activated once and shown on request; if you are not certain of a transport product's mechanics, name it and point to the official app or site instead of explaining it. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
-Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expressen for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself, and if the trip is mostly or entirely Copenhagen based, actively steer away from renting a car for it: parking there is genuinely limited and expensive, the city center has large pedestrianized/bike-priority zones, and the metro/S-train/bus network plus citywide biking reaches everywhere faster and cheaper, say so plainly rather than just going along with a car if someone proposes one for a Copenhagen-only trip; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
+Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
 
 ASK BEFORE YOU PLAN — ONLY WHEN THEY'VE ACTUALLY ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary — not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately — never redirect a simple question into an intake questionnaire. Only when they're asking you to actually build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together — for example: "Happy to help! Where are you starting from — flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — real hidden gems, the well-known popular spots, or a mix?" A genuinely minimal request like "I wanna go to Denmark, plan me something" gives you ZERO of those things — this is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for actually knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip actually begins — a guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. Once you know enough to build, your LAST question before actually building should always be: "Want a simple plan you can glance at, or a full hour-by-hour schedule?" — build the actual plan once you have that answer, either from what they've said or because they already told you everything in their first message.
 NEVER SEND A "WORKING ON IT" STALLING REPLY — THIS IS ABSOLUTE. You cannot do background work after sending a message — there is no "one moment, let me dive in" that leads anywhere; once your reply is sent, nothing further happens until the traveler does something next. So every single reply must be complete and immediately actionable on its own — either (1) the one clarifying question above, or (2) the FULL actual plan itself, written out completely, right now, in this message. Never write something like "Let me put together a detailed itinerary for you, one moment!" or "I'll get started on that now" — that promises work that will never happen and leaves the person stuck looking at a dead end. If you have enough information to build, build the real thing immediately in this same reply — don't announce it, don't preview it, just do it.
@@ -3310,7 +2530,7 @@ ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS
 
 If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range genuinely overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing genuinely overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. Gemlyx's core mission: most tourists only see Copenhagen for 3-4 days and never explore the rest of Denmark, especially Jutland and North Zealand. When someone is staying more than 2 days, actively suggest at least one destination outside Copenhagen — don't just default to city recommendations. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket.
 
-You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above, current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above. Whenever you do search, follow this priority order: an attraction or venue's own official site first for prices/hours/booking, recent Google Maps and TripAdvisor reviews (last 30 days for attractions, last 1 to 2 months for nightlife) for current real conditions, official ticket sites or the venue's own calendar plus a check of news/social media from the last 48 hours for events, and always also check Reddit (r/Denmark, r/travel) and Quora for honest traveler opinions. If an official site and Wikipedia or a general source disagree, the official site is right. Treat pricing or hours from articles older than 2025 as likely stale.`;
+You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.`;
 
       const claudeTools = [{
         name: "web_search",
@@ -3560,7 +2780,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
     const away = !event.date ? "" : daysUntil(event.date) <= 0 ? "Happening now" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)} days away`;
     return (
       <div onClick={() => setEventDetail(event)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
-        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease, border-color 0.18s ease" }}>
+        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease, border-color 0.18s ease", willChange: "transform" }}>
         <div style={{ height: 136, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${event.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 52, fontWeight: 500, color: "rgba(148,163,199,0.3)" }}>{(event.name || "◆").slice(0, 1)}</span>
           {event.photo && (
@@ -3569,13 +2789,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
           )}
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
           {d && (
-            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(10,15,30,0.92)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
+            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
               <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, color: C.accent, textTransform: "uppercase", lineHeight: 1 }}>{d.toLocaleString("en-GB", { month: "short" })}</div>
               <div style={{ fontSize: 21, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{d.getDate()}</div>
             </div>
           )}
           {away && (
-            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(10,15,30,0.92)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
+            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
           )}
         </div>
         <div style={{ padding: "14px 16px 15px" }}>
@@ -3611,29 +2831,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
     );
   };
 
-  // One merged event pool (Oliver's pick over the old three-tab split); scale
-  // travels with each event so it can be filtered like anything else.
-  const allEventsTagged = [
-    ...events.map(e => ({ ...e, _scale: "Local" })),
-    ...majorEvents.map(e => ({ ...e, _scale: "Major" })),
-    ...vikingEvents.map(e => ({ ...e, _scale: "Viking" })),
-  ];
-  // Type options follow the current scale pick, so the sheet never offers a
-  // type that can't produce results.
-  const eventTypeOptions = [...new Set(allEventsTagged.filter(e => isUpcoming(e.date) && (!eventScale || e._scale === eventScale)).map(e => e.type).filter(Boolean))].sort();
-  const filteredEvents = allEventsTagged
+  const filteredEvents = (eventTab === "local" ? events : eventTab === "viking" ? vikingEvents : majorEvents)
     .filter(e => isUpcoming(e.date))
     .filter(e => {
       const em = new Date(e.date).toLocaleString("en", { month: "short" });
-      return (!eventScale || e._scale === eventScale) && (!eventMonth || em === eventMonth) && (!eventType || e.type === eventType || (eventType === "North Zealand" && ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town)));
+      return (!eventMonth || em === eventMonth) && (!eventType || e.type === eventType || (eventType === "North Zealand" && ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town)));
     })
-    .sort((a, b) => {
-      if (eventSortNear && isInDenmark(userCoords)) {
-        const ka = townKmFromUser(a.town) ?? 9999, kb = townKmFromUser(b.town) ?? 9999;
-        if (ka !== kb) return ka - kb;
-      }
-      return new Date(a.date) - new Date(b.date);
-    });
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
 
   const aiHelperBlock = () => (
     <div id="ai-helper-anchor" style={{ marginTop: 8 }}>
@@ -3647,7 +2851,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
                         )}
                         <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
-                          {m.role === "assistant" ? <SmoothStreamText streaming={!!m.streaming} text={deDashText(stripMarkdown(stripReadyMarker(m.text)))} /> : m.text}
+                          {m.role === "assistant" ? stripMarkdown(stripReadyMarker(m.text)) : m.text}
                         </div>
                       </div>
                     ))}
@@ -3667,155 +2871,15 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {(() => {
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
                   const readyToBuild = lastAssistantMsg && isReadyToBuild(lastAssistantMsg.text);
-                  return readyToBuild && !aiLoading && !guideModal;
+                  return readyToBuild && !aiLoading;
                 })() && (
                   <>
                     <button onClick={generateGuide}
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 4 }}>
                       📖 Turn this into a guide
                     </button>
-                    <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>You'll get a preview first, then pick how you want to see it</div>
+                    <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>Takes a few seconds — checking real places and routes</div>
                   </>
-                )}
-                {/* GEMLYX_WIZARD_PORTAL — correction pass. Oliver: "this is not
-                    what we agreed on... why have you completely ruined it."
-                    The whole preview/essentials/choice/loading wizard now
-                    mounts as a real full-screen page via createPortal, same
-                    escape-the-transformed-strip reasoning as FilterChip near
-                    the top of this file, instead of being crammed inline into
-                    the small chat panel. Each step below is its own page. */}
-                {guideModal && createPortal(
-                  <div style={{ position: "fixed", inset: 0, zIndex: 800, background: C.bg, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-                    <div style={{ maxWidth: 640, margin: "0 auto", padding: "22px 20px calc(32px + env(safe-area-inset-bottom))", minHeight: "100%", display: "flex", flexDirection: "column" }}>
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
-                        <button onClick={closeGuideWizard} aria-label="Close"
-                          style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, width: 34, height: 34, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          ✕
-                        </button>
-                      </div>
-
-                      {guideFlowStep === "preview" ? (
-                        // Oliver: "What Chinese Guy know what Roskilde is... we
-                        // need a page with pictures and a minimal description in
-                        // 4-5 sentences, where you can click read more." Real
-                        // photos only, via lookupRealPlace — never a fabricated
-                        // image — falling back to the same monogram plate
-                        // GuidePage itself uses when nothing real matches.
-                        <div key="preview" style={{ flex: 1, animation: "gxPageTurn 0.5s cubic-bezier(0.22,1,0.36,1) both" }}>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: "'Fraunces', serif", textAlign: "center" }}>Here's what you'll see</div>
-                          <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 22, lineHeight: 1.5, textAlign: "center" }}>Grouped by town, before the day-by-day breakdown.</div>
-                          {groupStopsByTown(guideModal.days).map(g => (
-                            <div key={g.town} style={{ marginBottom: 26 }}>
-                              <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, marginBottom: 10, fontFamily: "'Fraunces', serif" }}>{g.town}</div>
-                              {g.wanderOnly ? (
-                                <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>Just wander around {g.town}, no fixed stops planned here.</div>
-                              ) : (
-                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-                                  {g.namedAttractions.map((s, i) => {
-                                    const real = lookupRealPlace(s.name);
-                                    const photo = real?.photo;
-                                    const key = `${g.town}|${s.name}`;
-                                    const expanded = expandedPreviewStops.has(key);
-                                    const fullText = s.note || real?.desc || "";
-                                    const CUTOFF = 210;
-                                    const isLong = fullText.length > CUTOFF;
-                                    const shownText = expanded || !isLong ? fullText : `${fullText.slice(0, CUTOFF)}…`;
-                                    const extraParas = expanded && Array.isArray(real?.blogBody) ? real.blogBody.filter(b => b.type === "paragraph").map(b => b.content) : [];
-                                    return (
-                                      <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
-                                        <div style={{ position: "relative", height: 130, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: photo ? undefined : `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
-                                          {photo ? (
-                                            <img src={photo} alt={s.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                          ) : (
-                                            <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 40, fontWeight: 500, color: "rgba(148,163,199,0.35)" }}>{(s.name || "◆").slice(0, 1)}</span>
-                                          )}
-                                        </div>
-                                        <div style={{ padding: "12px 14px 14px" }}>
-                                          <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 6 }}>{s.name}</div>
-                                          {shownText && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{shownText}</div>}
-                                          {extraParas.map((p, pi) => (
-                                            <div key={pi} style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginTop: 8 }}>{p}</div>
-                                          ))}
-                                          {isLong && (
-                                            <button onClick={() => setExpandedPreviewStops(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; })}
-                                              style={{ marginTop: 8, background: "none", border: "none", padding: 0, color: C.gold, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                                              {expanded ? "Show less" : "Read more"}
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          <button onClick={() => guidePreviewResolveRef.current?.()}
-                            style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "13px", fontSize: 13, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 4 }}>
-                            Looks good, continue →
-                          </button>
-                        </div>
-                      ) : guideFlowStep === "essentials" ? (
-                        // "This trip's own essentials summary" (Oliver's pick):
-                        // the guide's own AI-written essentials fields, not the
-                        // general Essentials tab. Now its own full-screen page,
-                        // same as preview, per Oliver: "same with essentials..
-                        // it's own page."
-                        <div key="essentials" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, margin: "0 auto", width: "100%", animation: "gxPageTurn 0.5s cubic-bezier(0.22,1,0.36,1) both" }}>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 22, fontFamily: "'Fraunces', serif", textAlign: "center" }}>Before you go</div>
-                          {[["Budget", guideModal.essentials?.budgetReality], ["Getting there", guideModal.essentials?.transportTip], ["Keep in mind", guideModal.essentials?.keepInMind]]
-                            .filter(([, text]) => text)
-                            .map(([label, text]) => (
-                              <div key={label} style={{ marginBottom: 18, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 }}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 }}>{label}</div>
-                                <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.65 }}>{text}</div>
-                              </div>
-                            ))}
-                          <button onClick={() => guideEssentialsResolveRef.current?.()}
-                            style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "13px", fontSize: 13, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 6 }}>
-                            Continue →
-                          </button>
-                        </div>
-                      ) : guideFlowStep === "choice" ? (
-                        // Oliver's pick, asked directly: the choice happens
-                        // BEFORE building, so the plain option genuinely skips
-                        // the Google Directions calls, not just their display.
-                        <div key="choice" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, margin: "0 auto", width: "100%", animation: "gxPageTurn 0.5s cubic-bezier(0.22,1,0.36,1) both" }}>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 6, textAlign: "center", fontFamily: "'Fraunces', serif" }}>How do you want to see it?</div>
-                          <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 22, textAlign: "center" }}>Pick one, this decides what gets built next.</div>
-                          <div style={{ display: "flex", gap: 12 }}>
-                            <button onClick={() => guideChoiceResolveRef.current?.("map")}
-                              style={{ flex: 1, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                              <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>🗺 Map & transport</div>
-                              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>Real routes, exact travel times, one-tap Google Maps links.</div>
-                            </button>
-                            <button onClick={() => guideChoiceResolveRef.current?.("plain")}
-                              style={{ flex: 1, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                              <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>📋 Simple day by day</div>
-                              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>Just the days and stops, no maps or transport times.</div>
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        // Loading/enriching state, per Oliver: real photos and
-                        // real facts about Denmark while it builds, not a bare
-                        // spinner — now centered in the middle of the actual
-                        // screen instead of the small chat panel. The real
-                        // stage label and progress line stay underneath, still
-                        // the authoritative status, this is additional, not a
-                        // replacement for honesty about what's happening.
-                        <div key="enriching" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "10px 10px", animation: "gxPageTurn 0.5s cubic-bezier(0.22,1,0.36,1) both" }}>
-                          <DenmarkFactsLoader />
-                          <GemlyxLoader size={30} tone="gold" ring={true} />
-                          <div style={{ marginTop: 14, fontSize: 14, color: C.light, fontWeight: 600 }}>{guideBuildStage?.label || "Building your guide"}</div>
-                          <div style={{ marginTop: 14, maxWidth: 200, marginLeft: "auto", marginRight: "auto", height: 3, borderRadius: 100, background: C.border, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${guideBuildStage?.percent || 5}%`, background: C.gold, transition: "width 0.6s ease" }} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>,
-                  document.body
                 )}
                 {guideError && (
                   <div style={{ fontSize: 12, color: "#FFB347", textAlign: "center", marginBottom: 12 }}>{guideError}</div>
@@ -3830,15 +2894,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginTop: 8 }}>
                   Mention who's traveling — kids, budget, a car. The more Gemlyx knows, the better the plan.
                 </div>
-                {/* Studio-only (Oliver's ask): build a test guide from a randomized
-                    brief without a single chat call — no more burning credits
-                    talking with Gemlyx just to reach the build step. */}
-                {isStudio && (
-                  <button onClick={randomGuideSetup}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", marginTop: 10, background: "none", border: `1px dashed ${C.gold}66`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    ✦ Random guide setup — builds a test guide instantly (Studio only)
-                  </button>
-                )}
                 {isStudio && !studioSession && (
                   <div style={{ background: C.surface, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "20px", marginTop: 18 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>🔒 Content Studio — log in</div>
@@ -3873,62 +2928,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {manageOpen ? "Hide" : "📋 Manage Published"}
                         </button>
-                        <button onClick={() => setContentPhotosOpen(v => !v)}
-                          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                          {contentPhotosOpen ? "Hide" : "📷 Photos"}
-                        </button>
                       </div>
                     </div>
-
-                    {contentPhotosOpen && (
-                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16 }}>
-                        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
-                          Events, towns, attractions, food and nightlife spots — tap the camera on any listing to attach a real photo from your phone, camera or library. It goes live for everyone right away, no code or redeploy needed. (Shopping/craft isn't listed here, that one already lives in its own live table.)
-                        </div>
-                        <input value={contentPhotoFilter} onChange={e => setContentPhotoFilter(e.target.value)}
-                          placeholder="Filter by name…"
-                          style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", fontSize: 12, outline: "none", background: C.surface, color: C.text, fontFamily: "'Inter', sans-serif", marginBottom: 10, boxSizing: "border-box" }} />
-                        {contentPhotoError && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 10 }}>{contentPhotoError}</div>}
-                        <div style={{ maxHeight: 360, overflowY: "auto" }}>
-                          {[
-                            { label: "Events", category: "event", items: [...events, ...majorEvents] },
-                            { label: "Towns", category: "town", items: towns },
-                            { label: "Attractions", category: "attraction", items: freeEntrance },
-                            { label: "Food", category: "food", items: foodSpots },
-                            { label: "Nightlife", category: "nightlife", items: nightlifeSpots },
-                          ].map(group => {
-                            const q = contentPhotoFilter.trim().toLowerCase();
-                            const filtered = q ? group.items.filter(it => (it.name || "").toLowerCase().includes(q)) : group.items;
-                            if (!filtered.length) return null;
-                            return (
-                              <div key={group.label} style={{ marginBottom: 14 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>{group.label}</div>
-                                {filtered.map(item => (
-                                  <div key={`${group.category}-${item.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 0", borderBottom: `1px solid ${C.border}` }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                                      <div style={{ width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
-                                        {item.photo ? (
-                                          <img src={item.photo} alt="" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                        ) : (item.emoji || "•")}
-                                      </div>
-                                      <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
-                                    </div>
-                                    <button
-                                      onClick={() => { pendingContentPhotoItemRef.current = { item, category: group.category }; contentPhotoInputRef.current?.click(); }}
-                                      disabled={contentPhotoUploadKey === item.photo}
-                                      style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
-                                      {contentPhotoUploadKey === item.photo ? "Uploading…" : "📷 Upload"}
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <input ref={contentPhotoInputRef} type="file" accept="image/*" style={{ display: "none" }}
-                          onChange={e => { const f = e.target.files?.[0]; handleContentPhotoFile(f); e.target.value = ""; }} />
-                      </div>
-                    )}
 
                     {redraftOpen && (
                       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16, maxHeight: 320, overflowY: "auto" }}>
@@ -4209,8 +3210,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           </div>
                         )}
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
-                        <div style={{ fontSize: 9.5, color: perplexityPrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
-                          {perplexityPrecheckRan ? "✦ Written with a Perplexity cross-check folded in before drafting" : "Perplexity pre-check didn't run (no key set, or the call failed) — Tavily research only"}
+                        <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
+                          {googlePrecheckRan ? "✦ Written with a Perplexity cross-check folded in before drafting" : "Perplexity pre-check didn't run (no key set, or the call failed) — Tavily research only"}
                         </div>
                         <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); }}
                           rows={12}
@@ -4359,20 +3360,20 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             style={{ width: "100%", background: "none", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginTop: 10, marginBottom: 8, fontFamily: "'Inter', sans-serif" }}>
                             {verifyLoading ? "Searching…" : "🔎 Verify dates, prices & venue names"}
                           </button>
-                          <button onClick={perplexityFactCheck} disabled={perplexityCheckLoading}
+                          <button onClick={googleAICheck} disabled={googleCheckLoading}
                             style={{ width: "100%", background: "none", border: "1px solid #4285F466", color: "#8AB4F8", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                            {perplexityCheckLoading ? "Asking Perplexity…" : "◆ Ask Perplexity to fact-check this"}
+                            {googleCheckLoading ? "Asking Perplexity…" : "◆ Ask Perplexity to fact-check this"}
                           </button>
                         </div>
 
-                        {perplexityCheckError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 12 }}>{perplexityCheckError}</div>}
-                        {perplexityCheckResult && (
+                        {googleCheckError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 12 }}>{googleCheckError}</div>}
+                        {googleCheckResult && (
                           <div style={{ background: C.bg, border: "1px solid #4285F444", borderRadius: 10, padding: "12px", marginBottom: 12 }}>
                             <div style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", marginBottom: 8 }}>◆ Perplexity's independent check — read this, then edit the JSON above if it flags something:</div>
-                            <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: perplexityCheckResult.citations.length > 0 ? 10 : 0 }}>{perplexityCheckResult.text}</div>
-                            {perplexityCheckResult.citations.length > 0 && (
+                            <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: googleCheckResult.citations.length > 0 ? 10 : 0 }}>{googleCheckResult.text}</div>
+                            {googleCheckResult.citations.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                                {perplexityCheckResult.citations.map((c, i) => (
+                                {googleCheckResult.citations.map((c, i) => (
                                   <a key={i} href={c.url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#8AB4F8", background: "#4285F418", border: "1px solid #4285F444", borderRadius: 100, padding: "3px 9px", textDecoration: "none" }}>{c.title.slice(0, 30)} ↗</a>
                                 ))}
                               </div>
@@ -4388,7 +3389,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                 <textarea readOnly value={factCheckFixPreview} rows={8}
                                   style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, fontSize: 10.5, color: C.light, lineHeight: 1.5, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box" }} />
                                 <div style={{ display: "flex", gap: 8 }}>
-                                  <button onClick={() => { setStudioDraftText(factCheckFixPreview); setFactCheckFixPreview(null); setPerplexityCheckResult(null); }}
+                                  <button onClick={() => { setStudioDraftText(factCheckFixPreview); setFactCheckFixPreview(null); setGoogleCheckResult(null); }}
                                     style={{ background: C.accent, border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
                                     ✓ Apply to draft
                                   </button>
@@ -4474,8 +3475,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {!videoError && (
                   <video ref={heroVideoRef} src="/video1.mp4" autoPlay muted defaultMuted loop playsInline webkit-playsinline="true" preload="auto"
                     onCanPlay={(e) => { e.target.muted = true; setVideoReady(true); e.target.play().catch(() => {}); }}
-                    onLoadedData={(e) => { e.target.muted = true; setVideoReady(true); e.target.play().catch(() => {}); }}
-                    onPlaying={() => setVideoReady(true)}
                     onError={() => setVideoError(true)}
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
                 )}
@@ -4492,7 +3491,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <div style={{ fontSize: "clamp(32px, 5.5vw, 50px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, marginBottom: 12, textShadow: "0 2px 24px rgba(0,0,0,0.55)" }}>
                     Beyond the<br />guidebooks<span style={{ color: C.gold }}>.</span>
                   </div>
-                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Hidden gems across the country, and this is how you find them.</div>
+                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Hidden gems across the whole country — every one visited and verified.</div>
                   <button onClick={() => { goTab("ai"); window.scrollTo(0, 0); }}
                     style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
                     ✦ Plan my trip
@@ -4504,49 +3503,36 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
               </div>
 
-              {/* "Today in Denmark" — modernized (Oliver: "less 2010"). One glass
-                  panel instead of a loose stack of utility widgets: kicker with a
-                  fading hairline, weather as pill chips, the location ask as a
-                  quiet row with an Enable chip, a hairline divider, then the
-                  live/coming events with a proper segmented control. */}
-              {/* BUG FIX (Oliver: "on desktop at the explorer page on Denmark, the
-                  weather and event tab should be fully sized"): the hero above
-                  and the nav tiles below are both full viewport width, but this
-                  panel was capped at maxWidth 760 with no desktop breakpoint —
-                  on a wide desktop screen that reads as a tiny half-size strip
-                  next to the full-bleed sections around it. Widened via the
-                  .today-panel-wrap class below instead of the old fixed inline
-                  maxWidth, same base (760) on mobile, noticeably fuller on
-                  desktop widths. */}
-              <div className="today-panel-wrap">
-                <div style={{ background: "linear-gradient(180deg, rgba(15,22,40,0.94), rgba(15,22,40,0.6))", border: `1px solid ${C.border}`, borderRadius: 20, padding: "16px 18px 14px", boxShadow: "0 24px 60px -30px rgba(0,0,0,0.8)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", whiteSpace: "nowrap" }}>Today in Denmark</span>
-                    <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, ${C.border}, transparent)` }} />
-                  </div>
+              {/* Redesign pass: the page now OPENS on the hero — the weather strip,
+                  location prompt and live-events ticker used to stack above it and
+                  made the top feel like a utility drawer. They now live here, under
+                  the hero, as one tidy "Today in Denmark" block. */}
+              <div style={{ padding: "20px 16px 8px", maxWidth: 720, margin: "0 auto" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in Denmark</div>
+
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
                   <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
-                  {(userCoords === null || userCoords === "denied") && (
-                    <button onClick={requestLocation}
-                      style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: "12px 0 2px", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
-                      <Ico name="pin" size={14} color={userCoords === "denied" ? "#FFB347" : C.gold} />
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.light, fontWeight: 600 }}>
-                          {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? See travel times from where you are"}
-                        </span>
-                        <span onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
-                          style={{ display: "block", fontSize: 10, color: C.muted, marginTop: 2 }}>
-                          Only used on your device, never stored · <span style={{ textDecoration: "underline" }}>Privacy</span>
-                        </span>
-                      </span>
-                      <span style={{ flexShrink: 0, border: `1px solid ${C.border}`, background: "rgba(33,44,68,0.45)", color: C.text, borderRadius: 100, padding: "5px 14px", fontSize: 11, fontWeight: 700 }}>Enable</span>
-                    </button>
-                  )}
-                  {userCoords === "requesting" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, padding: "12px 0 2px" }}><Ico name="pin" size={13} /> Getting your location…</div>
-                  )}
-                  <div style={{ height: 1, background: C.border, opacity: 0.6, margin: "12px 0 10px" }} />
-                  <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
                 </div>
+                {(userCoords === null || userCoords === "denied") && (
+                  <button onClick={requestLocation}
+                    style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 8, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
+                    <Ico name="pin" size={15} color={userCoords === "denied" ? "#FFB347" : C.gold} />
+                    <span style={{ flex: 1 }}>
+                      <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
+                        {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? Tap to see travel times from where you are"}
+                      </span>
+                      <span onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
+                        style={{ display: "block", fontSize: 10, color: C.muted, marginTop: 2 }}>
+                        Only used on your device, never stored · <span style={{ textDecoration: "underline" }}>Privacy</span>
+                      </span>
+                    </span>
+                  </button>
+                )}
+                {userCoords === "requesting" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, padding: "0 0 8px" }}><Ico name="pin" size={13} /> Getting your location…</div>
+                )}
+                <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
+              
               </div>
 
               {/* Navigation sections */}
@@ -4558,11 +3544,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", ico: "car" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", ico: "town" },
                 // { id: "craft", ... } merged into attractions below
-                // picture7.jpg / picture9.jpg were referenced but never existed in
-                // public/ — these two home cards have been silently broken images.
-                // Repointed to real files until Oliver picks the photos he wants.
-                { id: "attractions", img: "/librarygarden1.jpg", title: "Attractions", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", ico: "ticket" },
-                { id: "ai", img: "/plans.jpg", title: "Gemlyx Detour", sub: "Your personal Denmark guide — plans trips, checks what's live", ico: null, glyph: "✦" },
+                { id: "attractions", img: "/picture7.jpg", title: "Attractions", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", ico: "ticket" },
+                { id: "ai", img: "/picture9.jpg", title: "Gemlyx Detour", sub: "Your personal Denmark guide — plans trips, checks what's live", ico: null, glyph: "✦" },
               ].map((section, i) => (
                 <div key={section.id} onClick={() => {
                   // "roadtrips" isn't its own tab anymore — it now lives inside
@@ -4606,13 +3589,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Guides</div>
                   {savedGuides.map(g => (
-                    // A guide saved via GuidePage's real Save gets a genuine Supabase
-                    // row (a short string id) and a real shareable link — those go
-                    // straight to it. Anything saved the old way (a plain numeric
-                    // Date.now() id, from before this pass) has no Supabase row to
-                    // fetch, so it opens as an unsaved guide instead, with the option
-                    // to save it properly and get a real link.
-                    <div key={g.id} onClick={() => (typeof g.id === "string" ? navigate(`/guide/${g.id}`) : navigate("/guide/new", { state: { guide: { title: g.title, days: g.days } } }))}
+                    <div key={g.id} onClick={() => setGuideModal({ title: g.title, days: g.days })}
                       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: C.text }}><Ico name="book" size={14} color={C.gold} /> {g.title}</div>
@@ -4644,7 +3621,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <div style={{ fontSize: 13, color: "#4CAF50", fontWeight: 700, marginBottom: 28 }}>✓ You're on the list — we'll be in touch.</div>
                 )}
                 <GemlyxLogo size={18} color={C.text} style={{ marginBottom: 6 }} />
-                <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>It exists nowhere else · Denmark <FlagDK height={10} /></div>
+                <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>Every find personally verified · Denmark <FlagDK height={10} /></div>
                 <div onClick={() => setShowPrivacy(true)} style={{ fontSize: 11, color: C.muted, marginTop: 8, textDecoration: "underline", cursor: "pointer" }}>Privacy & Data</div>
                 <div style={{ fontSize: 10, color: C.muted, marginTop: 6, opacity: 0.6 }}>v2.87 — Jul 2026</div>
               </div>
@@ -4682,35 +3659,65 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Attractions</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal: genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal — genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
               </div>
 
-              {/* Modern filter bar — the old boxed panel with five labeled pill
-                  rows collapses into one chip row (chips open bottom sheets).
-                  "Handmade" keeps its special internal value; only the label is
-                  cleaned up. Emoji removed per the no-emoji rule. */}
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 8, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
-                <FilterChip label="City" value={attractionCity === "All" ? null : (attractionCity === "🍬 Handmade" ? "Handmade" : attractionCity)}
-                  options={[...cityOptions.filter(c => c !== "All"), "Handmade"]}
-                  onChange={(v) => setAttractionCity(v === "Handmade" ? "🍬 Handmade" : (v || "All"))} />
+              {/* Filters */}
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 16px 14px", marginBottom: 18 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>City</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
+                  {[...cityOptions, "🍬 Handmade"].map(c => (
+                    <Pill key={c} label={c} active={attractionCity === c} onClick={() => setAttractionCity(c)} color={c === "🍬 Handmade" ? "#E91E63" : undefined} />
+                  ))}
+                </div>
+
                 {attractionCity !== "🍬 Handmade" && (
-                  <FilterChip label="Price" value={priceFilter === "all" ? null : (priceFilter === "free" ? "Free" : "Bookable")}
-                    options={["Free", "Bookable"]}
-                    onChange={(v) => setPriceFilter(v === "Free" ? "free" : v === "Bookable" ? "paid" : "all")} />
+                  <>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Price</div>
+                    <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
+                      {[["all", "All"], ["free", "🆓 Free"], ["paid", "🎟 Bookable"]].map(([k, label]) => (
+                        <Pill key={k} label={label} active={priceFilter === k} onClick={() => setPriceFilter(k)} />
+                      ))}
+                    </div>
+
+                    {priceFilter !== "free" && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
+                        <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
+                          {["All", "Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"].map(k => (
+                            <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ height: 1, background: C.border, margin: "2px 0 14px" }} />
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Popularity</div>
+                        <Pill label="◆ Hidden Gem" active={hiddenGemOnly} onClick={() => setHiddenGemOnly(v => !v)} color={C.gold} />
+                      </div>
+                      {priceFilter !== "free" && (
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Speed</div>
+                          <Pill label="⚡ Bookable online" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Sort</div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
+                          <Pill label="📍 Closest" active={craftSort === "near"} color={C.gold}
+                            onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
+                        </div>
+                      </div>
+                    </div>
+                    {craftSort === "near" && !isInDenmark(userCoords) && (
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you're in Denmark with location enabled — showing recommended order for now.</div>
+                    )}
+                  </>
                 )}
-                {attractionCity !== "🍬 Handmade" && priceFilter !== "free" && (
-                  <FilterChip label="Craft" value={craftKind} options={["Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"]} onChange={setCraftKind} />
-                )}
-                <FilterToggle label="Hidden Gem" active={hiddenGemOnly} icon={<span style={{ fontSize: 10 }}>◆</span>} onClick={() => setHiddenGemOnly(v => !v)} />
-                {attractionCity !== "🍬 Handmade" && priceFilter !== "free" && (
-                  <FilterToggle label="Bookable online" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} />
-                )}
-                <FilterToggle label="Closest to me" active={craftSort === "near"} icon={<Ico name="pin" size={12} />}
-                  onClick={() => { if (craftSort === "near") { setCraftSort("recommended"); } else { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); } }} />
               </div>
-              {craftSort === "near" && !isInDenmark(userCoords) && (
-                <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>Works once you're in Denmark with location enabled. Showing recommended order for now.</div>
-              )}
 
               {attractionCity === "🍬 Handmade" ? (
                 <>
@@ -4750,56 +3757,57 @@ You also have a web_search tool. Use it whenever someone asks about something th
               ) : (
                 <div>
                   <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, paddingLeft: 2 }}>{filtered.length} place{filtered.length !== 1 ? "s" : ""}{craftSort === "near" && isInDenmark(userCoords) ? " · nearest first" : ""}</div>
-                  {filtered.map(item => (
-                    <div key={`${item._kind}-${item.id}`} onClick={() => item._kind === "free" ? setFreeDetail(item) : setCraftDetail(item)}
-                      style={{ background: C.surface, borderRadius: 20, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 16, cursor: "pointer", boxShadow: "0 4px 18px rgba(0,0,0,0.18)" }}>
-                      <div style={{ height: 172, position: "relative", background: `linear-gradient(135deg, ${item.color}40 0%, #0A0F1E 100%)` }}>
-                        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, opacity: 0.22 }}>{item.emoji}</span>
-                        {item.photo && <img src={item.photo} alt={item.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />}
-                        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(10,15,30,0.75) 100%)" }} />
+                  {/* Same photo-forward card structure as the Towns tab — a real
+                      photo up top instead of a small icon buried in a text row,
+                      so a place actually looks like something worth seeing. */}
+                  <div className="towns-grid">
+                    {filtered.map(item => (
+                      <div key={`${item._kind}-${item.id}`} onClick={() => item._kind === "free" ? setFreeDetail(item) : setCraftDetail(item)} style={{ cursor: "pointer" }}>
+                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${item.color}40 0%, #0A0F1E 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{item.emoji}</span>
+                          <img src={item.photo} alt={item.name} onError={e => { e.target.style.display = "none"; }}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
 
-                        <div style={{ position: "absolute", top: 10, left: 10, display: "flex", gap: 6, alignItems: "center" }}>
-                          <span style={{ background: item._kind === "free" ? "#2E7D32" : item.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                            {item._kind === "free" ? "Free" : item.type}
-                          </span>
-                          {item.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.92)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100 }}>◆ Hidden Gem</span>}
+                          <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 6, alignItems: "center" }}>
+                            <span style={{ background: "rgba(10,15,30,0.8)", color: item._kind === "free" ? "#4CAF50" : C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                              {item._kind === "free" ? "Free" : item.type}
+                            </span>
+                            {item.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◆ Hidden Gem</span>}
+                            {item.transportWarning && <span title="Limited public transport" style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 11, padding: "3px 7px", borderRadius: 100 }}>🚲</span>}
+                          </div>
+
+                          <button onClick={(e) => { e.stopPropagation(); toggleSavePlace(item._kind, item, item._kind === "craft" ? item.location : item.city); }}
+                            style={{ position: "absolute", top: 8, right: 8, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 13, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
+                            {isPlaceSaved(item._kind, item.id) ? "♥" : "♡"}
+                          </button>
                         </div>
 
-                        <button onClick={(e) => { e.stopPropagation(); toggleSavePlace(item._kind, item, item._kind === "craft" ? item.location : item.city); }}
-                          style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.9)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
-                          {isPlaceSaved(item._kind, item.id) ? "♥" : "♡"}
-                        </button>
-
-                        <div style={{ position: "absolute", bottom: 10, left: 12, right: 12, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", fontFamily: "'Fraunces', serif", lineHeight: 1.1, textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>{item.name}</div>
-                          {item.rating && <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: C.gold, background: "rgba(10,15,30,0.9)", padding: "4px 9px", borderRadius: 100 }}>★ {item.rating}</div>}
+                        <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{item.name}</div>
+                        <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>
+                          {item._kind === "craft" ? item.location : item.city}{item._kind === "craft" ? ` · ${travelLabel(userCoords, item.location, item.travelTime)}` : ""}{item.priceNote ? ` · ${item.priceNote}` : ""}
+                          {craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item._kind === "craft" ? item.location : item.city); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}
                         </div>
-                        {item.transportWarning && <div style={{ position: "absolute", top: 10, right: 48 }} title="Limited public transport"><span style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 12, padding: "5px 8px", borderRadius: 100 }}>🚲</span></div>}
-                      </div>
-                      <div style={{ padding: "14px 16px 16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-                          <div style={{ fontSize: 12, color: C.muted }}>{item._kind === "craft" ? item.location : item.city}{item._kind === "craft" ? ` · ${travelLabel(userCoords, item.location, item.travelTime)}` : ""}{item.priceNote ? ` · ${item.priceNote}` : ""}{craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item._kind === "craft" ? item.location : item.city); return km != null ? ` · ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}</div>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif", flexShrink: 0 }}>{item._kind === "free" ? "Free" : (item.price || "On request")}</div>
-                        </div>
-                        <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: item.gemlyxFind ? 6 : 12 }}>{(item.desc || "").slice(0, 110)}{(item.desc || "").length > 110 ? "…" : ""}</div>
-                        {item.gemlyxFind && <div style={{ fontSize: 11.5, color: C.gold, lineHeight: 1.5, marginBottom: 12 }}><b>✦ Gemlyx Find:</b> {item.gemlyxFind.slice(0, 90)}{item.gemlyxFind.length > 90 ? "…" : ""}</div>}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
+                          <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>{item._kind === "free" ? "Free" : (item.price || "On request")}</span>
+                          {item.rating && <span style={{ fontSize: 11, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>}
                           {item._kind === "craft" ? (
                             item.bookingType === "online" ? (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "5px 10px", borderRadius: 100 }}>⚡ Book online</span>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "2px 8px", borderRadius: 100 }}>⚡ Book online</span>
                             ) : (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, background: `${C.border}55`, padding: "5px 10px", borderRadius: 100 }}>Contact to book</span>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, background: `${C.border}55`, padding: "2px 8px", borderRadius: 100 }}>Contact to book</span>
                             )
                           ) : (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "5px 10px", borderRadius: 100 }}>🆓 Walk in, free</span>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", background: "#4CAF5018", border: "1px solid #4CAF5044", padding: "2px 8px", borderRadius: 100 }}>🆓 Walk in</span>
                           )}
-                          <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.gold, fontSize: 12.5, fontWeight: 700 }}>
-                            Details <span style={{ fontSize: 15 }}>›</span>
-                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(item.desc || "").slice(0, 90)}{(item.desc || "").length > 90 ? "…" : ""}</div>
+                        {item.gemlyxFind && <div style={{ fontSize: 11, color: C.gold, lineHeight: 1.5, marginTop: 5 }}><b>✦ Gemlyx Find:</b> {item.gemlyxFind.slice(0, 80)}{item.gemlyxFind.length > 80 ? "…" : ""}</div>}
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
+                          Details <span style={{ fontSize: 14 }}>›</span>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -4811,18 +3819,30 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Events</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about, we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about — we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
 
-              {/* Modern filter bar: one chip per dimension, tap opens a sheet.
-                  The old Local/Major/Viking tabs + labeled pill rows are gone —
-                  one merged grid, scale is just a filter now. */}
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 16, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
-                <FilterChip label="Scale" value={eventScale} options={["Local", "Major", "Viking"]} onChange={(v) => { setEventScale(v); setEventType(null); }} />
-                <FilterChip label="Month" value={eventMonth} options={["Jun", "Jul", "Aug", "Sep"]} onChange={setEventMonth} />
-                <FilterChip label="Type" value={eventType} options={[...eventTypeOptions, "North Zealand"]} onChange={setEventType} />
-                <FilterToggle label="Closest to me" active={eventSortNear} icon={<Ico name="pin" size={12} />}
-                  onClick={() => { setEventSortNear(v => !v); if (!eventSortNear && !isInDenmark(userCoords)) requestLocation(); }} />
+              <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
+                {[{ id: "local", label: "Local", ico: "town" }, { id: "major", label: "Major", ico: "ticket" }, { id: "viking", label: "Viking", ico: "ferry" }].map(t => (
+                  <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
+                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    <Ico name={t.ico} size={14} /> {t.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                  {["All", "Jun", "Jul", "Aug", "Sep"].map(m => (
+                    <Pill key={m} label={m} active={(m === "All" && !eventMonth) || eventMonth === m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                  {(eventTab === "local" ? ["All", "Festival", "Market", "Concert", "Music", "North Zealand"] : eventTab === "viking" ? ["All", "Market", "Battle & Market", "Craftsmen Gathering", "Market & Combat"] : ["All", "Music", "Cultural"]).map(f => (
+                    <Pill key={f} label={f} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />
+                  ))}
+                </div>
               </div>
               {filteredEvents.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No upcoming events — try a different filter</div>
@@ -4840,26 +3860,31 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Food</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market: the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market — the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
               </div>
 
-              {/* Modern filter bar — chips + sheet, replacing the pill row and
-                  the budget underline tabs. */}
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 18, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
-                <FilterChip label="Type" value={foodKind === "All" ? null : foodKind} options={["Restaurants", "Food Streets"]} onChange={(v) => setFoodKind(v || "All")} />
-                <FilterChip label="Budget" value={foodTab === "All" ? null : foodTab} options={["Budget", "Mid-range", "Splurge"]} onChange={(v) => setFoodTab(v || "All")} />
-                <FilterToggle label="Closest to me" active={foodSortNear} icon={<Ico name="pin" size={12} />}
-                  onClick={() => { setFoodSortNear(v => !v); if (!foodSortNear && !isInDenmark(userCoords)) requestLocation(); }} />
+              <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                {["All", "Restaurants", "Food Streets"].map(k => (
+                  <Pill key={k} label={k} active={foodKind === k} onClick={() => setFoodKind(k)} />
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}`, flexWrap: "wrap" }}>
+                {[{ id: "All", label: "All" }, { id: "Budget", label: "Budget" }, { id: "Mid-range", label: "Mid-range" }, { id: "Splurge", label: "Splurge" }].map(t => (
+                  <button key={t.id} onClick={() => setFoodTab(t.id)}
+                    style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${foodTab === t.id ? C.accent : "transparent"}`, color: foodTab === t.id ? C.text : C.muted, padding: "12px 6px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
+                    {t.label}
+                  </button>
+                ))}
               </div>
 
               {/* Redesign pass: text rows with dangling "Read more" links became
                   real cards — media plate (photo or monogram), name, meta, price,
                   two-sentence description, whole card tappable, tilt on hover. */}
               <div className="cards-grid">
-                {[...foodSpots].filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet)))
-                  .sort((a, b) => (foodSortNear && isInDenmark(userCoords)) ? ((townKmFromUser(a.location) ?? 9999) - (townKmFromUser(b.location) ?? 9999)) : 0).map(spot => (
+                {foodSpots.filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet))).map(spot => (
                   <div key={spot.id} onClick={() => setFoodDetail(spot)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
-                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease" }}>
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease", willChange: "transform" }}>
                     <div style={{ height: 128, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${spot.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
                       <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 48, fontWeight: 500, color: "rgba(148,163,199,0.3)" }}>{(spot.name || "◆").slice(0, 1)}</span>
                       {spot.photo && (
@@ -4867,7 +3892,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                       )}
                       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
-                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.92)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{spot.price}</div>
+                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{spot.price}</div>
                     </div>
                     <div style={{ padding: "13px 15px 15px" }}>
                       <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>{spot.category} · {spot.location}</div>
@@ -4902,7 +3927,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <>
                   <div style={{ marginBottom: 18, paddingTop: 8 }}>
                     <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
-                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers, but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
+                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers — but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
                   </div>
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
 
@@ -5008,16 +4033,15 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Hidden Towns</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops, and this is how you find them.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — every one of them visited and verified in person.</div>
               </div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 16, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
-                <FilterChip label="Region" value={townFilter} options={["Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "East Jutland", "Bornholm", "Fanø Island"]} onChange={setTownFilter} />
-                <FilterToggle label="Closest to me" active={townSortNear} icon={<Ico name="pin" size={12} />}
-                  onClick={() => { setTownSortNear(v => !v); if (!townSortNear && !isInDenmark(userCoords)) requestLocation(); }} />
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+                {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "East Jutland", "Bornholm", "Fanø Island"].map(r => (
+                  <Pill key={r} label={r} active={(r === "All" && !townFilter) || townFilter === r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))} />
+                ))}
               </div>
               <div className="towns-grid">
-                {[...towns].filter(t => !townFilter || t.region === townFilter)
-                  .sort((a, b) => (townSortNear && isInDenmark(userCoords)) ? ((townKmFromUser(a.name) ?? 9999) - (townKmFromUser(b.name) ?? 9999)) : 0).map(town => (
+                {towns.filter(t => !townFilter || t.region === townFilter).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                     <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{town.emoji}</span>
@@ -5175,21 +4199,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
                   </div>
 
-                  {/* BUG FIX (Oliver: "the 'fine-tune the plan' doesn't look like
-                      something you can click"): this was always a real <button>
-                      with onClick + cursor:pointer, so it worked, it just had no
-                      background/border, so it read as a plain text label rather
-                      than a control. Given it the same pill-chip treatment used
-                      elsewhere in the app (rgba background, border, rounded
-                      corners) so it visually reads as tappable, plus a gold
-                      chevron and a light hover state. */}
                   <button onClick={() => setIntakeMoreOpen(o => !o)}
-                    onMouseOver={e => e.currentTarget.style.background = "rgba(33,44,68,0.65)"}
-                    onMouseOut={e => e.currentTarget.style.background = "rgba(33,44,68,0.45)"}
-                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "rgba(33,44,68,0.45)", border: `1px solid ${C.border}`, borderRadius: 12, marginTop: 13, padding: "11px 13px", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left", transition: "background 0.15s ease" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", borderTop: `1px solid ${C.border}`, padding: "13px 2px 2px", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: C.light }}>Fine-tune the plan</span>
                     <span style={{ fontSize: 11, color: C.muted }}>budget · interests · who's going</span>
-                    <span style={{ marginLeft: "auto", fontSize: 12, color: C.gold, fontWeight: 700, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: C.muted, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
                   </button>
 
                   {intakeMoreOpen && (<div style={{ paddingTop: 14 }}>
@@ -5427,11 +4441,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {[
                   { q: "Is Gemlyx free?", a: "Yes — completely free for travelers. Browse, save, use the map and discover hidden finds at no cost." },
                   { q: "How do I save a find?", a: "Tap the ♡ heart on any business. It gets saved to your Saved tab instantly." },
-                  // Honesty pass (Oliver: "I don't lie to people") — no claims of
-                  // personal visits. What's true: research + fact-checking, and
-                  // omission when something can't be confirmed.
-                  { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyx.com. Every listing is researched and checked before it goes live." },
-                  { q: "Are all finds verified?", a: "Every find is researched and fact-checked before it goes live — and when something can't be confirmed, we leave it out rather than guess. Many finds show the date they were last checked." },
+                  { q: "How do I get my shop listed?", a: "Send us a message on Instagram or email hello@gemlyx.com. We visit and verify every listing personally." },
+                  { q: "Are all finds verified?", a: "Yes — every listing is physically verified by a real person. We show the verification date on each find." },
                   { q: "Which cities are covered?", a: "Currently Copenhagen, Denmark. More Danish cities coming soon." },
                 ].map((item, i) => (
                   <div key={i} style={{ background: C.surface, borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1px solid ${C.border}` }}>
@@ -5577,24 +4588,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
         @keyframes gemlyxDotPulse { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
         @keyframes gemlyxMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .gemlyx-msg-in { animation: gemlyxMsgIn 0.28s ease both; }
-        @keyframes gxFactFade { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: scale(1); } }
-        /* Oliver: "make it swipe like a page of a book" — going from preview to
-           essentials to the map/plain question. A subtle rotateY + slide reads as
-           a page turning rather than a flat crossfade. Applied via key={guideFlowStep}
-           on each wizard step's wrapper below so it replays on every step change. */
-        @keyframes gxPageTurn { 0% { opacity: 0; transform: perspective(1000px) rotateY(-14deg) translateX(46px); } 100% { opacity: 1; transform: perspective(1000px) rotateY(0deg) translateX(0); } }
-        @keyframes gxPaperSettle { 0% { opacity: 0; transform: translateY(-22px) rotate(5deg) scale(0.92); } 100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); } }
-        @keyframes gxSimpleFade { 0% { opacity: 0; } 100% { opacity: 1; } }
-        @keyframes gxBokehFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-        @keyframes gxNeonIn { 0% { opacity: 0; transform: scale(0.85); } 100% { opacity: 1; transform: scale(1); } }
-        @keyframes gxNeonPulse { 0%, 100% { box-shadow: 0 0 16px 2px rgba(236,72,153,0.5), 0 0 30px 5px rgba(168,85,247,0.22); } 50% { box-shadow: 0 0 24px 5px rgba(236,72,153,0.9), 0 0 44px 10px rgba(168,85,247,0.45); } }
-        @keyframes gxFlashOut { 0% { opacity: 0.9; } 100% { opacity: 0; } }
-        @keyframes gxSteamRise { 0% { opacity: 0; transform: translateY(0) scaleY(0.6); } 30% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(-60px) scaleY(1.3); } }
-        @keyframes gxScanSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .gemlyx-thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: ${C.gold}; margin: 0 2px; animation: gemlyxDotPulse 1.1s ease infinite; }
-        .today-panel-wrap { padding: 26px 16px 10px; max-width: 760px; margin: 0 auto; }
-        @media (min-width: 900px) { .today-panel-wrap { max-width: 1000px; padding: 32px 20px 12px; } }
-        @media (min-width: 1300px) { .today-panel-wrap { max-width: 1200px; } }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }
         @media (min-width: 900px) {
@@ -5618,13 +4612,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
           fixed above it. Animated: only light — the painting breathes very
           slowly, painted lanterns/torch pulse, the arch sunset breathes,
           blue mushrooms pulse cool, and golden dust drifts through the air.
-          The middle is the country picker: Denmark's card carries its own
-          photo and line — each country gets its own. Painting served from a
-          2x-upscaled export (front-page-2x.jpg) to cut the phone blur from
-          the 1024px original. Card photo currently unset, see the "BUG/RISK
-          FIX" comment further down for why. */}
+          The middle is the country picker: Denmark's card carries a real
+          photo (the Little Mermaid) and its own line — each country gets
+          its own. Served from a 2x-upscaled export (front-page-2x.jpg) to
+          cut the phone blur from the 1024px original. */}
       {!entered && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08", transform: enteringDenmark ? "translateY(-100%)" : "translateY(0)", opacity: enteringDenmark ? 0 : 1, transition: "transform 0.65s cubic-bezier(0.65,0,0.35,1), opacity 0.5s ease" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
           <style>{`
             .gxa-pan { position:absolute; inset:0; overflow:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
             .gxa-pan::-webkit-scrollbar { display:none; }
@@ -5673,52 +4666,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 110, background: "linear-gradient(to top, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 45%, transparent 58%, rgba(10,9,5,0.45) 100%)" }} />
 
-          {/* the opening animation — ONLY the compass, centered, nothing else.
-              A solid cover sits over the painting and fades away on the exact
-              same timing as the compass's own pop-and-spin, so the spin is
-              what visually exposes the painting rather than it already being
-              visible underneath. Once revealed, ONLY the compass flies to the
-              corner and SITS DOWN in the brand spot (like coming in a door and
-              finding a chair in the corner). The compass aims at the real
-              corner mark's measured position and the static mark takes over
-              pixel-on-pixel at landing. Then the Denmark card pops. A click
-              anywhere skips it. */}
-          {!introDone && (
-            <div onClick={finishIntro}
-              style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px", cursor: "pointer" }}>
-              <style>{`
-                .gxi-leave .gxi-mark { animation: none !important; opacity: 1 !important; }
-                .gxi-reveal-cover { animation: gxiRevealCover 1.55s cubic-bezier(0.45,0.05,0.35,0.95) 0.35s forwards; }
-                @keyframes gxiRevealCover { from { opacity: 1; } to { opacity: 0; } }
-                @media (prefers-reduced-motion: reduce) { .gxi-reveal-cover { animation: none !important; opacity: 0 !important; } }
-              `}</style>
-              <div className="gxi-reveal-cover" style={{ position: "absolute", inset: 0, background: "#0F0D08", pointerEvents: "none" }} />
-              <div className={introLeaving ? "gxi-leave" : ""} style={{ position: "relative" }}>
-                <GemlyxIntro markSize={108} />
-              </div>
-            </div>
-          )}
-
-          {/* corner brand: mark and wordmark split so the flying compass can land
-              on the mark's exact spot. The mark shows the frame the flyer lands
-              (visibility flip, no fade); the wordmark fades in beside it. */}
-          {(introLeaving || introDone) && (
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none", zIndex: 6 }}>
-              <span style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 8, filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}>
-                <span id="gx-corner-mark" style={{ display: "inline-flex", visibility: introDone ? "visible" : "hidden" }}>
-                  <GemlyxMark size={19} ring={true} ringColor="#F0EFE6" />
-                </span>
-                <span style={{ display: "inline-flex", opacity: introDone ? 1 : 0, transition: "opacity 0.5s ease 0.12s" }}>
-                  <GemlyxWordmark height={11.8} color="#F0EFE6" />
-                </span>
-              </span>
-            </div>
-          )}
-
-          {/* top bar right: Log in / Sign up (the brand corner is its own row
-              above, so the landing compass never has to fade with the buttons) */}
-          {introDone && (
-          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none" }}>
+          {/* top bar: brand left, Log in / Sign up right */}
+          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none" }}>
+            <span style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
             <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
               <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
                 style={{ background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -5730,7 +4680,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </button>
             </div>
           </div>
-          )}
           {landingNote && (
             <div style={{ position: "absolute", top: "calc(64px + env(safe-area-inset-top))", right: 18, background: "rgba(12,11,7,0.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#F0EFE6", borderRadius: 12, padding: "10px 14px", fontSize: 12, maxWidth: 250, lineHeight: 1.5 }}>
               {landingNote}
@@ -5738,63 +4687,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
           )}
 
           {/* the explorer — country cards, each with its own photo and line */}
-          {introDone && (
-          // BUG FIX (Oliver: "the front page with the writing looks absolutely
-          // ridiculous"): this wrapper used to have no scroll and no bottom
-          // clearance, so once the "what inspired us" paragraph below made the
-          // column taller than the screen, the overflow just spilled past both
-          // edges with nothing to contain it, running straight into the fixed
-          // Customer Support pill at the bottom. Tried a centered-flex-with-
-          // scroll approach first, but verified in a real headless render
-          // (measured getBoundingClientRect, not just eyeballed) that it still
-          // let content bleed into the pill's fixed screen position at any
-          // scroll offset, since the pill isn't part of the scrolling content.
-          // Fixed properly by reserving a real dead strip at the bottom this
-          // wrapper's own scroll can never clip into (bottom: 64px + safe
-          // area, comfortably taller than the pill's own footprint) instead of
-          // spanning the full height — the pill now always sits in its own
-          // space, never behind scrollable text at any scroll position. Also
-          // gave the paragraph its own card + a "Read more" toggle so it
-          // doesn't dump a full wall of text directly onto the busy painting.
-          //
-          // Oliver: "push 'enter Denmark' down a bit... bothers me it isn't
-          // in the middle." A fixed 70px top padding barely registers on a
-          // short desktop window but reads as glued-to-the-top on a genuinely
-          // tall phone screen, since the card's own height (roughly 210px
-          // above its natural center) stays constant while the empty space
-          // below it grows with the screen. Using a plain viewport-relative
-          // padding-top (not flex/align-items centering, which has a known
-          // history of clipping the top of overflowing content on scroll,
-          // exactly the bug already found and fixed once in this same
-          // wrapper) keeps the same guaranteed-safe scroll behavior while
-          // actually centering on tall screens: max(70px, 50vh minus roughly
-          // half the card's own height) — never less than the original 70px
-          // floor on short windows, grows toward true center as the screen
-          // gets taller.
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "max(70px, calc(50vh - 220px)) 20px 24px", pointerEvents: "auto" }}>
-            <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto", margin: "0 auto" }}>
-              {/* RISK FIX: this card's photo used to be denmark-hero.jpg, a photo
-                  of the Little Mermaid statue — pulled per Oliver's flag that using
-                  it commercially can be a real legal risk (the statue's copyright,
-                  held by sculptor Edvard Eriksen's estate, is actively enforced
-                  against commercial use of its likeness in Denmark, unlike most
-                  public statues). Same filename now points at a real Nyhavn harbor
-                  photo Oliver supplied instead — landscape shot, no statue, no
-                  identifiable living/trademarked subject. Still falls back to the
-                  plain gradient + flag if the photo ever fails to load. */}
-              {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "50% 62%" }].map(cn => (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "70px 20px 84px", pointerEvents: "none" }}>
+            <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto" }}>
+              {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "68% 42%" }].map(cn => (
                 <div key={cn.id} style={{ background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, overflow: "hidden", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
                   <div style={{ height: 158, position: "relative", overflow: "hidden" }}>
-                    {/* Gradient + flag always rendered underneath, not just as a
-                        fallback when photo is unset — the img (when present) sits on
-                        top and hides itself on load failure, so a missing/broken
-                        photo file never leaves a blank or broken-image icon here. */}
-                    <div style={{ position: "absolute", inset: 0, background: `radial-gradient(120% 90% at 20% 10%, #2A2015 0%, transparent 60%), radial-gradient(100% 80% at 85% 100%, #1B140D 0%, transparent 55%), #0F0D08`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <FlagDK height={40} />
-                    </div>
-                    {cn.photo && (
-                      <img src={cn.photo} alt={cn.name} onError={e => { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: cn.photoPos }} />
-                    )}
+                    <img src={cn.photo} alt={cn.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: cn.photoPos }} />
                     <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(12,11,7,0.72), transparent 55%)" }} />
                     <div style={{ position: "absolute", bottom: 10, left: 14, display: "flex", alignItems: "center", gap: 8 }}>
                       <FlagDK height={12} />
@@ -5804,54 +4702,23 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                   <div style={{ padding: "12px 14px 14px" }}>
                     <div style={{ fontSize: 13.5, fontStyle: "italic", fontFamily: "'Fraunces', serif", color: "#EFE9D6", textAlign: "center", marginBottom: 11 }}>{cn.tagline}</div>
-                    <button onClick={handleEnterDenmark} disabled={enteringDenmark}
-                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: enteringDenmark ? "default" : "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 20px rgba(0,0,0,0.45)", opacity: enteringDenmark ? 0.7 : 1 }}>
+                    <button onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
+                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}>
                       Enter {cn.name} →
                     </button>
                   </div>
                 </div>
               ))}
-
-              {/* "What inspired us to create this app?" — Oliver's own words
-                  (light typo cleanup only, e.g. "Countryamong" -> "Country
-                  among", "critisi..." -> "criticised" — meaning and voice
-                  untouched, no rewriting). This is founder/marketing copy in
-                  his own voice, not guide content, so the "guide prose must be
-                  Claude's own writing" rule doesn't apply here. Resolves the
-                  longstanding backlog item: text under the entrance country
-                  card explaining why the app exists. */}
-              <div style={{ marginTop: 16, background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 16, padding: "16px 18px", textAlign: "center", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#D9A441", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>What inspired us to create this app?</div>
-                {(() => {
-                  const fullText = "Denmark has seen an increase in tourism over the years, and is in fact experiencing overtourism in Copenhagen. It has become the most popular Nordic country among international visitors, yet people only stay around 3 days, due to both prices and the idea that only Copenhagen is worth visiting. This very idea is what has inspired the Gemlyx team to create this app. This app is, indeed, AI powered. However, we have put in work to make sure that blogs, essential knowledge, and even the Gemlyx Guide communicate no different from humans. Knowing that many similar apps are heavily criticised for lack of factual accuracy, we've also been fact checking every flaw to make sure that you don't get misguided on your travels. We hope to get more support as we try to include other countries!";
-                  const CUTOFF = 130;
-                  const shown = inspiredExpanded || fullText.length <= CUTOFF ? fullText : `${fullText.slice(0, CUTOFF)}…`;
-                  return (
-                    <>
-                      <div style={{ fontSize: 12, color: "rgba(240,239,230,0.78)", lineHeight: 1.65 }}>{shown}</div>
-                      {fullText.length > CUTOFF && (
-                        <button onClick={() => setInspiredExpanded(v => !v)}
-                          style={{ marginTop: 8, background: "none", border: "none", padding: 0, color: "#D9A441", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                          {inspiredExpanded ? "Show less" : "Read more"}
-                        </button>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
             </div>
           </div>
-          )}
 
           {/* bottom: customer support */}
-          {introDone && (
           <div className="gxa-topbar" style={{ position: "absolute", bottom: "calc(12px + env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
             <button onClick={() => window.open("mailto:hello@gemlyx.com?subject=" + encodeURIComponent("Gemlyx support"))}
               style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#EFE9D6", borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               <Ico name="mail" size={13} /> Customer Support
             </button>
           </div>
-          )}
         </div>
       )}
 
@@ -5957,7 +4824,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           ))}
         </div>
         {/* Page dots */}
-        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, zIndex: 60, background: "rgba(10,15,30,0.85)", padding: "7px 12px", borderRadius: 100 }}>
+        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, zIndex: 60, background: "rgba(10,15,30,0.55)", padding: "7px 12px", borderRadius: 100, backdropFilter: "blur(8px)" }}>
           {TAB_ORDER.map((t, i) => (
             <div key={t} onClick={() => goTab(t)}
               style={{ width: i === tabIdx ? 8 : 6, height: i === tabIdx ? 8 : 6, borderRadius: "50%", background: i === tabIdx ? "#fff" : "rgba(255,255,255,0.35)", cursor: "pointer", transition: "all 0.2s", alignSelf: "center" }} />
@@ -6051,6 +4918,322 @@ You also have a web_search tool. Use it whenever someone asks about something th
       <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
       <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
 
+      {guideModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.85)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
+          <div style={{ maxWidth: 480, margin: "0 auto", background: guideModal === "loading" ? "transparent" : C.bg, border: guideModal === "loading" ? "none" : `1px solid ${C.border}`, borderRadius: 20, padding: guideModal === "loading" ? 0 : "22px", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+            {guideModal === "loading" ? (() => {
+              // VINTAGE TRAVEL-JOURNAL LOADING SCREEN — per Oliver's call ("Building
+              // your guide is still unchanged in letters" — he wanted the full
+              // visual redesign, not just new copy). This is meant to read like a
+              // hand-written dispatch being drafted, not a generic app spinner: a
+              // parchment/ink background, a compass instead of a loading ring, and
+              // per-stage copy written like a line from a travel letter rather than
+              // a status label. guideBuildStage itself is untouched (same 4 real
+              // pipeline stages, same percent values) — only how each stage's label
+              // gets DISPLAYED changes here, so nothing about the actual build logic
+              // needed to move.
+              const STAGE_COPY = {
+                "Gathering real places and facts": { title: "Charting the Route", body: "Gathering real places worth the detour, straight from Gemlyx's own research — not a guess, not a brochure." },
+                "Structuring your itinerary": { title: "Penning the Itinerary", body: "Sorting everything into a real day-by-day route, the way a local would actually walk it." },
+                "Finishing the remaining days": { title: "Finishing the Last Pages", body: "A few more days still need writing — nearly there." },
+                "Verifying exact locations and routes": { title: "Checking Every Road and Door", body: "Confirming real distances, opening hours, and the roads between each stop before the ink dries." },
+              };
+              const copy = STAGE_COPY[guideBuildStage?.label] || { title: "Drafting Your Travel Journal", body: "Checking real places, routes and travel times — this takes a moment." };
+              return (
+                <div style={{ textAlign: "center", padding: "54px 20px 42px", position: "relative", overflow: "hidden", borderRadius: 20, border: "1px solid #4A3D22", background: "linear-gradient(160deg, #221B10 0%, #16110A 100%)" }}>
+                  {/* Subtle paper grain, laid over the gradient via an inline SVG turbulence filter — no external image/font download needed. */}
+                  <div aria-hidden style={{ position: "absolute", inset: 0, opacity: 0.5, mixBlendMode: "overlay", pointerEvents: "none",
+                    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E\")" }} />
+                  {/* Two soft ink-stain blotches, like a well-used map */}
+                  <div aria-hidden style={{ position: "absolute", top: -30, left: -20, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.10), transparent 70%)", pointerEvents: "none" }} />
+                  <div aria-hidden style={{ position: "absolute", bottom: -40, right: -30, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.08), transparent 70%)", pointerEvents: "none" }} />
+                  <div style={{ position: "relative" }}>
+                    <div style={{ marginBottom: 12 }}><GemlyxLoader size={44} tone="gold" ring={false} /></div>
+                    <div style={{ fontSize: 10.5, color: "#D9A441", letterSpacing: 2.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>A Dispatch From Gemlyx</div>
+                    <div style={{ fontSize: 20, color: "#F2E8CE", fontWeight: 600, fontFamily: "'Fraunces', serif", fontStyle: "italic", marginBottom: 10, lineHeight: 1.25 }}>
+                      {copy.title}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#BBA778", lineHeight: 1.7, maxWidth: 290, margin: "0 auto 26px", fontFamily: "'Fraunces', serif" }}>
+                      {copy.body}
+                    </div>
+                    <div style={{ maxWidth: 220, margin: "0 auto" }}>
+                      <div style={{ height: 1, background: "linear-gradient(90deg, transparent, #D9A44166 15%, #D9A44166 85%, transparent)", position: "relative", marginBottom: 10 }}>
+                        <div style={{ position: "absolute", top: -3.5, left: `calc(${guideBuildStage?.percent || 5}% - 4px)`, width: 8, height: 8, borderRadius: "50%", background: "#D9A441", transition: "left 0.6s ease", boxShadow: "0 0 8px rgba(212,175,55,0.7)" }} />
+                      </div>
+                      <div style={{ fontSize: 9.5, color: "#8A7A54", letterSpacing: 1.2, fontWeight: 700 }}>{guideBuildStage?.percent || 5}% OF THE JOURNEY MAPPED</div>
+                    </div>
+                  </div>
+                  <style>{`
+                    @keyframes gemlyxCompassSway { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
+                  `}</style>
+                </div>
+              );
+            })() : (
+              <>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "4px 12px" }}>
+                    <span style={{ fontSize: 11 }}>✦</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 0.5, textTransform: "uppercase" }}>Your Guide</span>
+                  </div>
+                  <button onClick={() => setGuideModal(null)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{guideModal.title}</div>
+                <div style={{ marginBottom: 14 }} />
+                {guideModal.essentials && (guideModal.essentials.budgetReality || guideModal.essentials.keepInMind || guideModal.essentials.transportTip || guideModal.essentials.weatherNote) && (() => {
+                  // weatherNote is added client-side, after real per-day forecasts come
+                  // back (see fetchGuideWeather) — not part of what Claude writes, since
+                  // Claude has no real forecast data to draw from at build time. Listed
+                  // last on purpose: it can arrive a moment after everything else in this
+                  // card is already showing.
+                  const lines = [
+                    guideModal.essentials.budgetReality && { icon: "💰", text: guideModal.essentials.budgetReality },
+                    guideModal.essentials.transportTip && { icon: "🚆", text: guideModal.essentials.transportTip },
+                    guideModal.essentials.keepInMind && { icon: "✦", text: guideModal.essentials.keepInMind },
+                    guideModal.essentials.weatherNote && { icon: "🌧", text: guideModal.essentials.weatherNote },
+                  ].filter(Boolean);
+                  return (
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Essentials</div>
+                      {lines.map((line, i) => (
+                        <div key={i} style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: i < lines.length - 1 ? 8 : 0 }}>
+                          {line.icon} {line.text}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+                {guideModal.days.map((day, dayIdx) => (
+                  <div key={day.day} style={{ marginBottom: 20 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Day {day.day}{day.title ? ` — ${day.title}` : ""}</div>
+                    {(() => {
+                      // If today only has one stop, connect it to yesterday's last stop instead —
+                      // that inter-day leg (e.g. Dragør → Køge) IS the actual journey, and without
+                      // it a single-stop day would show no map and no travel info at all.
+                      if (day.stops.length > 1 || dayIdx === 0) return null;
+                      const prevDay = guideModal.days[dayIdx - 1];
+                      const prevStop = prevDay?.stops?.[prevDay.stops.length - 1];
+                      if (!prevStop) return null;
+                      const how = day.glance?.legs?.[0]?.how || "";
+                      const mode = resolveLegMode(how, guideModal._mode, prevStop.name, day.stops[0].name, guideModal._onlyWalking);
+                      const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
+                      const a = resolveStopCoords(prevStop.name), b = resolveStopCoords(day.stops[0].name);
+                      const km = a && b ? kmBetween(a, b) : null;
+                      const rawExact = exactDurations[`${prevStop.name}|${day.stops[0].name}|${mode}`];
+                      const plausibleCap = mode === "walking" ? 180 : mode === "bicycling" ? 300 : Infinity;
+                      const exact = rawExact && rawExact.durationMinutes <= plausibleCap ? rawExact : null;
+                      const originText = prevStop.town ? `${prevStop.name}, ${prevStop.town}, Denmark` : `${prevStop.name}, Denmark`;
+                      const destText = day.stops[0].town ? `${day.stops[0].name}, ${day.stops[0].town}, Denmark` : `${day.stops[0].name}, Denmark`;
+                      const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
+                      return (
+                        <a href={mapsUrl} target="_blank" rel="noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginBottom: 12 }}>
+                          <span style={{ fontSize: 12 }}>{icon}</span>
+                          <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
+                            {exact ? `${exact.durationText} ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
+                              : km !== null ? `${Math.round(km) === 0 ? "<1" : "~" + Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}` : how || "Route from yesterday"}
+                          </span>
+                          <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· {exact ? "Google Maps ↗" : "Exact route ↗"}</span>
+                        </a>
+                      );
+                    })()}
+                      {day.weather && (
+                        <div title="Forecast assumes the trip starts today" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: C.surface, border: `1px solid ${day.weather.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 11 }}>
+                          <span>{day.weather.icon}</span>
+                          <span style={{ color: C.text, fontWeight: 700 }}>{day.weather.temp}°</span>
+                          {day.weather.risk === "high" && <span style={{ color: "#FFB347", fontWeight: 700 }}>· rain likely</span>}
+                        </div>
+                      )}
+                    </div>
+                    {(() => {
+                      const prevDay = dayIdx > 0 ? guideModal.days[dayIdx - 1] : null;
+                      const prevStop = prevDay?.stops?.[prevDay.stops.length - 1];
+                      const leadIn = day.stops.length === 1 && prevStop ? [prevStop] : [];
+                      const routePoints = [...leadIn, ...day.stops].map(s => {
+                        const c = resolveStopCoords(s.name);
+                        return c ? { name: s.name, ...c } : null;
+                      }).filter(Boolean);
+                      if (routePoints.length < 2) return null;
+                      return (
+                        <div style={{ height: 160, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 14 }}>
+                          <GuideRouteMap points={routePoints} />
+                        </div>
+                      );
+                    })()}
+                    {day.stops.map((stop, i) => {
+                      const real = lookupRealPlace(stop.name);
+                      const townMatch = towns.find(t => t.name === stop.name)?.name || (real?._src === "town" ? real.name : null) || Object.keys(TOWN_COORDS).find(t => stop.name.includes(t));
+                      return (
+                        <div key={i}>
+                          <div style={{ display: "flex", gap: 12 }}>
+                          {real?.photo ? (
+                            <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                              <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            </div>
+                          ) : townMatch ? (
+                            <div style={{ width: 52, height: 52, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${C.border}` }}>
+                              <DKLocator town={townMatch} color={C.gold} />
+                            </div>
+                          ) : (
+                            <div style={{ width: 52, height: 52, borderRadius: 10, flexShrink: 0, border: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                              {real?.emoji || "📍"}
+                            </div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
+                              <div onClick={real ? () => openStopDetail(real) : undefined}
+                                style={{ fontSize: 14, fontWeight: 700, color: real ? C.gold : C.text, cursor: real ? "pointer" : "default", textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}66` : "none", textUnderlineOffset: 3 }}>
+                                {stop.name}{real ? " ↗" : ""}
+                              </div>
+                              {(stop.arrivalTime || stop.suggestedStay) && (
+                                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, whiteSpace: "nowrap" }}>
+                                  {stop.arrivalTime ? `⏰ ${stop.arrivalTime}` : ""}{stop.arrivalTime && stop.suggestedStay ? " · " : ""}{stop.suggestedStay ? `${stop.suggestedStay}` : ""}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginBottom: real ? 4 : 0 }}>{stop.note}</div>
+                            {real && real.name === stop.name && (
+                              <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
+                                {real.price ? `${real.price}` : real.popularityTag === "Hidden Gem" ? "◆ Free — Hidden Gem" : real._src === "free" ? "Free entry" : ""}
+                              </div>
+                            )}
+                          </div>
+                          </div>
+                          {i < day.stops.length - 1 ? (() => {
+                            const nextStop = day.stops[i + 1];
+                            const how = day.glance?.legs?.[i]?.how || "";
+                            const mode = resolveLegMode(how, guideModal._mode, stop.name, nextStop.name, guideModal._onlyWalking);
+                            const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
+                            const a = resolveStopCoords(stop.name), b = resolveStopCoords(nextStop.name);
+                            const km = a && b ? kmBetween(a, b) : null;
+                            const rawExact = exactDurations[`${stop.name}|${nextStop.name}|${mode}`];
+                            // Display-level sanity cap: even after every upstream fix, don't trust
+                            // a number blindly — no genuine walking leg WITHIN a single day's stops
+                            // should exceed ~3 hours, nor a bike leg ~5 hours. If one somehow does,
+                            // that's still a real mismatch somewhere upstream (bad geocode, wrong
+                            // branch of a chain, etc.) — better to show an honest "Route" fallback
+                            // than a false-confidence "✓ Exact route" on an obviously wrong number.
+                            const plausibleCap = mode === "walking" ? 180 : mode === "bicycling" ? 300 : Infinity;
+                            const exact = rawExact && rawExact.durationMinutes <= plausibleCap ? rawExact : null;
+                            const routeFailed = noRouteFound[`${stop.name}|${nextStop.name}|${mode}`];
+                            const originText = stop.town ? `${stop.name}, ${stop.town}, Denmark` : `${stop.name}, Denmark`;
+                            const destText = nextStop.town ? `${nextStop.name}, ${nextStop.town}, Denmark` : `${nextStop.name}, Denmark`;
+                            const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
+                            // Rome2Rio handles real multi-modal routes (ferry+train+taxi combos)
+                            // that a single Google Directions mode can't — the common case being
+                            // a smaller island (Femø, Bornholm, Ærø, Samsø) with no direct route
+                            // in any one mode. Its own URL search auto-detects the real modes,
+                            // no need to guess and hardcode a specific combination here.
+                            const rome2rioUrl = `https://www.rome2rio.com/map/${encodeURIComponent(stop.name)}/${encodeURIComponent(nextStop.name)}`;
+                            return (
+                              <div style={{ borderLeft: `2px dashed ${C.border}`, marginLeft: 31, padding: "7px 0 9px 14px", minHeight: 14 }}>
+                                {glancePending > 0 && !how ? (
+                                  <span style={{ fontSize: 11, color: C.muted }}>✨ checking…</span>
+                                ) : routeFailed ? (
+                                  <a href={rome2rioUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
+                                    <span style={{ fontSize: 12 }}>⛴</span>
+                                    <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>No direct route — check Rome2Rio</span>
+                                    <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>↗</span>
+                                  </a>
+                                ) : (
+                                  <a href={mapsUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
+                                    <span style={{ fontSize: 12 }}>{icon}</span>
+                                    <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
+                                      {exact
+                                        ? `${exact.durationText} ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
+                                        : km !== null
+                                        ? `${Math.round(km) === 0 ? "<1" : "~" + Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
+                                        : how || "Route"}
+                                    </span>
+                                    {exact && <span style={{ fontSize: 9, color: "#4CAF50", fontWeight: 700 }}>✓</span>}
+                                    <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· Exact route ↗</span>
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })() : (
+                            <div style={{ height: 12 }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                    {day.glance?.accommodation ? (() => {
+                      // Real checkin/checkout for this specific day, not "today" —
+                      // Booking.com's own default (as seen live) silently ignores a
+                      // bare destination-only URL and falls back to "near me, today",
+                      // which is exactly the wrong result for a trip being planned
+                      // for a future date.
+                      const dayDate = guideModal._arrivalDate ? new Date(guideModal._arrivalDate) : null;
+                      if (dayDate) dayDate.setDate(dayDate.getDate() + (day.day - 1));
+                      const nextDate = dayDate ? new Date(dayDate) : null;
+                      if (nextDate) nextDate.setDate(nextDate.getDate() + 1);
+                      const fmt = (d) => d ? d.toISOString().slice(0, 10) : null;
+                      const adultsMatch = (guideModal._travelers || "").match(/\d+/);
+                      const adults = adultsMatch ? adultsMatch[0] : "2";
+                      const searchTerm = day.glance.recommendedStay || day.glance.stayArea;
+                      const bookingUrl = searchTerm
+                        ? `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(searchTerm + ", Denmark")}` +
+                          (fmt(dayDate) ? `&checkin=${fmt(dayDate)}&checkout=${fmt(nextDate)}` : "") +
+                          `&group_adults=${adults}&no_rooms=1`
+                        : null;
+                      return (
+                        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "10px 12px", marginTop: 2 }}>
+                          <span style={{ fontSize: 13, flexShrink: 0 }}>🏡</span>
+                          <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+                            <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
+                            <span style={{ color: C.light }}>{day.glance.accommodation}</span>
+                            {day.glance.recommendedStay && (
+                              <div style={{ marginTop: 2 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
+                            )}
+                            {bookingUrl && (
+                              // NOT an affiliate link yet — plain Booking.com search, works today.
+                              // Once the Booking.com Affiliate Partner Program account is approved,
+                              // add "&aid=YOUR_AID_HERE" to this URL and every one of these becomes
+                              // a real earning link with zero other changes needed.
+                              <a href={bookingUrl} target="_blank" rel="noreferrer"
+                                style={{ display: "block", marginTop: 4, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                                🔎 {day.glance.recommendedStay ? `See ${day.glance.recommendedStay} on Booking.com` : `Search stays near ${day.glance.stayArea}`} ↗
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })() : glancePending > 0 ? (
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>✨ Checking travel times & where to stay…</div>
+                    ) : null}
+                  </div>
+                ))}
+
+                {/* NEW — bridges to the full-page guide view (src/pages/GuidePage.jsx)
+                    without removing this existing modal. The modal keeps everything
+                    it already does well (weather per day, route maps, exact travel
+                    times, day editing) — this just offers the new page as an
+                    alternative view of the SAME guide data, so nothing that already
+                    works gets ripped out before the new page has been tried. Once
+                    it's confirmed to cover everything needed, this modal can be
+                    retired in a later pass. */}
+                <button onClick={() => navigate("/guide/new", { state: { guide: guideModal } })}
+                  style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 8 }}>
+                  View as full page ↗
+                </button>
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <button onClick={saveCurrentGuide}
+                    style={{ flex: 1, background: C.accent, border: "none", color: "#fff", borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    💾 Save Guide
+                  </button>
+                  <button onClick={() => setGuideModal(null)}
+                    style={{ flex: 1, background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── PRIVACY & DATA MODAL ──────────────────────────── */}
       {showPrivacy && (
         <div onClick={() => setShowPrivacy(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -6063,7 +5246,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
             {[
               ["📍 Your location", "Only requested when you tap the location button — never in the background. Your coordinates are used directly in your browser to calculate distances to towns and events. They are not stored on any server and are not sent to anyone. You can revoke access anytime in your browser's site settings."],
-              ["✦ AI chats (Gemlyx Detour & Route Builder)", "When you use the AI Guide, your messages are sent to Anthropic's Claude (a US company) to generate the actual reply and guide content, and to Perplexity to search the live web for real facts like opening status and prices. OpenAI plays a narrow, behind the scenes support role, planning research queries and flagging phrasing that might need another pass, it never writes what you actually see. Please don't include personal details in your messages, the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
+              ["✦ AI chats (Gemlyx Detour & Route Builder)", "When you use the AI Guide, your messages are sent to OpenAI (a US company) to generate the answer, and in some cases to Tavily to search for live information like opening status. Please don't include personal details in your messages — the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
               ["💾 Saved routes & guides", "Guides and road-trip routes you save are stored only in your browser's local storage, on your own device. We never see them. Delete them in the app, or by clearing your browser data for this site."],
               ["◈ Booking requests", "If you send a booking or craft request, the details you enter (name, email, message) are stored in our database (Supabase) so the maker can get back to you. We use them for nothing else. Email hello@gemlyx.com to have a request deleted."],
               ["💡 Suggestions", "If you suggest a place via 'Suggest a Place', what you type is stored so we can review it. We don't ask for your name or contact details — suggestions are anonymous."],
@@ -6421,97 +5604,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 style={{ background: "none", border: "none", color: C.muted, fontSize: 14, cursor: "pointer", padding: 0, flexShrink: 0 }}>✕</button>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* ── "What is this?" floating photo identifier ──────────────────
-          Sits in the safe top-level zone (same spot as toast/weatherAlerts
-          above), not inside any tab's own content, so it never needs the
-          createPortal treatment the tab-pager transform bug would otherwise
-          require. Only shown once past the entrance. */}
-      {entered && !photoScanOpen && (
-        <button onClick={() => setPhotoScanOpen(true)}
-          style={{ position: "fixed", bottom: 82, right: 18, zIndex: 550, width: 52, height: 52, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 24px rgba(226,59,78,0.45)" }}
-          aria-label="What is this? Identify a photo">
-          <Ico name="sightseeing" size={22} color="#fff" />
-        </button>
-      )}
-
-      {photoScanOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 700, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={closePhotoScan}>
-          <div style={{ background: C.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>What is this?</div>
-              <button onClick={closePhotoScan} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 4 }}>✕</button>
-            </div>
-
-            {/* Hidden inputs: one hints the rear camera on mobile, the other opens the photo library. Same handler either way. */}
-            <input ref={photoScanInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-              onChange={e => { handlePhotoScanFile(e.target.files?.[0]); e.target.value = ""; }} />
-            <input ref={photoScanLibraryRef} type="file" accept="image/*" style={{ display: "none" }}
-              onChange={e => { handlePhotoScanFile(e.target.files?.[0]); e.target.value = ""; }} />
-
-            {!photoScanPreview && !photoScanLoading && !photoScanError && (
-              <>
-                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>Point your camera at a building, a plant, a dish, a sign, anything you're curious about, and Gemlyx will tell you what it actually is. If it's something Gemlyx already has a real page for, you'll get a link straight there.</div>
-                <button onClick={() => photoScanInputRef.current?.click()}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
-                  <Ico name="sightseeing" size={16} color="#fff" /> Take a photo
-                </button>
-                <button onClick={() => photoScanLibraryRef.current?.click()}
-                  style={{ display: "block", width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  Choose from your photos
-                </button>
-                <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 14 }}>
-                  {Math.max(0, PHOTO_SCAN_DAILY_LIMIT - getPhotoScanUsage().count)} of {PHOTO_SCAN_DAILY_LIMIT} free scans left today
-                </div>
-              </>
-            )}
-
-            {(photoScanLoading || photoScanPreview) && !photoScanError && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: C.bg }}>
-                  <img src={photoScanPreview} alt="Your photo" style={{ width: "100%", maxHeight: 260, objectFit: "contain", display: "block", opacity: photoScanLoading ? 0.5 : 1 }} />
-                  {photoScanLoading && (
-                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                      <div style={{ width: 30, height: 30, border: `3px solid ${C.border}`, borderTopColor: C.gold, borderRadius: "50%", animation: "gxScanSpin 0.8s linear infinite" }} />
-                      <div style={{ fontSize: 12.5, color: "#fff", fontWeight: 600, textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>Taking a look…</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {photoScanError && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 13, color: "#FFB347", lineHeight: 1.6, marginBottom: 14 }}>{photoScanError}</div>
-                <button onClick={() => { setPhotoScanError(null); setPhotoScanPreview(null); }}
-                  style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  Try again
-                </button>
-              </div>
-            )}
-
-            {photoScanResult && !photoScanLoading && (
-              <div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>{photoScanResult.name}</div>
-                {!photoScanResult.confident && (
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Best guess, not fully certain</div>
-                )}
-                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 16 }}>{photoScanResult.description}</div>
-                {photoScanResult.matched ? (
-                  <button onClick={() => { openStopDetail(photoScanResult.matched); closePhotoScan(); }}
-                    style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
-                    See it in Gemlyx →
-                  </button>
-                ) : null}
-                <button onClick={() => { setPhotoScanPreview(null); setPhotoScanResult(null); }}
-                  style={{ display: "block", width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  Scan another
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>

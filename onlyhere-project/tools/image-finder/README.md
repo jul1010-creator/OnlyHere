@@ -10,16 +10,22 @@ Runs up to **20 new images per day** by default (configurable via `dailyCap`
 in `config.json`), so it works through the backlog gradually instead of
 hammering the free API rate limits.
 
-**Major festivals, nightlife/bars, and towns are deliberately left out of the
-automatic search.** Stock photo sites are a poor fit for a specific named
-festival (Roskilde, Distortion, Aalborg Karneval, ...) or a specific bar/club
-— either there's no real photo of that exact place on a free stock site, or
-what comes back is a generic "crowd at a festival" shot that could be
-anywhere, or (as happened once) a photo that's simply the wrong country. For
-these, a genuinely lively, specific photo is worth more than a "technically
-Denmark, technically a festival" stock photo, so they're flagged in the
-console output as "left for manual photos on purpose" instead of being
-auto-filled.
+**Automatic search is scoped to just Attractions and Towns.** After finding
+real, confirmed mismatches in Events too (a lighthouse photo attached to a
+folk festival, a plain building for a cultural festival, on top of the
+earlier wrong-country town misses), Oliver asked to narrow this down rather
+than keep chasing individual bad matches: events (both regular and major
+festivals), food spots, and nightlife/bars are now all left out of the
+automatic search entirely, only Attractions (`freeEntrance`) and Towns get
+auto-filled. Stock photo sites are a poor fit for a specific named festival
+or a specific bar/restaurant — either there's no real photo of that exact
+place on a free stock site, or what comes back is a generic "crowd at a
+festival" shot that could be anywhere, or (as happened more than once) a
+photo that's simply the wrong place or the wrong country entirely. For
+these, a genuinely specific photo (or one uploaded by hand through Studio's
+photo panel) is worth more than a "technically Denmark, technically a
+festival" stock photo, so they're flagged in the console output as "left
+for manual photos on purpose" instead of being auto-filled.
 
 Towns briefly went on that same manual-only list after a real, confirmed
 miss: Gemini accepted a stock photo of a completely different town (Nysted)
@@ -79,14 +85,17 @@ they're Creative Commons licensed, not just courtesy-credited like the
 stock sites). No API key needed for either Wikipedia or Commons, both are
 public, unauthenticated, read-only access.
 
-Major festivals and nightlife/bars are still manual-only (see above, that's
-a "no good photo exists" problem, not a "the AI can't verify" problem, so
-this doesn't help there the same way).
+Events, food and nightlife are all manual-only now (see above — that's
+partly a "no good photo exists" problem for festivals/bars specifically,
+and partly just Oliver choosing to narrow scope after real misses turned up
+in Events too), so the Wikipedia/Commons and boring-photo-rejection
+improvements above don't get a chance to help there the same way; Attractions
+photos go through the regular Unsplash/Pexels/Pixabay + Gemini flow.
 
-Configurable via `manualOnlyArrays` in `config.json` (defaults to
-`["majorEvents", "nightlifeSpots"]`) if you want to exclude other arrays
-too. If you ever see a wrong-place photo from a category still running
-(regular `events`, `freeEntrance`, `foodSpots`, or even a bad Commons pick
+Configurable via `manualOnlyArrays` in `config.json` (currently
+`["events", "majorEvents", "foodSpots", "nightlifeSpots"]`) if you want to
+change the scope again. If you ever see a wrong-place photo from a category
+still running (`freeEntrance` or a bad Commons pick
 for a town), it's worth adding that array here rather than trusting the
 verification to always catch it, the check is a real backstop, not a
 guarantee.

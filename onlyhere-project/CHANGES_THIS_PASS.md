@@ -1,4 +1,20 @@
-# LATEST: town photos now come from Wikimedia Commons, not stock sites, real automation is back
+# LATEST: attraction pictures actually show now, auto-search narrowed to attractions + towns only
+
+**Went and looked at the live site with you, in your actual Chrome.** Events had real, confirmed misses too, not just towns: "Folkely Festival" (a folk festival) was showing a random lighthouse photo, "Aarhus Festuge" was showing a plain building with nothing festival-like about it at all. On top of that, Attractions turned out to have a different, more basic problem: 11 of the 13 attraction listings (Greenhouses Botanical Garden, Viking Museum, Lindholm Høje, Kastellet, and 7 others) never had a `photo` field in the data at all, so no picture could ever show for them no matter how good the search tool got, the code was correctly trying to render a photo, there just wasn't one to point at. Added a `photo:` path for all 11 (under a new `public/attractions/` folder) so the auto-search and the Studio upload panel can both actually fill them in now.
+
+**Per your call, automatic search is now scoped to just Attractions and Towns.** Events, food, and nightlife are all manual-only going forward, `manualOnlyArrays` in config.json is now `["events", "majorEvents", "foodSpots", "nightlifeSpots"]`. Less for the tool to get wrong on its own, and those categories (festivals especially) were always the weakest fit for generic stock photos anyway.
+
+**Attractions now use the same card layout as Towns**, per your note that the Towns structure is better: a real photo header in a grid (2 columns on phone, 3 on desktop) instead of the old full-width list. Same badges (Free/Hidden Gem/booking status) as before, just restructured around a photo the way Towns already worked.
+
+**Went through every current town photo file with you and sorted them**: Ribe, Sønderho, Ærøskøbing, Skagen, and Thorup Strand are all good, no action needed. Faaborg (still the Plön, Germany photo from before) and Mariager (still the 6.9MB church interior, despite thinking it was deleted) need deleting. Dragør, Gudhjem, Sæby, and Ebeltoft are all technically-the-right-place but fail the "could be an average neighborhood anywhere" standard you set, recommended deleting those too so the improved pipeline below can redo them properly.
+
+**Added the town's own Wikipedia lead image as the first thing tried**, before falling back to Commons geosearch, since a human editor's pick for "the one photo that represents this place" tends to beat a raw geosearch. Also added an explicit license check (rejects anything with no license tag or a fair-use/non-free/restricted one) after you flagged that Wikipedia images aren't always public domain, and a hard 4MB file-size cutoff after Mariager's photo turned out to be a 6.9MB scanned slide. The Gemini check also now explicitly rejects boring/generic photos (dim interiors, plain facades), not just wrong-place ones, after you called out the Mariager photo specifically.
+
+**Still open, no action taken:** you mentioned the front page looks "centered weird" on phone. My best guess is this is just the entrance-card centering fix from a couple passes back that hasn't been deployed yet (worth checking, `git push` if you haven't), but I couldn't test a real mobile viewport myself to confirm since my browser bridge only controls your actual desktop Chrome window, not a phone-sized emulation, let me know what you're actually seeing if it's still off after deploying.
+
+---
+
+# EARLIER: town photos now come from Wikimedia Commons, not stock sites, real automation is back
 
 **You asked "is there no better API for it".** Looked into the real options (Google's own landmark-recognition API, giving Gemini live search access, an actual Google-Lens-style reverse image search service) and wrote up the honest tradeoffs of each, you picked the free one: **Wikimedia Commons**, instead of Unsplash/Pexels/Pixabay for towns specifically.
 
