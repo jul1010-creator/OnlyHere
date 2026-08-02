@@ -12,6 +12,8 @@
 
 **Still open, no action taken:** you mentioned the front page looks "centered weird" on phone. My best guess is this is just the entrance-card centering fix from a couple passes back that hasn't been deployed yet (worth checking, `git push` if you haven't), but I couldn't test a real mobile viewport myself to confirm since my browser bridge only controls your actual desktop Chrome window, not a phone-sized emulation, let me know what you're actually seeing if it's still off after deploying.
 
+**Two Studio content-quality gaps, found from you cross-checking a Nysted draft against Google AI.** First: the "Ask Perplexity to fact-check this" button only ever checked dates/prices/venue names, never historical claims, so it had no mandate to catch the profile blending "a Franciscan friary founded in 1286" with the town's own official market-town status (a different, later date, 1409) into one sentence — added historical/founding claims as a fourth thing it checks, and sharpened the research step to explicitly list multiple historical dates separately instead of merging them. Second: nothing in the whole Studio pipeline ever checked grammar, every existing check is about facts, not English correctness, so a real subject-verb slip ("if you genuinely wants") sailed straight through. The existing awkward-phrasing scan (OpenAI flags → Claude fixes in place, right after every draft's written) now also catches actual grammar errors, not just stilted phrasing, reusing the same mechanism rather than adding a new API call.
+
 ---
 
 # EARLIER: town photos now come from Wikimedia Commons, not stock sites, real automation is back

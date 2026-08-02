@@ -593,7 +593,7 @@ function GemlyxApp() {
   const googleAICheck = async () => {
     if (!studioDraft || googleCheckLoading) return;
     setGoogleCheckLoading(true); setGoogleCheckError(null); setGoogleCheckResult(null);
-    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n\nDraft: ${JSON.stringify(studioDraft)}`;
+    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
     if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
     setGoogleCheckResult({ text: result.text, citations: result.citations });
@@ -857,7 +857,7 @@ REALITY CHECK FACTS: real current prices, typical wait times, seating situation,
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : studioType === "town"
           ? `Using real, current web search, find accurate facts about the town "${name}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
-CHARACTER/FIT FACTS: founding date or defining historical fact, its region, what kind of place it genuinely is, who it suits.
+CHARACTER/FIT FACTS: founding date or defining historical fact, its region, what kind of place it genuinely is, who it suits. IMPORTANT: if the town has more than one relevant historical date (e.g. an older institution, monastery, or building founded there vs. the town itself later being granted official status such as market-town/købstad rights), list each as its own separate fact with its own date — do not merge them into a single date or imply one caused the other unless your source explicitly says so.
 WHAT TO DO FACTS: specific real streets, buildings, museums, or activities — named and concrete, not generic.
 GETTING THERE/REALITY FACTS: real transit routes and times from Copenhagen, how long a visit genuinely takes, any real logistical downside (limited dining, seasonal closures, etc).
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
@@ -1121,14 +1121,21 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       }
       if (t.travelTime) t.travelTime = t.travelTime.replace(/approx\.?( from)?( Copenhagen)?:?\s*/gi, "").trim();
 
-      // AWKWARD-PHRASING SCAN — per Oliver's explicit ask: OpenAI reads the
-      // finished prose specifically hunting for stilted, unnatural phrasing
-      // (his example: "the town itself grew up..." — nobody actually writes
-      // that) and flags the EXACT phrases, never rewriting anything itself.
-      // Whatever it flags gets sent straight to Claude for a targeted, in-place
-      // rewrite of only those phrases — same "touch only what's flagged, leave
-      // everything else untouched" pattern as the fact-check-fix tool. OpenAI
-      // never contributes a single word of final prose here, only diagnosis.
+      // AWKWARD-PHRASING + GRAMMAR SCAN — per Oliver's explicit ask: OpenAI reads
+      // the finished prose specifically hunting for (a) stilted, unnatural
+      // phrasing (his example: "the town itself grew up..." — nobody actually
+      // writes that) AND (b) actual grammar errors — subject-verb agreement,
+      // wrong verb tense/form, typos (his example: "if you genuinely wants" —
+      // should be "want", a plain agreement mistake, not a style choice). No
+      // stage before this one ever checked grammar at all — the fact-check
+      // passes only ever verify dates/prices/venues/historical claims, never
+      // whether the English itself is correct, so this scan is genuinely the
+      // only backstop for that, not a redundant extra layer. Flags the EXACT
+      // phrases, never rewriting anything itself. Whatever it flags gets sent
+      // straight to Claude for a targeted, in-place rewrite of only those
+      // phrases — same "touch only what's flagged, leave everything else
+      // untouched" pattern as the fact-check-fix tool. OpenAI never
+      // contributes a single word of final prose here, only diagnosis.
       // Best-effort/non-fatal — this is a polish pass on an already-valid
       // draft, not a core research stage, so a scan failure shouldn't block
       // publishing a draft that's otherwise fine.
@@ -1136,7 +1143,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
         const proseFields = Object.entries(t).filter(([, v]) => typeof v === "string" && v.length > 20).map(([k, v]) => `${k}: "${v}"`).join("\n");
         if (proseFields) {
           const scanResult = await askOpenAI(
-            `Read this travel-guide draft's text fields below. Flag ONLY specific phrases that sound stilted, unnatural, or like an awkward/non-native English construction — the kind of sentence a real editor winces at, not a general writing-quality opinion. Example of what counts: "the town itself grew up around the harbour" — nobody writes that a town "grew up" that way; "developed" or "formed" reads naturally instead. Do NOT flag plain, simple writing just for being simple — only genuinely odd phrasing. If nothing genuinely reads awkward, respond with exactly: NONE. Otherwise respond with ONLY a JSON array: [{"field": "the field name", "phrase": "the exact awkward phrase, verbatim from the text", "why": "one short reason"}].\n\nDraft text fields:\n${proseFields}`,
+            `Read this travel-guide draft's text fields below. Flag specific phrases that fall into either category: (1) phrases that sound stilted, unnatural, or like an awkward/non-native English construction — the kind of sentence a real editor winces at, not a general writing-quality opinion (example: "the town itself grew up around the harbour" — nobody writes that a town "grew up" that way; "developed" or "formed" reads naturally instead); (2) actual grammar errors — subject-verb agreement, wrong verb tense/form, misused words, typos (example: "if you genuinely wants" — should be "want", a plain agreement mistake a human editor would catch immediately). Do NOT flag plain, simple writing just for being simple — only genuinely awkward phrasing or genuinely incorrect grammar. If nothing qualifies, respond with exactly: NONE. Otherwise respond with ONLY a JSON array: [{"field": "the field name", "phrase": "the exact flagged phrase, verbatim from the text", "why": "one short reason, say whether it's awkward phrasing or a grammar error"}].\n\nDraft text fields:\n${proseFields}`,
             700
           );
           if (!scanResult.error && scanResult.text && scanResult.text.trim() !== "NONE") {
