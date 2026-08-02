@@ -1,4 +1,26 @@
-# LATEST: three real bug fixes from your console log, plus the four items from your file, plus two desktop polish fixes
+# LATEST: correction, the front page "what inspired us" text was genuinely broken, fixed for real this time
+
+**You were right, that looked bad.** The "what inspired us to create this app" paragraph I added under the entrance Denmark card had nowhere to go once it got tall: the wrapper it lived in had no scroll and no real bottom boundary, so the text just spilled straight into the fixed "Customer Support" pill at the bottom of the screen, running text and button together. That is exactly what your screenshot showed.
+
+Fixed properly this time, not just eyeballed: gave the paragraph its own card (same translucent panel style as the Denmark card above it, instead of floating bare text directly on the painting) and a "Read more" toggle so it does not dump a full wall of text on-screen by default. Then, separately, fixed the actual layout bug: I first tried a centered-scroll approach and it looked right in a screenshot, but a real headless-browser measurement (checking exact pixel positions, not just looking at one screenshot) caught that it could still bleed into the Support pill at certain scroll positions, since that pill sits at a fixed screen position outside the scrolling area. Rebuilt it properly: the scrollable area now stops short of the bottom on purpose, leaving a real dead strip the Support pill lives in that content can never scroll into, at any position. Verified this against your exact situation, a short, wide browser window, not just a normal tall phone screen, and against the fully expanded text on a small screen. No more overlap in either case.
+
+Sorry for shipping that broken the first time, going forward I will check overflow/scroll behavior on unusually short windows before calling front page changes done, not just a phone-sized screenshot.
+
+---
+
+# EARLIER: "What is this?" photo identifier, point your camera at something and Gemlyx tells you what it is
+
+**Your dad's idea, built.** A new camera button floats in the corner once you're past the entrance. Tap it, take a photo (or pick one from your library), and Claude looks at it and tells you what it actually is, a building, a plant, a dish, a sign, whatever it genuinely is. If it recognizes something specific and is genuinely confident, it names it; if it can only tell the general kind of thing, it says that instead of guessing; if it truly can't tell, it says so rather than inventing an answer, same honesty standard as everything else in the app. If what it identifies matches something Gemlyx already has a real page for, you get a "See it in Gemlyx" button straight to that page, same lookup guide stops already use, never a fabricated match.
+
+**Cost, the real numbers:** Claude vision (the model already wired into the app) prices images by resolution, roughly 1,300 to 1,600 tokens for a typical phone photo at standard resolution, at $2 per million input tokens through August 31, 2026 ($3 after), that is under half a cent per scan, plus a small amount for the text prompt and reply. Google's own Cloud Vision API (closer to real Google Lens) is separately priced per feature, about $1.50 per 1,000 images for label detection and the same for landmark detection after a 1,000 free per month allowance, so roughly comparable or slightly cheaper per image, but it is a second billing account and a new integration this app doesn't have yet. Went with Claude since it is already the app's real vision-capable provider with a key and proxy already live (`/api/anthropic`), no new server file needed, just an image block added to the same request shape the chat already sends.
+
+**Per your call: soft daily cap, no signup.** Everyone gets 5 free scans a day, tracked in the browser's own storage, no account needed. Worth being honest about the tradeoff: this is a soft limit, someone could clear their browser storage and get more, a real hard limit would need real accounts or a server-side counter, which you said you don't want yet. If usage ever looks like it's being abused, a server-side limit is the next step up.
+
+**Please test:** enter Denmark, tap the camera button bottom right, try both "Take a photo" and "Choose from your photos," and check the free-scan counter ticks down correctly and resets tomorrow.
+
+---
+
+# EARLIER: three real bug fixes from your console log, plus the four items from your file, plus two desktop polish fixes
 
 **1. The OpenAI 400 errors you just pasted are fixed.** Your console showed three straight `/api/openai` 400s with `"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."` A previous pass fixed this for the shared `askOpenAI` helper, but three other places call `/api/openai` directly with their own `fetch` and never got the same fix: the source-scan feature (Studio's "scan a source" for festivals/events), the AI voice scan (Studio's "sounds like AI" check), and the prose scan that runs during a guide draft. All three now send `max_completion_tokens` instead of `max_tokens`. (The other line in your paste, "No Listener: tabs:outgoing.message.ready," isn't from Gemlyx, that's a Chrome extension messaging error running in your browser, unrelated to the app.)
 

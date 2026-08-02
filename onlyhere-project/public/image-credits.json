@@ -78,5 +78,45 @@
     "sourceUrl": "https://www.pexels.com/photo/silhouette-of-man-playing-trumpet-at-concert-20252568/",
     "query": "Maribo Jazz Festival Denmark",
     "downloadedAt": "2026-08-01T18:57:32.930Z"
+  },
+  {
+    "file": "/kirsebaerfestival.jpg",
+    "source": "pexels",
+    "photographer": "Michael Obstoj",
+    "sourceUrl": "https://www.pexels.com/photo/cherry-blossom-close-up-with-blurred-background-31755679/",
+    "query": "KirsebærFestival Denmark",
+    "downloadedAt": "2026-08-02T13:50:30.930Z"
+  },
+  {
+    "file": "/aarhus-festuge.jpg",
+    "source": "unsplash",
+    "photographer": "Nikolai Lehmann",
+    "sourceUrl": "https://unsplash.com/photos/a-large-brick-building-with-a-clock-tower-lOLOQ3ITQnA",
+    "query": "Aarhus Festuge Denmark",
+    "downloadedAt": "2026-08-02T13:59:04.276Z"
+  },
+  {
+    "file": "/triangle-folklore-festival.jpg",
+    "source": "unsplash",
+    "photographer": "Magnus S",
+    "sourceUrl": "https://unsplash.com/photos/white-and-brown-concrete-building-under-blue-sky-during-daytime-dVgvMiCNtF0",
+    "query": "Triangle Folklore Festival Denmark",
+    "downloadedAt": "2026-08-02T14:00:34.142Z"
+  },
+  {
+    "file": "/odense-flower-festival.jpg",
+    "source": "unsplash",
+    "photographer": "Clyde Icuspit",
+    "sourceUrl": "https://unsplash.com/photos/people-walk-on-a-cobblestone-street-with-buildings-and-flowers-cfBPXqerGL8",
+    "query": "Odense Flower Festival Denmark",
+    "downloadedAt": "2026-08-02T14:00:44.730Z"
+  },
+  {
+    "file": "/h-c-andersen-festivals.jpg",
+    "source": "pexels",
+    "photographer": "Joerg Mangelsen",
+    "sourceUrl": "https://www.pexels.com/photo/a-man-in-red-and-white-uniform-holding-a-gun-27424976/",
+    "query": "H.C. Andersen Festivals Denmark",
+    "downloadedAt": "2026-08-02T14:01:15.402Z"
   }
 ]

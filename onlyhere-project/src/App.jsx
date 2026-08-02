@@ -2777,6 +2777,7 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
   // "entered" itself still flips after the animation finishes, so nothing
   // about the actual entered/not-entered logic elsewhere changes.
   const [enteringDenmark, setEnteringDenmark] = useState(false);
+  const [inspiredExpanded, setInspiredExpanded] = useState(false);
   const handleEnterDenmark = () => {
     let reduced = false;
     try { reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { /* no matchMedia */ }
@@ -2858,6 +2859,96 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
   const [tabArrow, setTabArrow] = useState(true);
   const [toast, setToast] = useState(null);
   const [weatherAlerts, setWeatherAlerts] = useState([]);
+
+  // ── "What is this?" photo identifier ─────────────────────────────
+  // Oliver's dad's idea: point your camera at something (a building, a
+  // plant, a dish, a sign) and get told what it is, like Google Lens.
+  // Uses Claude's own vision input (already the only AI provider with a
+  // real key/proxy wired up for this — /api/anthropic is a thin passthrough,
+  // so no new server file was needed, just a request with an image block
+  // instead of only text). Soft daily cap per Oliver's call: 5 free scans a
+  // day, tracked client-side in localStorage, no signup, no accounts. This
+  // is intentionally NOT abuse-proof (clearing localStorage resets it) — a
+  // real hard limit would need accounts/a server-side counter, which Oliver
+  // explicitly didn't want yet.
+  const PHOTO_SCAN_DAILY_LIMIT = 5;
+  const getPhotoScanUsage = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const raw = localStorage.getItem("gxPhotoScanUsage");
+      if (!raw) return { date: today, count: 0 };
+      const parsed = JSON.parse(raw);
+      return parsed.date === today ? parsed : { date: today, count: 0 };
+    } catch { return { date: today, count: 0 }; }
+  };
+  const recordPhotoScanUse = () => {
+    try {
+      const usage = getPhotoScanUsage();
+      localStorage.setItem("gxPhotoScanUsage", JSON.stringify({ date: usage.date, count: usage.count + 1 }));
+    } catch { /* localStorage unavailable — soft cap just won't persist, not worth failing the scan over */ }
+  };
+  const [photoScanOpen, setPhotoScanOpen] = useState(false);
+  const [photoScanPreview, setPhotoScanPreview] = useState(null); // data URL, shown while identifying
+  const [photoScanLoading, setPhotoScanLoading] = useState(false);
+  const [photoScanResult, setPhotoScanResult] = useState(null); // { name, description, matched }
+  const [photoScanError, setPhotoScanError] = useState(null);
+  const photoScanInputRef = useRef(null);
+  const photoScanLibraryRef = useRef(null);
+  const closePhotoScan = () => { setPhotoScanOpen(false); setPhotoScanPreview(null); setPhotoScanResult(null); setPhotoScanError(null); setPhotoScanLoading(false); };
+  const handlePhotoScanFile = (file) => {
+    if (!file) return;
+    const usage = getPhotoScanUsage();
+    if (usage.count >= PHOTO_SCAN_DAILY_LIMIT) {
+      setPhotoScanError(`You have used all ${PHOTO_SCAN_DAILY_LIMIT} free scans for today. Come back tomorrow for more.`);
+      return;
+    }
+    setPhotoScanResult(null);
+    setPhotoScanError(null);
+    setPhotoScanLoading(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      setPhotoScanPreview(dataUrl);
+      const commaIdx = dataUrl.indexOf(",");
+      const mediaType = dataUrl.slice(5, dataUrl.indexOf(";"));
+      const base64 = dataUrl.slice(commaIdx + 1);
+      try {
+        const res = await fetch("/api/anthropic", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-5",
+            max_tokens: 400,
+            messages: [{
+              role: "user",
+              content: [
+                { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+                { type: "text", text: `This photo was taken by someone traveling in Denmark. Identify what's actually shown, a landmark, building, plant, animal, dish, sign, whatever it genuinely is. Be honest: if you recognize it specifically and are genuinely confident, name it precisely; if you can only tell the general kind of thing it is, say that instead of guessing a specific name; if you truly can't tell, say so plainly rather than inventing an answer. Never invent a name, a history, or a fact you're not actually confident about. Respond with ONLY strict JSON, no markdown, no commentary: {"name": "short specific name if confident, else a short general description like \\"a half-timbered Danish farmhouse\\"", "confident": true or false, "description": "1-2 honest sentences, real facts only if you actually know them, otherwise just describe what's visibly there"}` },
+              ],
+            }],
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setPhotoScanError(data.error?.message || "Couldn't reach Claude to identify that photo."); setPhotoScanLoading(false); return; }
+        const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
+        if (!text) { setPhotoScanError("Got an empty response, try again."); setPhotoScanLoading(false); return; }
+        let parsed;
+        try { parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, "").trim()); }
+        catch { setPhotoScanError("Couldn't read the response, try again."); setPhotoScanLoading(false); return; }
+        recordPhotoScanUse();
+        // If Claude named something specific, check whether Gemlyx already has
+        // a real curated page for it, same lookup guide stops use, so a match
+        // can link straight into the app's own content instead of just text.
+        const matched = parsed.confident ? lookupRealPlace(parsed.name) : null;
+        setPhotoScanResult({ name: parsed.name, description: parsed.description, confident: !!parsed.confident, matched });
+      } catch (err) {
+        setPhotoScanError("Couldn't reach Claude, check your connection and try again.");
+      }
+      setPhotoScanLoading(false);
+    };
+    reader.onerror = () => { setPhotoScanError("Couldn't read that photo, try a different one."); setPhotoScanLoading(false); };
+    reader.readAsDataURL(file);
+  };
   useEffect(() => {
     // Purely in-app "your weather changed" notice — like an Instagram-style corner
     // pop-in, not a real push notification, since that would need a service worker
@@ -5310,6 +5401,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
         @keyframes gxNeonPulse { 0%, 100% { box-shadow: 0 0 16px 2px rgba(236,72,153,0.5), 0 0 30px 5px rgba(168,85,247,0.22); } 50% { box-shadow: 0 0 24px 5px rgba(236,72,153,0.9), 0 0 44px 10px rgba(168,85,247,0.45); } }
         @keyframes gxFlashOut { 0% { opacity: 0.9; } 100% { opacity: 0; } }
         @keyframes gxSteamRise { 0% { opacity: 0; transform: translateY(0) scaleY(0.6); } 30% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(-60px) scaleY(1.3); } }
+        @keyframes gxScanSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .gemlyx-thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: ${C.gold}; margin: 0 2px; animation: gemlyxDotPulse 1.1s ease infinite; }
         .today-panel-wrap { padding: 26px 16px 10px; max-width: 760px; margin: 0 auto; }
         @media (min-width: 900px) { .today-panel-wrap { max-width: 1000px; padding: 32px 20px 12px; } }
@@ -5458,8 +5550,25 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           {/* the explorer — country cards, each with its own photo and line */}
           {introDone && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "70px 20px 84px", pointerEvents: "none" }}>
-            <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto" }}>
+          // BUG FIX (Oliver: "the front page with the writing looks absolutely
+          // ridiculous"): this wrapper used to have no scroll and no bottom
+          // clearance, so once the "what inspired us" paragraph below made the
+          // column taller than the screen, the overflow just spilled past both
+          // edges with nothing to contain it, running straight into the fixed
+          // Customer Support pill at the bottom. Tried a centered-flex-with-
+          // scroll approach first, but verified in a real headless render
+          // (measured getBoundingClientRect, not just eyeballed) that it still
+          // let content bleed into the pill's fixed screen position at any
+          // scroll offset, since the pill isn't part of the scrolling content.
+          // Fixed properly by reserving a real dead strip at the bottom this
+          // wrapper's own scroll can never clip into (bottom: 64px + safe
+          // area, comfortably taller than the pill's own footprint) instead of
+          // spanning the full height — the pill now always sits in its own
+          // space, never behind scrollable text at any scroll position. Also
+          // gave the paragraph its own card + a "Read more" toggle so it
+          // doesn't dump a full wall of text directly onto the busy painting.
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: "calc(64px + env(safe-area-inset-bottom))", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "70px 20px 24px", pointerEvents: "auto" }}>
+            <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto", margin: "0 auto" }}>
               {/* RISK FIX: this card's photo used to be denmark-hero.jpg, a photo
                   of the Little Mermaid statue — pulled per Oliver's flag that using
                   it commercially can be a real legal risk (the statue's copyright,
@@ -5507,11 +5616,24 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   Claude's own writing" rule doesn't apply here. Resolves the
                   longstanding backlog item: text under the entrance country
                   card explaining why the app exists. */}
-              <div style={{ marginTop: 22, maxWidth: 420, textAlign: "center" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#D9A441", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>What inspired us to create this app?</div>
-                <div style={{ fontSize: 12, color: "rgba(240,239,230,0.78)", lineHeight: 1.7 }}>
-                  Denmark has seen an increase in tourism over the years, and is in fact experiencing overtourism in Copenhagen. It has become the most popular Nordic country among international visitors, yet people only stay around 3 days, due to both prices and the idea that only Copenhagen is worth visiting. This very idea is what has inspired the Gemlyx team to create this app. This app is, indeed, AI powered. However, we have put in work to make sure that blogs, essential knowledge, and even the Gemlyx Guide communicate no different from humans. Knowing that many similar apps are heavily criticised for lack of factual accuracy, we've also been fact checking every flaw to make sure that you don't get misguided on your travels. We hope to get more support as we try to include other countries!
-                </div>
+              <div style={{ marginTop: 16, background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 16, padding: "16px 18px", textAlign: "center", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#D9A441", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>What inspired us to create this app?</div>
+                {(() => {
+                  const fullText = "Denmark has seen an increase in tourism over the years, and is in fact experiencing overtourism in Copenhagen. It has become the most popular Nordic country among international visitors, yet people only stay around 3 days, due to both prices and the idea that only Copenhagen is worth visiting. This very idea is what has inspired the Gemlyx team to create this app. This app is, indeed, AI powered. However, we have put in work to make sure that blogs, essential knowledge, and even the Gemlyx Guide communicate no different from humans. Knowing that many similar apps are heavily criticised for lack of factual accuracy, we've also been fact checking every flaw to make sure that you don't get misguided on your travels. We hope to get more support as we try to include other countries!";
+                  const CUTOFF = 130;
+                  const shown = inspiredExpanded || fullText.length <= CUTOFF ? fullText : `${fullText.slice(0, CUTOFF)}…`;
+                  return (
+                    <>
+                      <div style={{ fontSize: 12, color: "rgba(240,239,230,0.78)", lineHeight: 1.65 }}>{shown}</div>
+                      {fullText.length > CUTOFF && (
+                        <button onClick={() => setInspiredExpanded(v => !v)}
+                          style={{ marginTop: 8, background: "none", border: "none", padding: 0, color: "#D9A441", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          {inspiredExpanded ? "Show less" : "Read more"}
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -6095,6 +6217,97 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 style={{ background: "none", border: "none", color: C.muted, fontSize: 14, cursor: "pointer", padding: 0, flexShrink: 0 }}>✕</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── "What is this?" floating photo identifier ──────────────────
+          Sits in the safe top-level zone (same spot as toast/weatherAlerts
+          above), not inside any tab's own content, so it never needs the
+          createPortal treatment the tab-pager transform bug would otherwise
+          require. Only shown once past the entrance. */}
+      {entered && !photoScanOpen && (
+        <button onClick={() => setPhotoScanOpen(true)}
+          style={{ position: "fixed", bottom: 82, right: 18, zIndex: 550, width: 52, height: 52, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 24px rgba(226,59,78,0.45)" }}
+          aria-label="What is this? Identify a photo">
+          <Ico name="sightseeing" size={22} color="#fff" />
+        </button>
+      )}
+
+      {photoScanOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 700, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={closePhotoScan}>
+          <div style={{ background: C.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>What is this?</div>
+              <button onClick={closePhotoScan} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", padding: 4 }}>✕</button>
+            </div>
+
+            {/* Hidden inputs: one hints the rear camera on mobile, the other opens the photo library. Same handler either way. */}
+            <input ref={photoScanInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+              onChange={e => { handlePhotoScanFile(e.target.files?.[0]); e.target.value = ""; }} />
+            <input ref={photoScanLibraryRef} type="file" accept="image/*" style={{ display: "none" }}
+              onChange={e => { handlePhotoScanFile(e.target.files?.[0]); e.target.value = ""; }} />
+
+            {!photoScanPreview && !photoScanLoading && !photoScanError && (
+              <>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>Point your camera at a building, a plant, a dish, a sign, anything you're curious about, and Gemlyx will tell you what it actually is. If it's something Gemlyx already has a real page for, you'll get a link straight there.</div>
+                <button onClick={() => photoScanInputRef.current?.click()}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
+                  <Ico name="sightseeing" size={16} color="#fff" /> Take a photo
+                </button>
+                <button onClick={() => photoScanLibraryRef.current?.click()}
+                  style={{ display: "block", width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Choose from your photos
+                </button>
+                <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 14 }}>
+                  {Math.max(0, PHOTO_SCAN_DAILY_LIMIT - getPhotoScanUsage().count)} of {PHOTO_SCAN_DAILY_LIMIT} free scans left today
+                </div>
+              </>
+            )}
+
+            {(photoScanLoading || photoScanPreview) && !photoScanError && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: C.bg }}>
+                  <img src={photoScanPreview} alt="Your photo" style={{ width: "100%", maxHeight: 260, objectFit: "contain", display: "block", opacity: photoScanLoading ? 0.5 : 1 }} />
+                  {photoScanLoading && (
+                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                      <div style={{ width: 30, height: 30, border: `3px solid ${C.border}`, borderTopColor: C.gold, borderRadius: "50%", animation: "gxScanSpin 0.8s linear infinite" }} />
+                      <div style={{ fontSize: 12.5, color: "#fff", fontWeight: 600, textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>Taking a look…</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {photoScanError && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: "#FFB347", lineHeight: 1.6, marginBottom: 14 }}>{photoScanError}</div>
+                <button onClick={() => { setPhotoScanError(null); setPhotoScanPreview(null); }}
+                  style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {photoScanResult && !photoScanLoading && (
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>{photoScanResult.name}</div>
+                {!photoScanResult.confident && (
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Best guess, not fully certain</div>
+                )}
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 16 }}>{photoScanResult.description}</div>
+                {photoScanResult.matched ? (
+                  <button onClick={() => { openStopDetail(photoScanResult.matched); closePhotoScan(); }}
+                    style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
+                    See it in Gemlyx →
+                  </button>
+                ) : null}
+                <button onClick={() => { setPhotoScanPreview(null); setPhotoScanResult(null); }}
+                  style={{ display: "block", width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 100, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Scan another
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
