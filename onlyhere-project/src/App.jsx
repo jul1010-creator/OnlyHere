@@ -3468,32 +3468,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           {/* ── HOME LANDING ─────────────────────────────────── */}
           {tab === "home" && (
             <div className={pageAnim} style={{ margin: "-0px -0px" }}>
-              {/* Weather + live/coming events — real page content now, not persistent
-                  header chrome, so it scrolls away naturally like everything else */}
-              <div style={{ padding: "12px 16px 0" }}>
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-                  <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
-                </div>
-                {(userCoords === null || userCoords === "denied") && (
-                  <button onClick={requestLocation}
-                    style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 8, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
-                    <Ico name="pin" size={15} color={userCoords === "denied" ? "#FFB347" : C.gold} />
-                    <span style={{ flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
-                        {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? Tap to see travel times from where you are"}
-                      </span>
-                      <span onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
-                        style={{ display: "block", fontSize: 10, color: C.muted, marginTop: 2 }}>
-                        Only used on your device, never stored · <span style={{ textDecoration: "underline" }}>Privacy</span>
-                      </span>
-                    </span>
-                  </button>
-                )}
-                {userCoords === "requesting" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, padding: "0 0 8px" }}><Ico name="pin" size={13} /> Getting your location…</div>
-                )}
-                <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
-              </div>
+
 
               {/* Hero */}
               <div className="hero-h" style={{ position: "relative", overflow: "hidden", background: `url('/picture3.png') center/cover no-repeat` }}>
@@ -3526,6 +3501,38 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <span style={{ fontSize: 15, animation: "bounceInline 2s infinite", display: "inline-block" }}>↓</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Redesign pass: the page now OPENS on the hero — the weather strip,
+                  location prompt and live-events ticker used to stack above it and
+                  made the top feel like a utility drawer. They now live here, under
+                  the hero, as one tidy "Today in Denmark" block. */}
+              <div style={{ padding: "20px 16px 8px", maxWidth: 720, margin: "0 auto" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in Denmark</div>
+
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+                  <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+                </div>
+                {(userCoords === null || userCoords === "denied") && (
+                  <button onClick={requestLocation}
+                    style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 8, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
+                    <Ico name="pin" size={15} color={userCoords === "denied" ? "#FFB347" : C.gold} />
+                    <span style={{ flex: 1 }}>
+                      <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
+                        {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? Tap to see travel times from where you are"}
+                      </span>
+                      <span onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
+                        style={{ display: "block", fontSize: 10, color: C.muted, marginTop: 2 }}>
+                        Only used on your device, never stored · <span style={{ textDecoration: "underline" }}>Privacy</span>
+                      </span>
+                    </span>
+                  </button>
+                )}
+                {userCoords === "requesting" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, padding: "0 0 8px" }}><Ico name="pin" size={13} /> Getting your location…</div>
+                )}
+                <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
+              
               </div>
 
               {/* Navigation sections */}

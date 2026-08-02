@@ -1,4 +1,16 @@
-# LATEST: the front door breathes, you can swim around it, gold dust floats, and Denmark's card is the Little Mermaid
+# LATEST: Denmark's page now opens on the hero (top clutter solved), plus a handoff doc for the next session
+
+**1. The top of the Denmark explore page is fixed.** It used to open on a stack of utility widgets — weather strip, location banner, live-events ticker — before you ever saw the hero. Now the page opens straight onto the video hero (matching the drama of the front door), and those three utilities live in one tidy centered block right below it, under a small gold "TODAY IN DENMARK" label. Nothing was removed — same weather, same location prompt, same live events — they just stopped being the first thing you see.
+
+**2. About the odd top-left corner in the previews I sent:** that's only my static test replica — I fake the logo with a plain "◆ Gemlyx" placeholder when rendering quick checks. The real app shows your compass gem + GEMLYX wordmark. Nothing to fix.
+
+**3. GEMLYX_HANDOFF_3.md is in the repo root** — everything the next chat needs: the design system rules (fonts, palette, the compass-adapts-to-context color rule, no-emoji rule, card recipe), the front door's full anatomy, what shipped this session, the agreed backlog (Nightlife → Attractions → Essentials are next), and the workflow conventions (changelog style, esbuild verification, render-and-look visual process). Start the next session by having it read that file.
+
+**Please test before trusting**: open Denmark and check the new top — hero first, "Today in Denmark" block under it. Weather and live events should work exactly as before, just relocated.
+
+---
+
+# EARLIER: the front door breathes, you can swim around it, gold dust floats, and Denmark's card is the Little Mermaid
 
 Four upgrades to the painted entrance, from your two messages:
 
