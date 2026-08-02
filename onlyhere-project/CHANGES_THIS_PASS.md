@@ -1,4 +1,24 @@
-# LATEST: real loading screen with Denmark facts, guide preview grouped by town, a map-guide-vs-plain-guide choice, and a smoother entrance transition
+# LATEST: correction pass, the guide wizard is a real full-screen experience now, not crammed into the chat panel
+
+**You were right, the previous pass shipped a version of this that wasn't what we'd agreed on, so this pass is a direct fix of exactly what you flagged, nothing more:**
+
+**1. The loading screen is centered on the actual screen now, not stuck inside the small chat panel.** The whole guide wizard (loading, preview, essentials, choice) now mounts as its own full-screen page over everything else, with a close button, instead of being squeezed into the chat's inline flow.
+
+**2. Photos no longer get cut off.** The fact card used to force every photo into a short, wide box with `object-fit: cover`, which cropped anything that wasn't already that exact shape, worst on the tall H.C. Andersen portrait. The photo now sits fully visible with `object-fit: contain` over a softly blurred copy of itself for atmosphere, nothing is ever cropped out of frame.
+
+**3. Facts change every 9 seconds now, not every 4.2.** Slow enough to actually read.
+
+**4. The preview step is now what we actually agreed on: its own page, with real photos of each attraction, not just name chips.** "What Chinese Guy know what Roskilde is" was the right challenge, a bare text label tells a first-time visitor nothing. Each attraction card now shows its real photo (pulled the same way the finished guide page already does, via the app's own place lookup, never a fabricated image, falling back to the same lettered plate the real guide uses when no real photo exists), the place's name, and a short description with a "Read more" toggle that expands to the fuller text when there's more to show.
+
+**5. Essentials is its own full-screen page too now**, same treatment as preview, not squeezed inline anymore.
+
+**6. The wizard now has a real close button.** A full-screen takeover with no way out isn't acceptable, closing it now cleanly cancels the in-progress build instead of leaving it stuck.
+
+**Please test this one closely, it's a direct correction of a miss:** build a fresh guide and confirm the loading screen sits centered with readable facts and uncropped photos, confirm the preview page shows real photos with working "Read more" toggles, confirm essentials is its own page, and confirm the close button actually cancels cleanly.
+
+---
+
+# EARLIER: real loading screen with Denmark facts, guide preview grouped by town, a map-guide-vs-plain-guide choice, and a smoother entrance transition
 
 **The loading screen now shows real photos and real facts about Denmark while a guide builds**, not a bare spinner. It cycles through places like H.C. Andersen, Ribe, Kronborg Castle, the Jelling stones, Roskilde's Viking ships, and Amalienborg, each with a short, true fact, using photos already in your public folder plus the H.C. Andersen portrait you sent over. Left out on purpose, same reasoning as before: the Little Mermaid statue and the LEGO logo, both stay out of any curated fact library for the same commercial risk reasons. The real stage label and progress line are still there underneath, still the honest source of truth for what's actually happening, this is additional, not a replacement.
 

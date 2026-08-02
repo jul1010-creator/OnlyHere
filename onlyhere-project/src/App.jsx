@@ -106,19 +106,29 @@ function SmoothStreamText({ text, streaming }) {
 function DenmarkFactsLoader() {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setIdx(i => (i + 1) % denmarkFacts.length), 4200);
+    // Oliver: "the facts goes on WAAY too quickly, I can barely read it...
+    // let it change every 8th or 10th second." Was 4200ms, now 9000ms.
+    const t = setInterval(() => setIdx(i => (i + 1) % denmarkFacts.length), 9000);
     return () => clearInterval(t);
   }, []);
   const fact = denmarkFacts[idx];
   if (!fact) return null;
   return (
-    <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg, marginBottom: 14, textAlign: "left" }}>
-      <div style={{ position: "relative", height: 120, overflow: "hidden" }}>
-        <img key={fact.id} src={fact.photo} alt={fact.name} style={{ width: "100%", height: "100%", objectFit: "cover", animation: "gxFactFade 4.2s ease" }} />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.85), transparent 60%)" }} />
-        <div style={{ position: "absolute", bottom: 8, left: 12, fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
+    <div style={{ borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg, marginBottom: 18, textAlign: "left", maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
+      {/* Oliver: "avoid the pictures being cut off." objectFit "cover" in a
+          short fixed-height box was cropping tall photos (esp. the H.C.
+          Andersen portrait). Fix: a blurred, scaled copy of the same image
+          fills the box for atmosphere, and the real foreground photo sits on
+          top with objectFit "contain" so nothing is ever cropped. Only one
+          loader is ever mounted at a time, so the single blur() here doesn't
+          run into the per-card backdrop-filter perf trap.  */}
+      <div style={{ position: "relative", height: 210, overflow: "hidden", background: "#0A0F1E" }}>
+        <img key={`${fact.id}-bg`} src={fact.photo} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(18px) brightness(0.55)", transform: "scale(1.15)" }} />
+        <img key={fact.id} src={fact.photo} alt={fact.name} style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain", animation: "gxFactFade 0.5s ease" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.9), transparent 45%)" }} />
+        <div style={{ position: "absolute", bottom: 10, left: 14, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
       </div>
-      <div style={{ padding: "10px 14px 12px", fontSize: 11.5, color: C.light, lineHeight: 1.6 }}>{fact.fact}</div>
+      <div style={{ padding: "12px 16px 14px", fontSize: 12.5, color: C.light, lineHeight: 1.65 }}>{fact.fact}</div>
     </div>
   );
 }
@@ -388,15 +398,17 @@ function GemlyxApp() {
     return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches };
   })() : (userCoords === "denied" ? "denied" : userCoords === "requesting" ? "loading" : null);
 
-  // guideModal is no longer shown as a POPUP (Oliver: "get rid of the popup")
-  // — it's never an overlay modal. It IS rendered inline though, right where
-  // "Turn this into a guide" was tapped, as a small wizard while a guide is
-  // being built: preview (grouped by town) -> essentials -> map/plain choice
-  // -> loading, tracked by guideFlowStep alongside it. Once
-  // enrichGuideDays/fetchGuideWeather both finish, the handoff effect below
-  // navigates to the real full-page guide (GuidePage, "/guide/new") and
-  // clears both back to null. Search this file for "guideFlowStep ===" for
-  // the wizard's actual render branches.
+  // guideModal is not a small popup and not inline chat content either —
+  // correction pass, Oliver: "this needs to be a real full-screen experience,
+  // not crammed into the chat panel." It's a full-screen createPortal
+  // overlay (same escape-the-transformed-strip reasoning as FilterChip
+  // above) with its own pages: preview (real photos + descriptions, grouped
+  // by town) -> essentials (its own page) -> map/plain choice -> loading,
+  // tracked by guideFlowStep alongside it. Once enrichGuideDays/
+  // fetchGuideWeather both finish, the handoff effect below navigates to the
+  // real full-page guide (GuidePage, "/guide/new") and clears both back to
+  // null. Search this file for "guideFlowStep ===" for the wizard's actual
+  // render branches, and "GEMLYX_WIZARD_PORTAL" for where the portal mounts.
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days } (build buffer only, see above)
   const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } — shown inline near the "Turn this into a guide" button while building
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
@@ -413,6 +425,22 @@ function GemlyxApp() {
   const guidePreviewResolveRef = useRef(null);
   const guideEssentialsResolveRef = useRef(null);
   const guideChoiceResolveRef = useRef(null);
+  // Which preview cards have "Read more" expanded, keyed by "town|stopName".
+  // A Set, not an array, purely so toggling is a cheap has()/add()/delete().
+  const [expandedPreviewStops, setExpandedPreviewStops] = useState(new Set());
+  // Full-screen wizard needs a real close/cancel path (a takeover with no
+  // escape hatch is a trap). Setting this flag and resolving whichever
+  // pause is currently awaited unblocks generateGuide so it can bail out
+  // cleanly instead of leaking a forever-pending promise.
+  const guideCancelledRef = useRef(false);
+  const closeGuideWizard = () => {
+    guideCancelledRef.current = true;
+    guidePreviewResolveRef.current?.();
+    guideEssentialsResolveRef.current?.();
+    guideChoiceResolveRef.current?.("plain");
+    setGuideModal(null);
+    setGuideFlowStep(null);
+  };
   // BUG FIX (real production crash, "Cannot access before initialization"):
   // these two used to be declared ~1600 lines further down, but the
   // guidePendingNav handoff effect below reads them (in its own body AND its
@@ -2324,6 +2352,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       navigate("/guide/new", { state: { guide: lastBuiltGuide.guide } });
       return;
     }
+    guideCancelledRef.current = false;
     setGuideModal("loading");
     setGuideBuildStage({ label: "Gathering real places and facts", percent: 15 });
     setGuideError(null);
@@ -2540,10 +2569,12 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
       setGuideModal({ _gid: gid, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days, _geo: freshGeo });
       setGuideFlowStep("preview");
       await new Promise(resolve => { guidePreviewResolveRef.current = resolve; });
+      if (guideCancelledRef.current) return;
 
       // ── Wizard pause 2: essentials for this specific trip ───────────
       setGuideFlowStep("essentials");
       await new Promise(resolve => { guideEssentialsResolveRef.current = resolve; });
+      if (guideCancelledRef.current) return;
 
       // ── Wizard pause 3: map-and-transport guide, or plain day-by-day ─
       // Oliver's call when asked: the choice happens BEFORE building, so
@@ -2551,6 +2582,7 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
       // not just their display.
       setGuideFlowStep("choice");
       const chosenMode = await new Promise(resolve => { guideChoiceResolveRef.current = resolve; });
+      if (guideCancelledRef.current) return;
 
       setGuideFlowStep("enriching");
       setGuideBuildStage({ label: chosenMode === "map" ? "Mapping exact routes and times" : "Putting the final guide together", percent: 92 });
@@ -2572,8 +2604,10 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
     } catch {
       setGuideModal(null);
       setGuideFlowStep(null);
-      setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
-      setTimeout(() => setGuideError(null), 3500);
+      if (!guideCancelledRef.current) {
+        setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
+        setTimeout(() => setGuideError(null), 3500);
+      }
     }
   };
 
@@ -3292,91 +3326,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 )}
 
-                {guideModal && guideFlowStep === "preview" ? (
-                  // Oliver: "First there will be a preview of everything you'll
-                  // see... under Copenhagen there will be these attractions,
-                  // under Ribe there will be these, or just wander around Ribe."
-                  // Grouped by town, not by day — this is about WHAT'S in the
-                  // trip, the day-by-day breakdown comes later on the real page.
-                  <div style={{ padding: "6px 2px 14px" }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>Here's what you'll see</div>
-                    <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>Grouped by town, before the day-by-day breakdown.</div>
-                    {groupStopsByTown(guideModal.days).map(g => (
-                      <div key={g.town} style={{ marginBottom: 14 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, marginBottom: 6, fontFamily: "'Fraunces', serif" }}>{g.town}</div>
-                        {g.wanderOnly ? (
-                          <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>Just wander around {g.town}, no fixed stops planned here.</div>
-                        ) : (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                            {g.namedAttractions.map((s, i) => (
-                              <span key={i} style={{ fontSize: 11.5, color: C.text, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 10px" }}>{s.name}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    <button onClick={() => guidePreviewResolveRef.current?.()}
-                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                      Looks good, continue →
-                    </button>
-                  </div>
-                ) : guideModal && guideFlowStep === "essentials" ? (
-                  // "This trip's own essentials summary" (Oliver's pick): the
-                  // guide's own AI-written essentials fields, not the general
-                  // Essentials tab, shown as its own step before the final choice.
-                  <div style={{ padding: "6px 2px 14px" }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 12 }}>Before you go</div>
-                    {[["Budget", guideModal.essentials?.budgetReality], ["Getting there", guideModal.essentials?.transportTip], ["Keep in mind", guideModal.essentials?.keepInMind]]
-                      .filter(([, text]) => text)
-                      .map(([label, text]) => (
-                        <div key={label} style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
-                          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>{text}</div>
-                        </div>
-                      ))}
-                    <button onClick={() => guideEssentialsResolveRef.current?.()}
-                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 4 }}>
-                      Continue →
-                    </button>
-                  </div>
-                ) : guideModal && guideFlowStep === "choice" ? (
-                  // Oliver's pick, asked directly: the choice happens BEFORE
-                  // building, so the plain option genuinely skips the Google
-                  // Directions calls, not just their display.
-                  <div style={{ padding: "6px 2px 14px" }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 4, textAlign: "center" }}>How do you want to see it?</div>
-                    <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14, textAlign: "center" }}>Pick one, this decides what gets built next.</div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => guideChoiceResolveRef.current?.("map")}
-                        style={{ flex: 1, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 4 }}>🗺 Map & transport</div>
-                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>Real routes, exact travel times, one-tap Google Maps links.</div>
-                      </button>
-                      <button onClick={() => guideChoiceResolveRef.current?.("plain")}
-                        style={{ flex: 1, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 4 }}>📋 Simple day by day</div>
-                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>Just the days and stops, no maps or transport times.</div>
-                      </button>
-                    </div>
-                  </div>
-                ) : guideModal ? (
-                  // Loading/enriching state, per Oliver: real photos and real
-                  // facts about Denmark while it builds, not a bare spinner. The
-                  // real stage label and progress line stay underneath, still the
-                  // authoritative status, this is additional, not a replacement
-                  // for honesty about what's actually happening.
-                  <div style={{ textAlign: "center", padding: "6px 10px 14px" }}>
-                    <DenmarkFactsLoader />
-                    <GemlyxLoader size={28} tone="gold" ring={true} />
-                    <div style={{ marginTop: 12, fontSize: 13, color: C.light, fontWeight: 600 }}>{guideBuildStage?.label || "Building your guide"}</div>
-                    <div style={{ marginTop: 12, maxWidth: 180, marginLeft: "auto", marginRight: "auto", height: 3, borderRadius: 100, background: C.border, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${guideBuildStage?.percent || 5}%`, background: C.gold, transition: "width 0.6s ease" }} />
-                    </div>
-                  </div>
-                ) : (() => {
+                {(() => {
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
                   const readyToBuild = lastAssistantMsg && isReadyToBuild(lastAssistantMsg.text);
-                  return readyToBuild && !aiLoading;
+                  return readyToBuild && !aiLoading && !guideModal;
                 })() && (
                   <>
                     <button onClick={generateGuide}
@@ -3385,6 +3338,146 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     </button>
                     <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>You'll get a preview first, then pick how you want to see it</div>
                   </>
+                )}
+                {/* GEMLYX_WIZARD_PORTAL — correction pass. Oliver: "this is not
+                    what we agreed on... why have you completely ruined it."
+                    The whole preview/essentials/choice/loading wizard now
+                    mounts as a real full-screen page via createPortal, same
+                    escape-the-transformed-strip reasoning as FilterChip near
+                    the top of this file, instead of being crammed inline into
+                    the small chat panel. Each step below is its own page. */}
+                {guideModal && createPortal(
+                  <div style={{ position: "fixed", inset: 0, zIndex: 800, background: C.bg, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+                    <div style={{ maxWidth: 640, margin: "0 auto", padding: "22px 20px calc(32px + env(safe-area-inset-bottom))", minHeight: "100%", display: "flex", flexDirection: "column" }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+                        <button onClick={closeGuideWizard} aria-label="Close"
+                          style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, width: 34, height: 34, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          ✕
+                        </button>
+                      </div>
+
+                      {guideFlowStep === "preview" ? (
+                        // Oliver: "What Chinese Guy know what Roskilde is... we
+                        // need a page with pictures and a minimal description in
+                        // 4-5 sentences, where you can click read more." Real
+                        // photos only, via lookupRealPlace — never a fabricated
+                        // image — falling back to the same monogram plate
+                        // GuidePage itself uses when nothing real matches.
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: "'Fraunces', serif", textAlign: "center" }}>Here's what you'll see</div>
+                          <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 22, lineHeight: 1.5, textAlign: "center" }}>Grouped by town, before the day-by-day breakdown.</div>
+                          {groupStopsByTown(guideModal.days).map(g => (
+                            <div key={g.town} style={{ marginBottom: 26 }}>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, marginBottom: 10, fontFamily: "'Fraunces', serif" }}>{g.town}</div>
+                              {g.wanderOnly ? (
+                                <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>Just wander around {g.town}, no fixed stops planned here.</div>
+                              ) : (
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+                                  {g.namedAttractions.map((s, i) => {
+                                    const real = lookupRealPlace(s.name);
+                                    const photo = real?.photo;
+                                    const key = `${g.town}|${s.name}`;
+                                    const expanded = expandedPreviewStops.has(key);
+                                    const fullText = s.note || real?.desc || "";
+                                    const CUTOFF = 210;
+                                    const isLong = fullText.length > CUTOFF;
+                                    const shownText = expanded || !isLong ? fullText : `${fullText.slice(0, CUTOFF)}…`;
+                                    const extraParas = expanded && Array.isArray(real?.blogBody) ? real.blogBody.filter(b => b.type === "paragraph").map(b => b.content) : [];
+                                    return (
+                                      <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
+                                        <div style={{ position: "relative", height: 130, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: photo ? undefined : `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
+                                          {photo ? (
+                                            <img src={photo} alt={s.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                          ) : (
+                                            <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 40, fontWeight: 500, color: "rgba(148,163,199,0.35)" }}>{(s.name || "◆").slice(0, 1)}</span>
+                                          )}
+                                        </div>
+                                        <div style={{ padding: "12px 14px 14px" }}>
+                                          <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 6 }}>{s.name}</div>
+                                          {shownText && <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>{shownText}</div>}
+                                          {extraParas.map((p, pi) => (
+                                            <div key={pi} style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginTop: 8 }}>{p}</div>
+                                          ))}
+                                          {isLong && (
+                                            <button onClick={() => setExpandedPreviewStops(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; })}
+                                              style={{ marginTop: 8, background: "none", border: "none", padding: 0, color: C.gold, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                              {expanded ? "Show less" : "Read more"}
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          <button onClick={() => guidePreviewResolveRef.current?.()}
+                            style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "13px", fontSize: 13, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 4 }}>
+                            Looks good, continue →
+                          </button>
+                        </div>
+                      ) : guideFlowStep === "essentials" ? (
+                        // "This trip's own essentials summary" (Oliver's pick):
+                        // the guide's own AI-written essentials fields, not the
+                        // general Essentials tab. Now its own full-screen page,
+                        // same as preview, per Oliver: "same with essentials..
+                        // it's own page."
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, margin: "0 auto", width: "100%" }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 22, fontFamily: "'Fraunces', serif", textAlign: "center" }}>Before you go</div>
+                          {[["Budget", guideModal.essentials?.budgetReality], ["Getting there", guideModal.essentials?.transportTip], ["Keep in mind", guideModal.essentials?.keepInMind]]
+                            .filter(([, text]) => text)
+                            .map(([label, text]) => (
+                              <div key={label} style={{ marginBottom: 18, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 }}>{label}</div>
+                                <div style={{ fontSize: 13.5, color: C.light, lineHeight: 1.65 }}>{text}</div>
+                              </div>
+                            ))}
+                          <button onClick={() => guideEssentialsResolveRef.current?.()}
+                            style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "13px", fontSize: 13, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 6 }}>
+                            Continue →
+                          </button>
+                        </div>
+                      ) : guideFlowStep === "choice" ? (
+                        // Oliver's pick, asked directly: the choice happens
+                        // BEFORE building, so the plain option genuinely skips
+                        // the Google Directions calls, not just their display.
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, margin: "0 auto", width: "100%" }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 6, textAlign: "center", fontFamily: "'Fraunces', serif" }}>How do you want to see it?</div>
+                          <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 22, textAlign: "center" }}>Pick one, this decides what gets built next.</div>
+                          <div style={{ display: "flex", gap: 12 }}>
+                            <button onClick={() => guideChoiceResolveRef.current?.("map")}
+                              style={{ flex: 1, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>🗺 Map & transport</div>
+                              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>Real routes, exact travel times, one-tap Google Maps links.</div>
+                            </button>
+                            <button onClick={() => guideChoiceResolveRef.current?.("plain")}
+                              style={{ flex: 1, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>📋 Simple day by day</div>
+                              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>Just the days and stops, no maps or transport times.</div>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        // Loading/enriching state, per Oliver: real photos and
+                        // real facts about Denmark while it builds, not a bare
+                        // spinner — now centered in the middle of the actual
+                        // screen instead of the small chat panel. The real
+                        // stage label and progress line stay underneath, still
+                        // the authoritative status, this is additional, not a
+                        // replacement for honesty about what's happening.
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "10px 10px" }}>
+                          <DenmarkFactsLoader />
+                          <GemlyxLoader size={30} tone="gold" ring={true} />
+                          <div style={{ marginTop: 14, fontSize: 14, color: C.light, fontWeight: 600 }}>{guideBuildStage?.label || "Building your guide"}</div>
+                          <div style={{ marginTop: 14, maxWidth: 200, marginLeft: "auto", marginRight: "auto", height: 3, borderRadius: 100, background: C.border, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${guideBuildStage?.percent || 5}%`, background: C.gold, transition: "width 0.6s ease" }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>,
+                  document.body
                 )}
                 {guideError && (
                   <div style={{ fontSize: 12, color: "#FFB347", textAlign: "center", marginBottom: 12 }}>{guideError}</div>

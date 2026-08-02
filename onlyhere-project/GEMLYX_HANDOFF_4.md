@@ -65,6 +65,16 @@ Oliver, after the crash fix: the loading screen needed real photos and facts, no
 5. Entrance: "Enter Denmark" no longer snaps instantly, the whole overlay now lifts away (`translateY(-100%)` + fade, 650ms) before `entered` flips, respects `prefers-reduced-motion` the same as the rest of the entrance choreography.
 6. Stale in-code comment fixed: the note above `guideModal`'s declaration used to say "nothing renders it directly, search for guideModal && and there should be none", no longer true now that it's rendered inline as the wizard, comment rewritten to say so and point at `guideFlowStep ===` instead.
 
+## Shipped in the seventh pass, same day (correction of the sixth pass, Oliver flagged it directly)
+
+Oliver's feedback, verbatim: "this is not the old loading screen... this 'Here's what you'll see' is not what we agreed on... same with essentials, it's own page. Why have you completely ruined it?" All four things he named are fixed:
+
+1. The whole guide wizard (loading, preview, essentials, choice) no longer renders inline in the small chat panel. It now mounts via `createPortal(..., document.body)` as a real `position: fixed` full-screen page (`GEMLYX_WIZARD_PORTAL` marker in App.jsx), same escape-the-transformed-strip pattern `FilterChip` already used, with its own close button (`closeGuideWizard`) that cleanly cancels an in-progress build via a new `guideCancelledRef` instead of leaking a forever-pending promise.
+2. `DenmarkFactsLoader`'s cycle interval changed from 4200ms to 9000ms.
+3. `DenmarkFactsLoader`'s photo treatment changed from a single `object-fit: cover` image (cropped tall photos, worst on the H.C. Andersen portrait) to a non-cropping `object-fit: contain` foreground image over a blurred, scaled copy of the same photo for atmosphere. Single instance only, so this doesn't run into the per-card `backdrop-filter`/`willChange` perf trap from the hard rule below.
+4. The preview step is now genuinely item 12 from the backlog below, resolved: each attraction card shows a real photo (`lookupRealPlace(s.name)?.photo`, the exact same lookup and monogram-letter fallback `GuidePage.jsx` already uses, never a fabricated image), the place name, and a description (the stop's own `note` field, falling back to the matched place's real `desc`) truncated with a "Read more" toggle that expands to the full text plus, when the matched place has one, its real `blogBody` paragraphs.
+5. Essentials is now its own full-screen page too, same treatment as preview, not embedded inline anymore.
+
 ## Still to do (Oliver's remaining backlog, rough priority)
 1. The floating "same Detour chat, minimized" AI bubble, available while browsing a guide and staying visible when you tap into an attraction's page too (his explicit ask, see fourth pass above for why it's not done yet). Needs: lifting `aiMessages`/`sendAI`/the grounding data it reads into a shared context at the `Gemlyx` top-level component (above `<Routes>` in App.jsx, `export default function Gemlyx()`), so both `GemlyxApp` and `GuidePage` can read/write the same live conversation. The sixth pass's scroll-bottom-AI idea (item 5 below) is the same underlying work.
 2. Nightlife: card treatment plus room for an AI-written town description when a town is clicked (Copenhagen description was missing); Local/Major feels weird there, reconsider.
@@ -77,7 +87,7 @@ Oliver, after the crash fix: the loading screen needed real photos and facts, no
 9. "Why this page exists" text under the entrance country card (waiting on Oliver's words).
 10. Older: image-finder tool re-run for town photos, "map takes long to load" never investigated, Studio login 🔒 emoji, deeper App.jsx splitting (standing permission given, partly acted on in the fourth pass above, more to do).
 11. Audit other tab-content components for the same fixed-position/transform bug described above (DetailPage and the top-level modals at the bottom of GemlyxApp's return are confirmed safe, everything else that opens an overlay from inside a page's own content should be checked).
-12. The guide preview step (sixth pass) only shows town/attraction names, no photos, unlike the old popup's richer preview. Worth a follow-up pass if Oliver wants it more visual, kept deliberately simple this round given how much else shipped in the same diff.
+12. ~~The guide preview step only shows town/attraction names, no photos.~~ RESOLVED in the seventh pass above, preview cards now show real photos with expandable descriptions.
 
 ## Hard performance rule (learned live, session end)
 Clicking a filter chip on the live Events page froze painting for 30+ seconds (worse on phone). Root cause: willChange:transform on every card (a permanent GPU layer each, ~65 at once on the merged grid) plus backdrop-filter blur badges on every card (~130 live blurs). Both removed. NEVER put willChange or backdrop-filter on per-card/per-item elements in this app; blurs are allowed only on things that appear once and unmount (the entrance overlay). Badges over photos use solid rgba(10,15,30,0.9) instead.
