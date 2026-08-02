@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { C } from "../utils/theme";
 import { weatherIcon } from "../utils/helpers";
 import { WEATHER_CITIES } from "../data/mapShapes";
@@ -34,7 +35,14 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
         <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 14, background: `linear-gradient(to right, transparent, ${C.bg})`, pointerEvents: "none" }} />
       )}
 
-      {openCityData && (
+      {/* This strip renders inside a swipeable page tab, and the tab pager
+          wraps every tab in a `transform: translateX(...)` strip for the
+          slide animation — a transform on any ancestor becomes the
+          containing block for a `position: fixed` descendant instead of the
+          real viewport, so this popup would land pinned to that giant
+          multi-tab strip and get clipped to a sliver, same root cause as the
+          filter sheets. Portal straight to document.body to escape it. */}
+      {openCityData && createPortal(
         <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpenCity(null)}>
           <div style={{ width: "100%", maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <WeatherStrip label={openCityData.label} weatherKey={openCityData.key} lat={openCityData.lat} lon={openCityData.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
@@ -42,7 +50,8 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
               Close
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

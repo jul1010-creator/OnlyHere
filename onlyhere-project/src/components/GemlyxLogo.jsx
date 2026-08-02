@@ -92,45 +92,33 @@ export const GemlyxLoader = ({ size = 40, tone = "gold", ring = true, label, sty
   </span>
 );
 
-// The opening animation, restored (Oliver: "why is that gone?"). The entrance's
-// brand moment, played center stage before the country card appears. Oliver's
-// approved choreography from the hero file, at his even ~1.2s-per-phase pacing:
-// GEMLYX letters rise first (staggered 120ms), the compass pops in and does one
-// full spin (overshoots to 366° then settles — needle physics), the ring draws
-// itself in sync with the spin, and the tagline pure-fades last. The parent
-// decides when to fade the whole thing away; reduced-motion users see it settled.
-export const GemlyxIntro = ({ markSize = 96, wordHeight = 26, tone = "gold", color = "#F0EFE6", tagline = "IT EXISTS NOWHERE ELSE", style }) => (
-  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", ...style }}>
+// The opening animation (Oliver, latest cut): ONLY the compass, centered.
+// No wordmark, no caption, nothing else in the choreography itself. It pops
+// in, then does one full spin (overshoots to 366deg then settles, needle
+// physics), the ring drawing itself in sync with the spin. The parent (the
+// entrance overlay in App.jsx) times its own background painting fade to
+// this exact same delay and duration, so the spin is what visually exposes
+// the painting behind it, instead of the painting already being visible
+// underneath. After this, the parent alone decides when to fly the compass
+// to the corner; reduced-motion users skip straight to the settled state.
+export const GemlyxIntro = ({ markSize = 108, tone = "gold", color = "#F0EFE6", style }) => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", ...style }}>
     <style>{`
-      .gxi-word path { opacity: 0; animation: gxiLetter 0.7s cubic-bezier(0.2,0.7,0.3,1) forwards; }
-      .gxi-word path:nth-child(1) { animation-delay: 0.10s; }
-      .gxi-word path:nth-child(2) { animation-delay: 0.22s; }
-      .gxi-word path:nth-child(3) { animation-delay: 0.34s; }
-      .gxi-word path:nth-child(4) { animation-delay: 0.46s; }
-      .gxi-word path:nth-child(5) { animation-delay: 0.58s; }
-      .gxi-word path:nth-child(6) { animation-delay: 0.70s; }
-      @keyframes gxiLetter { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-      .gxi-mark { opacity: 0; animation: gxiPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 1.5s forwards; }
+      .gxi-mark { opacity: 0; animation: gxiPop 0.42s cubic-bezier(0.34,1.56,0.64,1) 0.08s forwards; }
       @keyframes gxiPop { from { opacity: 0; transform: scale(0.25); } to { opacity: 1; transform: scale(1); } }
-      .gxi-gem { transform-origin: 60px 60px; animation: gxiSpin 1.2s cubic-bezier(0.45,0.05,0.35,0.95) 1.9s both; }
+      .gxi-gem { transform-origin: 60px 60px; animation: gxiSpin 1.4s cubic-bezier(0.45,0.05,0.35,0.95) 0.5s both; }
       @keyframes gxiSpin { 0% { transform: rotate(0deg); } 85% { transform: rotate(366deg); } 100% { transform: rotate(360deg); } }
-      .gxi-ring { stroke-dasharray: 339.3; stroke-dashoffset: 339.3; transform: rotate(-90deg); transform-origin: 60px 60px; animation: gxiRing 1.2s cubic-bezier(0.45,0.05,0.35,0.95) 1.9s forwards; }
+      .gxi-ring { stroke-dasharray: 339.3; stroke-dashoffset: 339.3; transform: rotate(-90deg); transform-origin: 60px 60px; animation: gxiRing 1.4s cubic-bezier(0.45,0.05,0.35,0.95) 0.5s forwards; }
       @keyframes gxiRing { to { stroke-dashoffset: 0; } }
-      .gxi-tag { opacity: 0; animation: gxiFadeIn 0.9s ease 3.2s forwards; }
-      @keyframes gxiFadeIn { to { opacity: 1; } }
       @media (prefers-reduced-motion: reduce) {
-        .gxi-word path, .gxi-mark, .gxi-gem, .gxi-ring, .gxi-tag { animation: none !important; opacity: 1 !important; }
+        .gxi-mark, .gxi-gem, .gxi-ring { animation: none !important; opacity: 1 !important; }
         .gxi-ring { stroke-dashoffset: 0 !important; }
       }
     `}</style>
-    <svg id="gxi-fly-mark" className="gxi-mark" width={markSize} height={markSize} viewBox="0 0 120 120" style={{ display: "block", marginBottom: 20 }} aria-hidden="true">
+    <svg id="gxi-fly-mark" className="gxi-mark" width={markSize} height={markSize} viewBox="0 0 120 120" style={{ display: "block" }} aria-hidden="true">
       <circle className="gxi-ring" cx="60" cy="60" r="54" fill="none" stroke={color} strokeWidth="4" opacity="0.9" />
       <g className="gxi-gem"><GemCore tone={tone} /></g>
     </svg>
-    <span className="gxi-word" style={{ display: "inline-flex" }}>
-      <GemlyxWordmark height={wordHeight} color={color} />
-    </span>
-    <div className="gxi-tag" style={{ marginTop: 16, fontSize: 11, fontWeight: 600, letterSpacing: 3.5, textTransform: "uppercase", color, opacity: 0, fontFamily: "'Inter', sans-serif", textAlign: "center" }}>{tagline}</div>
   </div>
 );
 

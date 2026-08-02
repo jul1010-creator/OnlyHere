@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Routes, Route, useNavigate } from "react-router-dom";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
@@ -105,6 +106,16 @@ const gxFilterOptStyle = (active) => ({ background: active ? "#EDF0F7" : "rgba(3
 function FilterChip({ label, value, options, onChange, allLabel = "All" }) {
   const [open, setOpen] = useState(false);
   const active = value !== null && value !== undefined;
+  // The sheet below is `position: fixed`, which only pins to the real
+  // viewport when EVERY ancestor is untransformed. FilterChip is rendered
+  // inside a page tab's content, and the tab pager wraps every tab in a
+  // `transform: translateX(...)` strip (for the swipe animation) — CSS spec
+  // rule: a transform on an ancestor makes IT the containing block for any
+  // fixed descendant, not the viewport. That's what caused "you click them
+  // and suddenly they're in the corner" — inset:0 was resolving against the
+  // giant multi-tab strip, not the screen, and got clipped down to a sliver.
+  // createPortal escapes the transformed strip entirely by mounting the
+  // sheet straight onto document.body, so it's viewport-fixed for real.
   return (
     <>
       <button onClick={() => setOpen(true)}
@@ -112,7 +123,7 @@ function FilterChip({ label, value, options, onChange, allLabel = "All" }) {
         {active ? `${label} · ${value}` : label}
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
       </button>
-      {open && (
+      {open && createPortal(
         <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.62)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.surface, border: `1px solid ${C.border}`, borderRadius: "20px 20px 0 0", padding: "14px 18px calc(20px + env(safe-area-inset-bottom))", animation: "gxSheetUp 0.22s cubic-bezier(0.2,0.7,0.3,1)" }}>
             <style>{`@keyframes gxSheetUp { from { transform: translateY(44px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }`}</style>
@@ -125,7 +136,8 @@ function FilterChip({ label, value, options, onChange, allLabel = "All" }) {
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -139,6 +151,24 @@ function FilterToggle({ label, active, onClick, icon }) {
     </button>
   );
 }
+
+// ─── RESEARCH SOURCE RULES ──────────────────────────────────────────
+// Frozen source-priority rules for every real web search Gemlyx's research
+// AIs (Perplexity, and the chat's own web_search tool) run. Written up by
+// Oliver from Gemini's review of the research pipeline, plus his own
+// standing rule to always check Reddit and Quora for honest opinions.
+// Spliced into every grounding, fact-check, and precheck prompt so no
+// research call skips these, not just the ones someone remembers to add
+// this to by hand.
+const RESEARCH_SOURCE_RULES = `SOURCE PRIORITY RULES FOR THIS SEARCH, apply whichever category fits what you're checking:
+ATTRACTIONS: check the attraction's own official website first for current entry prices, closed days, booking requirements, and any renovation or closure notices. For live, right now conditions like queues or partial closures, check the most recent Google Maps and TripAdvisor reviews, last 30 days only. Wikipedia and general encyclopedias are for historical and architectural background only, never for current prices or hours, and background sources never override official live data.
+FOOD (restaurants and cafes): check the official menu, prices, and whether reservations are required. Cross reference Google Maps, TripAdvisor, and Danish food press (Gastro, Politiken, Berlingske, or local food blogs) for real credibility and atmosphere. If dietary needs are relevant, check recent reviews specifically for vegetarian, vegan, or gluten free options.
+EVENTS (concerts, festivals, theatre): use only official ticket sites (Ticketmaster, Billetlugen) or the venue's own calendar to confirm date, time, and ticket availability. Always run a dedicated check of news and the venue's official social media (Facebook Events, Instagram) from the last 48 hours to catch a cancellation or a venue change.
+NIGHTLIFE (bars, clubs, lounges): check Google reviews from the last 1 to 2 months for the current crowd, age limits, dress code, and music style. Verify exact opening hours, especially night and weekend hours, and any entry price or cover charge directly from the venue's own channels or social media, since these change often.
+ALWAYS ALSO CHECK REDDIT AND QUORA (r/Denmark, r/travel, general Quora results) alongside the sources above, for honest, non marketing traveler opinions on whether a place is genuinely worth it, overrated, or a real hidden gem.
+CONFLICT RESOLUTION: if Wikipedia or any general background source disagrees with a place's own official website, the official website is always right.
+FRESHNESS: the current year is 2026. Treat prices, hours, or availability claims from articles or blog posts older than 2025 as likely stale, do not state them as current fact.
+CITE YOUR SOURCES: make clear which real source each fact came from.`;
 
 function GemlyxApp() {
   const navigate = useNavigate();
@@ -696,7 +726,7 @@ function GemlyxApp() {
   const googleAICheck = async () => {
     if (!studioDraft || googleCheckLoading) return;
     setGoogleCheckLoading(true); setGoogleCheckError(null); setGoogleCheckResult(null);
-    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n\nDraft: ${JSON.stringify(studioDraft)}`;
+    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. ONLY report things that are actually WRONG, unverifiable, or missing, do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise, bullet points, not an essay.\n\n${RESEARCH_SOURCE_RULES}\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
     if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
     setGoogleCheckResult({ text: result.text, citations: result.citations });
@@ -968,7 +998,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
           : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`;
         const preCheck = await withRetry(
-          () => askPerplexity(precheckPrompt),
+          () => askPerplexity(`${precheckPrompt}\n\n${RESEARCH_SOURCE_RULES}`),
           r => !!r.error,
           "Fact-check (Perplexity)"
         );
@@ -1487,7 +1517,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       for (let i = 0; i < batch.length; i++) {
         const ev = batch[i];
         setUpdateEventsProgress(`${i + 1} / ${batch.length}`);
-        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.`;
+        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited).\n\n${RESEARCH_SOURCE_RULES}\n\nRespond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""}, dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.`;
         try {
           const result = await askPerplexity(prompt);
           if (result.error) continue;
@@ -2305,7 +2335,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // the single moment concrete facts actually get committed.
       let guideGrounding = "";
       {
-        const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n\n${convoText.slice(0, 3000)}`);
+        const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise, short facts only.\n\n${RESEARCH_SOURCE_RULES}\n\n${convoText.slice(0, 3000)}`);
         if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
       }
       setGuideBuildStage({ label: "Structuring your itinerary", percent: 45 });
@@ -2366,11 +2396,11 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
       // independent web fact-check, and anything flagged gets corrected by a
       // targeted second pass that changes only the wrong claims. Full pipeline is
       // now: grounding search → build → day-count retry → independent fact-check
-      // → targeted correction → dash scrub → geocode/durations/weather.
+      // → targeted correction → voice polish → dash scrub → geocode/durations/weather.
       setGuideBuildStage({ label: "Fact-checking the guide", percent: 72 });
       try {
         const checkable = JSON.stringify({ essentials: parsed.essentials, days: parsed.days.map(d => ({ title: d.title, stops: (d.stops || []).map(s => ({ name: s.name, town: s.town, note: s.note })) })) });
-        const check = await askPerplexity(`Fact-check this Denmark travel guide with real, current web search. Report ONLY genuine factual errors, each with the correct fact on the same line: wrong transport card mechanics (for example, the Copenhagen Card has NO check-in or check-out, that is how Rejsekort works), invented or wrong prices, wrong opening days or hours, places that do not exist or are permanently closed, and claims that put a place in the wrong town. Ignore style, tone, and anything subjective. If everything checks out, reply with exactly: NO ERRORS\n\n${checkable.slice(0, 6000)}`);
+        const check = await askPerplexity(`Fact-check this Denmark travel guide with real, current web search. Report ONLY genuine factual errors, each with the correct fact on the same line: wrong transport card mechanics (for example, the Copenhagen Card has NO check-in or check-out, that is how Rejsekort works), invented or wrong prices, wrong opening days or hours, places that do not exist or are permanently closed, and claims that put a place in the wrong town. Ignore style, tone, and anything subjective. If everything checks out, reply with exactly: NO ERRORS\n\n${RESEARCH_SOURCE_RULES}\n\n${checkable.slice(0, 6000)}`);
         if (!check.error && check.text && !/^\s*NO ERRORS\b/i.test(check.text.trim())) {
           setGuideBuildStage({ label: "Correcting flagged facts", percent: 82 });
           const fixResult = await askClaude(
@@ -2386,6 +2416,59 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
           }
         }
       } catch { /* fact-check is best-effort, never kill a build over it */ }
+      // ── Voice polish, per Oliver's architecture rule: Sonnet writes every word
+      // of a guide, ChatGPT is never the author, but if ChatGPT judges a line
+      // needs a rewrite, it flags it and Sonnet is the one who actually does the
+      // rewrite. Same split Studio already uses (runAIVoiceScan flags, Claude's
+      // rephraseFlag rewrites), applied here to the guide's real prose fields
+      // instead of a Studio draft blob. OpenAI only ever returns which fields
+      // read as generic or childish and why; it never sees or writes a
+      // replacement sentence.
+      setGuideBuildStage({ label: "Polishing the writing", percent: 86 });
+      try {
+        const proseFields = [];
+        if (parsed.essentials?.budgetReality) proseFields.push({ id: "essentials.budgetReality", text: parsed.essentials.budgetReality });
+        if (parsed.essentials?.transportTip) proseFields.push({ id: "essentials.transportTip", text: parsed.essentials.transportTip });
+        if (parsed.essentials?.keepInMind) proseFields.push({ id: "essentials.keepInMind", text: parsed.essentials.keepInMind });
+        (parsed.days || []).forEach((d, di) => (d.stops || []).forEach((s, si) => {
+          if (s.note) proseFields.push({ id: `days.${di}.stops.${si}.note`, text: s.note });
+        }));
+        if (proseFields.length > 0) {
+          const scanRes = await fetch("/api/openai", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "gpt-5.6-sol",
+              messages: [{
+                role: "user",
+                content: `Read these numbered lines from a real Denmark travel guide and flag ONLY the ones that genuinely read as generic AI writing or oversimplified, childish phrasing, not real, specific, locally informed prose written for an adult traveler: banned generic filler words, sentences that could describe any trip anywhere, flat repetitive rhythm, a tone that reads like it is explaining something to a child rather than telling a well traveled friend the real story. Never flag a line just for being short or plain if it is actually specific and true. Be selective, most lines here should already be fine. Respond with ONLY a JSON array, no other text: [{"id": "the exact id given", "reason": "short reason"}], return [] if nothing genuinely needs a rewrite.\n\n${proseFields.map(f => `${f.id}: "${f.text}"`).join("\n")}`
+              }],
+              max_tokens: 500,
+            }),
+          });
+          const scanData = await scanRes.json();
+          let raw = scanData.choices?.[0]?.message?.content?.trim() || "[]";
+          raw = raw.replace(/^```json\s*|\s*```$/g, "");
+          const flagged = JSON.parse(raw);
+          if (Array.isArray(flagged) && flagged.length > 0) {
+            setGuideBuildStage({ label: "Rewriting flagged lines", percent: 88 });
+            for (const flag of flagged.slice(0, 12)) { // capped so one noisy scan can't trigger a huge rewrite chain
+              const field = proseFields.find(f => f.id === flag.id);
+              if (!field) continue;
+              const rewriteResult = await askClaude(
+                `Rewrite this one sentence or short passage from a real Denmark travel guide so it no longer reads as generic AI writing or childish phrasing (${flag.reason || "flagged as generic"}). Keep every real fact, place name, price, and time exactly as given, change only the wording. Write it the way a knowledgeable, direct local friend would actually talk to another adult, never a brochure and never a simplified children's summary. Never use an em dash, en dash, or a hyphen as a pause between clauses. Respond with ONLY the rewritten text, no quotes, no explanation.\n\nText: "${field.text}"`,
+                200
+              );
+              if (!rewriteResult.error && rewriteResult.text?.trim()) {
+                const newText = rewriteResult.text.trim().replace(/^"|"$/g, "");
+                const path = field.id.split(".");
+                if (path[0] === "essentials" && parsed.essentials) parsed.essentials[path[1]] = newText;
+                else if (path[0] === "days" && parsed.days?.[Number(path[1])]?.stops?.[Number(path[3])]) parsed.days[Number(path[1])].stops[Number(path[3])].note = newText;
+              }
+            }
+          }
+        }
+      } catch { /* voice polish is best-effort, never kill a build over it */ }
       // Dash ban is enforced deterministically too — no model slip can ship one.
       parsed = deDashDeep(parsed);
       setGuideBuildStage({ label: "Verifying exact locations and routes", percent: 90 });
@@ -2492,12 +2575,14 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
   };
   useEffect(() => {
     if (entered || introDone) return;
-    // Choreography ends ~4.1s in; hold the settled logo a beat, then ONLY the
-    // compass flies to the corner (0.9s) and SITS. Oliver's image: coming in a
-    // door and finding a chair in the corner to sit in. The writing and caption
-    // fade out where they stand; they do not travel.
-    const t1 = setTimeout(() => setIntroLeaving(true), 4600);
-    const t2 = setTimeout(finishIntro, 5560);
+    // Compass-only choreography: pop (0.08-0.5s) then one spin (0.5-1.9s), the
+    // same window the background reveal cover below fades out on, so the spin
+    // is what visually exposes the painting. A short beat to register the
+    // reveal, then the compass alone flies to the corner (0.9s) and SITS.
+    // Oliver's image: coming in a door and finding a chair in the corner to
+    // sit in, nothing vanishes and reappears.
+    const t1 = setTimeout(() => setIntroLeaving(true), 2400);
+    const t2 = setTimeout(finishIntro, 3400);
     return () => { clearTimeout(t1); clearTimeout(t2); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entered, introDone]);
@@ -2774,7 +2859,7 @@ ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS
 
 If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range genuinely overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing genuinely overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. Gemlyx's core mission: most tourists only see Copenhagen for 3-4 days and never explore the rest of Denmark, especially Jutland and North Zealand. When someone is staying more than 2 days, actively suggest at least one destination outside Copenhagen — don't just default to city recommendations. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket.
 
-You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.`;
+You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above, current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above. Whenever you do search, follow this priority order: an attraction or venue's own official site first for prices/hours/booking, recent Google Maps and TripAdvisor reviews (last 30 days for attractions, last 1 to 2 months for nightlife) for current real conditions, official ticket sites or the venue's own calendar plus a check of news/social media from the last 48 hours for events, and always also check Reddit (r/Denmark, r/travel) and Quora for honest traveler opinions. If an official site and Wikipedia or a general source disagree, the official site is right. Treat pricing or hours from articles older than 2025 as likely stale.`;
 
       const claudeTools = [{
         name: "web_search",
@@ -4900,24 +4985,28 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 110, background: "linear-gradient(to top, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 45%, transparent 58%, rgba(10,9,5,0.45) 100%)" }} />
 
-          {/* the restored opening animation — plays center stage, then ONLY the
-              compass flies to the corner and SITS DOWN in the brand spot (like
-              coming in a door and finding a chair in the corner). The writing
-              and caption fade out in place, they never travel. The compass aims
-              at the real corner mark's measured position and the static mark
-              takes over pixel-on-pixel at landing. Then the Denmark card pops.
-              A click anywhere skips it. */}
+          {/* the opening animation — ONLY the compass, centered, nothing else.
+              A solid cover sits over the painting and fades away on the exact
+              same timing as the compass's own pop-and-spin, so the spin is
+              what visually exposes the painting rather than it already being
+              visible underneath. Once revealed, ONLY the compass flies to the
+              corner and SITS DOWN in the brand spot (like coming in a door and
+              finding a chair in the corner). The compass aims at the real
+              corner mark's measured position and the static mark takes over
+              pixel-on-pixel at landing. Then the Denmark card pops. A click
+              anywhere skips it. */}
           {!introDone && (
             <div onClick={finishIntro}
               style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px", cursor: "pointer" }}>
               <style>{`
-                .gxi-leave .gxi-tag { animation: none !important; opacity: 0 !important; transition: opacity 0.25s ease; }
-                .gxi-leave .gxi-word { opacity: 0; transition: opacity 0.35s ease; }
                 .gxi-leave .gxi-mark { animation: none !important; opacity: 1 !important; }
+                .gxi-reveal-cover { animation: gxiRevealCover 1.55s cubic-bezier(0.45,0.05,0.35,0.95) 0.35s forwards; }
+                @keyframes gxiRevealCover { from { opacity: 1; } to { opacity: 0; } }
+                @media (prefers-reduced-motion: reduce) { .gxi-reveal-cover { animation: none !important; opacity: 0 !important; } }
               `}</style>
-              <div style={{ position: "absolute", inset: 0, background: "radial-gradient(90% 72% at 50% 46%, rgba(8,8,5,0.6) 0%, rgba(8,8,5,0.28) 55%, transparent 100%)", opacity: introLeaving ? 0 : 1, transition: "opacity 0.8s ease", pointerEvents: "none" }} />
+              <div className="gxi-reveal-cover" style={{ position: "absolute", inset: 0, background: "#0F0D08", pointerEvents: "none" }} />
               <div className={introLeaving ? "gxi-leave" : ""} style={{ position: "relative" }}>
-                <GemlyxIntro markSize={96} wordHeight={26} />
+                <GemlyxIntro markSize={108} />
               </div>
             </div>
           )}
@@ -5199,54 +5288,25 @@ You also have a web_search tool. Use it whenever someone asks about something th
       {guideModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.85)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
           <div style={{ maxWidth: 480, margin: "0 auto", background: guideModal === "loading" ? "transparent" : C.bg, border: guideModal === "loading" ? "none" : `1px solid ${C.border}`, borderRadius: 20, padding: guideModal === "loading" ? 0 : "22px", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
-            {guideModal === "loading" ? (() => {
-              // VINTAGE TRAVEL-JOURNAL LOADING SCREEN — per Oliver's call ("Building
-              // your guide is still unchanged in letters" — he wanted the full
-              // visual redesign, not just new copy). This is meant to read like a
-              // hand-written dispatch being drafted, not a generic app spinner: a
-              // parchment/ink background, a compass instead of a loading ring, and
-              // per-stage copy written like a line from a travel letter rather than
-              // a status label. guideBuildStage itself is untouched (same 4 real
-              // pipeline stages, same percent values) — only how each stage's label
-              // gets DISPLAYED changes here, so nothing about the actual build logic
-              // needed to move.
-              const STAGE_COPY = {
-                "Gathering real places and facts": { title: "Charting the Route", body: "Gathering real places worth the detour, straight from Gemlyx's own research — not a guess, not a brochure." },
-                "Structuring your itinerary": { title: "Penning the Itinerary", body: "Sorting everything into a real day-by-day route, the way a local would actually walk it." },
-                "Finishing the remaining days": { title: "Finishing the Last Pages", body: "A few more days still need writing — nearly there." },
-                "Verifying exact locations and routes": { title: "Checking Every Road and Door", body: "Confirming real distances, opening hours, and the roads between each stop before the ink dries." },
-              };
-              const copy = STAGE_COPY[guideBuildStage?.label] || { title: "Drafting Your Travel Journal", body: "Checking real places, routes and travel times — this takes a moment." };
-              return (
-                <div style={{ textAlign: "center", padding: "54px 20px 42px", position: "relative", overflow: "hidden", borderRadius: 20, border: "1px solid #4A3D22", background: "linear-gradient(160deg, #221B10 0%, #16110A 100%)" }}>
-                  {/* Subtle paper grain, laid over the gradient via an inline SVG turbulence filter — no external image/font download needed. */}
-                  <div aria-hidden style={{ position: "absolute", inset: 0, opacity: 0.5, mixBlendMode: "overlay", pointerEvents: "none",
-                    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E\")" }} />
-                  {/* Two soft ink-stain blotches, like a well-used map */}
-                  <div aria-hidden style={{ position: "absolute", top: -30, left: -20, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.10), transparent 70%)", pointerEvents: "none" }} />
-                  <div aria-hidden style={{ position: "absolute", bottom: -40, right: -30, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,175,55,0.08), transparent 70%)", pointerEvents: "none" }} />
-                  <div style={{ position: "relative" }}>
-                    <div style={{ marginBottom: 12 }}><GemlyxLoader size={44} tone="gold" ring={false} /></div>
-                    <div style={{ fontSize: 10.5, color: "#D9A441", letterSpacing: 2.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>A Dispatch From Gemlyx</div>
-                    <div style={{ fontSize: 20, color: "#F2E8CE", fontWeight: 600, fontFamily: "'Fraunces', serif", fontStyle: "italic", marginBottom: 10, lineHeight: 1.25 }}>
-                      {copy.title}
-                    </div>
-                    <div style={{ fontSize: 13, color: "#BBA778", lineHeight: 1.7, maxWidth: 290, margin: "0 auto 26px", fontFamily: "'Fraunces', serif" }}>
-                      {copy.body}
-                    </div>
-                    <div style={{ maxWidth: 220, margin: "0 auto" }}>
-                      <div style={{ height: 1, background: "linear-gradient(90deg, transparent, #D9A44166 15%, #D9A44166 85%, transparent)", position: "relative", marginBottom: 10 }}>
-                        <div style={{ position: "absolute", top: -3.5, left: `calc(${guideBuildStage?.percent || 5}% - 4px)`, width: 8, height: 8, borderRadius: "50%", background: "#D9A441", transition: "left 0.6s ease", boxShadow: "0 0 8px rgba(212,175,55,0.7)" }} />
-                      </div>
-                      <div style={{ fontSize: 9.5, color: "#8A7A54", letterSpacing: 1.2, fontWeight: 700 }}>{guideBuildStage?.percent || 5}% OF THE JOURNEY MAPPED</div>
-                    </div>
-                  </div>
-                  <style>{`
-                    @keyframes gemlyxCompassSway { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
-                  `}</style>
+            {guideModal === "loading" ? (
+              // MINIMAL LOADING STATE — per Oliver ("why does the guide love sending
+              // you to the long tunnel. Just put the user onto the page. That's it"):
+              // the previous version was a whole separate themed screen (parchment
+              // background, ink stains, a title and a rewritten travel-letter line
+              // for every stage) the person had to sit through before ever seeing
+              // real content, which is exactly what read as a long detour before
+              // the actual page. This is just a spinner, the plain real stage label,
+              // and a thin progress line, so the wait reads as a brief pause on the
+              // way to the page rather than its own destination. guideBuildStage
+              // itself is untouched, same real pipeline stages and percents.
+              <div style={{ textAlign: "center", padding: "70px 20px" }}>
+                <GemlyxLoader size={44} tone="gold" ring={true} />
+                <div style={{ marginTop: 16, fontSize: 14, color: C.light, fontWeight: 600 }}>{guideBuildStage?.label || "Building your guide"}</div>
+                <div style={{ marginTop: 16, maxWidth: 200, marginLeft: "auto", marginRight: "auto", height: 3, borderRadius: 100, background: C.border, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${guideBuildStage?.percent || 5}%`, background: C.gold, transition: "width 0.6s ease" }} />
                 </div>
-              );
-            })() : (
+              </div>
+            ) : (
               <>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                   <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "4px 12px" }}>
@@ -5524,7 +5584,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
             {[
               ["📍 Your location", "Only requested when you tap the location button — never in the background. Your coordinates are used directly in your browser to calculate distances to towns and events. They are not stored on any server and are not sent to anyone. You can revoke access anytime in your browser's site settings."],
-              ["✦ AI chats (Gemlyx Detour & Route Builder)", "When you use the AI Guide, your messages are sent to OpenAI (a US company) to generate the answer, and in some cases to Tavily to search for live information like opening status. Please don't include personal details in your messages — the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
+              ["✦ AI chats (Gemlyx Detour & Route Builder)", "When you use the AI Guide, your messages are sent to Anthropic's Claude (a US company) to generate the actual reply and guide content, and to Perplexity to search the live web for real facts like opening status and prices. OpenAI plays a narrow, behind the scenes support role, planning research queries and flagging phrasing that might need another pass, it never writes what you actually see. Please don't include personal details in your messages, the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
               ["💾 Saved routes & guides", "Guides and road-trip routes you save are stored only in your browser's local storage, on your own device. We never see them. Delete them in the app, or by clearing your browser data for this site."],
               ["◈ Booking requests", "If you send a booking or craft request, the details you enter (name, email, message) are stored in our database (Supabase) so the maker can get back to you. We use them for nothing else. Email hello@gemlyx.com to have a request deleted."],
               ["💡 Suggestions", "If you suggest a place via 'Suggest a Place', what you type is stored so we can review it. We don't ask for your name or contact details — suggestions are anonymous."],
