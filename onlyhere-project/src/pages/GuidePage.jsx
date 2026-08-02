@@ -3,27 +3,36 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { GemlyxLoader } from "../components/GemlyxLogo";
+import { DetailPage } from "../components/DetailPage";
+import { GuideRouteMap } from "../components/GuideRouteMap";
+import { ensureLiveContentLoaded } from "../utils/liveContent";
+import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween } from "../utils/guideEnrichment";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
-// The full-page replacement for the old "little book" guide modal, per Oliver's
-// request: a card grid (same visual language as the "Hidden Towns" nav page —
-// see the .towns-grid class used there) instead of a scrolling wall of text,
-// with an explicit confirm-before-save step, and a real shareable URL once saved.
+// The ONLY place a guide is ever shown, per Oliver ("get rid of the popup") —
+// the old in-app "little book" guide modal in App.jsx is gone, and this is
+// what it used to link out to as an optional "View as full page" extra. A card
+// grid (same visual language as the "Hidden Towns" nav page — see the
+// .towns-grid class used there) instead of a scrolling wall of text, with an
+// explicit confirm-before-save step and a real shareable URL once saved.
 //
 // Two ways this component gets used:
-//  1. FRESH / UNSAVED — App.jsx passes a `guide` object straight from
-//     generateGuide() via router state (see integration notes below). Shows the
-//     card grid + a "Looks good — save my guide" confirmation step. Saving
-//     POSTs to Supabase and redirects to the real /guide/:id URL.
+//  1. FRESH / UNSAVED — App.jsx's generateGuide navigates here with a finished,
+//     fully-enriched `guide` object via router state (maps/exact routes/
+//     accommodation/weather already baked in — see that function for why it
+//     waits for all of that before ever navigating here). Shows the card grid
+//     + a "Looks good — save my guide" confirmation step. Saving POSTs to
+//     Supabase and redirects to the real /guide/:id URL.
 //  2. SAVED / SHARED — visited directly via a real /guide/:id URL (from a saved
 //     link, or after step 1 completes). Fetches the guide from Supabase by id
 //     and shows it read-only, with its own "Save to my guides" (bookmark) option
 //     for whoever's viewing the link.
 //
-// REQUIRES the "gemlyx_guides" Supabase table — see supabase_guides_schema.sql
-// in this same delivery for the exact SQL to run once in the Supabase SQL editor.
-// REQUIRES react-router-dom — see INTEGRATION.md for the one small change needed
-// in your router setup (not done automatically here — see that file for why).
+// REQUIRES the "gemlyx_guides" Supabase table (id text primary key, payload
+// jsonb, created_at timestamptz default now()) with public insert+select RLS
+// policies — this may already exist from an earlier pass; if this page's Save
+// button ever fails, that table not existing yet is the first thing to check
+// in the Supabase dashboard.
 
 const dayIcon = (i) => ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭"][i] || `Day ${i + 1}`;
 
@@ -31,9 +40,11 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
   const { guideId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  // Reached two ways: navigate("/guide/new", { state: { guide } }) from the existing
-  // modal's "View as full page" button (router state), or a plain `guide` prop for
-  // standalone/test use — router state wins when both are somehow present.
+  // Reached two ways: navigate("/guide/new", { state: { guide } }) once a fresh
+  // build finishes (App.jsx's generateGuide) or from a saved-guide click on Home,
+  // or a plain `guide` prop for standalone/test use — router state wins when both
+  // are somehow present. Per Oliver ("get rid of the popup"), this page is now
+  // the ONLY place a guide is ever shown — there's no in-app modal anymore.
   const freshGuide = location.state?.guide || guideProp || null;
   const [guide, setGuide] = useState(freshGuide || null);
   const [loading, setLoading] = useState(!freshGuide && !!guideId);
@@ -41,6 +52,65 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const isUnsaved = !!freshGuide && !guideId;
+
+  // Fold in anything published via Content Studio (same one-time, dedup-safe
+  // loader App.jsx uses) so a stop that matches a real Gemlyx entry — including
+  // one published after this page's own code shipped — can actually be found by
+  // lookupRealPlace below, even for someone landing here cold via a shared link
+  // who never visited "/" first in this browser tab.
+  useEffect(() => { ensureLiveContentLoaded(); }, []);
+
+  // Click a stop that matches something real Gemlyx already knows (a town, a
+  // free attraction, a restaurant, a nightlife venue, an event) to open that
+  // actual page — same feature the old in-app guide modal had, now here since
+  // this is the only guide view left. DetailPage itself is a self-contained
+  // full-screen overlay (no route change), so "back" is always instant.
+  const [eventDetail, setEventDetail] = useState(null);
+  const [townDetail, setTownDetail] = useState(null);
+  const [nightlifeDetail, setNightlifeDetail] = useState(null);
+  const [freeDetail, setFreeDetail] = useState(null);
+  const [foodDetail, setFoodDetail] = useState(null);
+  // Craft/booking matches deliberately don't open anything here — App.jsx's own
+  // craft detail is a separate bespoke modal (not the shared DetailPage this
+  // page reuses), out of scope for this pass. lookupRealPlace's caller below
+  // filters craft matches out of "clickable" for the same reason, so a craft
+  // stop's card never shows a pointer cursor for a click that would do nothing.
+  const openStopDetail = (real) => {
+    if (!real) return;
+    if (real._src === "free") setFreeDetail(real);
+    else if (real._src === "food") setFoodDetail(real);
+    else if (real._src === "nightlife") setNightlifeDetail(real);
+    else if (real._src === "town") setTownDetail(real);
+    else if (real._src === "event") setEventDetail(real);
+  };
+  const [liveInfo, setLiveInfo] = useState({});
+  const [liveInfoLoading, setLiveInfoLoading] = useState(null);
+  const checkLiveInfo = async (item) => {
+    setLiveInfoLoading(item.name);
+    try {
+      const query = `${item.name} ${item.location || item.town || ""} Instagram Facebook official page latest update opening hours events 2026`;
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      setLiveInfo(prev => ({ ...prev, [item.name]: data.answer || (data.results?.[0]?.snippet) || "No current updates found." }));
+    } catch {
+      setLiveInfo(prev => ({ ...prev, [item.name]: "Couldn't check right now — try again in a moment." }));
+    }
+    setLiveInfoLoading(null);
+  };
+  const [savedPlaces, setSavedPlaces] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gemlyx_saved_places") || "[]"); } catch { return []; }
+  });
+  const isPlaceSaved = (kind, id) => savedPlaces.some(p => p.kind === kind && p.id === id);
+  const toggleSavePlace = (kind, item, townName) => {
+    setSavedPlaces(prev => {
+      const exists = prev.some(p => p.kind === kind && p.id === item.id);
+      const updated = exists
+        ? prev.filter(p => !(p.kind === kind && p.id === item.id))
+        : [{ kind, id: item.id, name: item.name, emoji: item.emoji, town: townName || item.town || item.city || item.location || "" }, ...prev].slice(0, 40);
+      try { localStorage.setItem("gemlyx_saved_places", JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+  };
 
   useEffect(() => {
     if (freshGuide || !guideId) return;
@@ -72,6 +142,17 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
         body: JSON.stringify({ id, payload: guide }),
       });
       if (!res.ok) { setSaveError("Couldn't save this guide — try again."); setSaving(false); return; }
+      // Also bookmark it into the same "gemlyx_saved_guides" localStorage list
+      // Home's "Your Saved Guides" quick list reads — this is what used to happen
+      // from the old popup's own separate "Save Guide" button, now this page's
+      // real Supabase save is the only save flow, so it does both jobs. The
+      // string id (not a Date.now() number) is what tells Home's list this entry
+      // has a real shareable link and should route straight to /guide/:id.
+      try {
+        const bookmarks = JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]");
+        const updated = [{ id, title: guide.title, days: guide.days, savedAt: new Date().toISOString() }, ...bookmarks].slice(0, 20);
+        localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated));
+      } catch { /* bookmark list is a convenience, never block the real save over it */ }
       navigate(`/guide/${id}`, { replace: true });
     } catch {
       setSaveError("Couldn't save this guide — check your connection and try again.");
@@ -97,9 +178,6 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
     );
   }
 
-  // Flatten every stop across every day into one list for the card grid, keeping
-  // day context on each card — this is the "not a list, just a page with smaller
-  // pictures" layout Oliver described, grouped visually by day header only.
   const days = guide.days || [];
 
   return (
@@ -128,7 +206,7 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 30, maxWidth: 640 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>Before you go</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {[["Money", guide.essentials.budgetReality], ["Getting around", guide.essentials.transportTip], ["Keep in mind", guide.essentials.keepInMind]].filter(([, v]) => v).map(([label, v]) => (
+              {[["Money", guide.essentials.budgetReality], ["Getting around", guide.essentials.transportTip], ["Keep in mind", guide.essentials.keepInMind], ["Weather", guide.essentials.weatherNote]].filter(([, v]) => v).map(([label, v]) => (
                 <div key={label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>{label}</span>
                   <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{v}</span>
@@ -145,7 +223,58 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
           </div>
         )}
 
-        {days.map((day, dayIdx) => (
+        {days.map((day, dayIdx) => {
+          // Real coordinates for this guide (from geocodeStopsForGuide, baked onto
+          // the guide object as _geo when the build handed off to this page — see
+          // App.jsx's generateGuide) plus this day's own real exact-duration/route
+          // data (_exactDurations/_noRouteFound), so route links/maps here use the
+          // exact same numbers the guide-building pipeline already verified,
+          // instead of a second, separately-computed guess.
+          const geo = guide._geo || {};
+          const exactDurations = guide._exactDurations || {};
+          const noRouteFound = guide._noRouteFound || {};
+          const routeUrl = (originName, destName, mode) => {
+            const originTown = (day.stops || []).find(s => s.name === originName)?.town || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
+            const destTown = (day.stops || []).find(s => s.name === destName)?.town;
+            const originText = originTown ? `${originName}, ${originTown}, Denmark` : `${originName}, Denmark`;
+            const destText = destTown ? `${destName}, ${destTown}, Denmark` : `${destName}, Denmark`;
+            return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
+          };
+          const legChip = (originName, destName, how) => {
+            const mode = resolveLegMode(how, guide._mode, originName, destName, guide._onlyWalking, geo);
+            const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how || "") ? "⛴" : "🚆";
+            const rawExact = exactDurations[`${originName}|${destName}|${mode}`];
+            const plausibleCap = mode === "walking" ? 180 : mode === "bicycling" ? 300 : Infinity;
+            const exact = rawExact && rawExact.durationMinutes <= plausibleCap ? rawExact : null;
+            const a = resolveStopCoords(originName, geo), b = resolveStopCoords(destName, geo);
+            const km = a && b ? kmBetween(a, b) : null;
+            const modeLabel = mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus";
+            const routeFailed = noRouteFound[`${originName}|${destName}|${mode}`];
+            if (routeFailed) {
+              return (
+                <a href={`https://www.rome2rio.com/map/${encodeURIComponent(originName)}/${encodeURIComponent(destName)}`} target="_blank" rel="noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
+                  <span style={{ fontSize: 12 }}>⛴</span>
+                  <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>No direct route, check Rome2Rio</span>
+                </a>
+              );
+            }
+            return (
+              <a href={routeUrl(originName, destName, mode)} target="_blank" rel="noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
+                <span style={{ fontSize: 12 }}>{icon}</span>
+                <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
+                  {exact ? `${exact.durationText} ${modeLabel}` : km !== null ? `${Math.round(km) === 0 ? "<1" : "~" + Math.round(km)} km ${modeLabel}` : how || "Route"}
+                </span>
+                <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
+              </a>
+            );
+          };
+          const routePoints = (day.stops || []).map(s => {
+            const c = resolveStopCoords(s.name, geo);
+            return c ? { name: s.name, ...c } : null;
+          }).filter(Boolean);
+          return (
           <div key={day.day || dayIdx} style={{ marginBottom: 44 }}>
             {/* Redesign pass: day headers went from a cramped gold uppercase micro-line
                 to a proper serif heading with a hairline rule — the day number stays
@@ -155,12 +284,6 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
                 <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", flexShrink: 0 }}>Day {day.day || dayIdx + 1}</span>
                 {day.title && <span style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{day.title}</span>}
               </div>
-              {/* Reuses whatever the existing modal already computed for this same
-                  guide (fetchGuideWeather, patched onto day.weather asynchronously
-                  after the guide is built) — no new fetch here, this page just wasn't
-                  showing weather at all before. If you build the guide and jump to
-                  "View as full page" immediately, this may briefly be empty until
-                  that background fetch finishes; it'll appear once it lands. */}
               {day.weather && (
                 <div title="Forecast assumes the trip starts today" style={{ display: "flex", alignItems: "center", gap: 5, background: C.surface, border: `1px solid ${day.weather.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 11 }}>
                   <span>{day.weather.icon}</span>
@@ -170,29 +293,87 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
               )}
             </div>
             <div style={{ height: 1, background: C.border, margin: "10px 0 18px" }} />
+            {/* If today only has one stop, the real journey worth showing is the leg
+                connecting it to yesterday's last stop, not nothing at all. */}
+            {day.stops?.length === 1 && dayIdx > 0 && days[dayIdx - 1]?.stops?.length > 0 && (
+              <div style={{ marginBottom: 14 }}>{legChip(days[dayIdx - 1].stops.slice(-1)[0].name, day.stops[0].name, day.glance?.legs?.[0]?.how)}</div>
+            )}
+            {routePoints.length > 1 && (
+              <div style={{ height: 180, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 18 }}>
+                <GuideRouteMap points={routePoints} />
+              </div>
+            )}
             <div className="towns-grid">
               {/* Redesign pass: stops became real cards (surface, border, radius) instead
                   of floating text under a gray box, and the empty-photo state is now a
                   designed monogram plate — the place's initial in italic serif on a
-                  layered gradient — rather than a lonely ◆ in a void. */}
-              {(day.stops || []).map((stop, stopIdx) => (
-                <div key={stopIdx} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
-                  <div style={{ position: "relative", height: 116, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
-                    <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 44, fontWeight: 500, color: "rgba(148,163,199,0.35)" }}>{(stop.name || "◆").slice(0, 1)}</span>
-                    {stop.arrivalTime && (
-                      <div style={{ position: "absolute", top: 10, left: 10, background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, border: `1px solid ${C.gold}44` }}>{stop.arrivalTime}</div>
+                  layered gradient — rather than a lonely ◆ in a void. Now also clickable
+                  when the stop matches something real Gemlyx already has its own page
+                  for (a town, a free attraction, a restaurant, a venue, an event). */}
+              {(day.stops || []).map((stop, stopIdx) => {
+                const matched = lookupRealPlace(stop.name);
+                const real = matched && matched._src !== "craft" ? matched : null;
+                const nextStop = day.stops[stopIdx + 1];
+                return (
+                <div key={stopIdx}>
+                  <div onClick={real ? () => openStopDetail(real) : undefined}
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: real ? "pointer" : "default" }}>
+                    <div style={{ position: "relative", height: 116, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: real?.photo ? undefined : `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
+                      {real?.photo ? (
+                        <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 44, fontWeight: 500, color: "rgba(148,163,199,0.35)" }}>{(stop.name || "◆").slice(0, 1)}</span>
+                      )}
+                      {stop.arrivalTime && (
+                        <div style={{ position: "absolute", top: 10, left: 10, background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, border: `1px solid ${C.gold}44` }}>{stop.arrivalTime}</div>
+                      )}
+                    </div>
+                    <div style={{ padding: "12px 14px 14px" }}>
+                      <div style={{ fontSize: 17, fontWeight: 600, color: real ? C.gold : C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}55` : "none", textUnderlineOffset: 3 }}>{stop.name}{real ? " ↗" : ""}</div>
+                      {stop.town && <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1, marginTop: 5 }}>{stop.town}{stop.suggestedStay ? ` · ${stop.suggestedStay}` : ""}</div>}
+                      {stop.note && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginTop: 7 }}>{stop.note.slice(0, 140)}{stop.note.length > 140 ? "…" : ""}</div>}
+                    </div>
+                  </div>
+                  {nextStop && legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
+                </div>
+                );
+              })}
+            </div>
+            {day.glance?.accommodation && (() => {
+              const dayDate = guide._arrivalDate ? new Date(guide._arrivalDate) : null;
+              if (dayDate) dayDate.setDate(dayDate.getDate() + ((day.day || dayIdx + 1) - 1));
+              const nextDate = dayDate ? new Date(dayDate) : null;
+              if (nextDate) nextDate.setDate(nextDate.getDate() + 1);
+              const fmt = (d) => d ? d.toISOString().slice(0, 10) : null;
+              const adultsMatch = (guide._travelers || "").match(/\d+/);
+              const adults = adultsMatch ? adultsMatch[0] : "2";
+              const searchTerm = day.glance.recommendedStay || day.glance.stayArea;
+              const bookingUrl = searchTerm
+                ? `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(searchTerm + ", Denmark")}` +
+                  (fmt(dayDate) ? `&checkin=${fmt(dayDate)}&checkout=${fmt(nextDate)}` : "") +
+                  `&group_adults=${adults}&no_rooms=1`
+                : null;
+              return (
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>🏡</span>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                    <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
+                    <span style={{ color: C.light }}>{day.glance.accommodation}</span>
+                    {day.glance.recommendedStay && (
+                      <div style={{ marginTop: 3 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
+                    )}
+                    {bookingUrl && (
+                      <a href={bookingUrl} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 5, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                        🔎 {day.glance.recommendedStay ? `See ${day.glance.recommendedStay} on Booking.com` : `Search stays near ${day.glance.stayArea}`} ↗
+                      </a>
                     )}
                   </div>
-                  <div style={{ padding: "12px 14px 14px" }}>
-                    <div style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}>{stop.name}</div>
-                    {stop.town && <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1, marginTop: 5 }}>{stop.town}{stop.suggestedStay ? ` · ${stop.suggestedStay}` : ""}</div>}
-                    {stop.note && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginTop: 7 }}>{stop.note.slice(0, 140)}{stop.note.length > 140 ? "…" : ""}</div>}
-                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
-        ))}
+          );
+        })}
 
         {isUnsaved && (
           <div style={{ position: "sticky", bottom: 16, display: "flex", justifyContent: "center", marginTop: 20 }}>
@@ -210,6 +391,15 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
         )}
         {saveError && <div style={{ textAlign: "center", color: "#FFB347", fontSize: 12.5, marginTop: 12 }}>{saveError}</div>}
       </div>
+
+      {/* Same DetailPage overlay every other page in the app uses to show a real
+          Gemlyx entry — self-contained, fixed full-screen, no route change, so
+          closing it is always instant and lands you right back on this guide. */}
+      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} />
+      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} />
+      <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
+      <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
+      <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={null} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
     </div>
   );
 };

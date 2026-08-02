@@ -20,6 +20,8 @@ import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
   isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
 } from "./utils/helpers";
+import { ensureLiveContentLoaded } from "./utils/liveContent";
+import { lookupRealPlace, resolveStopCoords, resolveLegMode } from "./utils/guideEnrichment";
 
 import { DetailPage } from "./components/DetailPage";
 import { WeatherStrip } from "./components/WeatherStrip";
@@ -154,12 +156,14 @@ function FilterToggle({ label, active, onClick, icon }) {
 
 // ─── RESEARCH SOURCE RULES ──────────────────────────────────────────
 // Frozen source-priority rules for every real web search Gemlyx's research
-// AIs (Perplexity, and the chat's own web_search tool) run. Written up by
-// Oliver from Gemini's review of the research pipeline, plus his own
-// standing rule to always check Reddit and Quora for honest opinions.
-// Spliced into every grounding, fact-check, and precheck prompt so no
-// research call skips these, not just the ones someone remembers to add
-// this to by hand.
+// AIs (Perplexity only, plus the chat's own web_search tool, there is no
+// live Gemini call anywhere in this app) run. Written up by Oliver from a
+// one-time review document Gemini gave him about the research pipeline
+// (an outside opinion he asked for and pasted in, not a dependency), plus
+// his own standing rule to always check Reddit and Quora for honest
+// opinions. Spliced into every grounding, fact-check, and precheck prompt
+// so no research call skips these, not just the ones someone remembers to
+// add this to by hand.
 const RESEARCH_SOURCE_RULES = `SOURCE PRIORITY RULES FOR THIS SEARCH, apply whichever category fits what you're checking:
 ATTRACTIONS: check the attraction's own official website first for current entry prices, closed days, booking requirements, and any renovation or closure notices. For live, right now conditions like queues or partial closures, check the most recent Google Maps and TripAdvisor reviews, last 30 days only. Wikipedia and general encyclopedias are for historical and architectural background only, never for current prices or hours, and background sources never override official live data.
 FOOD (restaurants and cafes): check the official menu, prices, and whether reservations are required. Cross reference Google Maps, TripAdvisor, and Danish food press (Gastro, Politiken, Berlingske, or local food blogs) for real credibility and atmosphere. If dietary needs are relevant, check recent reviews specifically for vegetarian, vegan, or gluten free options.
@@ -206,43 +210,14 @@ function GemlyxApp() {
   // every existing .map()/lookup across the whole app picks the new items up for free,
   // no need to touch dozens of call sites. bumpLiveContent forces the one re-render
   // needed after the mutation, since React can't see a plain array push on its own.
+  // The actual fetch+merge now lives in utils/liveContent.js (ensureLiveContentLoaded)
+  // so pages/GuidePage.jsx can call the exact same one-time, dedup-safe loader — see
+  // that file's comment for why the dedup set had to move to module scope for that
+  // sharing to be safe.
   const [, bumpLiveContent] = useState(0);
-  const fetchedLiveContent = useRef(false);
-  const mergedContentIds = useRef(new Set());
   const heroVideoRef = useRef(null);
-  const loadLiveContent = async () => {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      });
-      const rows = await res.json();
-      if (!Array.isArray(rows)) { console.warn("gemlyx_content fetch did not return an array:", rows); return; }
-      if (rows.length === 0) return;
-      const bookingRows = [];
-      rows.forEach(row => {
-        if (mergedContentIds.current.has(row.id)) return; // already merged this row, skip
-        const item = row.payload;
-        if (!item || !item.name) return;
-        mergedContentIds.current.add(row.id);
-        const id = 100000 + row.id; // offset keeps live IDs clear of hardcoded ones
-        if (row.type === "town") {
-          towns.push({ id, ...item });
-          if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
-        } else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
-        else if (row.type === "free") freeEntrance.push({ id, ...item });
-        else if (row.type === "food" || row.type === "foodStreet") foodSpots.push({ id, ...item });
-        else if (row.type === "night") nightlifeSpots.push({ id, ...item });
-        else if (row.type === "nightTown") nightlifeTowns.push({ id, ...item });
-        else if (row.type === "booking") bookingRows.push({ id, ...item });
-      });
-      if (bookingRows.length > 0) setCraftItems(prev => [...prev, ...bookingRows]);
-      bumpLiveContent(v => v + 1);
-    } catch (err) { console.warn("gemlyx_content fetch failed:", err); }
-  };
   useEffect(() => {
-    if (fetchedLiveContent.current) return;
-    fetchedLiveContent.current = true;
-    loadLiveContent();
+    ensureLiveContentLoaded(bookingRows => setCraftItems(prev => [...prev, ...bookingRows])).then(() => bumpLiveContent(v => v + 1));
   }, []);
   const [active, setActive] = useState("home");
   const [shopTab, setShopTab] = useState("shops");
@@ -361,8 +336,14 @@ function GemlyxApp() {
     return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches };
   })() : (userCoords === "denied" ? "denied" : userCoords === "requesting" ? "loading" : null);
 
-  const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days }
-  const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } shown during "loading" — real progress, not a static message
+  // guideModal is no longer shown as a popup (Oliver: "get rid of the popup") —
+  // it now only serves as the in-progress "build buffer" while a guide is being
+  // written and enriched. Once enrichGuideDays/fetchGuideWeather both finish,
+  // the handoff effect below navigates to the real full-page guide (GuidePage,
+  // "/guide/new") and clears this back to null. Nothing renders it directly
+  // anymore — search this file for "guideModal &&" and there should be none.
+  const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days } (build buffer only, see above)
+  const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } — shown inline near the "Turn this into a guide" button while building
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
   useEffect(() => {
     // Mirror any real (non-loading, non-null) guide into the cache as it updates —
@@ -376,6 +357,23 @@ function GemlyxApp() {
   }, [guideModal]);
   const [glancePending, setGlancePending] = useState(0);
   const [weatherPending, setWeatherPending] = useState(0);
+  // Waits for the fire-and-forget enrichGuideDays/fetchGuideWeather calls
+  // (tracked by glancePending/weatherPending) to both genuinely finish, then
+  // hands off to the real full-page guide with everything already baked in —
+  // maps, exact routes, accommodation, weather — instead of navigating early
+  // and having GuidePage show a guide that's still visibly filling itself in.
+  // _exactDurations/_noRouteFound are snapshotted onto the guide object here
+  // since GuidePage has no access to this component's exactDurations/
+  // noRouteFound state otherwise (it's a completely separate route/component).
+  const [guidePendingNav, setGuidePendingNav] = useState(null); // { gid } | null
+  useEffect(() => {
+    if (!guidePendingNav) return;
+    if (!guideModal || typeof guideModal !== "object" || guideModal._gid !== guidePendingNav.gid) return;
+    if (glancePending > 0 || weatherPending > 0) return;
+    navigate("/guide/new", { state: { guide: { ...guideModal, _exactDurations: exactDurations, _noRouteFound: noRouteFound } } });
+    setGuidePendingNav(null);
+    setGuideModal(null);
+  }, [guidePendingNav, guideModal, glancePending, weatherPending, exactDurations, noRouteFound, navigate]);
 
   // ── Founder studio (visible only at /#studio): Tavily+OpenAI drafts complete
   // entries — card + long-form blogBody — for any content type, following the
@@ -437,7 +435,7 @@ function GemlyxApp() {
     setDraftEditError(null);
     setPublishStatus(null);
     setPublishErrorDetail(null);
-    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
+    setVerifyResults(null); setVerifyError(null); setPerplexityCheckResult(null); setPerplexityCheckError(null); setPerplexityPrecheckRan(false);
     setManageOpen(false);
   };
 
@@ -536,17 +534,16 @@ function GemlyxApp() {
     setVerifyLoading(false);
   };
 
-  // Real independent second opinion via Gemini + Google Search grounding — genuinely
+  // Real independent second opinion via Perplexity's live web search, genuinely
   // different from Tavily+OpenAI (different search index, different model), which is
-  // why it caught things Studio's own research missed (e.g. the fabricated "Kap" stage
-  // and wrong currency for Skagen Festival). Never edits the draft automatically —
+  // why it catches things Studio's own research missed (e.g. the fabricated "Kap" stage
+  // and wrong currency for Skagen Festival). Never edits the draft automatically,
   // shows a synthesized answer with real citations for Oliver to read and act on himself.
-  // SWAPPED FROM GEMINI (Aug 2026): every call site here is a fact-check/
-  // verification task (never open-ended discovery), and independent
-  // comparisons found Perplexity's search-first, per-claim-cited design
-  // structurally better suited to that than Gemini's end-bundled citations —
-  // see api/perplexity.js for the full reasoning. Same signature/shape as the
-  // old askGemini so every call site below needed only a name change.
+  // Gemini was tried here first and fully removed (Aug 2026): every call site below
+  // is a fact-check/verification task, never open-ended discovery, and Perplexity's
+  // search-first, per-claim-cited design fits that better than Gemini's end-bundled
+  // citations did. There is no live Gemini call left anywhere in this app, this
+  // comment exists only so nobody re-adds one by mistake.
   const askPerplexity = async (prompt) => {
     try {
       const res = await fetch("/api/perplexity", {
@@ -614,7 +611,7 @@ function GemlyxApp() {
         }),
       });
       const data = await res.json();
-      // Same reasoning as askGemini: planning (Stage 1) and structuring (Stage 4)
+      // Same reasoning as askPerplexity: planning (Stage 1) and structuring (Stage 4)
       // both swallow OpenAI failures silently by design (a miss here just degrades
       // to raw research, never blocks the draft) — but that means a genuinely
       // broken OpenAI call (wrong model string, a param the model doesn't accept)
@@ -695,23 +692,23 @@ function GemlyxApp() {
       }
     }
   };
-  const [googlePrecheckRan, setGooglePrecheckRan] = useState(false);
-  const [googleCheckLoading, setGoogleCheckLoading] = useState(false);
-  const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
-  const [googleCheckError, setGoogleCheckError] = useState(null);
+  const [perplexityPrecheckRan, setPerplexityPrecheckRan] = useState(false);
+  const [perplexityCheckLoading, setPerplexityCheckLoading] = useState(false);
+  const [perplexityCheckResult, setPerplexityCheckResult] = useState(null); // { text, citations: [{title,url}] }
+  const [perplexityCheckError, setPerplexityCheckError] = useState(null);
   const [factCheckFixLoading, setFactCheckFixLoading] = useState(false);
   const [factCheckFixPreview, setFactCheckFixPreview] = useState(null); // proposed corrected JSON text, awaiting Apply
   const [factCheckFixError, setFactCheckFixError] = useState(null);
-  // Claude reads Gemini's fact-check findings + the current draft, and rewrites
+  // Claude reads Perplexity's fact-check findings + the current draft, and rewrites
   // ONLY what's actually flagged as wrong — never a from-scratch regeneration.
   // Returns the full corrected JSON so the fix stays internally consistent, but
   // it's validated as real JSON and shown as a preview before anything is
   // applied — same "you see it before it's live" pattern as every other rewrite
   // tool in Studio, never a silent overwrite.
   const fixFactCheckWithClaude = async () => {
-    if (!googleCheckResult?.text || !studioDraftText.trim()) return;
+    if (!perplexityCheckResult?.text || !studioDraftText.trim()) return;
     setFactCheckFixLoading(true); setFactCheckFixError(null); setFactCheckFixPreview(null);
-    const prompt = `Here is a draft (JSON) and a list of factual issues an independent fact-checker found in it. Rewrite ONLY the specific parts that are actually flagged as wrong, fixing them to match the fact-checker's findings. Leave every other field completely untouched — same structure, same keys, same wording for anything not flagged. If the fact-checker didn't find real numbers/dates to replace a wrong value with, leave that field an honest empty string rather than guessing. Respond with ONLY the complete corrected JSON, valid JSON, nothing else — no explanation, no markdown code fences.\n\nFact-checker's findings:\n${googleCheckResult.text}\n\nCurrent draft:\n${studioDraftText}`;
+    const prompt = `Here is a draft (JSON) and a list of factual issues an independent fact-checker found in it. Rewrite ONLY the specific parts that are actually flagged as wrong, fixing them to match the fact-checker's findings. Leave every other field completely untouched — same structure, same keys, same wording for anything not flagged. If the fact-checker didn't find real numbers/dates to replace a wrong value with, leave that field an honest empty string rather than guessing. Respond with ONLY the complete corrected JSON, valid JSON, nothing else — no explanation, no markdown code fences.\n\nFact-checker's findings:\n${perplexityCheckResult.text}\n\nCurrent draft:\n${studioDraftText}`;
     const result = await askClaude(prompt, 3000);
     if (result.error) { setFactCheckFixError(result.error); setFactCheckFixLoading(false); return; }
     const cleaned = result.text.replace(/^```json\s*|\s*```$/g, "").trim();
@@ -723,14 +720,14 @@ function GemlyxApp() {
     }
     setFactCheckFixLoading(false);
   };
-  const googleAICheck = async () => {
-    if (!studioDraft || googleCheckLoading) return;
-    setGoogleCheckLoading(true); setGoogleCheckError(null); setGoogleCheckResult(null);
+  const perplexityFactCheck = async () => {
+    if (!studioDraft || perplexityCheckLoading) return;
+    setPerplexityCheckLoading(true); setPerplexityCheckError(null); setPerplexityCheckResult(null);
     const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name. ONLY report things that are actually WRONG, unverifiable, or missing, do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise, bullet points, not an essay.\n\n${RESEARCH_SOURCE_RULES}\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
-    if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
-    setGoogleCheckResult({ text: result.text, citations: result.citations });
-    setGoogleCheckLoading(false);
+    if (result.error) { setPerplexityCheckError(result.error); setPerplexityCheckLoading(false); return; }
+    setPerplexityCheckResult({ text: result.text, citations: result.citations });
+    setPerplexityCheckLoading(false);
   };
 
   const [publishStatus, setPublishStatus] = useState(null); // null | "sending" | "sent" | "error"
@@ -869,7 +866,7 @@ function GemlyxApp() {
     const name = studioTown.trim();
     if (!name || studioLoading) return;
     setStudioLoading(true); setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null); setStudioInventedWarning(null);
-    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
+    setVerifyResults(null); setVerifyError(null); setPerplexityCheckResult(null); setPerplexityCheckError(null); setPerplexityPrecheckRan(false);
     setStudioInstagramUrl(""); setStudioFrozenGeo(null);
     try {
       // STAGE 1 — OpenAI plans what to research. The fixed queries below are a
@@ -967,15 +964,15 @@ function GemlyxApp() {
         }
       }
 
-      // Automatic Gemini + Google Search pre-check, BEFORE OpenAI writes a word — a second,
+      // Automatic Perplexity pre-check, BEFORE OpenAI writes a word, a second,
       // independent search pass (different index, different model than Tavily+OpenAI) that
       // caught real errors Studio's own research missed (e.g. Skagen Festival's fabricated
       // venue and wrong currency). Its findings get folded in as extra grounding for the
-      // draft, not as a rewrite — OpenAI still writes every word. If the key's missing or
-      // the call fails, this just skips silently — drafting must never depend on Gemini.
-      let googleFindings = "";
+      // draft, not as a rewrite, OpenAI still writes every word. If the key's missing or
+      // the call fails, this just skips silently, drafting must never depend on Perplexity.
+      let perplexityFindings = "";
       {
-        // For Food and Town: Gemini's job is no longer just "fact-check" — it's the
+        // For Food and Town: Perplexity's job is no longer just "fact-check", it's the
         // actual "Data Clerk" step (per Oliver's proposed pipeline). It organizes real,
         // searched facts into the SAME narrative buckets the final draft uses, so
         // OpenAI's job narrows down to pure prose transformation of already-sorted
@@ -1009,7 +1006,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // different/weaker model.)
         if (preCheck.error) throw new Error(`Fact-check failed (Perplexity): ${preCheck.error}`);
         if (preCheck.text) {
-          googleFindings = preCheck.text;
+          perplexityFindings = preCheck.text;
           // Surface an identity mismatch as its own clearly-visible warning, separate
           // from the general findings text, so it can't get lost in a wall of facts —
           // this is what actually gives the founder a "did you mean...?" moment before
@@ -1018,7 +1015,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           if (warningMatch) setStudioIdentityWarning(warningMatch[1].trim());
         }
       }
-      setGooglePrecheckRan(!!googleFindings);
+      setPerplexityPrecheckRan(!!perplexityFindings);
 
       // Real, automatic night-transport check — nightlife only, since that's the one
       // content type where "can I actually get home at 3am" is load-bearing. Runs
@@ -1050,8 +1047,8 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
 
       // FROZEN FACTS — real geocoding + real nearest-station lookup, computed
       // programmatically BEFORE OpenAI ever sees this draft. This is the actual
-      // architectural fix for coordinate/station hallucination (per Gemini's
-      // pipeline report): OpenAI "smooths" a real number into whichever one reads
+      // architectural fix for coordinate/station hallucination (per the research
+      // pipeline's own findings): OpenAI "smooths" a real number into whichever one reads
       // more naturally in a sentence, even when fed the correct one — so instead
       // of asking it to state these, they're computed once here, told to OpenAI
       // as facts to reference (not restate character-for-character, since it still
@@ -1158,7 +1155,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
 
       const rawResearch = (scanHint && (scanHint.town || scanHint.dates)
         ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[scanHint.town && `town/city = ${scanHint.town}`, scanHint.dates && `dates = ${scanHint.dates}`].filter(Boolean).join(", ")}\n\n`
-        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below; if it conflicts, prefer whichever is more specific/recent):\n${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
+        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (perplexityFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below; if it conflicts, prefer whichever is more specific/recent):\n${perplexityFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
 
       // STAGE 4 — OpenAI structures the raw research into organized notes per
       // schema field, BEFORE Claude ever writes a word. This is the actual
@@ -1336,7 +1333,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       setPublishStatus(null);
       setPublishErrorDetail(null);
 
-      // FINAL STAGE — Gemini checks the finished draft against the actual research
+      // FINAL STAGE — Perplexity checks the finished draft against the actual research
       // gathered above, specifically hunting for anything that reads like it was
       // invented rather than grounded in what was actually found. This is separate
       // from the "Ask Perplexity to fact-check" button (which re-searches the web
@@ -1838,7 +1835,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     }).finally(() => setWeatherPending(0));
   };
 
-  const enrichGuideDays = (days, gid, travelMode, mixedModes) => {
+  const enrichGuideDays = (days, gid, travelMode, mixedModes, freshGeo = {}) => {
     setGlancePending(days.length);
     days.forEach(async (day, idx) => {
       try {
@@ -1878,11 +1875,26 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
               if (prevLast) dayLegTriples.push([prevLast.name, names[0], glance.legs[0]?.how || ""]);
             }
             for (let i = 0; i < names.length - 1; i++) dayLegTriples.push([names[i], names[i + 1], glance.legs[i]?.how || ""]);
+            // BUG FIX, same root cause as the "2-3 hour transit that's really a 5
+            // minute walk" report: this used to send Google's Directions API a
+            // BARE stop name with no town or country attached, so its own
+            // geocoder was free to match a same-named place anywhere, including
+            // a different branch of a chain or a same-named spot in another
+            // town entirely, giving a plausible but wrong duration. Now uses the
+            // same coordinate-first, town-qualified-text-fallback pattern
+            // fetchExactDurations already uses, so this re-fetch can't disagree
+            // with the real route just from a lazier query.
+            const townByName = {};
+            days.forEach(d => (d.stops || []).forEach(s => { if (s.town && !townByName[s.name]) townByName[s.name] = s.town; }));
+            const asParam = (name) => {
+              const c = resolveStopCoords(name, freshGeo);
+              return c ? `${c.lat},${c.lon}` : `${name}${townByName[name] ? `, ${townByName[name]}` : ""}, Denmark`;
+            };
             const foundExact = {};
             for (const [origin, dest, how] of dayLegTriples) {
               const legMode = detectLegMode(how, travelMode);
               try {
-                const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}`);
+                const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(asParam(origin))}&destination=${encodeURIComponent(asParam(dest))}&mode=${legMode}`);
                 const d2 = await res2.json();
                 if (!d2.error) foundExact[`${origin}|${dest}|${legMode}`] = d2;
               } catch { /* falls back to km estimate / AI text, same as always */ }
@@ -1931,14 +1943,16 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     });
   };
 
-  // Resolve a guide stop name to real coordinates (content data first, then town list), or null.
-  const [geocodedCoords, setGeocodedCoords] = useState({}); // name -> {lat,lon}, filled in once per guide
+  // lookupRealPlace/resolveStopCoords/resolveLegMode/kmBetween now live in
+  // utils/guideEnrichment.js (imported above) so pages/GuidePage.jsx can use
+  // the exact same logic when rendering/enriching a finished guide, instead
+  // of a second hand-copied version that could quietly drift out of sync.
   const [exactDurations, setExactDurations] = useState({}); // "origin|dest|mode" -> {durationText, durationMinutes}
   const [noRouteFound, setNoRouteFound] = useState({}); // "origin|dest|mode" -> true, when Google genuinely found nothing (e.g. islands needing ferry+train+taxi combos no single mode covers)
   // Real Google-matched travel time (not a straight-line estimate) for every leg in a
   // guide, fetched once before it's shown. Needs /api/directions.js + GOOGLE_MAPS_KEY —
   // if either is missing, this silently no-ops and legs fall back to the km estimate,
-  // same graceful-degradation pattern as the Gemini pre-check.
+  // same graceful-degradation pattern as the Perplexity pre-check.
   const fetchExactDurations = async (days, primaryMode, freshGeo = {}, onlyWalking = false) => {
     // Build (origin, dest, how-text) triples instead of flat pairs, so each leg can be
     // routed with ITS OWN mode — e.g. a mostly-bike trip that needs a ferry to Bornholm
@@ -1957,7 +1971,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // Resolves BOTH already-known coords (towns/landmarks/prior geocodes) and this
     // guide's freshly-geocoded ones passed in directly — never the stale geocodedCoords
     // state var, which isn't updated in this closure until the next re-render.
-    const resolveFresh = (name) => resolveStopCoords(name) || freshGeo[name] || null;
+    const resolveFresh = (name) => resolveStopCoords(name, freshGeo);
     // Same ambiguity problem as geocoding — a bare name can match the wrong
     // same-named place in a different town, so include real town context in the
     // text fallback too whenever coordinates genuinely aren't available yet.
@@ -1989,51 +2003,9 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     if (Object.keys(found).length > 0) setExactDurations(prev => ({ ...prev, ...found }));
     if (Object.keys(failed).length > 0) setNoRouteFound(prev => ({ ...prev, ...failed }));
   };
-  // BUG FIX (the "34 min walk that's really 7 min" report): this used to check
-  // the crude TOWN_COORDS substring match BEFORE geocodedCoords — so a stop
-  // like "Odense Flower Festival" (whose name contains the town "Odense")
-  // would match Odense's generic TOWN CENTER coordinate and stop right there,
-  // even when a real, precise geocode of the actual venue existed or could
-  // have been fetched. The town-center point can be a real walking distance
-  // away from the actual venue, which is exactly why the in-app leg said "34
-  // min" while clicking through to real Google Maps (which geocodes the venue
-  // by name/address directly, not by this shortcut) said "7 min" — two
-  // different, disagreeing coordinate sources for the same stop. Precise
-  // sources (a real lat/lon on file, or an actual Nominatim geocode of the
-  // specific venue) now both take priority over the generic town-center
-  // fallback, which is only used as an absolute last resort when neither
-  // exists — see geocodeStopsForGuide below for the matching fix on the
-  // geocoding-eligibility side of this same bug.
-  const resolveStopCoords = (name) => {
-    const real = lookupRealPlace(name);
-    if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
-    if (geocodedCoords[name]) return geocodedCoords[name];
-    const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
-    if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
-    return null;
-  };
-  // SINGLE SOURCE OF TRUTH for leg transport mode — used by fetchExactDurations
-  // (the background fetch) AND both render sites. Previously each computed mode
-  // independently: the fetch could correctly override "walking" to "transit" for
-  // a genuinely far pair, store the result under the "transit" cache key, while
-  // the render recalculated mode fresh with no distance check, still said
-  // "walking", and looked for a "walking" cache entry that was never created —
-  // silently falling through to a real Directions API result fetched separately
-  // for mode=walking between two names Google's OWN geocoder may have resolved
-  // completely differently than our Nominatim-based distance check did.
-  const resolveLegMode = (how, primaryMode, originName, destName, onlyWalking = false, extraGeo = {}) => {
-    let mode = detectLegMode(how, primaryMode);
-    const distKm = haversineKm(
-      resolveStopCoords(originName) || extraGeo[originName] || null,
-      resolveStopCoords(destName) || extraGeo[destName] || null
-    );
-    if (distKm != null) {
-      const walkCapKm = onlyWalking ? Infinity : 2.5;
-      if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
-      else if (mode === "bicycling" && distKm > 60) mode = "transit";
-    }
-    return mode;
-  };
+  // resolveStopCoords/resolveLegMode: see utils/guideEnrichment.js (imported
+  // above) for the current versions, plus the "2-3 hour transit that's really
+  // a 5 minute walk" bug history that shaped their priority order.
   // Free geocoding for specific landmarks (museums, attractions) that only towns have
   // coordinates for otherwise — no API key, no billing, unlike Google's Geocoding API.
   // Runs once per guide, before it's shown, so every downstream render (maps, legs)
@@ -2070,15 +2042,8 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       } catch { /* leave this one unresolved — map/leg for it just won't show, no crash */ }
       await new Promise(r => setTimeout(r, 250)); // be a polite, low-volume client to a free public service
     }
-    if (Object.keys(found).length > 0) setGeocodedCoords(prev => ({ ...prev, ...found }));
-    return found; // returned directly too — setGeocodedCoords won't be visible in this same closure until
-                   // a re-render happens, so any caller needing the fresh coords right away (not next render)
-                   // must use this return value instead of reading the geocodedCoords state variable.
-  };
-  const kmBetween = (a, b) => {
-    const dLat = (a.lat - b.lat) * 111.32;
-    const dLon = (a.lon - b.lon) * 62.06;
-    return Math.sqrt(dLat * dLat + dLon * dLon);
+    return found; // this guide's own freshly-geocoded coords, passed directly to whoever needs
+                   // them right away (never cached in component state — see guideEnrichment.js).
   };
   // Real, future Unix timestamp for the next occurrence of a given weekday+hour —
   // Directions API's departure_time must be in the future, never the past.
@@ -2116,8 +2081,8 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     return results;
   };
 
-  // Geocodes a place name to real coordinates — the "immutable data" anchor from
-  // Gemini's pipeline report. This gets computed ONCE, programmatically, and never
+  // Geocodes a place name to real coordinates, the "immutable data" anchor from
+  // the research pipeline's own findings. This gets computed ONCE, programmatically, and never
   // touched by OpenAI, instead of asking the model to state a lat/lon in its own
   // JSON (which is exactly where coordinate hallucination happens — it "smooths"
   // a real number into something that reads naturally but isn't the real one).
@@ -2183,21 +2148,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     return Math.sqrt(dLat * dLat + dLon * dLon);
   };
 
-  // Looks up a stop name against everything real Gemlyx already knows, so the guide
-  // shows real price/hours/type instead of just repeating the AI's own prose.
-  const lookupRealPlace = (name) => {
-    if (!name) return null;
-    const norm = name.toLowerCase();
-    const pools = [
-      ...freeEntrance.map(p => ({ ...p, _src: "free" })),
-      ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
-      ...foodSpots.map(p => ({ ...p, _src: "food" })),
-      ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
-      ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event" })),
-      ...towns.map(p => ({ ...p, _src: "town" })),
-    ];
-    return pools.find(p => p.name && (norm.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(norm))) || null;
-  };
+  // lookupRealPlace: see utils/guideEnrichment.js (imported above).
 
   // Lets a guide stop that matches something already in Gemlyx's own content
   // (a real free-entrance spot, restaurant, nightlife venue, town, or event)
@@ -2280,10 +2231,12 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     const convoText = srcMsgs.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
     if (!convoText.trim()) return;
     // Reopen instantly if this exact conversation already built a guide — avoids
-    // forcing a full rebuild + loading wait just because the person accidentally
-    // closed the guide and tapped back into it, with nothing new to plan.
+    // forcing a full rebuild + loading wait just because the person tapped "build"
+    // again with nothing new to plan. No popup anymore (Oliver: "get rid of the
+    // popup") — this goes straight to the real full-page guide, same as a fresh
+    // build does once it finishes.
     if (lastBuiltGuide && lastBuiltGuide.convoText === convoText) {
-      setGuideModal(lastBuiltGuide.guide);
+      navigate("/guide/new", { state: { guide: lastBuiltGuide.guide } });
       return;
     }
     setGuideModal("loading");
@@ -2328,10 +2281,10 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         if (candidate < new Date(now.toDateString())) candidate = new Date(now.getFullYear() + 1, monthIdx, day); // already passed this year — assume next year
         arrivalDate = candidate;
       }
-      // One Gemini + Google Search cross-check per guide (not per chat message — the
+      // One Perplexity cross-check per guide (not per chat message, the
       // conversation itself stays fast; this only runs at the moment a real artifact
-      // gets built). Pulls out the place names mentioned so far and asks Gemini to
-      // ground them — same "grounding before writing" pattern as Studio, scoped to
+      // gets built). Pulls out the place names mentioned so far and asks Perplexity to
+      // ground them, same "grounding before writing" pattern as Studio, scoped to
       // the single moment concrete facts actually get committed.
       let guideGrounding = "";
       {
@@ -2340,7 +2293,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       }
       setGuideBuildStage({ label: "Structuring your itinerary", percent: 45 });
       const guideSystemPrompt = `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — whenever the plan has ANY genuine intercity leg (moving between two different towns/cities, not just getting around within one), name Flixbus or Kombardo Expresbus by name as the real budget alternative to a DSB train for that leg (often meaningfully cheaper on longer routes) — this is real, current, useful information, not a footnote to add only when a fare happens to be steep. If a specific train leg is also genuinely expensive at full price, additionally mention DSB Orange billetter (discount advance-purchase train tickets) as the cheaper way to book that same train instead. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — whenever the plan has ANY genuine intercity leg (moving between two different towns/cities, not just getting around within one), name Flixbus or Kombardo Expressen by name as the real budget alternative to a DSB train for that leg (often meaningfully cheaper on longer routes) — this is real, current, useful information, not a footnote to add only when a fare happens to be steep. If a specific train leg is also genuinely expensive at full price, additionally mention DSB Orange billetter (discount advance-purchase train tickets) as the cheaper way to book that same train instead. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
@@ -2354,9 +2307,9 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.
-VERIFIED DANISH TRANSPORT FACTS, THESE OVERRIDE EVERYTHING AND MUST NEVER BE CONTRADICTED: Rejsekort is the travel card you physically check IN with when a journey starts and check OUT with when it ends. The Copenhagen Card is a sightseeing pass (unlimited public transport in the capital region plus free entry to 80+ attractions): you activate it once and show it on request, and it has NO check-in and NO check-out, ever. Tickets bought in the DOT or DSB apps are simply shown on your phone when asked. NEVER describe check-in/check-out mechanics for anything except Rejsekort, and NEVER attribute one product's mechanics to another product. If you are not completely certain how a ticket, card, or pass actually works, do not explain its mechanics at all: name it and tell the traveler to check the official site or app. Inventing operational details, validation steps, prices, or rules for any transport product is the single worst failure this guide can make.
+VERIFIED DANISH TRANSPORT FACTS, THESE OVERRIDE EVERYTHING AND MUST NEVER BE CONTRADICTED: Rejsekort is the travel card you physically check IN with when a journey starts and check OUT with when it ends. The Copenhagen Card is a sightseeing pass (unlimited public transport in the capital region plus free entry to 80+ attractions): you activate it once and show it on request, and it has NO check-in and NO check-out, ever. Tickets bought in the DOT or DSB apps are simply shown on your phone when asked. NEVER describe check-in/check-out mechanics for anything except Rejsekort, and NEVER attribute one product's mechanics to another product. The real Danish express bus operator is spelled "Kombardo Expressen", not Expressbus or Expresbus, always use that exact spelling. Get every named business, operator, or product's exact real spelling right, never an approximated or guessed version of a real name. If you are not completely certain how a ticket, card, or pass actually works, do not explain its mechanics at all: name it and tell the traveler to check the official site or app. Inventing operational details, validation steps, prices, or rules for any transport product is the single worst failure this guide can make.
 VOICE FOR THE THREE ESSENTIALS FIELDS: write them like a knowledgeable Danish friend texting quick practical advice, never like an AI assistant writing a brochure. Short sentences. Concrete numbers and real names. Banned in essentials: "It's worth noting", "Keep in mind that", "Additionally", "Overall", "be sure to", "consider", exclamation marks, and any sentence that could apply to any trip anywhere.
-DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em dash or an en dash anywhere, and never use a hyphen as a pause between clauses. Use a comma, a period, a colon, or a plain connecting word instead. A hyphen is allowed ONLY inside compound words (check-in, open-faced) and number ranges (2-3 hours, 150-250 DKK).${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
+DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em dash or an en dash anywhere, and never use a hyphen as a pause between clauses. Use a comma, a period, a colon, or a plain connecting word instead. A hyphen is allowed ONLY inside compound words (check-in, open-faced) and number ranges (2-3 hours, 150-250 DKK).${guideGrounding ? `\nPERPLEXITY CROSS-CHECK (weigh this alongside the conversation, if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -2490,10 +2443,19 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
       // set through to the per-day prompt so it stops treating one mode as dominant.
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
-      fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking); // fire-and-forget — legs show estimates until this resolves, then upgrade
+      // Awaited now, was fire-and-forget — since there's no popup to progressively
+      // patch anymore, the guide only hands off to the real full page once it's
+      // genuinely finished, maps/times/weather included, not a partial draft that
+      // fills in after the person's already looking at it.
+      await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking);
       const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
-      enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
+      // enrichGuideDays/fetchGuideWeather still run fire-and-forget, tracked by
+      // glancePending/weatherPending — the handoff effect below (search
+      // "guidePendingNav") waits for both to hit 0 before navigating to the real
+      // full-page guide, so it always arrives fully enriched, never a partial one.
+      setGuidePendingNav({ gid });
+      enrichGuideDays(parsed.days, gid, travelMode, mixedModes, freshGeo);
       fetchGuideWeather(parsed.days, gid, arrivalDate);
     } catch {
       setGuideModal(null);
@@ -2502,21 +2464,12 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
     }
   };
 
-  const saveCurrentGuide = () => {
-    if (!guideModal || guideModal === "loading") return;
-    const weatherMissing = guideModal.days.some(d => !d.weather);
-    if (weatherMissing && weatherPending > 0) {
-      setToast("⏳ Still checking weather for this trip — try Save again in a few seconds");
-      setTimeout(() => setToast(null), 2600);
-      return;
-    }
-    const newGuide = { id: Date.now(), title: guideModal.title, days: guideModal.days, savedAt: new Date().toISOString(), arrivalDate: guideModal._arrivalDate || null };
-    const updated = [newGuide, ...savedGuides].slice(0, 20);
-    setSavedGuides(updated);
-    try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
-    setToast("📖 Guide saved — weather included for each day");
-    setTimeout(() => setToast(null), 2200);
-  };
+  // saveCurrentGuide (the old popup's "Save Guide" button handler) is gone along
+  // with the popup itself. Saving now happens on the real full-page guide
+  // (GuidePage.jsx's own saveGuide, which gets a genuine Supabase row and a
+  // real shareable /guide/:id link) — it also writes the same
+  // "gemlyx_saved_guides" localStorage list this Home-tab list reads, so a
+  // save from there still shows up here.
 
   const deleteSavedGuide = (id) => {
     const updated = savedGuides.filter(g => g.id !== id);
@@ -2818,7 +2771,7 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
       const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. NEVER use an em dash or an en dash in your replies, and never use a hyphen as a pause between clauses: use a comma, a period, a colon, or a plain connecting word instead (hyphens stay only inside compound words and number ranges). NEVER invent how a ticket, card, or pass works: Rejsekort is the card with physical check-in and check-out; the Copenhagen Card has no check-in or check-out, it is activated once and shown on request; if you are not certain of a transport product's mechanics, name it and point to the official app or site instead of explaining it. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
-Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
+Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expressen for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
 
 ASK BEFORE YOU PLAN — ONLY WHEN THEY'VE ACTUALLY ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary — not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately — never redirect a simple question into an intake questionnaire. Only when they're asking you to actually build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together — for example: "Happy to help! Where are you starting from — flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — real hidden gems, the well-known popular spots, or a mix?" A genuinely minimal request like "I wanna go to Denmark, plan me something" gives you ZERO of those things — this is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for actually knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip actually begins — a guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. Once you know enough to build, your LAST question before actually building should always be: "Want a simple plan you can glance at, or a full hour-by-hour schedule?" — build the actual plan once you have that answer, either from what they've said or because they already told you everything in their first message.
 NEVER SEND A "WORKING ON IT" STALLING REPLY — THIS IS ABSOLUTE. You cannot do background work after sending a message — there is no "one moment, let me dive in" that leads anywhere; once your reply is sent, nothing further happens until the traveler does something next. So every single reply must be complete and immediately actionable on its own — either (1) the one clarifying question above, or (2) the FULL actual plan itself, written out completely, right now, in this message. Never write something like "Let me put together a detailed itinerary for you, one moment!" or "I'll get started on that now" — that promises work that will never happen and leaves the person stuck looking at a dead end. If you have enough information to build, build the real thing immediately in this same reply — don't announce it, don't preview it, just do it.
@@ -3213,7 +3166,22 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 )}
 
-                {(() => {
+                {guideModal ? (
+                  // MINIMAL LOADING STATE, per Oliver ("why does the guide love sending
+                  // you to the long tunnel. Just put the user onto the page. That's it")
+                  // — a spinner, the plain real stage label, and a thin progress line,
+                  // right here in the chat where "Turn this into a guide" was tapped, not
+                  // a separate screen to sit through. No popup opens at the end either
+                  // (Oliver: "get rid of the popup") — once this finishes, the app
+                  // navigates straight to the real full-page guide.
+                  <div style={{ textAlign: "center", padding: "18px 10px 14px" }}>
+                    <GemlyxLoader size={32} tone="gold" ring={true} />
+                    <div style={{ marginTop: 12, fontSize: 13, color: C.light, fontWeight: 600 }}>{guideBuildStage?.label || "Building your guide"}</div>
+                    <div style={{ marginTop: 12, maxWidth: 180, marginLeft: "auto", marginRight: "auto", height: 3, borderRadius: 100, background: C.border, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${guideBuildStage?.percent || 5}%`, background: C.gold, transition: "width 0.6s ease" }} />
+                    </div>
+                  </div>
+                ) : (() => {
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
                   const readyToBuild = lastAssistantMsg && isReadyToBuild(lastAssistantMsg.text);
                   return readyToBuild && !aiLoading;
@@ -3564,8 +3532,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           </div>
                         )}
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 5 }}>✏️ EDIT BEFORE PUBLISHING — this is what actually gets saved</div>
-                        <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
-                          {googlePrecheckRan ? "✦ Written with a Perplexity cross-check folded in before drafting" : "Perplexity pre-check didn't run (no key set, or the call failed) — Tavily research only"}
+                        <div style={{ fontSize: 9.5, color: perplexityPrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
+                          {perplexityPrecheckRan ? "✦ Written with a Perplexity cross-check folded in before drafting" : "Perplexity pre-check didn't run (no key set, or the call failed) — Tavily research only"}
                         </div>
                         <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); }}
                           rows={12}
@@ -3714,20 +3682,20 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             style={{ width: "100%", background: "none", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginTop: 10, marginBottom: 8, fontFamily: "'Inter', sans-serif" }}>
                             {verifyLoading ? "Searching…" : "🔎 Verify dates, prices & venue names"}
                           </button>
-                          <button onClick={googleAICheck} disabled={googleCheckLoading}
+                          <button onClick={perplexityFactCheck} disabled={perplexityCheckLoading}
                             style={{ width: "100%", background: "none", border: "1px solid #4285F466", color: "#8AB4F8", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                            {googleCheckLoading ? "Asking Perplexity…" : "◆ Ask Perplexity to fact-check this"}
+                            {perplexityCheckLoading ? "Asking Perplexity…" : "◆ Ask Perplexity to fact-check this"}
                           </button>
                         </div>
 
-                        {googleCheckError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 12 }}>{googleCheckError}</div>}
-                        {googleCheckResult && (
+                        {perplexityCheckError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 12 }}>{perplexityCheckError}</div>}
+                        {perplexityCheckResult && (
                           <div style={{ background: C.bg, border: "1px solid #4285F444", borderRadius: 10, padding: "12px", marginBottom: 12 }}>
                             <div style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", marginBottom: 8 }}>◆ Perplexity's independent check — read this, then edit the JSON above if it flags something:</div>
-                            <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: googleCheckResult.citations.length > 0 ? 10 : 0 }}>{googleCheckResult.text}</div>
-                            {googleCheckResult.citations.length > 0 && (
+                            <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: perplexityCheckResult.citations.length > 0 ? 10 : 0 }}>{perplexityCheckResult.text}</div>
+                            {perplexityCheckResult.citations.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                                {googleCheckResult.citations.map((c, i) => (
+                                {perplexityCheckResult.citations.map((c, i) => (
                                   <a key={i} href={c.url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#8AB4F8", background: "#4285F418", border: "1px solid #4285F444", borderRadius: 100, padding: "3px 9px", textDecoration: "none" }}>{c.title.slice(0, 30)} ↗</a>
                                 ))}
                               </div>
@@ -3743,7 +3711,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                 <textarea readOnly value={factCheckFixPreview} rows={8}
                                   style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, fontSize: 10.5, color: C.light, lineHeight: 1.5, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box" }} />
                                 <div style={{ display: "flex", gap: 8 }}>
-                                  <button onClick={() => { setStudioDraftText(factCheckFixPreview); setFactCheckFixPreview(null); setGoogleCheckResult(null); }}
+                                  <button onClick={() => { setStudioDraftText(factCheckFixPreview); setFactCheckFixPreview(null); setPerplexityCheckResult(null); }}
                                     style={{ background: C.accent, border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
                                     ✓ Apply to draft
                                   </button>
@@ -3952,7 +3920,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Guides</div>
                   {savedGuides.map(g => (
-                    <div key={g.id} onClick={() => setGuideModal({ title: g.title, days: g.days })}
+                    // A guide saved via GuidePage's real Save gets a genuine Supabase
+                    // row (a short string id) and a real shareable link — those go
+                    // straight to it. Anything saved the old way (a plain numeric
+                    // Date.now() id, from before this pass) has no Supabase row to
+                    // fetch, so it opens as an unsaved guide instead, with the option
+                    // to save it properly and get a real link.
+                    <div key={g.id} onClick={() => (typeof g.id === "string" ? navigate(`/guide/${g.id}`) : navigate("/guide/new", { state: { guide: { title: g.title, days: g.days } } }))}
                       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: C.text }}><Ico name="book" size={14} color={C.gold} /> {g.title}</div>
@@ -5284,293 +5258,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
       <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
       <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
       <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
-
-      {guideModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.85)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
-          <div style={{ maxWidth: 480, margin: "0 auto", background: guideModal === "loading" ? "transparent" : C.bg, border: guideModal === "loading" ? "none" : `1px solid ${C.border}`, borderRadius: 20, padding: guideModal === "loading" ? 0 : "22px", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
-            {guideModal === "loading" ? (
-              // MINIMAL LOADING STATE — per Oliver ("why does the guide love sending
-              // you to the long tunnel. Just put the user onto the page. That's it"):
-              // the previous version was a whole separate themed screen (parchment
-              // background, ink stains, a title and a rewritten travel-letter line
-              // for every stage) the person had to sit through before ever seeing
-              // real content, which is exactly what read as a long detour before
-              // the actual page. This is just a spinner, the plain real stage label,
-              // and a thin progress line, so the wait reads as a brief pause on the
-              // way to the page rather than its own destination. guideBuildStage
-              // itself is untouched, same real pipeline stages and percents.
-              <div style={{ textAlign: "center", padding: "70px 20px" }}>
-                <GemlyxLoader size={44} tone="gold" ring={true} />
-                <div style={{ marginTop: 16, fontSize: 14, color: C.light, fontWeight: 600 }}>{guideBuildStage?.label || "Building your guide"}</div>
-                <div style={{ marginTop: 16, maxWidth: 200, marginLeft: "auto", marginRight: "auto", height: 3, borderRadius: 100, background: C.border, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${guideBuildStage?.percent || 5}%`, background: C.gold, transition: "width 0.6s ease" }} />
-                </div>
-              </div>
-            ) : (
-              <>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "4px 12px" }}>
-                    <span style={{ fontSize: 11 }}>✦</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 0.5, textTransform: "uppercase" }}>Your Guide</span>
-                  </div>
-                  <button onClick={() => setGuideModal(null)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
-                </div>
-                <div style={{ fontSize: 26, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 4 }}>{guideModal.title}</div>
-                <div style={{ marginBottom: 14 }} />
-                {guideModal.essentials && (guideModal.essentials.budgetReality || guideModal.essentials.keepInMind || guideModal.essentials.transportTip || guideModal.essentials.weatherNote) && (() => {
-                  // weatherNote is added client-side, after real per-day forecasts come
-                  // back (see fetchGuideWeather) — not part of what Claude writes, since
-                  // Claude has no real forecast data to draw from at build time. Listed
-                  // last on purpose: it can arrive a moment after everything else in this
-                  // card is already showing.
-                  const lines = [
-                    guideModal.essentials.budgetReality && { icon: "💰", text: guideModal.essentials.budgetReality },
-                    guideModal.essentials.transportTip && { icon: "🚆", text: guideModal.essentials.transportTip },
-                    guideModal.essentials.keepInMind && { icon: "✦", text: guideModal.essentials.keepInMind },
-                    guideModal.essentials.weatherNote && { icon: "🌧", text: guideModal.essentials.weatherNote },
-                  ].filter(Boolean);
-                  return (
-                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Essentials</div>
-                      {lines.map((line, i) => (
-                        <div key={i} style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: i < lines.length - 1 ? 8 : 0 }}>
-                          {line.icon} {line.text}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-                {guideModal.days.map((day, dayIdx) => (
-                  <div key={day.day} style={{ marginBottom: 20 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase" }}>Day {day.day}{day.title ? ` — ${day.title}` : ""}</div>
-                    {(() => {
-                      // If today only has one stop, connect it to yesterday's last stop instead —
-                      // that inter-day leg (e.g. Dragør → Køge) IS the actual journey, and without
-                      // it a single-stop day would show no map and no travel info at all.
-                      if (day.stops.length > 1 || dayIdx === 0) return null;
-                      const prevDay = guideModal.days[dayIdx - 1];
-                      const prevStop = prevDay?.stops?.[prevDay.stops.length - 1];
-                      if (!prevStop) return null;
-                      const how = day.glance?.legs?.[0]?.how || "";
-                      const mode = resolveLegMode(how, guideModal._mode, prevStop.name, day.stops[0].name, guideModal._onlyWalking);
-                      const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
-                      const a = resolveStopCoords(prevStop.name), b = resolveStopCoords(day.stops[0].name);
-                      const km = a && b ? kmBetween(a, b) : null;
-                      const rawExact = exactDurations[`${prevStop.name}|${day.stops[0].name}|${mode}`];
-                      const plausibleCap = mode === "walking" ? 180 : mode === "bicycling" ? 300 : Infinity;
-                      const exact = rawExact && rawExact.durationMinutes <= plausibleCap ? rawExact : null;
-                      const originText = prevStop.town ? `${prevStop.name}, ${prevStop.town}, Denmark` : `${prevStop.name}, Denmark`;
-                      const destText = day.stops[0].town ? `${day.stops[0].name}, ${day.stops[0].town}, Denmark` : `${day.stops[0].name}, Denmark`;
-                      const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
-                      return (
-                        <a href={mapsUrl} target="_blank" rel="noreferrer"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginBottom: 12 }}>
-                          <span style={{ fontSize: 12 }}>{icon}</span>
-                          <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
-                            {exact ? `${exact.durationText} ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
-                              : km !== null ? `${Math.round(km) === 0 ? "<1" : "~" + Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}` : how || "Route from yesterday"}
-                          </span>
-                          <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· {exact ? "Google Maps ↗" : "Exact route ↗"}</span>
-                        </a>
-                      );
-                    })()}
-                      {day.weather && (
-                        <div title="Forecast assumes the trip starts today" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: C.surface, border: `1px solid ${day.weather.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 11 }}>
-                          <span>{day.weather.icon}</span>
-                          <span style={{ color: C.text, fontWeight: 700 }}>{day.weather.temp}°</span>
-                          {day.weather.risk === "high" && <span style={{ color: "#FFB347", fontWeight: 700 }}>· rain likely</span>}
-                        </div>
-                      )}
-                    </div>
-                    {(() => {
-                      const prevDay = dayIdx > 0 ? guideModal.days[dayIdx - 1] : null;
-                      const prevStop = prevDay?.stops?.[prevDay.stops.length - 1];
-                      const leadIn = day.stops.length === 1 && prevStop ? [prevStop] : [];
-                      const routePoints = [...leadIn, ...day.stops].map(s => {
-                        const c = resolveStopCoords(s.name);
-                        return c ? { name: s.name, ...c } : null;
-                      }).filter(Boolean);
-                      if (routePoints.length < 2) return null;
-                      return (
-                        <div style={{ height: 160, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 14 }}>
-                          <GuideRouteMap points={routePoints} />
-                        </div>
-                      );
-                    })()}
-                    {day.stops.map((stop, i) => {
-                      const real = lookupRealPlace(stop.name);
-                      const townMatch = towns.find(t => t.name === stop.name)?.name || (real?._src === "town" ? real.name : null) || Object.keys(TOWN_COORDS).find(t => stop.name.includes(t));
-                      return (
-                        <div key={i}>
-                          <div style={{ display: "flex", gap: 12 }}>
-                          {real?.photo ? (
-                            <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                              <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                            </div>
-                          ) : townMatch ? (
-                            <div style={{ width: 52, height: 52, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${C.border}` }}>
-                              <DKLocator town={townMatch} color={C.gold} />
-                            </div>
-                          ) : (
-                            <div style={{ width: 52, height: 52, borderRadius: 10, flexShrink: 0, border: `1px solid ${C.border}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                              {real?.emoji || "📍"}
-                            </div>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
-                              <div onClick={real ? () => openStopDetail(real) : undefined}
-                                style={{ fontSize: 14, fontWeight: 700, color: real ? C.gold : C.text, cursor: real ? "pointer" : "default", textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}66` : "none", textUnderlineOffset: 3 }}>
-                                {stop.name}{real ? " ↗" : ""}
-                              </div>
-                              {(stop.arrivalTime || stop.suggestedStay) && (
-                                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, whiteSpace: "nowrap" }}>
-                                  {stop.arrivalTime ? `⏰ ${stop.arrivalTime}` : ""}{stop.arrivalTime && stop.suggestedStay ? " · " : ""}{stop.suggestedStay ? `${stop.suggestedStay}` : ""}
-                                </div>
-                              )}
-                            </div>
-                            <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginBottom: real ? 4 : 0 }}>{stop.note}</div>
-                            {real && real.name === stop.name && (
-                              <div style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
-                                {real.price ? `${real.price}` : real.popularityTag === "Hidden Gem" ? "◆ Free — Hidden Gem" : real._src === "free" ? "Free entry" : ""}
-                              </div>
-                            )}
-                          </div>
-                          </div>
-                          {i < day.stops.length - 1 ? (() => {
-                            const nextStop = day.stops[i + 1];
-                            const how = day.glance?.legs?.[i]?.how || "";
-                            const mode = resolveLegMode(how, guideModal._mode, stop.name, nextStop.name, guideModal._onlyWalking);
-                            const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how) ? "⛴" : "🚆";
-                            const a = resolveStopCoords(stop.name), b = resolveStopCoords(nextStop.name);
-                            const km = a && b ? kmBetween(a, b) : null;
-                            const rawExact = exactDurations[`${stop.name}|${nextStop.name}|${mode}`];
-                            // Display-level sanity cap: even after every upstream fix, don't trust
-                            // a number blindly — no genuine walking leg WITHIN a single day's stops
-                            // should exceed ~3 hours, nor a bike leg ~5 hours. If one somehow does,
-                            // that's still a real mismatch somewhere upstream (bad geocode, wrong
-                            // branch of a chain, etc.) — better to show an honest "Route" fallback
-                            // than a false-confidence "✓ Exact route" on an obviously wrong number.
-                            const plausibleCap = mode === "walking" ? 180 : mode === "bicycling" ? 300 : Infinity;
-                            const exact = rawExact && rawExact.durationMinutes <= plausibleCap ? rawExact : null;
-                            const routeFailed = noRouteFound[`${stop.name}|${nextStop.name}|${mode}`];
-                            const originText = stop.town ? `${stop.name}, ${stop.town}, Denmark` : `${stop.name}, Denmark`;
-                            const destText = nextStop.town ? `${nextStop.name}, ${nextStop.town}, Denmark` : `${nextStop.name}, Denmark`;
-                            const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
-                            // Rome2Rio handles real multi-modal routes (ferry+train+taxi combos)
-                            // that a single Google Directions mode can't — the common case being
-                            // a smaller island (Femø, Bornholm, Ærø, Samsø) with no direct route
-                            // in any one mode. Its own URL search auto-detects the real modes,
-                            // no need to guess and hardcode a specific combination here.
-                            const rome2rioUrl = `https://www.rome2rio.com/map/${encodeURIComponent(stop.name)}/${encodeURIComponent(nextStop.name)}`;
-                            return (
-                              <div style={{ borderLeft: `2px dashed ${C.border}`, marginLeft: 31, padding: "7px 0 9px 14px", minHeight: 14 }}>
-                                {glancePending > 0 && !how ? (
-                                  <span style={{ fontSize: 11, color: C.muted }}>✨ checking…</span>
-                                ) : routeFailed ? (
-                                  <a href={rome2rioUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
-                                    <span style={{ fontSize: 12 }}>⛴</span>
-                                    <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>No direct route — check Rome2Rio</span>
-                                    <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>↗</span>
-                                  </a>
-                                ) : (
-                                  <a href={mapsUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
-                                    <span style={{ fontSize: 12 }}>{icon}</span>
-                                    <span style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
-                                      {exact
-                                        ? `${exact.durationText} ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
-                                        : km !== null
-                                        ? `${Math.round(km) === 0 ? "<1" : "~" + Math.round(km)} km ${mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus"}`
-                                        : how || "Route"}
-                                    </span>
-                                    {exact && <span style={{ fontSize: 9, color: "#4CAF50", fontWeight: 700 }}>✓</span>}
-                                    <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>· Exact route ↗</span>
-                                  </a>
-                                )}
-                              </div>
-                            );
-                          })() : (
-                            <div style={{ height: 12 }} />
-                          )}
-                        </div>
-                      );
-                    })}
-                    {day.glance?.accommodation ? (() => {
-                      // Real checkin/checkout for this specific day, not "today" —
-                      // Booking.com's own default (as seen live) silently ignores a
-                      // bare destination-only URL and falls back to "near me, today",
-                      // which is exactly the wrong result for a trip being planned
-                      // for a future date.
-                      const dayDate = guideModal._arrivalDate ? new Date(guideModal._arrivalDate) : null;
-                      if (dayDate) dayDate.setDate(dayDate.getDate() + (day.day - 1));
-                      const nextDate = dayDate ? new Date(dayDate) : null;
-                      if (nextDate) nextDate.setDate(nextDate.getDate() + 1);
-                      const fmt = (d) => d ? d.toISOString().slice(0, 10) : null;
-                      const adultsMatch = (guideModal._travelers || "").match(/\d+/);
-                      const adults = adultsMatch ? adultsMatch[0] : "2";
-                      const searchTerm = day.glance.recommendedStay || day.glance.stayArea;
-                      const bookingUrl = searchTerm
-                        ? `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(searchTerm + ", Denmark")}` +
-                          (fmt(dayDate) ? `&checkin=${fmt(dayDate)}&checkout=${fmt(nextDate)}` : "") +
-                          `&group_adults=${adults}&no_rooms=1`
-                        : null;
-                      return (
-                        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "10px 12px", marginTop: 2 }}>
-                          <span style={{ fontSize: 13, flexShrink: 0 }}>🏡</span>
-                          <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
-                            <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
-                            <span style={{ color: C.light }}>{day.glance.accommodation}</span>
-                            {day.glance.recommendedStay && (
-                              <div style={{ marginTop: 2 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
-                            )}
-                            {bookingUrl && (
-                              // NOT an affiliate link yet — plain Booking.com search, works today.
-                              // Once the Booking.com Affiliate Partner Program account is approved,
-                              // add "&aid=YOUR_AID_HERE" to this URL and every one of these becomes
-                              // a real earning link with zero other changes needed.
-                              <a href={bookingUrl} target="_blank" rel="noreferrer"
-                                style={{ display: "block", marginTop: 4, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
-                                🔎 {day.glance.recommendedStay ? `See ${day.glance.recommendedStay} on Booking.com` : `Search stays near ${day.glance.stayArea}`} ↗
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })() : glancePending > 0 ? (
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>✨ Checking travel times & where to stay…</div>
-                    ) : null}
-                  </div>
-                ))}
-
-                {/* NEW — bridges to the full-page guide view (src/pages/GuidePage.jsx)
-                    without removing this existing modal. The modal keeps everything
-                    it already does well (weather per day, route maps, exact travel
-                    times, day editing) — this just offers the new page as an
-                    alternative view of the SAME guide data, so nothing that already
-                    works gets ripped out before the new page has been tried. Once
-                    it's confirmed to cover everything needed, this modal can be
-                    retired in a later pass. */}
-                <button onClick={() => navigate("/guide/new", { state: { guide: guideModal } })}
-                  style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 8 }}>
-                  View as full page ↗
-                </button>
-                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                  <button onClick={saveCurrentGuide}
-                    style={{ flex: 1, background: C.accent, border: "none", color: "#fff", borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    💾 Save Guide
-                  </button>
-                  <button onClick={() => setGuideModal(null)}
-                    style={{ flex: 1, background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                    Close
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── PRIVACY & DATA MODAL ──────────────────────────── */}
       {showPrivacy && (
