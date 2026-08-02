@@ -123,7 +123,7 @@ export const GemlyxIntro = ({ markSize = 96, wordHeight = 26, tone = "gold", col
         .gxi-ring { stroke-dashoffset: 0 !important; }
       }
     `}</style>
-    <svg className="gxi-mark" width={markSize} height={markSize} viewBox="0 0 120 120" style={{ display: "block", marginBottom: 20 }} aria-hidden="true">
+    <svg id="gxi-fly-mark" className="gxi-mark" width={markSize} height={markSize} viewBox="0 0 120 120" style={{ display: "block", marginBottom: 20 }} aria-hidden="true">
       <circle className="gxi-ring" cx="60" cy="60" r="54" fill="none" stroke={color} strokeWidth="4" opacity="0.9" />
       <g className="gxi-gem"><GemCore tone={tone} /></g>
     </svg>

@@ -1,4 +1,16 @@
-# LATEST: the ridiculous filter rows are gone. Chips + bottom sheets everywhere, one merged Events list, and "Closest to me" on four pages
+# LATEST: found why the pages freeze when you use the filters, and the compass now walks to its chair
+
+**1. The freeze: seen live in your Chrome, root cause found.** I opened the live site in your browser, went to Events, clicked a filter chip, and the page stopped painting for over 30 seconds (the tab wasn't dead, the rendering pipeline was choking). Cause, and it's mine to own from the card redesign: every single card carried willChange:transform, which forces the browser to keep a permanent GPU layer per card. The merged Events grid meant about 65 of those at once. On top of that, every card had one or two badges with backdrop-filter blur, each of which makes the browser re-blur everything behind it live. Roughly 130 live blurs stacked on 65 forced layers. A desktop GPU stalls; a phone GPU gives up, which is exactly your "even worse on phone." Fixed: willChange removed from all cards (the hover tilt still works, it never needed it), and every card badge's blur replaced with a slightly more opaque solid background that looks nearly identical and costs nothing. The entrance page kept its blurs, it unmounts after Enter and was never the problem.
+
+**2. The compass walks in and takes its chair.** The settle animation is redone to your picture. Only the compass travels. The GEMLYX letters and the caption fade out exactly where they stand; they never move. The compass then glides up to the corner (0.9s) and SITS: it aims at the real corner mark's measured position on your actual screen, lands pixel-on-pixel, and the static corner mark takes over in the same frame with no fade, so it reads as the same object coming to rest. The wordmark then fades in next to the seated compass, and only after that does the Denmark card pop up. Verified frame-by-frame in renders at desktop and phone sizes.
+
+**3. Bonus dash sweep.** The page subtitles on Events, Food, Towns, Nightlife, and Attractions still carried em dashes from before the ban (I saw one live on the Events page during the test). All five rewritten with commas and colons. The rest of the app's long-tail static copy still has some; say the word and I'll do a full sweep pass.
+
+**Please test before trusting**: after pushing, hard-refresh, then (1) Events on your phone: scroll the grid, open every chip, pick and clear filters, it should stay smooth now; (2) fresh browser session for the intro: letters and caption fade in place, compass alone flies to the corner and sits, name appears beside it, then the card; (3) glance at the five rewritten subtitles. The perf fix is code-verified but the real judge is your phone, so this one matters to test.
+
+---
+
+# EARLIER: the ridiculous filter rows are gone. Chips + bottom sheets everywhere, one merged Events list, and "Closest to me" on four pages
 
 **1. One filter language across the app.** Every page's stack of labeled pill rows is now a single short row of compact chips. A chip shows its dimension and current pick ("Month · Aug"); tapping it slides up a bottom sheet with the options, one tap picks and closes. Active chips fill light with dark text, matching the app's chip language. This replaced: the Events date and type rows, the Food type pills plus the budget underline tabs, the Towns region row, and the entire boxed Attractions panel that had five labeled rows (City, Price, Craft, Popularity, Speed, Sort).
 

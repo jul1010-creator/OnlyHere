@@ -2492,14 +2492,37 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
   };
   useEffect(() => {
     if (entered || introDone) return;
-    // Choreography ends ~4.1s in; hold the settled logo a beat, then the lockup
-    // FLIES up to the top-left brand corner (0.9s), dissolving into the real
-    // top-bar logo as it lands — then the Denmark card pops up (Oliver's ask).
+    // Choreography ends ~4.1s in; hold the settled logo a beat, then ONLY the
+    // compass flies to the corner (0.9s) and SITS. Oliver's image: coming in a
+    // door and finding a chair in the corner to sit in. The writing and caption
+    // fade out where they stand; they do not travel.
     const t1 = setTimeout(() => setIntroLeaving(true), 4600);
-    const t2 = setTimeout(finishIntro, 5400);
+    const t2 = setTimeout(finishIntro, 5560);
     return () => { clearTimeout(t1); clearTimeout(t2); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entered, introDone]);
+  // The flight itself, measured live: the corner brand mark is already mounted
+  // (invisible) during the flight, so the compass can aim at its exact
+  // bounding box and land pixel-on-pixel. At landing the static corner mark
+  // becomes visible in the same frame the flyer unmounts: it sits, no fade.
+  useEffect(() => {
+    if (!introLeaving || introDone) return;
+    const raf = requestAnimationFrame(() => {
+      const flyer = document.getElementById("gxi-fly-mark");
+      const target = document.getElementById("gx-corner-mark");
+      if (!flyer || !target) return;
+      const f = flyer.getBoundingClientRect();
+      const t = target.getBoundingClientRect();
+      if (!f.width || !t.width) return;
+      const s = t.width / f.width;
+      const dx = (t.left + t.width / 2) - (f.left + f.width / 2);
+      const dy = (t.top + t.height / 2) - (f.top + f.height / 2);
+      flyer.style.transformOrigin = "50% 50%";
+      flyer.style.transition = "transform 0.9s cubic-bezier(0.5,0.05,0.2,1)";
+      flyer.style.transform = `translate(${dx}px, ${dy}px) scale(${s})`;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [introLeaving, introDone]);
   // Small note chip on the front door (login/signup are placeholders for now).
   const [landingNote, setLandingNote] = useState(null);
   useEffect(() => {
@@ -3001,7 +3024,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
     const away = !event.date ? "" : daysUntil(event.date) <= 0 ? "Happening now" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)} days away`;
     return (
       <div onClick={() => setEventDetail(event)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
-        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease, border-color 0.18s ease", willChange: "transform" }}>
+        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease, border-color 0.18s ease" }}>
         <div style={{ height: 136, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${event.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 52, fontWeight: 500, color: "rgba(148,163,199,0.3)" }}>{(event.name || "◆").slice(0, 1)}</span>
           {event.photo && (
@@ -3010,13 +3033,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
           )}
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
           {d && (
-            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
+            <div style={{ position: "absolute", top: 12, left: 12, textAlign: "center", background: "rgba(10,15,30,0.92)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "6px 10px 8px", minWidth: 46 }}>
               <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, color: C.accent, textTransform: "uppercase", lineHeight: 1 }}>{d.toLocaleString("en-GB", { month: "short" })}</div>
               <div style={{ fontSize: 21, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{d.getDate()}</div>
             </div>
           )}
           {away && (
-            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(10,15,30,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
+            <div style={{ position: "absolute", top: 12, right: 12, fontSize: 10.5, fontWeight: 700, color: away === "Happening now" ? "#6ECF97" : C.gold, background: "rgba(10,15,30,0.92)", border: `1px solid ${away === "Happening now" ? "rgba(110,207,151,0.35)" : `${C.gold}44`}`, padding: "5px 11px", borderRadius: 100 }}>{away}</div>
           )}
         </div>
         <div style={{ padding: "14px 16px 15px" }}>
@@ -3914,7 +3937,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Attractions</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal — genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal: genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
               </div>
 
               {/* Modern filter bar — the old boxed panel with five labeled pill
@@ -3994,17 +4017,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <span style={{ background: item._kind === "free" ? "#2E7D32" : item.color, color: "#fff", fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>
                             {item._kind === "free" ? "Free" : item.type}
                           </span>
-                          {item.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.85)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100, backdropFilter: "blur(4px)" }}>◆ Hidden Gem</span>}
+                          {item.popularityTag === "Hidden Gem" && <span style={{ background: "rgba(10,15,30,0.92)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "5px 10px", borderRadius: 100 }}>◆ Hidden Gem</span>}
                         </div>
 
                         <button onClick={(e) => { e.stopPropagation(); toggleSavePlace(item._kind, item, item._kind === "craft" ? item.location : item.city); }}
-                          style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
+                          style={{ position: "absolute", top: 10, right: 10, background: "rgba(10,15,30,0.9)", border: "none", borderRadius: 100, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, color: isPlaceSaved(item._kind, item.id) ? "#E91E63" : "#ffffffaa" }}>
                           {isPlaceSaved(item._kind, item.id) ? "♥" : "♡"}
                         </button>
 
                         <div style={{ position: "absolute", bottom: 10, left: 12, right: 12, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
                           <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", fontFamily: "'Fraunces', serif", lineHeight: 1.1, textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>{item.name}</div>
-                          {item.rating && <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: C.gold, background: "rgba(10,15,30,0.75)", backdropFilter: "blur(4px)", padding: "4px 9px", borderRadius: 100 }}>★ {item.rating}</div>}
+                          {item.rating && <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: C.gold, background: "rgba(10,15,30,0.9)", padding: "4px 9px", borderRadius: 100 }}>★ {item.rating}</div>}
                         </div>
                         {item.transportWarning && <div style={{ position: "absolute", top: 10, right: 48 }} title="Limited public transport"><span style={{ background: "rgba(61,42,10,0.9)", color: "#FFB347", fontSize: 12, padding: "5px 8px", borderRadius: 100 }}>🚲</span></div>}
                       </div>
@@ -4043,7 +4066,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Events</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about — we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Summer means festival season across Denmark. From legendary stages to harbour markets nobody talks about, we guide you to what's worth traveling for, and exactly how far it is from Copenhagen.</div>
               </div>
 
               {/* Modern filter bar: one chip per dimension, tap opens a sheet.
@@ -4072,7 +4095,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Food</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market — the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From a 1965 hot dog cart to Copenhagen's biggest food market: the everyday spots locals actually eat at, and the bigger names worth the crowd.</div>
               </div>
 
               {/* Modern filter bar — chips + sheet, replacing the pill row and
@@ -4091,7 +4114,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {[...foodSpots].filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet)))
                   .sort((a, b) => (foodSortNear && isInDenmark(userCoords)) ? ((townKmFromUser(a.location) ?? 9999) - (townKmFromUser(b.location) ?? 9999)) : 0).map(spot => (
                   <div key={spot.id} onClick={() => setFoodDetail(spot)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
-                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease", willChange: "transform" }}>
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease" }}>
                     <div style={{ height: 128, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${spot.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
                       <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 48, fontWeight: 500, color: "rgba(148,163,199,0.3)" }}>{(spot.name || "◆").slice(0, 1)}</span>
                       {spot.photo && (
@@ -4099,7 +4122,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                       )}
                       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.5), transparent 45%)" }} />
-                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{spot.price}</div>
+                      <div style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(10,15,30,0.92)", padding: "4px 11px", borderRadius: 100, border: `1px solid ${C.border}` }}>{spot.price}</div>
                     </div>
                     <div style={{ padding: "13px 15px 15px" }}>
                       <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>{spot.category} · {spot.location}</div>
@@ -4134,7 +4157,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <>
                   <div style={{ marginBottom: 18, paddingTop: 8 }}>
                     <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
-                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers — but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
+                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers, but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
                   </div>
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
 
@@ -4240,7 +4263,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Hidden Towns</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — and this is how you find them.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops, and this is how you find them.</div>
               </div>
               <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 16, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
                 <FilterChip label="Region" value={townFilter} options={["Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "East Jutland", "Bornholm", "Fanø Island"]} onChange={setTownFilter} />
@@ -4877,26 +4900,48 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 110, background: "linear-gradient(to top, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 45%, transparent 58%, rgba(10,9,5,0.45) 100%)" }} />
 
-          {/* the restored opening animation — plays center stage over the painting,
-              then the whole lockup flies up to the top-left brand corner and
-              dissolves into the real top-bar logo as it lands; only after that
-              does the Denmark card pop up. A click anywhere skips it. */}
+          {/* the restored opening animation — plays center stage, then ONLY the
+              compass flies to the corner and SITS DOWN in the brand spot (like
+              coming in a door and finding a chair in the corner). The writing
+              and caption fade out in place, they never travel. The compass aims
+              at the real corner mark's measured position and the static mark
+              takes over pixel-on-pixel at landing. Then the Denmark card pops.
+              A click anywhere skips it. */}
           {!introDone && (
             <div onClick={finishIntro}
               style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px", cursor: "pointer" }}>
-              <style>{`.gxi-leave .gxi-tag { animation: none !important; opacity: 0 !important; transition: opacity 0.25s ease; }`}</style>
+              <style>{`
+                .gxi-leave .gxi-tag { animation: none !important; opacity: 0 !important; transition: opacity 0.25s ease; }
+                .gxi-leave .gxi-word { opacity: 0; transition: opacity 0.35s ease; }
+                .gxi-leave .gxi-mark { animation: none !important; opacity: 1 !important; }
+              `}</style>
               <div style={{ position: "absolute", inset: 0, background: "radial-gradient(90% 72% at 50% 46%, rgba(8,8,5,0.6) 0%, rgba(8,8,5,0.28) 55%, transparent 100%)", opacity: introLeaving ? 0 : 1, transition: "opacity 0.8s ease", pointerEvents: "none" }} />
-              <div className={introLeaving ? "gxi-leave" : ""}
-                style={{ position: "relative", transform: introLeaving ? "translate(calc(-50vw + 30px), calc(-50vh + 42px)) scale(0.22)" : "none", opacity: introLeaving ? 0 : 1, transition: "transform 0.9s cubic-bezier(0.55,0.06,0.25,1), opacity 0.3s ease 0.72s" }}>
+              <div className={introLeaving ? "gxi-leave" : ""} style={{ position: "relative" }}>
                 <GemlyxIntro markSize={96} wordHeight={26} />
               </div>
             </div>
           )}
 
-          {/* top bar: brand left, Log in / Sign up right */}
+          {/* corner brand: mark and wordmark split so the flying compass can land
+              on the mark's exact spot. The mark shows the frame the flyer lands
+              (visibility flip, no fade); the wordmark fades in beside it. */}
+          {(introLeaving || introDone) && (
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none", zIndex: 6 }}>
+              <span style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 8, filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}>
+                <span id="gx-corner-mark" style={{ display: "inline-flex", visibility: introDone ? "visible" : "hidden" }}>
+                  <GemlyxMark size={19} ring={true} ringColor="#F0EFE6" />
+                </span>
+                <span style={{ display: "inline-flex", opacity: introDone ? 1 : 0, transition: "opacity 0.5s ease 0.12s" }}>
+                  <GemlyxWordmark height={11.8} color="#F0EFE6" />
+                </span>
+              </span>
+            </div>
+          )}
+
+          {/* top bar right: Log in / Sign up (the brand corner is its own row
+              above, so the landing compass never has to fade with the buttons) */}
           {introDone && (
-          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none" }}>
-            <span style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
+          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
               <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
                 style={{ background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -5057,7 +5102,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           ))}
         </div>
         {/* Page dots */}
-        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, zIndex: 60, background: "rgba(10,15,30,0.55)", padding: "7px 12px", borderRadius: 100, backdropFilter: "blur(8px)" }}>
+        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, zIndex: 60, background: "rgba(10,15,30,0.85)", padding: "7px 12px", borderRadius: 100 }}>
           {TAB_ORDER.map((t, i) => (
             <div key={t} onClick={() => goTab(t)}
               style={{ width: i === tabIdx ? 8 : 6, height: i === tabIdx ? 8 : 6, borderRadius: "50%", background: i === tabIdx ? "#fff" : "rgba(255,255,255,0.35)", cursor: "pointer", transition: "all 0.2s", alignSelf: "center" }} />
