@@ -13,6 +13,7 @@ import { essentials } from "./data/essentials";
 import { roadTrips, seasonalItineraries } from "./data/roadtrips";
 import { WEATHER_CITIES } from "./data/mapShapes";
 import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
+import { denmarkFacts } from "./data/denmarkFacts";
 
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import { C } from "./utils/theme";
@@ -95,6 +96,57 @@ function SmoothStreamText({ text, streaming }) {
   }, [text]);
   return (text || "").slice(0, Math.floor(shown));
 }
+
+// ── Guide loading screen: real Denmark facts + photos ─────────────
+// Oliver's ask: instead of a bare spinner while a guide builds, real photos
+// with real facts about Denmark should pop up. Cycles through denmarkFacts
+// (module-level data, see src/data/denmarkFacts.js) on a timer. Defined at
+// module level, same reasoning as FilterChip below, so it isn't remounted
+// (and its cycle reset) on every parent re-render while the build progresses.
+function DenmarkFactsLoader() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx(i => (i + 1) % denmarkFacts.length), 4200);
+    return () => clearInterval(t);
+  }, []);
+  const fact = denmarkFacts[idx];
+  if (!fact) return null;
+  return (
+    <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg, marginBottom: 14, textAlign: "left" }}>
+      <div style={{ position: "relative", height: 120, overflow: "hidden" }}>
+        <img key={fact.id} src={fact.photo} alt={fact.name} style={{ width: "100%", height: "100%", objectFit: "cover", animation: "gxFactFade 4.2s ease" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.85), transparent 60%)" }} />
+        <div style={{ position: "absolute", bottom: 8, left: 12, fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
+      </div>
+      <div style={{ padding: "10px 14px 12px", fontSize: 11.5, color: C.light, lineHeight: 1.6 }}>{fact.fact}</div>
+    </div>
+  );
+}
+
+// ── Guide preview: stops grouped by town ───────────────────────────
+// Oliver's ask, after the popup removal accidentally dropped this: before
+// the day-by-day guide, show what's actually in it grouped by town, e.g.
+// "Copenhagen: these attractions", "Ribe: just wander around". A pure
+// function, no hooks needed, so it's safe at module level regardless of
+// where it sits relative to other declarations in this file.
+const groupStopsByTown = (days) => {
+  const order = [];
+  const byTown = new Map();
+  (days || []).forEach(day => {
+    (day.stops || []).forEach(stop => {
+      const town = (stop.town || "").trim() || "Denmark";
+      if (!byTown.has(town)) { byTown.set(town, []); order.push(town); }
+      byTown.get(town).push(stop);
+    });
+  });
+  return order.map(town => {
+    const stops = byTown.get(town);
+    // A stop whose name basically IS the town (no specific attraction named)
+    // reads as "just be in this town", not a real attraction to list.
+    const namedAttractions = stops.filter(s => s.name && s.name.trim().toLowerCase() !== town.toLowerCase());
+    return { town, stops, namedAttractions, wanderOnly: namedAttractions.length === 0 };
+  });
+};
 
 // ── Modern filters (Oliver: "the filters are ridiculous on every page") ──
 // The long wrapping pill rows are replaced by one short row of compact chips.
@@ -336,15 +388,31 @@ function GemlyxApp() {
     return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches };
   })() : (userCoords === "denied" ? "denied" : userCoords === "requesting" ? "loading" : null);
 
-  // guideModal is no longer shown as a popup (Oliver: "get rid of the popup") —
-  // it now only serves as the in-progress "build buffer" while a guide is being
-  // written and enriched. Once enrichGuideDays/fetchGuideWeather both finish,
-  // the handoff effect below navigates to the real full-page guide (GuidePage,
-  // "/guide/new") and clears this back to null. Nothing renders it directly
-  // anymore — search this file for "guideModal &&" and there should be none.
+  // guideModal is no longer shown as a POPUP (Oliver: "get rid of the popup")
+  // — it's never an overlay modal. It IS rendered inline though, right where
+  // "Turn this into a guide" was tapped, as a small wizard while a guide is
+  // being built: preview (grouped by town) -> essentials -> map/plain choice
+  // -> loading, tracked by guideFlowStep alongside it. Once
+  // enrichGuideDays/fetchGuideWeather both finish, the handoff effect below
+  // navigates to the real full-page guide (GuidePage, "/guide/new") and
+  // clears both back to null. Search this file for "guideFlowStep ===" for
+  // the wizard's actual render branches.
   const [guideModal, setGuideModal] = useState(null); // null | "loading" | { title, days } (build buffer only, see above)
   const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } — shown inline near the "Turn this into a guide" button while building
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
+  // Multi-step wizard, per Oliver: preview grouped by town first, then
+  // essentials, then a map-guide-vs-plain-guide choice, THEN (only if map was
+  // picked) the expensive Google Directions calls. null while nothing is
+  // building; "preview" | "essentials" | "choice" | "enriching" while
+  // guideModal holds an in-progress guide object. generateGuide (below) is
+  // kept as ONE continuous async function that pauses at each step by
+  // awaiting a Promise these refs resolve — the local variables it already
+  // has in scope (parsed days, geo, travel mode, etc.) stay valid across each
+  // pause with no need to round-trip them through state.
+  const [guideFlowStep, setGuideFlowStep] = useState(null);
+  const guidePreviewResolveRef = useRef(null);
+  const guideEssentialsResolveRef = useRef(null);
+  const guideChoiceResolveRef = useRef(null);
   // BUG FIX (real production crash, "Cannot access before initialization"):
   // these two used to be declared ~1600 lines further down, but the
   // guidePendingNav handoff effect below reads them (in its own body AND its
@@ -383,6 +451,7 @@ function GemlyxApp() {
     navigate("/guide/new", { state: { guide: { ...guideModal, _exactDurations: exactDurations, _noRouteFound: noRouteFound } } });
     setGuidePendingNav(null);
     setGuideModal(null);
+    setGuideFlowStep(null);
   }, [guidePendingNav, guideModal, glancePending, weatherPending, exactDurations, noRouteFound, navigate]);
 
   // ── Founder studio (visible only at /#studio): Tavily+OpenAI drafts complete
@@ -1845,7 +1914,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     }).finally(() => setWeatherPending(0));
   };
 
-  const enrichGuideDays = (days, gid, travelMode, mixedModes, freshGeo = {}) => {
+  const enrichGuideDays = (days, gid, travelMode, mixedModes, freshGeo = {}, lightMode = false) => {
     setGlancePending(days.length);
     days.forEach(async (day, idx) => {
       try {
@@ -1878,7 +1947,12 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           // otherwise-bike trip), re-fetch just this day's legs with their real per-leg
           // modes — this is what lets mixed-mode trips show a correct route instead of a
           // failed bike-route-across-water guess silently falling back to a wrong km estimate.
-          if (Array.isArray(glance.legs) && glance.legs.length > 0) {
+          // BUG FIX: this re-fetch hits /api/directions (Google) same as
+          // fetchExactDurations does — it was the one place still calling that
+          // API even when the plain (no maps/transport) guide mode was chosen,
+          // since only fetchExactDurations itself was being skipped in
+          // generateGuide. Gated on lightMode here too, now genuinely skipped.
+          if (!lightMode && Array.isArray(glance.legs) && glance.legs.length > 0) {
             const dayLegTriples = [];
             if (names.length === 1 && idx > 0) {
               const prevLast = days[idx - 1]?.stops?.[days[idx - 1].stops.length - 1];
@@ -2454,22 +2528,50 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
       // set through to the per-day prompt so it stops treating one mode as dominant.
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
-      // Awaited now, was fire-and-forget — since there's no popup to progressively
-      // patch anymore, the guide only hands off to the real full page once it's
-      // genuinely finished, maps/times/weather included, not a partial draft that
-      // fills in after the person's already looking at it.
-      await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking);
       const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
+      // ── Wizard pause 1: preview, grouped by town ────────────────────
+      // Oliver: "First there will be a preview of everything you'll see."
+      // Only the geocode above has run so far, deliberately — no Google
+      // Directions calls yet, those are gated behind the map/plain choice
+      // further down so the plain path never pays for one it doesn't need.
+      // This object intentionally has NO _convoText yet, so the cache-mirror
+      // effect above (search "Mirror any real") doesn't cache it as finished
+      // — only the final object at the end of this function gets that.
+      setGuideModal({ _gid: gid, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days, _geo: freshGeo });
+      setGuideFlowStep("preview");
+      await new Promise(resolve => { guidePreviewResolveRef.current = resolve; });
+
+      // ── Wizard pause 2: essentials for this specific trip ───────────
+      setGuideFlowStep("essentials");
+      await new Promise(resolve => { guideEssentialsResolveRef.current = resolve; });
+
+      // ── Wizard pause 3: map-and-transport guide, or plain day-by-day ─
+      // Oliver's call when asked: the choice happens BEFORE building, so
+      // picking plain genuinely skips the Google Directions calls below,
+      // not just their display.
+      setGuideFlowStep("choice");
+      const chosenMode = await new Promise(resolve => { guideChoiceResolveRef.current = resolve; });
+
+      setGuideFlowStep("enriching");
+      setGuideBuildStage({ label: chosenMode === "map" ? "Mapping exact routes and times" : "Putting the final guide together", percent: 92 });
+      // Awaited when the map mode is chosen — the guide only hands off to the
+      // real full page once it's genuinely finished, maps/times included, not
+      // a partial draft that fills in after the person's already looking at
+      // it. Skipped entirely for the plain mode, per Oliver's choice above.
+      if (chosenMode === "map") await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking);
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _lightMode: chosenMode !== "map", title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
       // enrichGuideDays/fetchGuideWeather still run fire-and-forget, tracked by
       // glancePending/weatherPending — the handoff effect below (search
       // "guidePendingNav") waits for both to hit 0 before navigating to the real
       // full-page guide, so it always arrives fully enriched, never a partial one.
+      // Both run in the plain mode too — accommodation and weather aren't
+      // maps/transport, Oliver only asked to skip those specifically.
       setGuidePendingNav({ gid });
-      enrichGuideDays(parsed.days, gid, travelMode, mixedModes, freshGeo);
+      enrichGuideDays(parsed.days, gid, travelMode, mixedModes, freshGeo, chosenMode !== "map");
       fetchGuideWeather(parsed.days, gid, arrivalDate);
     } catch {
       setGuideModal(null);
+      setGuideFlowStep(null);
       setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
       setTimeout(() => setGuideError(null), 3500);
     }
@@ -2523,6 +2625,19 @@ DASH BAN, APPLIES TO EVERY TEXT FIELD IN THE ENTIRE RESPONSE: never use an em da
   // and the country picker; choosing Denmark drops you into the app. Shown on
   // every fresh load — it's the brand moment, and it's one click to pass.
   const [entered, setEntered] = useState(false);
+  // Oliver: "animate the enter Denmark better." The whole entrance overlay
+  // lifts away like a curtain (translateY + fade) instead of vanishing
+  // instantly. enteringDenmark just drives the CSS transition below;
+  // "entered" itself still flips after the animation finishes, so nothing
+  // about the actual entered/not-entered logic elsewhere changes.
+  const [enteringDenmark, setEnteringDenmark] = useState(false);
+  const handleEnterDenmark = () => {
+    let reduced = false;
+    try { reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { /* no matchMedia */ }
+    if (reduced) { setEntered(true); window.scrollTo(0, 0); return; }
+    setEnteringDenmark(true);
+    setTimeout(() => { setEntered(true); window.scrollTo(0, 0); }, 650);
+  };
   // The restored logo opening animation (Oliver: "why is that gone?"). Plays
   // center stage over the painting, once per browser session — a repeat visit
   // in the same tab session skips straight to the settled entrance. Reduced-
@@ -3177,16 +3292,82 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 )}
 
-                {guideModal ? (
-                  // MINIMAL LOADING STATE, per Oliver ("why does the guide love sending
-                  // you to the long tunnel. Just put the user onto the page. That's it")
-                  // — a spinner, the plain real stage label, and a thin progress line,
-                  // right here in the chat where "Turn this into a guide" was tapped, not
-                  // a separate screen to sit through. No popup opens at the end either
-                  // (Oliver: "get rid of the popup") — once this finishes, the app
-                  // navigates straight to the real full-page guide.
-                  <div style={{ textAlign: "center", padding: "18px 10px 14px" }}>
-                    <GemlyxLoader size={32} tone="gold" ring={true} />
+                {guideModal && guideFlowStep === "preview" ? (
+                  // Oliver: "First there will be a preview of everything you'll
+                  // see... under Copenhagen there will be these attractions,
+                  // under Ribe there will be these, or just wander around Ribe."
+                  // Grouped by town, not by day — this is about WHAT'S in the
+                  // trip, the day-by-day breakdown comes later on the real page.
+                  <div style={{ padding: "6px 2px 14px" }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>Here's what you'll see</div>
+                    <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>Grouped by town, before the day-by-day breakdown.</div>
+                    {groupStopsByTown(guideModal.days).map(g => (
+                      <div key={g.town} style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, marginBottom: 6, fontFamily: "'Fraunces', serif" }}>{g.town}</div>
+                        {g.wanderOnly ? (
+                          <div style={{ fontSize: 12, color: C.light, lineHeight: 1.6 }}>Just wander around {g.town}, no fixed stops planned here.</div>
+                        ) : (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {g.namedAttractions.map((s, i) => (
+                              <span key={i} style={{ fontSize: 11.5, color: C.text, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 10px" }}>{s.name}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <button onClick={() => guidePreviewResolveRef.current?.()}
+                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                      Looks good, continue →
+                    </button>
+                  </div>
+                ) : guideModal && guideFlowStep === "essentials" ? (
+                  // "This trip's own essentials summary" (Oliver's pick): the
+                  // guide's own AI-written essentials fields, not the general
+                  // Essentials tab, shown as its own step before the final choice.
+                  <div style={{ padding: "6px 2px 14px" }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 12 }}>Before you go</div>
+                    {[["Budget", guideModal.essentials?.budgetReality], ["Getting there", guideModal.essentials?.transportTip], ["Keep in mind", guideModal.essentials?.keepInMind]]
+                      .filter(([, text]) => text)
+                      .map(([label, text]) => (
+                        <div key={label} style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>{label}</div>
+                          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>{text}</div>
+                        </div>
+                      ))}
+                    <button onClick={() => guideEssentialsResolveRef.current?.()}
+                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 4 }}>
+                      Continue →
+                    </button>
+                  </div>
+                ) : guideModal && guideFlowStep === "choice" ? (
+                  // Oliver's pick, asked directly: the choice happens BEFORE
+                  // building, so the plain option genuinely skips the Google
+                  // Directions calls, not just their display.
+                  <div style={{ padding: "6px 2px 14px" }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 4, textAlign: "center" }}>How do you want to see it?</div>
+                    <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14, textAlign: "center" }}>Pick one, this decides what gets built next.</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => guideChoiceResolveRef.current?.("map")}
+                        style={{ flex: 1, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 4 }}>🗺 Map & transport</div>
+                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>Real routes, exact travel times, one-tap Google Maps links.</div>
+                      </button>
+                      <button onClick={() => guideChoiceResolveRef.current?.("plain")}
+                        style={{ flex: 1, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 4 }}>📋 Simple day by day</div>
+                        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>Just the days and stops, no maps or transport times.</div>
+                      </button>
+                    </div>
+                  </div>
+                ) : guideModal ? (
+                  // Loading/enriching state, per Oliver: real photos and real
+                  // facts about Denmark while it builds, not a bare spinner. The
+                  // real stage label and progress line stay underneath, still the
+                  // authoritative status, this is additional, not a replacement
+                  // for honesty about what's actually happening.
+                  <div style={{ textAlign: "center", padding: "6px 10px 14px" }}>
+                    <DenmarkFactsLoader />
+                    <GemlyxLoader size={28} tone="gold" ring={true} />
                     <div style={{ marginTop: 12, fontSize: 13, color: C.light, fontWeight: 600 }}>{guideBuildStage?.label || "Building your guide"}</div>
                     <div style={{ marginTop: 12, maxWidth: 180, marginLeft: "auto", marginRight: "auto", height: 3, borderRadius: 100, background: C.border, overflow: "hidden" }}>
                       <div style={{ height: "100%", width: `${guideBuildStage?.percent || 5}%`, background: C.gold, transition: "width 0.6s ease" }} />
@@ -3202,7 +3383,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 4 }}>
                       📖 Turn this into a guide
                     </button>
-                    <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>Takes a few seconds — checking real places and routes</div>
+                    <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>You'll get a preview first, then pick how you want to see it</div>
                   </>
                 )}
                 {guideError && (
@@ -4892,6 +5073,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
         @keyframes gemlyxDotPulse { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
         @keyframes gemlyxMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .gemlyx-msg-in { animation: gemlyxMsgIn 0.28s ease both; }
+        @keyframes gxFactFade { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: scale(1); } }
         .gemlyx-thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: ${C.gold}; margin: 0 2px; animation: gemlyxDotPulse 1.1s ease infinite; }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }
@@ -4922,7 +5104,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           the 1024px original. Card photo currently unset, see the "BUG/RISK
           FIX" comment further down for why. */}
       {!entered && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08", transform: enteringDenmark ? "translateY(-100%)" : "translateY(0)", opacity: enteringDenmark ? 0 : 1, transition: "transform 0.65s cubic-bezier(0.65,0,0.35,1), opacity 0.5s ease" }}>
           <style>{`
             .gxa-pan { position:absolute; inset:0; overflow:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
             .gxa-pan::-webkit-scrollbar { display:none; }
@@ -5070,8 +5252,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                   <div style={{ padding: "12px 14px 14px" }}>
                     <div style={{ fontSize: 13.5, fontStyle: "italic", fontFamily: "'Fraunces', serif", color: "#EFE9D6", textAlign: "center", marginBottom: 11 }}>{cn.tagline}</div>
-                    <button onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
-                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}>
+                    <button onClick={handleEnterDenmark} disabled={enteringDenmark}
+                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: enteringDenmark ? "default" : "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 20px rgba(0,0,0,0.45)", opacity: enteringDenmark ? 0.7 : 1 }}>
                       Enter {cn.name} →
                     </button>
                   </div>

@@ -179,6 +179,11 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
   }
 
   const days = guide.days || [];
+  // Oliver's map-vs-plain choice, made before this page ever sees the guide
+  // (App.jsx's generateGuide, search "chosenMode") — _lightMode true means
+  // the plain day-by-day pick, so no route map and no leg time chips here,
+  // just the stop cards, photos, click-through, accommodation, and weather.
+  const lightMode = !!guide._lightMode;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 60 }}>
@@ -200,7 +205,13 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
             labeled "Before you go" card instead of three anonymous ◆ bullet lines —
             same data, but each line now says what KIND of tip it is at a glance. */}
         <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>✦ Your Gemlyx guide</div>
-        <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 24, maxWidth: 680 }}>{guide.title || "Your Denmark Guide"}</div>
+        <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || "Your Denmark Guide"}</div>
+        {/* So the absence of maps/routes reads as the choice it was, not a bug. */}
+        {lightMode && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 12px", marginBottom: 24, fontSize: 11, color: C.muted, fontWeight: 600 }}>
+            📋 Simple guide, no maps or transport times
+          </div>
+        )}
 
         {guide.essentials && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 30, maxWidth: 640 }}>
@@ -294,11 +305,12 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
             </div>
             <div style={{ height: 1, background: C.border, margin: "10px 0 18px" }} />
             {/* If today only has one stop, the real journey worth showing is the leg
-                connecting it to yesterday's last stop, not nothing at all. */}
-            {day.stops?.length === 1 && dayIdx > 0 && days[dayIdx - 1]?.stops?.length > 0 && (
+                connecting it to yesterday's last stop, not nothing at all.
+                Skipped in light mode, same reasoning as the route map below. */}
+            {!lightMode && day.stops?.length === 1 && dayIdx > 0 && days[dayIdx - 1]?.stops?.length > 0 && (
               <div style={{ marginBottom: 14 }}>{legChip(days[dayIdx - 1].stops.slice(-1)[0].name, day.stops[0].name, day.glance?.legs?.[0]?.how)}</div>
             )}
-            {routePoints.length > 1 && (
+            {!lightMode && routePoints.length > 1 && (
               <div style={{ height: 180, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 18 }}>
                 <GuideRouteMap points={routePoints} />
               </div>
@@ -334,7 +346,7 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
                       {stop.note && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginTop: 7 }}>{stop.note.slice(0, 140)}{stop.note.length > 140 ? "…" : ""}</div>}
                     </div>
                   </div>
-                  {nextStop && legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
+                  {!lightMode && nextStop && legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
                 </div>
                 );
               })}
