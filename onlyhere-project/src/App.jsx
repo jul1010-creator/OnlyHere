@@ -2286,6 +2286,16 @@ If the conversation only covers a single day or a few stops with no explicit day
     const t = setTimeout(() => setLandingNote(null), 3200);
     return () => clearTimeout(t);
   }, [landingNote]);
+  // The pannable painting: start the view centered on the gate, so "swimming"
+  // works in every direction from the first touch.
+  const landingPanRef = useRef(null);
+  useEffect(() => {
+    if (entered) return;
+    const el = landingPanRef.current;
+    if (!el) return;
+    el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+  }, [entered]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -4588,92 +4598,70 @@ You also have a web_search tool. Use it whenever someone asks about something th
       <div style={{ flexShrink: 0, position: "relative", zIndex: 100 }}>
       {/* ── HEADER ─────────────────────────────────────────── */}
       {/* ── THE FRONT DOOR ──────────────────────────────────────────
-          Oliver's vision: a page BEFORE Denmark's explore page — a living
-          "adventure select" entrance (his reference: Hearthstone adventure
-          screens / the WoW gates). Everything here is CSS/SVG, no images:
-          a breathing aurora sky with twinkling stars and rising light motes,
-          silhouette hills with a tiny traveler watching from the crest and a
-          lighthouse blinking teal, a soft vignette framing the scene — and
-          his animated logo intro (ring draws, gem pops and spins, letters
-          fade) above the Denmark card that takes you in. */}
-      {/* ── THE FRONT DOOR ──────────────────────────────────────────
-          Oliver's own painted scene (public/Front Page.jpg): a mossy castle
-          gate in an enchanted forest. Rule for animating over a painting:
-          only animate LIGHT — never add moving objects the artist didn't
-          paint. So: a very slow breathing zoom on the painting itself, warm
-          pulsing glows pinned to the painted lanterns/torch, a soft breathe
-          on the sunset behind the arch, cool pulses on the blue mushrooms,
-          and a handful of drifting fireflies. Everything else is still.
-          Glow positions are % of a fixed-aspect wrapper that matches the
-          image exactly, so they stay glued to the painted lanterns at any
-          screen size. UI: Log in / Sign up top right, the explorer panel in
-          the middle (under the arch), Customer Support at the bottom. */}
+          Oliver's painted gate scene, now explorable: the painting is larger
+          than the screen and you can pan ("swim") across it — swipe/scroll
+          down moves down the painting, sideways works too. The UI floats
+          fixed above it. Animated: only light — the painting breathes very
+          slowly, painted lanterns/torch pulse, the arch sunset breathes,
+          blue mushrooms pulse cool, and golden dust drifts through the air.
+          The middle is the country picker: Denmark's card carries a real
+          photo (the Little Mermaid) and its own line — each country gets
+          its own. Served from a 2x-upscaled export (front-page-2x.jpg) to
+          cut the phone blur from the 1024px original. */}
       {!entered && (
         <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
           <style>{`
-            .gxa-kb { position:absolute; top:50%; left:50%; width:max(100vw, 175.04vh); aspect-ratio: 1024 / 585; animation: gxaKb 46s ease-in-out infinite alternate; will-change:transform; }
-            @keyframes gxaKb { from { transform:translate(-50%,-50%) scale(1); } to { transform:translate(-50%,-50%) scale(1.05); } }
+            .gxa-pan { position:absolute; inset:0; overflow:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+            .gxa-pan::-webkit-scrollbar { display:none; }
+            .gxa-kb { position:relative; width:max(124vw, 227.1vh); aspect-ratio: 1024 / 559; animation: gxaKb 26s ease-in-out infinite alternate; transform-origin: 50% 50%; will-change: transform; }
+            @keyframes gxaKb { from { transform:scale(1); } to { transform:scale(1.045); } }
             .gxa-glow { position:absolute; border-radius:50%; pointer-events:none; animation: gxaGlowPulse 4.2s ease-in-out infinite; }
             @keyframes gxaGlowPulse { 0%,100% { opacity:.55; } 50% { opacity:1; } }
             .gxa-shroom { position:absolute; border-radius:50%; pointer-events:none; animation: gxaShroomPulse 6.5s ease-in-out infinite; }
             @keyframes gxaShroomPulse { 0%,100% { opacity:.35; } 50% { opacity:.8; } }
             .gxa-archlight { position:absolute; border-radius:50%; pointer-events:none; animation: gxaArchBreathe 9s ease-in-out infinite alternate; }
             @keyframes gxaArchBreathe { from { opacity:.35; transform:scale(1); } to { opacity:.7; transform:scale(1.12); } }
-            .gxa-fly { position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(255,224,130,.9); box-shadow:0 0 7px rgba(255,214,110,.75); opacity:0; animation: gxaFirefly 11s ease-in-out infinite; pointer-events:none; }
-            @keyframes gxaFirefly { 0% { transform:translate(0,0); opacity:0; } 12% { opacity:.9; } 45% { transform:translate(2.2vw,-6vh); opacity:.35; } 70% { transform:translate(-1.2vw,-11vh); opacity:.75; } 100% { transform:translate(1vw,-16vh); opacity:0; } }
-            .gxa-ring { animation: gxaRingdraw 1.2s cubic-bezier(.45,.05,.35,.95) 1.9s both; }
-            @keyframes gxaRingdraw { from { stroke-dashoffset:339.3; } to { stroke-dashoffset:0; } }
-            .gxa-pop { transform-box:fill-box; transform-origin:center; animation: gxaPop .5s cubic-bezier(.2,.9,.3,1.18) 1.5s both; }
-            @keyframes gxaPop { from { opacity:0; transform:scale(.4); } to { opacity:1; transform:scale(1); } }
-            .gxa-spin { transform-box:fill-box; transform-origin:center; animation: gxaSpin1 1.2s cubic-bezier(.45,.05,.35,.95) 1.9s both, gxaSway 9s ease-in-out 4.4s infinite; }
-            @keyframes gxaSpin1 { 0% { transform:rotate(0deg); } 82% { transform:rotate(366deg); } 100% { transform:rotate(360deg); } }
-            @keyframes gxaSway { 0%,100% { transform:rotate(-1.5deg); } 50% { transform:rotate(1.5deg); } }
-            .gxa-word svg path { opacity:0; animation: gxaFadein .9s cubic-bezier(.45,.05,.35,.95) both; }
-            .gxa-word svg path:nth-child(1){animation-delay:.25s} .gxa-word svg path:nth-child(2){animation-delay:.37s}
-            .gxa-word svg path:nth-child(3){animation-delay:.49s} .gxa-word svg path:nth-child(4){animation-delay:.61s}
-            .gxa-word svg path:nth-child(5){animation-delay:.73s} .gxa-word svg path:nth-child(6){animation-delay:.85s}
+            .gxa-fly { position:fixed; border-radius:50%; background:rgba(255,214,110,.95); opacity:0; animation: gxaFirefly 12s ease-in-out infinite; pointer-events:none; }
+            @keyframes gxaFirefly { 0% { transform:translate(0,0); opacity:0; } 10% { opacity:.95; } 38% { transform:translate(2.4vw,-5vh); opacity:.45; } 62% { transform:translate(-1.6vw,-10vh); opacity:.85; } 88% { transform:translate(1.4vw,-15vh); opacity:.3; } 100% { transform:translate(0.6vw,-18vh); opacity:0; } }
+            .gxa-choose { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) .5s both; }
+            .gxa-topbar { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) .2s both; }
             @keyframes gxaFadein { from { opacity:0; } to { opacity:1; } }
-            .gxa-tag { animation: gxaFadein 1.2s cubic-bezier(.45,.05,.35,.95) 3.2s both; }
-            .gxa-choose { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) 2.7s both; }
-            .gxa-topbar { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) 2.2s both; }
             @media (prefers-reduced-motion: reduce) {
-              .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-ring, .gxa-pop, .gxa-spin, .gxa-tag, .gxa-choose, .gxa-topbar { animation: none !important; }
+              .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-choose, .gxa-topbar { animation: none !important; }
               .gxa-fly { opacity: 0 !important; }
-              .gxa-word svg path { animation: none !important; opacity: 1; }
-              .gxa-ring { stroke-dashoffset: 0 !important; }
-              .gxa-tag, .gxa-choose, .gxa-topbar { opacity: 1 !important; }
+              .gxa-choose, .gxa-topbar { opacity: 1 !important; }
             }
           `}</style>
 
-          {/* The painting, breathing slowly, with light effects pinned to it */}
-          <div className="gxa-kb">
-            <img src="/Front%20Page.jpg" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "fill" }} />
-            {/* painted lanterns on the gate + the torch on the left stair */}
-            {[[41.6, 41.5, 7], [42.2, 27.5, 6], [62.4, 34.5, 6.5], [63.2, 46.5, 7], [25.7, 41.5, 7.5]].map(([x, y, s], i) => (
-              <div key={i} className="gxa-glow" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.874}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(255,190,90,0.5) 0%, rgba(255,160,60,0.18) 45%, transparent 70%)", animationDelay: `${i * 0.9}s` }} />
-            ))}
-            {/* sunset through the arch, breathing */}
-            <div className="gxa-archlight" style={{ left: "43%", top: "18%", width: "18%", aspectRatio: "1.2", background: "radial-gradient(circle, rgba(255,214,140,0.4) 0%, rgba(255,190,110,0.14) 50%, transparent 72%)" }} />
-            {/* the glowing blue mushrooms answer with a cool pulse */}
-            {[[12.5, 63, 7], [74.5, 67, 7.5], [93, 57.5, 6.5]].map(([x, y, s], i) => (
-              <div key={i} className="gxa-shroom" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.874}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(110,225,255,0.4) 0%, rgba(90,190,240,0.14) 48%, transparent 72%)", animationDelay: `${i * 2.1}s` }} />
-            ))}
+          {/* The painting — pannable, breathing, with light pinned to it */}
+          <div className="gxa-pan" ref={landingPanRef}>
+            <div className="gxa-kb">
+              <img src="/front-page-2x.jpg" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "fill" }} />
+              {[[41.6, 41.5, 7], [42.2, 27.5, 6], [62.4, 34.5, 6.5], [63.2, 46.5, 7], [25.7, 41.5, 7.5]].map(([x, y, s], i) => (
+                <div key={i} className="gxa-glow" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.916}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(255,190,90,0.5) 0%, rgba(255,160,60,0.18) 45%, transparent 70%)", animationDelay: `${i * 0.9}s` }} />
+              ))}
+              <div className="gxa-archlight" style={{ left: "43%", top: "18%", width: "18%", aspectRatio: "1.2", background: "radial-gradient(circle, rgba(255,214,140,0.4) 0%, rgba(255,190,110,0.14) 50%, transparent 72%)" }} />
+              {[[12.5, 63, 7], [74.5, 67, 7.5], [93, 57.5, 6.5]].map(([x, y, s], i) => (
+                <div key={i} className="gxa-shroom" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.916}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(110,225,255,0.4) 0%, rgba(90,190,240,0.14) 48%, transparent 72%)", animationDelay: `${i * 2.1}s` }} />
+              ))}
+            </div>
           </div>
 
-          {/* fireflies drifting up through the lower half */}
-          {[[14, 76, 0], [27, 82, 3.4], [44, 79, 6.8], [58, 84, 1.7], [71, 78, 5.1], [86, 81, 8.5], [36, 88, 9.9], [64, 90, 2.6]].map(([l, t, d], i) => (
-            <span key={i} className="gxa-fly" style={{ left: `${l}%`, top: `${t}%`, animationDelay: `${d}s` }} />
+          {/* golden dust drifting through the air (fixed to the screen, so it
+              floats in front of the painting like motes in a sunbeam) */}
+          {[[10, 78, 0, 3], [22, 84, 3.2, 2.5], [33, 74, 6.5, 3.5], [46, 86, 1.4, 2.5], [57, 78, 4.8, 4], [68, 88, 8.2, 3], [79, 76, 2.3, 2.5], [90, 83, 5.9, 3.5], [16, 60, 7.4, 2], [50, 62, 9.6, 2.5], [72, 58, 10.8, 2], [86, 64, 0.8, 2]].map(([l, t, d, s], i) => (
+            <span key={i} className="gxa-fly" style={{ left: `${l}%`, top: `${t}%`, width: s, height: s, animationDelay: `${d}s`, boxShadow: `0 0 ${s * 2.5}px rgba(255,214,110,.8)` }} />
           ))}
 
-          {/* legibility gradients + gentle vignette */}
+          {/* legibility gradients + gentle vignette (fixed, over the painting) */}
           <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 130, background: "linear-gradient(to bottom, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 110, background: "linear-gradient(to top, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(10,9,5,0.5) 100%)" }} />
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 45%, transparent 58%, rgba(10,9,5,0.45) 100%)" }} />
 
           {/* top bar: brand left, Log in / Sign up right */}
-          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0" }}>
-            <GemlyxLogo size={19} color="#F0EFE6" />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none" }}>
+            <span style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
               <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
                 style={{ background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                 Log in
@@ -4690,64 +4678,36 @@ You also have a web_search tool. Use it whenever someone asks about something th
             </div>
           )}
 
-          {/* center: logo intro above, the explorer under the gate */}
-          <div style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "70px 20px 84px" }}>
-            <svg viewBox="0 0 120 120" style={{ width: "min(22vw, 92px)", height: "auto", display: "block", filter: "drop-shadow(0 2px 14px rgba(8,8,4,0.75))" }} aria-label="Gemlyx">
-              <circle className="gxa-ring" cx="60" cy="60" r="54" fill="none" stroke="#F0F4FF" strokeWidth="2.6" strokeDasharray="339.3" strokeLinecap="round" transform="rotate(-90 60 60)" />
-              <g className="gxa-pop"><g className="gxa-spin"><g transform="translate(12,12) scale(0.8)">
-                {[45, 135, 225, 315].map(r => (
-                  <g key={r} transform={`rotate(${r} 60 60)`}>
-                    <path d="M 60 30 L 70 60 L 60 60 Z" fill="#0E9384" />
-                    <path d="M 60 30 L 50 60 L 60 60 Z" fill="#0E9384" opacity="0.55" />
-                  </g>
-                ))}
-                {[0, 90, 180, 270].map(r => (
-                  <g key={r} transform={`rotate(${r} 60 60)`}>
-                    <path d="M 60 8 L 75 60 L 60 60 Z" fill="#2DD4BF" />
-                    <path d="M 60 8 L 45 60 L 60 60 Z" fill="#14B8A6" />
-                  </g>
-                ))}
-                <g transform="rotate(45 60 60)"><rect x="51.5" y="51.5" width="17" height="17" fill="rgba(10,15,30,0.5)" stroke="#2DD4BF" strokeWidth="3" /></g>
-              </g></g></g>
-            </svg>
-            <div className="gxa-word" style={{ marginTop: 14, filter: "drop-shadow(0 2px 10px rgba(8,8,4,0.8))" }}>
-              <GemlyxWordmark height={22} color="#F0F4FF" />
-            </div>
-            <div className="gxa-tag" style={{ marginTop: 12, color: "#EFE9D6", fontSize: 11, letterSpacing: "0.32em", textTransform: "uppercase", textShadow: "0 1px 8px rgba(8,8,4,0.85)" }}>It exists nowhere else</div>
-
-            <div className="gxa-choose" style={{ marginTop: 30, width: "100%", maxWidth: 340 }}>
-              <div style={{ background: "rgba(12,11,7,0.62)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, padding: "16px 16px 15px", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#FFE9A8", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>Where are you going?</div>
-                <svg viewBox="-12 -12 477 397" style={{ width: "72%", maxHeight: 110, display: "block", margin: "0 auto" }} aria-label="Map of Denmark with Gemlyx's verified towns">
-                  {DK_PATHS.map((p, i) => <polygon key={i} points={p} fill="rgba(18,27,48,0.85)" stroke="#3A4A66" strokeWidth="2.5" />)}
-                  {Object.entries(TOWN_COORDS).map(([name, [la, lo]]) => {
-                    const [x, y] = dkProject(la, lo);
-                    return (
-                      <g key={name}>
-                        <circle cx={x} cy={y} r="13" fill={`${C.gold}26`} />
-                        <circle cx={x} cy={y} r="5.5" fill={C.gold} stroke="#0A0F1E" strokeWidth="2" />
-                      </g>
-                    );
-                  })}
-                </svg>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
-                  <FlagDK height={12} />
-                  <span style={{ fontSize: 16, fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#F5F2E8" }}>Denmark</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: "#8FE3AF", background: "rgba(110,207,151,0.14)", border: "1px solid rgba(110,207,151,0.3)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
+          {/* the explorer — country cards, each with its own photo and line */}
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "70px 20px 84px", pointerEvents: "none" }}>
+            <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto" }}>
+              {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "68% 42%" }].map(cn => (
+                <div key={cn.id} style={{ background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, overflow: "hidden", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
+                  <div style={{ height: 158, position: "relative", overflow: "hidden" }}>
+                    <img src={cn.photo} alt={cn.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: cn.photoPos }} />
+                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(12,11,7,0.72), transparent 55%)" }} />
+                    <div style={{ position: "absolute", bottom: 10, left: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                      <FlagDK height={12} />
+                      <span style={{ fontSize: 18, fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#F5F2E8" }}>{cn.name}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#8FE3AF", background: "rgba(110,207,151,0.16)", border: "1px solid rgba(110,207,151,0.32)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
+                    </div>
+                  </div>
+                  <div style={{ padding: "12px 14px 14px" }}>
+                    <div style={{ fontSize: 13.5, fontStyle: "italic", fontFamily: "'Fraunces', serif", color: "#EFE9D6", textAlign: "center", marginBottom: 11 }}>{cn.tagline}</div>
+                    <button onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
+                      style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}>
+                      Enter {cn.name} →
+                    </button>
+                  </div>
                 </div>
-                <button onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
-                  style={{ display: "block", width: "100%", marginTop: 11, background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}>
-                  Enter Denmark →
-                </button>
-              </div>
-              <div style={{ fontSize: 11, color: "#EFE9D6", marginTop: 12, textShadow: "0 1px 6px rgba(8,8,4,0.8)" }}>Every dot is a place we've stood. More countries someday.</div>
+              ))}
             </div>
           </div>
 
           {/* bottom: customer support */}
-          <div className="gxa-topbar" style={{ position: "absolute", bottom: "calc(12px + env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center" }}>
+          <div className="gxa-topbar" style={{ position: "absolute", bottom: "calc(12px + env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
             <button onClick={() => window.open("mailto:hello@gemlyx.com?subject=" + encodeURIComponent("Gemlyx support"))}
-              style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#EFE9D6", borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#EFE9D6", borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               <Ico name="mail" size={13} /> Customer Support
             </button>
           </div>

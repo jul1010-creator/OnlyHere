@@ -1,4 +1,20 @@
-# LATEST: your painted front page is in — with living light on top of it
+# LATEST: the front door breathes, you can swim around it, gold dust floats, and Denmark's card is the Little Mermaid
+
+Four upgrades to the painted entrance, from your two messages:
+
+**1. You can "swim" on the painting now.** The painting is deliberately larger than the screen (about 24% wider than the viewport, more on phones) and pannable in every direction — swipe down and you move down the painting, swipe sideways and you drift sideways. The view starts centered on the gate. The UI (buttons, the country card, support) floats fixed above while the world moves behind it. The lantern glows and mushroom pulses are pinned to the painting, so they travel with it as you pan.
+
+**2. It breathes more, and golden dust floats through the air.** The breathing zoom is faster and deeper than before (26s cycle), and there are now twelve golden motes in varied sizes drifting up through the scene — they're fixed to the screen rather than the painting, so they read as dust hanging in the air in front of the scenery.
+
+**3. Phone sharpness: real cause found, half-fixed, full fix is yours.** The blur is because the painting's source file is only 1024px wide, and a phone stretches its center crop to roughly 4x the pixels. I made a 2x upscale with proper resampling and sharpening (public/front-page-2x.jpg — the app now uses this) which visibly helps, but resolution can't be invented: if your image generator can export the same scene at 2048px or wider, drop it in Public and I'll swap it in — that's the real fix.
+
+**4. The middle is now the Denmark card with your Little Mermaid photo.** The logo intro animation is gone from the middle (the brand mark stays top-left), replaced by a country card: the Mermaid photo (saved as public/denmark-hero.jpg, cropped from the left via smart positioning so it survives every card size), flag + Denmark + LIVE overlaid on the photo, and its own line underneath — *"The home of H.C. Andersen"* — in italic serif. The caption system is per-country by design: each future country carries its own photo and its own line. The old "Every dot is a place we've stood" caption is removed. Space under the card is reserved for the "why this page exists" text you mentioned — send me the words whenever they're written.
+
+**Please test before trusting**: pan the painting in all four directions (phone especially), check the view starts on the gate, verify the card's photo crop looks right at your screen sizes, and judge the new phone sharpness — then tell me if a 2048px art export is possible from your generator.
+
+---
+
+# EARLIER: your painted front page is in — with living light on top of it
 
 Your art (public/Front Page.jpg) is now the entrance, and it's exactly what the code-drawn versions couldn't be. What I layered on top follows one strict rule to keep it from ever looking off: **only light gets animated, never objects.** Nothing moves that the artist didn't paint as glowing.
 
