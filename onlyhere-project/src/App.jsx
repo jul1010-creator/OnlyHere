@@ -103,31 +103,134 @@ function SmoothStreamText({ text, streaming }) {
 // (module-level data, see src/data/denmarkFacts.js) on a timer. Defined at
 // module level, same reasoning as FilterChip below, so it isn't remounted
 // (and its cycle reset) on every parent re-render while the build progresses.
+// Per-category photo treatment, Oliver's idea: history facts should look and
+// feel different from attractions or nightlife facts, "it depends on their
+// taste." Picked: history = parchment (taped down like a travel journal
+// page), attractions = mapPin (pin + map backdrop), nightlife = neonGlow
+// (pulsing neon frame with floating bokeh), food = foodTray (wooden board,
+// ambient steam). "Nature" is a real interest tag in the trip intake (see
+// "Into" pills further down this file) but has no dedicated content tab of
+// its own — parks/gardens/beaches all live in the Attractions (Free
+// Entrance) data pool, so nature facts use the attractions treatment too.
+// Events don't get their OWN treatment at all — his idea, and it maps
+// cleanly onto data that already exists: events.js already tags every real
+// event with what it actually is (History, Culture, Music, Food, Craft...),
+// so an event fact just gets tagged with whichever treatment above already
+// fits it (a Viking market -> history, a beach music festival -> nightlife)
+// when it's added to denmarkFacts.js, no separate "events" style needed.
+// Animation note (his follow-up round): attractions and food both got
+// simplified from multi-step physics (pin-drop-then-rise, tray-rise) down to
+// a plain fade in/out, "odd animation... just do fade in and out probably."
+// Nightlife deliberately did NOT get simplified — "nightlife shall be like
+// more flashy" — so it keeps its neon pulse and got an added flash beat.
+const FACT_TREATMENTS = { history: "parchment", attractions: "mapPin", nature: "mapPin", nightlife: "neonGlow", food: "foodTray" };
+
 function DenmarkFactsLoader() {
-  const [idx, setIdx] = useState(0);
+  // Oliver: "let it roll random, not always H.C. Andersen first." Starting
+  // fact is randomized on mount, and every tick picks a random fact that is
+  // NOT the one currently showing, so it never silently repeats the same
+  // photo back to back (which would look frozen since nothing would animate).
+  const randomIdx = () => Math.floor(Math.random() * denmarkFacts.length);
+  const randomIdxExcluding = (exclude) => {
+    if (denmarkFacts.length <= 1) return exclude;
+    let next = randomIdx();
+    while (next === exclude) next = randomIdx();
+    return next;
+  };
+  const [idx, setIdx] = useState(() => denmarkFacts.length ? randomIdx() : 0);
   useEffect(() => {
-    // Oliver: "the facts goes on WAAY too quickly, I can barely read it...
-    // let it change every 8th or 10th second." Was 4200ms, now 9000ms.
-    const t = setInterval(() => setIdx(i => (i + 1) % denmarkFacts.length), 9000);
+    // Oliver: "make each fact 10 sec." Was 9000ms.
+    const t = setInterval(() => setIdx(i => randomIdxExcluding(i)), 10000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const fact = denmarkFacts[idx];
   if (!fact) return null;
+  const treatment = FACT_TREATMENTS[fact.category];
   return (
     <div style={{ borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg, marginBottom: 18, textAlign: "left", maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
-      {/* Oliver: "avoid the pictures being cut off." objectFit "cover" in a
-          short fixed-height box was cropping tall photos (esp. the H.C.
-          Andersen portrait). Fix: a blurred, scaled copy of the same image
-          fills the box for atmosphere, and the real foreground photo sits on
-          top with objectFit "contain" so nothing is ever cropped. Only one
-          loader is ever mounted at a time, so the single blur() here doesn't
-          run into the per-card backdrop-filter perf trap.  */}
-      <div style={{ position: "relative", height: 210, overflow: "hidden", background: "#0A0F1E" }}>
-        <img key={`${fact.id}-bg`} src={fact.photo} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(18px) brightness(0.55)", transform: "scale(1.15)" }} />
-        <img key={fact.id} src={fact.photo} alt={fact.name} style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain", animation: "gxFactFade 0.5s ease" }} />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.9), transparent 45%)" }} />
-        <div style={{ position: "absolute", bottom: 10, left: 14, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
-      </div>
+      {treatment === "parchment" ? (
+        // History treatment: photo taped to an aged-parchment backdrop,
+        // dropping in and settling at a slight tilt each time it swaps —
+        // "ALWAYS ANIMATION when you swap to next picture" (key={fact.id}
+        // below forces a real remount, not just a prop update, so the
+        // animation genuinely replays every single swap, never gets skipped).
+        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "radial-gradient(120% 90% at 30% 8%, #e6d3a8 0%, #cdb47c 55%, #a98c56 100%)" }}>
+          <div key={fact.id} style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: "gxPaperSettle 0.7s cubic-bezier(0.16,1,0.3,1) both" }}>
+            <div style={{ position: "relative", width: 168, background: "#fdfaf2", padding: 6, boxShadow: "0 10px 22px rgba(40,25,5,0.42)", transform: "rotate(-2deg)" }}>
+              <div style={{ position: "absolute", width: 40, height: 16, top: -8, left: -10, background: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.3)", transform: "rotate(-40deg)" }} />
+              <div style={{ position: "absolute", width: 40, height: 16, top: -8, right: -10, background: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.3)", transform: "rotate(40deg)" }} />
+              <img src={fact.photo} alt={fact.name} style={{ width: "100%", height: 148, objectFit: "contain", background: "#f4ecd9", display: "block" }} />
+            </div>
+          </div>
+          <div style={{ position: "absolute", top: 10, left: 14, fontSize: 11.5, fontWeight: 700, color: "rgba(58,40,14,0.8)", fontStyle: "italic", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
+        </div>
+      ) : treatment === "mapPin" ? (
+        // Attractions (and nature) treatment, Oliver's pick "Attractions B":
+        // a pin sits on a map backdrop with the photo as a location card
+        // underneath. Originally had a pin-drop-then-card-rise animation;
+        // simplified to a plain fade per his follow-up ("odd animation...
+        // just do fade in and out"). key={fact.id} forces a real remount on
+        // every swap so the fade genuinely replays every time, never skipped.
+        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "linear-gradient(160deg, #d8cdae, #b9a97c 75%)", backgroundImage: "repeating-linear-gradient(0deg, rgba(90,70,30,0.08) 0px, transparent 1px, transparent 26px), repeating-linear-gradient(90deg, rgba(90,70,30,0.08) 0px, transparent 1px, transparent 26px)" }}>
+          <div key={fact.id} style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: 6, animation: "gxSimpleFade 0.55s ease both" }}>
+            <div style={{ width: 20, height: 20, borderRadius: "50% 50% 50% 0", background: C.accent, transform: "rotate(-45deg)", boxShadow: "0 4px 10px rgba(0,0,0,0.35)" }} />
+            <div style={{ width: 172, background: "#fff", padding: 5, marginTop: 8, boxShadow: "0 10px 20px rgba(40,30,10,0.35)" }}>
+              <img src={fact.photo} alt={fact.name} style={{ width: "100%", height: 118, objectFit: "contain", background: "#ece4d2", display: "block" }} />
+            </div>
+          </div>
+          <div style={{ position: "absolute", top: 10, left: 14, fontSize: 11.5, fontWeight: 700, color: "rgba(50,35,10,0.75)", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
+        </div>
+      ) : treatment === "neonGlow" ? (
+        // Nightlife treatment, Oliver's pick "Nightlife A", then asked for
+        // MORE flashy rather than simplified ("nightlife shall be like more
+        // flashy") — so unlike attractions/food this one keeps real motion:
+        // a bright camera-flash beat plays first, then the frame settles
+        // into its pulsing neon glow with bokeh floating behind. The bokeh
+        // blurs and the glow's box-shadow pulse are safe here (only one
+        // loader instance is ever mounted at a time, so this doesn't run
+        // into the per-card backdrop-filter/willChange perf trap).
+        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "radial-gradient(120% 100% at 50% 0%, #241035 0%, #120a1e 60%, #0a0614 100%)" }}>
+          <div style={{ position: "absolute", width: 70, height: 70, borderRadius: "50%", filter: "blur(14px)", opacity: 0.5, background: "#ff2e88", top: 10, left: 16, animation: "gxBokehFloat 6s ease-in-out infinite" }} />
+          <div style={{ position: "absolute", width: 56, height: 56, borderRadius: "50%", filter: "blur(14px)", opacity: 0.5, background: "#22d3ee", bottom: 18, right: 14, animation: "gxBokehFloat 7s ease-in-out infinite reverse" }} />
+          <div key={fact.id} style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+            <div style={{ width: 160, padding: 5, background: "#0d0714", borderRadius: 10, animation: "gxNeonIn 0.45s ease both, gxNeonPulse 2.4s ease-in-out 0.45s infinite" }}>
+              <img src={fact.photo} alt={fact.name} style={{ width: "100%", height: 148, objectFit: "contain", background: "#150c22", display: "block", borderRadius: 6 }} />
+            </div>
+          </div>
+          <div key={`${fact.id}-flash`} style={{ position: "absolute", inset: 0, zIndex: 3, background: "#fff", pointerEvents: "none", animation: "gxFlashOut 0.5s ease-out both" }} />
+          <div style={{ position: "absolute", top: 10, left: 14, zIndex: 2, fontSize: 11.5, fontWeight: 700, color: "rgba(255,255,255,0.85)", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
+        </div>
+      ) : treatment === "foodTray" ? (
+        // Food treatment, Oliver's pick "Food A" (wooden tray with ambient
+        // steam, no crop) with the swap animation simplified to a plain fade
+        // per his follow-up, same as attractions. The steam wisps are
+        // continuous atmosphere, not the swap animation, so they keep
+        // looping independent of which fact is showing.
+        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "linear-gradient(160deg, #8a5a34, #6b4325 70%)", backgroundImage: "repeating-linear-gradient(90deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 2px, transparent 2px, transparent 30px)" }}>
+          <div style={{ position: "absolute", width: 8, height: 46, left: "44%", bottom: "58%", background: "linear-gradient(to top, rgba(255,255,255,0.5), transparent)", filter: "blur(4px)", borderRadius: "50%", animation: "gxSteamRise 3.5s ease-in-out infinite" }} />
+          <div style={{ position: "absolute", width: 8, height: 46, left: "52%", bottom: "58%", background: "linear-gradient(to top, rgba(255,255,255,0.5), transparent)", filter: "blur(4px)", borderRadius: "50%", animation: "gxSteamRise 3.5s ease-in-out 1.2s infinite" }} />
+          <div key={fact.id} style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: "gxSimpleFade 0.55s ease both" }}>
+            <div style={{ width: 190, background: "#fdfaf2", padding: 6, boxShadow: "0 14px 24px rgba(0,0,0,0.38)" }}>
+              <img src={fact.photo} alt={fact.name} style={{ width: "100%", height: 160, objectFit: "contain", background: "#f0e6d2", display: "block" }} />
+            </div>
+          </div>
+          <div style={{ position: "absolute", top: 10, left: 14, fontSize: 11.5, fontWeight: 700, color: "rgba(255,255,255,0.85)", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
+        </div>
+      ) : (
+        // Default treatment (kept for anything not yet categorized): a
+        // blurred, scaled copy of the same photo fills the box for
+        // atmosphere, the real photo sits on top at objectFit "contain" so
+        // nothing is ever cropped. Only one loader is ever mounted at a
+        // time, so this single blur() doesn't run into the per-card
+        // backdrop-filter perf trap.
+        <div style={{ position: "relative", height: 210, overflow: "hidden", background: "#0A0F1E" }}>
+          <img key={`${fact.id}-bg`} src={fact.photo} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(18px) brightness(0.55)", transform: "scale(1.15)" }} />
+          <img key={fact.id} src={fact.photo} alt={fact.name} style={{ position: "relative", width: "100%", height: "100%", objectFit: "contain", animation: "gxFactFade 0.5s ease" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.9), transparent 45%)" }} />
+          <div style={{ position: "absolute", bottom: 10, left: 14, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Fraunces', serif" }}>{fact.name}</div>
+        </div>
+      )}
       <div style={{ padding: "12px 16px 14px", fontSize: 12.5, color: C.light, lineHeight: 1.65 }}>{fact.fact}</div>
     </div>
   );
@@ -3363,7 +3466,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         // photos only, via lookupRealPlace — never a fabricated
                         // image — falling back to the same monogram plate
                         // GuidePage itself uses when nothing real matches.
-                        <div style={{ flex: 1 }}>
+                        <div key="preview" style={{ flex: 1, animation: "gxPageTurn 0.5s cubic-bezier(0.22,1,0.36,1) both" }}>
                           <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: "'Fraunces', serif", textAlign: "center" }}>Here's what you'll see</div>
                           <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 22, lineHeight: 1.5, textAlign: "center" }}>Grouped by town, before the day-by-day breakdown.</div>
                           {groupStopsByTown(guideModal.days).map(g => (
@@ -3423,7 +3526,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         // general Essentials tab. Now its own full-screen page,
                         // same as preview, per Oliver: "same with essentials..
                         // it's own page."
-                        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, margin: "0 auto", width: "100%" }}>
+                        <div key="essentials" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, margin: "0 auto", width: "100%", animation: "gxPageTurn 0.5s cubic-bezier(0.22,1,0.36,1) both" }}>
                           <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 22, fontFamily: "'Fraunces', serif", textAlign: "center" }}>Before you go</div>
                           {[["Budget", guideModal.essentials?.budgetReality], ["Getting there", guideModal.essentials?.transportTip], ["Keep in mind", guideModal.essentials?.keepInMind]]
                             .filter(([, text]) => text)
@@ -3442,7 +3545,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         // Oliver's pick, asked directly: the choice happens
                         // BEFORE building, so the plain option genuinely skips
                         // the Google Directions calls, not just their display.
-                        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, margin: "0 auto", width: "100%" }}>
+                        <div key="choice" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 460, margin: "0 auto", width: "100%", animation: "gxPageTurn 0.5s cubic-bezier(0.22,1,0.36,1) both" }}>
                           <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 6, textAlign: "center", fontFamily: "'Fraunces', serif" }}>How do you want to see it?</div>
                           <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 22, textAlign: "center" }}>Pick one, this decides what gets built next.</div>
                           <div style={{ display: "flex", gap: 12 }}>
@@ -3466,7 +3569,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         // stage label and progress line stay underneath, still
                         // the authoritative status, this is additional, not a
                         // replacement for honesty about what's happening.
-                        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "10px 10px" }}>
+                        <div key="enriching" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "10px 10px", animation: "gxPageTurn 0.5s cubic-bezier(0.22,1,0.36,1) both" }}>
                           <DenmarkFactsLoader />
                           <GemlyxLoader size={30} tone="gold" ring={true} />
                           <div style={{ marginTop: 14, fontSize: 14, color: C.light, fontWeight: 600 }}>{guideBuildStage?.label || "Building your guide"}</div>
@@ -5167,6 +5270,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
         @keyframes gemlyxMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .gemlyx-msg-in { animation: gemlyxMsgIn 0.28s ease both; }
         @keyframes gxFactFade { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: scale(1); } }
+        /* Oliver: "make it swipe like a page of a book" — going from preview to
+           essentials to the map/plain question. A subtle rotateY + slide reads as
+           a page turning rather than a flat crossfade. Applied via key={guideFlowStep}
+           on each wizard step's wrapper below so it replays on every step change. */
+        @keyframes gxPageTurn { 0% { opacity: 0; transform: perspective(1000px) rotateY(-14deg) translateX(46px); } 100% { opacity: 1; transform: perspective(1000px) rotateY(0deg) translateX(0); } }
+        @keyframes gxPaperSettle { 0% { opacity: 0; transform: translateY(-22px) rotate(5deg) scale(0.92); } 100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); } }
+        @keyframes gxSimpleFade { 0% { opacity: 0; } 100% { opacity: 1; } }
+        @keyframes gxBokehFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+        @keyframes gxNeonIn { 0% { opacity: 0; transform: scale(0.85); } 100% { opacity: 1; transform: scale(1); } }
+        @keyframes gxNeonPulse { 0%, 100% { box-shadow: 0 0 16px 2px rgba(236,72,153,0.5), 0 0 30px 5px rgba(168,85,247,0.22); } 50% { box-shadow: 0 0 24px 5px rgba(236,72,153,0.9), 0 0 44px 10px rgba(168,85,247,0.45); } }
+        @keyframes gxFlashOut { 0% { opacity: 0.9; } 100% { opacity: 0; } }
+        @keyframes gxSteamRise { 0% { opacity: 0; transform: translateY(0) scaleY(0.6); } 30% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(-60px) scaleY(1.3); } }
         .gemlyx-thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: ${C.gold}; margin: 0 2px; animation: gemlyxDotPulse 1.1s ease infinite; }
         @media (min-width: 900px) { .mobile-only { display: none !important; } }
         @media (max-width: 899px) { .desktop-only { display: none !important; } }
