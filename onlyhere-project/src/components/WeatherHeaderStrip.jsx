@@ -15,15 +15,17 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
 
   return (
     <div style={{ position: "relative", flex: compact ? 1 : "none", minWidth: 0 }}>
-      <div style={{ display: "flex", gap: compact ? 10 : 14, overflowX: "auto", padding: compact ? "0 4px" : "4px 0", marginTop: 0 }}>
+      {/* Modernized (the "less 2010" pass): each city is a proper pill chip
+          instead of bare emoji+number floating in a row. */}
+      <div style={{ display: "flex", gap: compact ? 6 : 8, overflowX: "auto", padding: compact ? "0 4px" : "2px 0", marginTop: 0, scrollbarWidth: "none" }}>
         {WEATHER_CITIES.map(c => {
           const d = weather[c.key];
           return (
             <button key={c.key} onClick={() => setOpenCity(c.key)}
-              style={{ display: "flex", alignItems: "center", gap: compact ? 3 : 6, flexShrink: 0, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-              <span style={{ fontSize: compact ? 12 : 15 }}>{d && !d.error ? weatherIcon(d.condition) : "⏳"}</span>
-              {!compact && <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{c.label}</span>}
-              <span style={{ fontSize: compact ? 11 : 13, color: C.text, fontWeight: 700 }}>{d && !d.error ? `${Math.round(d.temperature_c)}°` : "--"}</span>
+              style={{ display: "flex", alignItems: "center", gap: compact ? 4 : 6, flexShrink: 0, background: "rgba(33,44,68,0.45)", border: `1px solid ${C.border}`, borderRadius: 100, padding: compact ? "4px 9px" : "6px 12px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              <span style={{ fontSize: compact ? 11 : 13 }}>{d && !d.error ? weatherIcon(d.condition) : "–"}</span>
+              {!compact && <span style={{ fontSize: 11, color: C.light, fontWeight: 600 }}>{c.label}</span>}
+              <span style={{ fontSize: compact ? 11 : 12.5, color: C.text, fontWeight: 700 }}>{d && !d.error ? `${Math.round(d.temperature_c)}°` : "--"}</span>
             </button>
           );
         })}
@@ -35,7 +37,7 @@ export const WeatherHeaderStrip = ({ weather, weatherLoading, checkWeather, comp
       {openCityData && (
         <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(5,8,16,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px" }} onClick={() => setOpenCity(null)}>
           <div style={{ width: "100%", maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-            <WeatherStrip label={`🌤 ${openCityData.label}`} weatherKey={openCityData.key} lat={openCityData.lat} lon={openCityData.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+            <WeatherStrip label={openCityData.label} weatherKey={openCityData.key} lat={openCityData.lat} lon={openCityData.lon} weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
             <button onClick={() => setOpenCity(null)} style={{ display: "block", width: "100%", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               Close
             </button>

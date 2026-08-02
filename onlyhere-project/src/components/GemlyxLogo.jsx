@@ -14,17 +14,18 @@ const TEAL_BRIGHT = "#2DD4BF";
 const TEAL_MID = "#14B8A6";
 const TEAL_DEEP = "#0E9384";
 
-// Gold variant of the compass — used in gold-dominant contexts (the parchment
-// guide-building screen, gold-accented panels) where the cyan gem clashed.
-// Oliver's call: adventure yes, but cyan floating in a sea of gold looked off.
+// Aug 2026, Oliver's call: the compass is GOLD everywhere now. The gold variant
+// started as a fix for gold-dominant contexts (the parchment guide screen); he
+// liked it enough to promote it to the identity. Teal stays available as a
+// variant (tone="teal") but nothing uses it by default anymore.
 const TONES = {
   teal: { bright: TEAL_BRIGHT, mid: TEAL_MID, deep: TEAL_DEEP },
   gold: { bright: "#E8C25E", mid: "#D9A441", deep: "#A87B26" },
 };
 
 // The gem itself, drawn in the logo file's 120×120 coordinate space.
-const GemCore = ({ tone = "teal" }) => {
-  const t = TONES[tone] || TONES.teal;
+const GemCore = ({ tone = "gold" }) => {
+  const t = TONES[tone] || TONES.gold;
   return (
     <g transform="translate(12,12) scale(0.8)">
       {[45, 135, 225, 315].map(r => (
@@ -46,10 +47,10 @@ const GemCore = ({ tone = "teal" }) => {
   );
 };
 
-export const GemlyxMark = ({ size = 24, ring = true, ringColor = "#EDF0F7", style }) => (
+export const GemlyxMark = ({ size = 24, ring = true, ringColor = "#EDF0F7", tone = "gold", style }) => (
   <svg width={size} height={size} viewBox="0 0 120 120" style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} aria-label="Gemlyx">
     {ring && <circle cx="60" cy="60" r="54" fill="none" stroke={ringColor} strokeWidth="4" opacity="0.9" />}
-    <GemCore />
+    <GemCore tone={tone} />
   </svg>
 );
 
@@ -66,9 +67,9 @@ export const GemlyxWordmark = ({ height = 13, color = "#EDF0F7", style }) => (
 );
 
 // Nav / footer lockup: gem + wordmark side by side.
-export const GemlyxLogo = ({ size = 20, color = "#EDF0F7", gap = 8, style }) => (
+export const GemlyxLogo = ({ size = 20, color = "#EDF0F7", gap = 8, tone = "gold", style }) => (
   <span style={{ display: "inline-flex", alignItems: "center", gap, ...style }}>
-    <GemlyxMark size={size} ring={true} ringColor={color} />
+    <GemlyxMark size={size} ring={true} ringColor={color} tone={tone} />
     <GemlyxWordmark height={size * 0.62} color={color} />
   </span>
 );
@@ -76,7 +77,7 @@ export const GemlyxLogo = ({ size = 20, color = "#EDF0F7", gap = 8, style }) => 
 // The loading icon — per Oliver: ONLY the compass turning. No chasing arc, no
 // label — just the gem rotating inside its quiet static ring. `tone="gold"`
 // renders the gold compass for gold-dominant contexts.
-export const GemlyxLoader = ({ size = 40, tone = "teal", ring = true, label, style }) => (
+export const GemlyxLoader = ({ size = 40, tone = "gold", ring = true, label, style }) => (
   <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", ...style }}>
     <style>{`
       @keyframes gxGemSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -89,6 +90,48 @@ export const GemlyxLoader = ({ size = 40, tone = "teal", ring = true, label, sty
       </g>
     </svg>
   </span>
+);
+
+// The opening animation, restored (Oliver: "why is that gone?"). The entrance's
+// brand moment, played center stage before the country card appears. Oliver's
+// approved choreography from the hero file, at his even ~1.2s-per-phase pacing:
+// GEMLYX letters rise first (staggered 120ms), the compass pops in and does one
+// full spin (overshoots to 366° then settles — needle physics), the ring draws
+// itself in sync with the spin, and the tagline pure-fades last. The parent
+// decides when to fade the whole thing away; reduced-motion users see it settled.
+export const GemlyxIntro = ({ markSize = 96, wordHeight = 26, tone = "gold", color = "#F0EFE6", tagline = "IT EXISTS NOWHERE ELSE", style }) => (
+  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", ...style }}>
+    <style>{`
+      .gxi-word path { opacity: 0; animation: gxiLetter 0.7s cubic-bezier(0.2,0.7,0.3,1) forwards; }
+      .gxi-word path:nth-child(1) { animation-delay: 0.10s; }
+      .gxi-word path:nth-child(2) { animation-delay: 0.22s; }
+      .gxi-word path:nth-child(3) { animation-delay: 0.34s; }
+      .gxi-word path:nth-child(4) { animation-delay: 0.46s; }
+      .gxi-word path:nth-child(5) { animation-delay: 0.58s; }
+      .gxi-word path:nth-child(6) { animation-delay: 0.70s; }
+      @keyframes gxiLetter { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+      .gxi-mark { opacity: 0; animation: gxiPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 1.5s forwards; }
+      @keyframes gxiPop { from { opacity: 0; transform: scale(0.25); } to { opacity: 1; transform: scale(1); } }
+      .gxi-gem { transform-origin: 60px 60px; animation: gxiSpin 1.2s cubic-bezier(0.45,0.05,0.35,0.95) 1.9s both; }
+      @keyframes gxiSpin { 0% { transform: rotate(0deg); } 85% { transform: rotate(366deg); } 100% { transform: rotate(360deg); } }
+      .gxi-ring { stroke-dasharray: 339.3; stroke-dashoffset: 339.3; transform: rotate(-90deg); transform-origin: 60px 60px; animation: gxiRing 1.2s cubic-bezier(0.45,0.05,0.35,0.95) 1.9s forwards; }
+      @keyframes gxiRing { to { stroke-dashoffset: 0; } }
+      .gxi-tag { opacity: 0; animation: gxiFadeIn 0.9s ease 3.2s forwards; }
+      @keyframes gxiFadeIn { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        .gxi-word path, .gxi-mark, .gxi-gem, .gxi-ring, .gxi-tag { animation: none !important; opacity: 1 !important; }
+        .gxi-ring { stroke-dashoffset: 0 !important; }
+      }
+    `}</style>
+    <svg className="gxi-mark" width={markSize} height={markSize} viewBox="0 0 120 120" style={{ display: "block", marginBottom: 20 }} aria-hidden="true">
+      <circle className="gxi-ring" cx="60" cy="60" r="54" fill="none" stroke={color} strokeWidth="4" opacity="0.9" />
+      <g className="gxi-gem"><GemCore tone={tone} /></g>
+    </svg>
+    <span className="gxi-word" style={{ display: "inline-flex" }}>
+      <GemlyxWordmark height={wordHeight} color={color} />
+    </span>
+    <div className="gxi-tag" style={{ marginTop: 16, fontSize: 11, fontWeight: 600, letterSpacing: 3.5, textTransform: "uppercase", color, opacity: 0, fontFamily: "'Inter', sans-serif", textAlign: "center" }}>{tagline}</div>
+  </div>
 );
 
 export default GemlyxLogo;

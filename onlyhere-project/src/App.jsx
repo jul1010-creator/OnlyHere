@@ -30,7 +30,7 @@ import { GemlyxFindCard } from "./components/GemlyxFindCard";
 import { ReviewsSection } from "./components/ReviewsSection";
 import { InstagramEmbed } from "./components/InstagramEmbed";
 import { Ico, EmojiIcon, FlagDK } from "./components/Icon";
-import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader } from "./components/GemlyxLogo";
+import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader, GemlyxIntro } from "./components/GemlyxLogo";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
@@ -55,7 +55,10 @@ function GemlyxApp() {
   // covers the case where the video was already cached and onCanPlay never re-fires.
   useEffect(() => {
     const v = heroVideoRef.current;
-    if (v) { v.muted = true; v.play().catch(() => {}); }
+    // If the video was cached and is already decodable, onCanPlay may never fire —
+    // the video would then PLAY behind opacity 0 and look "stopped" (the poster
+    // image showing forever). Mark it ready here too, not just in onCanPlay.
+    if (v) { v.muted = true; if (v.readyState >= 2) setVideoReady(true); v.play().catch(() => {}); }
     // Ultimate fallback: some in-app/embedded browsers block even muted+playsInline
     // autoplay entirely until the very first user interaction anywhere on the page —
     // this makes sure that first tap (on ANYTHING, not just the video) starts it,
@@ -2279,6 +2282,29 @@ If the conversation only covers a single day or a few stops with no explicit day
   // and the country picker; choosing Denmark drops you into the app. Shown on
   // every fresh load — it's the brand moment, and it's one click to pass.
   const [entered, setEntered] = useState(false);
+  // The restored logo opening animation (Oliver: "why is that gone?"). Plays
+  // center stage over the painting, once per browser session — a repeat visit
+  // in the same tab session skips straight to the settled entrance. Reduced-
+  // motion users skip it too. Clicking anywhere during the intro skips it.
+  const [introDone, setIntroDone] = useState(() => {
+    try { if (sessionStorage.getItem("gxIntroSeen") === "1") return true; } catch { /* private mode etc. */ }
+    try { if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return true; } catch { /* no matchMedia */ }
+    return false;
+  });
+  const [introLeaving, setIntroLeaving] = useState(false);
+  const finishIntro = () => {
+    setIntroDone(true);
+    try { sessionStorage.setItem("gxIntroSeen", "1"); } catch { /* ignore */ }
+  };
+  useEffect(() => {
+    if (entered || introDone) return;
+    // Choreography ends ~4.1s in; hold the settled logo a beat, then fade the
+    // whole intro out (0.6s) and let the card/topbar fade in underneath.
+    const t1 = setTimeout(() => setIntroLeaving(true), 4600);
+    const t2 = setTimeout(finishIntro, 5200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entered, introDone]);
   // Small note chip on the front door (login/signup are placeholders for now).
   const [landingNote, setLandingNote] = useState(null);
   useEffect(() => {
@@ -3475,6 +3501,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {!videoError && (
                   <video ref={heroVideoRef} src="/video1.mp4" autoPlay muted defaultMuted loop playsInline webkit-playsinline="true" preload="auto"
                     onCanPlay={(e) => { e.target.muted = true; setVideoReady(true); e.target.play().catch(() => {}); }}
+                    onLoadedData={(e) => { e.target.muted = true; setVideoReady(true); e.target.play().catch(() => {}); }}
+                    onPlaying={() => setVideoReady(true)}
                     onError={() => setVideoError(true)}
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "25% center", opacity: videoReady ? 1 : 0, transition: "opacity 0.6s ease" }} />
                 )}
@@ -3503,36 +3531,40 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
               </div>
 
-              {/* Redesign pass: the page now OPENS on the hero — the weather strip,
-                  location prompt and live-events ticker used to stack above it and
-                  made the top feel like a utility drawer. They now live here, under
-                  the hero, as one tidy "Today in Denmark" block. */}
-              <div style={{ padding: "20px 16px 8px", maxWidth: 720, margin: "0 auto" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in Denmark</div>
-
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+              {/* "Today in Denmark" — modernized (Oliver: "less 2010"). One glass
+                  panel instead of a loose stack of utility widgets: kicker with a
+                  fading hairline, weather as pill chips, the location ask as a
+                  quiet row with an Enable chip, a hairline divider, then the
+                  live/coming events with a proper segmented control. */}
+              <div style={{ padding: "26px 16px 10px", maxWidth: 760, margin: "0 auto" }}>
+                <div style={{ background: "linear-gradient(180deg, rgba(15,22,40,0.94), rgba(15,22,40,0.6))", border: `1px solid ${C.border}`, borderRadius: 20, padding: "16px 18px 14px", boxShadow: "0 24px 60px -30px rgba(0,0,0,0.8)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", whiteSpace: "nowrap" }}>Today in Denmark</span>
+                    <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, ${C.border}, transparent)` }} />
+                  </div>
                   <WeatherHeaderStrip weather={weather} weatherLoading={weatherLoading} checkWeather={checkWeather} />
+                  {(userCoords === null || userCoords === "denied") && (
+                    <button onClick={requestLocation}
+                      style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: "12px 0 2px", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
+                      <Ico name="pin" size={14} color={userCoords === "denied" ? "#FFB347" : C.gold} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.light, fontWeight: 600 }}>
+                          {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? See travel times from where you are"}
+                        </span>
+                        <span onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
+                          style={{ display: "block", fontSize: 10, color: C.muted, marginTop: 2 }}>
+                          Only used on your device, never stored · <span style={{ textDecoration: "underline" }}>Privacy</span>
+                        </span>
+                      </span>
+                      <span style={{ flexShrink: 0, border: `1px solid ${C.border}`, background: "rgba(33,44,68,0.45)", color: C.text, borderRadius: 100, padding: "5px 14px", fontSize: 11, fontWeight: 700 }}>Enable</span>
+                    </button>
+                  )}
+                  {userCoords === "requesting" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, padding: "12px 0 2px" }}><Ico name="pin" size={13} /> Getting your location…</div>
+                  )}
+                  <div style={{ height: 1, background: C.border, opacity: 0.6, margin: "12px 0 10px" }} />
+                  <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
                 </div>
-                {(userCoords === null || userCoords === "denied") && (
-                  <button onClick={requestLocation}
-                    style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: userCoords === "denied" ? "#3D2A0A" : `${C.gold}18`, border: `1px solid ${userCoords === "denied" ? "#FFB347" : C.gold}`, borderRadius: 10, padding: "8px 12px", marginBottom: 8, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
-                    <Ico name="pin" size={15} color={userCoords === "denied" ? "#FFB347" : C.gold} />
-                    <span style={{ flex: 1 }}>
-                      <span style={{ display: "block", fontSize: 12, color: userCoords === "denied" ? "#FFB347" : C.gold, fontWeight: 600 }}>
-                        {userCoords === "denied" ? "Location blocked — tap to try again, or check your browser's site settings" : "Already in Denmark? Tap to see travel times from where you are"}
-                      </span>
-                      <span onClick={(e) => { e.stopPropagation(); setShowPrivacy(true); }}
-                        style={{ display: "block", fontSize: 10, color: C.muted, marginTop: 2 }}>
-                        Only used on your device, never stored · <span style={{ textDecoration: "underline" }}>Privacy</span>
-                      </span>
-                    </span>
-                  </button>
-                )}
-                {userCoords === "requesting" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, padding: "0 0 8px" }}><Ico name="pin" size={13} /> Getting your location…</div>
-                )}
-                <LiveEventsHeaderStrip liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} nearYou={nearYou} requestLocation={requestLocation} setEventDetail={setEventDetail} setFreeDetail={setFreeDetail} setFoodDetail={setFoodDetail} userCoords={userCoords} />
-              
               </div>
 
               {/* Navigation sections */}
@@ -3544,8 +3576,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", ico: "car" },
                 { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", ico: "town" },
                 // { id: "craft", ... } merged into attractions below
-                { id: "attractions", img: "/picture7.jpg", title: "Attractions", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", ico: "ticket" },
-                { id: "ai", img: "/picture9.jpg", title: "Gemlyx Detour", sub: "Your personal Denmark guide — plans trips, checks what's live", ico: null, glyph: "✦" },
+                // picture7.jpg / picture9.jpg were referenced but never existed in
+                // public/ — these two home cards have been silently broken images.
+                // Repointed to real files until Oliver picks the photos he wants.
+                { id: "attractions", img: "/librarygarden1.jpg", title: "Attractions", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", ico: "ticket" },
+                { id: "ai", img: "/plans.jpg", title: "Gemlyx Detour", sub: "Your personal Denmark guide — plans trips, checks what's live", ico: null, glyph: "✦" },
               ].map((section, i) => (
                 <div key={section.id} onClick={() => {
                   // "roadtrips" isn't its own tab anymore — it now lives inside
@@ -4665,7 +4700,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 110, background: "linear-gradient(to top, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 45%, transparent 58%, rgba(10,9,5,0.45) 100%)" }} />
 
+          {/* the restored opening animation — plays center stage over the painting
+              first; the entrance UI mounts (and fades in) only after it finishes.
+              A click anywhere skips it. */}
+          {!introDone && (
+            <div onClick={finishIntro}
+              style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px", cursor: "pointer", background: "radial-gradient(90% 72% at 50% 46%, rgba(8,8,5,0.6) 0%, rgba(8,8,5,0.28) 55%, transparent 100%)", opacity: introLeaving ? 0 : 1, transition: "opacity 0.6s ease" }}>
+              <GemlyxIntro markSize={96} wordHeight={26} />
+            </div>
+          )}
+
           {/* top bar: brand left, Log in / Sign up right */}
+          {introDone && (
           <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none" }}>
             <span style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
             <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
@@ -4679,6 +4725,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               </button>
             </div>
           </div>
+          )}
           {landingNote && (
             <div style={{ position: "absolute", top: "calc(64px + env(safe-area-inset-top))", right: 18, background: "rgba(12,11,7,0.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#F0EFE6", borderRadius: 12, padding: "10px 14px", fontSize: 12, maxWidth: 250, lineHeight: 1.5 }}>
               {landingNote}
@@ -4686,6 +4733,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           )}
 
           {/* the explorer — country cards, each with its own photo and line */}
+          {introDone && (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "70px 20px 84px", pointerEvents: "none" }}>
             <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto" }}>
               {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "68% 42%" }].map(cn => (
@@ -4710,14 +4758,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
               ))}
             </div>
           </div>
+          )}
 
           {/* bottom: customer support */}
+          {introDone && (
           <div className="gxa-topbar" style={{ position: "absolute", bottom: "calc(12px + env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
             <button onClick={() => window.open("mailto:hello@gemlyx.com?subject=" + encodeURIComponent("Gemlyx support"))}
               style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#EFE9D6", borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               <Ico name="mail" size={13} /> Customer Support
             </button>
           </div>
+          )}
         </div>
       )}
 
