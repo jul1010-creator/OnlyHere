@@ -4568,27 +4568,20 @@ You also have a web_search tool. Use it whenever someone asks about something th
           his animated logo intro (ring draws, gem pops and spins, letters
           fade) above the Denmark card that takes you in. */}
       {!entered && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflowY: "auto", background: "linear-gradient(180deg,#070B16 0%,#0A0F1E 55%,#0C1524 100%)" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflowY: "auto", background: "linear-gradient(180deg,#122B10 0%, #2E5A1F 26%, #6FA93A 55%, #8FC24E 78%, #7DB443 100%)" }}>
           <style>{`
-            .gxa-aur { position:absolute; inset:-25%; will-change:transform; pointer-events:none; }
-            .gxa-aur1 { background: radial-gradient(ellipse 48% 20% at 32% 38%, rgba(45,212,191,.36) 0%, rgba(45,212,191,.15) 45%, transparent 72%), radial-gradient(ellipse 40% 16% at 66% 30%, rgba(20,184,166,.26) 0%, rgba(20,184,166,.11) 48%, transparent 74%); animation: gxaDrift1 26s ease-in-out infinite alternate; }
-            .gxa-aur2 { background: radial-gradient(ellipse 46% 18% at 60% 56%, rgba(94,234,212,.20) 0%, rgba(94,234,212,.08) 48%, transparent 75%), radial-gradient(ellipse 38% 15% at 24% 62%, rgba(13,148,136,.24) 0%, rgba(13,148,136,.10) 50%, transparent 76%); animation: gxaDrift2 34s ease-in-out infinite alternate; }
-            @keyframes gxaDrift1 { from { transform:translate3d(-4%,-2%,0) rotate(-6deg) scale(1); } to { transform:translate3d(5%,3%,0) rotate(5deg) scale(1.12); } }
-            @keyframes gxaDrift2 { from { transform:translate3d(3%,2%,0) rotate(4deg) scale(1.08); } to { transform:translate3d(-4%,-3%,0) rotate(-5deg) scale(1); } }
-            .gxa-star { position:absolute; width:2px; height:2px; border-radius:50%; background:#F0F4FF; opacity:.35; animation: gxaTw 4.5s ease-in-out infinite; }
-            .gxa-star:nth-child(3n) { animation-delay:1.4s; width:1.5px; height:1.5px; }
-            .gxa-star:nth-child(4n) { animation-delay:2.6s; opacity:.22; }
-            .gxa-star:nth-child(5n) { animation-delay:3.4s; }
-            @keyframes gxaTw { 0%,100% { opacity:.14; } 50% { opacity:.5; } }
-            .gxa-breathe { animation: gxaBreathe 6s ease-in-out infinite alternate; will-change:transform,opacity; }
-            @keyframes gxaBreathe { from { transform: scale(1); opacity:.45; } to { transform: scale(1.08); opacity:.8; } }
-            .gxa-ember { position:absolute; bottom:18%; width:3px; height:3px; border-radius:50%; background:rgba(45,212,191,.7); opacity:0; animation: gxaRise 13s linear infinite; pointer-events:none; }
-            @keyframes gxaRise { 0% { transform:translateY(0); opacity:0; } 12% { opacity:.55; } 70% { opacity:.3; } 100% { transform:translateY(-46vh); opacity:0; } }
-            .gxa-light { animation: gxaBlink 3.2s ease-in-out infinite; }
-            @keyframes gxaBlink { 0%,100% { opacity:.25; } 50% { opacity:1; } }
-            .gxa-win { animation: gxaFlicker 5.5s ease-in-out infinite; }
-            .gxa-win:nth-of-type(2n) { animation-delay: 2.3s; }
-            @keyframes gxaFlicker { 0%,100% { opacity:.75; } 47% { opacity:1; } 53% { opacity:.6; } 60% { opacity:.95; } }
+            .gxa-canopy, .gxa-trunks { position:absolute; top:0; left:0; right:0; pointer-events:none; }
+            .gxa-trunks { opacity:.9; }
+            .gxa-ray { position:absolute; top:-12vh; height:130vh; pointer-events:none; background:linear-gradient(180deg, rgba(255,250,205,0.30) 0%, rgba(255,250,205,0.10) 55%, rgba(255,250,205,0) 80%); transform:rotate(16deg); transform-origin:top center; filter:blur(9px); animation: gxaRayPulse 9s ease-in-out infinite alternate; will-change:opacity; }
+            @keyframes gxaRayPulse { from { opacity:.7; } to { opacity:1; } }
+            .gxa-pol { position:absolute; bottom:26%; width:4px; height:4px; border-radius:50%; background:rgba(250,236,150,.85); box-shadow:0 0 6px rgba(250,236,150,.6); opacity:0; animation: gxaFloat 16s linear infinite; pointer-events:none; }
+            @keyframes gxaFloat { 0% { transform:translate(0,0); opacity:0; } 12% { opacity:.8; } 75% { opacity:.4; } 100% { transform:translate(3vw,-38vh); opacity:0; } }
+            .gxa-bird { position:absolute; left:-6%; pointer-events:none; animation: gxaFly 46s linear infinite; }
+            .gxa-bird2 { animation-duration: 63s; animation-delay: -24s; }
+            @keyframes gxaFly { 0% { transform: translate(0, 0); } 25% { transform: translate(30vw, -2.5vh); } 50% { transform: translate(60vw, 1.5vh); } 75% { transform: translate(90vw, -2vh); } 100% { transform: translate(125vw, 0); } }
+            .gxa-smoke { animation: gxaSmokeUp 4.5s ease-out infinite; will-change:transform,opacity; }
+            .gxa-smoke2 { animation-delay: 1.5s; } .gxa-smoke3 { animation-delay: 3s; }
+            @keyframes gxaSmokeUp { 0% { transform:translateY(6px); opacity:.7; } 100% { transform:translateY(-34px); opacity:0; } }
             .gxa-ring { animation: gxaRingdraw 1.2s cubic-bezier(.45,.05,.35,.95) 1.9s both; }
             @keyframes gxaRingdraw { from { stroke-dashoffset:339.3; } to { stroke-dashoffset:0; } }
             .gxa-pop { transform-box:fill-box; transform-origin:center; animation: gxaPop .5s cubic-bezier(.2,.9,.3,1.18) 1.5s both; }
@@ -4604,102 +4597,110 @@ You also have a web_search tool. Use it whenever someone asks about something th
             .gxa-tag { animation: gxaFadein 1.2s cubic-bezier(.45,.05,.35,.95) 3.2s both; }
             .gxa-choose { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) 2.7s both; }
             @media (prefers-reduced-motion: reduce) {
-              .gxa-aur, .gxa-star, .gxa-breathe, .gxa-ember, .gxa-light, .gxa-ring, .gxa-pop, .gxa-spin, .gxa-tag, .gxa-choose { animation: none !important; }
+              .gxa-ray, .gxa-pol, .gxa-bird, .gxa-smoke, .gxa-ring, .gxa-pop, .gxa-spin, .gxa-tag, .gxa-choose { animation: none !important; }
+              .gxa-pol, .gxa-smoke { opacity: 0 !important; }
+              .gxa-bird { left: 30% !important; }
               .gxa-word svg path { animation: none !important; opacity: 1; }
               .gxa-ring { stroke-dashoffset: 0 !important; }
             }
           `}</style>
 
-          {/* Sky: aurora + stars + breathing glow behind the logo */}
+          {/* The forest, upper half: canopy overhead, tree trunks, blurred sun
+              shafts breathing through, golden pollen motes drifting up, two
+              birds slowly crossing the sky. Daylight, alive — Oliver's forest
+              reference, not night. */}
           <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-            <div className="gxa-aur gxa-aur1" />
-            <div className="gxa-aur gxa-aur2" />
-            {/* stars only in the upper sky — below that it's land, not space */}
-            {[[2,4],[13,28],[22,12],[35,22],[44,8],[48,38],[57,17],[70,8],[74,33],[83,20],[95,13],[98,41],[28,5],[55,3],[81,6],[12,44],[69,26]].map(([l, t], i) => (
-              <span key={i} className="gxa-star" style={{ left: `${l}%`, top: `${t}%` }} />
+            <div className="gxa-trunks">
+              <svg viewBox="0 0 1440 500" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "56vh" }} aria-hidden="true">
+                <g fill="#2A5220" opacity="0.55">
+                  <path d="M150,0 L162,0 L174,500 L134,500 Z" /><path d="M395,0 L404,0 L414,500 L382,500 Z" />
+                  <path d="M1050,0 L1060,0 L1072,500 L1034,500 Z" /><path d="M1290,0 L1300,0 L1314,500 L1272,500 Z" />
+                </g>
+                <g fill="#1F4218" opacity="0.7">
+                  <path d="M70,0 L86,0 L102,500 L50,500 Z" /><path d="M1380,0 L1394,0 L1410,500 L1360,500 Z" />
+                </g>
+              </svg>
+            </div>
+            <div className="gxa-canopy">
+              <svg viewBox="0 0 1440 300" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "30vh" }} aria-hidden="true">
+                <g fill="#14310F">
+                  <ellipse cx="120" cy="10" rx="330" ry="150" /><ellipse cx="480" cy="-40" rx="340" ry="170" />
+                  <ellipse cx="820" cy="-20" rx="360" ry="185" /><ellipse cx="1180" cy="0" rx="360" ry="165" />
+                  <ellipse cx="1440" cy="30" rx="300" ry="150" />
+                </g>
+                <g fill="#1B3E14">
+                  <ellipse cx="240" cy="-30" rx="260" ry="120" /><ellipse cx="700" cy="-60" rx="300" ry="140" />
+                  <ellipse cx="1120" cy="-40" rx="280" ry="125" />
+                </g>
+                <g fill="#245018" opacity="0.8">
+                  <ellipse cx="90" cy="-10" rx="150" ry="80" /><ellipse cx="1360" cy="-5" rx="160" ry="85" />
+                </g>
+              </svg>
+            </div>
+            <div className="gxa-ray" style={{ left: "16%", width: "9vw" }} />
+            <div className="gxa-ray" style={{ left: "34%", width: "5vw", animationDelay: "3s" }} />
+            <div className="gxa-ray" style={{ left: "58%", width: "9vw", animationDelay: "6s" }} />
+            <div className="gxa-ray" style={{ left: "78%", width: "6vw", animationDelay: "1.5s" }} />
+            {[[12, 0], [24, 3.5], [37, 7], [52, 1.8], [64, 5.2], [77, 8.6], [88, 2.7], [45, 10]].map(([l, d], i) => (
+              <span key={i} className="gxa-pol" style={{ left: `${l}%`, animationDelay: `${d}s` }} />
             ))}
-            {/* warm horizon glow — distant hearth-light against the cool aurora */}
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "58vh", background: "radial-gradient(60% 55% at 50% 100%, rgba(217,164,65,0.20) 0%, rgba(217,164,65,0.08) 45%, transparent 75%)" }} />
-            <div className="gxa-breathe" style={{ position: "absolute", top: "8%", left: "50%", marginLeft: "-40vmax", width: "80vmax", height: "50vmax", background: "radial-gradient(ellipse 50% 40% at 50% 45%, rgba(45,212,191,0.12), transparent 65%)" }} />
-            {[[8, 0], [18, 4.2], [29, 8.5], [41, 2.1], [53, 6.4], [63, 10.7], [72, 1.3], [81, 5.6], [90, 9.1], [96, 3.4]].map(([l, d], i) => (
-              <span key={i} className="gxa-ember" style={{ left: `${l}%`, animationDelay: `${d}s` }} />
-            ))}
+            <div className="gxa-bird" style={{ top: "19%" }}>
+              <svg width="26" height="10" viewBox="0 0 26 10"><path d="M1 8 Q7 1 13 7 Q19 1 25 8" stroke="#1B3A14" strokeWidth="2" fill="none" strokeLinecap="round" /></svg>
+            </div>
+            <div className="gxa-bird gxa-bird2" style={{ top: "26%" }}>
+              <svg width="18" height="8" viewBox="0 0 26 10"><path d="M1 8 Q7 1 13 7 Q19 1 25 8" stroke="#1B3A14" strokeWidth="2.4" fill="none" strokeLinecap="round" /></svg>
+            </div>
           </div>
 
-          {/* The landscape — a full adventure scene, all silhouettes (Oliver's
-              reference: Hearthstone / the forest-arch painting, not "space"):
-              spruces framing both corners, a castle with lit windows on the far
-              left ridge with the tiny traveler on the crest below gazing at it,
-              a hamlet with flickering windows and a blinking lighthouse on the
-              right, and a path winding in from the bottom. Visually verified via
-              a static render before shipping. */}
+          {/* The meadow — sunlit storybook clearing: light-dappled grass, a
+              winding dirt path to a moss-roofed cottage with smoking chimney
+              and lit round window, the tiny traveler walking the path, bushes,
+              a stump, grass tufts. Visually iterated against real renders. */}
           <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, pointerEvents: "none" }}>
-            <svg viewBox="0 0 1440 430" preserveAspectRatio="xMidYMax slice" style={{ display: "block", width: "100%", height: "44vh" }} aria-hidden="true">
-              <defs>
-                <linearGradient id="gxaSkyfade" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor="#0C1524" stopOpacity="0" /><stop offset="1" stopColor="#0C1524" stopOpacity="0.9" />
-                </linearGradient>
-              </defs>
-              <rect x="0" y="0" width="1440" height="430" fill="url(#gxaSkyfade)" />
-              {/* far hills */}
-              <path d="M0,215 C180,168 340,208 520,186 C700,164 840,196 1010,178 C1180,160 1310,196 1440,180 L1440,430 L0,430 Z" fill="#16233F" opacity="0.75" />
-              {/* castle on the far ridge, windows lit */}
-              <g transform="translate(-855,-109) scale(1.62)" fill="#2A3D66">
-                <path d="M652,182 L652,150 L658,150 L658,143 L661,143 L661,150 L667,150 L667,182 Z" />
-                <path d="M667,182 L667,158 L697,158 L697,182 Z" />
-                <path d="M697,182 L697,146 L703,146 L703,139 L706,139 L706,146 L712,146 L712,182 Z" />
-                <path d="M657,150 L661.5,132 L666,150 Z" />
-                <path d="M700,146 L704.5,126 L709,146 Z" />
-                <path d="M678,158 L682,144 L686,158 Z" />
-                <rect className="gxa-win" x="676" y="166" width="3" height="4" fill="#E8B75A" />
-                <rect className="gxa-win" x="687" y="166" width="3" height="4" fill="#E8B75A" />
-                <rect className="gxa-win" x="702" y="158" width="2.6" height="3.6" fill="#E8B75A" />
+            <svg viewBox="0 0 1440 430" preserveAspectRatio="xMidYMax slice" style={{ display: "block", width: "100%", height: "42vh" }} aria-hidden="true">
+              <path d="M0,150 C240,110 480,160 720,135 C960,110 1200,155 1440,125 L1440,430 L0,430 Z" fill="#8CC24F" />
+              <ellipse cx="380" cy="185" rx="150" ry="26" fill="#9ED45F" opacity="0.7" />
+              <ellipse cx="1020" cy="205" rx="190" ry="30" fill="#9ED45F" opacity="0.6" />
+              <path d="M0,240 C260,196 560,250 840,222 C1100,198 1300,248 1440,224 L1440,430 L0,430 Z" fill="#6FB03B" />
+              {/* cottage */}
+              <g transform="translate(1005,84) scale(1.06)">
+                <rect x="18" y="76" width="150" height="76" rx="3" fill="#CFC0A0" />
+                <path d="M4,80 L93,18 L182,80 C182,80 158,70 93,70 C28,70 4,80 4,80 Z" fill="#5D9C2E" />
+                <path d="M0,84 C30,66 156,66 186,84 C186,92 160,80 93,80 C26,80 0,92 0,84 Z" fill="#6FB03B" />
+                <rect x="132" y="20" width="16" height="34" fill="#A98D6B" />
+                <rect x="129" y="16" width="22" height="7" rx="2" fill="#8E7355" />
+                <circle cx="93" cy="52" r="9" fill="#F5E9C8" stroke="#8E7355" strokeWidth="3" />
+                <rect x="76" y="102" width="34" height="50" rx="3" fill="#9C6B36" />
+                <rect x="79" y="105" width="28" height="44" rx="2" fill="#7E5429" />
+                <rect x="32" y="100" width="26" height="22" rx="2" fill="#F5E9C8" stroke="#8E7355" strokeWidth="3" />
+                <rect x="126" y="100" width="26" height="22" rx="2" fill="#F5E9C8" stroke="#8E7355" strokeWidth="3" />
+                <circle className="gxa-smoke" cx="140" cy="10" r="6" fill="rgba(240,244,235,0.7)" />
+                <circle className="gxa-smoke gxa-smoke2" cx="143" cy="-6" r="8" fill="rgba(240,244,235,0.55)" />
+                <circle className="gxa-smoke gxa-smoke3" cx="147" cy="-24" r="10" fill="rgba(240,244,235,0.4)" />
               </g>
-              {/* mid hills */}
-              <path d="M0,268 C220,214 430,272 640,246 C880,216 1120,276 1440,238 L1440,430 L0,430 Z" fill="#0D1729" />
-              {/* hamlet with flickering windows + church */}
-              <g>
-                <path d="M980,246 L980,232 L992,224 L1004,232 L1004,246 Z" fill="#0A1220" />
-                <path d="M1008,246 L1008,235 L1017,229 L1026,235 L1026,246 Z" fill="#0A1220" />
-                <rect className="gxa-win" x="987" y="234" width="5" height="6.5" fill="#E8B75A" />
-                <rect className="gxa-win" x="1013" y="236" width="4.5" height="6" fill="#E8B75A" />
-                <path d="M962,246 L962,222 L967,222 L967,216 L970,216 L970,222 L975,222 L975,246 Z" fill="#0A1220" />
-                <path d="M961,222 L968.5,206 L976,222 Z" fill="#0A1220" />
+              <path d="M0,330 C300,290 620,340 900,314 C1140,292 1330,338 1440,316 L1440,430 L0,430 Z" fill="#529727" />
+              {/* winding dirt path to the cottage door */}
+              <path d="M640,430 C660,392 700,368 780,348 C880,326 1010,330 1078,268 L1092,276 C1020,342 884,342 796,360 C716,378 678,398 662,430 Z" fill="#C7A86B" opacity="0.9" />
+              {/* traveler walking the path */}
+              <g fill="#2E511C">
+                <circle cx="700" cy="368" r="5" />
+                <path d="M691 392 C691 377 709 377 709 392 Z" />
+                <rect x="712" y="366" width="2" height="26" rx="1" />
               </g>
-              {/* lighthouse */}
-              <g>
-                <path d="M1258,258 L1263,214 L1275,214 L1280,258 Z" fill="#070D18" />
-                <rect x="1259" y="206" width="20" height="8" rx="2.5" fill="#070D18" />
-                <circle className="gxa-light" cx="1269" cy="210" r="3.5" fill="#2DD4BF" />
-              </g>
-              {/* near ground + winding path */}
-              <path d="M0,330 C260,286 520,336 780,310 C1040,284 1240,340 1440,306 L1440,430 L0,430 Z" fill="#05080F" />
-              <path d="M700,430 C712,392 690,366 706,330 C712,318 720,314 726,312 C720,318 716,324 714,332 C704,364 730,392 716,430 Z" fill="#0C1526" opacity="0.85" />
-              {/* traveler: head, cloaked body, walking stick — gazing toward the castle */}
-              <g fill="#02040A">
-                <circle cx="332" cy="299" r="4.4" />
-                <path d="M324 320 C324 306 340 306 340 320 Z" />
-                <rect x="343" y="297" width="1.8" height="23" rx="0.9" />
-              </g>
-              {/* framing spruces, left */}
-              <g fill="#03060D">
-                <path d="M28,246 L5.8,322 L50.2,322 Z" /><path d="M28,287.8 L-1.6,379 L57.6,379 Z" /><path d="M28,337.2 L-9,436 L65,436 Z" /><rect x="26.5" y="434" width="3" height="6" />
-                <path d="M74,286 L56,346 L92,346 Z" /><path d="M74,319 L50,391 L98,391 Z" /><path d="M74,358 L44,436 L104,436 Z" /><rect x="72.5" y="434" width="3" height="6" />
-                <path d="M118,320 L104.2,364 L131.8,364 Z" /><path d="M118,344.2 L99.6,397 L136.4,397 Z" /><path d="M118,372.8 L95,430 L141,430 Z" /><rect x="116.5" y="428" width="3" height="6" />
-                <path d="M154,348 L143.8,378.4 L164.2,378.4 Z" /><path d="M154,364.72 L140.4,401.2 L167.6,401.2 Z" /><path d="M154,384.48 L137,424 L171,424 Z" /><rect x="152.5" y="422" width="3" height="6" />
-              </g>
-              {/* framing spruces, right */}
-              <g fill="#03060D">
-                <path d="M1412,236 L1388.6,316 L1435.4,316 Z" /><path d="M1412,280 L1380.8,376 L1443.2,376 Z" /><path d="M1412,332 L1373,436 L1451,436 Z" /><rect x="1410.5" y="434" width="3" height="6" />
-                <path d="M1364,280 L1345.4,342.4 L1382.6,342.4 Z" /><path d="M1364,314.32 L1339.2,389.2 L1388.8,389.2 Z" /><path d="M1364,354.88 L1333,436 L1395,436 Z" /><rect x="1362.5" y="434" width="3" height="6" />
-                <path d="M1318,314 L1303.6,360.4 L1332.4,360.4 Z" /><path d="M1318,339.52 L1298.8,395.2 L1337.2,395.2 Z" /><path d="M1318,369.68 L1294,430 L1342,430 Z" /><rect x="1316.5" y="428" width="3" height="6" />
-                <path d="M1280,344 L1269.2,376 L1290.8,376 Z" /><path d="M1280,361.6 L1265.6,400 L1294.4,400 Z" /><path d="M1280,382.4 L1262,424 L1298,424 Z" /><rect x="1278.5" y="422" width="3" height="6" />
+              {/* bushes, stump, grass tufts */}
+              <ellipse cx="180" cy="330" rx="60" ry="24" fill="#3F7C20" />
+              <ellipse cx="240" cy="342" rx="44" ry="18" fill="#4A8A26" />
+              <ellipse cx="1300" cy="350" rx="70" ry="26" fill="#3F7C20" />
+              <circle cx="1210" cy="332" r="10" fill="#8E7355" /><ellipse cx="1210" cy="326" rx="10" ry="4" fill="#C9AE83" />
+              <g fill="#39701C">
+                <path d="M90,430 C92,404 96,398 98,394 C99,402 98,410 96,418 C102,406 106,402 112,398 C108,410 104,420 100,430 Z" />
+                <path d="M1352,430 C1354,406 1358,400 1360,396 C1361,404 1360,412 1358,420 C1364,408 1368,404 1374,400 C1370,412 1366,422 1362,430 Z" />
               </g>
             </svg>
           </div>
 
-          {/* Vignette frame — slightly deeper now that the scene is richer */}
-          <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(115% 95% at 50% 40%, transparent 48%, rgba(4,5,12,0.72) 100%)" }} />
+          {/* Vignette — deep forest-green frame */}
+          <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(115% 95% at 50% 40%, transparent 50%, rgba(16,36,12,0.55) 100%)" }} />
 
           {/* Center: animated logo intro + tagline + country pick */}
           <div style={{ position: "relative", minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "48px 20px 120px" }}>
@@ -4724,14 +4725,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className="gxa-word" style={{ marginTop: 22 }}>
               <GemlyxWordmark height={26} color="#F0F4FF" />
             </div>
-            <div className="gxa-tag" style={{ marginTop: 20, color: "#7E8CAD", fontSize: 12, letterSpacing: "0.34em", textTransform: "uppercase" }}>It exists nowhere else</div>
+            <div className="gxa-tag" style={{ marginTop: 20, color: "#EAF6D3", fontSize: 12, letterSpacing: "0.34em", textTransform: "uppercase", textShadow: "0 1px 8px rgba(16,40,12,0.6)" }}>It exists nowhere else</div>
 
             <div className="gxa-choose" style={{ marginTop: 44, width: "100%", maxWidth: 720 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Where are you going?</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#FFE9A8", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16, textShadow: "0 1px 6px rgba(16,40,12,0.55)" }}>Where are you going?</div>
               <div className="country-row">
-                <div className="country-ghost">
-                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: C.muted, opacity: 0.7 }}>?</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
+                <div className="country-ghost" style={{ borderColor: "rgba(24,50,16,0.5)" }}>
+                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: "#2F5220", opacity: 0.85 }}>?</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: "#2F5220", letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
                 </div>
                 <div onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
                   style={{ flex: "0 1 340px", background: "rgba(15,22,40,0.82)", backdropFilter: "blur(6px)", border: `1px solid ${C.border}`, borderRadius: 18, padding: "16px 16px 14px", cursor: "pointer", boxShadow: "0 20px 60px -20px rgba(0,0,0,0.8)" }}>
@@ -4756,12 +4757,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     Enter Denmark →
                   </div>
                 </div>
-                <div className="country-ghost">
-                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: C.muted, opacity: 0.7 }}>?</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
+                <div className="country-ghost" style={{ borderColor: "rgba(24,50,16,0.5)" }}>
+                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", fontStyle: "italic", color: "#2F5220", opacity: 0.85 }}>?</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: "#2F5220", letterSpacing: 1, textTransform: "uppercase", marginTop: 6 }}>Someday</div>
                 </div>
               </div>
-              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 16 }}>Every dot is a place we've stood. More countries when they're ready.</div>
+              <div style={{ fontSize: 11.5, color: "#EAF6D3", marginTop: 16, textShadow: "0 1px 6px rgba(16,40,12,0.5)" }}>Every dot is a place we've stood. More countries when they're ready.</div>
             </div>
           </div>
         </div>

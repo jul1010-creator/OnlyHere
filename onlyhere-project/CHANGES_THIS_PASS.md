@@ -1,4 +1,18 @@
-# LATEST: the entrance is a full adventure scene now — no more "space"
+# LATEST: the entrance is DAYTIME now — a sunlit storybook forest, per your reference
+
+You were right to say no to the night version — your forest painting reference (the mossy cottage in sunbeams) is a completely different feeling: alive, warm, adventurous. Rebuilt the whole entrance scene in daylight:
+
+**The scene now:** deep-green canopy hanging overhead, tree trunks fading into a luminous green-gold mist, four soft blurred sunbeams slanting through (they slowly pulse brighter and dimmer — the "breathing"), golden pollen motes drifting up through the light, two birds gliding across the sky on long slow loops, and below: a light-dappled meadow with a winding dirt path leading to a moss-roofed cottage — smoke curling from its chimney in animated puffs, round window, wooden door — with the tiny traveler walking the path toward it, bushes, a chopped stump, and grass tufts at the frame's edge. Deep forest-green vignette instead of the old night one. Your white logo and its full intro animation read beautifully against the darker canopy zone. The dark Denmark card now pops off the meadow like a rune stone.
+
+Same method as before: iterated against real rendered screenshots (first pass had hard-edged rays and the cottage colliding with the "Someday" slot — caught and fixed by looking). All CSS/SVG, no images, reduced-motion respected.
+
+One taste note, honestly held: the entrance is now bright green and the app inside is dark navy — that's a strong contrast at the moment you click "Enter Denmark." I actually think it works (stepping out of the sunny forest into the cool guidebook feels like a scene change, and the card being dark prepares your eye), but if it feels jarring when you click through, options are a brief fade transition or warming up the Denmark page — tell me what you feel.
+
+Next agreed step is still the Denmark page rebuild (container widths, Events/Food card grids, emoji sweep, tilt cards).
+
+---
+
+# EARLIER: the entrance was a night adventure scene (superseded same evening — Oliver wanted daylight)
 
 Your Hearthstone / forest-arch references landed. The entrance background went from "dark sky with stars" to an actual place: spruce silhouettes framing both corners (the forest-arch effect from your painting reference), a castle with warm lit windows on the far left ridge, the tiny traveler on the crest below gazing up at it, a hamlet with flickering gold windows and the blinking lighthouse on the right, a path winding in from the bottom of the screen, and a warm hearth-glow on the horizon pushing back against the cool aurora — which is now noticeably stronger and fills the sky properly. Stars only live in the upper sky now; below that it's land. Iterated on this visually five times against real renders (the first castle was invisible, the first trees looked like flames — both caught by looking, not guessing) before porting the final version into the app.
 
