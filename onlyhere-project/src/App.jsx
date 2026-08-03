@@ -3169,7 +3169,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <div style={{ fontSize: "clamp(32px, 5.5vw, 50px)", fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, marginBottom: 12, textShadow: "0 2px 24px rgba(0,0,0,0.55)" }}>
                     Beyond the<br />guidebooks<span style={{ color: C.gold }}>.</span>
                   </div>
-                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Hidden gems across the whole country — every one visited and verified.</div>
+                  <div style={{ fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: 22, textShadow: "0 1px 10px rgba(0,0,0,0.5)", maxWidth: 420 }}>Hidden gems across the whole country, and this is how you find them.</div>
                   <button onClick={() => { goTab("ai"); window.scrollTo(0, 0); }}
                     style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "13px 26px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 24px rgba(226,59,78,0.4)" }}>
                     ✦ Plan my trip
@@ -3711,7 +3711,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Hidden Towns</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — every one of them visited and verified in person.</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — every one of them hand-researched and checked against multiple sources.</div>
               </div>
               <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
                 {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "East Jutland", "Bornholm", "Fanø Island"].map(r => (
@@ -3992,7 +3992,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <Ico name="bulb" size={22} color={C.gold} strokeWidth={1.8} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Know a place we're missing?</div>
-                    <div style={{ fontSize: 11.5, color: C.muted }}>Tell us — every Gemlyx entry is personally checked, so this helps us find the next one.</div>
+                    <div style={{ fontSize: 11.5, color: C.muted }}>Tell us — every Gemlyx entry is hand-researched and checked against multiple sources, so this helps us find the next one.</div>
                   </div>
                   <button onClick={() => { setSuggestOpen(true); setSuggestStatus(null); }}
                     style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
@@ -4312,34 +4312,41 @@ You also have a web_search tool. Use it whenever someone asks about something th
             .gxa-choose { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) .5s both; }
             .gxa-topbar { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) .2s both; }
             @keyframes gxaFadein { from { opacity:0; } to { opacity:1; } }
-            /* OPENING LOGO — spins big and centered, then settles into the same
-               spot the static corner logo already sits (that logo underneath is
-               unchanged, just covered until this finishes). Per Oliver: this used
-               to exist, went missing across a few passes rebuilding this screen.
-               left/top animate to the real corner position (not a second nested
-               transform, those don't add cleanly) while scale shrinks in step. */
-            .gx-intro-spin { position: fixed; left: 50vw; top: 50vh; z-index: 30; pointer-events: none;
-              transform: translate(-50%, -50%) scale(1); opacity: 0;
-              animation: gxIntroSettle 1.7s cubic-bezier(.5,.05,.25,1) .1s both; }
-            @keyframes gxIntroSettle {
-              0% { left: 50vw; top: 50vh; transform: translate(-50%, -50%) scale(1); opacity: 0; }
-              14% { opacity: 1; }
-              60% { left: 50vw; top: 50vh; transform: translate(-50%, -50%) scale(1); opacity: 1; }
-              100% { left: 30px; top: calc(24px + env(safe-area-inset-top)); transform: translate(-50%, -50%) scale(0.21); opacity: 0; }
+            /* OPENING SPLASH — a genuine dark screen: solid near-black, the gem
+               fades in and spins centered with the wordmark settling in under
+               it, holds a beat, then the whole screen fades away to reveal the
+               painting and the already-faded-in Enter Denmark card underneath. */
+            .gx-splash { position: fixed; inset: 0; z-index: 40; pointer-events: none;
+              display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+              background: #0A0906;
+              animation: gxSplashFade 2.6s ease-in-out both; }
+            @keyframes gxSplashFade {
+              0% { opacity: 0; }
+              6% { opacity: 1; }
+              62% { opacity: 1; }
+              100% { opacity: 0; visibility: hidden; }
             }
+            .gx-splash-mark { opacity: 0; transform: scale(0.82);
+              animation: gxSplashMarkIn .55s cubic-bezier(.34,1.56,.64,1) .18s both; }
+            @keyframes gxSplashMarkIn { to { opacity: 1; transform: scale(1); } }
+            .gx-splash-word { opacity: 0; animation: gxaFadein .6s ease .55s both; }
             @media (prefers-reduced-motion: reduce) {
               .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-choose, .gxa-topbar { animation: none !important; }
               .gxa-fly { opacity: 0 !important; }
               .gxa-choose, .gxa-topbar { opacity: 1 !important; }
-              .gx-intro-spin { display: none !important; }
+              .gx-splash { display: none !important; }
             }
           `}</style>
 
-          {/* Opening logo: spins in the middle, settles into the corner over the
-              static logo below. Purely decorative/pointer-events:none, so it can
-              never block the Enter Denmark card underneath it. */}
-          <div className="gx-intro-spin">
-            <GemlyxLoader size={90} ring={false} label="Gemlyx" />
+          {/* Opening splash: dark screen, gem spins and fades in center, then the
+              whole screen fades away to reveal the entrance underneath. */}
+          <div className="gx-splash">
+            <div className="gx-splash-mark">
+              <GemlyxLoader size={100} label="Gemlyx" />
+            </div>
+            <div className="gx-splash-word">
+              <GemlyxWordmark height={16} color="#F0EFE6" />
+            </div>
           </div>
 
           {/* The painting — pannable, breathing, with light pinned to it */}
@@ -4971,7 +4978,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>💡 Suggest a Place</div>
               <button onClick={() => setSuggestOpen(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
             </div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18, lineHeight: 1.5 }}>We read every suggestion — nothing goes live automatically. If it's a real, worthwhile find, it'll show up in Gemlyx personally checked, same as everything else.</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18, lineHeight: 1.5 }}>We read every suggestion — nothing goes live automatically. If it's a real, worthwhile find, it'll show up in Gemlyx, hand-researched and checked against multiple sources, same as everything else.</div>
 
             {suggestStatus === "sent" ? (
               <div style={{ textAlign: "center", padding: "20px 0" }}>
