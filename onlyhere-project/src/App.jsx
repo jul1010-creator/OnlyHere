@@ -2708,7 +2708,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
                         placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market/street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightTown: "Town name, e.g. Aarhus" }[studioType]}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
-                      <button onClick={generateArea} disabled={studioLoading}
+                      <button onClick={() => generateArea()} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                         {studioLoading ? "Researching…" : "Draft it"}
                       </button>
@@ -4312,12 +4312,35 @@ You also have a web_search tool. Use it whenever someone asks about something th
             .gxa-choose { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) .5s both; }
             .gxa-topbar { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) .2s both; }
             @keyframes gxaFadein { from { opacity:0; } to { opacity:1; } }
+            /* OPENING LOGO — spins big and centered, then settles into the same
+               spot the static corner logo already sits (that logo underneath is
+               unchanged, just covered until this finishes). Per Oliver: this used
+               to exist, went missing across a few passes rebuilding this screen.
+               left/top animate to the real corner position (not a second nested
+               transform, those don't add cleanly) while scale shrinks in step. */
+            .gx-intro-spin { position: fixed; left: 50vw; top: 50vh; z-index: 30; pointer-events: none;
+              transform: translate(-50%, -50%) scale(1); opacity: 0;
+              animation: gxIntroSettle 1.7s cubic-bezier(.5,.05,.25,1) .1s both; }
+            @keyframes gxIntroSettle {
+              0% { left: 50vw; top: 50vh; transform: translate(-50%, -50%) scale(1); opacity: 0; }
+              14% { opacity: 1; }
+              60% { left: 50vw; top: 50vh; transform: translate(-50%, -50%) scale(1); opacity: 1; }
+              100% { left: 30px; top: calc(24px + env(safe-area-inset-top)); transform: translate(-50%, -50%) scale(0.21); opacity: 0; }
+            }
             @media (prefers-reduced-motion: reduce) {
               .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-choose, .gxa-topbar { animation: none !important; }
               .gxa-fly { opacity: 0 !important; }
               .gxa-choose, .gxa-topbar { opacity: 1 !important; }
+              .gx-intro-spin { display: none !important; }
             }
           `}</style>
+
+          {/* Opening logo: spins in the middle, settles into the corner over the
+              static logo below. Purely decorative/pointer-events:none, so it can
+              never block the Enter Denmark card underneath it. */}
+          <div className="gx-intro-spin">
+            <GemlyxLoader size={90} ring={false} label="Gemlyx" />
+          </div>
 
           {/* The painting — pannable, breathing, with light pinned to it */}
           <div className="gxa-pan" ref={landingPanRef}>
