@@ -29,6 +29,101 @@ export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-
   }
 };
 
+export const askPerplexity = async (prompt) => {
+  try {
+    const res = await fetch("/api/perplexity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await res.json();
+    // Log the REAL error to console even though every call site here treats a
+    // Perplexity failure as non-fatal (silent skip) — otherwise a broken model
+    // name or bad key just reads as "Perplexity found nothing", never as
+    // "Perplexity is broken".
+    if (!res.ok) { console.warn("Perplexity call failed:", res.status, data.error || data); return { error: data.error || `Request failed (${res.status})` }; }
+    return { text: data.text || "No response text.", citations: data.citations || [] };
+  } catch (err) {
+    return { error: "Couldn't reach Perplexity — check the API key and your connection." };
+  }
+};
+
+// RETRY-BEFORE-FAIL: the hard-fail policy in generateArea() (in App.jsx) is
+// deliberate — a genuine outage should stop a draft rather than silently
+// publishing on partial research. But a single flaky request isn't the same
+// as a real outage, and nuking an entire draft attempt over one transient
+// blip is needless friction. This retries the SAME API up to 2 extra times
+// (3 attempts total, short pause between) before actually giving up — no
+// fallback to a different/weaker model (that was considered and rejected:
+// it would silently swap in a less reliable source with no visible sign it
+// happened, which defeats the point of the hard-fail rule). `isFailure`
+// inspects each attempt's result to decide whether to retry.
+export const withRetry = async (fn, isFailure, label, attempts = 3) => {
+  let lastResult;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      lastResult = await fn();
+      if (!isFailure(lastResult)) return lastResult;
+      console.warn(`${label}: attempt ${i + 1}/${attempts} failed${i < attempts - 1 ? ", retrying..." : ", giving up."}`, lastResult);
+    } catch (err) {
+      lastResult = { error: String(err) };
+      console.warn(`${label}: attempt ${i + 1}/${attempts} threw${i < attempts - 1 ? ", retrying..." : ", giving up."}`, err);
+    }
+    if (i < attempts - 1) await new Promise(r => setTimeout(r, 600));
+  }
+  return lastResult;
+};
+
+// Claude is the actual WRITER in Gemlyx's pipeline — every rewrite/rephrase/
+// fix task routes through here, never OpenAI. OpenAI's role is narrowed to
+// structuring research into the schema during the initial draft; once real
+// prose needs to be written or fixed, it's Claude's job specifically.
+// OpenAI's role is narrowed to planning + structuring — research query planning
+// (Stage 1) and organizing raw research into notes (Stage 4), never final prose.
+export const askOpenAI = async (prompt, maxTokens = 800) => {
+  try {
+    const res = await fetch("/api/openai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-5.6-sol",
+        messages: [{ role: "user", content: prompt }],
+        // CONFIRMED BUG (from live console error): "gpt-5.6-sol" rejects
+        // max_tokens with "Unsupported parameter... Use 'max_completion_tokens'
+        // instead" — this is the real OpenAI reasoning-model behavior (o1/o3-style
+        // models dropped max_tokens entirely). This was silently killing Stage 1
+        // (research planning) and Stage 4 (note structuring) on every single draft.
+        max_completion_tokens: maxTokens,
+      }),
+    });
+    const data = await res.json();
+    // Same reasoning as askGemini: planning (Stage 1) and structuring (Stage 4)
+    // both swallow OpenAI failures silently by design (a miss here just degrades
+    // to raw research, never blocks the draft) — but that means a genuinely
+    // broken OpenAI call (wrong model string, a param the model doesn't accept)
+    // could fail on EVERY single draft forever without ever surfacing anywhere.
+    // Logging it here is the only way to actually notice that.
+    if (!res.ok) { console.warn("OpenAI call failed:", res.status, data.error?.message || data.error || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (!text) {
+      // DIAGNOSTIC: "gpt-5.6-sol" is a reasoning-tier model — max_completion_tokens
+      // is shared between its INTERNAL reasoning tokens and the actual visible
+      // reply, unlike older models where every token you pay for shows up in the
+      // response. On a tight budget (this project's smaller calls were 300-500),
+      // it can burn the entire budget thinking and leave zero left to write the
+      // actual answer, which reads as "Empty response" even though nothing
+      // actually failed — finish_reason: "length" with reasoning_tokens > 0 in
+      // usage is the fingerprint of exactly this. Logging both here so a future
+      // empty-response report shows which cause it actually was.
+      console.warn("OpenAI returned no text.", { finish_reason: data.choices?.[0]?.finish_reason, usage: data.usage });
+      return { error: "Empty response from OpenAI" };
+    }
+    return { text };
+  } catch (err) {
+    return { error: "Couldn't reach OpenAI — check the API key and your connection." };
+  }
+};
+
 export const parseClaudeJSON = async (rawText, maxTokens = 8192) => {
   const cleaned = rawText.replace(/^```json\s*|\s*```$/g, "").trim();
   try {

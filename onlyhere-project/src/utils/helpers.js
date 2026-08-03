@@ -164,3 +164,82 @@ export const stripMarkdown = (text) => {
 
 
 export const daysUntil = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
+
+// Pure helpers moved out of App.jsx — none of these close over component state,
+// they only ever read their own parameters.
+export const normName = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, "").trim();
+export const dedupeAgainstExisting = (candidates, existingNames) => {
+  const existingNorm = existingNames.map(normName);
+  return (candidates || []).filter(c => {
+    if (!c?.name) return false;
+    const cn = normName(c.name);
+    return !existingNorm.some(e => e === cn || e.includes(cn) || cn.includes(e));
+  });
+};
+
+export const getEnclosingJSONStringBounds = (text, index) => {
+  let start = index;
+  while (start > 0 && !(text[start] === '"' && text[start - 1] !== "\\")) start--;
+  let end = index;
+  while (end < text.length && !(text[end] === '"' && text[end - 1] !== "\\")) end++;
+  return { start: start + 1, end };
+};
+
+export const nextWeekdayTimestamp = (dayOfWeek, hour) => {
+  const now = new Date();
+  const d = new Date(now);
+  let diff = (dayOfWeek - now.getDay() + 7) % 7;
+  if (diff === 0) diff = 7; // always the NEXT occurrence, not today
+  d.setDate(now.getDate() + diff);
+  d.setHours(hour, 0, 0, 0);
+  return Math.floor(d.getTime() / 1000);
+};
+
+// Realistic stay-duration by category — never let the model guess this from
+// language probability (which is how a "Half day" ended up attached to a
+// hot dog stand with no seats). Applied AFTER the draft, keyed off the
+// category the AI itself determined, overriding whatever it guessed.
+export const stayDurationForCategory = (studioType, category) => {
+  const c = (category || "").toLowerCase();
+  if (studioType === "food") {
+    if (/hot dog|stand|kiosk|food truck|street food|takeaway/.test(c)) return "15–30 mins"; // no seats, eaten standing
+    if (/bakery|café|coffee|ice cream/.test(c)) return "30–45 mins";
+    return "60–90 mins"; // casual dining / restaurant chains / pub strips — a real sit-down meal, not a quick bite
+  }
+  if (studioType === "foodStreet") return "60–120 mins"; // grazing across multiple vendors, longer than a single sit-down meal
+  if (studioType === "free") {
+    if (/palace|slot|castle|museum|exhibition/.test(c)) return "2–3 hours"; // historic interiors, real exhibitions
+    if (/square|plaza|torv|park|garden|viewpoint/.test(c)) return "30–45 mins"; // outdoor public spaces, a look-around not a tour
+    return "1–2 hours";
+  }
+  return null; // no confident category mapping for this type — leave the AI's own judgment
+};
+
+export const parsePrice = (str) => {
+  if (!str) return 0;
+  const m = str.replace(/,/g, "").match(/\d+/);
+  return m ? parseInt(m[0], 10) : 0;
+};
+
+export const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  const d = R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return d < 1 ? Math.round(d*1000)+"m" : d.toFixed(1)+"km";
+};
+export const getDistanceRaw = (lat1, lon1, lat2, lon2) => {
+  const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+};
+
+// ── 3D TILT (shared) ─────────────────────────────────────────
+// Redesign pass: cards tilt toward the cursor in real 3D with no library and
+// no re-renders — handlers write transforms straight onto the element. Touch
+// devices never fire mousemove, so phones are unaffected.
+export const tiltMove = (e) => {
+  const el = e.currentTarget, r = el.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+  el.style.transform = `perspective(950px) rotateX(${((0.5 - py) * 5).toFixed(2)}deg) rotateY(${((px - 0.5) * 7).toFixed(2)}deg) translateY(-2px)`;
+};
+export const tiltLeave = (e) => { e.currentTarget.style.transform = ""; };
