@@ -5434,11 +5434,35 @@ You also have a web_search tool. Use it whenever someone asks about something th
 // already did (home, food, events, Studio, Detour chat, the guide modal, all of
 // it) mounted at "/", completely unchanged in behavior. "/guide/:guideId" is the
 // only new thing: a real, shareable, full-page URL for a saved guide.
+// CRITICAL FIX (found live, production-crashing): `guideModal` referenced right
+// below used to read `<Route path="/guide/new" element={<GuidePage
+// liveGuide={guideModal} />} />` — but `guideModal` is state declared INSIDE
+// GemlyxApp (see its useState near the top of that function), and this Gemlyx()
+// wrapper is a completely separate component. That's a bare reference to an
+// identifier that doesn't exist in this scope, which is a hard ReferenceError,
+// not a soft undefined — and since a Route's `element` JSX is constructed
+// eagerly every time <Routes> itself renders (regardless of which path
+// actually matches), this crashed the ENTIRE app on every single load, caught
+// by the top-level ErrorBoundary. This was never actually reachable working
+// code even before tonight: GemlyxApp is only mounted at path "/" and reliably
+// UNMOUNTS the moment React Router navigates to "/guide/new" (that's how
+// <Routes> works), so the "liveGuide keeps patching in after navigation" idea
+// this prop was for could never have functioned anyway, crash or no crash —
+// the enrichGuideDays/fetchGuideWeather background updates it was meant to
+// carry over die with GemlyxApp the instant the route changes. Removed the
+// broken reference entirely rather than leave a crash in place; GuidePage
+// still gets the freshly-built guide correctly via router state
+// (navigate("/guide/new", { state: { guide: guideModal } })), which is set
+// BEFORE navigation and has nothing to do with this wrapper's scope. If real
+// post-navigation live updates are ever wanted, that needs guideModal actually
+// lifted to a level that survives the route change (this wrapper, or a
+// context) — a real architectural change, not a one-line prop fix, and not
+// safe to attempt unverified overnight.
 export default function Gemlyx() {
   return (
     <Routes>
       <Route path="/" element={<GemlyxApp />} />
-      <Route path="/guide/new" element={<GuidePage liveGuide={guideModal} />} />
+      <Route path="/guide/new" element={<GuidePage />} />
       <Route path="/guide/:guideId" element={<GuidePage />} />
     </Routes>
   );
