@@ -461,7 +461,17 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
         })}
 
         {isUnsaved && (
-          <div style={{ position: "sticky", bottom: 16, display: "flex", justifyContent: "center", marginTop: 20 }}>
+          // PASS 27 BUG FIX (Oliver: "the Gemlyx Guide is on top of the 'sounds
+          // good' button... on phone"): this bar was only ever tested at desktop
+          // widths. It's centered and un-z-indexed, while the floating "Ask
+          // Gemlyx" launcher below is fixed bottom:20/right:20 with zIndex:40 —
+          // on a narrow phone this centered pill runs wide enough that its
+          // right end (the actual "Looks good — save my guide" button) sits
+          // directly under the launcher, which draws on top of it since the
+          // bar had no z-index of its own. zIndex 45 here guarantees the save
+          // button always wins the stack; the launcher itself also gets moved
+          // up out of the way below (className gxa-guide-savebar-active).
+          <div style={{ position: "sticky", bottom: 16, zIndex: 45, display: "flex", justifyContent: "center", marginTop: 20 }}>
             <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: 6, display: "flex", gap: 8, boxShadow: "0 8px 30px rgba(0,0,0,0.6)" }}>
               <button onClick={() => (onBack ? onBack() : navigate(-1))}
                 style={{ background: "none", border: "none", color: C.light, borderRadius: 100, padding: "12px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -481,8 +491,21 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           never collides with the centered "save my guide" bar above. Opens a
           fixed-position panel with its own scrollable history; closing it keeps
           the conversation in memory for the rest of this page visit. */}
+      {/* PASS 27: on narrow phones, when the "Looks good — save my guide" bar
+          is on screen (isUnsaved), this launcher gets pushed up above it
+          instead of sitting at its usual bottom:20 — see the sticky bar's own
+          comment above for why they collided. Desktop/tablet is unaffected;
+          this only kicks in under 480px via the media query below. */}
+      {isUnsaved && (
+        <style>{`
+          @media (max-width: 480px) {
+            .gxa-guide-chat-launcher.gxa-savebar-active { bottom: 84px !important; }
+          }
+        `}</style>
+      )}
       {!chatOpen && (
         <button onClick={() => setChatOpen(true)}
+          className={`gxa-guide-chat-launcher${isUnsaved ? " gxa-savebar-active" : ""}`}
           style={{ position: "fixed", bottom: 20, right: 20, zIndex: 40, display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${C.surface}, ${C.bg})`, border: `1px solid ${C.gold}55`, color: C.text, borderRadius: 100, padding: "12px 18px 12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 26px rgba(0,0,0,0.55)" }}>
           <GemlyxMark size={20} ring={true} ringColor={C.gold} tone="gold" />
           Ask Gemlyx

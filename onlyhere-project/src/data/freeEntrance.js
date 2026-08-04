@@ -37,7 +37,7 @@ export const freeEntrance = [
       { type: "heading", content: "Things to Know" },
       { type: "paragraph", content: "A small museum — most visits last 20–40 minutes, focused on archaeological remains rather than interactive exhibits." },
     ] },
-  { id: 7, name: "Sohngårdsholmpark", popularityTag: "Hidden Gem", city: "Aalborg", type: "Park & fruit orchard", emoji: "🍎", photo: "/attractions/sohngardsholmpark.jpg", desc: "A sprawling neighbourhood park around a 19th-century manor — with a public apple orchard anyone can pick from.", website: null, color: "#558B2F",
+  { id: 7, name: "Sohngårdsholmpark", popularityTag: "Hidden Gem", city: "Aalborg", type: "Park & fruit orchard", emoji: "🍎", photo: "/attractions/sohngaardsholmpark.jpg", desc: "A sprawling neighbourhood park around a 19th-century manor — with a public apple orchard anyone can pick from.", website: null, color: "#558B2F",
     blogBody: [
       { type: "heading", content: "What Makes It Special" },
       { type: "paragraph", content: "Unlike Aalborg's smaller city parks, Sohngårdsholm feels spacious and tranquil — walking paths wind through mature woodland, open grassy areas and past the historic manor house." },
