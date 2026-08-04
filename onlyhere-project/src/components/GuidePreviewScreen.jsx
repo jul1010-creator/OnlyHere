@@ -25,6 +25,31 @@ import { C } from "../utils/theme";
 // map/plain choice screen and builds immediately instead. Unset (real chat
 // flow) behaves exactly as before this pass: "continue" hands off to
 // setGuideModal("choosing").
+// PASS 27, per Oliver ("I want it to show the towns in its own section and
+// attractions in its own section"): matched real places used to render as
+// one flat mixed list — a town, a restaurant, and an event with no visual
+// distinction between them. Grouped into labeled sections instead, one per
+// real category, shown in this order whenever that category has at least
+// one match. Craft/workshop spots are now matched too (they weren't before
+// — a genuine gap, not by design: the random-guide test brief can name a
+// craft spot as one of its "extras," but the old flat pool never included
+// craftItemsFallback at all, so a mentioned craft spot silently had nothing
+// to match against and just never showed up, quietly shrinking the count
+// below what was actually mentioned).
+const CATEGORY_SECTIONS = [
+  { src: "town", label: "Towns" },
+  { src: "free", label: "Attractions" },
+  { src: "food", label: "Food & Drink" },
+  { src: "nightlife", label: "Nightlife" },
+  { src: "craft", label: "Crafts & Workshops" },
+  { src: "event", label: "Events" },
+];
+// Per-section cap, not one shared cap across everything — a real conversation
+// covering several towns and several attractions should be able to show all
+// of them without one category silently crowding another out of the shared
+// slice(0, 8) this used to have.
+const MAX_PER_SECTION = 6;
+
 export const GuidePreviewScreen = ({
   aiMessages,
   towns,
@@ -33,6 +58,7 @@ export const GuidePreviewScreen = ({
   nightlifeSpots,
   events,
   majorEvents,
+  craftItemsFallback,
   openStopDetail,
   pendingRandomGuideMode,
   setPendingRandomGuideMode,
@@ -47,6 +73,7 @@ export const GuidePreviewScreen = ({
     ...freeEntrance.map(p => ({ ...p, _src: "free" })),
     ...foodSpots.map(p => ({ ...p, _src: "food" })),
     ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
+    ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
     ...events.map(p => ({ ...p, _src: "event" })),
     ...majorEvents.map(p => ({ ...p, _src: "event" })),
   ];
@@ -60,7 +87,11 @@ export const GuidePreviewScreen = ({
     if (seen.has(key)) return;
     if (norm.includes(key)) { seen.add(key); matched.push(p); }
   });
-  const shown = matched.slice(0, 8);
+  // Group into the fixed category order above, each capped independently.
+  const sections = CATEGORY_SECTIONS
+    .map(cat => ({ ...cat, items: matched.filter(p => p._src === cat.src).slice(0, MAX_PER_SECTION) }))
+    .filter(cat => cat.items.length > 0);
+  const totalShown = sections.reduce((n, cat) => n + cat.items.length, 0);
   // PASS 27: closing without continuing (backdrop tap or ✕) needs to unwind
   // the random-guide test state too, not just the modal — else
   // pendingRandomGuideMode and the fabricated brief pushed into aiMessages
@@ -81,31 +112,34 @@ export const GuidePreviewScreen = ({
       <div style={{ maxWidth: 560, margin: "0 auto" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8, textAlign: "center" }}>Here's what's coming up</div>
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 24, textAlign: "center" }}>
-          {shown.length > 0 ? "A quick look at the real places on this route before Gemlyx builds your full guide." : "Gemlyx will build your full guide next — real places, checked and mapped out."}
+          {totalShown > 0 ? "A quick look at the real places on this route before Gemlyx builds your full guide." : "Gemlyx will build your full guide next — real places, checked and mapped out."}
         </div>
-        {shown.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 28 }}>
-            {shown.map(place => (
-              <div key={`${place._src}-${place.id}`} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>
-                <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {place.photo ? (
-                    <img src={place.photo} alt={place.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  ) : (
-                    <span style={{ fontSize: 22, opacity: 0.4 }}>{place.emoji || "◆"}</span>
-                  )}
+        {sections.map(cat => (
+          <div key={cat.src} style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>{cat.label}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {cat.items.map(place => (
+                <div key={`${place._src}-${place.id}`} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>
+                  <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {place.photo ? (
+                      <img src={place.photo} alt={place.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <span style={{ fontSize: 22, opacity: 0.4 }}>{place.emoji || "◆"}</span>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
+                    <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{(place.desc || "").slice(0, 100)}{(place.desc || "").length > 100 ? "…" : ""}</div>
+                  </div>
+                  <button onClick={() => openStopDetail(place)}
+                    style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    Read more
+                  </button>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
-                  <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{(place.desc || "").slice(0, 100)}{(place.desc || "").length > 100 ? "…" : ""}</div>
-                </div>
-                <button onClick={() => openStopDetail(place)}
-                  style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  Read more
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        )}
+        ))}
         <button onClick={() => {
             // PASS 27: the random-guide test button already picked its mode
             // (map/plain) itself and has nothing more to ask — go straight to

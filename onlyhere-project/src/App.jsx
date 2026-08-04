@@ -2403,9 +2403,32 @@ If the conversation only covers a single day or a few stops with no explicit day
     // timer against it. Falls back to a timer only if that event never
     // fires at all (a genuinely unusual case, e.g. this element somehow
     // isn't in the DOM yet), so this can't hang forever either.
+    // BUG FIX (Oliver: "it now finishes spinning. But it doesn't fly into
+    // the left corner and settle at the logo"): the animationend fix above
+    // solved the spin-cutoff bug, but introduced a NEW one — this had both
+    // the animationend listener AND the 2600ms safety-net timer able to fire
+    // startFlight independently, with nothing stopping the second one from
+    // also running. The flight transition itself takes 850ms, so a flight
+    // that starts right on time (animationend firing at ~1.9s) doesn't
+    // finish until ~2.75s — AFTER the 2600ms fallback timer, which was
+    // never cancelled once animationend already fired. That fallback firing
+    // a SECOND attemptFlight mid-transition re-measured flyEl's position
+    // while it was already partway through its transform, computed a bogus
+    // second delta from that already-moving position, and stomped the
+    // in-progress transition with it — which is exactly "doesn't fly into
+    // the corner and settle," it gets cut off and overwritten instead.
+    // flightStarted below guarantees only ONE of (animationend, fallback
+    // timer) can ever actually kick off attemptFlight, whichever fires
+    // first, and immediately cancels the other path.
     let spinDoneTimer;
+    let flightStarted = false;
     const gemEl = document.querySelector("#gxi-fly-mark .gxi-gem");
-    const startFlight = () => { if (!cancelled) attemptFlight(15); };
+    const startFlight = () => {
+      if (cancelled || flightStarted) return;
+      flightStarted = true;
+      clearTimeout(spinDoneTimer);
+      attemptFlight(15);
+    };
     if (gemEl) {
       gemEl.addEventListener("animationend", startFlight, { once: true });
       spinDoneTimer = setTimeout(startFlight, 2600); // safety net if animationend never fires for some reason
@@ -5180,6 +5203,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           nightlifeSpots={nightlifeSpots}
           events={events}
           majorEvents={majorEvents}
+          craftItemsFallback={craftItemsFallback}
           openStopDetail={openStopDetail}
           pendingRandomGuideMode={pendingRandomGuideMode}
           setPendingRandomGuideMode={setPendingRandomGuideMode}
