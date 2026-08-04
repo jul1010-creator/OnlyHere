@@ -2196,10 +2196,15 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (guideModal === "loading") return;
     const realTowns = towns.filter(t => t.popularityTag !== "Common Attraction");
     const pickTown = realTowns[Math.floor(Math.random() * realTowns.length)];
+    // PASS 27 (Oliver: "it only showed 3 places" in the new preview screen):
+    // that wasn't actually a bug, just an honest reflection of how few real
+    // places the old 2-3-extra brief named — bumped to 3-5 so a test click
+    // gives the preview screen something more representative to show, closer
+    // to what a real multi-place conversation would surface.
     const extras = [...freeEntrance, ...craftItemsFallback]
       .slice()
       .sort(() => Math.random() - 0.5)
-      .slice(0, 2 + Math.floor(Math.random() * 2));
+      .slice(0, 3 + Math.floor(Math.random() * 3));
     const days = 2 + Math.floor(Math.random() * 3);
     const interestPool = ["history", "local food", "quiet walks", "craft and workshops", "coastal views", "architecture", "markets"];
     const interests = interestPool.slice().sort(() => Math.random() - 0.5).slice(0, 2);
@@ -2218,7 +2223,27 @@ If the conversation only covers a single day or a few stops with no explicit day
     // up, same as if it came from the real chat. pendingRandomGuideMode is
     // how the preview screen knows to skip the map/plain choice screen (this
     // button already picked a mode above) and build immediately instead.
-    setAiMessages(prev => [...prev, { role: "user", text: brief }]);
+    //
+    // REAL BUG FIX (Oliver: "it said 'can't build.. need full plan'"): this
+    // used to APPEND the fake brief onto whatever was already in aiMessages
+    // — harmless on a single click, but clicking "Random guide" more than
+    // once in the same page load (completely natural while testing, e.g.
+    // to compare a couple of results) kept piling a second, third fake trip
+    // brief into the SAME conversation, each with its own random town/
+    // interests/day-count. generateGuide's convoText is the FULL joined
+    // conversation, not just the newest message — so by the second click,
+    // Claude/the planner were being handed two or three contradictory trip
+    // descriptions at once (different towns, different day counts, no
+    // relation to each other) and reasonably failing to produce a coherent
+    // plan, which is exactly the generic "Couldn't build a guide from that
+    // yet" catch-all error. Same failure mode would hit anyone who'd typed
+    // even a little into the real chat first, then hit this test button.
+    // Fixed by resetting aiMessages to just the opening greeting plus this
+    // one fresh brief every time, instead of appending — this button is an
+    // isolated pipeline test, it was never meant to accumulate a real
+    // conversation history, and now it can't get confused by leftover state
+    // from an earlier click or an earlier real chat.
+    setAiMessages(prev => [prev[0], { role: "user", text: brief }]);
     setPendingRandomGuideMode(mode);
     setGuideModal("preview");
   };
@@ -2358,8 +2383,42 @@ If the conversation only covers a single day or a few stops with no explicit day
       flyEl.addEventListener("transitionend", finish, { once: true });
       safety = setTimeout(finish, 1150); // in case transitionend never fires (e.g. tab backgrounded mid-flight)
     };
-    const t = setTimeout(() => attemptFlight(15), 2000);
-    return () => { cancelled = true; clearTimeout(t); clearTimeout(retryTimer); clearTimeout(safety); };
+    // PASS 27 BUG FIX (Oliver: "now it stops spinning half-way instead"):
+    // this used to trigger attemptFlight off a flat 2000ms setTimeout,
+    // guessing it'd land safely after the gem's own CSS spin (0.5s delay +
+    // 1.4s duration = finishes at 1.9s) — only a 100ms margin. That's a race
+    // between two DIFFERENT clocks: the spin runs on the browser's
+    // compositor thread, this timer runs on the JS main thread, and on a
+    // real phone under the load of a 500KB+ bundle plus a large background
+    // image finishing its own decode/paint around the same moment, that
+    // margin was thin enough to lose — the retry fix that shipped last pass
+    // made attemptFlight actually reach its ready-and-fire branch instead of
+    // silently giving up, which is what exposed this: it could now start
+    // measuring/flying while the spin was still mid-rotation on a slower
+    // device, visually reading as "stops spinning halfway" the instant the
+    // flight's own transform took over the same element.
+    // Real fix, not just a bigger guess: wait for the gem's OWN
+    // "animationend" event — the browser's actual, authoritative signal that
+    // the spin genuinely finished — instead of racing a second, independent
+    // timer against it. Falls back to a timer only if that event never
+    // fires at all (a genuinely unusual case, e.g. this element somehow
+    // isn't in the DOM yet), so this can't hang forever either.
+    let spinDoneTimer;
+    const gemEl = document.querySelector("#gxi-fly-mark .gxi-gem");
+    const startFlight = () => { if (!cancelled) attemptFlight(15); };
+    if (gemEl) {
+      gemEl.addEventListener("animationend", startFlight, { once: true });
+      spinDoneTimer = setTimeout(startFlight, 2600); // safety net if animationend never fires for some reason
+    } else {
+      spinDoneTimer = setTimeout(startFlight, 2000); // gem element genuinely not found — fall back to the old fixed delay
+    }
+    return () => {
+      cancelled = true;
+      gemEl?.removeEventListener("animationend", startFlight);
+      clearTimeout(spinDoneTimer);
+      clearTimeout(retryTimer);
+      clearTimeout(safety);
+    };
   }, [entered, introFlightDone]);
   // Small note chip on the front door (login/signup are placeholders for now).
   const [landingNote, setLandingNote] = useState(null);
