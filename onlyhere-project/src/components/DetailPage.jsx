@@ -9,7 +9,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
   if (!item) return null;
   const color = item.color || C.accent;
   return (
-    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 290, overflowY: "auto" }}>
+    // BUG FIX: z-index was 290, lower than the new pre-build "here's what's
+    // coming up" preview screen (guideModal === "preview" in App.jsx, z-index
+    // 950) — opening a place's "Read more" from inside that preview would
+    // render DetailPage BEHIND it, invisible. Bumped above every modal/overlay
+    // z-index used elsewhere in the app (all ≤950) so "drill into a real
+    // place's full page" always stacks on top, regardless of what else is open.
+    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 970, overflowY: "auto" }}>
       <div style={{ height: 190, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
         <span style={{ fontSize: 64, opacity: item.photo ? 0.25 : 1, position: item.photo ? "absolute" : "static" }}>{item.emoji}</span>
         {item.photo && (

@@ -27,6 +27,16 @@ export const denmarkFacts = [
     name: "H.C. Andersen",
     category: "history",
     photo: "/hc-andersen.jpg",
+    // BUG FIX (Oliver: "H.C. Andersen's head seems to be cut off"): the
+    // source photo is a TALL portrait (500x763, head near the very top),
+    // and the loading card's fixed 210x170 landscape box was center-cropping
+    // it with no objectPosition override — a plain center crop of a portrait
+    // photo into a wide box trims equally off the top and bottom, and since
+    // the head sits in roughly the top third here, that cut straight through
+    // it. photoPos biases the crop toward the top so the whole head/face
+    // stays in frame, same pattern the entrance card already uses for its
+    // own hero photo.
+    photoPos: "50% 12%",
     fact: "Born in Odense in 1805, he wrote over 150 fairy tales, including The Little Mermaid, The Ugly Duckling, and The Princess and the Pea, translated into more than 125 languages.",
   },
   {
@@ -48,6 +58,10 @@ export const denmarkFacts = [
     name: "The Jelling Stones",
     category: "history",
     photo: "/jelling.jpg",
+    // Also a portrait source (768x1024) — the carved stone's own top bulge
+    // sits close to the frame's top edge, so bias slightly upward too rather
+    // than trimming evenly off both ends.
+    photoPos: "50% 30%",
     fact: "Carved in the 900s under King Harald Bluetooth, these runic stones record the christening of Denmark and are sometimes called the country's birth certificate.",
   },
   {
@@ -62,6 +76,11 @@ export const denmarkFacts = [
     name: "Amalienborg",
     category: "attractions",
     photo: "/amalienborg1.jpg",
+    // Portrait source (3901x5852): the guard himself sits noticeably left of
+    // center with plain wall filling the right side, and his bearskin hat is
+    // in the upper third — a plain center crop pushes him too far right and
+    // trims close to his hat. photoPos keeps him properly framed.
+    photoPos: "35% 30%",
     fact: "The Danish royal family's winter home is actually four matching rococo palaces arranged around an octagonal courtyard, with a daily changing of the guard when the monarch is in residence.",
   },
   {
@@ -74,6 +93,9 @@ export const denmarkFacts = [
     // disk is harrysplace1.png), a pre-existing bug, not something this
     // pass touches, flagged to Oliver separately.
     photo: "/harrysplace1.png",
+    // Portrait source — the sign is the whole point of this fact, keep it
+    // clearly in frame instead of losing it to an even top/bottom trim.
+    photoPos: "50% 25%",
     fact: "A hot dog cart in Copenhagen since 1965, still run with the same hands-on style the whole time. Cash or Dankort only, no seats, just stand and eat like generations before you.",
   },
 ];

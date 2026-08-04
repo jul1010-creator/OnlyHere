@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
+import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
@@ -189,6 +190,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   ]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  // Which assistant message index has already finished streaming in — see
+  // components/TypewriterText.jsx and App.jsx's main Detour chat, same pattern.
+  const [chatRevealedUpTo, setChatRevealedUpTo] = useState(0);
   const chatEndRef = useRef(null);
   useEffect(() => {
     if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -235,6 +239,20 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 60 }}>
+      {/* BUG FIX: .towns-grid was only ever defined in App.jsx's own <style>
+          tag, which only exists while GemlyxApp (the "/" route) is mounted.
+          A guide reached via a direct/shared link never mounts GemlyxApp at
+          all — React Router only renders the ONE matching route — so this
+          page's stop-card grid was silently falling back to plain stacked
+          block layout with zero columns for anyone opening a shared guide
+          link cold, never noticed because every live test so far started
+          from "/" first (where GemlyxApp's style tag was still around from
+          the client-side nav). Defined locally now so this page never
+          depends on another route's CSS still being mounted. */}
+      <style>{`
+        .towns-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 14px; }
+        @media (min-width: 900px) { .towns-grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
+      `}</style>
       <div style={{ position: "sticky", top: 0, zIndex: 10, background: `${C.bg}ee`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.border}`, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={() => (onBack ? onBack() : navigate("/"))}
           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
@@ -378,7 +396,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 <div key={stopIdx}>
                   <div onClick={real ? () => openStopDetail(real) : undefined}
                     style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: real ? "pointer" : "default" }}>
-                    <div style={{ position: "relative", height: 116, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: real?.photo ? undefined : `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
+                    {/* Per Oliver: "avoid the horizontal pictures, you can't see the
+                        whole castle — go with the same size as on the town
+                        navigation." This was a much shorter/wider box (116px tall)
+                        than the Towns page's own stop photos (210px, same
+                        .towns-grid column width) — a short, wide crop of a tall
+                        subject like a castle cuts off its towers/spires. Now
+                        matches Towns exactly. */}
+                    <div style={{ position: "relative", height: 210, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: real?.photo ? undefined : `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
                       {real?.photo ? (
                         <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       ) : (
@@ -476,11 +501,17 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             </button>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-            {chatMessages.map((m, i) => (
+            {chatMessages.map((m, i) => {
+              const isLatestAssistant = m.role === "assistant" && i === chatMessages.length - 1;
+              const streaming = isLatestAssistant && i > chatRevealedUpTo;
+              return (
               <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", background: m.role === "user" ? C.accent : C.bg, border: m.role === "user" ? "none" : `1px solid ${C.border}`, color: m.role === "user" ? "#fff" : C.light, borderRadius: 14, padding: "9px 13px", fontSize: 13, lineHeight: 1.55 }}>
-                {m.text}
+                {m.role === "assistant"
+                  ? <TypewriterText text={m.text} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, i))} />
+                  : m.text}
               </div>
-            ))}
+              );
+            })}
             {chatLoading && (
               <div style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 8, padding: "9px 13px" }}>
                 <GemlyxLoader size={18} ring={false} />

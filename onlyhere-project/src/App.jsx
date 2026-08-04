@@ -36,6 +36,7 @@ import { ReviewsSection } from "./components/ReviewsSection";
 import { InstagramEmbed } from "./components/InstagramEmbed";
 import { Ico, EmojiIcon, FlagDK } from "./components/Icon";
 import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader, GemlyxIntro } from "./components/GemlyxLogo";
+import { TypewriterText } from "./components/TypewriterText";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
@@ -257,7 +258,21 @@ function GemlyxApp() {
   useEffect(() => {
     if (guideModal !== "loading") return;
     setFactCardIdx(Math.floor(Math.random() * denmarkFacts.length));
-    const t = setInterval(() => setFactCardIdx(i => (i + 1) % denmarkFacts.length), 10000);
+    // Per Oliver: (1) 10s wasn't enough to actually read a card, bumped to
+    // 15s; (2) always advancing +1 in the same fixed order meant every
+    // build eventually showed the exact same sequence just rotated to a
+    // different start point ("more random, instead of always being the
+    // same") — now picks a genuinely random NEXT card each tick (excluding
+    // the current one, so it never visibly repeats back-to-back) instead of
+    // just incrementing.
+    const t = setInterval(() => {
+      setFactCardIdx(i => {
+        if (denmarkFacts.length <= 1) return i;
+        let next = Math.floor(Math.random() * denmarkFacts.length);
+        while (next === i) next = Math.floor(Math.random() * denmarkFacts.length);
+        return next;
+      });
+    }, 15000);
     return () => clearInterval(t);
   }, [guideModal]);
   useEffect(() => {
@@ -2227,6 +2242,11 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [aiMessages, setAiMessages] = useState([
     { role: "assistant", text: "Hi! I'm your Local Assist ◆ Tell me where you're heading — or what you're after — and I'll find you something that exists nowhere else." }
   ]);
+  // Which assistant message index has already finished its typewriter reveal
+  // (or never needed one, like the opening greeting) — see
+  // components/TypewriterText.jsx. Only the newest assistant reply streams in;
+  // everything before it just renders in full, instantly, on every re-render.
+  const [chatRevealedUpTo, setChatRevealedUpTo] = useState(0);
   const [aiInput, setAiInput] = useState("");
   const [intakeArrival, setIntakeArrival] = useState("");
   const departurePickerRef = useRef(null);
@@ -2271,27 +2291,51 @@ If the conversation only covers a single day or a few stops with no explicit day
     if (entered || introFlightDone) return;
     const reduceMotion = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduceMotion) { setIntroFlightDone(true); return; }
-    let safety;
-    const t = setTimeout(() => {
+    let cancelled = false;
+    let retryTimer, safety;
+    // BUG FIX (Oliver: "needs to fly into the corner and settle. Not fade
+    // away"): this used to measure flyEl/cornerEl exactly once at the 2000ms
+    // mark and, if either wasn't found yet or had a zero-width rect (both
+    // real possibilities on a slower phone/connection — a heavy 500KB+ bundle
+    // plus a large background painting image can genuinely delay layout
+    // settling past a fixed 2000ms), it gave up SILENTLY and just jumped
+    // straight to the settled state with setIntroFlightDone(true) — no
+    // transform, no transition, nothing. Visually that's exactly "the spin
+    // and curtain fade happen, then everything just disappears and the real
+    // corner logo is already sitting there" — a fade, not a flight, which is
+    // exactly what was reported. Now it RETRIES the measurement (up to 15
+    // times, 120ms apart — a further 1.8s of real headroom) instead of
+    // giving up after one shot, so a slow layout settle no longer silently
+    // skips the animation. Also nudged the flight itself from 0.62s to
+    // 0.85s with a more pronounced ease — the old duration made a ~100px
+    // icon shrinking 80% down to 19px read as a quick blink/fade rather
+    // than a deliberate, followable travel across the screen.
+    const attemptFlight = (attemptsLeft) => {
+      if (cancelled) return;
       const flyEl = document.getElementById("gxi-fly-mark");
       const cornerEl = cornerMarkRef.current;
-      if (!flyEl || !cornerEl) { setIntroFlightDone(true); return; }
-      const from = flyEl.getBoundingClientRect();
-      const to = cornerEl.getBoundingClientRect();
-      if (from.width === 0 || to.width === 0) { setIntroFlightDone(true); return; }
+      const from = flyEl ? flyEl.getBoundingClientRect() : null;
+      const to = cornerEl ? cornerEl.getBoundingClientRect() : null;
+      const ready = flyEl && cornerEl && from.width > 0 && to.width > 0;
+      if (!ready) {
+        if (attemptsLeft > 0) { retryTimer = setTimeout(() => attemptFlight(attemptsLeft - 1), 120); return; }
+        setIntroFlightDone(true); // genuinely never became ready — settle instantly rather than hang forever
+        return;
+      }
       const scale = to.width / from.width;
       const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
       const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
       flyEl.style.animation = "none"; // detach the pop-in keyframe hold so the inline transform below actually takes effect
       flyEl.style.transformOrigin = "50% 50%";
       flyEl.getBoundingClientRect(); // force reflow before changing the transform, so the transition below actually plays
-      flyEl.style.transition = "transform 0.62s cubic-bezier(0.65,0,0.35,1)";
+      flyEl.style.transition = "transform 0.85s cubic-bezier(0.5,0,0.25,1)";
       flyEl.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
       const finish = () => setIntroFlightDone(true);
       flyEl.addEventListener("transitionend", finish, { once: true });
-      safety = setTimeout(finish, 900); // in case transitionend never fires (e.g. tab backgrounded mid-flight)
-    }, 2000);
-    return () => { clearTimeout(t); clearTimeout(safety); };
+      safety = setTimeout(finish, 1150); // in case transitionend never fires (e.g. tab backgrounded mid-flight)
+    };
+    const t = setTimeout(() => attemptFlight(15), 2000);
+    return () => { cancelled = true; clearTimeout(t); clearTimeout(retryTimer); clearTimeout(safety); };
   }, [entered, introFlightDone]);
   // Small note chip on the front door (login/signup are placeholders for now).
   const [landingNote, setLandingNote] = useState(null);
@@ -2830,16 +2874,23 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 {aiMessages.length > 1 && (
                   <div className="ai-msgs" style={{ maxHeight: 300, overflowY: "auto", marginBottom: 12, WebkitOverflowScrolling: "touch" }}>
-                    {aiMessages.slice(1).filter(m => !m.hidden).map((m, i) => (
-                      <div key={i} className="gemlyx-msg-in" style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+                    {aiMessages.map((m, idx) => ({ ...m, idx })).slice(1).filter(m => !m.hidden).map((m) => {
+                      const isLatestAssistant = m.role === "assistant" && m.idx === aiMessages.length - 1;
+                      const streaming = isLatestAssistant && m.idx > chatRevealedUpTo;
+                      const assistantText = m.role === "assistant" ? stripMarkdown(stripReadyMarker(m.text)) : m.text;
+                      return (
+                      <div key={m.idx} className="gemlyx-msg-in" style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                         {m.role === "assistant" && (
                           <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
                         )}
                         <div style={{ maxWidth: "82%", borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", background: m.role === "user" ? C.accent : C.bg, color: "#fff", border: m.role === "user" ? "none" : `1px solid ${C.border}`, borderLeft: m.role === "user" ? "none" : `2px solid ${C.gold}` }}>
-                          {m.role === "assistant" ? stripMarkdown(stripReadyMarker(m.text)) : m.text}
+                          {m.role === "assistant"
+                            ? <TypewriterText text={assistantText} active={streaming} onDone={() => setChatRevealedUpTo(prev => Math.max(prev, m.idx))} />
+                            : m.text}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                     {aiLoading && (
                       <div className="gemlyx-msg-in" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", marginBottom: 10 }}>
                         <div style={{ fontSize: 8.5, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 3, marginLeft: 6 }}>✦ Gemlyx</div>
@@ -2859,7 +2910,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   return readyToBuild && !aiLoading;
                 })() && (
                   <>
-                    <button onClick={() => setGuideModal("choosing")}
+                    <button onClick={() => setGuideModal("preview")}
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 4 }}>
                       📖 Turn this into a guide
                     </button>
@@ -5006,6 +5057,94 @@ You also have a web_search tool. Use it whenever someone asks about something th
           guideModal's own declaration). This block now ONLY ever renders the
           pre-build choice screen and the build-in-progress loading screen,
           never a finished-guide popup. */}
+      {/* NEW pre-build preview screen, per Oliver: "before this page pops up,
+          have another page before that, which shows the towns and
+          attractions in those towns that will be seen... including being
+          able to click 'read more'." Shown the instant "Turn this into a
+          guide" is tapped, BEFORE the map/plain choice and before any real
+          AI pipeline work starts — matches real place names already mentioned
+          in the conversation against everything Gemlyx already knows (towns,
+          free attractions, food, nightlife, events), client-side only, no AI
+          call, so it appears instantly rather than after another wait. Each
+          match uses that place's own already-written real description (same
+          voice/rules as everywhere else in the app — never generic/robotic
+          by the app's own standing content rules) and "Read more" opens the
+          exact same real DetailPage the rest of the app uses. Ends with the
+          same "continue" step that used to be the very first thing shown —
+          this doesn't touch the choosing/generateGuide flow at all, it's a
+          new step inserted in front of it.
+          NOTE (flagged honestly, not silently overreached): "talk to the
+          person as the kind of person he is" is only partially covered
+          here — this reuses each place's EXISTING description as-is rather
+          than rewriting it live per traveler persona, since the app doesn't
+          currently capture an explicit persona signal from the chat and a
+          live per-place AI rewrite here would add real cost/latency to what
+          should be an instant screen. Existing descriptions already follow
+          Gemlyx's standing "real local friend, not a brochure or a bored
+          teacher" voice rules, so this shouldn't read as robotic — but it's
+          not the same as adapting per traveler. Worth a real live look. */}
+      {guideModal === "preview" && (() => {
+        const convoText = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+        const norm = convoText.toLowerCase();
+        const pools = [
+          ...towns.map(p => ({ ...p, _src: "town" })),
+          ...freeEntrance.map(p => ({ ...p, _src: "free" })),
+          ...foodSpots.map(p => ({ ...p, _src: "food" })),
+          ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
+          ...events.map(p => ({ ...p, _src: "event" })),
+          ...majorEvents.map(p => ({ ...p, _src: "event" })),
+        ];
+        const seen = new Set();
+        const matched = [];
+        pools.forEach(p => {
+          // Skip anything shorter than 4 characters — too generic a string to
+          // trust as a real substring match (would false-positive constantly).
+          if (!p.name || p.name.length < 4) return;
+          const key = p.name.toLowerCase();
+          if (seen.has(key)) return;
+          if (norm.includes(key)) { seen.add(key); matched.push(p); }
+        });
+        const shown = matched.slice(0, 8);
+        return (
+        <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
+          <button onClick={() => setGuideModal(null)} aria-label="Close"
+            style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", color: C.light, width: 40, height: 40, borderRadius: "50%", fontSize: 16, cursor: "pointer", zIndex: 951 }}>✕</button>
+          <div style={{ maxWidth: 560, margin: "0 auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8, textAlign: "center" }}>Here's what's coming up</div>
+            <div style={{ fontSize: 13, color: C.muted, marginBottom: 24, textAlign: "center" }}>
+              {shown.length > 0 ? "A quick look at the real places on this route before Gemlyx builds your full guide." : "Gemlyx will build your full guide next — real places, checked and mapped out."}
+            </div>
+            {shown.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 28 }}>
+                {shown.map(place => (
+                  <div key={`${place._src}-${place.id}`} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>
+                    <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {place.photo ? (
+                        <img src={place.photo} alt={place.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <span style={{ fontSize: 22, opacity: 0.4 }}>{place.emoji || "◆"}</span>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
+                      <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{(place.desc || "").slice(0, 100)}{(place.desc || "").length > 100 ? "…" : ""}</div>
+                    </div>
+                    <button onClick={() => openStopDetail(place)}
+                      style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                      Read more
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setGuideModal("choosing")}
+              style={{ width: "100%", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, border: "none", borderRadius: 100, padding: "14px", fontSize: 14, fontWeight: 700, color: "#1A1206", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              Looks good — continue →
+            </button>
+          </div>
+        </div>
+        );
+      })()}
       {guideModal === "choosing" && (
         <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setGuideModal(null)}>
           <button onClick={() => setGuideModal(null)} aria-label="Close"
@@ -5032,6 +5171,76 @@ You also have a web_search tool. Use it whenever someone asks about something th
         <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
           <button onClick={() => setGuideModal(null)} aria-label="Close"
             style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", color: C.light, width: 40, height: 40, borderRadius: "50%", fontSize: 16, cursor: "pointer", zIndex: 951 }}>✕</button>
+          {/* EVENT-MATCH SIDE CARD, per Oliver: "while loading, check if one of
+              the events matches the date/category of what the traveller
+              likes... have the event popping up as a blog in the left or right
+              side." Only fires when the traveler filled in real dates via the
+              structured intake fields (intakeArrival/intakeDeparture) — those
+              are the one reliable, already-parsed date signal available here;
+              a freeform chat mention of a date range isn't reliably
+              extractable client-side without another AI call, so this
+              honestly no-ops rather than guessing at a date from prose.
+              Matches on: the event's date range genuinely overlapping the
+              trip's date range, AND at least one picked interest appearing in
+              the event's own tags/type. Never invents a match — if nothing
+              real overlaps both ways, nothing shows, same graceful-
+              degradation pattern as everything else in this build. "Quick
+              question" is intentionally NOT a blocking prompt mid-pipeline —
+              pausing/resuming a multi-stage async build safely for a real
+              answer is a much bigger, riskier change; this surfaces the real
+              event as an actual DetailPage ("Gemlyx explaining the place")
+              one tap away instead, which delivers the same "worth knowing
+              about this" value without touching the build pipeline itself. */}
+          {(() => {
+            if (!intakeArrival || !intakeDeparture) return null;
+            const tripStart = new Date(intakeArrival);
+            const tripEnd = new Date(intakeDeparture);
+            if (isNaN(tripStart) || isNaN(tripEnd)) return null;
+            const interestsLower = intakeInterest.map(i => i.toLowerCase());
+            const pool = [...events, ...majorEvents, ...vikingEvents];
+            const overlapsTrip = (e) => {
+              const eStart = new Date(e.date);
+              const eEnd = e.dateEnd ? new Date(e.dateEnd) : eStart;
+              if (isNaN(eStart)) return false;
+              return eStart <= tripEnd && eEnd >= tripStart;
+            };
+            const matchesInterest = (e) => {
+              if (interestsLower.length === 0) return false;
+              const haystack = [e.type || "", ...(e.tags || [])].join(" ").toLowerCase();
+              return interestsLower.some(i => haystack.includes(i));
+            };
+            const matchedEvent = pool.find(e => overlapsTrip(e) && matchesInterest(e));
+            if (!matchedEvent) return null;
+            return (
+              <div onClick={e => e.stopPropagation()}
+                style={{ position: "fixed", top: 90, right: 20, width: 240, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 14, padding: 14, zIndex: 951, boxShadow: "0 12px 30px rgba(0,0,0,0.45)" }}
+                className="gxa-event-match-card">
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>✦ Worth knowing</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {matchedEvent.photo ? (
+                      <img src={matchedEvent.photo} alt={matchedEvent.name} onError={ev => { ev.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <span style={{ fontSize: 18 }}>{matchedEvent.emoji || "◆"}</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.2 }}>{matchedEvent.name}</div>
+                </div>
+                <div style={{ fontSize: 11, color: C.light, lineHeight: 1.5, marginBottom: 10 }}>
+                  {matchedEvent.town} · {getEventDate(matchedEvent.date, matchedEvent.dateEnd)} — happening while you're there.
+                </div>
+                <button onClick={() => setEventDetail(matchedEvent)}
+                  style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 0", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  Read more
+                </button>
+              </div>
+            );
+          })()}
+          <style>{`
+            @media (max-width: 899px) {
+              .gxa-event-match-card { position: static !important; width: auto !important; max-width: 460px; margin: 0 auto 16px !important; }
+            }
+          `}</style>
           <div style={{ maxWidth: 460, margin: "0 auto" }} onClick={e => e.stopPropagation()}>
             {(() => {
               // DENMARK-FACTS LOADING SCREEN — restored per Oliver ("real photos
@@ -5072,7 +5281,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         {isAttraction && <div style={{ fontSize: 22, lineHeight: 1, marginBottom: 6 }}>📍</div>}
                         {isFood && <div style={{ fontSize: 20, lineHeight: 1, marginBottom: 6 }}>🍽️</div>}
                         <div style={{ display: "inline-block", background: "#F2EBDA", padding: "8px 8px 20px", borderRadius: 3, boxShadow: "0 8px 20px rgba(0,0,0,0.4)", marginBottom: 18, transform: "rotate(-0.6deg)" }}>
-                          <img src={fact.photo} alt={fact.name} style={{ width: 210, height: 170, objectFit: "cover", display: "block" }} />
+                          <img src={fact.photo} alt={fact.name} style={{ width: 210, height: 170, objectFit: "cover", objectPosition: fact.photoPos || "center", display: "block" }} />
                         </div>
                       </div>
                       <div style={{ fontSize: 13.5, color: isHistory ? "#BBA778" : C.light, lineHeight: 1.65, fontFamily: isHistory ? "'Fraunces', serif" : "'Inter', sans-serif" }}>
@@ -5085,10 +5294,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <div style={{ fontSize: 18, color: C.text, fontWeight: 600, fontFamily: "'Fraunces', serif", fontStyle: "italic" }}>
                       {guideBuildStage?.label || "Drafting your guide"}
                     </div>
-                    {/* Per Oliver: warn people up front that real research/fact-checking
-                        takes real time, rather than letting a long wait feel broken. */}
+                    {/* Per Oliver: the old copy here ("Real research, writing, and
+                        two full fact-checking passes...") read as "horrible writing" —
+                        too technical/self-explaining for what's supposed to be a calm
+                        wait screen. Simplified to plain, warm, human phrasing. Still
+                        sets the same real expectation (this takes a few minutes, not
+                        seconds) without describing the pipeline to the traveler. */}
                     <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8 }}>
-                      Real research, writing, and two full fact-checking passes — not a guess. Usually a few minutes for the full accuracy pipeline.
+                      Planning your trip, can take a few minutes.
                     </div>
                   </div>
                 </>
