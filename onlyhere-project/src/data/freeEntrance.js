@@ -1,13 +1,13 @@
 export const freeEntrance = [
   // ── AARHUS ──
-  { id: 1, name: "The Greenhouses, Botanical Garden", popularityTag: "Hidden Gem", city: "Aarhus", type: "Botanical garden", emoji: "🌿", photo: "/attractions/greenhouses-botanical-garden.jpg", desc: "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free.", website: "https://sciencemuseerne.dk/botanisk-have/", color: "#2E7D32",
+  { id: 1, name: "The Greenhouses, Botanical Garden", popularityTag: "Hidden Gem", city: "Aarhus", type: "Botanical garden", emoji: "🌿", photo: "/attractions/the-greenhouses-botanical-garden.jpg", desc: "Giant glass domes housing four climate zones, exotic plants and free-flying butterflies. Entry is completely free.", website: "https://sciencemuseerne.dk/botanisk-have/", color: "#2E7D32",
     blogBody: [
       { type: "heading", content: "What Makes It Special" },
       { type: "paragraph", content: "The star attraction is the Tropical Dome, where an elevated wooden walkway takes you above the rainforest canopy. The scenery shifts from lush jungle to Mediterranean gardens and arid desert, feeling like several attractions rolled into one." },
       { type: "heading", content: "Things to Know" },
       { type: "paragraph", content: "The tropical greenhouse is exactly that — tropical. Expect high humidity and warm temperatures, particularly in summer." },
     ] },
-  { id: 2, name: "The Viking Museum", popularityTag: "Hidden Gem", city: "Aarhus", type: "Small basement museum", emoji: "⚔️", photo: "/attractions/viking-museum-aarhus.jpg", desc: "A tiny, easily-missed museum literally underground beneath a bank on the town square, built around the genuine remains of ancient Aros. Around 30 DKK for adults, free under 18.", website: "https://www.nordjyskemuseer.dk/", color: "#1565C0",
+  { id: 2, name: "The Viking Museum", popularityTag: "Hidden Gem", city: "Aarhus", type: "Small basement museum", emoji: "⚔️", photo: "/attractions/the-viking-museum.jpg", desc: "A tiny, easily-missed museum literally underground beneath a bank on the town square, built around the genuine remains of ancient Aros. Around 30 DKK for adults, free under 18.", website: "https://www.nordjyskemuseer.dk/", color: "#1565C0",
     blogBody: [
       { type: "heading", content: "What Makes It Special" },
       { type: "paragraph", content: "Rather than replicas, the museum is built around genuine archaeological remains discovered beneath the modern city — ancient house foundations, runic carvings and everyday artefacts telling the story of how Aarhus grew from a Viking settlement into Denmark's second-largest city." },

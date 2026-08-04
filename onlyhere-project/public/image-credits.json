@@ -257,5 +257,50 @@
     "license": "CC BY-SA 3.0",
     "query": "Sæby North Jutland Denmark",
     "downloadedAt": "2026-08-02T15:09:15.313Z"
+  },
+  {
+    "file": "/attractions/the-greenhouses-botanical-garden.jpg",
+    "source": "unsplash",
+    "photographer": "Bryan Dijkhuizen",
+    "sourceUrl": "https://unsplash.com/photos/a-walkway-through-a-lush-green-forest-filled-with-lots-of-trees-afCYU_ti5QU",
+    "license": null,
+    "query": "The Greenhouses, Botanical Garden Denmark",
+    "downloadedAt": "2026-08-03T19:58:48.892Z"
+  },
+  {
+    "file": "/attractions/the-viking-museum.jpg",
+    "source": "unsplash",
+    "photographer": "Ma Fo",
+    "sourceUrl": "https://unsplash.com/photos/a-field-full-of-rocks-and-trees-under-a-cloudy-blue-sky-WF5Gj-67i8c",
+    "license": null,
+    "query": "The Viking Museum Denmark",
+    "downloadedAt": "2026-08-03T19:59:00.816Z"
+  },
+  {
+    "file": "/attractions/lindholm-hoje.jpg",
+    "source": "pexels",
+    "photographer": "Sonny Vermeer",
+    "sourceUrl": "https://www.pexels.com/photo/scenic-ribe-viking-stone-arrangement-in-denmark-31949845/",
+    "license": null,
+    "query": "Lindholm Høje Denmark",
+    "downloadedAt": "2026-08-03T20:00:14.911Z"
+  },
+  {
+    "file": "/attractions/medical-herb-garden-kastellet.jpg",
+    "source": "unsplash",
+    "photographer": "Jonas Schöne",
+    "sourceUrl": "https://unsplash.com/photos/a-red-building-with-a-white-door-and-windows-PmZAolFNMc8",
+    "license": null,
+    "query": "Medical Herb Garden, Kastellet Denmark",
+    "downloadedAt": "2026-08-03T20:01:51.155Z"
+  },
+  {
+    "file": "/attractions/kastellet.jpg",
+    "source": "unsplash",
+    "photographer": "Denis Eldridge",
+    "sourceUrl": "https://unsplash.com/photos/a-red-building-with-white-windows-and-a-danish-flag-K-sV0qFevGQ",
+    "license": null,
+    "query": "Kastellet Denmark",
+    "downloadedAt": "2026-08-03T20:01:56.362Z"
   }
 ]

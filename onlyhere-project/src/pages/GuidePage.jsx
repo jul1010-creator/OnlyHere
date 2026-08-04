@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
-import { GemlyxLoader } from "../components/GemlyxLogo";
+import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween } from "../utils/guideEnrichment";
+import { askClaude } from "../utils/aiClient";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
 // The ONLY place a guide is ever shown, per Oliver ("get rid of the popup") —
@@ -36,7 +37,7 @@ import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween } from ".
 
 const dayIcon = (i) => ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭"][i] || `Day ${i + 1}`;
 
-export const GuidePage = ({ guide: guideProp, onBack }) => {
+export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   const { guideId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,6 +53,20 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const isUnsaved = !!freshGuide && !guideId;
+
+  // App.jsx's generateGuide navigates here as soon as a guide first exists, then
+  // keeps enriching it in the background (exact travel times, weather, where to
+  // stay) via the same object, identified by _gid. GemlyxApp never unmounts
+  // across a route change, so it passes that same live-updating object down as
+  // liveGuide on every re-render — mirror it in here as it changes, instead of
+  // freezing on the snapshot taken at the moment of navigation. Only applies to
+  // the fresh/unsaved case (matched by _gid); a saved guide loaded by id below
+  // is untouched by this.
+  useEffect(() => {
+    if (liveGuide && typeof liveGuide === "object" && liveGuide._gid && guide?._gid === liveGuide._gid) {
+      setGuide(liveGuide);
+    }
+  }, [liveGuide]);
 
   // Fold in anything published via Content Studio (same one-time, dedup-safe
   // loader App.jsx uses) so a stop that matches a real Gemlyx entry — including
@@ -158,6 +173,39 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
       setSaveError("Couldn't save this guide — check your connection and try again.");
     }
     setSaving(false);
+  };
+
+  // PERSISTENT GEMLYX CHAT — per Oliver: once a guide is built, the traveler
+  // should still be able to talk to Gemlyx from right here, instead of the
+  // conversation dead-ending once App.jsx's Detour chat hands off to this page.
+  // This is a lightweight, separate conversation (not the same thread as the
+  // one that built the trip) — it can answer questions about the built trip
+  // (using the itinerary as context below) or anything else Denmark-related,
+  // but it doesn't edit the saved guide object directly; it points back to the
+  // main chat for that, same as the itinerary rebuild flow already works.
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([
+    { role: "assistant", text: "Hi again ◆ I'm still here if you want to talk through this trip, ask about a stop, or anything else about Denmark." }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef(null);
+  useEffect(() => {
+    if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, chatOpen]);
+  const sendChatMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || chatLoading || !guide) return;
+    const nextMessages = [...chatMessages, { role: "user", text }];
+    setChatMessages(nextMessages);
+    setChatInput("");
+    setChatLoading(true);
+    const convoText = nextMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+    const stopList = (guide.days || []).map(d => `Day ${d.day || ""}: ${d.title || ""} — ${(d.stops || []).map(s => s.name).join(", ") || "no stops yet"}`).join("\n");
+    const prompt = `You are Gemlyx's Local Assist, continuing to help with a Denmark trip after the itinerary below was already built. Answer naturally and conversationally, like a knowledgeable local friend giving real advice — never claim to have personally visited a place. Never use em dashes or en dashes anywhere in your reply. Keep answers focused and reasonably short unless the question genuinely needs more detail. If asked to change the itinerary itself, explain what you'd change in words — you can't directly edit this saved guide from here, so tell them to describe the change back on the main planning chat to rebuild it.\n\nTHE TRIP ALREADY BUILT:\nTitle: ${guide.title || "Untitled trip"}\n${stopList}${guide.essentials ? `\nBudget: ${guide.essentials.budgetReality || ""}\nGetting around: ${guide.essentials.transportTip || ""}\nKeep in mind: ${guide.essentials.keepInMind || ""}` : ""}\n\nCONVERSATION SO FAR:\n${convoText}\n\nRespond to the traveler's last message.`;
+    const result = await askClaude(prompt, 500);
+    setChatMessages(prev => [...prev, { role: "assistant", text: result.error ? "Sorry, I couldn't get an answer just now, try again in a moment." : result.text }]);
+    setChatLoading(false);
   };
 
   if (loading) {
@@ -403,6 +451,56 @@ export const GuidePage = ({ guide: guideProp, onBack }) => {
         )}
         {saveError && <div style={{ textAlign: "center", color: "#FFB347", fontSize: 12.5, marginTop: 12 }}>{saveError}</div>}
       </div>
+
+      {/* Persistent Gemlyx chat — a small floating launcher, bottom-right so it
+          never collides with the centered "save my guide" bar above. Opens a
+          fixed-position panel with its own scrollable history; closing it keeps
+          the conversation in memory for the rest of this page visit. */}
+      {!chatOpen && (
+        <button onClick={() => setChatOpen(true)}
+          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 40, display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${C.surface}, ${C.bg})`, border: `1px solid ${C.gold}55`, color: C.text, borderRadius: 100, padding: "12px 18px 12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 26px rgba(0,0,0,0.55)" }}>
+          <GemlyxMark size={20} ring={true} ringColor={C.gold} tone="gold" />
+          Ask Gemlyx
+        </button>
+      )}
+      {chatOpen && (
+        <div style={{ position: "fixed", bottom: 0, right: 0, zIndex: 40, width: "100%", maxWidth: 380, height: "min(560px, 82vh)", margin: "0 0 0 auto", display: "flex", flexDirection: "column", background: C.surface, border: `1px solid ${C.border}`, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, boxShadow: "0 -8px 30px rgba(0,0,0,0.55)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <GemlyxMark size={20} ring={true} ringColor={C.gold} tone="gold" />
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>Gemlyx</span>
+            </div>
+            <button onClick={() => setChatOpen(false)}
+              style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>
+              ✕
+            </button>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {chatMessages.map((m, i) => (
+              <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", background: m.role === "user" ? C.accent : C.bg, border: m.role === "user" ? "none" : `1px solid ${C.border}`, color: m.role === "user" ? "#fff" : C.light, borderRadius: 14, padding: "9px 13px", fontSize: 13, lineHeight: 1.55 }}>
+                {m.text}
+              </div>
+            ))}
+            {chatLoading && (
+              <div style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 8, padding: "9px 13px" }}>
+                <GemlyxLoader size={18} ring={false} />
+                <span style={{ fontSize: 11.5, color: C.muted }}>Thinking…</span>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          <div style={{ display: "flex", gap: 8, padding: 12, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <input value={chatInput} onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+              placeholder="Ask about this trip, or anything else…"
+              style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 14px", fontSize: 13, color: C.text, outline: "none" }} />
+            <button onClick={sendChatMessage} disabled={chatLoading || !chatInput.trim()}
+              style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 100, width: 40, height: 40, flexShrink: 0, cursor: chatLoading ? "default" : "pointer", opacity: chatLoading || !chatInput.trim() ? 0.55 : 1, fontSize: 15 }}>
+              ↑
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Same DetailPage overlay every other page in the app uses to show a real
           Gemlyx entry — self-contained, fixed full-screen, no route change, so
