@@ -6,7 +6,7 @@ import { GemlyxLoader, GemlyxMark } from "../components/GemlyxLogo";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween } from "../utils/guideEnrichment";
+import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText } from "../utils/guideEnrichment";
 import { askClaude } from "../utils/aiClient";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
@@ -323,7 +323,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
                 <span style={{ fontSize: 12 }}>{icon}</span>
                 <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
-                  {exact ? `${exact.durationText} ${modeLabel}` : km !== null ? `${Math.round(km) === 0 ? "<1" : "~" + Math.round(km)} km ${modeLabel}` : how || "Route"}
+                  {exact ? `${exact.durationText} ${modeLabel}` : km !== null ? `${estimateDurationText(km, mode)} ${modeLabel}` : how || "Route"}
                 </span>
                 <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
               </a>

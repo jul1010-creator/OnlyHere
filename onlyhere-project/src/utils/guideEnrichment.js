@@ -73,3 +73,23 @@ export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalki
   }
   return mode;
 };
+
+// FALLBACK TIME ESTIMATE (Oliver's report: legs without a real Google Directions
+// result were showing a bare "~34 km by car" instead of any actual time, which
+// reads as broken — "put a random time estimate" was the ask). This only fires
+// when the real API result is missing (no key, quota, or a leg Google's
+// Directions API genuinely can't route) — it's never used once an exact
+// duration exists. Speeds are rough real-world Danish averages (not
+// straight-line theoretical max), not precise, but genuinely in the right
+// ballpark and far more useful than a raw distance figure.
+const AVG_SPEED_KMH = { walking: 4.5, bicycling: 14, driving: 70, transit: 55 };
+export const estimateDurationText = (km, mode) => {
+  if (km == null) return null;
+  const speed = AVG_SPEED_KMH[mode] || AVG_SPEED_KMH.driving;
+  const totalMinutes = Math.max(1, Math.round((km / speed) * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hours === 0) return `~${mins} min`;
+  if (mins === 0) return `~${hours} hour${hours > 1 ? "s" : ""}`;
+  return `~${hours} hour${hours > 1 ? "s" : ""} ${mins} min`;
+};

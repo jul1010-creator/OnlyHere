@@ -257,7 +257,7 @@ function GemlyxApp() {
   useEffect(() => {
     if (guideModal !== "loading") return;
     setFactCardIdx(Math.floor(Math.random() * denmarkFacts.length));
-    const t = setInterval(() => setFactCardIdx(i => (i + 1) % denmarkFacts.length), 4200);
+    const t = setInterval(() => setFactCardIdx(i => (i + 1) % denmarkFacts.length), 10000);
     return () => clearInterval(t);
   }, [guideModal]);
   useEffect(() => {
@@ -844,7 +844,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. Bakery, es
 SHAPE-ONLY EXAMPLE (bar — this shows JSON field structure, not a prose quality bar): {"name": "Toga Vinstue", "type": "Local", "crowd": "Almost entirely Danish", "category": "Brown bar (bodega)", "location": "Indre By, Copenhagen", "isClub": false, "desc": "A classic \\"brown bar\\" — old wood interior, low light, walls covered in political cartoons. Sits five minutes from the Danish Parliament, and actual lawmakers drink here. Cheap beer (around 45 DKK), smoking still allowed indoors, genuinely local despite the central address.", "bestTime": "After 8pm on a weeknight for the real regular crowd — much quieter than that earlier in the day.", "beforeDark": "Quiet through the afternoon — a handful of regulars reading the paper over a beer.", "afterDark": "Fills up after 8pm with a real mix of ages, loud conversation over the bar's own political cartoons on the walls."}
 ${STUDIO_VOICE}
 IMPORTANT — DON'T CONFLATE SIMILARLY-NAMED OR NEARBY VENUES: when researching a venue whose name resembles another real place (e.g. "The Old Irish Pub" vs "The Dubliner" — both real, different, nearby Irish pubs in Copenhagen), keep every fact — address, neighbourhood, prices — strictly tied to the ONE venue actually named in this request. If the search context is ambiguous about which specific venue a fact belongs to, leave that fact out or note it in uncertainties rather than guessing which one it's about. PRICES specifically: state only a price the search context explicitly gives for THIS exact venue — if it doesn't have one, don't fill in a plausible-sounding number from general knowledge of similar venues or past training data, even if it feels safe; write "See website" instead.
-Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / Major", "crowd": "who actually goes here — locals, students, tourists, mixed", "category": "short category, e.g. 'Brown bar (bodega)' or 'Nightclub'", "location": "Neighbourhood, City", "isClub": "true only if this is genuinely a dedicated dance club/nightclub, false for an ordinary bar/pub even if it's lively late", "emoji": "one emoji", "desc": "2-4 sentences in the voice above — the intro, what it's actually like", "whoFor": "who this genuinely suits — real and specific, not generic positivity", "bestTime": "a short, practical answer to when to actually show up — for EVERY venue, bar or club", "beforeDark": "what it's like earlier in the day/evening — EMPTY STRING if isClub is true", "afterDark": "what it's actually like once it picks up — EMPTY STRING if isClub is true", "whenEnter": "when people actually show up and when it peaks — ONLY if isClub is true, else empty string", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
+Respond with ONLY strict JSON: {"name": ${J(name)}, "type": "Local / International", "crowd": "who actually goes here — locals, students, tourists, mixed", "category": "short category, e.g. 'Brown bar (bodega)' or 'Nightclub'", "location": "Neighbourhood, City", "isClub": "true only if this is genuinely a dedicated dance club/nightclub, false for an ordinary bar/pub even if it's lively late", "emoji": "one emoji", "desc": "2-4 sentences in the voice above — the intro, what it's actually like", "whoFor": "who this genuinely suits — real and specific, not generic positivity", "bestTime": "a short, practical answer to when to actually show up — for EVERY venue, bar or club", "beforeDark": "what it's like earlier in the day/evening — EMPTY STRING if isClub is true", "afterDark": "what it's actually like once it picks up — EMPTY STRING if isClub is true", "whenEnter": "when people actually show up and when it peaks — ONLY if isClub is true, else empty string", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag", "mapHint": "Name, street, postcode City, Denmark", "color": "#hex", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
         nightTown: `Draft a complete Gemlyx nightlife TOWN overview for ${name}, Denmark — this describes the town's whole nightlife scene as an introduction before someone browses individual bars/clubs there, following this EXACT structure (a premium travel editor's voice, never Wikipedia — focus on the actual FEEL of a night out in this town): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field) -> Who Is It Perfect For -> After Dark -> What to Be Aware Of (EXACTLY 3 short bullets). Total word count across WhoFor+AfterDark+ThingsToKnow+GemlyxFind should land around 180-280 words — this is an overview, not a single-venue page, so keep it a level more general than a bar/club entry while still being concrete and specific to THIS town's scene, not generic nightlife platitudes.
 SHAPE-ONLY EXAMPLE (structure reference, not a prose quality bar — invent nothing): {"name": "Aarhus", "desc": "Denmark's second city punches well above its weight after dark — a dense student population (Aarhus University alone has ~40,000 students) keeps the bar scene busy on weeknights, not just weekends, and the whole nightlife area is compact enough to walk between venues.", "whoFor": "Best for people who want a real mixed local/student crowd without the tourist density of Copenhagen's main strips — less polished, more genuinely Danish.", "afterDark": "Picks up noticeably later than a typical night out elsewhere — many venues don't fill until 11pm, and weeknight energy rivals weekends thanks to the student population."}
 ${STUDIO_VOICE}
@@ -1943,14 +1943,32 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       setGuideBuildStage({ label: "Researching real details", percent: 33 });
       let tavilyGrounding = "";
       try {
+        // ONE search per stop, not a single combined query across up to 8 names.
+        // The old combined query (e.g. "Den historiske miniby, Koldinghus,
+        // Fredericia Vold Denmark opening hours prices") dilutes Tavily's basic
+        // search — only 4 results total — across every name at once, so a
+        // smaller, lesser-known attraction gets crowded out by whichever names
+        // in the batch are more famous/SEO-heavy and never gets its own
+        // official site surfaced at all. This is exactly the failure Oliver
+        // flagged for Fredericia's "Den historiske miniby": wrong facts and
+        // uncertain transport because the research never actually reached that
+        // specific attraction's own website. Searching each stop individually,
+        // phrased to bias toward the attraction's own official page, gives
+        // every stop — not just the most famous one in the batch — a real shot.
         const searchNames = (plannerStopNames.length > 0 ? plannerStopNames : []).slice(0, 8);
         if (searchNames.length > 0) {
-          const q = `${searchNames.join(", ")} Denmark opening hours prices`;
-          const sRes = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-          const sData = await sRes.json();
-          if (!sData.error && (sData.answer || sData.results?.length)) {
-            tavilyGrounding = [sData.answer, ...(sData.results || []).map(r => `${r.title}: ${r.snippet}`)].filter(Boolean).join("\n").slice(0, 1500);
-          }
+          const searches = await Promise.allSettled(searchNames.map(name => {
+            const q = `"${name}" Denmark official website opening hours prices`;
+            return fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.json()).then(d => ({ name, d }));
+          }));
+          const chunks = [];
+          searches.forEach(s => {
+            if (s.status !== "fulfilled") return;
+            const { name, d } = s.value;
+            if (d.error || (!d.answer && !d.results?.length)) return;
+            chunks.push(`${name}: ${[d.answer, ...(d.results || []).map(r => `${r.title}: ${r.snippet}`)].filter(Boolean).join(" | ")}`);
+          });
+          tavilyGrounding = chunks.join("\n").slice(0, 2500);
         }
       } catch { /* non-fatal — same graceful degradation as the rest of this build */ }
       // Stage 3 — Perplexity real-search cross-check per guide (not per chat message —
@@ -3912,7 +3930,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   {townList.map(t => {
                     const spots = townGroups[t];
                     const localCount = spots.filter(s => s.type === "Local").length;
-                    const majorCount = spots.filter(s => s.type === "Major").length;
+                    const internationalCount = spots.filter(s => s.type === "International").length;
                     const townContent = nightlifeTowns.find(nt => nt.name === t);
                     return (
                       <div key={t} onClick={() => setNightlifeTownView(t)} style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${C.border}`, padding: "16px 0", cursor: "pointer" }}>
@@ -3924,7 +3942,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{t}</div>
                           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                            {spots.length} spot{spots.length !== 1 ? "s" : ""}{localCount > 0 && majorCount > 0 ? ` · ${localCount} local, ${majorCount} major` : ""}
+                            {spots.length} spot{spots.length !== 1 ? "s" : ""}{localCount > 0 && internationalCount > 0 ? ` · ${localCount} local, ${internationalCount} international` : ""}
                           </div>
                         </div>
                         <span style={{ fontSize: 18, color: C.muted }}>›</span>
@@ -3970,7 +3988,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 14 }}>Bars &amp; clubs in {nightlifeTownView}</div>
 
                   <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
-                    {[{ id: "Local", label: "🇩🇰 Local" }, { id: "Major", label: "🌍 Major" }].map(t => (
+                    {[{ id: "Local", label: "🇩🇰 Local" }, { id: "International", label: "🌍 International" }].map(t => (
                       <button key={t.id} onClick={() => setNightlifeTab(t.id)}
                         style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${nightlifeTab === t.id ? C.accent : "transparent"}`, color: nightlifeTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                         {t.label}
@@ -4608,23 +4626,34 @@ You also have a web_search tool. Use it whenever someone asks about something th
             @keyframes gxaArchBreathe { from { opacity:.35; transform:scale(1); } to { opacity:.7; transform:scale(1.12); } }
             .gxa-fly { position:fixed; border-radius:50%; background:rgba(255,214,110,.95); opacity:0; animation: gxaFirefly 12s ease-in-out infinite; pointer-events:none; }
             @keyframes gxaFirefly { 0% { transform:translate(0,0); opacity:0; } 10% { opacity:.95; } 38% { transform:translate(2.4vw,-5vh); opacity:.45; } 62% { transform:translate(-1.6vw,-10vh); opacity:.85; } 88% { transform:translate(1.4vw,-15vh); opacity:.3; } 100% { transform:translate(0.6vw,-18vh); opacity:0; } }
-            .gxa-choose { animation: gxaFadein 1s cubic-bezier(.45,.05,.35,.95) .5s both; }
-            .gxa-topbar { animation: gxaFadein .5s cubic-bezier(.45,.05,.35,.95) 2.5s both; }
-            @keyframes gxaFadein { from { opacity:0; } to { opacity:1; } }
+            /* gxa-choose/gxa-topbar visibility is now driven by React state
+               (introFlightDone), not a fixed CSS delay — see the inline opacity/
+               pointerEvents on each below. These two rules are just the
+               transition timing, the actual on/off is inline. */
+            .gxa-choose { transition: opacity 0.9s ease-out 0.35s; }
+            .gxa-topbar { transition: opacity 0.5s ease-out; }
             /* OPENING SPLASH, corner-flight version (restored per Oliver: darkness,
                the compass spins while the background fades in behind it, then it
-               flies and settles into the actual corner logo's spot). The curtain
-               below is a separate layer from the compass itself so fading the
-               curtain never fades the compass out along with it — its fade window
-               (0.5s delay, 1.4s duration) matches GemlyxIntro's own pop+spin+ring
-               timing exactly (see GemlyxLogo.jsx), so the reveal happens DURING the
-               spin, not after. The actual corner-flight (compass -> real logo
-               position) is JS-driven (see the introFlightDone effect above this
-               JSX) since it has to land on the corner mark's real measured
-               position, not a guessed CSS offset. gxa-topbar (holding the real
-               corner logo) now fades in right as that flight lands, instead of
-               early, so there's never a moment with two logos both sitting in the
-               corner at once. */
+               flies and settles into the actual corner logo's spot, and ONLY once
+               it's actually settled does the Enter Denmark card appear — Oliver was
+               explicit this needed to be the real sequence, not two things fading
+               in independently on their own fixed timers, which is what a prior
+               pass shipped and which could drift out of sync with the real flight
+               duration on a slower device). The curtain below is a separate layer
+               from the compass itself so fading the curtain never fades the
+               compass out along with it — its fade window (0.5s delay, 1.4s
+               duration) matches GemlyxIntro's own pop+spin+ring timing exactly (see
+               GemlyxLogo.jsx), so the reveal happens DURING the spin, not after.
+               The actual corner-flight (compass -> real logo position) is
+               JS-driven (see the introFlightDone effect above this JSX) since it
+               has to land on the corner mark's real measured position, not a
+               guessed CSS offset. gxa-topbar (holding the real corner logo) and
+               gxa-choose (the Enter Denmark card) both now read the SAME
+               introFlightDone boolean for their opacity — the corner logo appears
+               the instant the flight actually lands, the card follows a beat later
+               (0.35s transition-delay baked into .gxa-choose above), so there's
+               never a moment with two logos both sitting in the corner, and the
+               card never appears before the logo has actually settled. */
             .gx-splash { position: fixed; inset: 0; z-index: 40; pointer-events: none;
               display: flex; align-items: center; justify-content: center; }
             .gx-splash-curtain { position: absolute; inset: 0; background: #0A0906;
@@ -4632,7 +4661,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
             @keyframes gxSplashCurtain { from { opacity: 1; } to { opacity: 0; } }
             .gx-splash-mark { position: relative; z-index: 1; }
             @media (prefers-reduced-motion: reduce) {
-              .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-choose, .gxa-topbar { animation: none !important; }
+              .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly { animation: none !important; }
+              .gxa-choose, .gxa-topbar { transition: none !important; }
               .gxa-fly { opacity: 0 !important; }
               .gxa-choose, .gxa-topbar { opacity: 1 !important; }
               .gx-splash { display: none !important; }
@@ -4677,8 +4707,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 110, background: "linear-gradient(to top, rgba(10,10,6,0.62), transparent)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 100% at 50% 45%, transparent 58%, rgba(10,9,5,0.45) 100%)" }} />
 
-          {/* top bar: brand left, Log in / Sign up right */}
-          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none" }}>
+          {/* top bar: brand left, Log in / Sign up right — opacity now reads
+              introFlightDone directly instead of a fixed CSS delay, so this only
+              ever appears the instant the flying compass actually lands here. */}
+          <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none", opacity: introFlightDone ? 1 : 0 }}>
             <span ref={cornerMarkRef} style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
             <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
               <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
@@ -4699,7 +4731,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           {/* the explorer — country cards, each with its own photo and line */}
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "70px 20px 84px", pointerEvents: "none" }}>
-            <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: "auto" }}>
+            {/* Opacity reads introFlightDone, not a fixed CSS delay — per Oliver:
+                the compass has to actually finish traveling and settle into the
+                corner FIRST, and only then should this card appear (the 0.35s
+                transition-delay on .gxa-choose gives it a beat after the logo
+                lands rather than popping in on the exact same frame). Also not
+                clickable until visible, so a fast tapper can't hit "Enter
+                Denmark" while it's still invisible. */}
+            <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: introFlightDone ? "auto" : "none", opacity: introFlightDone ? 1 : 0 }}>
               {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "68% 42%" }].map(cn => (
                 <div key={cn.id} style={{ background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, overflow: "hidden", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
                   <div style={{ height: 158, position: "relative", overflow: "hidden" }}>
@@ -4720,8 +4759,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 </div>
               ))}
+              {/* Oliver: make this more legible — was a dim 75%-opacity gray,
+                  hard to read over the painting. Bumped to solid white with a
+                  drop-shadow (same treatment the corner logo uses) so it holds
+                  up over any part of the busy background, not just the darker
+                  patches. */}
               <button onClick={() => setShowWhyGemlyx(true)}
-                style={{ display: "block", width: "100%", background: "none", border: "none", color: "rgba(240,239,230,0.75)", fontSize: 11.5, fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 12, textAlign: "center" }}>
+                style={{ display: "block", width: "100%", background: "none", border: "none", color: "#FFFFFF", textShadow: "0 1px 6px rgba(0,0,0,0.85)", fontSize: 12, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 12, textAlign: "center" }}>
                 Why we built Gemlyx
               </button>
             </div>
@@ -4750,8 +4794,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
             </div>
           )}
 
-          {/* bottom: customer support */}
-          <div className="gxa-topbar" style={{ position: "absolute", bottom: "calc(12px + env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+          {/* bottom: customer support — same introFlightDone-driven opacity as the top bar, so both real-logo-adjacent elements appear together the moment the flight lands. */}
+          <div className="gxa-topbar" style={{ position: "absolute", bottom: "calc(12px + env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none", opacity: introFlightDone ? 1 : 0 }}>
             <button onClick={() => window.open("mailto:hello@gemlyx.com?subject=" + encodeURIComponent("Gemlyx support"))}
               style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.22)", color: "#EFE9D6", borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               <Ico name="mail" size={13} /> Customer Support
