@@ -1,3 +1,38 @@
+# PASS 43: the fact-check button can no longer revert a fact-check, and I had a number wrong
+
+## 1. I was wrong about the ferry, and the rule I wrote had the wrong number baked into it
+
+Last pass I told you the Kalundborg to Ballen crossing was 1 hour 30, and I wrote that figure into the permanent island rule as its worked example. **You said 1h20 was true. You were right.**
+
+What I had checked was samsoelinjen.dk's front page, which says "overfartstiden er 1 time og 30 minutter", and Molslinjen's page, which agrees. What I had not checked was the operator's own **timetable** page, which says "Turen tager 80 minutter". VisitSamsø also says 80.
+
+So the operator's own website contradicts itself across two of its own pages. I found two sources agreeing, stopped looking, and reported it as settled. That is the same shape of mistake as the OpenRouteService one earlier: enough evidence to feel confident, not enough to be right.
+
+The rule text in both places has been corrected, and the example is now the true and more useful one: **an operator's own timetable or booking flow outranks its own marketing front page**, and where pages genuinely disagree, give both figures with sources rather than silently picking one. A rule whose worked example is a wrong number teaches the wrong thing every time it fires.
+
+## 2. The Perplexity fact-check button was actively dangerous
+
+Your screenshot, and your read of it, were exactly right. The draft was about **Kalundborg to Ballen**. The in-app check found the operator's page, which lists several routes to the same island, and reported **Hou to Sælvig, 60 minutes**. Every number it returned was real. It was answering about a different crossing and presenting it as a correction, and applying it would have dragged a corrected entry back to roughly the wrong figure it started at.
+
+That is worse than a plain wrong answer, because a correction carries more authority than the original text, so a mismatched one gets applied.
+
+`FACT_CHECK_SCOPE_RULES` now goes into **both** halves of that flow, which matters because they fail differently:
+
+- **The check itself** must only report a correction about the exact same thing the draft is about: same route and pair of ports, same branch of a chain, same ticket type, same season or vessel. A figure for a different variant may be mentioned, but must be labelled as a different one and must not be presented as an error.
+- **The auto-apply step**, which is what actually writes into your entry, now refuses a finding that describes a different variant and leaves the field untouched.
+
+Both also carry an explicit anti-regression rule: **never replace a specific figure with a vaguer one.** Going from "1 hour 20 minutes" to "about an hour" is a regression, not a correction, even where the vaguer phrasing is technically defensible. And where the draft and a source disagree by a small amount and both look credible, the checker is told to name both numbers and both sources and leave the decision to you, rather than picking one.
+
+## 3. Storage bucket SQL
+
+Sent separately, and it is not identical to what was written down before. The old block had insert and select only. The Facts panel uploads with `x-upsert`, which is an UPDATE, so replacing a fact's image would have failed with a confusing permission error. The corrected block adds update and delete policies and makes the bucket insert idempotent so it is safe to re-run.
+
+## Verification
+
+Both rule strings were imported at runtime and read back out of the built bundle, since this is prompt text where an escaping mistake silently corrupts what the model actually reads. Caught and fixed exactly that: the STUDIO_VOICE block was rendering `\"` instead of `"` in six places. Both now render clean with no stray escapes. Declaration order confirmed ahead of every use site. Full bundle passes.
+
+The ferry duration was re-checked against the operator's timetable page rather than its front page, which is what settled it.
+
 # PASS 42: the island rule, baked into both the research and the writing
 
 Oliver: "These fact-checks are something I want you and OpenAI to remember. When it's an Island, you have to research the ferry connection."
