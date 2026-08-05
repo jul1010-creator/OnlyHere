@@ -361,11 +361,18 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           };
           const stopTownOf = (name) => (day.stops || []).find(s => s.name === name)?.town || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
           const routeUrl = (originName, destName, mode) => {
+            // READABILITY over raw precision in the LINK (Oliver's screenshot:
+            // Google Maps opening with "55.2613281,12.1288198" sitting in the
+            // origin field — reads as broken): a town-qualified place name
+            // resolves reliably in Google's own geocoder AND displays as a
+            // human place, so prefer it whenever a town is known; fall back to
+            // the precise coordinate only for stops with no town context at
+            // all (where a bare name genuinely risks matching the wrong place).
             const originTown = stopTownOf(originName);
             const destTown = (day.stops || []).find(s => s.name === destName)?.town;
             const oc = preciseCoord(originName), dc = preciseCoord(destName);
-            const originText = oc ? `${oc.lat},${oc.lon}` : originTown ? `${originName}, ${originTown}, Denmark` : `${originName}, Denmark`;
-            const destText = dc ? `${dc.lat},${dc.lon}` : destTown ? `${destName}, ${destTown}, Denmark` : `${destName}, Denmark`;
+            const originText = originTown ? `${originName}, ${originTown}, Denmark` : oc ? `${oc.lat},${oc.lon}` : `${originName}, Denmark`;
+            const destText = destTown ? `${destName}, ${destTown}, Denmark` : dc ? `${dc.lat},${dc.lon}` : `${destName}, Denmark`;
             return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
           };
           const legChip = (originName, destName, how) => {
@@ -497,7 +504,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                         .towns-grid column width) — a short, wide crop of a tall
                         subject like a castle cuts off its towers/spires. Now
                         matches Towns exactly. */}
-                    <div style={{ position: "relative", height: 210, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: real?.photo ? undefined : `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
+                    {/* EMPTY-BOX FIX (Oliver's screenshots: stops without photos
+                        rendered a full 210px of near-black nothing, reading as
+                        broken): the tall header is only worth its height when
+                        there's a real photo in it — photoless stops get a
+                        compact 96px monogram band instead. */}
+                    <div style={{ position: "relative", height: real?.photo ? 210 : 96, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: real?.photo ? undefined : `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
                       {real?.photo ? (
                         <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       ) : (

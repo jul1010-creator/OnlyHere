@@ -47,7 +47,24 @@ export const GuideRouteMap = ({ points }) => {
     // basically a solid gold line with no surroundings visible. More padding
     // plus a hard maxZoom keeps every route readable at a glance instead of
     // zooming in as far as the points technically allow.
-    map.fitBounds(latlngs, { padding: [44, 44], maxZoom: 14 });
+    // COLLAPSED-POINTS FIX (Oliver's screenshot: a day map showing one lone
+    // marker on featureless close-up water/coast — "this maps…"): when a
+    // day's stops all resolve to (nearly) the same coordinate — common in a
+    // small village where several stops share the town-center point — fitBounds
+    // zooms to the maximum allowed on a box that is essentially a dot, which
+    // shows nothing recognizable. If the whole route spans less than ~600m,
+    // show the AREA instead: center on it at a town-scale zoom so there's real
+    // geography (coastline, streets, the village shape) around the marker.
+    const lats = latlngs.map(p => p[0]), lons = latlngs.map(p => p[1]);
+    const spreadKm = Math.max(
+      (Math.max(...lats) - Math.min(...lats)) * 111.32,
+      (Math.max(...lons) - Math.min(...lons)) * 62.06
+    );
+    if (spreadKm < 0.6) {
+      map.setView([lats.reduce((a, b) => a + b, 0) / lats.length, lons.reduce((a, b) => a + b, 0) / lons.length], 12);
+    } else {
+      map.fitBounds(latlngs, { padding: [44, 44], maxZoom: 14 });
+    }
     return () => { group.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(points)]);
