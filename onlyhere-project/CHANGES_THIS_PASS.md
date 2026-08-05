@@ -1,3 +1,43 @@
+# PASS 44: the pipeline was not opening the official website, and was not asking its own Directions API about transport
+
+Two systemic gaps, both found by reading the pipeline rather than the drafts. Every transport error in the last three fact-checks traces to one of them.
+
+## 1. "Why do Tavily/Perplexity not actively search for the home website?"
+
+They do search. Tavily returns the URLs. **The app then chose not to open them.**
+
+The official-website fetch existed, but it ran for five content types only: `food`, `foodStreet`, `night`, `booking`, `free`. It skipped `town`, `festival` and `nightTown` entirely. Every error caught so far came from a **town** draft, which means the one source that would have settled it was never opened. The festival prompt even tells the model the official site "matters more here than for other content types", and then never fetched it.
+
+The second half of the gap was the matcher. It required the site's hostname to share a word with the entry name. That works for a restaurant, whose website is named after it. It cannot work for a town: the pages that decide a Møgeltønder draft are `schackenborg.dk` and `sydtrafik.dk`, and neither shares a word with "Møgeltønder". For a place, the official website is not one site named after the place, it is the sites of the specific things in it.
+
+Now: towns, festivals and nightlife towns fetch up to three plausible official pages, aggregators filtered out (TripAdvisor, Booking, Wikipedia, VisitDenmark, DirectFerries and the rest), Danish domains preferred. Single venues keep the strict one-site behaviour, unchanged. The prompt also now tells the model to prefer a **timetable or booking page over a marketing front page on the same site**, which is the rule I got wrong myself last pass.
+
+**Verified by running the selection against real search results for the three entries that actually went wrong:**
+
+- Møgeltønder now opens `schackenborg.dk` (the castle tour days and price Gemini corrected) and `sydtrafik.dk` (the 266/777 bus route Gemini said exists).
+- Samsø now opens `samsoelinjen.dk/fartplan`, the timetable page that says 80 minutes. The page I failed to check.
+- Geranium, a food entry, still opens only `geranium.dk`. No behaviour change for venues.
+
+## 2. "We gotta keep going until the transport is correct"
+
+The Møgeltønder draft said there was "no confirmed direct train-and-bus itinerary" from Copenhagen and left travelTime blank. A real route exists. The draft was not lying, it genuinely had not found one, because it was trying to establish a transport fact **from web search snippets**. Search is the wrong instrument for that question.
+
+Meanwhile the app has a Directions API and was not asking it. The real transport check ran for nightlife only, the one category where somebody had previously been bitten. Towns and festivals, where "how do I actually get there" is the decisive practical fact, had no grounding at all.
+
+Town, festival, free-entrance and booking drafts now get a live Google Directions query from Copenhagen, both by public transport and by car, with real durations and distances, before a word is written. Ferries are already included in those figures.
+
+**The part that matters most:** when the routing query returns nothing, the block says so explicitly as UNCONFIRMED and forbids writing that no route exists, pointing at rejseplanen.dk instead. Google's Danish transit coverage is good but not complete for rural bus links, and turning a failed lookup into a confident absence is precisely the error that produced this bug in the first place.
+
+## On the flawed-drafts document
+
+That is the right next move, and it will find things neither of us can find by reading one draft at a time. Two things would make it much more useful: include each draft's **type** (town, festival, food and so on), since the gaps above were type-specific and invisible from the prose, and keep each draft's own **uncertainties array**, since Møgeltønder's failure showed up there first as a hedge rather than in the body text.
+
+## Verification
+
+The URL selection was executed against realistic search-result sets for all three problem entries plus a venue control, confirming which pages each type now opens, that aggregators are filtered, and that empty and malformed inputs are safe. Declaration order confirmed for the new transport block. Full bundle passes. The nightlife transport check is untouched.
+
+**Not verified live:** both changes call deployed endpoints (`/api/scan-source`, `/api/directions`) that only exist on Vercel, so the first real proof is a draft run after pushing. Both fail soft, leaving the previous behaviour rather than blocking a draft.
+
 # PASS 43: the fact-check button can no longer revert a fact-check, and I had a number wrong
 
 ## 1. I was wrong about the ferry, and the rule I wrote had the wrong number baked into it
