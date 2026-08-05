@@ -417,6 +417,21 @@ function GemlyxApp() {
   const [studioTown, setStudioTown] = useState("");
   const [studioType, setStudioType] = useState("town");
   const [studioLoading, setStudioLoading] = useState(false);
+  // Ref mirror of studioLoading — the draft-queue runner is a long-lived async
+  // loop whose closure would otherwise read a stale false and double-start.
+  const studioLoadingRef = useRef(false);
+  // DRAFT QUEUE (Oliver: "I would like the draft/research to be able to put
+  // others in queue. This long pipeline takes forever to wait for... have a
+  // bunch being searched in the background while I go eat"): names queued with
+  // their content type, processed one at a time through the full real pipeline;
+  // each finished draft lands in queueResults with an Open button that loads it
+  // into the normal review/publish flow. Refs are the source of truth for the
+  // runner loop (state mirrors are for rendering only) — same stale-closure
+  // discipline as studioLoadingRef above.
+  const draftQueueRef = useRef([]);
+  const [draftQueue, setDraftQueue] = useState([]);
+  const [queueResults, setQueueResults] = useState([]);
+  const queueBusyRef = useRef(false);
   // DRAFT PROGRESS (Oliver: "when I click 'draft it' I wanna see the progress
   // of research like the loading screen"): generateArea sets a real stage
   // label + percent at each pipeline step, rendered as a progress panel under
@@ -601,13 +616,20 @@ function GemlyxApp() {
   // setTimeout(() => generateArea(), 50) and could silently draft/redraft the
   // WRONG town (the one from before the click) because generateArea's own
   // closure still held the pre-click studioTown value when it ran.
-  const generateArea = async (overrideTown) => {
+  const generateArea = async (overrideTown, overrideType) => {
+    // overrideType (draft QUEUE support, Oliver: "put others in queue... have a
+    // bunch being searched in the background while I go eat"): the queue runner
+    // is a long-lived async loop whose closure holds a STALE sType — the
+    // exact stale-closure class of bug already hit once with studioTown (see
+    // overrideTown's own history). Every reference below uses sType instead.
     const name = (overrideTown ?? studioTown).trim();
-    if (!name || studioLoading) return;
-    setStudioLoading(true); setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null); setStudioInventedWarning(null);
+    const sType = overrideType ?? studioType;
+    if (!name || studioLoading || studioLoadingRef.current) return { ok: false, error: "busy" };
+    setStudioLoading(true); studioLoadingRef.current = true; setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null); setStudioInventedWarning(null);
     setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     setStudioInstagramUrl(""); setStudioFrozenGeo(null);
     setStudioStage({ label: "Planning what to research", percent: 5 });
+    let draftOutcome = { ok: false, error: null };
     try {
       // STAGE 1 — OpenAI plans what to research. The fixed queries below are a
       // proven baseline (reddit/quora/reviews angle catches honest opinions
@@ -627,7 +649,7 @@ function GemlyxApp() {
       let plannedQueries = [];
       const planResult = await withRetry(
         () => askOpenAI(
-          `Planning research for a Danish travel guide entry: "${name}" (type: ${studioType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a genuine downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
+          `Planning research for a Danish travel guide entry: "${name}" (type: ${sType}). List 2-3 SPECIFIC search queries that would find the most important facts for THIS particular place — not generic categories, actual search strings a researcher would type. Include at least one query aimed at finding a genuine downside or limitation, not just highlights. Respond with ONLY a JSON array of strings, nothing else.`,
           // BUG FIX: 300 was almost certainly the actual cause of the "Empty
           // response from OpenAI" errors on town/event drafts and Discover runs —
           // gpt-5.6-sol is a reasoning model, and 300 tokens is tight enough that
@@ -656,7 +678,7 @@ function GemlyxApp() {
         night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
-      }[studioType];
+      }[sType];
       const allQueries = [...cfg.queries, ...plannedQueries];
       let context = "";
       let candidateUrls = [];
@@ -688,7 +710,7 @@ function GemlyxApp() {
       // name, not just any site that mentions it), actually fetch that page's real text via
       // the existing scan-source tool and fold it in — this is what turns "See website"
       // from a lazy default into an actual last resort, not a first one.
-      if (["food", "foodStreet", "night", "booking", "free"].includes(studioType) && candidateUrls.length > 0) {
+      if (["food", "foodStreet", "night", "booking", "free"].includes(sType) && candidateUrls.length > 0) {
         const nameWords = name.toLowerCase().replace(/[^a-z0-9æøå ]/g, "").split(" ").filter(w => w.length >= 4);
         const officialUrl = candidateUrls.find(u => {
           try {
@@ -722,20 +744,20 @@ function GemlyxApp() {
         // material, instead of also having to research AND organize AND write at once.
         // Other content types still get the general fact-check version until this
         // approach is validated on these two.
-        const precheckPrompt = ((studioType === "food" || studioType === "foodStreet")
+        const precheckPrompt = ((sType === "food" || sType === "foodStreet")
           ? `Using real, current web search, find accurate facts about "${name}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
 VIBE/LOCATION FACTS: its exact address or a real nearby landmark, why locals actually go there.
-FOOD MECHANICS FACTS: ${studioType === "foodStreet" ? "what vendors/stalls are actually there, the range of cuisines/dishes on offer, how it's organized (indoor hall, outdoor stalls, etc.)" : "how the food is actually made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order"}.
+FOOD MECHANICS FACTS: ${sType === "foodStreet" ? "what vendors/stalls are actually there, the range of cuisines/dishes on offer, how it's organized (indoor hall, outdoor stalls, etc.)" : "how the food is actually made — cooking method (stone-baked, flame-grilled, slow-cooked, hand-rolled), specific real dishes people order"}.
 REALITY CHECK FACTS: real current prices, typical wait times, seating situation, anything else logistically true.
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
-          : studioType === "town"
+          : sType === "town"
           ? `Using real, current web search, find accurate facts about the town "${name}" in Denmark, and organize them into exactly three labeled groups — do not write prose, just sort real facts you find into these buckets:
 CHARACTER/FIT FACTS: founding date or defining historical fact, its region, what kind of place it genuinely is, who it suits. IMPORTANT: if the town has more than one relevant historical date (e.g. an older institution, monastery, or building founded there vs. the town itself later being granted official status such as market-town/købstad rights), list each as its own separate fact with its own date — do not merge them into a single date or imply one caused the other unless your source explicitly says so.
 WHAT TO DO FACTS: specific real streets, buildings, museums, or activities — named and concrete, not generic. For any named attraction that has real access rules (opening hours, whether the grounds are open to the public even if a building itself is closed, seasonal restrictions), state exactly what you find rather than just naming the place. Also find the town's real signature or best-known named annual event, if it has one — its actual specific real name (e.g. a real festival or regatta name), not a generic placeholder description like "harbour festival" or "summer fest".
 GETTING THERE/REALITY FACTS: real transit routes and times from Copenhagen. If the town is not well served by train/bus, or driving is genuinely faster or more practical, also give the real driving time and route (e.g. via a named motorway/highway) — don't leave travel time blank just because transit is impractical. How long a visit genuinely takes, any real logistical downside (limited dining, seasonal closures, etc).
 IDENTITY CHECK, IMPORTANT: a town's real signature event has been mistaken for a generic placeholder name before (a made-up description standing in for the event's actual real name). If you're not fully confident of the event's exact real name, or you find more than one similarly-named or same-season event connected to this town, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what's uncertain, e.g. no confirmed real name found for this town's signature event, or a possible mix-up between two events]" — then continue with the facts as normal. If you're confident there's no such issue, don't include that line at all.
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
-          : studioType === "festival"
+          : sType === "festival"
           ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
           : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${RESEARCH_SOURCE_RULES}`;
         setStudioStage({ label: "Fact-checking the research (Perplexity)", percent: 50 });
@@ -770,7 +792,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // transport genuinely differs between them, same as UK transport stopping
       // earlier on weeknights than Fri/Sat.
       let transportFindings = "";
-      if (studioType === "night" || studioType === "nightTown") {
+      if (sType === "night" || sType === "nightTown") {
         const KNOWN_CITIES = ["Copenhagen", "Aarhus", "Aalborg", "Odense", "Esbjerg", "Randers", "Kolding", "Horsens", "Vejle", "Roskilde"];
         const detectedCity = KNOWN_CITIES.find(c => name.includes(c));
         if (detectedCity) {
@@ -801,7 +823,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // time in publishDraft, so nothing OpenAI does to them survives regardless.
       let frozenGeo = null;
       let frozenFactsText = "";
-      if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(studioType)) {
+      if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(sType)) {
         try {
           const coords = await geocodePlace(name);
           if (coords) {
@@ -820,7 +842,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // Non-fatal if it misses — the writer still has Tavily+Perplexity's findings
       // as a fallback, this just adds a stronger source when it's available.
       let realOpeningHoursText = "";
-      if (["free", "booking", "food", "foodStreet", "night"].includes(studioType)) {
+      if (["free", "booking", "food", "foodStreet", "night"].includes(sType)) {
         try {
           const hoursRes = await fetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`);
           const hoursData = await hoursRes.json();
@@ -913,13 +935,32 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       setStudioStage({ label: "Organizing the research notes", percent: 62 });
       const structureResult = await withRetry(
         () => askOpenAI(
-          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${studioType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts actually present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.\n\nRaw research:\n${rawResearch}`,
-          1200
+          `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${sType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts actually present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.\n\nRaw research:\n${rawResearch}`,
+          // 1200 → 3000 (Oliver's console: "OpenAI returned no text" 3/3 on this
+          // exact stage): gpt-5.6-sol is a reasoning model whose internal
+          // reasoning shares this same budget, and organizing a large research
+          // blob is exactly the kind of task where it thinks long — 1200 could
+          // be fully eaten by reasoning, leaving literally nothing for the
+          // visible notes. Same fingerprint as the Stage 1 fix (300 → 1400).
+          3000
         ),
         r => !!r.error,
         "Research organizing (OpenAI)"
       );
-      if (structureResult.error) throw new Error(`Research organizing failed (OpenAI): ${structureResult.error}`);
+      if (structureResult.error) {
+        // SOFT FALLBACK for the empty-response case specifically (Oliver's
+        // "OpenAI wants nothing now" report): an empty reply 3x is the model
+        // spending its whole budget reasoning, not an API outage — killing the
+        // entire multi-minute draft over a formatting-quality stage is the
+        // wrong trade. Claude drafts from the RAW research instead (exactly
+        // what it did for weeks before this stage existed). A genuine API
+        // error still hard-fails per the standing policy.
+        if (/empty response/i.test(structureResult.error)) {
+          console.warn("Research organizing came back empty after retries — drafting from raw research notes instead of failing the draft.");
+        } else {
+          throw new Error(`Research organizing failed (OpenAI): ${structureResult.error}`);
+        }
+      }
       if (structureResult.text) {
         userContent = `ORGANIZED RESEARCH NOTES (already sorted by OpenAI — your job is turning these into flowing prose per the rules below, not re-researching or re-organizing; if a heading is sparse, write less for that part rather than inventing to fill it):\n${structureResult.text}`;
       }
@@ -939,12 +980,14 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // expand it (don't let devtools collapse it) and send me the numbers.)
       setStudioStage({ label: "Writing the draft (Claude)", percent: 72 });
       const draftResult = await askClaude(
-        `${prompts[studioType]}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, no explanation before or after, nothing but the JSON itself, starting with { and ending with }.\n\n${userContent}`,
-        8192
+        `${prompts[sType]}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, no explanation before or after, nothing but the JSON itself, starting with { and ending with }.\n\n${userContent}`,
+        8192,
+        "claude-sonnet-5",
+        "{" // prefill — a chatty opening is physically impossible (see askClaude)
       );
       if (draftResult.error) throw new Error(draftResult.error);
       let t = await parseClaudeJSON(draftResult.text, 8192);
-      const noContentField = (studioType === "food" || studioType === "foodStreet") ? !t.vibeLocation : studioType === "town" ? !t.characterAndFit : !t.desc;
+      const noContentField = (sType === "food" || sType === "foodStreet") ? !t.vibeLocation : sType === "town" ? !t.characterAndFit : !t.desc;
       if (!t.name || noContentField) throw new Error("empty");
       // Verify the route to the AI's own highlighted attraction specifically —
       // this is the actual bug behind the Gentofte/Ordrupgaard case: the frozen-
@@ -954,7 +997,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // checked against anything real. Not a silent rewrite of free-form prose
       // (unsafe) — a clear, verified warning so the specific real station is
       // right there to swap in by hand before publishing.
-      if (studioType === "town" && t.highlight) {
+      if (sType === "town" && t.highlight) {
         try {
           const hlCoords = await geocodePlace(t.highlight);
           if (hlCoords && frozenGeo) {
@@ -988,7 +1031,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // A festival "date" already in the past is almost certainly a guess, not a real
       // finding — the model should have left it empty. Don't trust its own honesty here;
       // check mechanically and strip it so a wrong date can't slip through unnoticed.
-      if (studioType === "festival" && t.dateStart) {
+      if (sType === "festival" && t.dateStart) {
         const d = new Date(t.dateStart);
         if (!isNaN(d) && d < new Date()) {
           console.warn("Studio: dropped a festival date that was already in the past —", t.name, t.dateStart);
@@ -1046,28 +1089,28 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       const slug = slugify(name);
       const stamp = new Date().toLocaleString("en-GB", { month: "short", year: "numeric" });
       let code = "";
-      if (studioType === "town") {
+      if (sType === "town") {
         const nextId = Math.max(0, ...towns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
-      } else if (studioType === "festival") {
+      } else if (sType === "festival") {
         const isMajor = (t.scale || "").toLowerCase().startsWith("major");
         const targetArr = isMajor ? majorEvents : events;
         const targetName = isMajor ? "majorEvents" : "events";
         const nextId = Math.max(0, ...targetArr.map(x => x.id)) + 1;
         code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
-      } else if (studioType === "free") {
+      } else if (sType === "free") {
         const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, timeNeeded: ${J(t.timeNeeded)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
-      } else if (studioType === "booking") {
+      } else if (sType === "booking") {
         const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, timeNeeded: ${J(t.timeNeeded)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
-      } else if (studioType === "nightTown") {
+      } else if (sType === "nightTown") {
         const nextId = Math.max(0, ...nightlifeTowns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who Is It Perfect For", t.whoFor], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
-      } else if (studioType === "food") {
+      } else if (sType === "food") {
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
-      } else if (studioType === "foodStreet") {
+      } else if (sType === "foodStreet") {
         // Lands in the SAME foodSpots array as regular Food entries — Food Street is a
         // distinct Studio category to WRITE (its own tailored research/prompt), but the
         // live site's Food page filters restaurants vs. food streets by isFoodStreet on
@@ -1137,6 +1180,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
           }
         }
       } catch { /* final check failed — draft already shown, this just skips silently rather than blocking */ }
+      draftOutcome = { ok: true, draft: t };
     } catch (err) {
       console.error("Studio draft failed:", err);
       // Surface the real underlying error alongside the friendly message —
@@ -1145,9 +1189,59 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // JSON-parse failure apart from each other without opening devtools.
       const detail = err?.message && err.message !== "empty" ? err.message : null;
       setStudioError(`Couldn't draft that — try again, or check the name.${detail ? ` (${detail})` : ""}`);
+      draftOutcome = { ok: false, error: detail || "Couldn't draft that" };
     }
     setStudioStage(null);
     setStudioLoading(false);
+    studioLoadingRef.current = false;
+    return draftOutcome;
+  };
+
+  // ── DRAFT QUEUE runner (see draftQueueRef's comment): processes queued names
+  // one at a time through the full real generateArea pipeline, collecting each
+  // outcome. Deliberately sequential — the pipeline's own stages already run
+  // their internal calls where parallelism is safe, and drafting several places
+  // simultaneously would multiply API spend and rate-limit risk for no benefit
+  // while Oliver's away from the screen anyway.
+  const addToDraftQueue = () => {
+    const name = studioTown.trim();
+    if (!name) return;
+    draftQueueRef.current = [...draftQueueRef.current, { name, type: studioType }];
+    setDraftQueue([...draftQueueRef.current]);
+    setStudioTown("");
+    runDraftQueue();
+  };
+  const runDraftQueue = async () => {
+    if (queueBusyRef.current) return;
+    queueBusyRef.current = true;
+    try {
+      while (draftQueueRef.current.length > 0) {
+        // A manually-started draft may be mid-flight — wait for it rather than
+        // colliding (generateArea itself also guards via studioLoadingRef).
+        if (studioLoadingRef.current) { await new Promise(r => setTimeout(r, 2000)); continue; }
+        const item = draftQueueRef.current[0];
+        draftQueueRef.current = draftQueueRef.current.slice(1);
+        setDraftQueue([...draftQueueRef.current]);
+        const res = await generateArea(item.name, item.type);
+        setQueueResults(prev => [...prev, { name: item.name, type: item.type, ok: !!res?.ok, draft: res?.ok ? res.draft : null, error: res?.ok ? null : (res?.error || "failed") }]);
+      }
+    } finally {
+      queueBusyRef.current = false;
+    }
+  };
+  // Load a finished queue draft back into the normal review/publish flow. The
+  // per-draft warnings (invented claims etc.) from its run aren't kept — the
+  // fact-check buttons can be re-run on it like any draft before publishing.
+  const loadQueueResult = (r) => {
+    if (!r?.draft) return;
+    setStudioType(r.type);
+    setStudioTown(r.name);
+    setStudioDraft(r.draft);
+    setStudioDraftText(JSON.stringify(r.draft, null, 2));
+    setStudioResult(null);
+    setStudioError(null);
+    setStudioInventedWarning(null);
+    setStudioIdentityWarning(null);
   };
 
   // ── DISCOVER: OpenAI plans search angles → Tavily runs them → OpenAI reads
@@ -1645,7 +1739,8 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           // truncation. 900 gives honest headroom; the warn below makes any
           // remaining failure visible in the console instead of silent.
           900,
-          "claude-opus-4-8"
+          "claude-opus-4-8",
+          "{" // prefill — a chatty opening is physically impossible (see askClaude)
         );
         if (enrichResult.error) console.warn(`Day ${idx + 1} glance enrichment failed:`, enrichResult.error);
         const glance = JSON.parse(enrichResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
@@ -2168,7 +2263,8 @@ If the conversation only covers a single day or a few stops with no explicit day
       const guideResult = await askClaude(
         `${guideSystemPrompt}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
         6000,
-        "claude-opus-4-8"
+        "claude-opus-4-8",
+        "{" // prefill — makes a chatty non-JSON opening physically impossible (see askClaude)
       );
       if (guideResult.error) throw new Error(guideResult.error);
       let parsed = await parseClaudeJSON(guideResult.text, 6000);
@@ -2181,7 +2277,8 @@ If the conversation only covers a single day or a few stops with no explicit day
         const retryResult = await askClaude(
           `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
           6000,
-          "claude-opus-4-8"
+          "claude-opus-4-8",
+          "{" // prefill — same no-chit-chat guarantee as the main build call
         );
         try {
           const retryParsed = JSON.parse(retryResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
@@ -3546,7 +3643,41 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                         {studioLoading ? "Researching…" : "Draft it"}
                       </button>
+                      {/* DRAFT QUEUE (Oliver: "put others in queue... while I go
+                          eat") — queues the typed name with the selected type;
+                          the queue runs itself in the background one draft at a
+                          time and collects results below. */}
+                      <button onClick={addToDraftQueue} title="Add to the draft queue — runs in the background, one at a time"
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                        ＋ Queue
+                      </button>
                     </div>
+                    {(draftQueue.length > 0 || queueResults.length > 0) && (
+                      <div style={{ marginBottom: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
+                          Draft queue{draftQueue.length > 0 ? ` · ${draftQueue.length} waiting` : ""}
+                        </div>
+                        {draftQueue.map((it, i) => (
+                          <div key={`q${i}`} style={{ fontSize: 12, color: C.muted, marginBottom: 3 }}>◌ {it.name} <span style={{ fontSize: 10.5 }}>({it.type})</span></div>
+                        ))}
+                        {queueResults.map((r, i) => (
+                          <div key={`r${i}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 3 }}>
+                            <span style={{ color: r.ok ? C.gold : "#FFB347" }}>{r.ok ? "◆" : "✕"} {r.name}</span>
+                            {r.ok ? (
+                              <button onClick={() => loadQueueResult(r)}
+                                style={{ background: "none", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "3px 10px", fontSize: 10.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                Open
+                              </button>
+                            ) : (
+                              <span style={{ color: "#FFB347", fontSize: 10.5 }}>{r.error || "failed"}</span>
+                            )}
+                          </div>
+                        ))}
+                        {queueResults.length > 0 && (
+                          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6 }}>Open a finished draft to review and publish it — re-run the fact-check buttons on it like any other draft.</div>
+                        )}
+                      </div>
+                    )}
                     {/* Draft progress (Oliver: "when I click 'draft it' I wanna see the
                         progress of research like the loading screen") — real stage
                         labels from generateArea's actual pipeline steps, not a fake
@@ -5647,6 +5778,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
       {guideModal === "preview" && (
         <GuidePreviewScreen
           previewWhy={previewWhy}
+          testProfile={pendingRandomGuideMode ? randomTestProfileRef.current : null}
           aiMessages={aiMessages}
           towns={towns}
           freeEntrance={freeEntrance}

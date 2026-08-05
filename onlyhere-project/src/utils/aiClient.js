@@ -4,7 +4,15 @@
 // same way App.jsx's Detour/Studio code already does, without duplicating this logic
 // or reaching into App.jsx's component internals. App.jsx now imports these too
 // (its own local copies were removed) — same behavior, just defined once.
-export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-5") => {
+// `prefill` (optional): text placed as the START of Claude's own reply via an
+// assistant-role message — the API continues from it, so passing "{" makes it
+// PHYSICALLY IMPOSSIBLE for the reply to open with chit-chat. This is the real
+// fix for the recurring build-killer where despite every "respond with ONLY
+// JSON" instruction the model occasionally opened with "Got it — 4 days..." or
+// "Sounds like..." (both seen in Oliver's live console) — instructions can be
+// ignored, a prefill can't. The returned text includes the prefill, so callers
+// parse it exactly as before.
+export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-5", prefill = null) => {
   try {
     const res = await fetch("/api/anthropic", {
       method: "POST",
@@ -12,7 +20,9 @@ export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
-        messages: [{ role: "user", content: prompt }],
+        messages: prefill
+          ? [{ role: "user", content: prompt }, { role: "assistant", content: prefill }]
+          : [{ role: "user", content: prompt }],
       }),
     });
     const data = await res.json();
@@ -23,7 +33,7 @@ export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-
       const hint = data.stop_reason === "max_tokens" ? " (response was cut off — ran out of tokens)" : "";
       return { error: `Empty response from Claude${hint}` };
     }
-    return { text };
+    return { text: prefill ? prefill + text : text };
   } catch (err) {
     return { error: "Couldn't reach Claude — check the API key and your connection." };
   }

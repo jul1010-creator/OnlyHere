@@ -69,6 +69,7 @@ const MAX_PER_SECTION = 6;
 
 export const GuidePreviewScreen = ({
   previewWhy,
+  testProfile,
   aiMessages,
   towns,
   freeEntrance,
@@ -135,6 +136,22 @@ export const GuidePreviewScreen = ({
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, textAlign: "center" }}>
           {totalShown > 0 ? "A quick look at the real places on this route before Gemlyx builds your full guide." : "Gemlyx will build your full guide next — real places, checked and mapped out."}
         </div>
+        {/* TEST-PROFILE CARD (Oliver: "When I click the random guide, I have
+            to know what was picked") — shows the fabricated traveler right
+            HERE at the preview stage, not just on the finished guide. Only
+            ever present on Random-guide test runs (testProfile prop is null
+            for real travelers). The planner's full day-by-day breakdown and
+            the events-included line follow on the finished guide page. */}
+        {testProfile && (
+          <div style={{ background: `${C.gold}0D`, border: `1px dashed ${C.gold}66`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 12.5, lineHeight: 1.7 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 }}>◈ Pipeline test — the traveler that was picked</div>
+            <div style={{ color: C.light }}>{testProfile.days} day{testProfile.days !== 1 ? "s" : ""}, based around <span style={{ color: C.text, fontWeight: 700 }}>{(testProfile.towns || []).join(" + ")}</span>, into <span style={{ color: C.text, fontWeight: 700 }}>{(testProfile.interests || []).join(" and ")}</span>.</div>
+            {testProfile.extras?.length > 0 && (
+              <div style={{ color: C.light }}>Asked to fit in: {testProfile.extras.join(", ")}</div>
+            )}
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>The planner's full day-by-day breakdown and whether events made it in show on the finished guide.</div>
+          </div>
+        )}
         {/* Personal "why this fits you" line (Oliver's ask) — written by
             Claude from the traveler's own conversation, see App.jsx's
             previewWhy effect. Renders nothing while loading or on failure. */}
