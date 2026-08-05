@@ -64,7 +64,40 @@ import "leaflet/dist/leaflet.css";
 // the source of a hard fact (a date, price, or opening hour). Splice this into
 // any askPerplexity call that's doing real research, not just a narrow re-check
 // of one already-drafted fact.
-const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's actually like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would actually know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before 2025 should be treated as stale, not current.`;
+// ── ISLANDS AND FERRIES ────────────────────────────────────────────
+// Oliver, 5 Aug 2026, after two rounds of Gemini fact-checks on the same Samsø
+// draft: "These fact-checks are something I want you and OpenAI to remember.
+// When it's an Island, you have to research the ferry connection."
+//
+// Denmark has roughly 400 islands and around 70 of them are inhabited, so this
+// is not an edge case here, it is a whole category of entry that the getting-
+// there section can silently get wrong. Both Samsø drafts did, differently:
+//
+//   Round 1 sent a Copenhagen reader to drive to Hou, which is the Jutland-side
+//   port. From Zealand the crossing is Kalundborg to Ballen. Nobody wrote a
+//   false fact; the draft just never asked WHERE THE READER IS COMING FROM.
+//
+//   Round 2 fixed the port and said the crossing "runs about an hour". I
+//   checked the operator's own site: samsoelinjen.dk says "overfartstiden er
+//   1 time og 30 minutter", and Molslinjen (its parent) says 90 minutes.
+//
+// The genuinely instructive part: VisitSamsø, the TOURIST BOARD, still says the
+// crossing takes 80 minutes. So the draft could have cited a real, official
+// looking source and still shipped a wrong number. On ferries the operator's
+// own page is the only authority, above tourist boards, above aggregators.
+//
+// Ports also go obsolete. Kolby Kås was Samsø's Zealand-side port before Ballen
+// was built, and older sources still name it. A port that exists is not the
+// same fact as a port that is still served.
+const ISLAND_FERRY_RULES = `ISLANDS AND FERRIES, MANDATORY when the place is an island or sits on one: you must research the actual ferry connection before writing anything about getting there, and the ferry OPERATOR'S OWN WEBSITE is the authority for every part of it, ranking above tourist boards, aggregator sites and Wikipedia. This has produced real, confirmed errors: one draft said a crossing "runs about an hour" when the operator states 1 hour 30 minutes, and the island's own tourist board still publishes a third, different number, so a plausible official-looking source is not good enough here.
+Find and state: (1) BOTH ports by name, the mainland one you leave from and the island one you arrive at; (2) the crossing duration exactly as the operator states it; (3) which operator runs it; (4) whether cars must be booked ahead, and whether the route is seasonal or year-round.
+WHICH PORT DEPENDS ENTIRELY ON WHERE THE TRAVELER STARTS, and getting this wrong is the most common failure: a single island often has separate routes from different parts of the country, and sending someone to the wrong one can mean hours of unnecessary driving and a bridge toll. Never present one route as "the" way to the island when more than one exists. Name the route AND the side of the country it serves, and if the entry is not written for one specific starting point, give the real options rather than picking one silently.
+FERRY ROUTES AND PORTS CHANGE, and older sources go stale without saying so: a port named in an older article may have been replaced by a newer terminal elsewhere on the island. Confirm the route is CURRENTLY served, not merely that the port exists.
+If you cannot confirm the crossing duration from the operator, leave it out entirely and note it in uncertainties. Never approximate a sailing time, and never round one you did find. "About an hour" for a 90 minute crossing is the exact error this rule exists to stop.`;
+
+const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's actually like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would actually know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before 2025 should be treated as stale, not current.
+
+${ISLAND_FERRY_RULES}`;
 
 // The original component (previously the default export) is now mounted as the
 // "/" route below, with a new "/guide/:guideId" route alongside it for the

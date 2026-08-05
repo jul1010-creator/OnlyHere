@@ -1,3 +1,40 @@
+# PASS 42: the island rule, baked into both the research and the writing
+
+Oliver: "These fact-checks are something I want you and OpenAI to remember. When it's an Island, you have to research the ferry connection."
+
+So it is written into the app, not just into a document. Two places, because the failure can happen at either step:
+
+- **`ISLAND_FERRY_RULES`** is spliced into `RESEARCH_SOURCE_RULES`, which already reaches every real research call. This makes the model go and look the ferry up.
+- **The same rule in `STUDIO_VOICE`**, which reaches every draft that gets written. This makes it state what it found, correctly, or admit it could not confirm it.
+
+Research without the writing rule finds the right number and then rounds it. Writing without the research rule has nothing true to write down.
+
+## Why the rule reads the way it does
+
+The same Samsø entry got it wrong twice, differently, which is what makes it a good rule rather than a one-off correction.
+
+**Round 1** sent a Copenhagen reader to drive to Hou. Hou is the Jutland-side port. From Zealand the crossing is Kalundborg to Ballen. No false fact was written. The draft simply never asked where the reader was coming from, and that mistake costs someone about two and a half hours of driving plus a Great Belt toll.
+
+**Round 2** fixed the port and said the crossing "runs about an hour". I checked the operator rather than taking the fact-check on trust: samsoelinjen.dk states "overfartstiden er 1 time og 30 minutter", and Molslinjen, its parent, says 90 minutes. So Gemini's correction is right, and the draft was out by a third.
+
+**The part actually worth encoding:** VisitSamsø, the island's own tourist board, still publishes 80 minutes. Three sources, three numbers, and two of them look perfectly official. So the rule does not say "check a good source", it says the ferry OPERATOR outranks tourist boards, aggregators and Wikipedia on every part of a crossing. A draft could have cited the tourist board and shipped a wrong number with a clean conscience.
+
+It also covers ports going obsolete, since Kolby Kås was Samsø's Zealand port before Ballen was built and older articles still name it. A port existing is not the same fact as a port still being served. And it forbids approximating or rounding a sailing time at all: "about an hour" for a 90 minute crossing is the exact error the rule exists to stop.
+
+Denmark has roughly 400 islands, around 70 inhabited, so this is a whole category of entry rather than an edge case.
+
+## Content fix that is still yours, in Studio
+
+The current Samsø entry says the Kalundborg to Ballen crossing "runs about an hour". It is **1 hour 30 minutes** per the operator. The rest of that draft checks out, including the weekend tourist office tip, which is a genuinely good Gemlyx Find.
+
+## Not done, and it needs your call
+
+The rule now governs **Studio content**. The **guide builder** has its own separate prompts and its own frozen transport facts, and an island itinerary there can still pick the wrong ferry the same way round 1 did. Extending the rule into the guide prompts is a Rule Zero edit of a different kind than the map fix you cleared, so say the word and I will do it.
+
+## Verification
+
+Executed rather than eyeballed: `STUDIO_VOICE` was imported at runtime and the rule read back out of the built string, confirming it survives the escaping intact (13,481 characters, apostrophes and quotes rendering correctly, no stray backslashes). The ferry duration was verified against two operator sources before being written into the rule as an example, and the tourist board's disagreeing figure was confirmed rather than assumed.
+
 # PASS 41: the guide map draws real routes now, and "Nearest Station" says what the place actually is
 
 Oliver lifted Rule Zero for this: "I give you permission to get the maps bug fixed. I was talking about the structure. Sonnet kept screwing it up."
