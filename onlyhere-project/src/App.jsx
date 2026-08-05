@@ -417,6 +417,11 @@ function GemlyxApp() {
   const [studioTown, setStudioTown] = useState("");
   const [studioType, setStudioType] = useState("town");
   const [studioLoading, setStudioLoading] = useState(false);
+  // DRAFT PROGRESS (Oliver: "when I click 'draft it' I wanna see the progress
+  // of research like the loading screen"): generateArea sets a real stage
+  // label + percent at each pipeline step, rendered as a progress panel under
+  // the Draft it button — same idea as the guide build's stage display.
+  const [studioStage, setStudioStage] = useState(null);
   const [studioResult, setStudioResult] = useState(null);
   const [studioError, setStudioError] = useState(null);
   const [studioDraft, setStudioDraft] = useState(null);
@@ -602,6 +607,7 @@ function GemlyxApp() {
     setStudioLoading(true); setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null); setStudioInventedWarning(null);
     setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     setStudioInstagramUrl(""); setStudioFrozenGeo(null);
+    setStudioStage({ label: "Planning what to research", percent: 5 });
     try {
       // STAGE 1 — OpenAI plans what to research. The fixed queries below are a
       // proven baseline (reddit/quora/reviews angle catches honest opinions
@@ -654,7 +660,10 @@ function GemlyxApp() {
       const allQueries = [...cfg.queries, ...plannedQueries];
       let context = "";
       let candidateUrls = [];
+      let queryIdx = 0;
       for (const q of allQueries) {
+        queryIdx += 1;
+        setStudioStage({ label: `Searching the web (${queryIdx}/${allQueries.length})`, percent: 8 + Math.round(34 * queryIdx / allQueries.length) });
         // HARD-FAIL: any single Tavily query failing now stops the whole draft
         // rather than silently proceeding on whatever the earlier queries found —
         // see the note above Stage 1 for why. A network-level throw here (no
@@ -729,6 +738,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           : studioType === "festival"
           ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
           : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${RESEARCH_SOURCE_RULES}`;
+        setStudioStage({ label: "Fact-checking the research (Perplexity)", percent: 50 });
         const preCheck = await withRetry(
           () => askPerplexity(precheckPrompt),
           r => !!r.error,
@@ -900,6 +910,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // draft rather than silently having Claude write from raw, unorganized
       // research instead.
       let userContent = rawResearch;
+      setStudioStage({ label: "Organizing the research notes", percent: 62 });
       const structureResult = await withRetry(
         () => askOpenAI(
           `You're organizing raw research into notes for a writer — NOT writing final prose yourself, just sorting real facts under clear headings so the writer's job narrows to pure wording. This is for a "${studioType}" entry about "${name}" in a Danish travel guide. Read the raw research below and organize it into plain point-form notes under headings matching what needs to be written (use your judgment on what headings fit this content type — e.g. for a town: character/atmosphere facts, things-to-do facts, getting-there-and-downsides facts; for a restaurant: vibe facts, how-it's-made facts, price/wait/reality facts). Include ONLY facts actually present in the research — never invent to fill a heading, leave it sparse instead. Keep every specific number, name, date, and price exactly as found. Be concise — notes, not paragraphs.\n\nRaw research:\n${rawResearch}`,
@@ -926,6 +937,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // clean final JSON. If 8192 still isn't enough after that fix lands, the next
       // real signal is the actual usage/stop_reason object logged to console —
       // expand it (don't let devtools collapse it) and send me the numbers.)
+      setStudioStage({ label: "Writing the draft (Claude)", percent: 72 });
       const draftResult = await askClaude(
         `${prompts[studioType]}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, no explanation before or after, nothing but the JSON itself, starting with { and ending with }.\n\n${userContent}`,
         8192
@@ -1005,6 +1017,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // draft, not a core research stage, so a scan failure shouldn't block
       // publishing a draft that's otherwise fine.
       try {
+        setStudioStage({ label: "Polishing the writing", percent: 85 });
         const proseFields = Object.entries(t).filter(([, v]) => typeof v === "string" && v.length > 20).map(([k, v]) => `${k}: "${v}"`).join("\n");
         if (proseFields) {
           const scanResult = await askOpenAI(
@@ -1083,6 +1096,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // from, catching the specific failure mode of prose drifting from its own
       // source material during writing.
       try {
+        setStudioStage({ label: "Checking for invented claims", percent: 94 });
         const inventedCheck = await askPerplexity(
           `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${RESEARCH_SOURCE_RULES}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
         );
@@ -1099,6 +1113,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       const detail = err?.message && err.message !== "empty" ? err.message : null;
       setStudioError(`Couldn't draft that — try again, or check the name.${detail ? ` (${detail})` : ""}`);
     }
+    setStudioStage(null);
     setStudioLoading(false);
   };
 
@@ -2283,7 +2298,11 @@ If the conversation only covers a single day or a few stops with no explicit day
         ? await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking)
         : { found: {}, failed: {} };
       const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _exactDurations: exactFound, _noRouteFound: routeFailed, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
+      // Test-pipeline transparency: attach the fabricated profile + the
+      // planner's raw skeleton ONLY when this conversation is genuinely the
+      // test brief (see randomTestProfileRef's comment for the guard's why).
+      const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid, arrivalDate);
     } catch (err) {
@@ -2341,7 +2360,10 @@ If the conversation only covers a single day or a few stops with no explicit day
       .sort(() => Math.random() - 0.5)
       .slice(0, 3 + Math.floor(Math.random() * 3));
     const days = 2 + Math.floor(Math.random() * 3);
-    const interestPool = ["history", "local food", "quiet walks", "craft and workshops", "coastal views", "architecture", "markets"];
+    // "festivals and live events" added (Oliver: "did they include events..") —
+    // without an event-leaning interest in the pool, no test traveler ever asked
+    // for events, so the pipeline's event handling never got exercised by tests.
+    const interestPool = ["history", "local food", "quiet walks", "craft and workshops", "coastal views", "architecture", "markets", "nightlife", "festivals and live events"];
     const interests = interestPool.slice().sort(() => Math.random() - 0.5).slice(0, 2);
     const secondTownText = secondTown ? `, with a day trip out to ${secondTown.name}` : "";
     // Supabase-only content (Aug 5): the pools above are now whatever's actually
@@ -2393,6 +2415,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     // isolated pipeline test, it was never meant to accumulate a real
     // conversation history, and now it can't get confused by leftover state
     // from an earlier click or an earlier real chat.
+    randomTestProfileRef.current = { brief, towns: [pickTown?.name, secondTown?.name].filter(Boolean), days, interests, extras: extras.map(e => e.name) };
     setAiMessages(prev => [prev[0], { role: "user", text: brief }]);
     setPendingRandomGuideMode(mode);
     setGuideModal("preview");
@@ -2446,6 +2469,16 @@ If the conversation only covers a single day or a few stops with no explicit day
   // know whether to go straight to build (random-guide path, mode already
   // randomly chosen) or to the real map/plain choice screen (real chat path).
   const [pendingRandomGuideMode, setPendingRandomGuideMode] = useState(null);
+  // TEST-PIPELINE TRANSPARENCY (Oliver: "Can you in the test pipeline also
+  // show me what the plan was? I want to see what recommendations is given to
+  // the different types of people"): the Random-guide button stores its
+  // fabricated traveler profile here (towns, days, interests, extras, plus the
+  // exact brief text). generateGuide attaches it — together with the planner's
+  // raw day/stop skeleton — onto the finished guide as _testProfile/_testPlan,
+  // but ONLY when the conversation actually contains this exact brief (so a
+  // real traveler's build right after a test click can never get test data
+  // stuck to it). GuidePage renders it as a "Pipeline test" card.
+  const randomTestProfileRef = useRef(null);
   const [aiInput, setAiInput] = useState("");
   const [intakeArrival, setIntakeArrival] = useState("");
   const departurePickerRef = useRef(null);
@@ -2608,7 +2641,13 @@ If the conversation only covers a single day or a few stops with no explicit day
       // gxa-topbar's fade (see its CSS below) so the real logo appears
       // essentially the same instant the flying compass does, not half a
       // second later.
-      flyEl.style.transition = "transform 0.9s cubic-bezier(0.34,1.56,0.64,1)";
+      // EASING (Oliver, after seeing the overshoot live: "can the logo avoid
+      // the weird bounce? Just settle in the left corner please"): the spring
+      // curve added earlier (cubic-bezier(0.34,1.56,0.64,1), overshoot-and-
+      // return) read as a bounce once the scale fix made the full flight
+      // actually visible. Now a plain smooth decelerate-to-rest — it glides
+      // in and stops, no overshoot, no bounce.
+      flyEl.style.transition = "transform 0.9s cubic-bezier(0.22,0.61,0.36,1)";
       flyEl.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
       const finish = () => setIntroFlightDone(true);
       flyEl.addEventListener("transitionend", finish, { once: true });
@@ -3455,6 +3494,21 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         {studioLoading ? "Researching…" : "Draft it"}
                       </button>
                     </div>
+                    {/* Draft progress (Oliver: "when I click 'draft it' I wanna see the
+                        progress of research like the loading screen") — real stage
+                        labels from generateArea's actual pipeline steps, not a fake
+                        spinner. */}
+                    {studioLoading && studioStage && (
+                      <div style={{ marginBottom: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 11.5, marginBottom: 7 }}>
+                          <span style={{ color: C.light, fontWeight: 600 }}>{studioStage.label}</span>
+                          <span style={{ color: C.muted }}>{studioStage.percent}%</span>
+                        </div>
+                        <div style={{ height: 3, background: C.border, borderRadius: 2, overflow: "hidden" }}>
+                          <div style={{ width: `${studioStage.percent}%`, height: "100%", background: C.gold, transition: "width 0.6s ease" }} />
+                        </div>
+                      </div>
+                    )}
 
                     {/* ── DISCOVER — Tavily + OpenAI find new candidates for whichever type is
                         selected above; a dedicated Events shortcut sits next to it since Oliver

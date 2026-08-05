@@ -301,6 +301,39 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           </div>
         )}
 
+        {/* PIPELINE TEST CARD (Oliver: "Can you in the test pipeline also show
+            me what the plan was? I want to see what recommendations is given
+            to the different types of people... did they include events") —
+            only ever present on guides built from Studio's Random-guide test
+            button (guide._testProfile is attached exclusively on that path,
+            see App.jsx's randomTestProfileRef). Shows the fabricated traveler,
+            the planner's raw day/stop skeleton BEFORE the writer touched it,
+            and whether any real events made it into the final guide. */}
+        {guide._testProfile && (() => {
+          const p = guide._testProfile;
+          let plan = null;
+          try { plan = guide._testPlan ? JSON.parse(guide._testPlan) : null; } catch { /* skeleton unparseable — show the rest without it */ }
+          const eventStops = (guide.days || []).flatMap(d => d.stops || []).map(s => ({ s, real: lookupRealPlace(s.name) })).filter(x => x.real?._src === "event").map(x => x.s.name);
+          return (
+            <div style={{ background: `${C.gold}0D`, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "14px 16px", marginBottom: 24, maxWidth: 640, fontSize: 12.5, lineHeight: 1.7 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>◈ Pipeline test — what went in</div>
+              <div style={{ color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Test traveler:</span> {p.days} day{p.days !== 1 ? "s" : ""}, based around {p.towns.join(" + ")}, into {p.interests.join(" and ")}.</div>
+              {p.extras?.length > 0 && (
+                <div style={{ color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Asked to fit in:</span> {p.extras.join(", ")}</div>
+              )}
+              {plan?.days?.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ color: C.text, fontWeight: 700 }}>Planner's structure (before the writer):</div>
+                  {plan.days.map((d, i) => (
+                    <div key={i} style={{ color: C.light }}>Day {d.day || i + 1}{d.title ? ` · ${d.title}` : ""}: {(d.stops || []).map(s => (typeof s === "string" ? s : s?.name)).filter(Boolean).join(" → ")}</div>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 8, color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Events included:</span> {eventStops.length ? eventStops.join(", ") : "none matched this plan"}</div>
+            </div>
+          );
+        })()}
+
         {days.map((day, dayIdx) => {
           // Real coordinates for this guide (from geocodeStopsForGuide, baked onto
           // the guide object as _geo when the build handed off to this page — see

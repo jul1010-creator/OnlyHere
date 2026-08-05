@@ -125,7 +125,21 @@ export const askOpenAI = async (prompt, maxTokens = 800) => {
 };
 
 export const parseClaudeJSON = async (rawText, maxTokens = 8192) => {
-  const cleaned = rawText.replace(/^```json\s*|\s*```$/g, "").trim();
+  let cleaned = rawText.replace(/^```json\s*|\s*```$/g, "").trim();
+  // PREAMBLE GUARD (from Oliver's real console error: `Unexpected token 'G',
+  // "Got it — 4"... is not valid JSON` followed by a failed build): despite
+  // every "respond with ONLY the JSON" instruction, the model occasionally
+  // writes a short conversational lead-in ("Got it — 4 days coming up: ...")
+  // before the object. That's not a JSON syntax error, so the repair pass
+  // (which is prompted to fix ONE syntax problem) was the wrong tool and the
+  // whole guide build died on a reply whose JSON was sitting intact right
+  // after the chit-chat. Slice from the first "{" to the last "}" before
+  // parsing — and before ever spending a repair call.
+  if (cleaned && cleaned[0] !== "{" && cleaned[0] !== "[") {
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+    if (first !== -1 && last > first) cleaned = cleaned.slice(first, last + 1);
+  }
   try {
     return JSON.parse(cleaned || "{}");
   } catch (parseErr) {
