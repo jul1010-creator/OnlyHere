@@ -68,6 +68,7 @@ const groupKey = (p) => (p._src === "craft" ? "free" : p._src);
 const MAX_PER_SECTION = 6;
 
 export const GuidePreviewScreen = ({
+  previewWhy,
   aiMessages,
   towns,
   freeEntrance,
@@ -134,6 +135,14 @@ export const GuidePreviewScreen = ({
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, textAlign: "center" }}>
           {totalShown > 0 ? "A quick look at the real places on this route before Gemlyx builds your full guide." : "Gemlyx will build your full guide next — real places, checked and mapped out."}
         </div>
+        {/* Personal "why this fits you" line (Oliver's ask) — written by
+            Claude from the traveler's own conversation, see App.jsx's
+            previewWhy effect. Renders nothing while loading or on failure. */}
+        {previewWhy && (
+          <div style={{ fontSize: 13, color: C.gold, lineHeight: 1.6, marginBottom: 14, textAlign: "center", fontFamily: "'Fraunces', serif", fontStyle: "italic", maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
+            {previewWhy}
+          </div>
+        )}
         {/* The "✦ Want to ask something or change it first? Back to chat"
             text button that used to sit here is gone per Oliver ("I don't
             like that... Make the Gemlyx AI instantly able for help. In the

@@ -36,24 +36,46 @@ export const TypewriterText = ({ text, active, onDone }) => {
   const wordCount = useMemo(() => tokens.filter(t => /\S/.test(t)).length, [tokens]);
   const [shownWords, setShownWords] = useState(active ? 0 : wordCount);
   const doneFiredRef = useRef(false);
+  const prevTextRef = useRef(text || "");
+  const shownWordsRef = useRef(active ? 0 : wordCount);
 
   useEffect(() => {
     if (!active) {
       // Not the message actively streaming (an old message re-rendering, or
       // streaming already finished) — show it in full, instantly, no animation.
+      prevTextRef.current = text || "";
+      shownWordsRef.current = wordCount;
       setShownWords(wordCount);
       return;
     }
+    // STUTTER FIX (Oliver: "it starts and stops and starts and stops, and then
+    // when the box is big, it starts writing fully"): the main chat's
+    // web-search flow UPDATES the same message's text repeatedly as results
+    // stream in — and this effect used to reset the reveal to word zero on
+    // EVERY text change, so the animation kept restarting from the top: start,
+    // stop, start, stop, until the text finally stopped changing and one full
+    // run played on the finished ("big") box. When the new text simply EXTENDS
+    // the old one (the overwhelmingly common streaming case), continue the
+    // reveal from where it already was instead of restarting; only a genuinely
+    // different text (a different message reusing this component) resets.
+    const prev = prevTextRef.current;
+    const grew = prev && (text || "").startsWith(prev);
+    prevTextRef.current = text || "";
     doneFiredRef.current = false;
-    setShownWords(0);
+    const startAt = grew ? Math.min(shownWordsRef.current, wordCount) : 0;
+    shownWordsRef.current = startAt;
+    setShownWords(startAt);
     if (wordCount === 0) { onDone?.(); return; }
-    const totalMs = Math.min(MAX_TOTAL_MS, Math.max(MIN_TOTAL_MS, wordCount * MS_PER_WORD));
+    if (startAt >= wordCount) { if (!doneFiredRef.current) { doneFiredRef.current = true; onDone?.(); } return; }
+    const remaining = wordCount - startAt;
+    const totalMs = Math.min(MAX_TOTAL_MS, Math.max(MIN_TOTAL_MS, remaining * MS_PER_WORD));
     const ticks = Math.max(1, Math.round(totalMs / TICK_MS));
-    const perTick = wordCount / ticks;
-    let progress = 0;
+    const perTick = remaining / ticks;
+    let progress = startAt;
     const id = setInterval(() => {
       progress = Math.min(wordCount, progress + perTick);
       const n = Math.ceil(progress);
+      shownWordsRef.current = n;
       setShownWords(n);
       if (n >= wordCount) {
         clearInterval(id);

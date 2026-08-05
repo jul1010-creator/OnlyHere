@@ -1101,7 +1101,40 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
           `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${RESEARCH_SOURCE_RULES}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
         );
         if (!inventedCheck.error && inventedCheck.text && !/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
-          setStudioInventedWarning(inventedCheck.text);
+          // AUTO-CORRECTION (Oliver: "The last fact-check was actually pointed
+          // out as 'possibly made-up'. So why wasn't it re-researched and
+          // changed? Then it would have been fully accurate!") — he's right:
+          // this used to only WARN and leave the flagged claims sitting in the
+          // draft. Now the flagged claims get re-researched fresh (Perplexity,
+          // real web search targeted at exactly those claims) and Claude
+          // corrects ONLY those parts — same rewrite discipline as the manual
+          // "fix with Claude" button — with anything the re-research still
+          // can't confirm removed/emptied rather than guessed. The corrected
+          // version replaces the publishable draft (studioDraft/studioDraftText,
+          // which is what Publish actually reads); the warning stays visible so
+          // the correction is never silent, now prefixed with what happened.
+          setStudioStage({ label: "Re-researching flagged claims", percent: 97 });
+          try {
+            const reResearch = await askPerplexity(
+              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${RESEARCH_SOURCE_RULES}\n\nFlagged claims:\n${inventedCheck.text}`
+            );
+            if (!reResearch.error && reResearch.text) {
+              const fixResult = await askClaude(
+                `Here is a draft (JSON), a list of claims flagged as possibly invented, and FRESH targeted research with the real facts. Correct ONLY the flagged claims: where the fresh research gives the real fact, replace the wrong value with it; where the research could NOT verify a flagged claim, remove that specific claim from the prose or set that field to an honest empty string — never keep an unverified claim and never invent a replacement. Leave every other field and sentence completely untouched — same structure, same keys, same wording for everything not flagged. Respond with ONLY the complete corrected JSON, valid JSON, nothing else.\n\nFlagged claims:\n${inventedCheck.text}\n\nFresh research (the real facts):\n${reResearch.text}\n\nCurrent draft:\n${JSON.stringify(t)}`,
+                8192
+              );
+              if (!fixResult.error) {
+                const corrected = await parseClaudeJSON(fixResult.text, 8192);
+                if (corrected && corrected.name) {
+                  setStudioDraft(corrected);
+                  setStudioDraftText(JSON.stringify(corrected, null, 2));
+                  setStudioInventedWarning(`AUTO-CORRECTED — these claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${inventedCheck.text}`);
+                } else setStudioInventedWarning(inventedCheck.text);
+              } else setStudioInventedWarning(inventedCheck.text);
+            } else setStudioInventedWarning(inventedCheck.text);
+          } catch {
+            setStudioInventedWarning(inventedCheck.text); // correction failed — fall back to the plain warning, never lose it
+          }
         }
       } catch { /* final check failed — draft already shown, this just skips silently rather than blocking */ }
     } catch (err) {
@@ -2775,6 +2808,26 @@ If the conversation only covers a single day or a few stops with no explicit day
   useEffect(() => {
     if (previewChatOpen && previewChatScrollRef.current) previewChatScrollRef.current.scrollTop = previewChatScrollRef.current.scrollHeight;
   }, [aiMessages, previewChatOpen, aiLoading]);
+  // PERSONAL "WHY" LINE (Oliver: "the preview should probably describe why
+  // this road is good for this specific person"): when the preview opens, one
+  // small, cheap Claude call turns the traveler's own stated interests/pace/
+  // companions into 1-2 warm second-person sentences shown under the preview
+  // title. Non-fatal — if the call fails, the preview just shows without it.
+  const [previewWhy, setPreviewWhy] = useState(null);
+  const previewWhyForRef = useRef(null);
+  useEffect(() => {
+    if (guideModal !== "preview") { setPreviewWhy(null); previewWhyForRef.current = null; return; }
+    const convo = aiMessages.filter(m => !m.hidden).map(m => `${m.role}: ${m.text}`).join("\n").slice(-3000);
+    if (!convo || previewWhyForRef.current === convo) return;
+    previewWhyForRef.current = convo;
+    (async () => {
+      const r = await askClaude(
+        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation — never generic praise, never invented places or facts. Never use em dashes or en dashes. Respond with only the sentence(s), nothing else.\n\n${convo}`,
+        200
+      );
+      if (!r.error && r.text) setPreviewWhy(r.text.trim());
+    })();
+  }, [guideModal]);
   const [showMenu, setShowMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -2948,7 +3001,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const monthName = now.toLocaleString("en", { month: "long" });
       const season = getSeason();
 
-      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
+      const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a genuinely happy, upbeat guy who loves helping people discover Denmark — let real enthusiasm for a good find show through. A few fitting emojis are welcome where they add warmth (one or two per reply, like a 🚲 next to a bike tip or a 🌊 for a coastal stop) — never a wall of them, never one in every sentence. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
 Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expresbus for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself. LEAN AGAINST A RENTAL CAR SPECIFICALLY INSIDE COPENHAGEN: parking is scarce and genuinely expensive, congestion pricing and pedestrianized streets make driving there more hassle than it's worth, and the Metro/S-train/bus network plus biking already cover the city well — if someone's plan is mostly or entirely within Copenhagen, say so plainly and steer them toward public transport/biking instead, rather than defaulting to a rental. A car becomes genuinely useful the moment the trip actually leaves the capital for other regions; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
@@ -3336,7 +3389,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                 <div style={{ display: "flex", gap: 8 }}>
                   <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()}
-                    placeholder="Plan my 3 days in Copenhagen, or ask what's on this weekend…"
+                    placeholder="Tell me about your trip, and I'll find the Denmark most travelers miss…"
                     style={{ flex: 1, border: `1.5px solid ${C.accent}`, borderRadius: 100, padding: "11px 16px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                   <button onClick={sendAI} disabled={aiLoading} style={{ background: C.accent, border: "none", borderRadius: 100, width: 44, height: 44, cursor: "pointer", fontSize: 16, flexShrink: 0, color: "#fff" }}>↗</button>
                 </div>
@@ -4726,11 +4779,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
                   </div>
 
+                  {/* MORE EXPLICIT (Oliver: "The 'fine-tune the plan' should be
+                      a little more explicit. My dad didn't know you could click
+                      on it"): was a borderless text row that read as a section
+                      heading — now a real, obviously-tappable bordered button
+                      with a verb label and a chevron. */}
                   <button onClick={() => setIntakeMoreOpen(o => !o)}
-                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", borderTop: `1px solid ${C.border}`, padding: "13px 2px 2px", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: C.light }}>Fine-tune the plan</span>
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: intakeMoreOpen ? `${C.gold}14` : C.bg, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "12px 14px", marginTop: 4, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Tap to fine-tune the plan</span>
                     <span style={{ fontSize: 11, color: C.muted }}>budget · interests · who's going</span>
-                    <span style={{ marginLeft: "auto", fontSize: 11, color: C.muted, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
+                    <span style={{ marginLeft: "auto", fontSize: 12, color: C.gold, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
                   </button>
 
                   {intakeMoreOpen && (<div style={{ paddingTop: 14 }}>
@@ -5588,6 +5646,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           the full story. */}
       {guideModal === "preview" && (
         <GuidePreviewScreen
+          previewWhy={previewWhy}
           aiMessages={aiMessages}
           towns={towns}
           freeEntrance={freeEntrance}
@@ -5754,6 +5813,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <div style={{ marginBottom: 10 }}><GemlyxLoader size={40} tone="gold" ring={false} /></div>
                     <div style={{ fontSize: 18, color: C.text, fontWeight: 600, fontFamily: "'Fraunces', serif", fontStyle: "italic" }}>
                       {guideBuildStage?.label || "Drafting your guide"}
+                    </div>
+                    {/* Progress bar (Oliver: "I would also like a bar on the
+                        loading screen") — driven by the same real pipeline
+                        percents the stage label already uses. */}
+                    <div style={{ maxWidth: 260, margin: "12px auto 0", height: 3, background: C.border, borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ width: `${guideBuildStage?.percent || 5}%`, height: "100%", background: C.gold, transition: "width 0.8s ease" }} />
                     </div>
                     {/* Per Oliver: the old copy here ("Real research, writing, and
                         two full fact-checking passes...") read as "horrible writing" —
