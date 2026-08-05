@@ -455,6 +455,20 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             const c = resolveStopCoords(s.name, geo);
             return c ? { name: s.name, ...c } : null;
           }).filter(Boolean);
+          // Per-leg travel modes for the route map, resolved EXACTLY the way
+          // legChip resolves them above: same resolveLegMode call, same
+          // same-town-walk override. The map fetches real route geometry per
+          // leg, and a leg's shape depends entirely on its mode, since a ferry
+          // crossing and a walk between the same two points are different
+          // journeys. Sharing the resolution instead of re-deriving it is what
+          // stops the drawn line and the stated duration from drifting apart.
+          const routeLegs = routePoints.slice(0, -1).map((p, i) => {
+            const destName = routePoints[i + 1].name;
+            const how = day.glance?.legs?.[i]?.how;
+            let mode = resolveLegMode(how, guide._mode, p.name, destName, guide._onlyWalking, geo);
+            if (isSameTownWalk(mode, stopTownOf(p.name), stopTownOf(destName), how)) mode = "walking";
+            return { mode };
+          });
           return (
           <div key={day.day || dayIdx} style={{ marginBottom: 44 }}>
             {/* Redesign pass: day headers went from a cramped gold uppercase micro-line
@@ -482,7 +496,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             )}
             {!lightMode && routePoints.length > 1 && (
               <div style={{ height: 180, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 18, maxWidth: 620 }}>
-                <GuideRouteMap points={routePoints} />
+                <GuideRouteMap points={routePoints} legs={routeLegs} />
               </div>
             )}
             {/* TIMELINE LAYOUT (Oliver: "having the transport under each is

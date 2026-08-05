@@ -1,3 +1,90 @@
+# PASS 41: the guide map draws real routes now, and "Nearest Station" says what the place actually is
+
+Oliver lifted Rule Zero for this: "I give you permission to get the maps bug fixed. I was talking about the structure. Sonnet kept screwing it up."
+
+## A correction first
+
+Last pass I said the guide map was drawing a 324 km OpenRouteService line around the Great Belt next to text saying 3h16. **That was wrong.** The map never called OpenRouteService. It drew one dashed straight line through the stops. `api/route.js` exists but nothing in `src/` calls it, so it is dead code like `api/gemini.js`.
+
+The Google versus OpenRouteService divergence I measured is real, and it is exactly why the fix below pulls geometry from Google, but it was not causing what Oliver was seeing. I built a conclusion on a measurement without checking whether the thing measured was wired up at all. Full correction in `MAPS_DIAGNOSIS.md`.
+
+## What was actually wrong, and the fix
+
+His words: "It shouldn't be difficult to make a route…" The map was not making a route, it was joining dots.
+
+Now each leg is fetched from `/api/directions` and drawn as its real shape. `/api/directions` returns Google's own route polyline next to Google's own duration, which is the point: whatever draws the line and whatever states the time have to describe the same journey. Pulling geometry from OpenRouteService instead would have contradicted the duration on exactly the routes that matter here, since the two agree within a percent on land and come apart completely over water (Copenhagen to Samsø is 145 km one way and 324 km the other).
+
+Each leg is drawn separately with its own real mode, resolved by the same `resolveLegMode` call and same-town-walk override the leg chip already uses, because a ferry crossing and a walk between two points are different journeys. Where no real route comes back, the leg keeps its dashed straight line, which reads as "roughly this way" instead of pretending to be a road. Legs whose stops collapsed to one point are skipped rather than fetched, since that is the town-centre collapse behind the old "1 min walk that was really 30" bug. Bounds now fit what is actually drawn, because a real route can swing outside the box its endpoints make and fitting to the markers would crop the part that explains the journey.
+
+## Nearest Station, relabelled
+
+His words: "if the nearest station is just a terminal and bus stop, then the 'station' just gotta be changed to terminal and bus stop."
+
+The row was hardcoded to 🚆 Nearest Station everywhere, so "Sælvig Ferry Terminal" sat under a train icon. `arrivalRow()` now labels it for what it is: ⛴ Terminal, 🚌 Bus Stop, ✈️ Airport, 🚇 Metro, or 🚆 Station. It reads the value and never rewrites it. Ferry beats bus beats train, so "Bus to Sælvig Ferry Terminal" is a terminal. Danish and English both, since entries use both (havn, færge, rutebilstation, lufthavn).
+
+## Verification
+
+The polyline decoder matches Google's own published test vector exactly, and returns null rather than a wild line for empty, null, single-point or off-Earth input. The arrival labels were executed against 16 real and edge-case values. The drawing logic was rendered in a real browser with real road geometry, one solid leg and one dashed fallback, and screenshotted.
+
+**Not verified: the live `/api/directions` response carrying the new `polyline` field**, since that endpoint only exists on the deployed site and this is not pushed yet. The decoder is proven and the client falls back to the dashed line when the polyline is missing or unusable, so the failure mode is the old behaviour, not a broken map. Worth one look at a guide day after pushing.
+
+**Still Oliver's to fix in Studio:** the Samsø entry tells a Copenhagen reader to drive to Hou (it is Kalundborg to Ballen from Zealand), and its `nearestStation` would be more useful as "Kalundborg (then ferry)".
+
+# PASS 40: the Studio fact generator, a cancel button on the draft queue, and the Maps API tested rather than guessed at
+
+## 1. Fact generator (your ask: "we need a lot", with an upload image next to it)
+
+A **🎲 Facts** panel in Content Studio. Pick a subject source, press draft, edit what comes back, attach a photo right there, save. Saved facts go to `gemlyx_facts` and reach the guide loading card without a page reload.
+
+**Two subject sources, both real.** "About my published places" picks one of your own published towns, festivals, food spots or attractions and researches a fact about it, which turns the loading screen into a trailer for your own content: someone who reads a fact about Ribe can then go and read the Ribe entry. "Anywhere in Denmark" widens to the country for breadth you have not published yet, and is told to skip every subject already used, because a fact generator with no memory of itself hands you the Little Mermaid five times.
+
+**It cannot save something it could not verify.** Research runs through Perplexity, the writing through the same STUDIO_VOICE rules and dash ban as every other draft, and the model has to return `confident: true`. Anything else comes back as a failure with the reason, and nothing is saved. Draft 1, 5 or 10 at a time, sequentially on purpose, with a Stop after this one button. Each draft shows its source URL, or says plainly that it has none.
+
+**No Rule Zero file was touched to do this.** `utils/liveFacts.js` fills the existing `denmarkFacts` array in place, so the loading card keeps reading the exact same variable it always has and never learns anything changed. The guard is module-level, not a useRef, which is the rule `liveContent.js` earned the hard way when a per-mount guard let 55 rows get pushed in again on every remount and festivals showed up three times.
+
+**Run this SQL first**, or the panel will tell you it cannot read the table:
+
+```sql
+create table if not exists gemlyx_facts (
+  id bigserial primary key,
+  fact text not null,
+  subject text not null,
+  category text default 'history',
+  photo text,
+  photo_pos text,
+  source_url text,
+  published boolean default true,
+  created_at timestamptz default now()
+);
+alter table gemlyx_facts enable row level security;
+create policy "read gemlyx_facts" on gemlyx_facts for select to anon using (published);
+create policy "auth all gemlyx_facts" on gemlyx_facts for all to authenticated using (true) with check (true);
+```
+
+The photo upload also needs the `gemlyx-media` bucket SQL, which is still outstanding from an earlier pass. If it is missing, the upload says so by name instead of just failing.
+
+## 2. Cancel a queued draft
+
+Every waiting item in the draft queue now has a ✕, plus a Cancel all waiting button when there is more than one. Stated plainly under the list, because the distinction is real: anything you can see in the waiting list is genuinely still waiting and safe to remove. The one being drafted right now has already left the queue and will finish. I proved the cancel cannot drop or double-draft an item by executing the runner loop with cancels fired mid-flight.
+
+## 3. Maps API: tested live, and it is not broken
+
+Full writeup in `MAPS_DIAGNOSIS.md`. The short version, from real calls against your deployed site:
+
+**The API works.** Every endpoint returned real data. `GOOGLE_MAPS_KEY` is set. No auth errors, no quota errors, no 500s.
+
+**Gemini's Trap 1 is wrong.** It claimed routing to "Sælvig Ferry Terminal" would break the API. I ran that exact call: 7 hours 48 mins, 384 km, no error. Google handles the ferry without being told. Gemini is giving you confident, specific claims about your system that it has not tested. Check them.
+
+**Gemini's Trap 2 is right, but it is a writing bug.** From Copenhagen you would not drive to Hou. Google already knows: Copenhagen to Samsø by car came back 145 km / 3h16, which IS the Kalundborg to Ballen route. The API routed it correctly and the draft text went the wrong way on its own. Fix it in Studio, along with `nearestStation` saying "Sælvig Ferry Terminal" under a 🚆 label.
+
+**The real problem is one neither of you was looking at.** You have two routing systems. Google produces the durations, OpenRouteService draws the map line. On land they agree within a percent. On ferry routes they come apart badly: Copenhagen to Samsø is 145 km by Google and 324 km by OpenRouteService, a 92 minute gap. So a Samsø guide draws a line snaking around the Great Belt next to text saying 3h16. Nothing errors, it just quietly stops making sense, and it will do that on every island route you publish. That is guide and map code, so it is **Rule Zero and I have not touched it.** Evidence and a suggested shape are in the diagnosis file.
+
+## Verification
+
+Real-import bundle plus a minify scope check on all 18 new identifiers. The facts loader was EXECUTED in Node against simulated Supabase responses: repeat calls share one fetch, five simulated remounts add nothing, a refresh adds only genuinely new rows, whitespace-differing duplicates and empty facts are skipped, and both a missing table and a thrown network error leave the seven built-in facts working. The queue cancel was executed with cancels fired mid-run. The Maps findings are live HTTP calls, listed in full in the diagnosis file.
+
+**Needs `git push` and the SQL above.**
+
 # PASS 39: the invented road trips are gone, town pages now show what is actually on in that town, and the photos finally carry their credits
 
 **Checked before changing anything:** the towns, events, food, nightlife and free entrance arrays were already empty and Supabase only, from PASS 29. Nothing assistant written was left in any of them. Two things had been missed.

@@ -243,3 +243,35 @@ export const tiltMove = (e) => {
   el.style.transform = `perspective(950px) rotateX(${((0.5 - py) * 5).toFixed(2)}deg) rotateY(${((px - 0.5) * 7).toFixed(2)}deg) translateY(-2px)`;
 };
 export const tiltLeave = (e) => { e.currentTarget.style.transform = ""; };
+
+// ── What kind of arrival point is this, actually? ──────────────────
+// Oliver, 5 Aug 2026: "if the nearest station is just a terminal and bus stop,
+// then the 'station' just gotta be changed to terminal and bus stop."
+//
+// The At a Glance row was hardcoded to 🚆 "Nearest Station" for every content
+// type, so a value like "Sælvig Ferry Terminal" was presented under a train
+// icon and the word Station. The value was true and the label was not, which
+// is the kind of small wrongness that makes someone stand on a quay looking
+// for a platform.
+//
+// The value itself is never rewritten, only labelled for what it is. Order
+// matters: ferry beats bus beats train, because a value like "Bus to Sælvig
+// Ferry Terminal" is fundamentally a ferry arrival. Danish and English terms
+// both, since published entries genuinely use both.
+export const arrivalRow = (value) => {
+  const v = String(value || "").toLowerCase();
+  if (!v.trim()) return { icon: "🚆", label: "Nearest Station", value };
+  if (/ferry|færge|faerge|terminal|havn(en)?\b|harbour|harbor|quay|kaj\b/.test(v)) {
+    return { icon: "⛴", label: "Nearest Terminal", value };
+  }
+  if (/bus stop|busstop|busstoppested|stoppested|rutebil|coach stop/.test(v)) {
+    return { icon: "🚌", label: "Nearest Bus Stop", value };
+  }
+  // "Bus" without "stop" usually means a bus route serves it, still not a train.
+  if (/\bbus\b|\bcoach\b/.test(v) && !/station|banegård|banegaard/.test(v)) {
+    return { icon: "🚌", label: "Nearest Bus Stop", value };
+  }
+  if (/airport|lufthavn/.test(v)) return { icon: "✈️", label: "Nearest Airport", value };
+  if (/metro/.test(v)) return { icon: "🚇", label: "Nearest Metro", value };
+  return { icon: "🚆", label: "Nearest Station", value };
+};

@@ -8,6 +8,48 @@
 // it already has real, resolved coordinates for a stop.
 const isCoordPair = (s) => /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(s.trim());
 
+// Google returns the route shape as an "encoded polyline": a compact string
+// where each point is stored as a delta from the previous one, in units of
+// 1e-5 degrees, chunked into 5-bit groups. This is Google's own documented
+// format and the decoder is the standard algorithm for it.
+//
+// Returns [[lat, lon], ...] ready for Leaflet, or null when there is nothing
+// to decode. NULL MATTERS: the map treats it as "no real geometry available"
+// and falls back to its honest dashed straight line, rather than drawing
+// something half-decoded and wrong.
+const decodePolyline = (encoded) => {
+  if (typeof encoded !== "string" || encoded.length === 0) return null;
+  const points = [];
+  let index = 0, lat = 0, lon = 0;
+  try {
+    while (index < encoded.length) {
+      let result = 0, shift = 0, b;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20 && index < encoded.length);
+      lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+      result = 0; shift = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20 && index < encoded.length);
+      lon += (result & 1) ? ~(result >> 1) : (result >> 1);
+      points.push([lat / 1e5, lon / 1e5]);
+    }
+  } catch { return null; }
+  if (points.length < 2) return null;
+  // Sanity gate. A malformed string still "decodes" into numbers, and a line
+  // drawn through impossible coordinates would fling the map across the globe.
+  // Anything not on Earth means the decode is wrong, so return null and let the
+  // map fall back to its honest straight line.
+  const sane = points.every(([la, lo]) =>
+    Number.isFinite(la) && Number.isFinite(lo) && la >= -90 && la <= 90 && lo >= -180 && lo <= 180);
+  return sane ? points : null;
+};
+
 export default async function handler(req, res) {
   const { origin, destination, mode, departure_time } = req.query;
   if (!origin || !destination) {
@@ -51,6 +93,21 @@ export default async function handler(req, res) {
       durationText: leg.duration.text,   // e.g. "24 mins" — Google's own real number
       durationMinutes: Math.round(leg.duration.value / 60),
       distanceText: leg.distance.text,
+      distanceMeters: leg.distance.value,
+      // THE ACTUAL SHAPE OF THE ROUTE, added Aug 5 2026 so the guide map can
+      // draw the real thing instead of a straight line between two dots
+      // (Oliver: "It shouldn't be difficult to make a route").
+      //
+      // Why it comes from HERE rather than from a second routing service:
+      // whatever draws the line and whatever states the duration have to be
+      // the same journey, or they quietly contradict each other. Measured on
+      // the live site before writing this: Google and OpenRouteService agree
+      // within 1-2% on land routes but come apart completely over water
+      // (Copenhagen to Samsø is 145 km by Google, which takes the ferry, and
+      // 324 km by OpenRouteService, which drives around). Returning Google's
+      // own polyline next to Google's own duration makes that whole class of
+      // disagreement impossible by construction.
+      polyline: decodePolyline(data.routes[0].overview_polyline?.points),
     });
   } catch (err) {
     return res.status(500).json({ error: String(err) });

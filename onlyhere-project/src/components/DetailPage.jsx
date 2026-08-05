@@ -1,5 +1,5 @@
 import { C } from "../utils/theme";
-import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive } from "../utils/helpers";
+import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow } from "../utils/helpers";
 import { AtAGlanceCard } from "./AtAGlanceCard";
 import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
@@ -174,7 +174,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         )}
         {kind === "event" && (
           <AtAGlanceCard rows={[
-            { icon: "🚆", label: "Nearest Station", value: item.nearestStation },
+            arrivalRow(item.nearestStation),
             { icon: "🎟️", label: "Tickets", value: item.ticketInfo },
             { icon: "⛺", label: "Camping", value: item.camping },
             { icon: "🏡", label: "Accommodation", value: item.accommodationTip },
@@ -183,7 +183,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         {kind === "town" && (
           <>
             <AtAGlanceCard rows={[
-              { icon: "🚆", label: "Nearest Station", value: item.nearestStation },
+              arrivalRow(item.nearestStation),
               { icon: "🛏️", label: "Recommended Stay", value: item.recommendedStayGlance },
               { icon: "☀️", label: "Best Time", value: item.bestTimeGlance },
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
@@ -271,7 +271,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             { icon: "⏱️", label: "Time Needed", value: item.timeNeeded },
             { icon: "💰", label: "Extra Costs", value: item.extraCosts },
             { icon: "♿", label: "Accessibility", value: item.accessibility },
-            { icon: "🚆", label: "Nearest Station", value: item.nearestStation },
+            arrivalRow(item.nearestStation),
           ]} />
         )}
         {kind === "food" && (
