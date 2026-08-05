@@ -66,3 +66,69 @@ The traveler sees a preview screen (real matched places, grouped by category, wi
 He tests on a real phone, sends screenshots and raw console output, and follows up fast. He is a solo founder on a zero-kroner budget building this as his real product, and **accuracy is the identity of the app** — he has chosen it over speed and cost every single time. Never claim anywhere that places were personally visited; the framing is researched and fact-checked, and omitted when unconfirmable. The total dash ban is real and enforced in code, not just prompts. When something is uncertain, the correct move is to say so plainly rather than ship a confident guess — he consistently responds better to an honest "this needs your phone to confirm" than to a claim that turns out wrong.
 
 He is not looking for reassurance. He is looking for root causes. Several times the honest answer has been "this was my mistake" or "git was right and I was wrong", and saying it plainly has been worth more than any fix.
+
+---
+
+## PASS 38 addendum (5 Aug 2026, Opus, front of house only)
+
+Oliver reported the home page with screenshots: everything listed two or three
+times, broken and empty picture areas, and the Today in Denmark block too
+narrow. **Rule Zero was respected: nothing in the guide pipeline was touched.**
+The files changed are `src/App.jsx` (the home page block, three card grids, and
+the Studio content loader), `src/utils/liveContent.js`, and a new
+`src/components/PhotoPlate.jsx`. `utils/liveContent.js` is imported by
+GuidePage, so it was changed in a backwards compatible way: the exported
+`ensureLiveContentLoaded(onBookingRow)` signature is unchanged and GuidePage's
+existing bare call still behaves exactly as before.
+
+**The one lesson worth carrying forward from this pass:** never guard a
+mutation of a module level array with component scoped state. App.jsx guarded
+pushes into module level singletons with `useRef(new Set())`, so every remount
+of GemlyxApp (which happens on every trip to `/guide/new` and back) re-merged
+all 55 published rows on top of themselves. If the data outlives the component,
+so must the guard. Full detail at the top of `CHANGES_THIS_PASS.md`.
+
+Second lesson, the same shape as the ones already listed above: **removing a
+function is not verified by a bundle check.** The Studio publish handler still
+called the deleted `loadLiveContent()`, which esbuild accepts happily, because
+an undefined identifier is a runtime error and not a build error. It was found
+by grepping the name across the tree after the delete. Do that every time.
+
+**Still pending on Oliver from this pass:** delete the duplicate "Dragør" town
+row in Studio, and see `PHOTO_AUDIT.md` for the 54 published rows whose photo
+paths currently 404, including three quick wins that need no new images at all.
+
+---
+
+## PASS 39 addendum (5 Aug 2026, Opus)
+
+Four asks from Oliver: remove assistant-written places, show a town's upcoming
+events, credit Wikimedia photos, and start on login. Three shipped, two written
+up as plans instead of half built.
+
+**Rule Zero note, read this one.** Removing the hardcoded road trips left the
+Detour road trip picker rendering a heading with nothing under it, so an empty
+state was added there. That IS a Rule Zero file. It is the smallest possible
+edit (the empty state only, the picker and its copy untouched) and it is called
+out in CHANGES_THIS_PASS.md with an offer to revert. Nothing else in this pass
+goes near guide code.
+
+**Shipped.** `data/roadtrips.js` emptied (three assistant-written routes plus
+seasonal itineraries, which were already dead code). A "What's on in <town>"
+section on town pages built from published festival rows, with a separately
+labelled "Nearby" block using real computed distances. Photo credits, both as a
+caption under the photo and as a Photo credits page in the menu, reading the
+`public/image-credits.json` that had existed for ages with nothing reading it.
+
+**The lesson from this pass:** the strict town matcher was correct and almost
+useless, and only checking it against the LIVE published data showed why. Two of
+fifteen published towns have a festival whose town field names them; eighteen of
+twenty published festivals sit in towns with no published town entry. A feature
+can pass every test you write for it and still be invisible in production
+because of what the real data looks like. Run new matching logic against the
+real rows before calling it done.
+
+**Written, not built:** `PLAN_FACT_GENERATOR.md` (the Studio fact generator he
+asked for, plus the one Rule Zero question it needs answered) and
+`PLAN_LOGIN.md` (accounts, saved guides across devices, and the traveler profile
+that feeds the Detour chat, whose last step is Rule Zero).

@@ -49,6 +49,9 @@ import { DateTimePicker } from "./components/DateTimePicker";
 import { GuidePage } from "./pages/GuidePage";
 import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
+import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
+import { PhotoPlate } from "./components/PhotoPlate";
+import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 
 import "leaflet/dist/leaflet.css";
 
@@ -99,43 +102,41 @@ function GemlyxApp() {
   // every existing .map()/lookup across the whole app picks the new items up for free,
   // no need to touch dozens of call sites. bumpLiveContent forces the one re-render
   // needed after the mutation, since React can't see a plain array push on its own.
+  //
+  // ⚠ WHAT USED TO BE HERE WAS THE "EVERYTHING IS LISTED THREE TIMES" BUG
+  //   (found and fixed Aug 5 2026).
+  //
+  // This component carried its own private second copy of utils/liveContent.js,
+  // and guarded its pushes with `useRef(new Set())` — scoped to ONE MOUNT of this
+  // component. The arrays it pushed into are module-level and survive for the whole
+  // page session. GemlyxApp unmounts the instant you navigate to /guide/new (a
+  // standing, separately documented fact about this app), so every trip out to a
+  // guide and back handed us a fresh, empty guard in front of arrays that were
+  // already full, and re-merged all 55 published rows on top of themselves. Two
+  // guide round trips produced three copies of every festival, town and
+  // free-entrance place. It read as duplicated content in Supabase; it was not
+  // (verified by direct query: exactly one genuine duplicate row in the table).
+  //
+  // There is now exactly ONE loader, in utils/liveContent.js, with a module-level
+  // guard whose lifetime matches the arrays it protects. Do not reintroduce a local
+  // copy here, and never guard a module-level array with component-scoped state.
   const [, bumpLiveContent] = useState(0);
-  const fetchedLiveContent = useRef(false);
-  const mergedContentIds = useRef(new Set());
   const heroVideoRef = useRef(null);
-  const loadLiveContent = async () => {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      });
-      const rows = await res.json();
-      if (!Array.isArray(rows)) { console.warn("gemlyx_content fetch did not return an array:", rows); return; }
-      if (rows.length === 0) return;
-      const bookingRows = [];
-      rows.forEach(row => {
-        if (mergedContentIds.current.has(row.id)) return; // already merged this row, skip
-        const item = row.payload;
-        if (!item || !item.name) return;
-        mergedContentIds.current.add(row.id);
-        const id = 100000 + row.id; // offset keeps live IDs clear of hardcoded ones
-        if (row.type === "town") {
-          towns.push({ id, ...item });
-          if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
-        } else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
-        else if (row.type === "free") freeEntrance.push({ id, ...item });
-        else if (row.type === "food" || row.type === "foodStreet") foodSpots.push({ id, ...item });
-        else if (row.type === "night") nightlifeSpots.push({ id, ...item });
-        else if (row.type === "nightTown") nightlifeTowns.push({ id, ...item });
-        else if (row.type === "booking") bookingRows.push({ id, ...item });
-      });
-      if (bookingRows.length > 0) setCraftItems(prev => [...prev, ...bookingRows]);
-      bumpLiveContent(v => v + 1);
-    } catch (err) { console.warn("gemlyx_content fetch failed:", err); }
-  };
   useEffect(() => {
-    if (fetchedLiveContent.current) return;
-    fetchedLiveContent.current = true;
-    loadLiveContent();
+    let cancelled = false;
+    // Safe to call on every mount: the fetch itself happens at most once per page
+    // session. Booking rows come back on every call because craftItems is React
+    // state (that DOES reset on remount), so they are merged by id, never appended
+    // blind.
+    ensureLiveContentLoaded(rows => {
+      if (cancelled) return;
+      setCraftItems(prev => {
+        const have = new Set(prev.map(x => x.id));
+        const fresh = rows.filter(x => !have.has(x.id));
+        return fresh.length > 0 ? [...prev, ...fresh] : prev;
+      });
+    }).finally(() => { if (!cancelled) bumpLiveContent(v => v + 1); });
+    return () => { cancelled = true; };
   }, []);
   const [active, setActive] = useState("home");
   const [shopTab, setShopTab] = useState("shops");
@@ -1758,6 +1759,33 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
         if (!Array.isArray(shaped.blogBody)) shaped.blogBody = [];
         shaped.blogBody.push({ type: "instagram", url: studioInstagramUrl.trim() });
       }
+      // NO INVENTED PHOTO PATHS (Oliver's call, Aug 5 2026: "stop inventing").
+      //
+      // shapeForLive assigns a photo path to every row by convention
+      // ("/towns/<slug>.jpg" and so on) whether or not that file was ever added
+      // to public/. Measured against the live site the day this was written, 54
+      // of 55 published rows pointed at a 404. The card handled it (PhotoPlate
+      // falls back to a monogram plate), but the row itself was still carrying a
+      // promise the repo could not keep, and there was no way to tell a genuinely
+      // photoless place from one whose image simply had not been uploaded yet.
+      //
+      // So the path is now PROVEN before it is saved: the browser actually tries
+      // to load it, and a path that does not resolve is dropped from the payload
+      // rather than published. A row with no photo field renders exactly the same
+      // monogram plate, and the honest way to give it a picture afterwards is the
+      // Studio Media panel, or adding the file and republishing.
+      if (shaped.photo) {
+        const loads = await new Promise(resolve => {
+          const probe = new Image();
+          probe.onload = () => resolve(true);
+          probe.onerror = () => resolve(false);
+          probe.src = shaped.photo;
+        });
+        if (!loads) {
+          console.warn(`Studio: dropped photo path "${shaped.photo}" before publishing, no such file is deployed. Add the image and republish, or use the Media panel.`);
+          delete shaped.photo;
+        }
+      }
       const url = isEditing ? `${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${editingId}` : `${SUPABASE_URL}/rest/v1/gemlyx_content`;
       const body = isEditing ? JSON.stringify({ payload: shaped }) : JSON.stringify({ type: studioType, payload: shaped, published: true });
       const attempt = (token) => fetch(url, {
@@ -1786,7 +1814,15 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
           setToast("💾 Saved — refreshing");
           setTimeout(() => window.location.reload(), 900);
         } else {
-          await loadLiveContent(); // pull it into this session right away — no reload needed
+          // Explicit re-fetch (the loader caches its promise, so ensureLiveContentLoaded
+          // alone would be a no-op here). refreshLiveContent keeps the merged-id guard,
+          // so only the row just published gets folded in — the rest cannot re-add.
+          await refreshLiveContent(rows => setCraftItems(prev => {
+            const have = new Set(prev.map(x => x.id));
+            const fresh = rows.filter(x => !have.has(x.id));
+            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          }));
+          bumpLiveContent(v => v + 1); // pull it into this session right away — no reload needed
         }
       }
     } catch (err) { setPublishStatus("error"); setPublishErrorDetail(String(err)); }
@@ -1944,6 +1980,17 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     });
   };
   const [showPrivacy, setShowPrivacy] = useState(false);
+  // Photo credits sheet. Reads public/image-credits.json, which already tracked
+  // every downloaded image (photographer, source, licence) but was never shown
+  // to anyone. CC BY and CC BY-SA make attribution a condition of use, so this
+  // page plus the per-photo caption in DetailPage is what keeps those images
+  // legitimately usable.
+  const [showCredits, setShowCredits] = useState(false);
+  const [creditList, setCreditList] = useState(null);
+  useEffect(() => {
+    if (!showCredits) return;
+    loadImageCredits().then(() => setCreditList(allImageCredits()));
+  }, [showCredits]);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestForm, setSuggestForm] = useState({ name: "", type: "Event", note: "" });
   const [suggestStatus, setSuggestStatus] = useState(null); // null | "sending" | "sent" | "error"
@@ -4430,7 +4477,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   location prompt and live-events ticker used to stack above it and
                   made the top feel like a utility drawer. They now live here, under
                   the hero, as one tidy "Today in Denmark" block. */}
-              <div style={{ padding: "20px 16px 8px", maxWidth: 720, margin: "0 auto" }}>
+              {/* Widened from 720 to 1120 (Oliver, Aug 5 2026: "I want it broadened
+                  out, the weather and events"). 1120 is not a new number: it is the
+                  container width every other page in the app already uses, so the
+                  weather chips and the events rail now line up with the Towns,
+                  Events, Food and Attractions grids instead of sitting in a narrow
+                  column of their own under a full-bleed hero. */}
+              <div style={{ padding: "20px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>Today in Denmark</div>
 
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
@@ -4694,9 +4747,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {filtered.map(item => (
                       <div key={`${item._kind}-${item.id}`} onClick={() => item._kind === "free" ? setFreeDetail(item) : setCraftDetail(item)} style={{ cursor: "pointer" }}>
                         <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: `linear-gradient(135deg, ${item.color}40 0%, #0A0F1E 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{item.emoji}</span>
-                          <img src={item.photo} alt={item.name} onError={e => { e.target.style.display = "none"; }}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+                          {/* PhotoPlate, not a bare <img>: craft_items rows have no
+                              photo column at all, and a src-less <img> never fires
+                              onError, so Chrome used to draw its own broken-image
+                              icon plus the alt text right on the card. See
+                              components/PhotoPlate.jsx for the full story. */}
+                          <PhotoPlate photo={item.photo} name={item.name} color={item.color} />
 
                           <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 6, alignItems: "center" }}>
                             <span style={{ background: "rgba(10,15,30,0.8)", color: item._kind === "free" ? "#4CAF50" : C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -4991,9 +5047,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {towns.filter(t => t.isMajorCity).map(town => (
                       <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                         <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{town.emoji}</span>
-                          <img src={town.photo} alt={town.name} onError={e => { e.target.style.display = "none"; }}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+                          <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
                           <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
                             <DKLocator town={town.name} color={C.gold} />
                           </div>
@@ -5020,9 +5074,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 {towns.filter(t => !t.isMajorCity && (!townFilter || t.region === townFilter)).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                     <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{town.emoji}</span>
-                      <img src={town.photo} alt={town.name} onError={e => { e.target.style.display = "none"; }}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+                      <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
                       <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
                         <DKLocator town={town.name} color={C.gold} />
                       </div>
@@ -5070,6 +5122,20 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
               {detourTab === "roadtrip" && (
                 <div style={{ marginBottom: 20 }}>
+                  {/* MINIMAL RULE ZERO EDIT, flagged to Oliver (Aug 5 2026). The three
+                      hardcoded road trips were removed from data/roadtrips.js at his
+                      request, which left this picker showing a heading with nothing
+                      under it. This adds only the empty state so the screen is not
+                      visibly broken while the road trip concept gets redesigned. The
+                      picker itself, and the ROUTES heading copy, are untouched. */}
+                  {roadTrips.length === 0 ? (
+                    <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 14, padding: "18px 16px", marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 6 }}>Road trips are being rebuilt</div>
+                      <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65 }}>
+                        The old routes were written rather than researched, so they were taken down. Tell Gemlyx where you want to drive and it will build the route around real, verified places instead.
+                      </div>
+                    </div>
+                  ) : (<>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Pick a route — Gemlyx builds it around real stops along the way</div>
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Assumes you're driving. You can still add dates, budget and anything else afterwards.</div>
                   {roadTrips.map(rt => (
@@ -5085,6 +5151,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       <div style={{ fontSize: 11.5, color: C.gold }}>{rt.vibe}</div>
                     </button>
                   ))}
+                  </>)}
 
                   {/* Moved from the old standalone Road Trips tab — build a trip
                       request straight from whatever the traveler's already saved. */}
@@ -5880,12 +5947,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
             {[
               { id: "login", label: "Login", ico: "user", action: "login" },
               { id: "faq", label: "FAQ", ico: "help", action: "faq" },
+              { id: "credits", label: "Photo credits", ico: "book", action: "credits" },
               { id: "support", label: "Support", ico: "mail", action: "mail" },
             ].map((item, i) => (
               <button key={item.id}
                 onClick={() => {
                   setShowMenu(false);
                   if (item.action === "faq") setActive("essentials");
+                  else if (item.action === "credits") setShowCredits(true);
                   else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
                   else if (item.action === "login") { setToast("Login coming soon"); setTimeout(() => setToast(null), 2200); }
                 }}
@@ -5998,7 +6067,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
       )}
 
       <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} />
-      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} />
+      {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
+          festival closes the town page and opens that event's real entry, so the
+          traveler lands on the full page with dates, tickets and directions
+          rather than a dead-end list item. */}
+      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} />
       <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
       <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
       <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
@@ -6235,6 +6308,59 @@ You also have a web_search tool. Use it whenever someone asks about something th
       )}
 
       {/* ── PRIVACY & DATA MODAL ──────────────────────────── */}
+      {/* ── PHOTO CREDITS ──────────────────────────────────
+          Every image the app has on file, with its photographer, source and
+          licence. Built from public/image-credits.json, which is written when a
+          photo is downloaded, so this page cannot drift from what was actually
+          used. Images whose licence legally requires the credit are listed
+          first and marked, so a missing one is obvious at a glance rather than
+          buried in an alphabetical list. */}
+      {showCredits && (
+        <div onClick={() => setShowCredits(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", padding: "24px 22px 32px", border: `1px solid ${C.border}`, borderBottom: "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Photo credits</div>
+              <button onClick={() => setShowCredits(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
+            </div>
+            <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.65, marginBottom: 18 }}>
+              Photography on Gemlyx comes from Wikimedia Commons, Pexels and similar sources. Where a licence asks for it, the photographer and licence are also shown directly under the picture. Anything marked below is used under a licence that requires the credit.
+            </div>
+            {creditList === null ? (
+              <div style={{ fontSize: 12.5, color: C.muted }}>Loading credits…</div>
+            ) : creditList.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: C.muted }}>No image credits are on file yet.</div>
+            ) : (
+              [...creditList]
+                .sort((a, b) => (creditIsRequired(b) ? 1 : 0) - (creditIsRequired(a) ? 1 : 0) || String(a.file).localeCompare(String(b.file)))
+                .map(entry => {
+                  const lic = licenseUrl(entry.license);
+                  return (
+                    <div key={entry.file} style={{ borderTop: `1px solid ${C.border}`, padding: "11px 0" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontSize: 12.5, color: C.text, fontWeight: 600, wordBreak: "break-all" }}>{String(entry.file || "").replace(/^\//, "")}</span>
+                        {creditIsRequired(entry) && (
+                          <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 700, color: C.gold, background: `${C.gold}1E`, border: `1px solid ${C.gold}55`, padding: "2px 7px", borderRadius: 100, textTransform: "uppercase", letterSpacing: 0.5 }}>Credit required</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>
+                        {entry.photographer || "Photographer not recorded"}
+                        {entry.source ? ` · ${entry.source}` : ""}
+                        {entry.license ? " · " : ""}
+                        {entry.license && (lic
+                          ? <a href={lic} target="_blank" rel="noreferrer" style={{ color: C.light, textDecoration: "underline" }}>{entry.license}</a>
+                          : <span>{entry.license}</span>)}
+                        {entry.sourceUrl ? (
+                          <> · <a href={entry.sourceUrl} target="_blank" rel="noreferrer" style={{ color: C.light, textDecoration: "underline" }}>source</a></>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })
+            )}
+          </div>
+        </div>
+      )}
+
       {showPrivacy && (
         <div onClick={() => setShowPrivacy(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", padding: "24px 22px 32px", border: `1px solid ${C.border}`, borderBottom: "none" }}>

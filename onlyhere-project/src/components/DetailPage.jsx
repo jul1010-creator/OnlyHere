@@ -1,13 +1,91 @@
 import { C } from "../utils/theme";
-import { getEventDate, travelLabel } from "../utils/helpers";
+import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive } from "../utils/helpers";
 import { AtAGlanceCard } from "./AtAGlanceCard";
 import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
 import { ReviewsSection } from "./ReviewsSection";
+import { PhotoCredit } from "./PhotoCredit";
+import { events, majorEvents } from "../data/events";
+import { TOWN_COORDS } from "../data/towns";
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave }) => {
+// Which published festivals genuinely belong to this town.
+//
+// Deliberately strict, because the whole value of this section is that a
+// traveler can trust it. A festival is only shown here when its own `town`
+// field really names this town, matched case-insensitively on whole words
+// after trimming, never as a loose substring. A loose match would happily
+// claim "Køge Festuge" for a town called "Køge Bugt", or attach every
+// Copenhagen event to a place whose name merely contains "Copenhagen".
+//
+// Live events come first (they are happening right now, which is the most
+// useful thing a traveler can be told), then upcoming ones by date. Anything
+// already finished is dropped entirely rather than shown greyed out: a past
+// festival on a town page is noise, not information.
+const inThisTown = (e, key) => {
+  const t = String(e.town || "").trim().toLowerCase();
+  if (!t) return false;
+  // "Sønderho, Fanø" and "Ribe" both need to work, so split on commas and
+  // slashes and compare each part exactly, rather than using includes().
+  return t.split(/[,/]/).map(s => s.trim()).includes(key);
+};
+
+// Straight-line km between two known towns, or null when either coordinate is
+// missing. NULL IS THE POINT: it means "we do not know", and an unknown distance
+// must never become a displayed number. Same discipline as legDistanceKm in the
+// guide code, for the same reason it had to be added there.
+const kmBetweenTowns = (a, b) => {
+  const A = TOWN_COORDS[a], B = TOWN_COORDS[b];
+  if (!Array.isArray(A) || !Array.isArray(B)) return null;
+  const dLat = (A[0] - B[0]) * 111.32;
+  const dLon = (A[1] - B[1]) * 62.06; // longitude degrees are shorter at Denmark's latitude
+  return Math.sqrt(dLat * dLat + dLon * dLon);
+};
+
+// A festival in a DIFFERENT town, close enough to matter, with a real measured
+// distance. This exists because of what the published data actually looks like:
+// checked against the live database, only 2 of 16 published towns have a
+// festival whose town field names them, while 18 published festivals sit in
+// towns that have no published town entry (Skanderborg, Jelling, Aarhus and so
+// on). Without this, the section would almost never appear.
+//
+// It stays honest three ways: the distance is computed from real coordinates
+// (never estimated, and the row is dropped entirely when either town is missing
+// from TOWN_COORDS), the real host town is always named, and it renders under a
+// separate "Nearby" heading so it can never be read as "happening here".
+const NEARBY_MAX_KM = 45;
+const nearbyEvents = (townName, key) => [...events, ...majorEvents]
+  .filter(e => e.town && !inThisTown(e, key))
+  .map(e => ({ e, km: kmBetweenTowns(townName, String(e.town).split(/[,/]/)[0].trim()) }))
+  .filter(x => x.km != null && x.km <= NEARBY_MAX_KM)
+  .sort((a, b) => a.km - b.km);
+
+const eventsForTown = (townName) => {
+  const key = String(townName || "").trim().toLowerCase();
+  if (!key) return [];
+  return [...events, ...majorEvents]
+    .filter(e => inThisTown(e, key))
+    // `e.date &&` matters: isUpcoming() returns TRUE for an empty date (it treats
+    // "no date" as "not in the past"), which is right for the browse-everything
+    // lists but wrong here. A dateless festival on a town page would render as
+    // an event you could plan around when nobody actually knows when it runs.
+    .filter(e => e.date && (isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date)))
+    .sort((a, b) => {
+      const liveA = isCurrentlyLive(a.date, a.dateEnd) ? 0 : 1;
+      const liveB = isCurrentlyLive(b.date, b.dateEnd) ? 0 : 1;
+      if (liveA !== liveB) return liveA - liveB;
+      return new Date(a.date) - new Date(b.date);
+    });
+};
+
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, onOpenEvent }) => {
   if (!item) return null;
   const color = item.color || C.accent;
+  const townEvents = kind === "town" ? eventsForTown(item.name).slice(0, 4) : [];
+  const townNearby = kind === "town"
+    ? nearbyEvents(item.name, String(item.name || "").trim().toLowerCase())
+        .filter(x => x.e.date && (isCurrentlyLive(x.e.date, x.e.dateEnd) || isUpcoming(x.e.date)))
+        .slice(0, 3)
+    : [];
   return (
     // BUG FIX: z-index was 290, lower than the new pre-build "here's what's
     // coming up" preview screen (guideModal === "preview" in App.jsx, z-index
@@ -36,7 +114,12 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           {item.type && kind !== "food" && <div style={{ background: color, color: "#fff", fontSize: 10, fontWeight: 700, padding: "5px 11px", borderRadius: 100, textTransform: "uppercase" }}>{item.type}</div>}
         </div>
       </div>
-      <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
+      {/* Credit for the hero image, immediately under the photo it belongs to,
+          which is what CC BY and CC BY-SA actually ask for. Renders nothing when
+          the image has no credit on file, so it costs nothing on the many photos
+          that need none. */}
+      <PhotoCredit photo={item.photo} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
+      <div style={{ padding: "14px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
           {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : item.region}
         </div>
@@ -107,6 +190,79 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               { icon: "💰", label: "Typical Costs", value: item.typicalCosts },
             ]} />
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{travelLabel(userCoords, item.name, item.travelTime)}</div>
+
+            {/* WHAT'S ON IN THIS TOWN (Oliver's ask, Aug 5 2026: "is it possible to
+                show the soon coming events in these towns"). Everything here is a
+                real published festival row whose own `town` field names this town.
+                Nothing is generated, nothing is inferred from the town's text, and
+                if no published festival matches, the section does not render at
+                all rather than saying something vague like "check back later". */}
+            {(townEvents.length > 0 || townNearby.length > 0) && (
+              <div style={{ marginBottom: 22 }}>
+                {townEvents.length > 0 && (
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>
+                  What's on in {item.name}
+                </div>
+                )}
+                {townEvents.map(e => {
+                  const live = isCurrentlyLive(e.date, e.dateEnd);
+                  const soldOut = e.ticketStatus === "sold_out";
+                  return (
+                    <button key={e.id ?? e.name} onClick={() => onOpenEvent && onOpenEvent(e)} disabled={!onOpenEvent}
+                      style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${live ? "#4CAF5066" : C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: onOpenEvent ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
+                          {live && (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9, fontWeight: 700, color: "#4CAF50", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4CAF50", boxShadow: "0 0 6px #4CAF50" }} />
+                              On now
+                            </span>
+                          )}
+                          <span style={{ fontSize: 14, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: C.gold, fontWeight: 600 }}>
+                          {getEventDate(e.date, e.dateEnd)}
+                          {e.type ? <span style={{ color: C.muted, fontWeight: 400 }}> · {e.type}</span> : null}
+                        </div>
+                        {/* Ticket reality carried through verbatim from the published
+                            row. A sold-out festival that reads as a plan is the single
+                            most expensive way to mislead someone about a trip. */}
+                        {soldOut ? (
+                          <div style={{ fontSize: 11, color: "#FF8A80", fontWeight: 600, marginTop: 3 }}>Sold out</div>
+                        ) : e.ticketInfo ? (
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.ticketInfo}</div>
+                        ) : null}
+                      </div>
+                      {onOpenEvent && <span style={{ fontSize: 14, color: C.muted, flexShrink: 0 }}>›</span>}
+                    </button>
+                  );
+                })}
+
+                {townNearby.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", margin: `${townEvents.length > 0 ? 16 : 0}px 0 10px` }}>
+                      Nearby, worth knowing about
+                    </div>
+                    {townNearby.map(({ e, km }) => (
+                      <button key={`near-${e.id ?? e.name}`} onClick={() => onOpenEvent && onOpenEvent(e)} disabled={!onOpenEvent}
+                        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, padding: "11px 14px", marginBottom: 8, cursor: onOpenEvent ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 3 }}>{e.name}</div>
+                          <div style={{ fontSize: 11.5, color: C.muted }}>
+                            <span style={{ color: C.gold, fontWeight: 600 }}>{getEventDate(e.date, e.dateEnd)}</span>
+                            {" · "}{e.town}, about {km < 10 ? km.toFixed(1) : Math.round(km)} km away
+                          </div>
+                        </div>
+                        {onOpenEvent && <span style={{ fontSize: 14, color: C.muted, flexShrink: 0 }}>›</span>}
+                      </button>
+                    ))}
+                    <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+                      Distances are straight line between town centres, not driving time.
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
         {(kind === "free" || kind === "attraction") && (
@@ -156,6 +312,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   <img src={block.src} alt={block.caption || item.name} onError={e => { e.target.style.display = "none"; }}
                     style={{ width: "100%", borderRadius: 14, display: "block" }} />
                   {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
+                  <PhotoCredit photo={block.src} style={{ marginTop: 4 }} />
                 </div>
               ) : block.type === "heading" ? (
                 <div key={i} style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 20, marginBottom: 10 }}>{block.content}</div>

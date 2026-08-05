@@ -1,3 +1,79 @@
+# PASS 39: the invented road trips are gone, town pages now show what is actually on in that town, and the photos finally carry their credits
+
+**Checked before changing anything:** the towns, events, food, nightlife and free entrance arrays were already empty and Supabase only, from PASS 29. Nothing assistant written was left in any of them. Two things had been missed.
+
+## 1. Road trips and itineraries removed
+
+`data/roadtrips.js` still held three fully assistant written road trips and a set of seasonal itineraries: real town names wrapped in invented stop notes ("best smoked fish in Zealand", "a proper coffee stop", "Fjord views, a proper coffee stop") and invented day by day plans. None of it went through research, Studio or a fact check. Both arrays are now empty, the same way the place arrays went, with the reasoning written into the file so nobody refills them by hand.
+
+**Your words are in the file:** the concept is not cancelled, only this hardcoded version of it. The comment also records the obvious shape for a rebuild, since it is worth writing down while it is fresh: a road trip is really an ordered list of published towns plus real driving legs between them, and the app already computes exactly those legs in `utils/guideEnrichment.js`. That would make a route real by construction instead of written from memory.
+
+**Two things worth knowing.** `seasonalItineraries` was already dead code, imported in App.jsx line 14 and never read anywhere, so removing that import is a separate small cleanup rather than something I did quietly in passing. And removing the routes left the Detour road trip picker showing a heading with nothing under it, so **I added an empty state there, which is a Rule Zero file.** It is the smallest possible edit, only the empty state, and the picker and its copy are untouched. Say the word and I will revert it and leave that to Fable.
+
+## 2. What's on in this town
+
+Every town page now shows the festivals genuinely happening there: live ones first with an "On now" marker, then upcoming ones by date, with the real date range, the type, and the ticket reality carried through from the published row. Sold out is shown in red as its own line, because a sold out festival that reads as a plan is the most expensive way to mislead someone about a trip. Tapping one opens that event's real page.
+
+**The matching is deliberately strict.** A festival only appears when its own `town` field really names that town, compared on whole words after splitting on commas and slashes. A loose substring match would happily attach every Copenhagen event to any place whose name contains Copenhagen. Dateless festivals are excluded too: `isUpcoming()` treats an empty date as "not in the past", which is right for the browse everything lists and wrong for a page where someone is planning around a date.
+
+**Then I checked it against your real data, and strict alone was almost useless.** Only 2 of your 15 published towns have a festival whose town field names them. 18 of your 20 published festivals sit in towns you have not published as town entries: Skanderborg, Jelling, Aarhus, Silkeborg, Kolding, Nibe and so on. So there is a second, clearly separated block: **"Nearby, worth knowing about"**, which lists festivals within 45 km, always naming the real host town and the real distance. That distance is computed from actual coordinates, and a festival is dropped entirely when either town's coordinates are unknown, so an unknown distance can never become a displayed number. It is captioned as straight line between town centres, not driving time, because that is what it is. **That took the section from 2 town pages to 9 of 15.** If you would rather it only ever showed events strictly in the town, say so and the nearby block comes out in one edit.
+
+## 3. Photo credits
+
+`public/image-credits.json` has been tracking every downloaded photo for a while: the file, the source, the photographer, the source URL and the licence. **Nothing in the app ever read it**, so none of it reached a single visitor. Two of the 38 images on file are CC BY-SA, where attribution is a legal condition of use, not a courtesy.
+
+Now there are two places it shows. A small caption under the photo on a place's page, naming the photographer, linking to the original, and linking the licence name to its real deed, which is what CC BY and CC BY-SA actually ask for: the credit near the work. And a **Photo credits page** in the menu listing every image, with the ones whose licence requires the credit sorted to the top and marked, so a missing one is obvious rather than buried.
+
+Worth knowing for when you add the Wikimedia images: CC BY and CC BY-SA both require naming the author, naming the licence, and linking to it. CC BY-SA additionally means a derivative carries the same licence, though cropping and scaling for display is not a derivative. The credits file is in `public/`, so correcting a credit is a file edit and a redeploy with no code touched, and a missing or broken file can never break a page. Every failure path resolves to showing no credit.
+
+## Verification
+
+Full real import esbuild bundle and a minify scope check on every new identifier. Confirmed the invented road trip text is gone from the built bundle, not just from the source. The town matching and the distance maths were run against your live published data before shipping, which is how the 2 out of 15 problem surfaced at all. The two new sections were screenshotted from a static replica first.
+
+**Needs `git push`.** Two plans are written up separately and not built yet: `PLAN_FACT_GENERATOR.md` and `PLAN_LOGIN.md`.
+
+# PASS 38: "what da absolute fuck is that" answered with three separate root causes. Everything listed three times was ONE code bug (not your data), the broken and empty pictures were TWO different failures, and Today in Denmark now matches the width of every other page
+
+**Your screenshots, taken seriously, checked against the live database rather than guessed at.** Three findings, three different causes. Nothing here touches the Gemlyx Guide.
+
+## 1. The triple listings were a code bug. Your content is clean.
+
+I queried `gemlyx_content` directly: **55 published rows, and exactly ONE genuine duplicate in the entire table** (the town "Dragør", published twice). So the three Skanderborg Festival chips, the three Bork Vikingemarked cards and the doubled Attractions grid were the app duplicating your content on screen, not you publishing it three times.
+
+**The cause, stated exactly.** App.jsx carried its own private second copy of the Content Studio loader. Its "have I already merged this row" registry was a React `useRef(new Set())`, which is scoped to ONE MOUNT of the component. The arrays it pushes into (`events`, `towns`, `freeEntrance`, `foodSpots`, `nightlifeSpots`) are module level singletons that live for the whole page session. GemlyxApp unmounts the instant you navigate to `/guide/new`, which is already a documented standing fact about this app. So every trip out to a guide and back handed the loader a fresh, empty guard in front of arrays that were still full, and it re-merged all 55 rows on top of themselves. **Two guide round trips produce three copies of every festival, town and free entrance place.** A hard refresh cleaned it until the next guide, which is exactly why it looked random and intermittent.
+
+**The fix is structural, not a patch.** The dedupe registry must have the same lifetime as the arrays it protects. There is now exactly ONE loader in the codebase (`utils/liveContent.js`), its guard is module level like the arrays, and the in flight fetch promise is cached so a second caller awaits the first fetch instead of racing it. The private copy in App.jsx is gone, with a comment where it stood explaining why it must never come back.
+
+**A second net, deliberately separate.** Two different rows carrying the same type and name are a real duplicate publish. The second one is now skipped so visitors never see a place listed twice, and the console names the offending row so it still gets cleaned up: `gemlyx_content: skipped 1 duplicate published row(s), delete them in Studio: town "Dragør" (row id ...)`. **Yours to do in Studio: delete the second Dragør row.**
+
+**Caught while removing the old loader:** the Studio publish handler still called `loadLiveContent()` to pull a newly published entry into the session without a reload. That function no longer exists, and a bundle check would never have caught it, because an undefined identifier is a runtime error, not a build error. It now calls a new `refreshLiveContent()`, which clears the cached promise but deliberately KEEPS the merged id guard, so a mid session publish folds in only the row you just published and cannot re-add the other 54.
+
+## 2. The broken and empty pictures were two different failures that happen to look similar
+
+**The broken icon with the place name written across it** (Bornholm Ceramics, Sømods Bolcher, the Viking rows). Those come from the `craft_items` table, which has no photo column at all. `item.photo` is therefore undefined, React omits the `src` attribute entirely, and a src-less `<img>` never attempts a load, which means **`onError` never fires**. The old code relied entirely on `onError` to hide a bad image, so Chrome drew its own broken image icon plus the alt text right on top of the card.
+
+**The faint floating emoji** (the castle, the picture frame, the candy). Those rows DO have a photo path, but the file was never added to `public/`. Content Studio assigns `/towns/<slug>.jpg`, `/events/<slug>.jpg`, `/food/<slug>.jpg` and so on to every row it publishes, whether or not the image exists yet. That part is deliberate and stays: the photo appears the moment you drop the file in. But measured against the live site, **54 of 55 published rows currently 404**. `onError` fired, hid the image, and left a 44px emoji at 25% opacity sitting in an empty box.
+
+So the app had no real "this place has no photo yet" design state and fell into two different accidental ones. There is one now: a shared `PhotoPlate` component, using the same Fraunces monogram plate the Food and Events cards already used, so photoless cards look deliberate instead of broken. The `<img>` renders only when there is a genuinely non empty path, and a failed load falls back TO THE MONOGRAM rather than to nothing. Applied to the Attractions grid, the Major Cities grid and the Towns grid. The guide side was left untouched on purpose.
+
+**Studio no longer invents a photo path it cannot keep.** Your call, so it is done: on publish, the assigned path is now PROVEN before the row is saved. The browser actually tries to load it, and a path that does not resolve is dropped from the payload, with a plain console line naming which one and why. A row with no photo field renders exactly the same monogram plate, so nothing looks different, but a published row can no longer carry a promise the repo cannot keep, and you can finally tell a genuinely photoless place from one whose image simply has not been uploaded yet. The 54 existing rows keep their dead paths and show monogram plates until you either add the file or republish them.
+
+**A full audit of every missing image is in the new `PHOTO_AUDIT.md`,** including three quick wins: `public/towns/Nysted.jpg` only fails because the published row asks for lowercase `nysted.jpg` and Vercel is case sensitive; `public/ribe.jpg` already exists and just needs to be at `public/towns/ribe.jpg`; and the nightlife town Aarhus is asking for `/undefined/aarhus.jpg`, a legacy bad path from an older version of the publisher.
+
+## 3. Today in Denmark is broadened out
+
+That block was `maxWidth: 720` while every other page in the app uses `1120`. It is 1120 now, so the weather chips and the live events rail line up with the Towns, Events, Food and Attractions grids instead of sitting in a narrow column of their own under a full bleed hero. The events rail also stops clipping a chip mid word on a desktop width.
+
+## Verification
+
+Full real import esbuild bundle of the whole `src` tree from `main.jsx`, plus a minify scope check confirming every removed identifier (`loadLiveContent`, `mergedContentIds`, `fetchedLiveContent`) is genuinely gone and every new one resolves as a properly scoped local. The whole bundle contains exactly one published content fetch, down from two.
+
+Beyond that, the dedupe logic was **executed**, not just reasoned about: the real `liveContent.js` module was run in Node against a simulated three mount session with a stubbed fetch. Result: one fetch across three mounts, one copy of every place, the duplicate Dragør row skipped with its console warning, the booking callback firing correctly on each mount, and a mid session publish adding only the new row. All assertions pass.
+
+The visual changes were screenshotted from a static HTML replica before shipping, which caught a hard edged blob in the first version of the monogram plate's gradient. That is fixed.
+
+**Not yet confirmed on your phone, and needs `git push`.**
+
 # PASS 37 (+ new `GEMLYX_HANDOFF_5.md`, the handover to Opus carrying Oliver's ONLY-FABLE rule): the "1 min walk that's really 30" bug is finally root-caused and killed, a hard 20 minute walking rule, the 16 hour trip traced to the test brief itself, coach lines no longer recommended for routes they don't serve
 
 **The walking bug, stated exactly, after four separate reports.** `resolveStopCoords` falls back to matching a stop name against the town list. Two stops in the same town — "Samsø" and "Samsø Island Distillery", or "Faxe Kalkbrud" and "Faxe Kirke" — therefore both resolve to the IDENTICAL town-centre point. The distance between them came out as zero, and zero became a confident "~1 min": a number invented from two coordinates that were never about those stops. The same zero was why every distance rule silently did nothing, so a genuinely 4.5 km leg kept the mode the AI first guessed (walking), and Google honestly returned a 1 hour 15 minute walk, which shipped as a suggested leg. Both of your screenshots are this one bug. Fixed by making the code know the difference between a precise coordinate and a town-centre guess: when both ends are only guesses that landed on the same spot, the distance is now reported as UNKNOWN rather than zero, and an unknown distance shows the leg's own text or "Check route" instead of a fabricated time. Verified by running the real logic against your exact Samsø case.
