@@ -2220,10 +2220,27 @@ If the conversation only covers a single day or a few stops with no explicit day
       setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _exactDurations: exactFound, _noRouteFound: routeFailed, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid, arrivalDate);
-    } catch {
+    } catch (err) {
       setGuideModal(null);
-      setGuideError("Couldn't build a guide from that yet — try asking for a fuller plan first.");
-      setTimeout(() => setGuideError(null), 3500);
+      // ERROR-MESSAGE GAP FIX (flagged PASS 27, round 3): this catch-all used to
+      // show the same "try asking for a fuller plan" message for EVERY failure,
+      // including genuine API billing/credit exhaustion (a real incident: Oliver
+      // hit "can't build" repeatedly and it turned out his Anthropic credits had
+      // run out, which no amount of rephrasing the conversation could fix). The
+      // thrown error here carries the API's real message (askClaude/askOpenAI
+      // both surface data.error.message), so check it for the billing
+      // fingerprints Anthropic and OpenAI actually use ("credit balance is too
+      // low", "exceeded your current quota", generic billing/payment wording)
+      // and say THAT plainly instead of blaming the conversation. Everything
+      // else still gets the original message, plus the real error now always
+      // lands in the console so the next "can't build" report is diagnosable.
+      console.warn("Guide build failed:", err);
+      const msg = String(err?.message || err || "");
+      const isBilling = /credit balance|billing|payment|purchase credits|exceeded your current quota|insufficient[_ ]quota/i.test(msg);
+      setGuideError(isBilling
+        ? "The AI account is out of credits, so no guide can be built right now. This is a billing issue, not a problem with your plan. Top up the API credits and try again."
+        : "Couldn't build a guide from that yet. Try asking for a fuller plan first.");
+      setTimeout(() => setGuideError(null), isBilling ? 8000 : 3500);
     }
   };
 
@@ -2426,9 +2443,26 @@ If the conversation only covers a single day or a few stops with no explicit day
       if (cancelled) return;
       const flyEl = document.getElementById("gxi-fly-mark");
       const cornerEl = cornerMarkRef.current;
+      // BUG FIX (Oliver, 6th report: "It flies into the corner as a big logo.
+      // It doesn't fly in and minimize to the left corner"): cornerMarkRef is
+      // attached to the span wrapping the FULL GemlyxLogo lockup — the 19px
+      // compass icon PLUS the "GEMLYX" wordmark beside it (see GemlyxLogo.jsx:
+      // GemlyxMark + GemlyxWordmark in a flex span). Measuring THAT span for
+      // `to` made to.width the whole icon+gap+wordmark strip (~112px), so
+      // `scale = to.width / from.width` came out ≈1.12 — the flying 100px
+      // compass was being asked to very slightly ENLARGE, not shrink to the
+      // real ~0.19 (19px icon ÷ 100px compass) it needs. Position was also
+      // off for the same reason: dx/dy targeted the center of the whole
+      // lockup, roughly where the wordmark's first letters sit, not the
+      // icon's own center. The flight itself was working; it was flying a
+      // full-size compass to the wrong target box. Fix: measure the icon-only
+      // element — the FIRST <svg> inside the lockup is GemlyxMark (the
+      // wordmark is the second) — and compute scale AND landing center from
+      // that. No component changes needed, the icon svg is already there.
+      const cornerIconEl = cornerEl ? cornerEl.querySelector("svg") : null;
       const from = flyEl ? flyEl.getBoundingClientRect() : null;
-      const to = cornerEl ? cornerEl.getBoundingClientRect() : null;
-      const ready = flyEl && cornerEl && from.width > 0 && to.width > 0;
+      const to = cornerIconEl ? cornerIconEl.getBoundingClientRect() : null;
+      const ready = flyEl && cornerIconEl && from.width > 0 && to.width > 0;
       if (!ready) {
         if (attemptsLeft > 0) { retryTimer = setTimeout(() => attemptFlight(attemptsLeft - 1), 120); return; }
         setIntroFlightDone(true); // genuinely never became ready — settle instantly rather than hang forever
