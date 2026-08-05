@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { C } from "../utils/theme";
+import { departureParam } from "../utils/helpers";
 
 // ── REAL ROUTE GEOMETRY ────────────────────────────────────────────
 // Oliver, 5 Aug 2026: "It shouldn't be difficult to make a route…", with
@@ -32,7 +33,10 @@ const fetchLegGeometry = async (from, to, mode) => {
   if (geometryCache.has(key)) return geometryCache.get(key);
   const promise = (async () => {
     try {
-      const res = await fetch(`/api/directions?origin=${from[0]},${from[1]}&destination=${to[0]},${to[1]}&mode=${encodeURIComponent(mode)}`);
+      // Same departure anchor as the duration lookups. Without it a transit leg's
+      // GEOMETRY would describe a different departure than its stated time, which
+      // reintroduces exactly the line-and-number drift this component was fixed for.
+      const res = await fetch(`/api/directions?origin=${from[0]},${from[1]}&destination=${to[0]},${to[1]}&mode=${encodeURIComponent(mode)}${departureParam(mode)}`);
       const data = await res.json();
       return Array.isArray(data?.polyline) && data.polyline.length > 1 ? data.polyline : null;
     } catch { return null; }

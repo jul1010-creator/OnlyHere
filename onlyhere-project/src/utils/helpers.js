@@ -275,3 +275,32 @@ export const arrivalRow = (value) => {
   if (/metro/.test(v)) return { icon: "🚇", label: "Nearest Metro", value };
   return { icon: "🚆", label: "Nearest Station", value };
 };
+
+// ── When a transit query should pretend to depart ──────────────────
+// A Google Directions transit query with NO departure_time means "if you left
+// right this second". That is almost never the question being asked, and it
+// caused the worst accuracy bug of the 5 Aug 2026 session: published town travel
+// times were whatever Google returned at the accidental moment a draft ran.
+// Measured live at 22:38 against the same routes anchored to a weekday morning:
+// Nysted 6h08 vs 2h03, Thorup Strand 12h27 vs 7h08, Møgeltønder 5h53 vs 4h39,
+// Ribe 4h40 vs 3h33, Ærøskøbing 4h14 vs 3h04, Viborg 5h47 vs 5h01. Every single
+// one inflated, because late-evening timetables are sparse.
+//
+// The next Tuesday at 09:00: a plain weekday mid-morning. No rush hour, no
+// weekend timetable, no public holiday, and it is the journey a traveler
+// actually makes. Reproducible within a week, which also means two runs of the
+// same draft agree with each other.
+//
+// ONLY for transit. Driving is deliberately left unanchored, because without
+// departure_time Google returns its typical duration rather than a live-traffic
+// snapshot, and a typical duration is the right thing to publish.
+export const transitDepartureAnchor = () => {
+  const d = new Date();
+  d.setHours(9, 0, 0, 0);
+  do { d.setDate(d.getDate() + 1); } while (d.getDay() !== 2);
+  return Math.floor(d.getTime() / 1000);
+};
+
+// Appends the anchor only for a transit leg, so call sites stay one-liners and
+// cannot accidentally anchor a driving query.
+export const departureParam = (mode) => (mode === "transit" ? `&departure_time=${transitDepartureAnchor()}` : "");

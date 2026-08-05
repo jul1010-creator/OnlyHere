@@ -21,7 +21,7 @@ import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
   isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
   dedupeAgainstExisting, getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
-  parsePrice, getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow,
+  parsePrice, getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, departureParam, transitDepartureAnchor,
 } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, findRealNearestStation } from "./utils/geo";
 import { Pill } from "./components/Pill";
@@ -1076,18 +1076,37 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // proof that no route exists, because Google's Danish transit coverage is
       // good but not complete for rural bus links. Stating a confident absence
       // from a failed lookup is the exact error that produced this bug.
+      let realTransport = null;   // structured, so it can be ENFORCED and not merely suggested
       if (["town", "festival", "free", "booking"].includes(sType) && frozenGeo) {
         try {
           const CPH = "55.6761,12.5683";
           const dest = `${frozenGeo.lat},${frozenGeo.lon}`;
+          // A TRANSIT QUERY WITH NO departure_time MEANS "IF YOU LEFT RIGHT NOW",
+          // and that is a bug I shipped in PASS 44 and made worse in PASS 45 by
+          // force-writing the result into travelTime. Measured against the live
+          // API for Copenhagen to Møgeltønder: leaving at 22:38 on a Wednesday
+          // gives 5h53, while a normal weekday morning gives 4h39. Same route,
+          // same API, 74 minutes apart. Without an anchor, a town's PERMANENT
+          // published travel time depended on the accidental minute a draft was
+          // generated, and a draft written late at night would publish a figure
+          // over an hour worse than the real journey.
+          //
+          // So every transit query is anchored to the next Tuesday at 09:00: a
+          // plain weekday mid-morning, no rush hour, no weekend timetable, no
+          // holiday. Reproducible, and it describes the trip a traveler would
+          // actually take. Driving is deliberately left unanchored, since without
+          // departure_time Google returns its typical duration rather than a
+          // live-traffic snapshot, which is what we want for a published figure.
+          // Shared with the guide's own duration lookups, see helpers.js.
           const ask = async (mode) => {
-            const r = await fetch(`/api/directions?origin=${CPH}&destination=${dest}&mode=${mode}`);
+            const r = await fetch(`/api/directions?origin=${CPH}&destination=${dest}&mode=${mode}${departureParam(mode)}`);
             const d = await r.json();
             return d && !d.error && d.durationText ? `${d.durationText} (${d.distanceText})` : null;
           };
           const [transit, driving] = await Promise.all([ask("transit"), ask("driving")]);
+          realTransport = { transit, driving };
           if (transit || driving) {
-            transportFindings = `REAL TRANSPORT CHECK from Copenhagen (a live Google Directions query, not a search result and not a guess): `
+            transportFindings = `REAL TRANSPORT CHECK from Copenhagen (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
               + (transit ? `BY PUBLIC TRANSPORT: ${transit}. ` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links are not always covered. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk. `)
               + (driving ? `BY CAR: ${driving}. ` : "")
               + `Use these real figures for travelTime and for anything you say about getting there, in preference to any duration from a search snippet. If a ferry is involved, these already include it. NEVER state that no public transport route exists on the strength of this block alone.`;
@@ -1127,7 +1146,7 @@ KEEP THE GLANCE FIELDS HONEST TO THE BODY TEXT: recommendedStayGlance, bestTimeG
 
 SHAPE-ONLY EXAMPLE (structure and rhythm reference \u2014 apply the generic-sentence test and sentence-mechanics rules independently of how this reads): {"name": "Ribe", "region": "South Jutland", "emoji": "\u26ea", "tag": "Denmark\'s oldest town", "characterAndFit": "Ribe has been a town since around 700 AD \u2014 the oldest in Scandinavia \u2014 and it still centers on a working medieval cathedral rather than a recreated one. It suits people who want real history without a crowd; it\'s not the place for nightlife or a fast-paced day.", "whatToDo": "The cathedral tower is climbable for a real view over the marshland. Ribe VikingeCenter, just outside town, has artisans working leather and jewellery on site using period techniques. The cobbled streets around Puggaardsgade are the actual medieval core, not a rebuilt tourist version.", "gettingThereReality": "About 3h15 by train from Copenhagen with one change, or a manageable half-day trip from Esbjerg. Most of the real sights fit into a half day. Little in the way of nightlife or late dining if you\'re staying over \u2014 this is an early-to-bed kind of town."}
 ${STUDIO_VOICE}
-Respond with ONLY strict JSON: {"name": ${J(name)}, "region": "...", "emoji": "one emoji", "tag": "3-5 word hook", "characterAndFit": "paragraph 1, per the rules above \u2014 2-3 sentences max, also serves as the card-preview text", "whatToDo": "paragraph 2, per the rules above \u2014 3 sentences max, concrete and physical", "gettingThereReality": "PARAGRAPH 3, THE REALITY CHECK \u2014 real getting-there logistics (how, how long) AND a genuine blunt downside, both required, not just travel times dressed up as one section. A downside means something a traveler would actually be disappointed by if nobody told them first: nightlife/dining genuinely limited, the town is quieter or smaller than photos suggest, a real crowd/cost issue, whatever is ACTUALLY true here \u2014 stated as its own direct sentence, not softened or buried at the end of a logistics sentence. 2-4 sentences, matching the same blunt standard as the Reality Check used for restaurants and festivals \u2014 this needs to read as an honest reality check, not a transit schedule with one disclaimer tacked on", "highlight": "one specific real place/experience with a concrete detail, or empty string", "travelTime": "ONLY if you are genuinely confident of the real travel time — otherwise leave this an empty string, never guess (a real error happened before: a town genuinely 4+ hours from Copenhagen was once guessed at 1.5 hours). EXACT format like \'3h 15min \ud83d\ude82\' or \'45min \ud83d\ude8c\' or \'2h + ferry \u26f4\' \u2014 duration + one emoji, NO other words", "mapHint": "Town, postcode Town, Denmark", "lat": 56.09, "lon": 8.24, "nomiPotential": "High / Very High / Medium", "tier": "Can\'t Miss Out / Highly Recommended / Worth Considering / Best If You\'re Already Nearby", "nearestStation": "short \u2014 just the station name, for the At a Glance card", "recommendedStayGlance": "e.g. \'Half day\' or \'Overnight\' \u2014 short, for At a Glance, must match the real pacing implied in gettingThereReality", "bestTimeGlance": "e.g. \'May\u2013Sept\' \u2014 short, for At a Glance", "accommodationGlance": "e.g. \'Day trip from Copenhagen\' \u2014 short, for At a Glance", "typicalCosts": "REAL representative costs ONLY if the search context actually supports specific numbers \u2014 e.g. \'Museum entry ~100 DKK, dinner 150-250 DKK\' \u2014 never a vague category like \'Low\' or \'Moderate\'. Same discipline as everywhere else here: if the context doesn\'t support real numbers, leave this an empty string rather than guessing or inventing a category \u2014 empty is the correct, expected answer when nothing concrete turns up", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag \u2014 a real place/experience with a concrete detail, distinct from highlight and whatToDo", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
+Respond with ONLY strict JSON: {"name": ${J(name)}, "region": "...", "emoji": "one emoji", "tag": "3-5 word hook", "characterAndFit": "paragraph 1, per the rules above \u2014 2-3 sentences max, also serves as the card-preview text", "whatToDo": "paragraph 2, per the rules above \u2014 3 sentences max, concrete and physical", "gettingThereReality": "PARAGRAPH 3, THE REALITY CHECK \u2014 real getting-there logistics (how, how long) AND a genuine blunt downside, both required, not just travel times dressed up as one section. A downside means something a traveler would actually be disappointed by if nobody told them first: nightlife/dining genuinely limited, the town is quieter or smaller than photos suggest, a real crowd/cost issue, whatever is ACTUALLY true here \u2014 stated as its own direct sentence, not softened or buried at the end of a logistics sentence. 2-4 sentences, matching the same blunt standard as the Reality Check used for restaurants and festivals \u2014 this needs to read as an honest reality check, not a transit schedule with one disclaimer tacked on", "highlight": "one specific real place/experience with a concrete detail, or empty string", "travelTime": "ONLY if you are genuinely confident of the real travel time — otherwise leave this an empty string, never guess (a real error happened before: a town genuinely 4+ hours from Copenhagen was once guessed at 1.5 hours). EXACT format like \'3h 15min \ud83d\ude82\' or \'45min \ud83d\ude8c\' or \'2h + ferry \u26f4\' \u2014 duration + one emoji, NO other words", "mapHint": "Town, postcode Town, Denmark", "lat": "the town\'s REAL latitude as a number. If a VERIFIED LOCATION DATA block appears above, use exactly that coordinate. NEVER copy a number out of this schema and never invent one: an earlier version of this schema showed a filled-in example coordinate here and drafts copied it verbatim, putting the map pin in a field 130km from the town. If you do not have a real coordinate for THIS town, use null", "lon": "the town\'s REAL longitude as a number, same rules as lat, null if genuinely unknown", "nomiPotential": "High / Very High / Medium", "tier": "Can\'t Miss Out / Highly Recommended / Worth Considering / Best If You\'re Already Nearby", "nearestStation": "short \u2014 just the station name, for the At a Glance card", "recommendedStayGlance": "e.g. \'Half day\' or \'Overnight\' \u2014 short, for At a Glance, must match the real pacing implied in gettingThereReality", "bestTimeGlance": "e.g. \'May\u2013Sept\' \u2014 short, for At a Glance", "accommodationGlance": "e.g. \'Day trip from Copenhagen\' \u2014 short, for At a Glance", "typicalCosts": "REAL representative costs ONLY if the search context actually supports specific numbers \u2014 e.g. \'Museum entry ~100 DKK, dinner 150-250 DKK\' \u2014 never a vague category like \'Low\' or \'Moderate\'. Same discipline as everywhere else here: if the context doesn\'t support real numbers, leave this an empty string rather than guessing or inventing a category \u2014 empty is the correct, expected answer when nothing concrete turns up", "thingsToKnow": ["exactly 3 short practical bullets", "each one sentence", "at least one must be a real downside"], "gemlyxFind": "ONE specific curated recommendation only Gemlyx would flag \u2014 a real place/experience with a concrete detail, distinct from highlight and whatToDo", "uncertainties": ["short specific sentence per genuine unconfirmed fact, empty array if none"]}`,
         festival: `Draft a complete Gemlyx festival entry for ${name}, Denmark, following this EXACT structure (a premium travel editor's voice, never Wikipedia): Hero -> At a Glance -> Gemlyx Find -> Intro (the existing desc field — do NOT write a separate Overview, that would just repeat it) -> Atmosphere (the feeling) -> Who It's For (honest fit, also covering why someone should go — don't split into a separate Why Go section) -> Reality Check (the practical downsides, as flowing prose, not bullets). Total word count across Atmosphere+WhoItsFor+RealityCheck+GemlyxFind should land around 220-350 words — short paragraphs, never encyclopedic. Every section answers a different question; never repeat what's already in At a Glance.
 GEMLYX FIND — DON'T FORCE A "HIDDEN GEM" WHERE NONE EXISTS: if this is a genuinely massive, mainstream event with no quiet corners or alternative experience (a huge street festival, a major mainstream music festival), do NOT invent a "quiet alternative" or claim part of it is secretly intimate — that's actively misleading (e.g. telling someone Vesterbro is a quiet escape during Distortion, when it's the middle of a 100,000-person block party, is a real factual error, not just weak writing). Instead pivot Gemlyx Find into a genuinely useful insider PRACTICAL tip for surviving/enjoying a big event as it actually is — a specific sound system or DJ area worth seeking out, specific gear worth bringing (windproof layers for an exposed coastal site), a specific logistical trick (which entrance has shorter queues, a wristband/token system to know about) — something concrete and actionable, not a false claim about the event being smaller or calmer than it is. EVENT IDENTITY \u2014 THIS HAS CAUSED A REAL, SERIOUS ERROR BEFORE: a small church event was once drafted using facts from a completely different, much larger city-wide festival that happened to share part of its name and season, making a quiet event sound like a major party. The search context may contain results about a DIFFERENT event that shares a similar name, the same host town, or overlapping dates \u2014 do not assume everything in the context is about the one event you were actually asked to draft. Before writing, check: does the scale/atmosphere/venue described in the context genuinely match what a search for exactly this name would return, or does some of it sound like it belongs to a bigger, separately-named event nearby? If you have ANY doubt about which real event the context is actually describing, do not silently blend the facts \u2014 add an explicit uncertainty stating exactly what seems mixed up (e.g. \'Some context may describe [other event name] rather than this one \u2014 verify scale and venue before publishing\'), and default to the more conservative, smaller-scale reading rather than the more exciting-sounding one.
 SHAPE-ONLY EXAMPLE (structure reference, not a prose quality bar): {"name": "Distortion", "town": "Copenhagen", "nearestStation": "Nørreport Station, Copenhagen Central Station or nearby Metro stations", "ticketInfo": "Street parties are free. Distortion X and Distortion Ø require tickets.", "accommodationTip": "Stay in central Copenhagen and book several months in advance.", "desc": "Copenhagen's legendary street festival. Five days of block parties in different neighbourhoods."}
@@ -1384,6 +1403,84 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       }
       setStudioResult(code);
       setScanHint(null);
+
+      // ── RECONCILE THE DRAFT WITH WHAT WILL ACTUALLY PUBLISH ──────
+      // Oliver, 5 Aug 2026, on a fact-check flagging coordinates 130 km from the
+      // village: "that is horrific."
+      //
+      // Two separate bugs met here.
+      //
+      // FIRST, the town prompt's JSON schema literally contained "lat": 56.09,
+      // "lon": 8.24 as its example. Every other field in that schema is a
+      // DESCRIPTION of what to write ("one emoji", "3-5 word hook"); those two
+      // were real numbers. So the model did the reasonable thing with a filled-in
+      // example and copied it. 56.09, 8.24 is a field near Ringkøbing Fjord,
+      // which is exactly where the fact-checker said the pin landed. That was not
+      // a hallucination. The app handed the model a wrong answer and the model
+      // repeated it. The schema is fixed too, see the town prompt below.
+      //
+      // SECOND, and this is the part that wasted the human's time: the verified
+      // geocoded coordinates were ALREADY being force-applied, but only inside
+      // publishDraft. So the entry that published was correct, while the draft
+      // JSON shown for review still carried the copied number. He was
+      // fact-checking a document that did not match what the system would
+      // actually save, and burning a real fact-check round on a phantom.
+      //
+      // THE RULE, and it is bigger than coordinates: WHAT YOU REVIEW MUST BE WHAT
+      // YOU PUBLISH. Any value the system overrides at publish time has to be
+      // reconciled into the draft the moment it exists, or every review after it
+      // is being run against fiction.
+      if (frozenGeo) {
+        if (typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
+        if (typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
+        if (frozenGeo.station && typeof t.nearestStation !== "undefined") t.nearestStation = frozenGeo.station;
+      } else if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(sType) && (t.lat || t.lon)) {
+        // Geocoding failed, so nothing will override at publish either, and any
+        // number sitting in lat/lon right now is the model's own. That is the one
+        // case where a wrong coordinate genuinely ships, so it is dropped rather
+        // than trusted, and said out loud in the place the human actually reads.
+        t.lat = null; t.lon = null;
+        t.uncertainties = [...(t.uncertainties || []), "Coordinates could not be verified by geocoding, so they were cleared rather than guessed. Set the map pin manually before publishing."];
+      }
+
+      // ── ENFORCE THE TRANSPORT FACTS, DO NOT ASK FOR THEM ─────────
+      // Oliver: "I want to get to a point where I no longer need to fact-check.
+      // And we can only manage that, by making sure this works."
+      //
+      // That goal rules out a whole category of fix. Telling a model "here is the
+      // real route, please use it" is a request, and a request has a failure rate.
+      // Anything the system already KNOWS must be applied as code, exactly like
+      // the coordinate override above. Møgeltønder is the proof: a live
+      // Directions query returns a real Copenhagen route (5h53 by public
+      // transport, 3h39 by car, both confirmed against the deployed API), and a
+      // draft still said no confirmed public transport route existed.
+      //
+      // So travelTime is written from the real measurement, and a confident claim
+      // that no public transport exists is caught deterministically by reading
+      // the finished text, rather than by hoping the prompt was obeyed.
+      if (realTransport && (realTransport.transit || realTransport.driving)) {
+        if (typeof t.travelTime !== "undefined" && realTransport.transit) {
+          // Parsed as two INDEPENDENT matches. A single combined regex with a lazy
+          // separator silently dropped the minutes ("5 hours 53 mins" became
+          // "5h"), which caught in testing and would otherwise have shipped a
+          // travelTime an hour short of the truth.
+          const hm = realTransport.transit.match(/(\d+)\s*hour/);
+          const mmm = realTransport.transit.match(/(\d+)\s*min/);
+          const h = hm ? Number(hm[1]) : 0, mm = mmm ? Number(mmm[1]) : 0;
+          if (h || mm) t.travelTime = `${h ? `${h}h ` : ""}${mm ? `${mm}min` : ""}`.trim() + " 🚂";
+        }
+        // Deterministic contradiction check. These are phrasings that have really
+        // shipped, including the hedged one ("no confirmed..."), which reads to a
+        // traveler as a flat no while looking like honest caution.
+        const NO_TRANSPORT = /no (?:confirmed |direct |reliable |real |proper |obvious )*(?:public transport|public transit|train[- ]and[- ]bus|bus[- ]and[- ]train|train and bus)[^.]{0,60}?(?:route|itinerary|connection|link)|(?:public transport|public transit)[^.]{0,40}?(?:does not exist|isn't available|is not available|unavailable)|driving is (?:genuinely |really )?the only/i;
+        if (realTransport.transit && NO_TRANSPORT.test(JSON.stringify(t))) {
+          t.uncertainties = [
+            `PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: this draft says there is no public transport route, but a live Directions query found one from Copenhagen (${realTransport.transit}). Rewrite the getting-there text and any Things to Know bullet repeating the claim.`,
+            ...(t.uncertainties || []),
+          ];
+        }
+      }
+
       setStudioDraft(t);
       setStudioDraftText(JSON.stringify(t, null, 2));
       setDraftEditError(null);
@@ -2293,7 +2390,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
               // re-fetch was silently wasted. Same function on both sides now.
               const legMode = resolveLegMode(how, travelMode, origin, dest);
               try {
-                const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}`);
+                const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}${departureParam(legMode)}`);
                 const d2 = await res2.json();
                 if (!d2.error) foundExact[`${origin}|${dest}|${legMode}`] = d2;
               } catch { /* falls back to km estimate / AI text, same as always */ }
@@ -2444,7 +2541,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       const originParam = originCoord ? `${originCoord.lat},${originCoord.lon}` : `${origin}${townByName[origin] ? `, ${townByName[origin]}` : ""}, Denmark`;
       const destParam = destCoord ? `${destCoord.lat},${destCoord.lon}` : `${dest}${townByName[dest] ? `, ${townByName[dest]}` : ""}, Denmark`;
       try {
-        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}`);
+        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode)}`);
         const data = await res.json();
         if (!data.error) {
           // ABSURD-WALK GUARD (Oliver's screenshots: a leg shipped as "1 hour
@@ -2460,7 +2557,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           if (legMode === "walking" && !onlyWalking && data.durationMinutes > WALK_MAX_MINUTES) {
             const upgrade = primaryMode === "bike" ? "bicycling" : primaryMode === "car" ? "driving" : "transit";
             try {
-              const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}`);
+              const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}${departureParam(upgrade)}`);
               const udata = await ures.json();
               if (!udata.error) {
                 console.warn(`Leg ${origin} → ${dest}: Google says ${data.durationMinutes} min on foot, over the ${WALK_MAX_MINUTES} min walking cap — re-routed as ${upgrade}.`);

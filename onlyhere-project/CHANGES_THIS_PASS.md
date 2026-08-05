@@ -1,3 +1,128 @@
+# PASS 47: the same departure-time bug was in the guide's leg durations, and it was worse there
+
+Oliver, after PASS 46: "Can you solve this on the guide as well? Just the duration between locations." Scoped exactly to that.
+
+## What was wrong
+
+All four of the guide's `/api/directions` calls sent no `departure_time`, so every transit leg in a guide was answered as "if you left right this second", at whatever moment the guide happened to be built. A guide built in the evening described an evening journey and then presented it as the trip.
+
+Measured live against the deployed API, leg-shaped hops rather than whole-country routes, at 22:46:
+
+| Leg | Built now | Anchored to a weekday morning | |
+|---|---|---|---|
+| Copenhagen to Gilleleje | 3h 33 | **1h 36** | more than double |
+| Aalborg to Thorup Strand | 7h 16 | **3h 00** | more than double |
+| Aarhus to Skagen | 7h 04 | **3h 58** | |
+| Odense to Ribe | 2h 36 | **1h 55** | |
+| Roskilde to Odense | 2h 04 | **1h 46** | |
+| Copenhagen to Roskilde | 41 min | **42 min** | unchanged |
+
+That last row is the control, and it is the most telling one. On a dense, frequent line the anchor changes nothing, which is exactly what should happen. **All the damage lands on rural and infrequent routes**, which is precisely where Gemlyx claims to be worth using. The app is built on hidden gems rather than big cities, so the bug was worst exactly where the promise is strongest.
+
+## The change
+
+One shared helper in `helpers.js`, `transitDepartureAnchor()` plus a `departureParam(mode)` one-liner, used by every call site so there is a single definition and no chance of two anchors drifting apart. The Studio code from PASS 46 now uses it too instead of its own inline copy.
+
+Anchored: the guide's leg durations (both the main fetch and the mode-upgrade retry), the pre-build re-fetch, the Studio town check, and the route map's geometry.
+
+Deliberately NOT anchored, and this matters:
+
+- **Driving.** Without `departure_time` Google returns its typical duration; with one it returns a live-traffic snapshot. Typical is the right thing for a published figure.
+- **Walking.** No timetable exists to anchor to.
+- **The night-transport check in `geo.js`.** It already passes its own timestamps on purpose, because the entire question it asks is what runs at 1am on a Wednesday versus 3am on a Saturday.
+
+The route map is included because the geometry and the duration must describe the same departure. Leaving it out would have quietly reintroduced the line-versus-number drift that map was fixed for in PASS 41.
+
+## Verification
+
+Six guide-shaped legs queried against the live deployed API, before and after, including a dense-line control that correctly barely moves. The anchor function was executed from six starting moments including late night, an existing Tuesday, and a year boundary, always landing on a future Tuesday 09:00. Every `/api/directions` call site in the codebase was enumerated and checked for whether it is anchored, with a stated reason for each of the three that are not.
+
+# PASS 46: every transit time we produced was wrong, because of one missing parameter
+
+## The bug
+
+A Google transit query with no `departure_time` means **"if you left right this second."** My PASS 44 code never sent one, and PASS 45 then force-wrote that result into `travelTime`. So a town's permanent published travel time depended on the accidental minute a draft happened to be generated. A draft written at 22:38 published a late-evening journey as the truth.
+
+Measured against the live API, same route, same key, only the departure time changed:
+
+| Town | What we published (query "now", 22:38) | Anchored to a weekday morning | Wrong by |
+|---|---|---|---|
+| Nysted | 6h 08 | **2h 03** | 4h 05 |
+| Thorup Strand | 12h 27 | **7h 08** | 5h 19 |
+| Møgeltønder | 5h 53 | **4h 39** | 1h 14 |
+| Ribe | 4h 40 | **3h 33** | 1h 07 |
+| Ærøskøbing | 4h 14 | **3h 04** | 1h 10 |
+| Viborg | 5h 47 | **5h 01** | 46 min |
+
+Every single one inflated. Nysted was published as a six hour journey when it is two.
+
+Transit queries are now anchored to the next Tuesday at 09:00: a plain weekday mid-morning, no rush hour, no weekend timetable, no holiday. Reproducible, and it describes the trip someone would actually take. Driving is deliberately left unanchored, because without `departure_time` Google returns its typical duration rather than a live traffic snapshot, which is what a published figure should be.
+
+Samsø now returns no transit itinerary at all for a scheduled departure, where the unanchored query used to return a confident 6h 03. That is an improvement, not a regression: a misleading number replaced by an honest "could not confirm", which the existing handling already turns into a point at rejseplanen.dk rather than a claim that no route exists.
+
+## On the engineering document
+
+**Its premise is false.** It opens by saying we must eliminate our dependency on the commercial Rejseplanen REST API because the pricing is too expensive. Gemlyx has never called that API. Every mention of Rejseplanen in this codebase is a text string telling a traveler or a model to go and check rejseplanen.dk. Transit routing comes from Google Directions. **There is no Rejseplanen cost, so there is nothing to eliminate.**
+
+The document is written as though it has read the backend ("our pipeline", "our backend schema layouts"). It has not. Same pattern as the earlier claim that routing to a ferry terminal would break the Maps API, which turned out to work fine when actually called.
+
+Taking the three proposals honestly:
+
+**Proposal 3, car duration plus a fixed buffer as an estimated transit time, must not be built.** It manufactures a transit figure from a driving figure and then instructs the model to describe it in "safe, generic phrasing" so the invention is not obvious. That is a guess dressed as a fact, which is the one thing this app exists not to do. It would have hidden today's bug rather than exposed it.
+
+**Proposal 1, self-hosted GTFS with OpenTripPlanner, is real but disproportionate.** Rejseplanen Labs does publish free national GTFS. But OTP needs a persistent container with several GB of RAM to hold a national graph, which is neither $0 nor compatible with a serverless Vercel setup, and it adds a weekly refresh job to maintain. That is real infrastructure and real ops for a solo project with no budget, to solve a cost problem that does not exist.
+
+**Proposal 2, cached routing overrides on the destination, is the good idea.** Storing a human-verified route and duration on the entry fits the pattern we have been building all day: facts the system knows get enforced, not requested. If you want it, it should carry a "verified on" date, because a hardcoded timetable that nobody rechecks is exactly the kind of quietly rotting fact we keep finding.
+
+**The most useful thing the document did was make me re-check my own query.** Gemini's ~4h45 for Møgeltønder was right, and Google agrees the moment you ask it properly. The data source was never the problem. One missing parameter was, and buying infrastructure would have papered over it while every published travel time stayed wrong.
+
+## Verification
+
+The departure-time effect was measured against the live deployed API across seven published towns, at six different times of day, before and after. The anchor function was executed from six starting moments including late night, an existing Tuesday, and a year boundary, always landing on a future Tuesday 09:00. The Samsø zero-result case was retried across five weekday departure slots to confirm it is a genuine absence rather than a one-off.
+
+# PASS 45: the coordinates came from our own prompt, and facts the system knows are now enforced instead of requested
+
+## The coordinate error was ours, not the model's
+
+`"lat": 56.09, "lon": 8.24` was **printed in the town prompt's own JSON schema as its example.** Every other field in that schema is a description of what to write ("one emoji", "3-5 word hook"). Those two were real numbers. So the model did the reasonable thing with a filled-in example and copied it. 56.09, 8.24 is a field near Ringkøbing Fjord, which is exactly where the fact-check said the pin landed.
+
+That was not a hallucination. **The app handed the model a wrong answer and the model repeated it.** The schema now describes the field like every other one, and says explicitly never to copy a number out of the schema.
+
+**The second half is worse, and it is why you wasted a fact-check round.** The verified geocoded coordinates were already being force-applied, but only inside `publishDraft`. So the entry that would have published was correct all along, while the draft JSON you read and sent for checking still carried the copied number. You were fact-checking a document that did not match what the system would actually save.
+
+The rule now, and it is bigger than coordinates: **what you review must be what you publish.** Any value the system overrides at publish time is reconciled into the draft the moment it exists. If geocoding fails, the coordinates are cleared rather than trusted and it says so in uncertainties, because that is the one case where a wrong pin genuinely ships.
+
+## "I want to get to a point where I no longer need to fact-check"
+
+That goal rules out a whole category of fix, and it changes what I did here.
+
+Telling a model "here is the real route, please use it" is a request, and a request has a failure rate. Last pass I added a live Directions lookup and fed it into the prompt. **You have already pushed that, so it was live, and the draft still said no public transport route existed.** I checked the deployed API directly: Copenhagen to Møgeltønder returns 5h53 by public transport and 3h39 by car. The grounding was there. The prompt was not obeyed.
+
+So anything the system already knows is now applied as code:
+
+- **travelTime is written from the real measurement**, not left to the model.
+- **A confident claim that no public transport exists is caught by reading the finished draft**, not by hoping. If a real route was found and the text still denies one, the contradiction goes to the top of uncertainties naming the route it found.
+
+## Testing caught two bugs in my own fix
+
+Worth recording, because both would have shipped and both look fine by eye.
+
+The travelTime formatter turned "5 hours 53 mins" into **"5h"**. One lazy quantifier in a combined regex silently dropped the minutes, so it would have published a travel time an hour short. Hours and minutes are now parsed independently.
+
+The contradiction detector **missed the exact sentence from your draft**, "no confirmed direct train-and-bus itinerary", because the pattern allowed only one modifier after "no" and that phrase has two. It now allows any number.
+
+Final state: all six real absence phrasings caught, and five true statements that are not absence claims correctly left alone ("public transport is limited outside main bus routes", "there is no train station in the village itself"). That distinction is the whole game. The first is honest, the second is a lie, and they are one word apart.
+
+## What this does and does not get you
+
+The class of error in every fact-check so far is **the system knew better and did not use it**: coordinates it had geocoded, a route its own API returns, official pages it never opened. That class can go to zero, because it is engineering rather than judgment, and this pass plus the last two remove most of it.
+
+What no amount of this removes is the other class: a price that changed last month, two official pages that disagree, a tour schedule that shifts by season. Those need a source, and the honest target is that you spot-check rather than fact-check every entry.
+
+## Verification
+
+The reconciliation logic was executed against five cases including the real Møgeltønder failure and a geocoding failure. The travelTime formatter and the contradiction detector were executed against real phrasings from your own drafts, which is how both bugs above were found. The live deployed Directions API was queried for Møgeltønder, Tønder, Ribe, Nysted, Thorup Strand and Samsø, all returning real transit routes. Deployment state of every recent pass was checked against the live bundle rather than assumed.
+
 # PASS 44: the pipeline was not opening the official website, and was not asking its own Directions API about transport
 
 Two systemic gaps, both found by reading the pipeline rather than the drafts. Every transport error in the last three fact-checks traces to one of them.
