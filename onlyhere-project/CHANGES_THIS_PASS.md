@@ -1,3 +1,23 @@
+# PASS 35: media in the writing — per-listing photo uploads from your phone, multiple pictures, Instagram reels, hero photo control. Plus two corrections: the 400s persist only because the hotfix isn't pushed, and the whole "data files not deployed" saga was my false alarm
+
+**The prefill 400s in this report are from the OLD bundle.** Your console shows `index-B-oIWLrY.js` — the exact same bundle as the previous report, from before the PASS 34 hotfix. The fix is sitting on your disk; it needs a `git push` to reach the site. Nothing new is broken.
+
+**And an apology on the data files: git was right and I was wrong, three times over.** "It doesn't show that data is changed" is the correct answer — the emptied data files were committed and deployed long ago. My repeated "still not deployed" flags came from checking the live bundle for names like "Toga Vinstue" and "Harry's Place", which legitimately exist in the bundle as examples inside the Studio's own prompt files and the loading-screen facts. I was matching the wrong strings and telling you to fix a problem that didn't exist. The Supabase-only change has been live this whole time.
+
+**The media editor you asked for.** In Manage Published, every listing now has a "🖼 Media" button that opens an editor right under the row:
+
+An "⬆ Upload photos" button that works from your phone (pick from camera roll, several at once). Uploads go to Supabase Storage and land INSIDE the listing's writing as image blocks — the detail page already renders them in the flow of the text. The first photo a listing ever gets also becomes its hero photo (the card image and page header) automatically, and any uploaded image can be promoted with its "☆ Hero" button later. A reel field: paste an Instagram link, tap Add reel, and it embeds in the writing (the app's existing Instagram embed). Every image and reel is listed with a ✕ to remove it. All of it saves into the published row itself, so visitors see it on their next load — no code, no git, no redeploy.
+
+**One-time setup needed before the first upload** (Supabase dashboard → SQL editor, run once):
+
+insert into storage.buckets (id, name, public) values ('gemlyx-media','gemlyx-media', true);
+create policy "auth upload gemlyx-media" on storage.objects for insert to authenticated with check (bucket_id = 'gemlyx-media');
+create policy "public read gemlyx-media" on storage.objects for select using (bucket_id = 'gemlyx-media');
+
+If you skip this, the upload button will tell you exactly that instead of failing silently. Also worth knowing: an earlier session's "📷 Photos" panel (the photo_overrides approach) is completely gone from the current code — it was lost in one of the big rebuilds, which is why uploading felt missing. This new editor replaces it with a better fit for the Supabase-only content model: media attaches directly to the published entry, not to a side table.
+
+Verified: full real-import esbuild bundle + minify-scope-check clean on every new identifier. **Needs `git push` (which also ships the PASS 34 hotfix ending the 400s).**
+
 # PASS 34 HOTFIX: PASS 33's prefill broke every build — my mistake, reverted and replaced with a re-ask that no model can reject
 
 Straight up: the 400 errors killing both the guide build and Studio drafting ("This model does not support assistant message prefill") were caused by MY change in the previous pass. I used an Anthropic API feature (assistant-message prefill) that the models this app runs on reject outright, and I shipped it without being able to verify against the live API from this environment. That was the wrong call on an API-level change, and it took your builds down. The lesson is recorded in the code and the handoff so it can't be re-tried casually.

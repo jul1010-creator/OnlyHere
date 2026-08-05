@@ -373,6 +373,96 @@ function GemlyxApp() {
     setManageOpen(false);
   };
 
+  // ── MEDIA EDITOR (Oliver: "we need to have the picture of it shown in the
+  // writing or on the side. Also, I should be able to include multiple
+  // pictures and reels. I would also appreciate if we could make an 'upload'
+  // button. Then I can upload from my phone on the studio."): per published
+  // row in Manage Published, a 🖼 Media panel — upload photos straight from
+  // the phone (multiple at once) into the gemlyx-media Supabase Storage
+  // bucket, paste Instagram reel links, set the hero photo, remove media.
+  // Everything lands IN the row's payload (photo + blogBody image/instagram
+  // blocks — DetailPage already renders all three block types), so it shows
+  // inside the actual writing for every visitor after their next load.
+  // ONE-TIME SETUP (Supabase dashboard → SQL editor) if uploads 404:
+  //   insert into storage.buckets (id, name, public) values ('gemlyx-media','gemlyx-media', true);
+  //   create policy "auth upload gemlyx-media" on storage.objects for insert to authenticated with check (bucket_id = 'gemlyx-media');
+  //   create policy "public read gemlyx-media" on storage.objects for select using (bucket_id = 'gemlyx-media');
+  const [mediaEditId, setMediaEditId] = useState(null);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [mediaError, setMediaError] = useState(null);
+  const [mediaReelInput, setMediaReelInput] = useState("");
+  const patchContentPayload = async (row, newPayload) => {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ payload: newPayload }),
+    });
+    if (!res.ok) throw new Error(`Save failed (${res.status}) — check the update RLS policy on gemlyx_content`);
+    setManageItems(items => (items || []).map(r => r.id === row.id ? { ...r, payload: newPayload } : r));
+  };
+  const uploadMediaFiles = async (row, fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length || mediaBusy) return;
+    setMediaBusy(true); setMediaError(null);
+    try {
+      const slugBase = slugify(row.payload?.name || "item");
+      const newBlocks = [];
+      let firstUrl = null;
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const ext = ((f.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "")) || "jpg";
+        const path = `${row.type}/${slugBase}-${Date.now()}-${i}.${ext}`;
+        const up = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": f.type || "image/jpeg", "x-upsert": "true" },
+          body: f,
+        });
+        if (!up.ok) {
+          const detail = await up.text().catch(() => "");
+          throw new Error(up.status === 404 || /bucket/i.test(detail)
+            ? "The gemlyx-media storage bucket doesn't exist yet — run the one-time SQL setup (see the comment above the media editor in App.jsx, or CHANGES_THIS_PASS.md)."
+            : `Upload failed (${up.status})`);
+        }
+        const url = `${SUPABASE_URL}/storage/v1/object/public/gemlyx-media/${path}`;
+        newBlocks.push({ type: "image", src: url });
+        if (!firstUrl) firstUrl = url;
+      }
+      const p = row.payload || {};
+      // First-ever photo also becomes the hero (card + detail header) so the
+      // listing stops looking bare; further uploads land in the writing only.
+      await patchContentPayload(row, { ...p, photo: p.photo || firstUrl, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), ...newBlocks] });
+    } catch (e) { setMediaError(String(e?.message || e)); }
+    setMediaBusy(false);
+  };
+  const addReelToRow = async (row) => {
+    const url = mediaReelInput.trim();
+    if (!url || mediaBusy) return;
+    if (!/instagram\.com\//i.test(url)) { setMediaError("Paste a full Instagram link (instagram.com/reel/...)"); return; }
+    setMediaBusy(true); setMediaError(null);
+    try {
+      const p = row.payload || {};
+      await patchContentPayload(row, { ...p, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), { type: "instagram", url }] });
+      setMediaReelInput("");
+    } catch (e) { setMediaError(String(e?.message || e)); }
+    setMediaBusy(false);
+  };
+  const removeMediaBlock = async (row, blockIdx) => {
+    if (mediaBusy) return;
+    setMediaBusy(true); setMediaError(null);
+    try {
+      const p = row.payload || {};
+      await patchContentPayload(row, { ...p, blogBody: (Array.isArray(p.blogBody) ? p.blogBody : []).filter((_, i) => i !== blockIdx) });
+    } catch (e) { setMediaError(String(e?.message || e)); }
+    setMediaBusy(false);
+  };
+  const setHeroFromBlock = async (row, src) => {
+    if (mediaBusy) return;
+    setMediaBusy(true); setMediaError(null);
+    try {
+      await patchContentPayload(row, { ...(row.payload || {}), photo: src });
+    } catch (e) { setMediaError(String(e?.message || e)); }
+    setMediaBusy(false);
+  };
   const deleteContentItem = async (id) => {
     if (!studioSession || !window.confirm("Delete this from Gemlyx? This can't be undone.")) return;
     setDeletingId(id);
@@ -3571,25 +3661,88 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Nothing published yet.</div>
                         ) : (
                           manageItems.map(row => (
-                            <div key={row.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {row.payload?.emoji || "•"} {row.payload?.name || "(unnamed)"}
+                            <div key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0" }}>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {row.payload?.emoji || "•"} {row.payload?.name || "(unnamed)"}
+                                  </div>
+                                  <div style={{ fontSize: 10, color: C.muted }}>
+                                    {row.type}{!row.published ? " · not published" : ""}{row.payload?.photo ? "" : " · no photo"}
+                                  </div>
                                 </div>
-                                <div style={{ fontSize: 10, color: C.muted }}>
-                                  {row.type}{!row.published ? " · not published" : ""}
+                                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                  <button onClick={() => { setMediaEditId(v => v === row.id ? null : row.id); setMediaError(null); setMediaReelInput(""); }}
+                                    style={{ background: mediaEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                    🖼 Media
+                                  </button>
+                                  <button onClick={() => editItem(row)}
+                                    style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                    ✏️ Edit
+                                  </button>
+                                  <button onClick={() => deleteContentItem(row.id)} disabled={deletingId === row.id}
+                                    style={{ background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                    {deletingId === row.id ? "…" : "🗑 Delete"}
+                                  </button>
                                 </div>
                               </div>
-                              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                                <button onClick={() => editItem(row)}
-                                  style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                                  ✏️ Edit
-                                </button>
-                                <button onClick={() => deleteContentItem(row.id)} disabled={deletingId === row.id}
-                                  style={{ background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                                  {deletingId === row.id ? "…" : "🗑 Delete"}
-                                </button>
-                              </div>
+                              {/* MEDIA EDITOR — see the uploadMediaFiles comment block for the
+                                  why and the one-time bucket setup. Everything saves into the
+                                  row's payload, so it's live for visitors on their next load. */}
+                              {mediaEditId === row.id && (() => {
+                                const p = row.payload || {};
+                                const mediaBlocks = (Array.isArray(p.blogBody) ? p.blogBody : []).map((b, i) => ({ ...b, _idx: i })).filter(b => b.type === "image" || b.type === "instagram");
+                                return (
+                                  <div style={{ padding: "4px 0 12px", fontSize: 12 }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                                      <div style={{ width: 52, height: 40, borderRadius: 8, overflow: "hidden", background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                        {p.photo ? <img src={p.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 10, color: C.muted }}>none</span>}
+                                      </div>
+                                      <div style={{ fontSize: 11, color: C.muted }}>Hero photo — shows on the card and at the top of the page. First upload becomes it automatically if empty.</div>
+                                    </div>
+                                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.gold, color: "#000", borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: mediaBusy ? "default" : "pointer", opacity: mediaBusy ? 0.6 : 1, marginRight: 8 }}>
+                                      {mediaBusy ? "Uploading…" : "⬆ Upload photos"}
+                                      <input type="file" accept="image/*" multiple disabled={mediaBusy}
+                                        onChange={e => { uploadMediaFiles(row, e.target.files); e.target.value = ""; }}
+                                        style={{ display: "none" }} />
+                                    </label>
+                                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                                      <input value={mediaReelInput} onChange={e => setMediaReelInput(e.target.value)}
+                                        placeholder="Paste an Instagram reel/post link…"
+                                        style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                                      <button onClick={() => addReelToRow(row)} disabled={mediaBusy}
+                                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 8, padding: "7px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                        Add reel
+                                      </button>
+                                    </div>
+                                    {mediaBlocks.length > 0 && (
+                                      <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                                        {mediaBlocks.map(b => (
+                                          <div key={b._idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            {b.type === "image" ? (
+                                              <img src={b.src} alt="" style={{ width: 44, height: 32, objectFit: "cover", borderRadius: 6, border: `1px solid ${C.border}`, flexShrink: 0 }} />
+                                            ) : (
+                                              <span style={{ fontSize: 16, flexShrink: 0 }}>🎬</span>
+                                            )}
+                                            <span style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.type === "image" ? (b.src || "").split("/").pop() : b.url}</span>
+                                            {b.type === "image" && p.photo !== b.src && (
+                                              <button onClick={() => setHeroFromBlock(row, b.src)} disabled={mediaBusy} title="Use as the hero photo"
+                                                style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                                                ☆ Hero
+                                              </button>
+                                            )}
+                                            <button onClick={() => removeMediaBlock(row, b._idx)} disabled={mediaBusy}
+                                              style={{ background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 100, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                                              ✕
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {mediaError && <div style={{ marginTop: 8, fontSize: 11, color: "#FFB347", lineHeight: 1.5 }}>{mediaError}</div>}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           ))
                         )}
