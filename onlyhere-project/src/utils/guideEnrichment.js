@@ -84,6 +84,20 @@ export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalki
   return mode;
 };
 
+// SAME-TOWN RULE (Oliver, second report of this class: "It still does it..
+// Ribe Vikingecenter to Ribe Old Town.. No direct route, check Rome2Rio"):
+// the distance-based short-leg rule in resolveLegMode needs COORDINATES, and
+// when neither stop resolves to a precise point the leg can still end up
+// queried as transit and dead-end. But the guide itself already knows both
+// stops' towns (every stop carries a `town` field) — two stops in the SAME
+// town on a transit trip are a walk, coordinates or not, unless the leg text
+// explicitly says ferry/boat. Used by fetch AND render so cache keys agree.
+export const isSameTownWalk = (mode, originTown, destTown, how) =>
+  mode === "transit" &&
+  !!originTown && !!destTown &&
+  originTown.trim().toLowerCase() === destTown.trim().toLowerCase() &&
+  !/ferry|boat|færge/i.test(how || "");
+
 // FALLBACK TIME ESTIMATE (Oliver's report: legs without a real Google Directions
 // result were showing a bare "~34 km by car" instead of any actual time, which
 // reads as broken — "put a random time estimate" was the ask). This only fires

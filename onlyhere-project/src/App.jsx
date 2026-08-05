@@ -8,6 +8,7 @@ import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
+import { isSameTownWalk } from "./utils/guideEnrichment";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
 import { roadTrips, seasonalItineraries } from "./data/roadtrips";
@@ -1585,9 +1586,20 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
 Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
         const enrichResult = await askClaude(
           `${enrichPrompt}\n\nRespond with ONLY the raw JSON object, no markdown code fences.\n\n${context || "No live search context available — use only safe general knowledge and 'Check Rejseplanen' fallbacks."}`,
-          350,
+          // TOKEN BUMP 350 → 900 (Oliver: "why does the accommodation/booking
+          // affiliation keep getting removed"): 350 max_tokens was genuinely too
+          // tight for this response — a 5-stop day needs 4 leg objects PLUS the
+          // three accommodation fields, and the accommodation sentence alone is
+          // asked to be specific. A response cut off mid-JSON fails the parse
+          // below, the catch swallows it, and the whole day silently loses its
+          // "Where to stay" card and leg texts — which is exactly what "keeps
+          // getting removed" looks like from the outside. Not a removal, a
+          // truncation. 900 gives honest headroom; the warn below makes any
+          // remaining failure visible in the console instead of silent.
+          900,
           "claude-opus-4-8"
         );
+        if (enrichResult.error) console.warn(`Day ${idx + 1} glance enrichment failed:`, enrichResult.error);
         const glance = JSON.parse(enrichResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
         if ((Array.isArray(glance.legs) && glance.legs.length > 0) || glance.accommodation) {
           setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
@@ -1633,7 +1645,12 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
             }
           }
         }
-      } catch { /* leave this day without travel details */ }
+      } catch (e) {
+        // Leave this day without travel details, but SAY SO in the console —
+        // a silent swallow here is how the disappearing "Where to stay" card
+        // went undiagnosed for so long (see the token-bump comment above).
+        console.warn(`Day ${idx + 1} glance enrichment failed (no legs/accommodation for this day):`, e);
+      }
       finally { setGlancePending(p => Math.max(0, p - 1)); }
     });
   };
@@ -1734,7 +1751,12 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     await Promise.all(legs.map(async ([origin, dest, how]) => {
       // Same shared function the render uses — guarantees fetch and display can
       // never disagree on mode, and therefore never miss each other's cache entry.
-      const legMode = resolveLegMode(how, primaryMode, origin, dest, onlyWalking, freshGeo);
+      let legMode = resolveLegMode(how, primaryMode, origin, dest, onlyWalking, freshGeo);
+      // Same-town transit legs are walks even when coordinates never resolved
+      // (see isSameTownWalk in utils/guideEnrichment.js — the Ribe VikingeCenter
+      // → Ribe Old Town report). GuidePage's legChip applies the identical rule
+      // with the identical town source (stop.town), so the cache key still matches.
+      if (isSameTownWalk(legMode, townByName[origin], townByName[dest], how)) legMode = "walking";
       const key = `${origin}|${dest}|${legMode}`;
       // Pass real coordinates when known instead of a bare name — a bare "Bones"
       // or "Rosenborg Castle" leaves Google's own geocoder (inside the Directions
@@ -1760,11 +1782,13 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           // no-route case (an actual island crossing) deserving the Rome2Rio
           // chip. modeUsed tells the render to show the honest walking
           // icon/label/link for the result even though the leg's cache key
-          // stays the transit one it resolved to.
+          // stays the transit one it resolved to. Same-town legs with unknown
+          // distance get the retry too — same reasoning as isSameTownWalk.
           const a = resolveFresh(origin), b = resolveFresh(dest);
           const legKm = a && b ? haversineKm(a, b) : null;
+          const sameTown = townByName[origin] && townByName[dest] && townByName[origin].trim().toLowerCase() === townByName[dest].trim().toLowerCase();
           let rescued = false;
-          if (legMode === "transit" && legKm != null && legKm <= 4) {
+          if (legMode === "transit" && ((legKm != null && legKm <= 4) || (legKm == null && sameTown))) {
             try {
               const wres = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=walking`);
               const wdata = await wres.json();
@@ -2694,6 +2718,24 @@ If the conversation only covers a single day or a few stops with no explicit day
     el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
   }, [entered]);
   const [aiLoading, setAiLoading] = useState(false);
+  // PREVIEW CHAT (Oliver: "Make the Gemlyx AI instantly able for help. In the
+  // right corner or something"): the pre-build preview screen is a full-screen
+  // overlay covering the Detour chat, so this floating corner panel (rendered
+  // ABOVE the preview, zIndex 960) gives direct access to the SAME live
+  // conversation — same aiMessages, same sendAI — without closing the preview.
+  // Own input state so it never clobbers the main chat composer's draft text.
+  // DECLARED HERE, BELOW aiMessages AND aiLoading, on purpose — the effect's
+  // dependency array reads both eagerly at render time, and referencing a
+  // state variable declared further down the component is the exact
+  // temporal-dead-zone class of bug that crashed the whole app in the PASS 24
+  // hotfix. Do not move this block above those declarations.
+  const [previewChatOpen, setPreviewChatOpen] = useState(false);
+  const [previewChatInput, setPreviewChatInput] = useState("");
+  const [previewRevealedUpTo, setPreviewRevealedUpTo] = useState(0);
+  const previewChatScrollRef = useRef(null);
+  useEffect(() => {
+    if (previewChatOpen && previewChatScrollRef.current) previewChatScrollRef.current.scrollTop = previewChatScrollRef.current.scrollHeight;
+  }, [aiMessages, previewChatOpen, aiLoading]);
   const [showMenu, setShowMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -5507,6 +5549,57 @@ You also have a web_search tool. Use it whenever someone asks about something th
           setGuideModal={setGuideModal}
           generateGuide={generateGuide}
         />
+      )}
+      {/* PREVIEW CHAT — floating Ask Gemlyx corner launcher + panel ON TOP of
+          the preview overlay (zIndex 960 > the preview's 950), per Oliver:
+          "Make the Gemlyx AI instantly able for help. In the right corner or
+          something." This is the REAL Detour conversation (same aiMessages,
+          same sendAI, same grounding), not a second chat — anything asked or
+          changed here is the same thing the preview was built from, and the
+          preview stays open underneath the whole time. */}
+      {guideModal === "preview" && !previewChatOpen && (
+        <button onClick={() => setPreviewChatOpen(true)}
+          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 960, display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${C.surface}, ${C.bg})`, border: `1px solid ${C.gold}55`, color: C.text, borderRadius: 100, padding: "12px 18px 12px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 26px rgba(0,0,0,0.55)", fontFamily: "'Inter', sans-serif" }}>
+          <GemlyxMark size={20} ring={true} ringColor={C.gold} tone="gold" />
+          Ask Gemlyx
+        </button>
+      )}
+      {guideModal === "preview" && previewChatOpen && (
+        <div style={{ position: "fixed", bottom: 0, right: 0, zIndex: 960, width: "100%", maxWidth: 380, height: "min(540px, 80vh)", display: "flex", flexDirection: "column", background: C.surface, border: `1px solid ${C.border}`, borderTopLeftRadius: 18, borderTopRightRadius: 18, boxShadow: "0 -8px 30px rgba(0,0,0,0.55)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <GemlyxMark size={20} ring={true} ringColor={C.gold} tone="gold" />
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>Gemlyx</span>
+            </div>
+            <button onClick={() => setPreviewChatOpen(false)}
+              style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4 }}>✕</button>
+          </div>
+          <div ref={previewChatScrollRef} style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {aiMessages.filter(m => !m.hidden).map((m, i, arr) => {
+              const isLatestAssistant = m.role === "assistant" && i === arr.length - 1;
+              const streaming = isLatestAssistant && i > previewRevealedUpTo;
+              return (
+                <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%", background: m.role === "user" ? `linear-gradient(135deg, ${C.accent}, #C22A3C)` : C.bg, color: m.role === "user" ? "#fff" : C.light, borderRadius: 14, padding: "10px 13px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                  {m.role === "assistant"
+                    ? <TypewriterText text={m.text} active={streaming} onDone={() => setPreviewRevealedUpTo(prev => Math.max(prev, i))} />
+                    : m.text}
+                </div>
+              );
+            })}
+            {aiLoading && (
+              <div style={{ alignSelf: "flex-start", color: C.muted, fontSize: 12.5, padding: "4px 2px" }}>Gemlyx is thinking…</div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8, padding: "10px 12px", borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <input value={previewChatInput} onChange={e => setPreviewChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && previewChatInput.trim()) { sendAI(previewChatInput); setPreviewChatInput(""); } }}
+              placeholder="Ask or change something…"
+              style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 100, padding: "10px 14px", fontSize: 13, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+            <button onClick={() => { if (previewChatInput.trim()) { sendAI(previewChatInput); setPreviewChatInput(""); } }}
+              disabled={aiLoading}
+              style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", border: "none", borderRadius: 100, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: aiLoading ? "default" : "pointer", opacity: aiLoading ? 0.7 : 1, fontFamily: "'Inter', sans-serif" }}>➤</button>
+          </div>
+        </div>
       )}
       {guideModal === "choosing" && (
         <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setGuideModal(null)}>

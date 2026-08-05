@@ -134,24 +134,15 @@ export const GuidePreviewScreen = ({
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, textAlign: "center" }}>
           {totalShown > 0 ? "A quick look at the real places on this route before Gemlyx builds your full guide." : "Gemlyx will build your full guide next — real places, checked and mapped out."}
         </div>
-        {/* BUG FIX (Oliver: "when the preview pops up Gemlyx AI is not there
-            to answer questions"): true — this screen is a full-screen,
-            near-opaque overlay (see the outer div's background/zIndex) sitting
-            directly on top of the Gemlyx Detour chat tab it was opened from,
-            so the chat is completely hidden and unreachable while this is up,
-            with no obvious way back to it short of realizing the ✕ (which
-            reads as "cancel", not "go ask something") gets you there.
-            closePreview already correctly returns to that same live chat
-            (and cleans up random-guide test state if needed) — this just
-            makes that path visible and inviting instead of hidden behind a
-            close button, so a traveler who wants to tweak something before
-            committing doesn't have to guess. */}
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <button onClick={closePreview}
-            style={{ background: "none", border: "none", color: C.gold, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: "4px 8px" }}>
-            ✦ Want to ask something or change it first? Back to chat
-          </button>
-        </div>
+        {/* The "✦ Want to ask something or change it first? Back to chat"
+            text button that used to sit here is gone per Oliver ("I don't
+            like that... Make the Gemlyx AI instantly able for help. In the
+            right corner or something") — replaced by a floating Ask Gemlyx
+            launcher App.jsx renders ON TOP of this overlay (zIndex 960,
+            search PREVIEW CHAT in App.jsx), which opens the real live Detour
+            conversation in a corner panel without ever closing this preview.
+            The ✕ / backdrop tap still fully close back to the chat tab. */}
+        <div style={{ marginBottom: 18 }} />
         {sections.map(cat => (
           <div key={cat.label} style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>{cat.label}</div>

@@ -7,8 +7,9 @@ import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText } from "../utils/guideEnrichment";
+import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk } from "../utils/guideEnrichment";
 import { askClaude } from "../utils/aiClient";
+import { BOOKING_AFFILIATE_ID } from "../config";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
 // The ONLY place a guide is ever shown, per Oliver ("get rid of the popup") —
@@ -325,8 +326,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
             return geo[name] || null;
           };
+          const stopTownOf = (name) => (day.stops || []).find(s => s.name === name)?.town || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
           const routeUrl = (originName, destName, mode) => {
-            const originTown = (day.stops || []).find(s => s.name === originName)?.town || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
+            const originTown = stopTownOf(originName);
             const destTown = (day.stops || []).find(s => s.name === destName)?.town;
             const oc = preciseCoord(originName), dc = preciseCoord(destName);
             const originText = oc ? `${oc.lat},${oc.lon}` : originTown ? `${originName}, ${originTown}, Denmark` : `${originName}, Denmark`;
@@ -334,7 +336,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
           };
           const legChip = (originName, destName, how) => {
-            const mode = resolveLegMode(how, guide._mode, originName, destName, guide._onlyWalking, geo);
+            let mode = resolveLegMode(how, guide._mode, originName, destName, guide._onlyWalking, geo);
+            // Same-town transit legs are walks even when no coordinates ever
+            // resolved (the Ribe VikingeCenter → Ribe Old Town report) — same
+            // rule, same town source (stop.town) as fetchExactDurations, so
+            // the cache key each computes always matches the other's.
+            const legOriginTown = stopTownOf(originName);
+            const legDestTown = (day.stops || []).find(s => s.name === destName)?.town;
+            if (isSameTownWalk(mode, legOriginTown, legDestTown, how)) mode = "walking";
             const rawExact = exactDurations[`${originName}|${destName}|${mode}`];
             const plausibleCap = mode === "walking" ? 180 : mode === "bicycling" ? 300 : Infinity;
             const exact = rawExact && rawExact.durationMinutes <= plausibleCap ? rawExact : null;
@@ -350,22 +359,24 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             const routeFailed = noRouteFound[`${originName}|${destName}|${mode}`];
             if (routeFailed) {
               // SHORT-LEG GUARD, also covers guides built before the fetch-side
-              // fixes: if a "no route" leg is genuinely close together, it's a
-              // walk — show a real walking chip with an estimate and a walking
-              // Maps link, never "check Rome2Rio" for a five minute stroll.
-              if (km != null && km <= 3) {
+              // fixes: a "no route" leg that is genuinely close together (or
+              // inside one town) is a walk — show a real walking chip with a
+              // walking Maps link, never "check Rome2Rio" for a five minute
+              // stroll. Rome2Rio stays only for real long-distance dead ends
+              // (island crossings needing ferry+train combinations).
+              if ((km != null && km <= 3) || (legOriginTown && legDestTown && legOriginTown.trim().toLowerCase() === legDestTown.trim().toLowerCase())) {
                 return (
                   <a href={routeUrl(originName, destName, "walking")} target="_blank" rel="noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
                     <span style={{ fontSize: 12 }}>🚶</span>
-                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{estimateDurationText(km, "walking")} on foot</span>
+                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{km != null ? `${estimateDurationText(km, "walking")} on foot` : "A short walk"}</span>
                     <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
                   </a>
                 );
               }
               return (
                 <a href={`https://www.rome2rio.com/map/${encodeURIComponent(originName)}/${encodeURIComponent(destName)}`} target="_blank" rel="noreferrer"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
                   <span style={{ fontSize: 12 }}>⛴</span>
                   <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>No direct route, check Rome2Rio</span>
                 </a>
@@ -379,10 +390,10 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             const exactLabel = exact ? `${usedMode === "transit" ? "~" : ""}${exact.durationText} ${modeLabel}` : null;
             return (
               <a href={routeUrl(originName, destName, usedMode)} target="_blank" rel="noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
                 <span style={{ fontSize: 12 }}>{icon}</span>
                 <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
-                  {exactLabel || (km !== null ? `${estimateDurationText(km, usedMode)} ${modeLabel}` : how || "Route")}
+                  {exactLabel || (km !== null ? `${estimateDurationText(km, usedMode)} ${modeLabel}` : how || "Check route")}
                 </span>
                 <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
               </a>
@@ -418,11 +429,20 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               <div style={{ marginBottom: 14 }}>{legChip(days[dayIdx - 1].stops.slice(-1)[0].name, day.stops[0].name, day.glance?.legs?.[0]?.how)}</div>
             )}
             {!lightMode && routePoints.length > 1 && (
-              <div style={{ height: 180, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 18 }}>
+              <div style={{ height: 180, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 18, maxWidth: 620 }}>
                 <GuideRouteMap points={routePoints} />
               </div>
             )}
-            <div className="towns-grid">
+            {/* TIMELINE LAYOUT (Oliver: "having the transport under each is
+                odd... put it up so it looks a little bit more understanding",
+                his pick from the options offered): the two-column card grid put
+                each transport chip under one card in grid space, visually
+                attached to nothing. A day is a SEQUENCE, so it now renders as
+                one: a single column of stop cards with the transport chip
+                sitting on a small connector line BETWEEN the two stops it
+                actually joins. The cards themselves are unchanged (same photo
+                height as the Towns nav, per Oliver's earlier call). */}
+            <div style={{ maxWidth: 620 }}>
               {/* Redesign pass: stops became real cards (surface, border, radius) instead
                   of floating text under a gray box, and the empty-photo state is now a
                   designed monogram plate — the place's initial in italic serif on a
@@ -434,7 +454,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 const real = matched && matched._src !== "craft" ? matched : null;
                 const nextStop = day.stops[stopIdx + 1];
                 return (
-                <div key={stopIdx}>
+                <div key={stopIdx} style={{ marginBottom: nextStop && lightMode ? 14 : 0 }}>
                   <div onClick={real ? () => openStopDetail(real) : undefined}
                     style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: real ? "pointer" : "default" }}>
                     {/* Per Oliver: "avoid the horizontal pictures, you can't see the
@@ -460,7 +480,16 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                       {stop.note && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginTop: 7 }}>{stop.note.slice(0, 140)}{stop.note.length > 140 ? "…" : ""}</div>}
                     </div>
                   </div>
-                  {!lightMode && nextStop && legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
+                  {/* Connector: the leg chip sits ON the line between the two
+                      stops it joins, centered — reads as "then you travel",
+                      not as a stray label under a random card. */}
+                  {!lightMode && nextStop && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "4px 0" }}>
+                      <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
+                      {legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}
+                      <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
+                    </div>
+                  )}
                 </div>
                 );
               })}
@@ -474,10 +503,21 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               const adultsMatch = (guide._travelers || "").match(/\d+/);
               const adults = adultsMatch ? adultsMatch[0] : "2";
               const searchTerm = day.glance.recommendedStay || day.glance.stayArea;
+              // STANDING RULE — DO NOT REMOVE THIS CARD OR THIS LINK IN ANY
+              // REBUILD (Oliver: "why does the accommodation/booking
+              // affiliation keep getting removed"): the "Where to stay" card
+              // and its Booking.com link are a deliberate, permanent feature
+              // and the app's planned affiliate revenue path. If a redesign
+              // touches this section, the card and link must survive it.
+              // BOOKING_AFFILIATE_ID lives in src/config.js — one shared
+              // constant, empty until Oliver's Booking.com affiliate account
+              // is approved; pasting the aid number there turns every Booking
+              // link in the app into an affiliate link at once.
               const bookingUrl = searchTerm
                 ? `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(searchTerm + ", Denmark")}` +
                   (fmt(dayDate) ? `&checkin=${fmt(dayDate)}&checkout=${fmt(nextDate)}` : "") +
-                  `&group_adults=${adults}&no_rooms=1`
+                  `&group_adults=${adults}&no_rooms=1` +
+                  (BOOKING_AFFILIATE_ID ? `&aid=${BOOKING_AFFILIATE_ID}` : "")
                 : null;
               return (
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.gold}33`, borderRadius: 12, padding: "12px 14px", marginTop: 16 }}>
