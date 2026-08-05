@@ -310,24 +310,59 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           const geo = guide._geo || {};
           const exactDurations = guide._exactDurations || {};
           const noRouteFound = guide._noRouteFound || {};
+          // LINK PARITY FIX (Oliver: "Public transport says 19 minutes... you
+          // then check maps, and it's 27"): the in-app duration was fetched
+          // with real resolved COORDINATES, but this Google Maps link was built
+          // from plain text names — Google's own geocoder can resolve those to
+          // different endpoints (a different station, a same-named place
+          // elsewhere), so the linked route legitimately disagreed with the
+          // quoted one. When we have a genuinely precise coordinate for a stop
+          // (real data or this guide's own geocode — NOT the town-center
+          // fallback), the link now uses it, so Maps opens the same journey the
+          // chip's number came from.
+          const preciseCoord = (name) => {
+            const real = lookupRealPlace(name);
+            if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+            return geo[name] || null;
+          };
           const routeUrl = (originName, destName, mode) => {
             const originTown = (day.stops || []).find(s => s.name === originName)?.town || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
             const destTown = (day.stops || []).find(s => s.name === destName)?.town;
-            const originText = originTown ? `${originName}, ${originTown}, Denmark` : `${originName}, Denmark`;
-            const destText = destTown ? `${destName}, ${destTown}, Denmark` : `${destName}, Denmark`;
+            const oc = preciseCoord(originName), dc = preciseCoord(destName);
+            const originText = oc ? `${oc.lat},${oc.lon}` : originTown ? `${originName}, ${originTown}, Denmark` : `${originName}, Denmark`;
+            const destText = dc ? `${dc.lat},${dc.lon}` : destTown ? `${destName}, ${destTown}, Denmark` : `${destName}, Denmark`;
             return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
           };
           const legChip = (originName, destName, how) => {
             const mode = resolveLegMode(how, guide._mode, originName, destName, guide._onlyWalking, geo);
-            const icon = mode === "bicycling" ? "🚲" : mode === "driving" ? "🚗" : mode === "walking" ? "🚶" : /ferry|boat/i.test(how || "") ? "⛴" : "🚆";
             const rawExact = exactDurations[`${originName}|${destName}|${mode}`];
             const plausibleCap = mode === "walking" ? 180 : mode === "bicycling" ? 300 : Infinity;
             const exact = rawExact && rawExact.durationMinutes <= plausibleCap ? rawExact : null;
+            // A transit leg with no transit route can have been rescued as a real
+            // walking route by the build (see fetchExactDurations' walking retry) —
+            // modeUsed is the mode the result actually came from, and the icon/
+            // label/link must match IT, not the originally-resolved mode.
+            const usedMode = exact?.modeUsed || mode;
+            const icon = usedMode === "bicycling" ? "🚲" : usedMode === "driving" ? "🚗" : usedMode === "walking" ? "🚶" : /ferry|boat/i.test(how || "") ? "⛴" : "🚆";
             const a = resolveStopCoords(originName, geo), b = resolveStopCoords(destName, geo);
             const km = a && b ? kmBetween(a, b) : null;
-            const modeLabel = mode === "bicycling" ? "by bike" : mode === "driving" ? "by car" : mode === "walking" ? "on foot" : "by train/bus";
+            const modeLabel = usedMode === "bicycling" ? "by bike" : usedMode === "driving" ? "by car" : usedMode === "walking" ? "on foot" : "by train/bus";
             const routeFailed = noRouteFound[`${originName}|${destName}|${mode}`];
             if (routeFailed) {
+              // SHORT-LEG GUARD, also covers guides built before the fetch-side
+              // fixes: if a "no route" leg is genuinely close together, it's a
+              // walk — show a real walking chip with an estimate and a walking
+              // Maps link, never "check Rome2Rio" for a five minute stroll.
+              if (km != null && km <= 3) {
+                return (
+                  <a href={routeUrl(originName, destName, "walking")} target="_blank" rel="noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
+                    <span style={{ fontSize: 12 }}>🚶</span>
+                    <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>{estimateDurationText(km, "walking")} on foot</span>
+                    <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
+                  </a>
+                );
+              }
               return (
                 <a href={`https://www.rome2rio.com/map/${encodeURIComponent(originName)}/${encodeURIComponent(destName)}`} target="_blank" rel="noreferrer"
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
@@ -336,12 +371,18 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 </a>
               );
             }
+            // Transit times get an honest "~" even when they come from the real
+            // Directions API — a transit journey's duration depends on when you
+            // leave (the API answered for "now" at build time), so presenting it
+            // as exact is what made "says 19, Maps says 27" feel like a bug
+            // rather than schedule variance.
+            const exactLabel = exact ? `${usedMode === "transit" ? "~" : ""}${exact.durationText} ${modeLabel}` : null;
             return (
-              <a href={routeUrl(originName, destName, mode)} target="_blank" rel="noreferrer"
+              <a href={routeUrl(originName, destName, usedMode)} target="_blank" rel="noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px", marginTop: 8 }}>
                 <span style={{ fontSize: 12 }}>{icon}</span>
                 <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
-                  {exact ? `${exact.durationText} ${modeLabel}` : km !== null ? `${estimateDurationText(km, mode)} ${modeLabel}` : how || "Route"}
+                  {exactLabel || (km !== null ? `${estimateDurationText(km, usedMode)} ${modeLabel}` : how || "Route")}
                 </span>
                 <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
               </a>

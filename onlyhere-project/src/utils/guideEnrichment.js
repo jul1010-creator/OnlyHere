@@ -70,6 +70,16 @@ export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalki
     const walkCapKm = onlyWalking ? Infinity : 2.5;
     if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
     else if (mode === "bicycling" && distKm > 60) mode = "transit";
+    // BUG FIX (Oliver: "there is no route from Ærøskøbing to Ærøskøbing havn.
+    // You need to seek out Rome2Rio for that"): on a public-transport trip,
+    // every leg defaulted to transit — including two stops a few hundred
+    // meters apart in the same small town. Google's transit routing quite
+    // reasonably has no bus between a village center and its own harbour, so
+    // the leg came back ZERO_RESULTS and rendered as the "No direct route,
+    // check Rome2Rio" chip — for what is in reality a five minute walk. Any
+    // transit leg this short is a walk; the only exception is an explicit
+    // ferry/boat leg (a 1km harbour crossing is genuinely not walkable).
+    else if (mode === "transit" && distKm <= 1.5 && !/ferry|boat|færge/i.test(how || "")) mode = "walking";
   }
   return mode;
 };
@@ -82,7 +92,13 @@ export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalki
 // duration exists. Speeds are rough real-world Danish averages (not
 // straight-line theoretical max), not precise, but genuinely in the right
 // ballpark and far more useful than a raw distance figure.
-const AVG_SPEED_KMH = { walking: 4.5, bicycling: 14, driving: 70, transit: 55 };
+// Transit lowered 55 → 35 (Oliver: "Public transport says 19 minutes... you
+// then check maps, and it's 27"): 55 km/h straight-line was close to raw
+// intercity train speed with zero allowance for getting to the station,
+// waiting, stops, or transfers — systematically optimistic versus what Google
+// Maps then shows for the real door-to-door journey. 35 km/h straight-line is
+// a much better real-world average for Danish regional transit door to door.
+const AVG_SPEED_KMH = { walking: 4.5, bicycling: 14, driving: 70, transit: 35 };
 export const estimateDurationText = (km, mode) => {
   if (km == null) return null;
   const speed = AVG_SPEED_KMH[mode] || AVG_SPEED_KMH.driving;

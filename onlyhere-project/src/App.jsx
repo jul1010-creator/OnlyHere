@@ -1033,35 +1033,35 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       const stamp = new Date().toLocaleString("en-GB", { month: "short", year: "numeric" });
       let code = "";
       if (studioType === "town") {
-        const nextId = Math.max(...towns.map(x => x.id)) + 1;
+        const nextId = Math.max(0, ...towns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
       } else if (studioType === "festival") {
         const isMajor = (t.scale || "").toLowerCase().startsWith("major");
         const targetArr = isMajor ? majorEvents : events;
         const targetName = isMajor ? "majorEvents" : "events";
-        const nextId = Math.max(...targetArr.map(x => x.id)) + 1;
+        const nextId = Math.max(0, ...targetArr.map(x => x.id)) + 1;
         code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (studioType === "free") {
-        const nextId = Math.max(...freeEntrance.map(x => x.id)) + 1;
+        const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, timeNeeded: ${J(t.timeNeeded)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
       } else if (studioType === "booking") {
-        const nextId = Math.max(...craftItems.map(x => x.id)) + 1;
+        const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, timeNeeded: ${J(t.timeNeeded)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
       } else if (studioType === "nightTown") {
         const nextId = Math.max(0, ...nightlifeTowns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who Is It Perfect For", t.whoFor], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
       } else if (studioType === "food") {
-        const nextId = Math.max(...foodSpots.map(x => x.id)) + 1;
+        const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
       } else if (studioType === "foodStreet") {
         // Lands in the SAME foodSpots array as regular Food entries — Food Street is a
         // distinct Studio category to WRITE (its own tailored research/prompt), but the
         // live site's Food page filters restaurants vs. food streets by isFoodStreet on
         // one shared list, not a separate array — see the "Food Streets" tab on /food.
-        const nextId = Math.max(...foodSpots.map(x => x.id)) + 1;
+        const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
       } else {
-        const nextId = Math.max(...nightlifeSpots.map(x => x.id)) + 1;
+        const nextId = Math.max(0, ...nightlifeSpots.map(x => x.id)) + 1;
         const isClub = !!t.isClub;
         code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who Is It For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter]] : [["Who Is It For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
       }
@@ -1608,14 +1608,29 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
             for (let i = 0; i < names.length - 1; i++) dayLegTriples.push([names[i], names[i + 1], glance.legs[i]?.how || ""]);
             const foundExact = {};
             for (const [origin, dest, how] of dayLegTriples) {
-              const legMode = detectLegMode(how, travelMode);
+              // MODE-KEY PARITY FIX: this used detectLegMode while GuidePage's
+              // render resolves the mode through resolveLegMode (which also
+              // applies the distance overrides, including the short-transit-
+              // leg-is-a-walk rule) — when the two disagreed, this stored its
+              // result under a key the render never looks up, so the whole
+              // re-fetch was silently wasted. Same function on both sides now.
+              const legMode = resolveLegMode(how, travelMode, origin, dest);
               try {
                 const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}`);
                 const d2 = await res2.json();
                 if (!d2.error) foundExact[`${origin}|${dest}|${legMode}`] = d2;
               } catch { /* falls back to km estimate / AI text, same as always */ }
             }
-            if (Object.keys(foundExact).length > 0) setExactDurations(prev => ({ ...prev, ...foundExact }));
+            if (Object.keys(foundExact).length > 0) {
+              setExactDurations(prev => ({ ...prev, ...foundExact }));
+              // Also land these on the guide object itself — GuidePage reads
+              // guide._exactDurations (via the liveGuide prop), never this
+              // component's exactDurations state, so results that only went to
+              // state were invisible to the actual guide view.
+              setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid)
+                ? { ...prev, _exactDurations: { ...(prev._exactDurations || {}), ...foundExact } }
+                : prev);
+            }
           }
         }
       } catch { /* leave this day without travel details */ }
@@ -1734,7 +1749,30 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}`);
         const data = await res.json();
         if (!data.error) found[key] = data;
-        else { failed[key] = true; console.warn(`Directions API: no result for ${origin} → ${dest} (${legMode}):`, data.error, "— check GOOGLE_MAPS_KEY is set on Vercel and the Directions API is enabled on that key's project."); }
+        else {
+          // WALKING RETRY before declaring "no route" (Oliver's Ærøskøbing →
+          // Ærøskøbing havn report): the short-leg rule in resolveLegMode
+          // catches most of these up front, but a transit leg in the 1.5-4km
+          // band can still genuinely have no bus (small towns, evenings) while
+          // being perfectly walkable. Google saying "no transit route" for a
+          // couple of km does NOT mean the places are unreachable — retry the
+          // same leg as walking, and only if THAT also fails is it a real
+          // no-route case (an actual island crossing) deserving the Rome2Rio
+          // chip. modeUsed tells the render to show the honest walking
+          // icon/label/link for the result even though the leg's cache key
+          // stays the transit one it resolved to.
+          const a = resolveFresh(origin), b = resolveFresh(dest);
+          const legKm = a && b ? haversineKm(a, b) : null;
+          let rescued = false;
+          if (legMode === "transit" && legKm != null && legKm <= 4) {
+            try {
+              const wres = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=walking`);
+              const wdata = await wres.json();
+              if (!wdata.error) { found[key] = { ...wdata, modeUsed: "walking" }; rescued = true; }
+            } catch { /* fall through to the normal failed marking below */ }
+          }
+          if (!rescued) { failed[key] = true; console.warn(`Directions API: no result for ${origin} → ${dest} (${legMode}):`, data.error, "— check GOOGLE_MAPS_KEY is set on Vercel and the Directions API is enabled on that key's project."); }
+        }
       } catch (err) { failed[key] = true; console.warn(`Directions API request failed for ${origin} → ${dest}:`, err); }
     }));
     if (Object.keys(found).length > 0) setExactDurations(prev => ({ ...prev, ...found }));
@@ -1783,6 +1821,10 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       const walkCapKm = onlyWalking ? Infinity : 2.5;
       if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
       else if (mode === "bicycling" && distKm > 60) mode = "transit";
+      // Same short-transit-leg-is-a-walk rule as utils/guideEnrichment.js's
+      // shared copy (see the Ærøskøbing→Ærøskøbing havn comment there) — the
+      // two copies MUST stay in sync or fetch and render disagree on cache keys.
+      else if (mode === "transit" && distKm <= 1.5 && !/ferry|boat|færge/i.test(how || "")) mode = "walking";
     }
     return mode;
   };
@@ -2278,7 +2320,11 @@ If the conversation only covers a single day or a few stops with no explicit day
     const interestPool = ["history", "local food", "quiet walks", "craft and workshops", "coastal views", "architecture", "markets"];
     const interests = interestPool.slice().sort(() => Math.random() - 0.5).slice(0, 2);
     const secondTownText = secondTown ? `, with a day trip out to ${secondTown.name}` : "";
-    const brief = `I'm planning ${days} days in Denmark, based mostly around ${pickTown?.name || "Copenhagen"}${secondTownText}. I like ${interests.join(" and ")}. I'd also like to fit in a visit to ${extras.map(e => e.name).join(" and ")} if it makes sense with the route.`;
+    // Supabase-only content (Aug 5): the pools above are now whatever's actually
+    // been published via Studio, so either can legitimately be empty — build the
+    // brief from what really exists instead of interpolating empty lists.
+    const extrasText = extras.length ? ` I'd also like to fit in a visit to ${extras.map(e => e.name).join(" and ")} if it makes sense with the route.` : "";
+    const brief = `I'm planning ${days} days in Denmark, based mostly around ${pickTown?.name || "Copenhagen"}${secondTownText}. I like ${interests.join(" and ")}.${extrasText}`;
     // ROOT CAUSE of Oliver's "wtf happened to maps? Both leaflet and Google
     // Maps???" report: this used to randomly alternate mode, 50/50, so any
     // given test click had a coin-flip chance of landing on "plain" —
@@ -2416,10 +2462,38 @@ If the conversation only covers a single day or a few stops with no explicit day
   // with two logos both visible in the corner.
   const [introFlightDone, setIntroFlightDone] = useState(false);
   const cornerMarkRef = useRef(null);
+  // BUG FIX (Oliver, 7th flight report: "the logo needs to fully rotate before
+  // settling in the left corner"): the spin is a CSS animation whose clock is
+  // the document timeline — it starts ticking the moment the splash mounts,
+  // which on a real phone is exactly when the main thread is busiest (bundle
+  // just evaluated, background painting decoding, first layout of a big tree).
+  // Frames dropped during that initial jank aren't "paused", they're SKIPPED —
+  // the animation clock kept running, so when frames start rendering again the
+  // spin is already partway through (or nearly over), and what reaches the eye
+  // is a rotation that visibly never completes before the corner flight takes
+  // over. Fix: mount the splash with every intro animation (pop, spin, ring,
+  // curtain fade) paused via animation-play-state, and only un-pause after two
+  // real painted frames plus a short settle (double requestAnimationFrame +
+  // 150ms) — the jank happens while the compass is still safely hidden, and
+  // the spin then plays its FULL rotation on a thread that can actually render
+  // it. splashGo drives the .gx-go class; the flight-trigger effect below also
+  // waits for it so its own fallback timers count from the real start.
+  const [splashGo, setSplashGo] = useState(false);
+  useEffect(() => {
+    if (entered || introFlightDone || splashGo) return;
+    let raf1, raf2, t;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        t = setTimeout(() => setSplashGo(true), 150);
+      });
+    });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); clearTimeout(t); };
+  }, [entered, introFlightDone, splashGo]);
   useEffect(() => {
     if (entered || introFlightDone) return;
     const reduceMotion = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduceMotion) { setIntroFlightDone(true); return; }
+    if (!splashGo) return; // animations are still paused — timers below must count from the real start
     let cancelled = false;
     let retryTimer, safety;
     // BUG FIX (Oliver: "needs to fly into the corner and settle. Not fade
@@ -2560,11 +2634,30 @@ If the conversation only covers a single day or a few stops with no explicit day
       if (cancelled || flightStarted) return;
       flightStarted = true;
       clearTimeout(spinDoneTimer);
-      attemptFlight(15);
+      // 7th-report fix, part 2: a short beat between the spin genuinely
+      // finishing and the flight beginning, so the completed rotation actually
+      // registers to the eye as its own finished moment before anything moves.
+      // Without it, the flight transform grabs the element on the very frame
+      // the spin ends, which reads as the rotation being cut short even when
+      // it technically completed.
+      retryTimer = setTimeout(() => attemptFlight(15), 220);
     };
     if (gemEl) {
       gemEl.addEventListener("animationend", startFlight, { once: true });
-      spinDoneTimer = setTimeout(startFlight, 2600); // safety net if animationend never fires for some reason
+      // 7th-report fix, part 3: the safety net must never CAUSE the bug it
+      // guards against. If this fallback fires while the spin animation is
+      // genuinely still running (its start was delayed, or events are late),
+      // starting the flight now would hijack the element mid-rotation — the
+      // literal "doesn't fully rotate" failure. Check for a live spin first
+      // and wait for its own finished promise instead, with one last hard
+      // timer so a wedged animation still can't hang the intro forever.
+      spinDoneTimer = setTimeout(() => {
+        const liveSpin = (gemEl.getAnimations?.() || []).find(anim => anim.animationName === "gxiSpin" && anim.playState === "running");
+        if (liveSpin) {
+          liveSpin.finished.then(startFlight).catch(startFlight);
+          spinDoneTimer = setTimeout(startFlight, 2000);
+        } else startFlight();
+      }, 2600);
     } else {
       spinDoneTimer = setTimeout(startFlight, 2000); // gem element genuinely not found — fall back to the old fixed delay
     }
@@ -2575,7 +2668,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       clearTimeout(retryTimer);
       clearTimeout(safety);
     };
-  }, [entered, introFlightDone]);
+  }, [entered, introFlightDone, splashGo]);
   // Small note chip on the front door (login/signup are placeholders for now).
   const [landingNote, setLandingNote] = useState(null);
   useEffect(() => {
@@ -4007,6 +4100,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
               {attractionCity === "🍬 Handmade" ? (
                 <>
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Watch it made, buy it warm — no ticket, no booking, just walk in.</div>
+                  {/* Supabase-only content (Aug 5): handmade craft shops have no Studio
+                      type/table yet, so this list is empty until one exists. */}
+                  {handmadeCraftShops.length === 0 && (
+                    <div style={{ background: C.surface, borderRadius: 16, padding: "18px", border: `1px solid ${C.border}`, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+                      Nothing published here yet.
+                    </div>
+                  )}
                   {handmadeCraftShops.map(shop => (
                     <div key={shop.id} style={{ background: C.surface, borderRadius: 16, padding: "16px", marginBottom: 12, border: `1px solid ${shop.color}33`, position: "relative" }}>
                       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: shop.color, borderRadius: "16px 0 0 16px" }} />
@@ -4217,6 +4317,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
 
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Pick a town</div>
+                  {/* Supabase-only content (Aug 5): no nightlife spots are published in
+                      gemlyx_content yet, so this list can genuinely be empty — say so
+                      honestly instead of rendering a blank page. */}
+                  {townList.length === 0 && (
+                    <div style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+                      No nightlife spots published yet. They appear here as soon as they're published through the Studio.
+                    </div>
+                  )}
                   {townList.map(t => {
                     const spots = townGroups[t];
                     const localCount = spots.filter(s => s.type === "Local").length;
@@ -4989,6 +5097,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
                (0.35s transition-delay baked into .gxa-choose above), so there's
                never a moment with two logos both sitting in the corner, and the
                card never appears before the logo has actually settled. */
+            /* 7th-flight-report fix (see the splashGo effect): every intro
+               animation stays PAUSED until React has confirmed two real painted
+               frames (.gx-go added), so load-time jank can't silently eat the
+               start of the spin — CSS animation clocks keep ticking through
+               dropped frames, they don't wait. Covers the curtain here and the
+               pop/spin/ring rules that live in GemlyxIntro's own style tag. */
+            .gx-splash:not(.gx-go) .gx-splash-curtain,
+            .gx-splash:not(.gx-go) .gxi-mark,
+            .gx-splash:not(.gx-go) .gxi-gem,
+            .gx-splash:not(.gx-go) .gxi-ring { animation-play-state: paused !important; }
             .gx-splash { position: fixed; inset: 0; z-index: 40; pointer-events: none;
               display: flex; align-items: center; justify-content: center; }
             .gx-splash-curtain { position: absolute; inset: 0; background: #0A0906;
@@ -5009,7 +5127,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               introFlightDone effect above) it flies to the real corner logo's
               position and this whole layer unmounts in one frame. */}
           {!introFlightDone && (
-            <div className="gx-splash">
+            <div className={`gx-splash${splashGo ? " gx-go" : ""}`}>
               <div className="gx-splash-curtain" />
               <div className="gx-splash-mark">
                 <GemlyxIntro markSize={100} color="#F0EFE6" />

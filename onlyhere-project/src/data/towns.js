@@ -1,52 +1,13 @@
-export const towns = [
-  { id: 1, name: "Ribe", photo: "/ribe.jpg", region: "South Jutland", emoji: "⛪", tag: "Denmark's oldest town", desc: "Founded around 700 AD — the oldest town in Scandinavia. Medieval cathedral, Viking museum and cobblestone streets.", highlight: "Viking Center Ribe — artisans craft authentic Viking jewellery, leather and textiles on site.", travelTime: "3h 15min 🚂", mapHint: "Ribe, 6760 Ribe, Denmark", nomiPotential: "High" },
-  { id: 2, name: "Dragør", photo: "/towns/dragor.jpg", region: "Copenhagen Area", emoji: "⚓", tag: "Fisherman's village", desc: "Just 12km from Copenhagen — yellow ochre houses, a working harbour, cobblestone streets. Feels like another era.", highlight: "The harbour fish stalls sell smoked fish caught the same morning. No menus, no TripAdvisor.", travelTime: "30min 🚌", mapHint: "Dragør Havn, 2791 Dragør, Denmark", nomiPotential: "High" },
-  { id: 3, name: "Ærøskøbing", photo: "/towns/aeroskobing.jpg", region: "Funen", emoji: "🏡", tag: "Denmark's fairy-tale town", desc: "750-year-old town on the island of Ærø. Half-timbered houses, flower-lined streets. One of Europe's best preserved small towns.", highlight: "The local bottle ship museum — a man spent decades making ships inside bottles.", travelTime: "3h + ferry 🚢", mapHint: "Ærøskøbing, 5970 Ærø, Denmark", nomiPotential: "Very High" },
-  { id: 4, name: "Skagen", photo: "/towns/skagen.jpg", region: "North Jutland", emoji: "🌊", tag: "Where two seas meet", desc: "Denmark's northernmost town. Where the North Sea and Baltic Sea collide. Yellow houses, artist culture.", highlight: "The local fish auction starts at 6am on weekdays. Fresh fish sold direct from boats.", travelTime: "4h 🚂", mapHint: "Skagen, 9990 Skagen, Denmark", nomiPotential: "High" },
-  { id: 5, name: "Præstø", photo: "/towns/praesto.jpg", region: "Zealand", emoji: "🏘", tag: "Hidden countryside gem", desc: "South of Copenhagen — cobbled streets, old market square. The kind of town that makes you wonder why nobody talks about it.", highlight: "Oremandsgaard Estate sells locally produced goods from their own farm and distillery.", travelTime: "1h 10min 🚂", mapHint: "Præstø Torv, 4720 Præstø, Denmark", nomiPotential: "Very High" },
-  { id: 6, name: "Faaborg", photo: "/towns/faaborg.jpg", region: "Funen", emoji: "🌿", tag: "Old-world harbour charm", desc: "Quiet harbour town on the south coast of Funen. 17th century merchant buildings, cobblestone alleys.", highlight: "The local ceramics workshop near the harbour sells pieces made on site. Cash only, no website.", travelTime: "2h 30min 🚂", mapHint: "Faaborg Havn, 5600 Faaborg, Denmark", nomiPotential: "High" },
-  { id: 7, name: "Gudhjem", photo: "/towns/gudhjem.jpg", region: "Bornholm", emoji: "🐟", tag: "Baltic island village", desc: "Atmospheric fishing village on Bornholm. Home of the legendary Sol over Gudhjem smoked herring dish.", highlight: "Røgeriet — the old smokehouse. Watch them smoke herring the traditional way.", travelTime: "2h + ferry 🚢", mapHint: "Gudhjem Havn, 3760 Gudhjem, Bornholm", nomiPotential: "Very High" },
-  { id: 8, name: "Sønderho", photo: "/fanø.jpg", region: "Fanø Island", emoji: "🌾", tag: "Hidden dune village", desc: "Tucked in the dunes of Fanø island. Thatched houses, winding lanes, seals in the Wadden Sea National Park.", highlight: "The Fanø Kunstmuseer shows local folk art and crafts made on the island for centuries.", travelTime: "3h + ferry 🚢", mapHint: "Sønderho, 6720 Fanø, Denmark", nomiPotential: "Very High" },
-  { id: 9, name: "Mariager", photo: "/towns/mariager.jpg", region: "North Jutland", emoji: "🌹", tag: "The City of Roses", desc: "An 18th-century town of cobblestone streets and half-timbered houses, built around a medieval abbey on the Mariager Fjord.", highlight: "Mariager Saltcenter, a working salt museum nearby, lets you taste local salt variations most Danes have never heard of.", travelTime: "3h 30min 🚂", mapHint: "Mariager, 9550 Mariager, Denmark", nomiPotential: "High" },
-  { id: 10, name: "Sæby", photo: "/towns/saeby.jpg", region: "North Jutland", emoji: "⚓", tag: "The Artisans' Coastal Haven", desc: "A quiet coastal town with a historic watermill canal path and yellow timber fishermen's houses along the water.", highlight: "Small amber-carving workshops are tucked along the old streets — genuine local craft, no tour buses.", travelTime: "3h 45min 🚂", mapHint: "Sæby, 9300 Sæby, Denmark", nomiPotential: "High" },
-  { id: 11, name: "Thorup Strand", photo: "/towns/thorup-strand.jpg", region: "North Jutland", emoji: "🎣", tag: "The Last Living Fishing Hamlet", desc: "One of Denmark's last true coastal fishing communities — blue wooden cutters are still winched straight onto the beach by hand, the way it's been done for generations.", highlight: "Buy fish straight off the boat at the local beach-side cooperative shop, caught that same morning.", travelTime: "4h drive", mapHint: "Thorup Strand, 9690 Fjerritslev, Denmark", nomiPotential: "Very High" },
-  { id: 12, name: "Ebeltoft", photo: "/towns/ebeltoft.jpg", region: "East Jutland", emoji: "🚢", tag: "The Crooked-House Village of Mols", desc: "A perfectly preserved 1789 town hall, cobblestone alleys and one of the world's longest wooden warships moored right in the harbour.", highlight: "Step aboard the Fregatten Jylland, a genuine 19th-century wooden frigate you can walk through deck by deck. Great base for hiking Mols Bjerge National Park.", travelTime: "3h 30min 🚂", mapHint: "Ebeltoft, 8400 Ebeltoft, Denmark", nomiPotential: "High" },
-  { id: 13, name: "Nyhavn", popularityTag: "Common Attraction", region: "Copenhagen Area", emoji: "⛵", tag: "Copenhagen's most photographed harbour", desc: "The colourful 17th-century harbour district everyone recognises from postcards — wooden ships, waterfront restaurants, and Copenhagen's most Instagrammed street. Genuinely worth seeing, but this is the opposite of hidden — go in, know it, then find the quieter places nearby.", highlight: "Walk 10 minutes north to the quieter Nyboder district — original 17th-century naval rowhouses, still lived in, almost nobody stops there.", travelTime: "In Copenhagen 🚇", mapHint: "Nyhavn, 1051 København, Denmark", nomiPotential: "Common" },
-  // ADDED (Oliver: "Copenhagen, Aalborg, and Aarhus can't be researched for
-  // into 'town'"): these three were never in this array at all — only in
-  // TOWN_COORDS below, which exists purely for distance/geocoding math, not
-  // for real content. That's genuinely by design for the app's "hidden gems"
-  // premise (this is not a "top 3 cities" app), but it had a real side
-  // effect Oliver hit directly: a conversation naming Copenhagen/Aarhus/
-  // Aalborg had NOTHING to match against in lookupRealPlace, so those stops
-  // got no photo, no detail page, no "town" classification anywhere in the
-  // app — while a small hidden village got full treatment. Most real trips
-  // include at least one of these three (Copenhagen especially, as the usual
-  // arrival point), so leaving them fully unrecognized read as a real gap,
-  // not a feature.
-  // ROUND 2 (Oliver: "Copenhagen is technically a major city.. do you think
-  // we should handle it differently? I suppose we can make it its own..
-  // Major City / Town / Attractions"): agreed, and switched from the plain
-  // popularityTag: "Common Attraction" badge (Nyhavn's pattern — fine for a
-  // single landmark inside a hidden town, but too quiet a signal for three
-  // entire cities) to a real `isMajorCity: true` flag. This is checked
-  // wherever these three need to visually stand apart from the curated
-  // hidden-Towns list — the Towns tab (App.jsx, its own "Major Cities"
-  // section above the regular grid) and the guide preview screen
-  // (GuidePreviewScreen.jsx's CATEGORY_SECTIONS) both key off it now. Still
-  // real `_src: "town"` everywhere else (matching, detail-page routing,
-  // openStopDetail) — this is a display-grouping distinction, not a new
-  // content type, kept deliberately simple rather than a bigger restructure.
-  // photo/travelTime left for Studio to fill in (see the freeEntrance
-  // photo-field fix from a prior pass for the same pattern) rather than
-  // guessing either — travelTime specifically has a standing "never guess,
-  // leave empty" rule elsewhere in this file after a real embarrassing
-  // wrong-guess incident.
-  { id: 14, name: "Copenhagen", isMajorCity: true, region: "Copenhagen Area", emoji: "🏙", tag: "Denmark's capital", desc: "The country's capital and largest city, and the point most trips actually start and end from. Not a hidden find by any definition, but a real, common part of almost every Denmark itinerary — recognized here as a genuine stop rather than left unmatched.", highlight: "", travelTime: "", mapHint: "Copenhagen, Denmark", nomiPotential: "Common" },
-  { id: 15, name: "Aarhus", isMajorCity: true, region: "East Jutland", emoji: "🏙", tag: "Denmark's second city", desc: "Denmark's second-largest city, on the east coast of Jutland — a real university city with its own harbour and old town, and a common base for a Jutland trip rather than a hidden one.", highlight: "", travelTime: "", mapHint: "Aarhus, Denmark", nomiPotential: "Common" },
-  { id: 16, name: "Aalborg", isMajorCity: true, region: "North Jutland", emoji: "🏙", tag: "North Jutland's biggest city", desc: "The largest city in North Jutland, straddling the Limfjord — a real, common base for exploring the north of the country.", highlight: "", travelTime: "", mapHint: "Aalborg, Denmark", nomiPotential: "Common" },
-];
-
+// CONTENT MOVED TO SUPABASE (Aug 5 2026, Oliver's call: "remove all your own
+// examples of places. So we only keep the ones from Supabase.") — every
+// hardcoded example entry that used to live in this array was removed. Real
+// content is published through the Content Studio (/#studio) into the
+// gemlyx_content table and merged into this same array at runtime by
+// utils/liveContent.js (ensureLiveContentLoaded), so every render site keeps
+// working unchanged. The old hardcoded entries are recoverable from git
+// history if ever needed. Do NOT hardcode new places here — publish them
+// through Studio instead.
+export const towns = [];
 
 export const TOWN_COORDS = {
   "Copenhagen": [55.676, 12.568], "Aarhus": [56.157, 10.210], "Aalborg": [57.048, 9.919],
