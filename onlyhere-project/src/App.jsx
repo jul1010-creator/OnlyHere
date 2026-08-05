@@ -1693,7 +1693,30 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     days.forEach(d => d.stops.forEach(s => { if (s.town && !townByName[s.name]) townByName[s.name] = s.town; }));
     const found = {};
     const failed = {};
-    for (const [origin, dest, how] of legs) {
+    // BUG FIX (Oliver: "Google Maps/routes show either no transport or transport
+    // being 1 minute. It's like it has been deactivated"): this used to be
+    // called fire-and-forget, AFTER the guide object was already handed to
+    // GuidePage via navigate("/guide/new", {state:{guide: guideModal}}) — and
+    // its results only ever landed in THIS component's own React state
+    // (setExactDurations/setNoRouteFound), never on the guide object itself.
+    // GemlyxApp (this component) unmounts the instant that navigation happens
+    // (see the Gemlyx() wrapper's own comment, search "CRITICAL FIX (found
+    // live, production-crashing)") — so every one of these real Directions API
+    // results was being computed correctly and then thrown away, and
+    // GuidePage's guide._exactDurations/_noRouteFound were ALWAYS empty
+    // objects, meaning every single leg fell back to the straight-line km
+    // ESTIMATE, never the real fetched duration. Two different stops that
+    // hadn't been precisely geocoded either (see the _geo bug fixed alongside
+    // this one) could collapse to the same generic town-center coordinate,
+    // making that estimate come out as ~0 distance — "1 minute" — while a
+    // stop with genuinely no distance signal at all fell back to "Route"
+    // with no time shown — "no transport". Real fix: run every leg CONCURRENTLY
+    // (was a sequential await-in-a-loop; awaiting that serially before showing
+    // the guide would make an already-long build feel much longer) and RETURN
+    // the results so the caller can bake them directly onto the guide object
+    // before it's ever handed to GuidePage, instead of only mirroring them
+    // into this component's own state.
+    await Promise.all(legs.map(async ([origin, dest, how]) => {
       // Same shared function the render uses — guarantees fetch and display can
       // never disagree on mode, and therefore never miss each other's cache entry.
       const legMode = resolveLegMode(how, primaryMode, origin, dest, onlyWalking, freshGeo);
@@ -1713,9 +1736,10 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         if (!data.error) found[key] = data;
         else { failed[key] = true; console.warn(`Directions API: no result for ${origin} → ${dest} (${legMode}):`, data.error, "— check GOOGLE_MAPS_KEY is set on Vercel and the Directions API is enabled on that key's project."); }
       } catch (err) { failed[key] = true; console.warn(`Directions API request failed for ${origin} → ${dest}:`, err); }
-    }
+    }));
     if (Object.keys(found).length > 0) setExactDurations(prev => ({ ...prev, ...found }));
     if (Object.keys(failed).length > 0) setNoRouteFound(prev => ({ ...prev, ...failed }));
+    return { found, failed };
   };
   // BUG FIX (the "34 min walk that's really 7 min" report): this used to check
   // the crude TOWN_COORDS substring match BEFORE geocodedCoords — so a stop
@@ -1941,7 +1965,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       let plannerStopNames = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -2014,6 +2038,7 @@ CRITICAL: capture EVERY distinct place the plan mentions for each day as its OWN
 CRITICAL: make each day's arrivalTime sequence internally consistent — each stop's arrivalTime should follow realistically from the previous stop's arrivalTime + its suggestedStay + a sensible travel gap between them, using well-established Danish geography. Don't just space stops out evenly by habit; a genuinely quick stop should be followed soon after, a long museum visit should push the next arrivalTime later. If a day has too many stops to fit in a reasonable day (roughly 9am-9pm), that's a signal to trim rather than compress every stay time unrealistically.
 CRITICAL — NEVER REPEAT THE SAME PLACE TWICE ACROSS THE WHOLE TRIP: every stop name across every single day must be genuinely distinct — once a place has appeared as a stop on one day, it never appears again as a stop on any other day of this same plan (e.g. if Amalienborg is a stop on Day 1, it must not also appear as a stop on Day 3). If the traveler wants to revisit somewhere, that's a choice for THEM to make later, not something to build into the itinerary by default.
 CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stops that are genuinely close together rather than needlessly zigzagging back and forth across a city or region — minimize backtracking using real, well-established Danish geography. If a day includes one long-distance journey (e.g. a day trip to a distant town, or a genuinely long intercity leg) alongside more local stops, that long journey should always be the FIRST thing done that day, not scheduled for the afternoon or evening — most travelers want the big travel chunk out of the way early, then time to actually explore once they arrive, not a long haul tacked onto the end of an already-full day.
+CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are genuinely different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
 If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
@@ -2175,9 +2200,24 @@ If the conversation only covers a single day or a few stops with no explicit day
       // Google Directions calls only run at all if "map" was actually picked —
       // "plain" mode never needed them, GuidePage hides routes/leg times
       // entirely in that mode (see GuidePage.jsx, search "_lightMode").
-      if (mode !== "plain") fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking); // fire-and-forget — legs show estimates until this resolves, then upgrade
+      // BUG FIX (Oliver: "Google Maps/routes ... It's like it has been
+      // deactivated" + Leaflet map looking wrong): this used to be
+      // fire-and-forget, called AFTER setGuideModal below — but GemlyxApp
+      // unmounts the instant the resulting navigate("/guide/new") fires (see
+      // the Gemlyx() wrapper's own comment), so its results (real Google
+      // Directions durations) and freshGeo (real geocoded coordinates, also
+      // previously just discarded after being awaited) never actually reached
+      // GuidePage — guide._geo/_exactDurations/_noRouteFound were ALWAYS
+      // empty. Now genuinely awaited here and baked directly onto the guide
+      // object below, matching what "Verifying exact locations and routes"
+      // already told the traveler was happening at this stage. Legs run
+      // concurrently inside fetchExactDurations now (was sequential) so this
+      // wait stays reasonable even for a multi-day trip with many legs.
+      const { found: exactFound, failed: routeFailed } = mode !== "plain"
+        ? await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking)
+        : { found: {}, failed: {} };
       const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _exactDurations: exactFound, _noRouteFound: routeFailed, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
       enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
       fetchGuideWeather(parsed.days, gid, arrivalDate);
     } catch {
@@ -2194,7 +2234,10 @@ If the conversation only covers a single day or a few stops with no explicit day
   // shown to regular visitors.
   const generateRandomGuide = () => {
     if (guideModal === "loading") return;
-    const realTowns = towns.filter(t => t.popularityTag !== "Common Attraction");
+    // isMajorCity (round 5: Copenhagen/Aarhus/Aalborg) excluded here for the
+    // same reason "Common Attraction" already was — this test brief is meant
+    // to sample the curated hidden-gem list, not the well-known cities.
+    const realTowns = towns.filter(t => t.popularityTag !== "Common Attraction" && !t.isMajorCity);
     // PASS 27 ROUND 2 (Oliver: "Only 1 town?"): this used to pick exactly ONE
     // town and name only that one in the brief, so the preview screen's new
     // "Towns" section could never show more than 1 match on a test click —
@@ -2414,11 +2457,30 @@ If the conversation only covers a single day or a few stops with no explicit day
       flyEl.style.opacity = "1";
       flyEl.style.transformOrigin = "50% 50%";
       flyEl.getBoundingClientRect(); // force reflow before changing the transform, so the transition below actually plays
-      flyEl.style.transition = "transform 0.85s cubic-bezier(0.5,0,0.25,1)";
+      // BUG FIX (Oliver: "it does fly up.. but it doesn't settle. It needs to
+      // settle in [...] like an ad or presentation where the logo settles in
+      // after presenting"): two real things were missing, not just one. (1)
+      // The easing was a flat glide-to-a-stop (cubic-bezier(0.5,0,0.25,1)) —
+      // no overshoot, no sense of arriving and gently correcting into place,
+      // which is what actually reads as "settling" rather than just "moving
+      // then halting". Switched to the same spring/overshoot curve GemlyxIntro
+      // already uses for its own pop-in (GemlyxLogo.jsx's gxiPop), so the
+      // compass now travels slightly past its final spot and eases back,
+      // instead of stopping dead. (2) Even with real motion, the real corner
+      // logo (topbar) faded in over its own separate 0.5s opacity transition
+      // AFTER this element instantly unmounts the moment the flight ends
+      // (see .gx-splash conditional render) — a 500ms gap of nothing sitting
+      // in the corner right when the flight completes, which reads as "the
+      // compass just disappears" rather than "it settles", since nothing
+      // takes its place until well after it's already gone. Shortened
+      // gxa-topbar's fade (see its CSS below) so the real logo appears
+      // essentially the same instant the flying compass does, not half a
+      // second later.
+      flyEl.style.transition = "transform 0.9s cubic-bezier(0.34,1.56,0.64,1)";
       flyEl.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
       const finish = () => setIntroFlightDone(true);
       flyEl.addEventListener("transitionend", finish, { once: true });
-      safety = setTimeout(finish, 1150); // in case transitionend never fires (e.g. tab backgrounded mid-flight)
+      safety = setTimeout(finish, 1250); // in case transitionend never fires (e.g. tab backgrounded mid-flight)
     };
     // PASS 27 BUG FIX (Oliver: "now it stops spinning half-way instead"):
     // this used to trigger attemptFlight off a flat 2000ms setTimeout,
@@ -4224,13 +4286,51 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Hidden Towns</div>
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — every one of them hand-researched and checked against multiple sources.</div>
               </div>
+              {/* ROUND 5 (Oliver: "Copenhagen is technically a major city..
+                  I suppose we can make it its own... Major City / Town /
+                  Attractions"): a separate, plainly-labeled section for
+                  Copenhagen/Aarhus/Aalborg (towns.js, isMajorCity: true),
+                  ahead of the "Hidden Towns" grid below rather than mixed
+                  into it — this page's whole promise is "the ones the
+                  guidebooks skip", so folding well-known cities into that
+                  same grid (even badged) undersells both: the hidden towns
+                  look less special, and the cities look like an afterthought
+                  instead of the real, common part of a trip they actually
+                  are. */}
+              {towns.some(t => t.isMajorCity) && (
+                <div style={{ marginBottom: 28 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>Major Cities — not hidden, but real</div>
+                  <div className="towns-grid">
+                    {towns.filter(t => t.isMajorCity).map(town => (
+                      <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
+                        <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{town.emoji}</span>
+                          <img src={town.photo} alt={town.name} onError={e => { e.target.style.display = "none"; }}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
+                          <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
+                            <DKLocator town={town.name} color={C.gold} />
+                          </div>
+                          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>🏙 Major City</div>
+                        </div>
+                        <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
+                        <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region}</div>
+                        <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
+                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
+                          Read more <span style={{ fontSize: 14 }}>›</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
                 {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "East Jutland", "Bornholm", "Fanø Island"].map(r => (
                   <Pill key={r} label={r} active={(r === "All" && !townFilter) || townFilter === r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))} />
                 ))}
               </div>
               <div className="towns-grid">
-                {towns.filter(t => !townFilter || t.region === townFilter).map(town => (
+                {towns.filter(t => !t.isMajorCity && (!townFilter || t.region === townFilter)).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                     <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <span style={{ fontSize: 44, opacity: 0.25, position: "absolute" }}>{town.emoji}</span>
@@ -4825,7 +4925,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
                pointerEvents on each below. These two rules are just the
                transition timing, the actual on/off is inline. */
             .gxa-choose { transition: opacity 0.9s ease-out 0.35s; }
-            .gxa-topbar { transition: opacity 0.5s ease-out; }
+            /* BUG FIX (Oliver: "flies up but doesn't settle"): this was 0.5s —
+               the real corner logo used to only reach full opacity a HALF
+               SECOND after the flying compass had already vanished (it
+               unmounts the instant introFlightDone flips, no fade-out of its
+               own), leaving a visible gap of nothing in the corner right when
+               the flight lands. Shortened so the real logo appears
+               essentially the same instant the compass does. */
+            .gxa-topbar { transition: opacity 0.15s ease-out; }
             /* OPENING SPLASH, corner-flight version (restored per Oliver: darkness,
                the compass spins while the background fades in behind it, then it
                flies and settles into the actual corner logo's spot, and ONLY once

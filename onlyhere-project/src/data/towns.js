@@ -12,6 +12,39 @@ export const towns = [
   { id: 11, name: "Thorup Strand", photo: "/towns/thorup-strand.jpg", region: "North Jutland", emoji: "🎣", tag: "The Last Living Fishing Hamlet", desc: "One of Denmark's last true coastal fishing communities — blue wooden cutters are still winched straight onto the beach by hand, the way it's been done for generations.", highlight: "Buy fish straight off the boat at the local beach-side cooperative shop, caught that same morning.", travelTime: "4h drive", mapHint: "Thorup Strand, 9690 Fjerritslev, Denmark", nomiPotential: "Very High" },
   { id: 12, name: "Ebeltoft", photo: "/towns/ebeltoft.jpg", region: "East Jutland", emoji: "🚢", tag: "The Crooked-House Village of Mols", desc: "A perfectly preserved 1789 town hall, cobblestone alleys and one of the world's longest wooden warships moored right in the harbour.", highlight: "Step aboard the Fregatten Jylland, a genuine 19th-century wooden frigate you can walk through deck by deck. Great base for hiking Mols Bjerge National Park.", travelTime: "3h 30min 🚂", mapHint: "Ebeltoft, 8400 Ebeltoft, Denmark", nomiPotential: "High" },
   { id: 13, name: "Nyhavn", popularityTag: "Common Attraction", region: "Copenhagen Area", emoji: "⛵", tag: "Copenhagen's most photographed harbour", desc: "The colourful 17th-century harbour district everyone recognises from postcards — wooden ships, waterfront restaurants, and Copenhagen's most Instagrammed street. Genuinely worth seeing, but this is the opposite of hidden — go in, know it, then find the quieter places nearby.", highlight: "Walk 10 minutes north to the quieter Nyboder district — original 17th-century naval rowhouses, still lived in, almost nobody stops there.", travelTime: "In Copenhagen 🚇", mapHint: "Nyhavn, 1051 København, Denmark", nomiPotential: "Common" },
+  // ADDED (Oliver: "Copenhagen, Aalborg, and Aarhus can't be researched for
+  // into 'town'"): these three were never in this array at all — only in
+  // TOWN_COORDS below, which exists purely for distance/geocoding math, not
+  // for real content. That's genuinely by design for the app's "hidden gems"
+  // premise (this is not a "top 3 cities" app), but it had a real side
+  // effect Oliver hit directly: a conversation naming Copenhagen/Aarhus/
+  // Aalborg had NOTHING to match against in lookupRealPlace, so those stops
+  // got no photo, no detail page, no "town" classification anywhere in the
+  // app — while a small hidden village got full treatment. Most real trips
+  // include at least one of these three (Copenhagen especially, as the usual
+  // arrival point), so leaving them fully unrecognized read as a real gap,
+  // not a feature.
+  // ROUND 2 (Oliver: "Copenhagen is technically a major city.. do you think
+  // we should handle it differently? I suppose we can make it its own..
+  // Major City / Town / Attractions"): agreed, and switched from the plain
+  // popularityTag: "Common Attraction" badge (Nyhavn's pattern — fine for a
+  // single landmark inside a hidden town, but too quiet a signal for three
+  // entire cities) to a real `isMajorCity: true` flag. This is checked
+  // wherever these three need to visually stand apart from the curated
+  // hidden-Towns list — the Towns tab (App.jsx, its own "Major Cities"
+  // section above the regular grid) and the guide preview screen
+  // (GuidePreviewScreen.jsx's CATEGORY_SECTIONS) both key off it now. Still
+  // real `_src: "town"` everywhere else (matching, detail-page routing,
+  // openStopDetail) — this is a display-grouping distinction, not a new
+  // content type, kept deliberately simple rather than a bigger restructure.
+  // photo/travelTime left for Studio to fill in (see the freeEntrance
+  // photo-field fix from a prior pass for the same pattern) rather than
+  // guessing either — travelTime specifically has a standing "never guess,
+  // leave empty" rule elsewhere in this file after a real embarrassing
+  // wrong-guess incident.
+  { id: 14, name: "Copenhagen", isMajorCity: true, region: "Copenhagen Area", emoji: "🏙", tag: "Denmark's capital", desc: "The country's capital and largest city, and the point most trips actually start and end from. Not a hidden find by any definition, but a real, common part of almost every Denmark itinerary — recognized here as a genuine stop rather than left unmatched.", highlight: "", travelTime: "", mapHint: "Copenhagen, Denmark", nomiPotential: "Common" },
+  { id: 15, name: "Aarhus", isMajorCity: true, region: "East Jutland", emoji: "🏙", tag: "Denmark's second city", desc: "Denmark's second-largest city, on the east coast of Jutland — a real university city with its own harbour and old town, and a common base for a Jutland trip rather than a hidden one.", highlight: "", travelTime: "", mapHint: "Aarhus, Denmark", nomiPotential: "Common" },
+  { id: 16, name: "Aalborg", isMajorCity: true, region: "North Jutland", emoji: "🏙", tag: "North Jutland's biggest city", desc: "The largest city in North Jutland, straddling the Limfjord — a real, common base for exploring the north of the country.", highlight: "", travelTime: "", mapHint: "Aalborg, Denmark", nomiPotential: "Common" },
 ];
 
 

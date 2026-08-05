@@ -16,8 +16,21 @@ export const GuideRouteMap = ({ points }) => {
       }).addTo(map);
       L.control.zoom({ position: "bottomleft" }).addTo(map);
       mapRef.current = map;
+      // BUG FIX (Oliver: "leaflet maps look bad, too zoomed in and poor
+      // animation"): Leaflet measures its container's real pixel size the
+      // instant L.map() is called — but this map lives inside a day card
+      // that just mounted inside a scrollable page, whose 180px-tall holder
+      // may not have its final layout size yet (fonts/images still
+      // settling, or the day card's own entrance still running). A map
+      // created against a stale/zero size renders tiles at the wrong scale
+      // and pans roughly until something forces a re-measure — which reads
+      // exactly as "looks off" and "poor animation" the first time it's
+      // seen. invalidateSize() forces that re-measure once the container
+      // has genuinely settled.
+      requestAnimationFrame(() => map.invalidateSize());
     }
     const map = mapRef.current;
+    map.invalidateSize();
     if (layerRef.current) { layerRef.current.remove(); }
     const group = L.layerGroup().addTo(map);
     layerRef.current = group;
@@ -28,7 +41,13 @@ export const GuideRouteMap = ({ points }) => {
         .bindTooltip(`${i + 1}. ${p.name}`, { permanent: true, direction: "top", offset: [0, -8], className: "gemlyx-map-label" })
         .addTo(group);
     });
-    map.fitBounds(latlngs, { padding: [28, 28] });
+    // BUG FIX, same report: padding 28 with no zoom cap meant a day with only
+    // 2-3 genuinely close-together stops (common — most days have real stops
+    // within the same town) zoomed in tight enough to feel claustrophobic,
+    // basically a solid gold line with no surroundings visible. More padding
+    // plus a hard maxZoom keeps every route readable at a glance instead of
+    // zooming in as far as the points technically allow.
+    map.fitBounds(latlngs, { padding: [44, 44], maxZoom: 14 });
     return () => { group.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(points)]);

@@ -44,8 +44,17 @@ import { C } from "../utils/theme";
 // detail-page setter (setCraftDetail vs setFreeDetail) — renaming _src itself
 // would silently break that routing. groupKey() below is the one place that
 // decides which section header a place lands under, kept separate from _src.
+// PASS 27 ROUND 5, per Oliver ("Copenhagen is technically a major city..
+// I suppose we can make it its own... Major City / Town / Attractions"):
+// Copenhagen/Aarhus/Aalborg (see src/data/towns.js, isMajorCity: true) now
+// get their own section here too, ahead of the curated hidden-gem Towns
+// section — same real `_src: "town"` classification underneath (so
+// openStopDetail's routing is untouched), just split into two labeled
+// groups by the isMajorCity flag instead of one. `match` is an optional
+// extra predicate applied on top of the _src/groupKey match below.
 const CATEGORY_SECTIONS = [
-  { src: "town", label: "Towns" },
+  { src: "town", label: "Major Cities", match: p => p.isMajorCity },
+  { src: "town", label: "Towns", match: p => !p.isMajorCity },
   { src: "free", label: "Attractions" },
   { src: "food", label: "Food & Drink" },
   { src: "nightlife", label: "Nightlife" },
@@ -96,8 +105,11 @@ export const GuidePreviewScreen = ({
     if (norm.includes(key)) { seen.add(key); matched.push(p); }
   });
   // Group into the fixed category order above, each capped independently.
+  // Two sections ("Major Cities"/"Towns") now share src:"town" and are
+  // told apart by their own `match` predicate — apply it on top of the
+  // groupKey match, not instead of it.
   const sections = CATEGORY_SECTIONS
-    .map(cat => ({ ...cat, items: matched.filter(p => groupKey(p) === cat.src).slice(0, MAX_PER_SECTION) }))
+    .map(cat => ({ ...cat, items: matched.filter(p => groupKey(p) === cat.src && (!cat.match || cat.match(p))).slice(0, MAX_PER_SECTION) }))
     .filter(cat => cat.items.length > 0);
   const totalShown = sections.reduce((n, cat) => n + cat.items.length, 0);
   // PASS 27: closing without continuing (backdrop tap or ✕) needs to unwind
@@ -119,11 +131,29 @@ export const GuidePreviewScreen = ({
         style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", color: C.light, width: 40, height: 40, borderRadius: "50%", fontSize: 16, cursor: "pointer", zIndex: 951 }}>✕</button>
       <div style={{ maxWidth: 560, margin: "0 auto" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8, textAlign: "center" }}>Here's what's coming up</div>
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 24, textAlign: "center" }}>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, textAlign: "center" }}>
           {totalShown > 0 ? "A quick look at the real places on this route before Gemlyx builds your full guide." : "Gemlyx will build your full guide next — real places, checked and mapped out."}
         </div>
+        {/* BUG FIX (Oliver: "when the preview pops up Gemlyx AI is not there
+            to answer questions"): true — this screen is a full-screen,
+            near-opaque overlay (see the outer div's background/zIndex) sitting
+            directly on top of the Gemlyx Detour chat tab it was opened from,
+            so the chat is completely hidden and unreachable while this is up,
+            with no obvious way back to it short of realizing the ✕ (which
+            reads as "cancel", not "go ask something") gets you there.
+            closePreview already correctly returns to that same live chat
+            (and cleans up random-guide test state if needed) — this just
+            makes that path visible and inviting instead of hidden behind a
+            close button, so a traveler who wants to tweak something before
+            committing doesn't have to guess. */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <button onClick={closePreview}
+            style={{ background: "none", border: "none", color: C.gold, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: "4px 8px" }}>
+            ✦ Want to ask something or change it first? Back to chat
+          </button>
+        </div>
         {sections.map(cat => (
-          <div key={cat.src} style={{ marginBottom: 24 }}>
+          <div key={cat.label} style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>{cat.label}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {cat.items.map(place => (
