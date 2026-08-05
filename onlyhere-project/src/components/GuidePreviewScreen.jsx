@@ -36,14 +36,22 @@ import { C } from "../utils/theme";
 // craftItemsFallback at all, so a mentioned craft spot silently had nothing
 // to match against and just never showed up, quietly shrinking the count
 // below what was actually mentioned).
+// PASS 27 ROUND 2, per Oliver ("remove craft and workshop. Make those
+// attractions"): craft/workshop spots no longer get their own section here —
+// they display under "Attractions" instead. Note this is a DISPLAY grouping
+// only: each place's real _src stays "craft" (see the pools array below),
+// because openStopDetail routes "Read more" clicks by _src to the correct
+// detail-page setter (setCraftDetail vs setFreeDetail) — renaming _src itself
+// would silently break that routing. groupKey() below is the one place that
+// decides which section header a place lands under, kept separate from _src.
 const CATEGORY_SECTIONS = [
   { src: "town", label: "Towns" },
   { src: "free", label: "Attractions" },
   { src: "food", label: "Food & Drink" },
   { src: "nightlife", label: "Nightlife" },
-  { src: "craft", label: "Crafts & Workshops" },
   { src: "event", label: "Events" },
 ];
+const groupKey = (p) => (p._src === "craft" ? "free" : p._src);
 // Per-section cap, not one shared cap across everything — a real conversation
 // covering several towns and several attractions should be able to show all
 // of them without one category silently crowding another out of the shared
@@ -89,7 +97,7 @@ export const GuidePreviewScreen = ({
   });
   // Group into the fixed category order above, each capped independently.
   const sections = CATEGORY_SECTIONS
-    .map(cat => ({ ...cat, items: matched.filter(p => p._src === cat.src).slice(0, MAX_PER_SECTION) }))
+    .map(cat => ({ ...cat, items: matched.filter(p => groupKey(p) === cat.src).slice(0, MAX_PER_SECTION) }))
     .filter(cat => cat.items.length > 0);
   const totalShown = sections.reduce((n, cat) => n + cat.items.length, 0);
   // PASS 27: closing without continuing (backdrop tap or ✕) needs to unwind

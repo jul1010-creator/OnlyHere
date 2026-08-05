@@ -2195,7 +2195,16 @@ If the conversation only covers a single day or a few stops with no explicit day
   const generateRandomGuide = () => {
     if (guideModal === "loading") return;
     const realTowns = towns.filter(t => t.popularityTag !== "Common Attraction");
-    const pickTown = realTowns[Math.floor(Math.random() * realTowns.length)];
+    // PASS 27 ROUND 2 (Oliver: "Only 1 town?"): this used to pick exactly ONE
+    // town and name only that one in the brief, so the preview screen's new
+    // "Towns" section could never show more than 1 match on a test click —
+    // not a bug in the matching/sectioning itself, just an honest reflection
+    // of a brief that only ever mentioned one town by name. Picks a second,
+    // different town now and names both, so a test click gives the Towns
+    // section something to actually group.
+    const shuffledTowns = realTowns.slice().sort(() => Math.random() - 0.5);
+    const pickTown = shuffledTowns[0];
+    const secondTown = shuffledTowns[1];
     // PASS 27 (Oliver: "it only showed 3 places" in the new preview screen):
     // that wasn't actually a bug, just an honest reflection of how few real
     // places the old 2-3-extra brief named — bumped to 3-5 so a test click
@@ -2208,11 +2217,22 @@ If the conversation only covers a single day or a few stops with no explicit day
     const days = 2 + Math.floor(Math.random() * 3);
     const interestPool = ["history", "local food", "quiet walks", "craft and workshops", "coastal views", "architecture", "markets"];
     const interests = interestPool.slice().sort(() => Math.random() - 0.5).slice(0, 2);
-    const brief = `I'm planning ${days} days in Denmark, based mostly around ${pickTown?.name || "Copenhagen"}. I like ${interests.join(" and ")}. I'd also like to fit in a visit to ${extras.map(e => e.name).join(" and ")} if it makes sense with the route.`;
-    // Alternates modes so a couple of test clicks exercise both the map/plain
-    // paths (and both branches of _lightMode) without needing to go through
-    // the real "How do you want to see it?" screen every time.
-    const mode = Math.random() < 0.5 ? "plain" : "map";
+    const secondTownText = secondTown ? `, with a day trip out to ${secondTown.name}` : "";
+    const brief = `I'm planning ${days} days in Denmark, based mostly around ${pickTown?.name || "Copenhagen"}${secondTownText}. I like ${interests.join(" and ")}. I'd also like to fit in a visit to ${extras.map(e => e.name).join(" and ")} if it makes sense with the route.`;
+    // ROOT CAUSE of Oliver's "wtf happened to maps? Both leaflet and Google
+    // Maps???" report: this used to randomly alternate mode, 50/50, so any
+    // given test click had a coin-flip chance of landing on "plain" —
+    // GuidePage's lightMode (see GuidePage.jsx, search "_lightMode") is BY
+    // DESIGN a mode with no route map and no Google Maps leg links at all,
+    // just stop cards ("Simple guide, no maps or transport times" badge).
+    // Both maps "breaking" together, exactly as Oliver described, is what
+    // that mode looks like working correctly — it wasn't a bug in either
+    // map, it was this test button silently opting into the no-maps mode
+    // roughly half the time with no obvious signal why. Always "map" now,
+    // so a test click reliably shows the full route/maps experience; the
+    // real "How do you want to see it?" screen (a real traveler's actual
+    // choice) is still the one place "plain" is reachable from.
+    const mode = "map";
     // PASS 27: used to call generateGuide(brief, mode) directly here, which
     // skipped the new pre-build preview screen entirely (it's only reachable
     // via guideModal==="preview", and this button never set that). Now pushes
@@ -2375,6 +2395,23 @@ If the conversation only covers a single day or a few stops with no explicit day
       const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
       const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
       flyEl.style.animation = "none"; // detach the pop-in keyframe hold so the inline transform below actually takes effect
+      // BUG FIX (Oliver, 4th report: "still no flying" — even after the
+      // flightStarted guard above): .gxi-mark's base CSS rule is `opacity: 0`,
+      // with the gxiPop animation's "forwards" fill the ONLY thing holding it
+      // at opacity:1 after the pop-in finishes (see GemlyxLogo.jsx). Setting
+      // animation:none the line above doesn't just stop future animation
+      // frames — it detaches gxiPop entirely, INCLUDING the forwards-held
+      // end state, so the element's opacity fell straight back to the base
+      // rule's 0 the instant this ran. The transform below was then applied
+      // to a fully invisible element: the flight was actually happening the
+      // whole time, just with opacity:0, so it read as "spin finishes, then
+      // the compass just vanishes" while the corner logo separately faded in
+      // on its own timer a moment later — exactly "doesn't fly and settle."
+      // This line was here from the very first version of attemptFlight;
+      // bugs #2 (halfway-stop) and #3 (stomped mid-transition) each broke
+      // the flight a different, more obviously-wrong way before this one
+      // ever got a clean run to expose it.
+      flyEl.style.opacity = "1";
       flyEl.style.transformOrigin = "50% 50%";
       flyEl.getBoundingClientRect(); // force reflow before changing the transform, so the transition below actually plays
       flyEl.style.transition = "transform 0.85s cubic-bezier(0.5,0,0.25,1)";
