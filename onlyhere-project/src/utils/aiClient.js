@@ -4,39 +4,51 @@
 // same way App.jsx's Detour/Studio code already does, without duplicating this logic
 // or reaching into App.jsx's component internals. App.jsx now imports these too
 // (its own local copies were removed) — same behavior, just defined once.
-// `prefill` (optional): text placed as the START of Claude's own reply via an
-// assistant-role message — the API continues from it, so passing "{" makes it
-// PHYSICALLY IMPOSSIBLE for the reply to open with chit-chat. This is the real
-// fix for the recurring build-killer where despite every "respond with ONLY
-// JSON" instruction the model occasionally opened with "Got it — 4 days..." or
-// "Sounds like..." (both seen in Oliver's live console) — instructions can be
-// ignored, a prefill can't. The returned text includes the prefill, so callers
-// parse it exactly as before.
-export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-5", prefill = null) => {
-  try {
-    const res = await fetch("/api/anthropic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        messages: prefill
-          ? [{ role: "user", content: prompt }, { role: "assistant", content: prefill }]
-          : [{ role: "user", content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) { console.warn("Claude call failed:", res.status, data.error?.message || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
-    const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
-    if (!text) {
-      console.warn("Claude returned no text block.", { stop_reason: data.stop_reason, blockTypes: data.content?.map(b => b.type), usage: data.usage });
-      const hint = data.stop_reason === "max_tokens" ? " (response was cut off — ran out of tokens)" : "";
-      return { error: `Empty response from Claude${hint}` };
+// `expectJson` (optional 4th arg): callers that need a JSON reply set this so
+// a conversational answer gets ONE automatic strict re-ask instead of killing
+// the caller's whole pipeline. HISTORY, DO NOT REPEAT IT: the first attempt at
+// solving the chatty-opening problem ("Got it — 4 days...", "Sounds like...")
+// used assistant-message PREFILL — and the models this app runs on rejected it
+// with a live 400 ("This model does not support assistant message prefill"),
+// breaking every guide and Studio build in production until this replacement
+// shipped. Never re-add prefill here without verifying against the real API
+// first; this re-ask approach is plain user-messages only, so no model can
+// reject it.
+export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-5", expectJson = false) => {
+  const callOnce = async (p) => {
+    try {
+      const res = await fetch("/api/anthropic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          messages: [{ role: "user", content: p }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { console.warn("Claude call failed:", res.status, data.error?.message || data); return { error: data.error?.message || `Request failed (${res.status})` }; }
+      const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
+      if (!text) {
+        console.warn("Claude returned no text block.", { stop_reason: data.stop_reason, blockTypes: data.content?.map(b => b.type), usage: data.usage });
+        const hint = data.stop_reason === "max_tokens" ? " (response was cut off — ran out of tokens)" : "";
+        return { error: `Empty response from Claude${hint}` };
+      }
+      return { text };
+    } catch (err) {
+      return { error: "Couldn't reach Claude — check the API key and your connection." };
     }
-    return { text: prefill ? prefill + text : text };
-  } catch (err) {
-    return { error: "Couldn't reach Claude — check the API key and your connection." };
+  };
+  let out = await callOnce(prompt);
+  // JSON-expected reply came back as pure prose (no object anywhere in it) —
+  // one strict re-ask. The preamble guard in parseClaudeJSON already handles
+  // the milder case of chit-chat FOLLOWED by intact JSON; this catches the
+  // rarer all-prose reply that used to end as "Guide build failed: empty".
+  if (expectJson && !out.error && out.text && !out.text.includes("{")) {
+    console.warn("Claude replied with prose instead of JSON — re-asking once with a stricter instruction.");
+    out = await callOnce(`${prompt}\n\nIMPORTANT: Your previous attempt replied with conversational text instead of JSON. Respond with ONLY the JSON object itself, starting immediately with the { character — no greeting, no explanation, nothing before or after the JSON.`);
   }
+  return out;
 };
 
 export const askPerplexity = async (prompt) => {

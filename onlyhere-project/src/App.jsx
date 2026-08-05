@@ -983,7 +983,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
         `${prompts[sType]}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, no explanation before or after, nothing but the JSON itself, starting with { and ending with }.\n\n${userContent}`,
         8192,
         "claude-sonnet-5",
-        "{" // prefill — a chatty opening is physically impossible (see askClaude)
+        true // expectJson — one automatic strict re-ask if the reply comes back as prose (see askClaude)
       );
       if (draftResult.error) throw new Error(draftResult.error);
       let t = await parseClaudeJSON(draftResult.text, 8192);
@@ -1740,7 +1740,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           // remaining failure visible in the console instead of silent.
           900,
           "claude-opus-4-8",
-          "{" // prefill — a chatty opening is physically impossible (see askClaude)
+          true // expectJson — one automatic strict re-ask if the reply comes back as prose (see askClaude)
         );
         if (enrichResult.error) console.warn(`Day ${idx + 1} glance enrichment failed:`, enrichResult.error);
         const glance = JSON.parse(enrichResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
@@ -2264,7 +2264,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         `${guideSystemPrompt}\n\nRespond with ONLY the raw JSON object described above — no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
         6000,
         "claude-opus-4-8",
-        "{" // prefill — makes a chatty non-JSON opening physically impossible (see askClaude)
+        true // expectJson — one automatic strict re-ask if the reply comes back as prose (see askClaude; prefill was tried and the API rejected it live)
       );
       if (guideResult.error) throw new Error(guideResult.error);
       let parsed = await parseClaudeJSON(guideResult.text, 6000);
@@ -2278,7 +2278,7 @@ If the conversation only covers a single day or a few stops with no explicit day
           `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
           6000,
           "claude-opus-4-8",
-          "{" // prefill — same no-chit-chat guarantee as the main build call
+          true // expectJson — same prose-reply protection as the main build call
         );
         try {
           const retryParsed = JSON.parse(retryResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");

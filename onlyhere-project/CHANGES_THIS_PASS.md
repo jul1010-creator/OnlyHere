@@ -1,3 +1,13 @@
+# PASS 34 HOTFIX: PASS 33's prefill broke every build — my mistake, reverted and replaced with a re-ask that no model can reject
+
+Straight up: the 400 errors killing both the guide build and Studio drafting ("This model does not support assistant message prefill") were caused by MY change in the previous pass. I used an Anthropic API feature (assistant-message prefill) that the models this app runs on reject outright, and I shipped it without being able to verify against the live API from this environment. That was the wrong call on an API-level change, and it took your builds down. The lesson is recorded in the code and the handoff so it can't be re-tried casually.
+
+The replacement solves the same chatty-reply problem with plain user messages only, which no model can reject: JSON-critical calls now flag `expectJson`, and if a reply comes back as pure prose with no JSON in it at all, the call automatically re-asks ONCE with a stricter instruction before giving up. The preamble-extraction guard (for chit-chat followed by intact JSON) is unchanged and still active. Same four call sites as before: guide build, day-count retry, Studio draft writer, per-day travel/accommodation.
+
+The "No Listener: tabs:outgoing.message.ready" line in your console is from a browser extension (the Claude Chrome extension's own plumbing), not from Gemlyx — safe to ignore.
+
+Verified: full real-import esbuild bundle clean, minify-scope-check clean, zero assistant-role messages anywhere in the API client, and the re-ask trigger logic exercised directly in Node against both reply shapes ("Sounds like..." prose → re-asks; "Got it {json}" → passes straight through to the preamble guard). **Needs `git push` — and the src/data files are still waiting to ride along.**
+
 # PASS 33: the chatty-reply build killer ended for good (prefill — a non-JSON opening is now physically impossible), the OpenAI "wants nothing" stage fixed twice over, a real background DRAFT QUEUE in Studio, and the random-guide pick now shows at the preview stage
 
 **"Sounds lik..." was the same disease as "Got it — 4", and it's now cured at the API level, not the prompt level.** Instructions like "respond with ONLY JSON" can be ignored by the model; a prefill can't — the request now seeds the START of Claude's own reply with "{" (the API continues from it), so it's physically impossible for the reply to open with chit-chat. Applied to every JSON-critical call: the main guide build, the day-count retry, Studio's draft writer, and the per-day travel/accommodation call. The preamble-extraction guard from last pass stays as a second net.
