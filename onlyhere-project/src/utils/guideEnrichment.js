@@ -60,15 +60,74 @@ export const kmBetween = (a, b) => {
   return Math.sqrt(dLat * dLat + dLon * dLon);
 };
 
+// PRECISION-AWARE resolution — the fix for the longest-running bug in this
+// project (Oliver, at least four separate reports ending with "it still does
+// these 1 min walk when it's really 30").
+//
+// ROOT CAUSE, finally stated exactly: resolveStopCoords' last resort is a
+// SUBSTRING match against TOWN_COORDS. Two different stops in the same town
+// ("Samsø" and "Samsø Island Distillery"; "Faxe Kalkbrud" and "Faxe Kirke")
+// therefore resolve to the IDENTICAL town-centre point. kmBetween then returns
+// ~0, and estimateDurationText turns that into a confident "~1 min" — a number
+// invented out of two coordinates that were never about those stops at all.
+// Worse, resolveLegMode's distance overrides all saw 0 km, so a genuinely
+// 4.5km leg kept whatever mode it started with (walking) and the Directions
+// API dutifully returned a real 1 hour 15 minute WALK, which then rendered as
+// a suggested leg. Both of Oliver's screenshots are this single bug.
+//
+// The honest answer when both ends only resolved to the same town centre is
+// "we do not know this distance" — not zero. legDistanceKm returns null there,
+// and every caller already handles null by showing the AI's own leg text or
+// "Check route" instead of a fabricated figure.
+export const resolveStopCoordsDetailed = (name, geo = {}) => {
+  const real = lookupRealPlace(name);
+  if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon, precise: true };
+  if (geo[name]) return { ...geo[name], precise: true };
+  const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
+  if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1], precise: false };
+  return null;
+};
+
+// Trustworthy straight-line distance, or null when the inputs can't support one.
+export const legDistanceKm = (originName, destName, geo = {}) => {
+  const a = resolveStopCoordsDetailed(originName, geo);
+  const b = resolveStopCoordsDetailed(destName, geo);
+  if (!a || !b) return null;
+  const km = kmBetween(a, b);
+  // Neither end is precise and they landed on (essentially) the same point:
+  // that is the town-centre collapse described above, not a real short hop.
+  if (!a.precise && !b.precise && km < 0.05) return null;
+  return km;
+};
+
+// Oliver's explicit rule: "No walking more than 15-20 minutes." At a real
+// 4.5 km/h walking pace 20 minutes is about 1.5 km, so that is the hard cap
+// on any leg planned, routed, or displayed as a walk.
+export const WALK_MAX_MINUTES = 20;
+export const WALK_MAX_KM = 1.5;
+
 // SINGLE SOURCE OF TRUTH for leg transport mode — used by the exact-duration
 // fetch AND every render site that shows a route icon/label, so the fetch and
 // the display can never disagree about which mode a leg actually used.
 export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalking = false, geo = {}) => {
   let mode = detectLegMode(how, primaryMode);
-  const distKm = haversineKm(resolveStopCoords(originName, geo), resolveStopCoords(destName, geo));
+  // legDistanceKm, not raw kmBetween — a town-centre collapse must read as
+  // "unknown" here too, otherwise every distance override below silently sees
+  // 0 km and leaves a 4.5 km leg marked as a walk (see the comment on
+  // legDistanceKm; this is exactly the "1 hour 15 min on foot" screenshot).
+  const distKm = legDistanceKm(originName, destName, geo);
   if (distKm != null) {
-    const walkCapKm = onlyWalking ? Infinity : 2.5;
-    if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
+    // 2.5 km was ~33 minutes on foot — over Oliver's stated 15-20 minute
+    // ceiling, and the reason a 27 minute walk shipped as a suggested leg.
+    const walkCapKm = onlyWalking ? Infinity : WALK_MAX_KM;
+    if (mode === "walking" && distKm > walkCapKm) {
+      // Too far to walk, so fall back to how this traveler is ACTUALLY getting
+      // around on this trip rather than guessing from distance alone (the old
+      // rule turned every 3-60 km walk into "bicycling", which is nonsense on
+      // a public-transport trip). The 60 km bike sanity cap is kept.
+      const primary = primaryMode === "bike" ? "bicycling" : primaryMode === "car" ? "driving" : "transit";
+      mode = (primary === "bicycling" && distKm > 60) ? "transit" : primary;
+    }
     else if (mode === "bicycling" && distKm > 60) mode = "transit";
     // BUG FIX (Oliver: "there is no route from Ærøskøbing to Ærøskøbing havn.
     // You need to seek out Rome2Rio for that"): on a public-transport trip,

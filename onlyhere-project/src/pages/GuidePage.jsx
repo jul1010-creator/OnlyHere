@@ -7,7 +7,7 @@ import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk } from "../utils/guideEnrichment";
+import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES } from "../utils/guideEnrichment";
 import { askClaude } from "../utils/aiClient";
 import { BOOKING_AFFILIATE_ID } from "../config";
 
@@ -385,16 +385,28 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             const legDestTown = (day.stops || []).find(s => s.name === destName)?.town;
             if (isSameTownWalk(mode, legOriginTown, legDestTown, how)) mode = "walking";
             const rawExact = exactDurations[`${originName}|${destName}|${mode}`];
-            const plausibleCap = mode === "walking" ? 180 : mode === "bicycling" ? 300 : Infinity;
-            const exact = rawExact && rawExact.durationMinutes <= plausibleCap ? rawExact : null;
+            // Walking cap tightened 180 → WALK_MAX_MINUTES (Oliver: "there has
+            // to be rules. No walking more than 15-20 minutes"). 180 minutes
+            // is why a three-hour-capped "1 hour 15 min on foot" sailed through
+            // and shipped as a suggested leg. Rejecting it here makes an
+            // ALREADY-BUILT guide heal on next view too, not just new builds:
+            // the chip falls back to the honest estimate for a real mode
+            // instead of presenting an absurd walk.
+            const plausibleCap = mode === "walking" ? WALK_MAX_MINUTES : mode === "bicycling" ? 300 : Infinity;
+            const exact = rawExact && (rawExact.durationMinutes <= plausibleCap || (rawExact.modeUsed && rawExact.modeUsed !== "walking")) ? rawExact : null;
             // A transit leg with no transit route can have been rescued as a real
             // walking route by the build (see fetchExactDurations' walking retry) —
             // modeUsed is the mode the result actually came from, and the icon/
             // label/link must match IT, not the originally-resolved mode.
             const usedMode = exact?.modeUsed || mode;
             const icon = usedMode === "bicycling" ? "🚲" : usedMode === "driving" ? "🚗" : usedMode === "walking" ? "🚶" : /ferry|boat/i.test(how || "") ? "⛴" : "🚆";
-            const a = resolveStopCoords(originName, geo), b = resolveStopCoords(destName, geo);
-            const km = a && b ? kmBetween(a, b) : null;
+            // legDistanceKm, not kmBetween — when two stops only resolved to
+            // the same town centre we do NOT know the distance, and saying so
+            // (null → the AI's own leg text, or "Check route") is the honest
+            // answer. kmBetween returned 0 there, which estimateDurationText
+            // turned into a confident "~1 min" for legs that were really 30:
+            // the exact bug Oliver has now reported four times.
+            const km = legDistanceKm(originName, destName, geo);
             const modeLabel = usedMode === "bicycling" ? "by bike" : usedMode === "driving" ? "by car" : usedMode === "walking" ? "on foot" : "by train/bus";
             const routeFailed = noRouteFound[`${originName}|${destName}|${mode}`];
             if (routeFailed) {
