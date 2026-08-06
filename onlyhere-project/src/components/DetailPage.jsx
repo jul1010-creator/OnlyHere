@@ -294,8 +294,24 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
 
         <div style={{ fontSize: 14, color: C.light, lineHeight: 1.75, marginBottom: 20 }}>{item.desc}</div>
 
+        {/* ARTICLE LAYOUT (Oliver: "Instead of all of them just being flushed to
+            the bottom.. Perhaps at the side (on PC atleast)"). Images used to
+            stack full width in document order, so on a wide screen every photo
+            was a full-bleed interruption. At 760px and up an image now floats to
+            an alternating side at 44% and the prose wraps around it, which is
+            how an article actually reads. Below that width nothing changes: on a
+            phone a floated image would squeeze the text into an unreadable
+            column. The float is cleared after the body so the next section
+            cannot ride up beside a tall photo. */}
+        <style>{`
+          @media (min-width: 760px) {
+            .gx-fig { float: right; width: 44%; margin: 4px 0 16px 22px; }
+            .gx-fig:nth-of-type(even) { float: left; margin: 4px 22px 16px 0; }
+          }
+          .gx-body::after { content: ""; display: block; clear: both; }
+        `}</style>
         {item.blogBody && item.blogBody.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
+          <div className="gx-body" style={{ marginBottom: 24 }}>
             {item.blogBody.map((block, i) => (
               block.type === "bullets" ? (
                 <ul key={i} style={{ margin: "0 0 16px", paddingLeft: 20, color: C.light, fontSize: 14, lineHeight: 1.75 }}>
@@ -309,7 +325,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
                 </div>
               ) : block.type === "image" ? (
-                <div key={i} style={{ marginBottom: 16 }}>
+                <div key={i} className="gx-fig" style={{ marginBottom: 16 }}>
                   {/* referrerPolicy matters for Wikimedia-hosted images: some
                       CDNs refuse a hotlink based on the Referer header, and a
                       refused image is invisible because of the onError below.

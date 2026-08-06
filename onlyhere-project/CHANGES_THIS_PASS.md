@@ -1,3 +1,27 @@
+# PASS 60: article layout for images, and a hard stop on repeat research
+
+## Images
+
+They stacked full width in document order, so on a desktop every photo was a full-bleed interruption and they all piled up wherever the writer happened to drop them.
+
+At 760px and up, an image now floats to an **alternating side at 44% width** and the prose wraps around it, which is how an article actually reads. Below that width nothing changes: on a phone a floated image would squeeze the text into a column too narrow to read, so it stays full width there. Pure CSS, no layout library, and the float is cleared after the body so the next section cannot ride up beside a tall photo. Captions and credits travel with the image.
+
+Screenshotted before and after.
+
+## "You click open, and then it starts researching it again"
+
+I have now told you twice that Open does not trigger research, and you have told me twice that it does. **I am going to stop arguing and make it impossible instead.**
+
+The runner now keeps a record of every `type::name` it has drafted this session and skips anything already in it. Whatever calls it, from wherever, the same entry cannot be researched twice. If my reading of the cause was wrong, this stops the symptom anyway and stops you paying for it.
+
+Two honest notes. The naming fix from last pass, which makes the progress bar say `Queue: Ribe` instead of a bare "Researching", **is not deployed yet**, so what you are looking at is still the old unlabelled panel. And I could not reproduce this from here, because it needs a live Studio session with a real queue running; every claim I have made about it has been from reading the code, which is exactly the kind of confidence that has been wrong twice today.
+
+If it still happens after this deploys, the useful detail would be whether the progress bar names a DIFFERENT town than the one you opened. That single fact separates "the queue is working on the next one" from "something really is re-running your draft", and I have been guessing at it instead of asking.
+
+## Verification
+
+Layout rendered and screenshotted at desktop width and confirmed unchanged on narrow. Full bundle passes, 63 tests pass.
+
 # PASS 59: Open was innocent, and a note on fact-checkers that contradict themselves
 
 ## "I click open it just starts researching the draft again"

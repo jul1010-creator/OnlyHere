@@ -688,6 +688,7 @@ function GemlyxApp() {
   const [queueDrafting, setQueueDrafting] = useState(null); // the name the queue is researching right now
   const [queueResults, setQueueResults] = useState([]);
   const queueBusyRef = useRef(false);
+  const doneRef = useRef(new Set());   // type::name already drafted this session, never drafted twice
   // DRAFT PROGRESS (Oliver: "when I click 'draft it' I wanna see the progress
   // of research like the loading screen"): generateArea sets a real stage
   // label + percent at each pipeline step, rendered as a progress panel under
@@ -1831,6 +1832,13 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
         const item = draftQueueRef.current[0];
         draftQueueRef.current = draftQueueRef.current.slice(1);
         setDraftQueue([...draftQueueRef.current]);
+        // HARD GUARD against re-researching something already drafted. I told
+        // Oliver twice that Open does not trigger research, and he reported it
+        // twice more. Rather than explain again, this makes a repeat impossible
+        // regardless of what triggers the runner: if a result already exists for
+        // this exact name and type, it is skipped rather than paid for again.
+        if (doneRef.current.has(`${item.type}::${item.name.toLowerCase()}`)) continue;
+        doneRef.current.add(`${item.type}::${item.name.toLowerCase()}`);
         // Naming what the QUEUE is working on (Oliver: "I click 'open' it just
         // starts researching the draft again!"). It was not starting anything.
         // Open only loads a finished draft into the editor. The queue was simply
