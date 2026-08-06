@@ -1859,10 +1859,22 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
   const [factsPanelOpen, setFactsPanelOpen] = useState(false);
   const factCancelRef = useRef(false);
 
+  // Every Studio write below needs the LOGGED-IN token, not the anon key.
+  // This existed as `studioSession?.token || SUPABASE_KEY`, and since the session
+  // stores it as `access_token`, that read undefined and quietly sent the anon
+  // key instead. Supabase then refused with "new row violates row-level security
+  // policy", which reads like a broken SQL policy rather than a missing login.
+  // Both Oliver's 403 on storage and his 42501 on gemlyx_facts were this one typo.
+  const studioAuth = () => {
+    const tok = studioSession?.access_token;
+    if (!tok) throw new Error("Your Studio login has expired. Log out and back in.");
+    return { apikey: SUPABASE_KEY, Authorization: `Bearer ${tok}` };
+  };
+
   const loadSavedFacts = async () => {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?select=*&order=created_at.desc`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.token || SUPABASE_KEY}` },
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
       });
       const rows = await res.json();
       setFactSaved(Array.isArray(rows) ? rows : []);
@@ -1982,7 +1994,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       const path = `facts/${key}.${ext}`;
       const res = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.token || SUPABASE_KEY}`, "Content-Type": file.type || "image/jpeg", "x-upsert": "true" },
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": file.type || "image/jpeg", "x-upsert": "true" },
         body: file,
       });
       if (!res.ok) {
@@ -2005,12 +2017,13 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts`, {
         method: "POST",
         headers: {
-          apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.token || SUPABASE_KEY}`,
+          apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`,
           "Content-Type": "application/json", Prefer: "return=representation",
         },
         body: JSON.stringify({
           fact: draft.fact, subject: draft.subject, category: draft.category,
           photo: draft.photo || null, source_url: draft.sourceUrl || null, published: true,
+          photo_credit: draft.credit || null,
         }),
       });
       if (!res.ok) throw new Error((await res.text()).slice(0, 200));
@@ -2026,7 +2039,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?id=eq.${row.id}`, {
         method: "DELETE",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.token || SUPABASE_KEY}` },
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
       });
       if (!res.ok) throw new Error((await res.text()).slice(0, 200));
       setFactSaved(prev => prev.filter(f => f.id !== row.id));
@@ -4936,6 +4949,30 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                 <input type="file" accept="image/*" style={{ display: "none" }}
                                   onChange={e => { attachFactPhoto(d.key, e.target.files?.[0]); e.target.value = ""; }} />
                               </label>
+                              {/* Same Wikimedia search as the Media panel, because a
+                                  fact about Ribe needs a picture of Ribe just as much
+                                  as the Ribe entry does, and typing a credit by hand
+                                  for every fact would undo the point of generating
+                                  them in batches. The credit rides along with the
+                                  image, so a fact can never show uncredited. */}
+                              <button disabled={d.uploading || factBusy}
+                                onClick={async () => {
+                                  setFactError(null);
+                                  try {
+                                    const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(d.subject + " Denmark")}&limit=1`);
+                                    const data = await res.json();
+                                    const hit = (data.results || [])[0];
+                                    if (!hit) { setFactError(`No freely licensed photo found for "${d.subject}".`); return; }
+                                    setFactDrafts(prev => prev.map(x => x.key === d.key
+                                      ? { ...x, photo: String(hit.url).split("?")[0], credit: hit.credit } : x));
+                                  } catch (e) { setFactError(`Wikimedia lookup failed: ${e.message || e}`); }
+                                }}
+                                style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                🔎 Wikimedia
+                              </button>
+                              {d.credit && (
+                                <span style={{ fontSize: 9.5, color: C.muted }}>{d.credit.photographer} · {d.credit.license}</span>
+                              )}
                               {d.sourceUrl ? (
                                 <a href={d.sourceUrl} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: C.muted, textDecoration: "underline" }}>source</a>
                               ) : (
@@ -7275,10 +7312,25 @@ You also have a web_search tool. Use it whenever someone asks about something th
               const isHistory = fact.category === "history";
               const isFood = fact.category === "food";
               const isAttraction = fact.category === "attractions";
+              // RESTORED (Oliver, 6 Aug: "Before sonnet screwed it up, we had made
+              // different loading visuals for History, Nightlife, Attractions,
+              // Food, etc."). History, food and attractions survived; NIGHTLIFE
+              // and NATURE had been dropped and were falling through to the plain
+              // default card, so two of the five categories looked identical to
+              // "no category at all".
+              const isNightlife = fact.category === "nightlife";
+              const isNature = fact.category === "nature";
               const cardStyle = isHistory
                 ? { border: "1px solid #4A3D22", background: "linear-gradient(160deg, #221B10 0%, #16110A 100%)" }
                 : isFood
                 ? { border: "1px solid #4A2E1A", background: "linear-gradient(160deg, #2A1810 0%, #17100A 100%)" }
+                : isNightlife
+                // Neon: a cool violet wash with a lit edge, the way a bar front
+                // reads at night. Deliberately the only card with a glow.
+                ? { border: "1px solid #4A2F6B", background: "linear-gradient(160deg, #1B1230 0%, #0E0A18 100%)", boxShadow: "inset 0 0 34px rgba(150,90,255,0.16)" }
+                : isNature
+                // Green, low contrast, no glow: landscape rather than signage.
+                ? { border: "1px solid #24422C", background: "linear-gradient(160deg, #12200F 0%, #0A1109 100%)" }
                 : { border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" };
               return (
                 <>

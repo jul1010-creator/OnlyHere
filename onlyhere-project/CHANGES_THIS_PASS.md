@@ -1,3 +1,44 @@
+# PASS 57: both RLS errors were one typo of mine
+
+## The cause
+
+Your two errors were the same bug:
+
+```
+403 "new row violates row-level security policy"   (storage upload)
+42501 "new row violates row-level security policy for table gemlyx_facts"
+```
+
+**The Studio session stores its JWT as `access_token`. I wrote `studioSession?.token`.**
+
+That reads `undefined`, and I had written `|| SUPABASE_KEY` as a fallback, so every one of those four writes quietly sent the **anonymous** key instead. Supabase then did exactly the right thing and refused, because the anon role has no insert permission on either. Your SQL was correct the whole time.
+
+`patchContentPayload` uses `studioSession.access_token`, which is why publishing has always worked while everything I added failed. I had the working example twelve lines away and did not read it.
+
+**The `|| SUPABASE_KEY` fallback is the part I regret most.** Without it, these would have thrown "no token" and pointed straight at the login. Instead it produced a database permission error, which sends you looking at your SQL policies. A fallback that turns a clear failure into a confusing one is worse than no fallback.
+
+All four sites now use `access_token` through one `studioAuth()` helper that throws a plain "Your Studio login has expired. Log out and back in." when there is no token, so this class of error can never masquerade as an RLS problem again.
+
+## Wikimedia in the Facts panel
+
+A **🔎 Wikimedia** button next to each drafted fact, searching on the fact's own subject. One tap fills the picture and the credit together. Typing a credit by hand for every fact would have undone the point of generating them in batches, and a fact can now never show uncredited.
+
+The credit is saved with the fact, which needs one extra column:
+
+```sql
+alter table gemlyx_facts add column if not exists photo_credit jsonb;
+```
+
+## The loading screen visuals
+
+You were right that they were damaged, and half right about how much. History, food and attractions survived. **Nightlife and nature had been dropped entirely** and were falling through to the plain default card, so two of the five categories looked identical to having no category at all.
+
+Restored: nightlife gets a violet wash with a lit inner edge, the way a bar front reads at night, and it is deliberately the only card with a glow. Nature gets a low-contrast green, landscape rather than signage, no glow. History keeps its parchment noise and food its warm brown.
+
+## Verification
+
+Full bundle passes, 47 tests still pass. The auth fix is verified by comparison against the known-working `patchContentPayload` rather than by guessing, and the four call sites were enumerated rather than searched once.
+
 # PASS 56: the Wikimedia finder was failing silently, which is my fault
 
 ## The endpoint works. The UI was swallowing the failure.
