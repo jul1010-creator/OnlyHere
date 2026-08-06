@@ -166,6 +166,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     desc: "Odense appears in the first written mention of the name in 988." } });
   ok("named historical event is NOT flagged", !yearOk.findings.some(f => f.field === "history"));
 
+  // The Kliplev case: advice in a glance field.
+  const glance = auditEntry({ id: 12, type: "festival", payload: { ...base,
+    nearestStation: "No train station in Kliplev; likely via Aabenraa by bus, check rejseplanen.dk" } });
+  ok("advice in nearestStation is caught", glance.findings.some(f => f.field === "nearest stop" && f.severity === "high"));
+  ["Ribe St.", "Aabenraa Rutebilstation", "Hou Havn", "Kastrup Lufthavn", "Nørreport Station"].forEach(n => {
+    const okRow = auditEntry({ id: 13, type: "festival", payload: { ...base, nearestStation: n } });
+    ok(`real stop name "${n}" is NOT flagged`, !okRow.findings.some(f => f.field === "nearest stop"));
+  });
+  const empty = auditEntry({ id: 14, type: "festival", payload: { ...base, nearestStation: "" } });
+  ok("empty nearestStation is NOT flagged", !empty.findings.some(f => f.field === "nearest stop"));
+
   const sorted = auditAll([
     { id: 1, type: "town", payload: { ...base, __lat: 55, __lon: 9 } },
     { id: 2, type: "town", payload: { ...base, __lat: 56.09, __lon: 8.24 } },

@@ -1267,7 +1267,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               : "")
               + (namedLegs.length > 0 ? `REAL CONNECTING SERVICES on that public transport route, also from the API: ${namedLegs.join("; ")}.\n` : "")
               + `REAL TRANSPORT CHECK from Copenhagen (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
-              + (transit ? `BY PUBLIC TRANSPORT: ${transit}. ` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links and island ferry operators are not always in the transit feed, and this is ESPECIALLY common for islands, where a real, frequent, well-used ferry simply is not indexed. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk and the ferry operator. If a ferry is named anywhere above, that crossing is real and carries foot passengers unless the operator says otherwise. `)
+              + (transit ? `BY PUBLIC TRANSPORT: ${transit}. ` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links and island ferry operators are not always in the transit feed, and this is ESPECIALLY common for islands, where a real, frequent, well-used ferry simply is not indexed. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk and the ferry operator, IN THE PROSE ONLY. NEVER put that advice in a short At a Glance field. The nearestStation field takes a real station, stop or terminal NAME and nothing else: no sentence, no semicolon, no "likely", no "check rejseplanen", no explanation. If no real stop can be named, nearestStation must be an EMPTY STRING. An empty field reads as "we do not know"; a field containing advice reads as a station called "check rejseplanen.dk", which is what actually shipped. If a ferry is named anywhere above, that crossing is real and carries foot passengers unless the operator says otherwise. `)
               + (driving ? `BY CAR: ${driving}. ` : "")
               + `Use these real figures for travelTime and for anything you say about getting there, in preference to any duration from a search snippet. If a ferry is involved, these already include it. NEVER state that no public transport route exists on the strength of this block alone.`;
           }
@@ -1656,6 +1656,31 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
       // YOU PUBLISH. Any value the system overrides at publish time has to be
       // reconciled into the draft the moment it exists, or every review after it
       // is being run against fiction.
+      // ── A GLANCE FIELD IS A NAME, NOT A SENTENCE ────────────────
+      // Oliver, 6 Aug: a published draft carried nearestStation = "No train
+      // station in Kliplev; likely via Aabenraa by bus, check rejseplanen.dk".
+      //
+      // That text is MY fault: the transport block tells the writer to point at
+      // rejseplanen.dk when a connection cannot be confirmed, and I never said
+      // that guidance was for the prose. The model put it in the field, which
+      // then renders after the label as a station called "check rejseplanen.dk".
+      //
+      // The prompt is fixed too, but asking has failed repeatedly this session,
+      // so this enforces it. A station name is a name: no sentence punctuation,
+      // no hedging, no instructions to the reader. Anything else is cleared,
+      // because empty honestly means unknown and advice in a name does not.
+      if (typeof t.nearestStation === "string") {
+        const v = t.nearestStation.trim();
+        // A period only means a sentence when more text follows it. "Ribe St." is a
+        // real station name and must survive.
+        const isSentence = /;|\.\s+\S|,.*,/.test(v) || v.split(/\s+/).length > 6 || v.length > 48;
+        const isAdvice = /\b(check|likely|probably|see |visit |consult|rejseplanen|google maps|no train|none|unknown|n\/a|varies)\b/i.test(v);
+        if (v && (isSentence || isAdvice)) {
+          t.nearestStation = "";
+          t.uncertainties = [...(t.uncertainties || []), `The nearest stop could not be named, so that field was left empty rather than filled with advice. The draft had put "${v.slice(0, 70)}" there. Mention how to get there in the prose instead.`];
+        }
+      }
+
       if (frozenGeo) {
         if (typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
         if (typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
@@ -1780,7 +1805,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
           });
         }
       } catch { /* memory save is best-effort, never blocks a finished draft */ }
-      draftOutcome = { ok: true, draft: t };
+      draftOutcome = { ok: true, draft: t, code };
     } catch (err) {
       console.error("Studio draft failed:", err);
       // Surface the real underlying error alongside the friendly message —
@@ -1848,7 +1873,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
         setQueueDrafting(item.name);
         const res = await generateArea(item.name, item.type);
         setQueueDrafting(null);
-        setQueueResults(prev => [...prev, { name: item.name, type: item.type, ok: !!res?.ok, draft: res?.ok ? res.draft : null, error: res?.ok ? null : (res?.error || "failed") }]);
+        setQueueResults(prev => [...prev, { name: item.name, type: item.type, ok: !!res?.ok, draft: res?.ok ? res.draft : null, code: res?.code || null, error: res?.ok ? null : (res?.error || "failed") }]);
       }
     } finally {
       queueBusyRef.current = false;
@@ -2098,7 +2123,16 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
     setStudioTown(r.name);
     setStudioDraft(r.draft);
     setStudioDraftText(JSON.stringify(r.draft, null, 2));
-    setStudioResult(null);
+    // ── THE BUG (Oliver, four reports, and he was right every time) ──
+    // The whole draft editor renders inside `{studioResult && (...)}`. This line
+    // used to be `setStudioResult(null)`, so Open loaded the draft into state and
+    // then switched off the only thing that displays it. Nothing appeared, the
+    // name landed in the town input next to the queue's progress bar, and it
+    // looked exactly like Open had started a fresh research run.
+    //
+    // I explained that away twice instead of checking what the editor actually
+    // renders on. The draft was there the whole time, with no UI attached to it.
+    setStudioResult(r.code || `// Draft for ${r.name} loaded from the queue. Review the JSON below and press Publish.`);
     setStudioError(null);
     setStudioInventedWarning(null);
     setStudioIdentityWarning(null);

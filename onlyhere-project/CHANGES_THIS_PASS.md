@@ -1,3 +1,61 @@
+# PASS 62: "check rejseplanen.dk" as a station name, and it was my sentence
+
+The draft shipped this:
+
+```
+"nearestStation": "No train station in Kliplev; likely via Aabenraa by bus, check rejseplanen.dk"
+```
+
+That field renders straight after its label, so it reads as a station called "check rejseplanen.dk". You are right that it is bad.
+
+**The words came from me.** The transport block I wrote in PASS 44 says, when a connection cannot be confirmed, to "say the connection could not be confirmed and point at rejseplanen.dk". I never said that guidance was for the PROSE. The model did exactly what it was told, in the nearest field to hand.
+
+It also hedged: "likely via Aabenraa". A guess with a softener on it, in a field a traveler plans around.
+
+## Three layers, because asking has failed all week
+
+**The prompt is scoped.** The rejseplanen advice now says explicitly: prose only, never a short glance field. `nearestStation` takes a real station, stop or terminal NAME and nothing else. No sentence, no semicolon, no "likely", no "check rejseplanen". If no real stop can be named it must be an empty string, because empty reads as "we do not know" and advice in a name field reads as a station with that name.
+
+**It is enforced in code.** Every draft now has that field checked before you see it. A value containing sentence punctuation, more than six words, or any hedging or instruction word is cleared and the reason goes into uncertainties with the original text quoted, so nothing is lost silently. I have written four prompt rules this session that were ignored, so this one does not depend on being obeyed.
+
+**Published entries get flagged.** The audit catches the same pattern on anything already live, quoting the offending value.
+
+## The check that mattered
+
+A period only means a sentence when more text follows it. My first version flagged **"Ribe St."**, which is a real station name, and the test caught it before it could start silently blanking correct data. Verified against eight real Danish stop names including "Odense Banegård Center", "Sælvig Færgehavn" and "Tranekær Slot Station", all kept, and six advice strings including the exact Kliplev value, all cleared.
+
+70 tests, all passing.
+
+## Worth noting
+
+This is the third time this session that a rule of mine caused the exact error it was meant to prevent: the schema example coordinate that drafts copied, the `|| SUPABASE_KEY` fallback that turned a login failure into an RLS error, and now a fallback instruction landing in a field. The pattern is that I wrote the guidance for the case I was thinking about and not for where the model would actually put it.
+
+# PASS 61: found it. Open was clearing the thing that displays the draft.
+
+You were right four times. I explained it away twice. Here is what it actually was.
+
+**The entire draft editor renders inside `{studioResult && (...)}`.**
+
+`loadQueueResult` ended with `setStudioResult(null)`.
+
+So Open loaded the finished draft into state, and then, on the next line, switched off the only UI that shows it. The draft was there the whole time with nothing attached to render it. What you saw instead was the town name landing in the input, sitting next to the queue's progress bar, which is exactly what "it just puts the title up on the researching thing" describes.
+
+**No money was wasted.** Nothing re-researched. The draft you paid for was sitting in memory, invisible.
+
+Fixed by giving Open something real to show: the paste-ready code is now carried out of the draft, stored on the queue result, and set when you open it, with a plain fallback line for results drafted before this change.
+
+## What I got wrong, and why
+
+I read `loadQueueResult`, saw no research call in it, and concluded twice that Open could not be the cause. That was true and useless. I checked what the function DID and never checked what the screen NEEDS, so I kept confirming the same half of the picture and calling it a diagnosis.
+
+The second mistake was arguing. After the first report I should have asked for the one detail that would have settled it, or gone looking for what gates that panel. Instead I explained, added a label, added a guard, and shipped two passes that could not possibly have fixed it because neither touched the real cause. You told me the symptom precisely every time, including "it puts the title up", which was the whole answer.
+
+The tests would not have caught this either. It is render-gating, not a pure function, and I said as much two passes ago and then did not act on it.
+
+## Verification
+
+Confirmed `setStudioResult(null)` is gone from that function and that the editor's gate is the same variable it now sets. Full bundle passes, 63 tests pass. The draft that fixes this is not deployed until you push.
+
 # PASS 60: article layout for images, and a hard stop on repeat research
 
 ## Images

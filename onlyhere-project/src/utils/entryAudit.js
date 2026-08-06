@@ -110,6 +110,17 @@ export const auditEntry = (row) => {
     add("high", "history", `Attaches a year ("${m[0].trim()}") without naming which event it belongs to. First written mention, founding, and a grant of town rights are three different dates, and welding them together is how the Odense 988 error happened.`);
   }
 
+  // A glance field holding a sentence or an instruction to the reader. Real
+  // case: nearestStation = "No train station in Kliplev; likely via Aabenraa by
+  // bus, check rejseplanen.dk", which renders after the label as a station with
+  // that name.
+  const ns = typeof p.nearestStation === "string" ? p.nearestStation.trim() : "";
+  // A period only means a sentence when more text follows: "Ribe St." is a real name.
+  if (ns && (/;|\.\s+\S|,.*,/.test(ns) || ns.split(/\s+/).length > 6 || ns.length > 48
+             || /\b(check|likely|probably|see |consult|rejseplanen|google maps|no train|unknown|varies)\b/i.test(ns))) {
+    add("high", "nearest stop", `The Nearest Station field holds a sentence rather than a name: "${ns.slice(0, 70)}". It renders straight after the label, so it reads as the stop's name. Put the name there or leave it empty, and explain the journey in the prose.`);
+  }
+
   // ── medium: thin or unfinished ────────────────────────────────
   const body = Array.isArray(p.blogBody) ? p.blogBody : [];
   const words = all.split(/\s+/).filter(Boolean).length;
