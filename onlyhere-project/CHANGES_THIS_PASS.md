@@ -1,3 +1,94 @@
+# PASS 63: an assistant that follows you, and the ferry that was never required
+
+Three things, and they turned out to be the same thing.
+
+## 1. "Google AI says this is wrong. Correct it."
+
+Yes. It exists now, and it is not a redraft.
+
+**Paste the criticism, get a patch.** Every claim in what you paste is pulled out separately, verified on its own, and then either applied, rejected with the evidence, or left alone. Nothing is changed because a model said so.
+
+That last part is the whole design, and it comes from your own line: "Gemini seems to not always be correct either." It has been wrong twice this week in ways that would have made an entry worse. It insisted a crossing was 90 minutes when the operator's own timetable says 80. It called "third-largest" an error when the number was right and only the measure was missing. A correction tool that trusts its input is just a second way to publish someone else's mistake.
+
+So:
+
+- **Transport claims are settled by measurement, never by asking a model.** A ferry or duration claim goes to the Directions API. A live route is a fact; a model's opinion about a route is a sentence.
+- **Everything else needs a primary source.** A verification that comes back "confirmed" with no source URL is downgraded to unresolved and nothing changes. That is enforced in code, not requested in the prompt.
+- **Only the criticised fields may change.** The rewrite is told which keys it may touch, and then every other key is compared against the original and put back if it moved. A model quietly improving an untouched paragraph is how a correction becomes a redraft.
+
+Unresolved claims are not thrown away. They land in `uncertainties`, quoted, so the next reviewer sees what was raised and why nothing moved. Confirmed ones write a line into `__corrections` with the source, so an entry now carries its own repair history.
+
+## 2. It follows you everywhere
+
+You asked for an assistant for the /#studio guy that is always with you, even on the blogs. It sits bottom right on every page, above an open entry, and it renders only when a Studio session exists.
+
+It works out what you want from what you type:
+
+| what you type | what it does |
+|---|---|
+| "Google AI says this is wrong. Correct it." plus a paste | runs the correction pass on the entry you have open |
+| "why does this say the ferry is required?" | answers from the stored payload and the audit, never from memory |
+| "which ones need work?" | audits everything published, worst first |
+
+Routed deterministically. A model deciding between "answer him" and "edit his published content" is a coin flip on something that must never be a coin flip. When it is genuinely unclear it answers, because the wrong guess in that direction costs a sentence and the wrong guess the other way costs an entry.
+
+Nothing reaches Supabase without you pressing Save, and you see the field-by-field diff first.
+
+### "Then I won't need to take pictures of what I mean"
+
+There is a **⧉ Context** button. It copies one block holding the page you are on, the Supabase row id, the exact stored payload, and the full audit verdict for that entry, plus whatever you have already asked the assistant. Paste that instead of a screenshot. It carries things a screenshot never could: what is actually stored versus what is rendered, and whether the coordinates are real.
+
+## 3. The ferry that was never required
+
+Your Aarhus Festuge draft said it itself, in its own uncertainties box:
+
+> "The driving-route data mentioning a ferry crossing between Copenhagen and Aarhus looks inconsistent since Aarhus is reached by road/bridge."
+
+The draft was right and my pipeline was wrong.
+
+Google routes for **time**, not for land. Copenhagen to Aarhus by the Odden boat beats the Great Belt bridge, so Google returns the ferry route, my ferry flag fired, and the pipeline told the writer a ferry was required to reach a mainland city with a motorway running to it.
+
+The flag was answering **"does the fastest route use a ferry"**. That is not a fact about the destination. The fact about the destination is **"is a ferry required"**, and that question has a direct answer: ask for the same route again with ferries banned.
+
+- A route comes back: the boat was a shortcut. Aarhus, and the writer is now told plainly not to call it an island.
+- No route comes back: there is no road. Samsø, Fanø, Ærø, Bornholm.
+
+One extra API call, only on routes that mention a boat. It replaces an inference with a measurement.
+
+**It never concludes "required" from silence.** A probe that returns ZERO_RESULTS is evidence. A probe that returns REQUEST_DENIED, or hits a quota, or fails to run, is not, and those come back "unknown" with the writer told to claim nothing either way. Turning a broken key into "this is an island" is the same class of bug in a new place.
+
+There is also a deterministic catch on the finished text: if the ferry was measured as optional and the draft still calls the place an island or says a boat is needed, that contradiction goes to the top of `uncertainties` before you ever see the draft.
+
+## 4. The website that was sitting right there
+
+"How could it not find the website of aarhus festuge.. it was literally called that as a website."
+
+You are right, and it was not a search failure. The dedicated official-site query ran. aarhusfestuge.dk was almost certainly in the results. What failed is that the **writer** was asked to pick the official site out of a list and declined to commit, which is exactly the caution we spent this week building into it everywhere else.
+
+So it stops being asked. A domain that IS the name, with punctuation and Danish letters normalised out, is not a judgement call. `aarhusfestuge.dk` for "Aarhus Festuge" is the same string. It gets applied in code, like the coordinates and the travel time, and the uncertainty line about a missing website is removed with it.
+
+Aggregators, resellers and social pages can never win that slot however well the domain reads, and a name under six characters cannot match by substring. If nothing matches, the field stays empty, because empty is honest and a wrong official site is not.
+
+## Tests
+
+**118 passing, up from 70.** The new ones:
+
+- Aarhus classifies as optional, an island classifies as required, and every probe failure mode classifies as unknown.
+- `enforceScope` puts back an unasked-for prose edit, drops an invented key, and restores a deleted one. This is the test that keeps a correction from becoming a redraft.
+- An unpinned claim may touch prose and may **not** touch a glance field. That is the "check rejseplanen.dk" bug, guarded structurally.
+- A ticket reseller never wins the official-site slot; a deep link is trimmed to the domain.
+- A station NAME is not routed to the route probe. "Aarhus H" comes from DSB, and answering a name claim with a duration would be confidently wrong.
+
+## What you still have to do
+
+Nothing new in Supabase. This pass adds no table, no bucket, no policy.
+
+Still outstanding from before: `git rm api/gemini.js api/route.js`, the consolidated SQL, and a push. Everything from PASS 52 onward is on disk and not deployed.
+
+## The Aarhus draft specifically
+
+Its nearestStation says "Aarhus", which should be "Aarhus H". That is exactly what the correction pass is for now: open the entry, paste the Gemini block, and it will verify the station name against a source before touching it.
+
 # PASS 62: "check rejseplanen.dk" as a station name, and it was my sentence
 
 The draft shipped this:

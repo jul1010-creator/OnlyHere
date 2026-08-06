@@ -45,6 +45,9 @@ writeFileSync(entry, `
   export { mergeSaves } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
 `);
 const esbuild = [
   join(root, "node_modules/.bin/esbuild"),
@@ -214,6 +217,126 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok(`STUDIO_VOICE dash count stays at 1 (found ${dashes})`, dashes <= 2);
   ok("STUDIO_VOICE still bans the em dash", /NEVER USE THE EM DASH/.test(M.STUDIO_VOICE));
   ok("STUDIO_VOICE still carries the island rule", /ISLANDS AND FERRIES/.test(M.STUDIO_VOICE));
+}
+
+// ── the ferry that was not required (PASS 63) ──────────────────────
+// The Aarhus Festuge draft said a Copenhagen to Aarhus drive crosses a ferry.
+// It does, if you let Google optimise for time, and it does not if you want the
+// bridge. Only the second answer is a fact about Aarhus.
+{
+  const cph2aarhus = { hasFerry: true, durationMinutes: 168, ferries: [] };
+  const bridgeRoute = { durationMinutes: 190, durationText: "3 hours 10 mins", distanceText: "310 km" };
+  const v = M.classifyFerry({ base: cph2aarhus, avoid: bridgeRoute });
+  is("Aarhus: a road route exists with ferries banned, so the ferry is optional", v.status, M.FERRY.OPTIONAL);
+  is("Aarhus: the boat saves 22 minutes", v.savedMinutes, 22);
+  ok("the optional wording forbids calling it an island", /DO NOT call this place an island/.test(M.ferryFindings(v)));
+
+  // Samso, Fano, Bornholm: no road at all, so Google searched and found nothing.
+  const island = M.classifyFerry({ base: { hasFerry: true, durationMinutes: 196 }, avoid: { error: "ZERO_RESULTS" } });
+  is("an island with no road route reads as required", island.status, M.FERRY.REQUIRED);
+  ok("the required wording still forbids 'unreachable'", /Never write that it is unreachable/.test(M.ferryFindings(island)));
+
+  // THE ONE THAT MATTERS MOST. A broken key, a quota, a network blip: none of
+  // these are evidence about geography, and turning them into "this is an
+  // island" would be the same class of bug in a new place.
+  ["REQUEST_DENIED", "OVER_QUERY_LIMIT", "UNKNOWN_ERROR"].forEach(e =>
+    is(`a ${e} probe claims nothing`, M.classifyFerry({ base: { hasFerry: true }, avoid: { error: e } }).status, M.FERRY.UNKNOWN));
+  is("a probe that threw claims nothing", M.classifyFerry({ base: { hasFerry: true }, probeRan: false }).status, M.FERRY.UNKNOWN);
+  is("no ferry anywhere on the route stays none", M.classifyFerry({ base: { hasFerry: false }, avoid: null }).status, M.FERRY.NONE);
+  is("the unknown verdict says nothing either way", /do not state that a ferry is needed/.test(M.ferryFindings({ status: M.FERRY.UNKNOWN })), true);
+}
+
+// ── the website that was sitting right there (PASS 63) ─────────────
+{
+  ok("aarhusfestuge.dk is Aarhus Festuge", M.hostMatchesName("https://www.aarhusfestuge.dk/program", "Aarhus Festuge"));
+  ok("Danish letters normalise", M.hostMatchesName("https://moegeltoender.dk", "Møgeltønder"));
+  ok("a longer real name still matches its shorter domain", M.hostMatchesName("https://schackenborg.dk", "Schackenborg Slotskro"));
+  ok("a different place does not match", !M.hostMatchesName("https://visitaarhus.dk", "Aarhus Festuge"));
+  ok("a short name cannot match by substring", !M.hostMatchesName("https://denmarkholidays.com", "Ry"));
+  ok("nonsense input is not a match", !M.hostMatchesName("not a url", "Aarhus Festuge"));
+
+  // Aggregators and ticket sellers are never the official site, however well
+  // the domain reads. This is the case that would quietly publish a reseller.
+  is("a ticket site never wins",
+    M.officialSiteFromCandidates(["https://billetlugen.dk/aarhusfestuge", "https://aarhusfestuge.dk/en"], "Aarhus Festuge"),
+    "https://aarhusfestuge.dk");
+  is("facebook is never the official site",
+    M.officialSiteFromCandidates(["https://facebook.com/aarhusfestuge"], "Aarhus Festuge"), null);
+  is("no match returns null rather than a guess",
+    M.officialSiteFromCandidates(["https://visitdenmark.dk/x", "https://tripadvisor.com/y"], "Aarhus Festuge"), null);
+  is("a deep link is trimmed to the domain",
+    M.officialSiteFromCandidates(["https://www.aarhusfestuge.dk/program/2026/whatever"], "Aarhus Festuge"),
+    "https://www.aarhusfestuge.dk");
+}
+
+// ── the correction pass cannot become a redraft (PASS 63) ──────────
+// The whole safety property of "correct it" rather than "draft it again": a
+// rewrite that improves an untouched paragraph gets that paragraph put back.
+{
+  const before = { name: "Nysted", desc: "Original desc.", nearestStation: "Aarhus", atmosphere: "Untouched paragraph." };
+  const after = { name: "Nysted", desc: "Rewritten desc.", nearestStation: "Aarhus H", atmosphere: "Improved paragraph." };
+  const { patched, reverted } = M.enforceScope(before, after, ["nearestStation"]);
+  is("the corrected field is kept", patched.nearestStation, "Aarhus H");
+  is("an unasked-for prose edit is put back", patched.atmosphere, "Untouched paragraph.");
+  is("an unasked-for desc edit is put back", patched.desc, "Original desc.");
+  is("and the attempt is reported, not swallowed", reverted.sort(), ["atmosphere", "desc"]);
+
+  // A key the rewrite invented is removed, not kept. A correction that can add
+  // fields can add a field nobody reviewed.
+  const added = M.enforceScope({ a: 1 }, { a: 1, sneaky: "new" }, ["a"]);
+  is("an invented key is dropped", added.patched.sneaky, undefined);
+  is("dropping it is reported", added.reverted, ["sneaky"]);
+  // Deleting a key is a change too.
+  const removed = M.enforceScope({ a: 1, b: 2 }, { a: 1 }, ["a"]);
+  is("a deleted key is restored", removed.patched.b, 2);
+}
+
+// ── claims land on real keys, or on prose, never on a glance field ──
+{
+  const entry = { name: "X", nearestStation: "", ticketInfo: "", atmosphere: "", uncertainties: [] };
+  is("a spaced label resolves", M.resolveField(entry, "Nearest Station"), "nearestStation");
+  is("a sentence naming the key resolves", M.resolveField(entry, "the nearestStation field"), "nearestStation");
+  is("longest match wins over a prefix", M.resolveField(entry, "ticketInfo"), "ticketInfo");
+  is("an unknown field resolves to nothing", M.resolveField(entry, "vibe rating"), null);
+
+  // An unresolvable claim may touch prose only. A glance field must never be
+  // filled from a claim nobody could pin to it: that is how "check
+  // rejseplanen.dk" became a station name.
+  const allowed = M.allowedFieldsFor(entry, [{ field: "vibe rating", verdict: "confirmed" }]);
+  ok("an unpinned claim can touch prose", allowed.includes("atmosphere"));
+  ok("an unpinned claim cannot touch a glance field", !allowed.includes("nearestStation"));
+  ok("uncertainties is always writable", allowed.includes("uncertainties"));
+  is("a rejected claim opens no fields at all",
+    M.allowedFieldsFor(entry, [{ field: "nearestStation", verdict: "rejected" }]), ["uncertainties"]);
+}
+
+// ── transport claims go to the API, not to a model ─────────────────
+{
+  is("a ferry claim is measurable", M.classifyClaim({ field: "prose", says: "there is no mandatory ferry to Aarhus" }), "transport");
+  is("a travel time claim is measurable", M.classifyClaim({ field: "travelTime", says: "the journey time is wrong" }), "transport");
+  // A station NAME is not measurable by a route query. "Aarhus H" comes from
+  // DSB, so it needs a source like any other named fact, and sending it to the
+  // routing probe would return a duration and call it a station.
+  is("a station name claim needs a source, not a route probe", M.classifyClaim({ field: "nearestStation", says: "should be Aarhus H" }), "general");
+  is("a website claim is its own kind", M.classifyClaim({ field: "website", says: "the official site is aarhusfestuge.dk" }), "website");
+  is("a history claim is general", M.classifyClaim({ field: "prose", says: "the founding year is wrong" }), "general");
+  // A transport claim that happens to mention a URL is still transport.
+  is("a route claim mentioning a URL stays transport",
+    M.classifyClaim({ field: "prose", says: "the ferry route on molslinjen.dk is wrong" }), "transport");
+}
+
+// ── the box decides between answering and editing ──────────────────
+// When it is unclear, it answers. The wrong guess in that direction costs a
+// sentence; the wrong guess the other way edits published content.
+{
+  is("an explicit instruction corrects", M.routeMessage("Google AI says this is wrong. Correct it."), "correct");
+  is("a question answers", M.routeMessage("why does this say the ferry is required?"), "ask");
+  is("a scan request audits", M.routeMessage("which ones need work?"), "audit");
+  is("an empty message answers", M.routeMessage("   "), "ask");
+  is("a bare observation answers rather than edits", M.routeMessage("this looks off to me"), "ask");
+  // A pasted fact-check with no covering sentence is still a correction.
+  const paste = "Inaccuracies to correct. ".repeat(20) + " the nearestStation field should be Aarhus H";
+  is("a long paste with no instruction still corrects", M.routeMessage(paste), "correct");
 }
 
 rmSync(dir, { recursive: true, force: true });

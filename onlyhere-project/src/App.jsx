@@ -22,6 +22,7 @@ import {
   isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
   dedupeAgainstExisting, getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
   parsePrice, getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, departureParam, transitDepartureAnchor,
+  hostMatchesName, officialSiteFromCandidates,
 } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, findRealNearestStation } from "./utils/geo";
 import { Pill } from "./components/Pill";
@@ -53,6 +54,8 @@ import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
+import { StudioAssistant } from "./components/StudioAssistant";
+import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves } from "./utils/userSaves";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
@@ -1216,15 +1219,22 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // Shared with the guide's own duration lookups, see helpers.js.
           // Returns the whole answer now, not just a duration string, so the
           // named ferry and transit lines Google supplies can reach the draft.
+          // raw: the whole response including Google's own status string, which
+          // the ferry check below needs — ZERO_RESULTS means "searched, found no
+          // road", REQUEST_DENIED means "learned nothing", and collapsing both
+          // to null would turn a broken API key into a claim about geography.
+          const askRaw = async (mode, extra = "") => {
+            const r = await fetch(`/api/directions?origin=${CPH}&destination=${dest}&mode=${mode}${departureParam(mode)}${extra}`);
+            return r.json();
+          };
           const ask = async (mode) => {
-            const r = await fetch(`/api/directions?origin=${CPH}&destination=${dest}&mode=${mode}${departureParam(mode)}`);
-            const d = await r.json();
+            const d = await askRaw(mode);
             return d && !d.error && d.durationText ? d : null;
           };
           const [transitD, drivingD] = await Promise.all([ask("transit"), ask("driving")]);
           const fmt = (d) => (d ? `${d.durationText} (${d.distanceText})` : null);
           const transit = fmt(transitD), driving = fmt(drivingD);
-          realTransport = { transit, driving };
+          realTransport = { transit, driving };   // ferry verdict is attached below, once measured
 
           // ── THE ISLAND FIX ──────────────────────────────────────
           // Islands broke transit routing because a single Copenhagen-to-island
@@ -1245,7 +1255,35 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // from the driving route: a ferry is required. Say that plainly
           // instead of falling silent, which is what produced the "no confirmed
           // public transport route" claim on a well-connected island.
-          const ferryRequiredUnnamed = !!(transitD?.ferryUnnamed || drivingD?.ferryUnnamed);
+          // ── REQUIRED, OR JUST FASTER ────────────────────────────
+          // Added 6 Aug 2026 after the Aarhus Festuge draft, whose own
+          // uncertainties said it better than I could: "The driving-route data
+          // mentioning a ferry crossing between Copenhagen and Aarhus looks
+          // inconsistent since Aarhus is reached by road/bridge."
+          //
+          // It was right. Google routes for time, so it took the Odden boat
+          // instead of the Great Belt bridge, the ferry flag fired, and this
+          // block told the writer a ferry was required to reach a mainland city
+          // with a motorway to it. The flag was answering "does the fastest
+          // route use a ferry", which is not a fact about the destination.
+          //
+          // Asking again with ferries banned answers the real question with a
+          // measurement instead of an inference. One extra call, only on routes
+          // that mention a boat. See utils/transport.js.
+          let ferryVerdict = { status: FERRY.NONE };
+          if (transitD?.hasFerry || drivingD?.hasFerry) {
+            if (drivingD) {
+              let avoid, probeRan = true;
+              try { avoid = await askRaw("driving", "&avoid=ferries"); }
+              catch { probeRan = false; avoid = undefined; }
+              ferryVerdict = classifyFerry({ base: { ...drivingD, hasFerry: true }, avoid, probeRan });
+            } else {
+              // A ferry on the transit route and no driving route at all. There
+              // is no road, which is the definition of the required case.
+              ferryVerdict = { status: FERRY.REQUIRED };
+            }
+          }
+          realTransport.ferry = ferryVerdict;
           const allFerries = [...(transitD?.ferries || []), ...(drivingD?.ferries || [])];
           const seenFerry = new Set();
           const ferryLines = allFerries.filter(f => {
@@ -1257,13 +1295,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             .map(s => `${s.vehicle === "FERRY" ? "ferry" : s.vehicle === "BUS" ? "bus" : "train"} ${s.line}${s.agency ? ` (${s.agency})` : ""} from ${s.from} to ${s.to}`)
             .slice(0, 6);
           if (transit || driving) {
-            transportFindings = (ferryLines.length === 0 && ferryRequiredUnnamed
-              ? `THIS JOURNEY REQUIRES A FERRY. The routing API's own driving route includes a crossing, so the place is on an island or across water. It did NOT name the operator or the route, so you must not invent one: research the operator's own site for the crossing, name both ports and the operator only if the research supports it, and otherwise say plainly that the ferry route should be checked with the operator. Under no circumstances write that the place is unreachable or that no public transport exists, because a required ferry means a real, scheduled crossing exists.\n`
-              : "")
-              + (ferryLines.length > 0
-              ? `REAL FERRY CROSSING, named by the routing API itself, not researched or guessed: `
-                + ferryLines.map(f => `${f.line || "ferry"}${f.agency ? ` operated by ${f.agency}` : ""}, ${f.from} to ${f.to}${f.duration ? `, crossing ${f.duration}` : ""}`).join("; ")
-                + `. Use these exact port names and this operator. Do NOT name a different crossing to the same island, and do not write that the island is hard to reach without checking this first. If a traveler could start from a different part of the country and use a different route, say so, but this is the confirmed one from Copenhagen.\n`
+            const ferryText = ferryFindings(ferryVerdict, ferryLines);
+            transportFindings = (ferryText ? `${ferryText}\n` : "")
+              + (ferryLines.length > 0 && ferryVerdict.status !== FERRY.OPTIONAL
+              ? `Those port names and that operator come from the routing API itself, not from research: use them exactly. Do NOT name a different crossing to the same island. If a traveler could start from a different part of the country and use a different route, say so, but this is the confirmed one from Copenhagen.\n`
               : "")
               + (namedLegs.length > 0 ? `REAL CONNECTING SERVICES on that public transport route, also from the API: ${namedLegs.join("; ")}.\n` : "")
               + `REAL TRANSPORT CHECK from Copenhagen (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
@@ -1681,6 +1716,35 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
         }
       }
 
+      // ── THE OFFICIAL SITE IS NOT A JUDGEMENT CALL ───────────────
+      // Oliver, 6 Aug 2026: "how could it not find the website of aarhus
+      // festuge.. it was literally called that as a website."
+      //
+      // The Aarhus Festuge draft published with website: "" and an uncertainty
+      // saying no official URL was found, while aarhusfestuge.dk exists and a
+      // dedicated official-site query had already run. The search did its job.
+      // The writer was asked to pick the official site out of a list and
+      // declined to commit, which is exactly the caution we spent this week
+      // building into it everywhere else.
+      //
+      // So it stops being asked. Google's own registered URL wins if there is
+      // one; otherwise a candidate domain that IS the name is applied directly.
+      // Same principle as the coordinates and the travel time: anything the
+      // system already knows is enforced in code, never requested in a prompt.
+      if (typeof t.website !== "undefined" && !String(t.website || "").trim()) {
+        const forced = placesWebsite || officialSiteFromCandidates(candidateUrls, name);
+        if (forced) {
+          t.website = forced;
+          t.uncertainties = (t.uncertainties || []).filter(u => !/official (festival\/event )?website|website url was found|no official/i.test(String(u)));
+        }
+      } else if (typeof t.website === "string" && t.website.trim() && placesWebsite
+                 && !hostMatchesName(t.website, name) && hostMatchesName(placesWebsite, name)) {
+        // The draft filled the field with something that is not the place's own
+        // domain while Google's business listing holds one that is. That is a
+        // ticket reseller or a tourist board sitting in an official-site field.
+        t.website = placesWebsite;
+      }
+
       if (frozenGeo) {
         if (typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
         if (typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
@@ -1729,6 +1793,19 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
             `PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: this draft says there is no public transport route, but a live Directions query found one from Copenhagen (${realTransport.transit}). Rewrite the getting-there text and any Things to Know bullet repeating the claim.`,
             ...(t.uncertainties || []),
           ];
+        }
+        // The Aarhus case, caught by reading the finished text rather than by
+        // hoping the prompt was obeyed. If the ferry was MEASURED as optional
+        // and the draft still calls the place an island or says a boat is
+        // needed, that is a contradiction with data the system already holds.
+        if (realTransport.ferry?.status === FERRY.OPTIONAL) {
+          const FERRY_REQUIRED_CLAIM = /\b(only|must|need to|have to|requires?|required)\b[^.]{0,40}\bferry\b|\bferry\b[^.]{0,40}\b(is required|is the only|only way)\b|\bisland\b/i;
+          if (FERRY_REQUIRED_CLAIM.test(JSON.stringify(t))) {
+            t.uncertainties = [
+              `PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: this draft treats a ferry as required, or calls this place an island, but the routing API returns a road route when ferries are banned${realTransport.ferry.landDurationText ? ` (${realTransport.ferry.landDurationText} by car)` : ""}. The crossing is an optional shortcut. Remove the ferry from the getting-there text or label it clearly optional.`,
+              ...(t.uncertainties || []),
+            ];
+          }
         }
       }
 
@@ -7203,6 +7280,19 @@ You also have a web_search tool. Use it whenever someone asks about something th
       <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} />
       <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
       <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
+      {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
+          assistant for the admin /#studio guy? That will always be with me?
+          Even when I'm on the blogs")  ────────────────────────────────
+          Mounted at the app root rather than inside Studio, so it survives
+          navigation between the tabs and sits above an open entry page. It is
+          handed whichever detail page is currently open, which is what turns
+          "this one is wrong" into a specific row without a screenshot. */}
+      {studioSession && (() => {
+        const openDetail = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail;
+        const openKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : null;
+        return <StudioAssistant session={studioSession} item={openDetail} kind={openKind} onSaved={() => refreshLiveContent()} />;
+      })()}
+
       <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we

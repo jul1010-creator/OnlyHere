@@ -51,7 +51,7 @@ const decodePolyline = (encoded) => {
 };
 
 export default async function handler(req, res) {
-  const { origin, destination, mode, departure_time } = req.query;
+  const { origin, destination, mode, departure_time, avoid } = req.query;
   if (!origin || !destination) {
     return res.status(400).json({ error: "origin and destination required" });
   }
@@ -83,6 +83,18 @@ export default async function handler(req, res) {
     if (departure_time && (travelMode === "transit" || travelMode === "driving")) {
       url += `&departure_time=${departure_time}`;
     }
+    // ── THE QUESTION THAT DECIDES WHETHER A PLACE IS AN ISLAND ──────
+    // Google routes for SPEED, so it takes the Odden to Aarhus boat rather than
+    // the Great Belt bridge, and the ferry flag below then fires for a city on
+    // the mainland with a motorway running to it. That is what shipped in the
+    // Aarhus Festuge draft.
+    //
+    // Asking again with ferries banned settles it with a measurement: a route
+    // still comes back means the boat was a shortcut, no route comes back means
+    // there is no land connection. Only "avoid=ferries" is accepted, because
+    // this parameter exists for that one question and passing Google arbitrary
+    // client-supplied values is how a routing endpoint becomes a proxy.
+    if (avoid === "ferries") url += `&avoid=ferries`;
     const r = await fetch(url);
     const data = await r.json();
     if (data.status !== "OK" || !data.routes?.[0]) {

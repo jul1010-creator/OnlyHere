@@ -304,3 +304,58 @@ export const transitDepartureAnchor = () => {
 // Appends the anchor only for a transit leg, so call sites stay one-liners and
 // cannot accidentally anchor a driving query.
 export const departureParam = (mode) => (mode === "transit" ? `&departure_time=${transitDepartureAnchor()}` : "");
+
+// ── Is this domain literally the place's own name ───────────────────
+// Oliver, 6 Aug 2026, on the Aarhus Festuge draft that published with an empty
+// website field: "how could it not find the website of aarhus festuge.. it was
+// literally called that as a website."
+//
+// He is right, and the failure is not a search failure. A query for the
+// official site of a well-known Danish festival returns aarhusfestuge.dk near
+// the top. The URL was almost certainly in the research. What failed is that
+// the WRITER was asked to pick the official site out of a list, and it declined
+// to commit, which is the safe behaviour we deliberately trained into it
+// everywhere else.
+//
+// So this stops asking. A domain that IS the name, with the punctuation and the
+// Danish letters normalised out, is not a judgement call: aarhusfestuge.dk for
+// "Aarhus Festuge" is the same string. That gets applied in code, like the
+// coordinates and the travel time, and the model is left out of it.
+//
+// Deliberately strict about short names. A three-letter place name would match
+// half the internet on a substring rule, so containment needs at least six
+// characters on the side doing the containing.
+export const hostMatchesName = (url, name) => {
+  let host;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return false; }
+  host = host.replace(/^www\./, "");
+  const bare = host.replace(/\.(dk|com|net|org|eu|info|travel)$/i, "").replace(/[^a-z0-9]/g, "");
+  const n = String(name || "").toLowerCase()
+    .replace(/æ/g, "ae").replace(/ø/g, "oe").replace(/å/g, "aa")
+    .replace(/[^a-z0-9]/g, "");
+  if (!bare || !n) return false;
+  if (bare === n) return true;
+  if (n.length >= 6 && bare.includes(n)) return true;
+  if (bare.length >= 6 && n.includes(bare)) return true;
+  return false;
+};
+
+// Aggregators, booking sites and social platforms are never "the official
+// site", however well their URL happens to match. Kept next to the matcher so
+// the two cannot drift apart.
+const NOT_OFFICIAL = /facebook|instagram|tripadvisor|booking\.com|expedia|wikipedia|wikimedia|youtube|tiktok|eventbrite|ticketmaster|billetlugen|visitdenmark|visitaarhus|google\.|yelp|foursquare|reddit/i;
+
+// The first candidate URL whose domain is the name. Returns null rather than a
+// best guess, because an empty website field is honest and a wrong one is not.
+export const officialSiteFromCandidates = (candidateUrls, name) => {
+  for (const u of candidateUrls || []) {
+    if (typeof u !== "string") continue;
+    if (NOT_OFFICIAL.test(u)) continue;
+    if (hostMatchesName(u, name)) {
+      // Normalise to the site root. A deep link into a programme page ages out
+      // in a season; the domain does not.
+      try { const p = new URL(u); return `${p.protocol}//${p.hostname}`; } catch { return u; }
+    }
+  }
+  return null;
+};
