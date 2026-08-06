@@ -36,6 +36,20 @@ const NO_TRANSPORT = /no (?:confirmed |direct |reliable |real |proper |obvious )
 // field that was never actually researched.
 const LAZY = /^(see website|check locally|check the website|varies|n\/a|unknown|tbd|contact them)\.?$/i;
 
+// A ranking with no measure attached. Caught deterministically because it is a
+// pattern, not a judgement: "third-largest city" is unverifiable, "third-largest
+// city by municipality" is checkable. The real case was Odense, still third by
+// municipality and fourth by urban population, so the number was never wrong,
+// only unqualified.
+const RANK = /\b(largest|biggest|smallest|longest|oldest|newest|tallest|highest|busiest|most[- ]visited|best[- ]preserved|first|only)\b/i;
+const MEASURE = /\bby (municipality|urban|population|area|visitors?|floor|length|height|volume)|\b(municipality|urban area|by number of)\b/i;
+const ORDINAL_RANK = /\b(second|third|fourth|fifth|[0-9]+(st|nd|rd|th))[- ](largest|biggest|smallest|oldest|longest|busiest)\b/i;
+
+// A year attached to a place with no event named. "Founded in 988" and "first
+// mentioned in 988" are different claims; a bare year is neither.
+const BARE_YEAR_CLAIM = /\b(dates back to|dating back to|founded in|established in|from|since)\s+(the\s+)?\d{3,4}\b/i;
+const NAMED_EVENT = /first (written )?mention|mentioned in writing|market[- ]town|købstad|town rights|charter|consecrat|incorporat|settle/i;
+
 const textOf = (payload) => {
   const parts = [];
   const walk = (v) => {
@@ -81,6 +95,19 @@ export const auditEntry = (row) => {
   const lazyFields = Object.entries(p).filter(([k, v]) => typeof v === "string" && LAZY.test(v.trim())).map(([k]) => k);
   if (lazyFields.length > 0) {
     add(lazyFields.length >= 3 ? "high" : "low", "research", `${lazyFields.length} field${lazyFields.length === 1 ? "" : "s"} left as a placeholder instead of a real answer: ${lazyFields.slice(0, 4).join(", ")}.`);
+  }
+
+  // ── high: claims that cannot be checked as written ────────────
+  if (ORDINAL_RANK.test(all) && !MEASURE.test(all)) {
+    const m = all.match(ORDINAL_RANK);
+    add("high", "ranking", `Says "${m[0]}" without naming the measure. This is the Odense case: third by municipality and fourth by urban population are both real, so an unqualified ranking is unverifiable and reads as wrong to anyone using the other one.`);
+  } else if (RANK.test(all) && /\bin denmark\b/i.test(all) && !MEASURE.test(all)) {
+    const m = all.match(RANK);
+    add("low", "ranking", `Makes a "${m[0]}" claim about Denmark with no measure or scope stated. Worth checking it is the claim the source actually supports.`);
+  }
+  if (BARE_YEAR_CLAIM.test(all) && !NAMED_EVENT.test(all)) {
+    const m = all.match(BARE_YEAR_CLAIM);
+    add("high", "history", `Attaches a year ("${m[0].trim()}") without naming which event it belongs to. First written mention, founding, and a grant of town rights are three different dates, and welding them together is how the Odense 988 error happened.`);
   }
 
   // ── medium: thin or unfinished ────────────────────────────────

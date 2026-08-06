@@ -1,3 +1,43 @@
+# PASS 58: two error classes from the Odense draft, and where the rules actually were
+
+Both errors were real, and neither was a hallucination. The research found true things and the sentences still came out false. Those are different failures and they need different fixes.
+
+## 1. "Third-largest city"
+
+Odense **is** third-largest by municipality and **is** fourth by urban population. Nobody was wrong about a number. The sentence just never said which number it meant, so it could not be checked, and it reads as false to anyone using the other measure.
+
+**A superlative is never true on its own.** It is only true against a stated measure. Largest, oldest, first, only, longest, most visited, best preserved: all the same trap.
+
+New rule in the writing prompt: never write a bare ranking. Name the measure in the same sentence, or cut the ranking and describe the place instead. If the research does not make the measure explicit, you do not have a usable ranking, you have a number somebody else qualified and you did not.
+
+It also flags population aggregators specifically, which is where this came from. A site listing city populations has already picked a definition for you, silently, and different aggregators pick differently. And it separates scope: "oldest in Denmark", "oldest in the region" and "oldest still in use" are three claims, so use the one the source supports rather than the most impressive one.
+
+## 2. "Town rights in 988"
+
+988 is the date of an imperial letter that is the first written **mention** of the name. Town rights came later. Every individual fact in that sentence existed somewhere. The sentence was still untrue.
+
+**Here is the part worth knowing: a rule for exactly this already existed. It was only in the fact-check prompt.** The writer was never told, only the reviewer, and the reviewer is a button you have to press. A rule that lives only in the checker cannot prevent an error, it can only catch it, and only if someone remembers to click.
+
+It is now in the writing prompt too, stated as three distinct events: first written mention, founding or settlement, and a grant of market-town or købstad rights. A year must say which one it belongs to. The same applies inside a place, where the era a district was developed is not the date a specific church or gatehouse in it was built.
+
+## 3. Your 55 published entries get checked for both
+
+Rules only help what you draft next. The audit now scans what is already live:
+
+- An ordinal ranking with no measure ("third-largest city") is flagged **high**, quoting the phrase.
+- A year attached with no event named ("founded in 988") is flagged **high**, quoting it.
+- A qualified ranking ("third-largest by municipality") and a named event ("first written mention in 988") are both left alone. That distinction is tested in both directions.
+
+Four new tests, 51 total, all passing.
+
+## The pattern across all three of my recent misses and both of these
+
+A rule written in the wrong place is not a rule. The date rule was in the reviewer instead of the writer. My auth bug was a fallback that turned a clear failure into a confusing one. The Wikimedia save had no error path at all. In each case the knowledge existed somewhere in the system and never reached the point where it would have mattered.
+
+## Verification
+
+Both new rules were read back out of the built prompt string rather than the source, which caught ten escaping artifacts that would have shown the model literal backslash-quotes. Dash count still 1. Full bundle passes.
+
 # PASS 57: both RLS errors were one typo of mine
 
 ## The cause

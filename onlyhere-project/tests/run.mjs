@@ -151,6 +151,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     gettingThereReality: "Public transport is limited outside the main bus routes, and there is no train station in the village itself." } });
   ok("honest limitation is NOT flagged", !honest.findings.some(f => f.field === "getting there"));
 
+  // The two Odense failures, as tests.
+  const rank = auditEntry({ id: 8, type: "town", payload: { ...base, __lat: 55.4, __lon: 10.4,
+    desc: "Odense is Denmark's third-largest city and the birthplace of H.C. Andersen." } });
+  ok("unqualified ranking is caught", rank.findings.some(f => f.field === "ranking" && f.severity === "high"));
+  const rankOk = auditEntry({ id: 9, type: "town", payload: { ...base, __lat: 55.4, __lon: 10.4,
+    desc: "Odense is Denmark's third-largest city by municipality." } });
+  ok("qualified ranking is NOT flagged", !rankOk.findings.some(f => f.field === "ranking"));
+
+  const year = auditEntry({ id: 10, type: "town", payload: { ...base, __lat: 55.4, __lon: 10.4,
+    desc: "The town was founded in 988 and grew around the cathedral." } });
+  ok("bare year claim is caught", year.findings.some(f => f.field === "history" && f.severity === "high"));
+  const yearOk = auditEntry({ id: 11, type: "town", payload: { ...base, __lat: 55.4, __lon: 10.4,
+    desc: "Odense appears in the first written mention of the name in 988." } });
+  ok("named historical event is NOT flagged", !yearOk.findings.some(f => f.field === "history"));
+
   const sorted = auditAll([
     { id: 1, type: "town", payload: { ...base, __lat: 55, __lon: 9 } },
     { id: 2, type: "town", payload: { ...base, __lat: 56.09, __lon: 8.24 } },
