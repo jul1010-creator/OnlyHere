@@ -312,7 +312,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                   <img src={block.src} alt={block.caption || item.name} onError={e => { e.target.style.display = "none"; }}
                     style={{ width: "100%", borderRadius: 14, display: "block" }} />
                   {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
-                  <PhotoCredit photo={block.src} style={{ marginTop: 4 }} />
+                  <PhotoCredit photo={block.src} credit={block.credit} style={{ marginTop: 4 }} />
                 </div>
               ) : block.type === "heading" ? (
                 <div key={i} style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 20, marginBottom: 10 }}>{block.content}</div>

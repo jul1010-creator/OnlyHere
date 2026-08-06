@@ -1,3 +1,65 @@
+# PASS 51: one queue instead of two, and Discover feeds it
+
+Oliver: "when I do the 'search for towns' they should be able to be put into queue as well. I would appreciate if they could all run researches right after oneanother.. but if that is not possible.."
+
+**It is possible, and it already was.** `runDraftQueue` is a while loop that runs items back to back with no clicking. The problem was that Discover never used it.
+
+## What was actually happening
+
+There were **two queues**. The real one, and a second, worse one wired to the Discover button.
+
+The Discover queue drafted your first pick immediately, parked the rest in its own state, and then made you press "Next →" for every single one. So picking ten towns meant ten clicks, spread over however long each research took, with you sitting there waiting to click again. Meanwhile the real queue two hundred lines away already did exactly what you were asking for.
+
+Now there is one queue. **➕ Add picked to queue** puts every pick into it, and **▶ Start drafting** runs the whole lot back to back. The per-row button became **+ Queue** for the same reason. The old "Next →" panel is gone entirely.
+
+## The bug this would have had
+
+Queued items now carry the type they were **discovered for**, not whatever the Studio dropdown happens to say when they run.
+
+The old flow set `studioType` as a side effect at draft time, which worked because it drafted immediately. A queue cannot rely on that: by the time item seven runs, the dropdown may say anything. Without this, using the Events discovery while the dropdown still said "town" would have queued every festival as a town and researched all of them with the wrong prompt. `discoverForType` is now recorded when the discovery runs and travels with each queued item.
+
+Also added: picks already in the queue are skipped, case-insensitively, so double-tapping cannot research and bill for the same town twice. The same name under a *different* type is kept, because that is genuinely different work.
+
+## Verification
+
+Executed the queueing and the runner together: type taken from the discovery rather than the dropdown, mixed types coexisting in one queue, an exact duplicate skipped, a case-different duplicate skipped, the same name under another type correctly kept, all six items running back to back with no intervention, and the queue empty afterwards with its render mirror in step.
+
+Also written to disk this pass: PASS 50, which had been delivered to the conversation but never reached the repo because the bridge dropped mid-write.
+
+# PASS 50: the queue stops researching on sight, and uploaded media can carry credits
+
+## 1. Queueing is now free
+
+`addToDraftQueue` called `runDraftQueue()` immediately, so the first name began burning research calls the instant it was typed, while you were still building the list.
+
+Two real problems with that. You could not line up a batch and look at it before spending anything. And the cancel button from PASS 40 was close to useless, because the item most likely to be a typo was already mid-research before it could be removed.
+
+Nothing is researched until you press **▶ Start drafting (N)**. Queueing costs nothing and is fully reversible. The note under the list says so, and the Add button's tooltip no longer promises background drafting it does not do.
+
+The **Draft picked** button in Discover is deliberately unchanged: that one says Draft, so drafting immediately is what it should do.
+
+## 2. Credits on uploaded media
+
+PASS 39 built credits for photos downloaded into the repo, where the source is recorded in `public/image-credits.json` at download time. Media uploaded through Studio had no such record and no way to add one, so a Wikimedia image put in from your phone would have appeared with no attribution at all. That is exactly the case you flagged wanting, and for CC BY or CC BY-SA the credit is a condition of use rather than a courtesy.
+
+Every uploaded image in the Media panel now has a **+ Add photo credit** row: photographer, source, link to the original, and licence. Saved onto the image block itself rather than into the shared json file, because it belongs to that one uploaded image and travels with the row.
+
+`PhotoCredit` prefers a typed credit over a filename lookup, since a credit entered by hand for this specific image is more specific than anything matched by filename. It already renders under blogBody images on the detail page, so a saved credit appears with no further work. An all-blank credit is removed rather than saved as a row of empty strings, so "no credit" and "a credit we forgot to fill in" stay distinguishable.
+
+## 3. On the Leaflet maps, one finding worth your attention
+
+There are two different maps and only one of them is a polish question.
+
+`GuideRouteMap` is the guide one, already rebuilt this session: real route geometry per leg, honest dashed fallback where no route comes back, bounds fitted to what is actually drawn, and transit anchored to a weekday departure.
+
+`LeafletMap` is a separate 37-line component used in exactly one place, the shop view. It is **hardcoded to `center={[55.6761, 12.5683]}` at zoom 13**, which is Copenhagen, no matter which pin is selected, and it draws no marker at all. Its own overlay says "tap Get Directions for the exact spot", which is the app quietly admitting the map does not show the place.
+
+That is a real defect rather than a styling issue, and it is a small fix. The reason I have not just done it: that view sits on top of `data/shop.js`, which is assistant-written invented cities and products, one of the buckets you did not tick when we removed the road trips. Fixing the map would be polishing a window onto content that may not survive. Worth deciding the content question first.
+
+## Verification
+
+The credit save and precedence logic was executed against eight cases: a full credit, an all-blank credit correctly removing an existing one, whitespace trimming, licence-only, source-URL-only, and all three precedence paths. That surfaced one inconsistency, since a source-URL-only credit was being saved but would not have displayed, now fixed. Full bundle passes and the queue change was confirmed to leave the Discover path alone.
+
 # PASS 49: finding the official website is now its own job, not a lucky byproduct
 
 Oliver: "how do we make sure that Tavily/Perplexity in the future uses these websites? Can't you make Tavily/Perplexity search 'official website' or input Gemini and only use Gemini for the sole purpose of finding the official website"

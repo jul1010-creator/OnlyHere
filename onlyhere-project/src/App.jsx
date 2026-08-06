@@ -473,6 +473,36 @@ function GemlyxApp() {
     if (!res.ok) throw new Error(`Save failed (${res.status}) — check the update RLS policy on gemlyx_content`);
     setManageItems(items => (items || []).map(r => r.id === row.id ? { ...r, payload: newPayload } : r));
   };
+  // ── CREDIT AN UPLOADED IMAGE (Oliver, Aug 5: "I need to be able to put
+  // credits when I input media") ──────────────────────────────────
+  //
+  // PASS 39 built credits for photos DOWNLOADED into the repo, where the source
+  // is recorded in public/image-credits.json at download time. Media uploaded
+  // through Studio had no such record and no way to add one, so a Wikimedia
+  // image put in through the phone would have shown with no attribution at all.
+  // That is the exact case he said he wanted, and CC BY-SA makes it a condition
+  // of use rather than a courtesy.
+  //
+  // The credit is saved onto the image block itself rather than into the shared
+  // json file, because it belongs to this specific uploaded image and travels
+  // with the row. PhotoCredit prefers a typed credit over a filename lookup.
+  const saveMediaCredit = async (row, blockIdx, credit) => {
+    const p = row.payload || {};
+    const blocks = Array.isArray(p.blogBody) ? [...p.blogBody] : [];
+    if (!blocks[blockIdx]) return;
+    const clean = {
+      photographer: (credit.photographer || "").trim(),
+      source: (credit.source || "").trim(),
+      sourceUrl: (credit.sourceUrl || "").trim(),
+      license: (credit.license || "").trim(),
+    };
+    // An empty credit is removed rather than saved as a row of blank strings,
+    // so "no credit" and "credit we forgot to fill in" stay distinguishable.
+    const any = clean.photographer || clean.source || clean.sourceUrl || clean.license;
+    blocks[blockIdx] = any ? { ...blocks[blockIdx], credit: clean } : (() => { const { credit: _drop, ...rest } = blocks[blockIdx]; return rest; })();
+    await patchContentPayload(row, { ...p, blogBody: blocks });
+  };
+
   const uploadMediaFiles = async (row, fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length || mediaBusy) return;
@@ -613,7 +643,13 @@ function GemlyxApp() {
   const [discoverResults, setDiscoverResults] = useState(null); // [{name, region, hook}] — null = not run yet, [] = ran, nothing new
   const [discoverError, setDiscoverError] = useState(null);
   const [discoverPicked, setDiscoverPicked] = useState([]); // names ticked in the pick-list
-  const [discoverQueue, setDiscoverQueue] = useState([]); // names queued to auto-draft one at a time
+  // Which content type the current pick-list was discovered FOR. Without this,
+  // queueing picks from an Events discovery while the Studio dropdown still said
+  // "town" would have queued every festival as a town and researched all of them
+  // with the wrong prompt. The old flow set studioType as a side effect at draft
+  // time; a queue cannot rely on that, because by the time an item runs the
+  // dropdown may say anything.
+  const [discoverForType, setDiscoverForType] = useState(null);
   const [updateEventsLoading, setUpdateEventsLoading] = useState(false);
   const [updateEventsResults, setUpdateEventsResults] = useState(null); // [{name, notes, ticketStatus, dateChanged}] — only ones that actually changed
   const [updateEventsError, setUpdateEventsError] = useState(null);
@@ -1628,7 +1664,17 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
     draftQueueRef.current = [...draftQueueRef.current, { name, type: studioType }];
     setDraftQueue([...draftQueueRef.current]);
     setStudioTown("");
-    runDraftQueue();
+    // DELIBERATELY DOES NOT START DRAFTING (Oliver, Aug 5: "when towns are put
+    // in queue, then don't research while in queue").
+    //
+    // Adding to the queue used to fire runDraftQueue() immediately, so the first
+    // name began burning research calls the instant it was typed, while he was
+    // still building the list. Two real problems with that: he could not line up
+    // a batch and review it before spending anything, and the cancel button
+    // added last pass was close to useless, since the item most likely to be a
+    // typo was already mid-research before it could be removed.
+    //
+    // Queueing is now free and reversible. Nothing is researched until Start.
   };
   const runDraftQueue = async () => {
     if (queueBusyRef.current) return;
@@ -1895,6 +1941,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
   const runDiscovery = async (typeOverride, extraFraming) => {
     if (discoverLoading) return;
     const type = typeOverride || studioType;
+    setDiscoverForType(type);
     setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]);
     try {
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
@@ -1979,20 +2026,35 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   // time through the exact same generateArea() pipeline used for a manually
   // typed name — nothing about the research/write/publish flow is different,
   // this just automates typing the name and clicking "Draft it" for each pick.
-  const startDiscoverQueue = (names, type) => {
-    if (!names.length) return;
-    if (type && type !== studioType) setStudioType(type);
-    setDiscoverQueue(names.slice(1));
-    setStudioTown(names[0]);
-    setDiscoverResults(null);
-    setTimeout(() => generateArea(names[0]), 50); // pass the real name directly — don't rely on studioTown state having landed
-  };
-  const advanceDiscoverQueue = () => {
-    if (!discoverQueue.length) return;
-    const [next, ...rest] = discoverQueue;
-    setDiscoverQueue(rest);
-    setStudioTown(next);
-    setTimeout(() => generateArea(next), 50); // same fix — pass the real name directly
+  // ── DISCOVER PICKS GO INTO THE REAL QUEUE ────────────────────────
+  // Oliver, Aug 6: "when I do the 'search for towns' they should be able to be
+  // put into queue as well. I would appreciate if they could all run researches
+  // right after oneanother.. but if that is not possible.."
+  //
+  // It is possible, and it already was: runDraftQueue is a while loop that runs
+  // items back to back with no clicking. The problem was that Discover had its
+  // OWN separate queue that did not use it. That one drafted the first pick
+  // immediately, parked the rest, and then made you press "Next" for every
+  // single one. Two queues, and the worse one was wired to the button.
+  //
+  // Now there is one queue. Picks are added to it with the type they were
+  // DISCOVERED for, not whatever the dropdown happens to say later, and nothing
+  // is researched until Start, per his previous request.
+  const queueDiscovered = (names) => {
+    const list = (names || []).filter(Boolean);
+    if (!list.length) return;
+    const type = discoverForType || studioType;
+    // Skip anything already queued, so double-tapping a pick cannot research and
+    // bill for the same town twice.
+    const already = new Set(draftQueueRef.current.map(q => `${q.type}::${q.name.toLowerCase()}`));
+    const fresh = list.filter(n => !already.has(`${type}::${n.toLowerCase()}`));
+    draftQueueRef.current = [...draftQueueRef.current, ...fresh.map(name => ({ name, type }))];
+    setDraftQueue([...draftQueueRef.current]);
+    setDiscoverPicked([]);
+    setToast(fresh.length === list.length
+      ? `${fresh.length} added to the queue · press Start drafting`
+      : `${fresh.length} added, ${list.length - fresh.length} already queued`);
+    setTimeout(() => setToast(null), 2800);
   };
 
   // ── UPDATE CURRENT (events only): re-verify EXISTING upcoming events —
@@ -4462,7 +4524,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                     {mediaBlocks.length > 0 && (
                                       <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                                         {mediaBlocks.map(b => (
-                                          <div key={b._idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                          <div key={b._idx} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                             {b.type === "image" ? (
                                               <img src={b.src} alt="" style={{ width: 44, height: 32, objectFit: "cover", borderRadius: 6, border: `1px solid ${C.border}`, flexShrink: 0 }} />
                                             ) : (
@@ -4479,6 +4542,37 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                               style={{ background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 100, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
                                               ✕
                                             </button>
+                                            </div>
+                                            {/* CREDIT, per uploaded image. Shown for images only, since a
+                                                reel is credited by the Instagram embed itself. The licence
+                                                field is the one that matters legally: CC BY and CC BY-SA
+                                                make the credit a condition of use, not a courtesy, and a
+                                                photo uploaded from the phone has no image-credits.json
+                                                entry to fall back on. */}
+                                            {b.type === "image" && (
+                                              <details style={{ marginLeft: 52, marginTop: -2 }}>
+                                                <summary style={{ fontSize: 10, color: b.credit ? C.gold : C.muted, cursor: "pointer", listStyle: "none" }}>
+                                                  {b.credit ? `◆ ${b.credit.photographer || b.credit.source}${b.credit.license ? ` · ${b.credit.license}` : ""}` : "+ Add photo credit"}
+                                                </summary>
+                                                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+                                                  {[["photographer", "Photographer"], ["source", "Source, e.g. wikimedia"], ["sourceUrl", "Link to the original"], ["license", "Licence, e.g. CC BY-SA 4.0"]].map(([k, ph]) => (
+                                                    <input key={k} defaultValue={(b.credit || {})[k] || ""} placeholder={ph}
+                                                      id={`cred-${row.id}-${b._idx}-${k}`}
+                                                      style={{ flex: k === "sourceUrl" ? "1 1 100%" : "1 1 45%", minWidth: 0, background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 6, padding: "5px 7px", fontSize: 10.5, fontFamily: "'Inter', sans-serif" }} />
+                                                  ))}
+                                                  <button disabled={mediaBusy}
+                                                    onClick={() => saveMediaCredit(row, b._idx, {
+                                                      photographer: document.getElementById(`cred-${row.id}-${b._idx}-photographer`)?.value,
+                                                      source: document.getElementById(`cred-${row.id}-${b._idx}-source`)?.value,
+                                                      sourceUrl: document.getElementById(`cred-${row.id}-${b._idx}-sourceUrl`)?.value,
+                                                      license: document.getElementById(`cred-${row.id}-${b._idx}-license`)?.value,
+                                                    })}
+                                                    style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "4px 12px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                                    Save credit
+                                                  </button>
+                                                </div>
+                                              </details>
+                                            )}
                                           </div>
                                         ))}
                                       </div>
@@ -4544,7 +4638,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           eat") — queues the typed name with the selected type;
                           the queue runs itself in the background one draft at a
                           time and collects results below. */}
-                      <button onClick={addToDraftQueue} title="Add to the draft queue — runs in the background, one at a time"
+                      <button onClick={addToDraftQueue} title="Add to the draft queue. Nothing is researched until you press Start."
                         style={{ background: "none", border: `1px solid ${C.gold}66`, borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                         ＋ Queue
                       </button>
@@ -4661,10 +4755,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
                     {(draftQueue.length > 0 || queueResults.length > 0) && (
                       <div style={{ marginBottom: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                           <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase" }}>
                             Draft queue{draftQueue.length > 0 ? ` · ${draftQueue.length} waiting` : ""}
                           </div>
+                          {draftQueue.length > 0 && (
+                            <button onClick={runDraftQueue} disabled={queueBusyRef.current || studioLoading}
+                              style={{ background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "4px 13px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                              ▶ Start drafting ({draftQueue.length})
+                            </button>
+                          )}
                           {draftQueue.length > 1 && (
                             <button onClick={clearQueued}
                               style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "3px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
@@ -4683,7 +4783,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         ))}
                         {draftQueue.length > 0 && (
                           <div style={{ fontSize: 10, color: C.muted, marginTop: 2, marginBottom: 6, opacity: 0.8 }}>
-                            Anything listed here is still waiting and can be removed. The one being drafted right now has already left the queue and will finish.
+                            Nothing here is researched until you press Start, so queueing costs nothing and anything listed can still be removed. Once drafting begins, the item currently running has already left the queue and will finish.
                           </div>
                         )}
                         {queueResults.map((r, i) => (
@@ -4736,15 +4836,6 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       )}
                     </div>
 
-                    {discoverQueue.length > 0 && !discoverLoading && (
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: C.surface, border: `1px solid ${C.gold}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 10 }}>
-                        <span style={{ fontSize: 11.5, color: C.light }}>{discoverQueue.length} more from your pick-list — done with this one? </span>
-                        <button onClick={advanceDiscoverQueue}
-                          style={{ background: C.gold, border: "none", borderRadius: 100, padding: "6px 14px", fontSize: 11, fontWeight: 700, color: "#000", cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
-                          Next →
-                        </button>
-                      </div>
-                    )}
 
                     {discoverError && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 10 }}>{discoverError}</div>}
 
@@ -4766,17 +4857,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                       <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{c.name}{c.region ? <span style={{ color: C.muted, fontWeight: 500 }}> — {c.region}</span> : ""}</div>
                                       {c.hook && <div style={{ fontSize: 11.5, color: C.light, lineHeight: 1.5, marginTop: 2 }}>{c.hook}</div>}
                                     </div>
-                                    <button onClick={() => startDiscoverQueue([c.name])}
+                                    <button onClick={() => queueDiscovered([c.name])}
                                       style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
-                                      Draft this
+                                      + Queue
                                     </button>
                                   </div>
                                 );
                               })}
                             </div>
-                            <button onClick={() => startDiscoverQueue(discoverPicked)} disabled={discoverPicked.length === 0}
+                            <button onClick={() => queueDiscovered(discoverPicked)} disabled={discoverPicked.length === 0}
                               style={{ width: "100%", background: discoverPicked.length ? C.accent : C.border, border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, color: "#fff", cursor: discoverPicked.length ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
-                              📖 Draft picked ({discoverPicked.length})
+                              ➕ Add picked to queue ({discoverPicked.length})
                             </button>
                           </>
                         )}

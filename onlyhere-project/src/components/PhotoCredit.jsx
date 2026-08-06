@@ -14,11 +14,16 @@ import { loadImageCredits, creditFor, licenseUrl } from "../utils/imageCredits";
 // "pexels"). Deliberately not prettified into a fake proper noun: the value in
 // the file is what was actually recorded at download time, and rewriting it in
 // the UI would make the on-screen credit and the audit trail disagree.
-export const PhotoCredit = ({ photo, align = "left", style }) => {
+// `credit` is for media Oliver uploads through Studio, where the credit is typed
+// in rather than recorded at download time. It takes priority over the file
+// lookup, because a credit entered by hand for THIS image is more specific than
+// anything matched by filename.
+export const PhotoCredit = ({ photo, credit, align = "left", style }) => {
   const [, bump] = useState(0);
   useEffect(() => { let alive = true; loadImageCredits().then(() => { if (alive) bump(v => v + 1); }); return () => { alive = false; }; }, []);
 
-  const entry = creditFor(photo);
+  const typed = credit && (credit.photographer || credit.source || credit.license || credit.sourceUrl) ? credit : null;
+  const entry = typed || creditFor(photo);
   if (!entry) return null;
 
   const url = licenseUrl(entry.license);
