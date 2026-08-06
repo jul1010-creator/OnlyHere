@@ -971,6 +971,37 @@ function GemlyxApp() {
         candidateUrls.push(...(sData.results || []).map(r => r.url).filter(Boolean));
       }
 
+      // ── ONE QUERY WHOSE ONLY JOB IS THE JOURNEY ─────────────────
+      // Oliver, 6 Aug 2026, after a fact-check produced a full Copenhagen to
+      // Havnsø itinerary we had missed: "One of the sources I saw Google using
+      // was Rome2rio. Maybe that could have be our alternative to Rejseplanen?"
+      //
+      // The useful half of that is not the API. It is that a journey-planner
+      // PAGE is a searchable web page, and our research never went looking for
+      // one. Google's answer came from reading rejseplanen and rome2rio results,
+      // which Tavily can surface for free. The routing API stays the authority
+      // on DURATION; this is here to name the actual services when the transit
+      // feed has nothing, which is exactly the island and rural-bus case.
+      //
+      // TREATED AS A LEAD, NOT AS TRUTH. Aggregators go stale in precisely the
+      // way that produced the Hou-instead-of-Kalundborg error, so the framing
+      // below tells the writer to name the operator's own page and Rejseplanen
+      // for the reader rather than presenting a scraped timetable as fact.
+      if (["town", "festival", "free", "booking"].includes(sType)) {
+        try {
+          const tq = `how to get to ${name} Denmark from Copenhagen by public transport train bus ferry which line rejseplanen`;
+          const tRes = await fetch(`/api/search?q=${encodeURIComponent(tq)}`);
+          const tData = await tRes.json();
+          if (tRes.ok && !tData.error) {
+            const snips = (tData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ");
+            if (tData.answer || snips) {
+              context += ` JOURNEY RESEARCH (a search specifically about getting to this place by public transport, so real service names can be used instead of a vague "check locally"): ${tData.answer || ""} ${snips}`
+                + ` TREAT THIS AS A LEAD, NOT AS A TIMETABLE. Journey-planner and aggregator pages go out of date, and a wrong route here costs a traveler hours. Use it to NAME the real services (which train line, which bus number, which ferry and operator) only where it is specific and consistent, never to state a departure time or a price. Whatever you write, point the reader at rejseplanen.dk and the ferry operator's own site to check current times.`;
+            }
+          }
+        } catch { /* the routing API and the rest of the research still stand */ }
+      }
+
       // ── ONE QUERY WHOSE ONLY JOB IS FINDING THE OFFICIAL SITE ────
       // Oliver: "Can't you make Tavily/Perplexity search 'official website'".
       // Yes, and it should be its own query rather than a hopeful clause bolted

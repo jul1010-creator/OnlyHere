@@ -1,3 +1,43 @@
+# PASS 54: the Vercel function limit, and a journey-research query
+
+## The 12-function limit: delete two dead endpoints
+
+You have 13 serverless functions and Hobby allows 12. Two of them are dead and safe to remove, taking you to 11:
+
+```
+git rm api/gemini.js api/route.js
+```
+
+- **`api/gemini.js`**: nothing in `src/` calls it. There are no live Gemini calls in this app; the model was dropped in favour of Perplexity a while back and the endpoint was left behind.
+- **`api/route.js`**: the OpenRouteService endpoint. Nothing calls it either. This is the one I wrongly blamed for the map bug in PASS 40; it turned out the map never used it at all.
+
+**Do NOT delete `api/update-events-check.js`**, even though it also has no caller in `src/`. It is called by the Monday scheduled task, not from the app. That is exactly the kind of thing a "no references, must be dead" sweep gets wrong.
+
+That leaves one spare slot. Worth knowing for later: the next endpoint after that needs either consolidation (several of these are thin wrappers around one AI provider and could share a router) or the Pro plan.
+
+## Rome2rio: the useful half is free
+
+Your instinct was half right, and the useful half costs nothing.
+
+**As an API, no.** Rome2rio is commercial, key-required, pricing on request. Structurally the same thing you just rejected Rejseplanen for.
+
+**As a page to read, yes**, and that is what Google was actually doing. It read journey-planner results. Our research never went looking for one, which is why our draft said the route could not be confirmed while a chat model found it in seconds.
+
+So there is now a dedicated journey query, the same trick that fixed the official-website gap: one search whose only job is how you actually get to this place by public transport, naming lines and operators. It runs for towns, festivals, free attractions and bookings.
+
+**Tested against your Havnsø case, and I will be straight about the result.** The query surfaces Holbæk, which is the key transfer, and points at rejseplanen.dk. It did **not** surface bus 541, and rome2rio did not appear in the results at all. So it gets partway: enough to stop a draft claiming no route exists, not enough to reproduce Gemini's full itinerary.
+
+It is deliberately framed as a lead rather than a timetable. Aggregator and planner pages go stale in exactly the way that produced the Hou-instead-of-Kalundborg error, so the writer is told to use it to NAME services only where the evidence is specific and consistent, never to state a departure time or price, and always to point the reader at rejseplanen.dk and the operator.
+
+## Deploy status, since you asked about the photo finder
+
+Checked against the live bundle rather than assumed:
+
+- **LIVE:** the unified queue (PASS 51), the departure-time anchor (PASS 46).
+- **NOT LIVE:** the Wikimedia photo finder and the blog mini map (PASS 52), and the ferry step extraction (PASS 53).
+
+So the photo finder does exist, it is just sitting on your disk. It ships on the next push, after the two `git rm`s above.
+
 # PASS 53: the island fix, built from data Google was already returning
 
 Oliver: "Surely the AI can look into these transports that Google Maps come up with?"
