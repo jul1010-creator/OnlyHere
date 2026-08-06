@@ -1,3 +1,70 @@
+# PASS 56: the Wikimedia finder was failing silently, which is my fault
+
+## The endpoint works. The UI was swallowing the failure.
+
+I tested production before guessing. `/api/commons-photo?q=Ribe` returns real results:
+
+> Ribe - udsigt mod øst.jpg, photographers Hubertus45, Hjart and Arne Müseler, licences CC BY 2.5 and CC BY-SA 4.0
+
+So the search, the licence filtering and the credit capture are all live and correct. The problem was entirely in what happens after you press **Use this**.
+
+**I wrote that function with no error handling whatsoever.** If the save to Supabase failed for any reason, an expired Studio token being the most likely, the await threw, the toast never fired, the panel never closed, and nothing at all appeared on screen. From the outside that is indistinguishable from a dead button, which is exactly how you described it: it does not go through, unlike the others.
+
+Now it shows a Saving state on the button it is working on, and if the save fails it says so in the panel. An expired login gets named specifically, since that is the likeliest cause and the fix is just logging out and back in.
+
+## Two other things that could have hidden the images
+
+**Wikimedia appends utm tracking parameters** to thumbnail URLs. Harmless to display, but they made the stored value messy and would break any later exact-match lookup against the credits file. Stored clean now.
+
+**Images now send no referrer.** Some CDNs, Wikimedia's included, refuse a hotlinked image based on the Referer header. A refused image is completely invisible here because the error handler hides it, so a working URL can look like a missing file. This applies to the hero photo and to every image inside an entry's body, so it may also be part of what you saw with Ribe.
+
+## Worth saying plainly
+
+The endpoint being fine while the button looked dead is the same failure I have now made twice in two days: the code was right and the reporting was missing. A silent catch and a missing catch produce the same experience, which is somebody staring at a button wondering if they clicked it properly.
+
+The tests do not cover this, because it is React state rather than a pure function. That is a real limit of the suite as written and worth knowing rather than pretending otherwise.
+
+## Verification
+
+Production endpoint queried directly and confirmed returning three correctly credited Ribe photos. Full bundle passes, 47 tests still pass.
+
+# PASS 55: tests that already caught two live bugs, a real "needs redraft" audit, and the fact generator fixed
+
+## 1. The test suite, and what it found on its first run
+
+`node tests/run.mjs`. **47 tests, zero dependencies, no framework, about a second.** Every rule in it is a bug that actually shipped and was actually caught by a human fact-checking a live entry.
+
+**It failed on its very first run, and the failure was real: `STUDIO_VOICE` contained 41 em dashes.** The prompt that says "NEVER USE THE EM DASH" was itself full of them, so every draft was reading its instructions and seeing 41 counter-examples. That is very likely part of why dashes kept surviving into drafts despite the ban being stated in capitals.
+
+Now down to 1, the single one inside the rule that has to name the character. Three of them were hiding as unicode escapes that a source-level search misses entirely and only a runtime check catches, which is exactly the argument for testing the built string rather than the file.
+
+Covered: the arrival-row labels, the transit departure anchor, the saved-places merge (every destructive case), the licence rules, the new audit, and the dash ban enforced on the prompt itself.
+
+## 2. "Needs redraft", built on evidence
+
+The old panel listed the hardcoded `towns` array, which was emptied in PASS 29. **It has been showing an empty list ever since.**
+
+`utils/entryAudit.js` scores every published entry against what is actually stored, and tells you why. Deliberately no AI: auditing all 55 costs nothing, the same entry always scores the same, and every reason given is literally checkable rather than a model's opinion.
+
+- **Critical**, someone loses a day: claims no public transport exists; still carries the copied schema coordinate that puts the pin 130km out.
+- **High**: missing coordinates, em dashes, banned AI phrases, three or more placeholder fields.
+- **Medium**: no body, under 180 words, no photo.
+- **Low**: no uncertainties array, which marks entries predating the honesty rules.
+
+Worst first, with the specific finding attached. It deliberately does NOT flag honest limitations: "public transport is limited outside the main bus routes" passes, "there is no public transport route" does not. That distinction is tested.
+
+## 3. The fact generator was broken, and it was my fault
+
+Your error: `Writing failed: "[object Object]" is not valid JSON`.
+
+`askOpenAI` returns an **object**, `{ text }` or `{ error }`, not a string. I wrote `String(raw)` around it, which produced the literal text "[object Object]", so every single fact failed. I never checked the helper's return shape, which every other call site in the file already handles correctly. `askPerplexity` had the same problem in the retry predicate, so the research step was misjudging its own results too.
+
+Both fixed, plus a fallback that pulls the JSON out of the outermost braces when a model wraps it in prose despite being told not to.
+
+## 4. Ribe's photo
+
+`public/towns/` does not exist in the repo at all, and there is no file matching "ribe" anywhere under `public/`. So the entry points at `/towns/ribe.jpg` and nothing is there. This is the same gap `PHOTO_AUDIT.md` listed: 53 published entries referencing files that were never added. The Wikimedia finder (undeployed, on your disk) is the fastest route through that backlog now, since it attaches a correct credit at the same time.
+
 # PASS 54: the Vercel function limit, and a journey-research query
 
 ## The 12-function limit: delete two dead endpoints

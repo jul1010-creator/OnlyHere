@@ -98,7 +98,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
       <div style={{ height: 190, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
         <span style={{ fontSize: 64, opacity: item.photo ? 0.25 : 1, position: item.photo ? "absolute" : "static" }}>{item.emoji}</span>
         {item.photo && (
-          <img src={item.photo} alt={item.name} onError={e => { e.target.style.display = "none"; }}
+          <img src={item.photo} alt={item.name} referrerPolicy="no-referrer" onError={e => { e.target.style.display = "none"; }}
             style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} />
         )}
         <button onClick={onClose}
@@ -310,7 +310,12 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 </div>
               ) : block.type === "image" ? (
                 <div key={i} style={{ marginBottom: 16 }}>
-                  <img src={block.src} alt={block.caption || item.name} onError={e => { e.target.style.display = "none"; }}
+                  {/* referrerPolicy matters for Wikimedia-hosted images: some
+                      CDNs refuse a hotlink based on the Referer header, and a
+                      refused image is invisible because of the onError below.
+                      Sending no referrer is what Wikimedia's own guidance says. */}
+                  <img src={block.src} alt={block.caption || item.name} referrerPolicy="no-referrer" loading="lazy"
+                    onError={e => { e.target.style.display = "none"; }}
                     style={{ width: "100%", borderRadius: 14, display: "block" }} />
                   {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
                   <PhotoCredit photo={block.src} credit={block.credit} style={{ marginTop: 4 }} />
