@@ -5,6 +5,7 @@ import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
 import { ReviewsSection } from "./ReviewsSection";
 import { PhotoCredit } from "./PhotoCredit";
+import { PlaceMiniMap } from "./PlaceMiniMap";
 import { events, majorEvents } from "../data/events";
 import { TOWN_COORDS } from "../data/towns";
 
@@ -322,6 +323,16 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             ))}
           </div>
         )}
+
+        {/* Where this actually is. Renders only when the entry carries real
+            verified coordinates, which today means towns; TOWN_COORDS is the
+            fallback for towns published before __lat/__lon was stored. */}
+        <PlaceMiniMap
+          lat={item.__lat ?? TOWN_COORDS[item.name]?.[0]}
+          lon={item.__lon ?? TOWN_COORDS[item.name]?.[1]}
+          name={item.name}
+          color={color}
+        />
 
         {kind === "town" && item.highlight && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>

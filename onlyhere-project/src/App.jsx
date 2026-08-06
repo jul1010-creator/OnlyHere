@@ -486,6 +486,47 @@ function GemlyxApp() {
   // The credit is saved onto the image block itself rather than into the shared
   // json file, because it belongs to this specific uploaded image and travels
   // with the row. PhotoCredit prefers a typed credit over a filename lookup.
+  // ── FIND A PHOTO ON WIKIMEDIA, CREDIT INCLUDED (Oliver, Aug 6) ────
+  // "search through Wiki as an example to find pictures and then automatically
+  // credit."
+  //
+  // The credit is not filled in afterwards from a second lookup: it arrives in
+  // the SAME response as the image, because Commons stores the author and
+  // licence as structured metadata on the file. That is what makes this
+  // automatic rather than a research task. /api/commons-photo does the licence
+  // filtering server-side, so anything that reaches this list is already free
+  // to publish with attribution: NC and ND are rejected, as is any file with
+  // usage restrictions flagged or, for a non-public-domain licence, no
+  // nameable author.
+  const [photoFinder, setPhotoFinder] = useState(null);   // { rowId, query, results, loading, error }
+  const findCommonsPhotos = async (row, query) => {
+    setPhotoFinder({ rowId: row.id, query, results: null, loading: true, error: null });
+    try {
+      const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&limit=8`);
+      const data = await res.json();
+      if (data.error) setPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
+      else setPhotoFinder(f => ({ ...f, loading: false, results: data.results || [] }));
+    } catch (e) {
+      setPhotoFinder(f => ({ ...f, loading: false, error: String(e.message || e) }));
+    }
+  };
+  // Adds the chosen image to the entry WITH its credit attached in one write, so
+  // an image can never exist in a published row without the attribution its
+  // licence requires. Also becomes the hero if the row has no photo yet, same
+  // rule the uploader already follows.
+  const useCommonsPhoto = async (row, hit) => {
+    const p = row.payload || {};
+    const block = { type: "image", src: hit.url, credit: hit.credit };
+    await patchContentPayload(row, {
+      ...p,
+      photo: p.photo || hit.url,
+      blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block],
+    });
+    setPhotoFinder(null);
+    setToast(`Added, credited to ${hit.credit.photographer} (${hit.credit.license})`);
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const saveMediaCredit = async (row, blockIdx, credit) => {
     const p = row.payload || {};
     const blocks = Array.isArray(p.blogBody) ? [...p.blogBody] : [];
@@ -1113,16 +1154,60 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // departure_time Google returns its typical duration rather than a
           // live-traffic snapshot, which is what we want for a published figure.
           // Shared with the guide's own duration lookups, see helpers.js.
+          // Returns the whole answer now, not just a duration string, so the
+          // named ferry and transit lines Google supplies can reach the draft.
           const ask = async (mode) => {
             const r = await fetch(`/api/directions?origin=${CPH}&destination=${dest}&mode=${mode}${departureParam(mode)}`);
             const d = await r.json();
-            return d && !d.error && d.durationText ? `${d.durationText} (${d.distanceText})` : null;
+            return d && !d.error && d.durationText ? d : null;
           };
-          const [transit, driving] = await Promise.all([ask("transit"), ask("driving")]);
+          const [transitD, drivingD] = await Promise.all([ask("transit"), ask("driving")]);
+          const fmt = (d) => (d ? `${d.durationText} (${d.distanceText})` : null);
+          const transit = fmt(transitD), driving = fmt(drivingD);
           realTransport = { transit, driving };
+
+          // ── THE ISLAND FIX ──────────────────────────────────────
+          // Islands broke transit routing because a single Copenhagen-to-island
+          // query has to cross a ferry the transit feed may not carry, so it
+          // returns nothing and the draft concluded no route exists.
+          //
+          // Two things rescue it, both from data Google already returns and
+          // this code previously discarded. DRIVING crosses ferries correctly:
+          // measured earlier this session, Copenhagen to Samsø by car came back
+          // 145 km / 3h16, which IS the Kalundborg to Ballen crossing. And the
+          // STEP LIST names the boats: line, operator, and both ports.
+          //
+          // So a named ferry from either mode is pulled out and handed to the
+          // writer as fact. It never has to guess "some ferry probably runs",
+          // which is precisely how the Hou-instead-of-Kalundborg error happened.
+          // An island where Google has no transit at all (Sønderho returns
+          // ZERO_RESULTS at every time of day) still yields the crucial fact
+          // from the driving route: a ferry is required. Say that plainly
+          // instead of falling silent, which is what produced the "no confirmed
+          // public transport route" claim on a well-connected island.
+          const ferryRequiredUnnamed = !!(transitD?.ferryUnnamed || drivingD?.ferryUnnamed);
+          const allFerries = [...(transitD?.ferries || []), ...(drivingD?.ferries || [])];
+          const seenFerry = new Set();
+          const ferryLines = allFerries.filter(f => {
+            const k = `${f.line}|${f.from}|${f.to}`.toLowerCase();
+            if (seenFerry.has(k)) return false;
+            seenFerry.add(k); return true;
+          });
+          const namedLegs = (transitD?.steps || []).filter(s => s.vehicle && s.line)
+            .map(s => `${s.vehicle === "FERRY" ? "ferry" : s.vehicle === "BUS" ? "bus" : "train"} ${s.line}${s.agency ? ` (${s.agency})` : ""} from ${s.from} to ${s.to}`)
+            .slice(0, 6);
           if (transit || driving) {
-            transportFindings = `REAL TRANSPORT CHECK from Copenhagen (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
-              + (transit ? `BY PUBLIC TRANSPORT: ${transit}. ` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links are not always covered. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk. `)
+            transportFindings = (ferryLines.length === 0 && ferryRequiredUnnamed
+              ? `THIS JOURNEY REQUIRES A FERRY. The routing API's own driving route includes a crossing, so the place is on an island or across water. It did NOT name the operator or the route, so you must not invent one: research the operator's own site for the crossing, name both ports and the operator only if the research supports it, and otherwise say plainly that the ferry route should be checked with the operator. Under no circumstances write that the place is unreachable or that no public transport exists, because a required ferry means a real, scheduled crossing exists.\n`
+              : "")
+              + (ferryLines.length > 0
+              ? `REAL FERRY CROSSING, named by the routing API itself, not researched or guessed: `
+                + ferryLines.map(f => `${f.line || "ferry"}${f.agency ? ` operated by ${f.agency}` : ""}, ${f.from} to ${f.to}${f.duration ? `, crossing ${f.duration}` : ""}`).join("; ")
+                + `. Use these exact port names and this operator. Do NOT name a different crossing to the same island, and do not write that the island is hard to reach without checking this first. If a traveler could start from a different part of the country and use a different route, say so, but this is the confirmed one from Copenhagen.\n`
+              : "")
+              + (namedLegs.length > 0 ? `REAL CONNECTING SERVICES on that public transport route, also from the API: ${namedLegs.join("; ")}.\n` : "")
+              + `REAL TRANSPORT CHECK from Copenhagen (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
+              + (transit ? `BY PUBLIC TRANSPORT: ${transit}. ` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links and island ferry operators are not always in the transit feed, and this is ESPECIALLY common for islands, where a real, frequent, well-used ferry simply is not indexed. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk and the ferry operator. If a ferry is named anywhere above, that crossing is real and carries foot passengers unless the operator says otherwise. `)
               + (driving ? `BY CAR: ${driving}. ` : "")
               + `Use these real figures for travelTime and for anything you say about getting there, in preference to any duration from a search snippet. If a ferry is involved, these already include it. NEVER state that no public transport route exists on the strength of this block alone.`;
           }
@@ -1904,6 +1989,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
   // fact-check buttons can be re-run on it like any draft before publishing.
   const loadQueueResult = (r) => {
     if (!r?.draft) return;
+    setQueueResults(prev => prev.map(x => (x === r || (x.name === r.name && x.type === r.type)) ? { ...x, opened: true } : x));
     setStudioType(r.type);
     setStudioTown(r.name);
     setStudioDraft(r.draft);
@@ -2352,6 +2438,30 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       } else {
         setPublishStatus("sent");
         setPublishErrorDetail(null);
+        // ── HAND OVER THE NEXT FINISHED DRAFT (Oliver, Aug 6: "when I have
+        // drafted one of them, the other that has been researched will pop
+        // up") ────────────────────────────────────────────────────
+        //
+        // The queue already researches continuously in the background:
+        // runDraftQueue is a while loop, so item two starts the moment item one
+        // finishes, with nobody watching. What was missing was the handover at
+        // the other end. Finished drafts piled up in the results list waiting to
+        // be found and clicked, so the queue ran ahead while he sat on a
+        // published entry with no idea anything else was ready.
+        //
+        // Now publishing pulls the next unopened finished draft straight into
+        // the editor. Deliberately only for a fresh publish, never after editing
+        // an existing row, since that path reloads the page anyway.
+        if (!isEditing) {
+          const next = queueResults.find(r => r.ok && r.draft && !r.opened);
+          if (next) {
+            setTimeout(() => {
+              loadQueueResult(next);
+              setToast(`Published · next up: ${next.name}`);
+              setTimeout(() => setToast(null), 2800);
+            }, 700);
+          }
+        }
         if (isEditing) {
           // Simplest correct way to reflect an in-place field change everywhere it's
           // already been merged into the app's shared arrays — same approach Delete uses.
@@ -4512,6 +4622,53 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                         onChange={e => { uploadMediaFiles(row, e.target.files); e.target.value = ""; }}
                                         style={{ display: "none" }} />
                                     </label>
+                                    <button onClick={() => findCommonsPhotos(row, p.name || "")} disabled={mediaBusy}
+                                      style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      🔎 Find on Wikimedia
+                                    </button>
+
+                                    {/* WIKIMEDIA PHOTO FINDER. Everything listed here is already
+                                        licence-checked server-side, and the credit shown is the one
+                                        that gets saved, so what you approve is exactly what gets
+                                        published. */}
+                                    {photoFinder?.rowId === row.id && (
+                                      <div style={{ marginTop: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
+                                        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                                          <input defaultValue={photoFinder.query} id={`cmq-${row.id}`}
+                                            onKeyDown={e => { if (e.key === "Enter") findCommonsPhotos(row, e.currentTarget.value); }}
+                                            placeholder="What to search Wikimedia for…"
+                                            style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                                          <button onClick={() => findCommonsPhotos(row, document.getElementById(`cmq-${row.id}`)?.value || p.name)}
+                                            style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Search</button>
+                                          <button onClick={() => setPhotoFinder(null)}
+                                            style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "6px 10px", fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>✕</button>
+                                        </div>
+                                        {photoFinder.loading && <div style={{ fontSize: 11.5, color: C.muted }}>Searching Wikimedia…</div>}
+                                        {photoFinder.error && <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.5 }}>{photoFinder.error}</div>}
+                                        {photoFinder.results?.length === 0 && (
+                                          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
+                                            Nothing usable found. Commons had no freely licensed photo for that search, or every match was non-commercial, no-derivatives, or had no nameable author. Try a different wording.
+                                          </div>
+                                        )}
+                                        {photoFinder.results?.length > 0 && (
+                                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
+                                            {photoFinder.results.map(hit => (
+                                              <div key={hit.url} style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", background: C.surface }}>
+                                                <img src={hit.url} alt="" style={{ width: "100%", height: 78, objectFit: "cover", display: "block" }} />
+                                                <div style={{ padding: "6px 7px" }}>
+                                                  <div style={{ fontSize: 9.5, color: C.light, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.credit.photographer}</div>
+                                                  <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>{hit.credit.license}</div>
+                                                  <button onClick={() => useCommonsPhoto(row, hit)} disabled={mediaBusy}
+                                                    style={{ width: "100%", background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "4px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                                    Use this
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                                       <input value={mediaReelInput} onChange={e => setMediaReelInput(e.target.value)}
                                         placeholder="Paste an Instagram reel/post link…"

@@ -1,3 +1,84 @@
+# PASS 53: the island fix, built from data Google was already returning
+
+Oliver: "Surely the AI can look into these transports that Google Maps come up with?"
+
+**Yes, and we were throwing all of it away.** `/api/directions` returned a duration, a distance and a polyline. Google's actual response carries the full step list, and every transit step carries the LINE NAME, the OPERATING AGENCY, both stops, the times, and a vehicle type. One of those types is `FERRY`.
+
+That is the island problem in one sentence: not that Google does not know about Fanølinjen, but that nothing here ever asked.
+
+## What now reaches the writer
+
+Where Google has a transit route, the draft is handed the real thing, tested against a Copenhagen to Sønderho shaped response:
+
+> Fanølinjen operated by Molslinjen, Esbjerg Færgehavn to Nordby, Fanø, crossing 12 mins
+> connecting: train IC (DSB) from København H to Esbjerg St.; ferry Fanølinjen (Molslinjen) from Esbjerg Færgehavn to Nordby, Fanø; bus 631 (Sydtrafik) from Nordby Havn to Sønderho
+
+Named ports, named operator, named connecting services. It never has to guess which crossing serves an island, which is exactly how the Hou instead of Kalundborg error happened.
+
+## But I have to be straight with you about Sønderho specifically
+
+I tested your actual case against the live API before claiming anything, and **Google returns ZERO_RESULTS for Copenhagen to Sønderho by transit. Tuesday morning, Sunday morning, every time I tried.** There is no transit route in its feed, so there are no steps to read. The step extraction above does nothing for Sønderho.
+
+Driving works: 4 hours 3 mins, 318 km. And you cannot drive to Fanø without the boat, so that route crosses the ferry, Google just does not describe it as a transit line.
+
+So there is a third layer, and it is the one that actually rescues your case. **Google marks ferry segments in the driving route's own instruction text.** Detecting that gives a weaker but true fact: *this journey requires a ferry.* The draft is then told, in these words, that a required ferry means a real scheduled crossing exists, that it must not name an operator the research does not support, and that it must never write that the place is unreachable or that no public transport exists.
+
+That is the difference between silence and honesty. Silence is what produced "no confirmed public transport route" for a well connected island.
+
+## Where this leaves the three cases
+
+- **Google has transit** (Møgeltønder): real named lines, ferries, operators, ports. Solved.
+- **Google has no transit but a ferry is required** (Sønderho, Samsø): the crossing is known to exist and is stated as required; the operator comes from the official-site research added in PASS 49, or the entry honestly says to check with the operator. No invention either way.
+- **Neither**: unchanged, honest "could not confirm", pointing at rejseplanen.dk.
+
+## On Rejseplanen, since you have ruled the API out
+
+Understood, and the composition approach above does not need it. Worth knowing for later: the old free `xmlopen.rejseplanen.dk` API is deprecated, and Labs API 2.0 publishes no pricing at all, so "too expensive" is not actually established. It is a contact form if you ever want to find out. Nothing here depends on it.
+
+## Verification
+
+The step and ferry extraction was executed against a realistic four-leg Copenhagen to Sønderho transit response including a ferry, plus empty, driving-only and missing-line-name cases. The driving-instruction ferry detector was tested against English and Danish phrasings, the ae spelling, the maneuver field, a plain road instruction and the false friend "Ferryman Street". Live checks against the deployed API confirmed the Sønderho transit gap that shaped the design. Full bundle passes and both API files parse clean.
+
+**Not verified live:** the new step fields need deploying before a real draft can use them.
+
+# PASS 52: Wikimedia photo finder with the credit attached, queue handover, and the maps
+
+## 1. Automatic photo finder, credit included
+
+**Yes, and Commons is the right source precisely because of the credit.** Every file there carries the author and licence as structured metadata, so the attribution CC BY and CC BY-SA legally require arrives in the SAME response as the image. That is the difference between this and pulling a picture off a search engine, where the credit becomes a research problem of its own.
+
+**🔎 Find on Wikimedia** in the Media panel of any published row. Search, see the candidates with the photographer and licence already shown, press Use this. The image and its credit are written in one operation, so an image can never exist in a published row without the attribution its licence requires.
+
+`/api/commons-photo` does the filtering server-side, so nothing unusable ever reaches the picker. It rejects non-photographs, anything with usage restrictions flagged, and any non-public-domain file with no nameable author, since an uncreditable CC BY image is not a usable one.
+
+**Two bugs testing caught in my own filter, both serious:**
+
+The licence gate **let CC BY-NC and CC BY-ND through**. "CC BY-NC 3.0" matched the "cc by" head and the trailing groups were optional, so it passed. That is not cosmetic. NC forbids commercial use, ND forbids derivative works, and a cropped card image is arguably one. Publishing under either would have been using someone's photo without the right to. Both are now rejected before anything else is checked.
+
+The HTML stripper **mangled photographers' names**, turning "R&uuml;diger Stehn" into "R diger Stehn". A broken name is a broken credit, not a formatting slip. Entities are now decoded rather than deleted, verified against Danish, German, Spanish and French names plus numeric entities.
+
+Evidence the field mapping is right: `public/image-credits.json` already holds two Commons images from an earlier session, and their photographer, sourceUrl and licence values line up exactly with the metadata fields read here.
+
+**Not verified live:** this environment cannot reach the Commons API through either available tool, so the endpoint needs one real run after deploy. The parsing and filtering were tested directly against real Commons value shapes.
+
+## 2. The queue hands over
+
+You were right that something was missing, but not the background research: `runDraftQueue` is a while loop, so item two already starts the moment item one finishes with nobody watching.
+
+The gap was at the other end. Finished drafts piled up in the results list waiting to be found and clicked, so the queue ran ahead while you sat on a published entry with no idea anything else was ready. **Publishing now pulls the next unopened finished draft straight into the editor**, with a "next up: Ribe" toast. Only on a fresh publish, since editing an existing row reloads the page anyway.
+
+## 3. The maps
+
+**Guide route map:** it snapped instantly whenever it re-fitted, which is what happens when real route geometry arrives a moment after the map paints. It now eases with flyTo, except on the very first fit, where animating from the arbitrary initial view would just be a long swoop across Denmark nobody asked for. Stops went from identical gold dots to **numbered pins with the start green and the end red**, so the map shows the order of the day rather than just the locations. Screenshotted.
+
+**New: a map inside the blogs.** Your idea, and a good one. A small map on a place's own page, for orientation rather than navigation: "South Jutland" means nothing to a visitor until they see it sitting near the German border. Scroll-wheel zoom is off so it cannot trap someone mid-article.
+
+**It renders only where there are real verified coordinates, which today means towns.** Only town entries store lat/lon. A map is a claim about where something is, and a pin dropped on a guess would be a confident wrong answer in the most believable possible format. If you want festivals and attractions to have one too, the fix is upstream: store their geocoded coordinates the way towns already do, and the map appears by itself.
+
+## Verification
+
+The licence gate was executed against fifteen licence strings including every NC and ND combination, and the entity decoder against six real author-value shapes. The pin markup was rendered and screenshotted. Full bundle and minify scope check clean, `commons-photo.js` parses and imports clean.
+
 # PASS 51: one queue instead of two, and Discover feeds it
 
 Oliver: "when I do the 'search for towns' they should be able to be put into queue as well. I would appreciate if they could all run researches right after oneanother.. but if that is not possible.."

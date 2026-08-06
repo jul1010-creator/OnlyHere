@@ -89,7 +89,72 @@ export default async function handler(req, res) {
       return res.status(200).json({ error: data.status || "No route found" });
     }
     const leg = data.routes[0].legs[0];
+
+    // ── WHAT THE JOURNEY IS ACTUALLY MADE OF ────────────────────────
+    // Oliver, 6 Aug 2026: "Surely the AI can look into these transports that
+    // Google Maps come up with?"
+    //
+    // Yes, and we were throwing it all away. Google's response carries a full
+    // step list, and every transit step carries transit_details: the LINE NAME,
+    // the operating AGENCY, the boarding and alighting stops, and a vehicle
+    // type. One of those types is FERRY. So for an island journey Google will
+    // often hand back the actual crossing, named, with its operator, and this
+    // endpoint was discarding it and returning a bare duration.
+    //
+    // That is the island problem in one sentence: not that Google does not know
+    // about Fanølinjen, but that nothing here ever asked.
+    //
+    // Kept deliberately compact. The raw steps object is enormous and most of
+    // it is HTML instructions for a turn-by-turn UI this app does not have.
+    const steps = (leg.steps || []).map(s => {
+      const td = s.transit_details;
+      if (!td) {
+        return { mode: (s.travel_mode || "").toLowerCase(), duration: s.duration?.text || "", distance: s.distance?.text || "" };
+      }
+      const line = td.line || {};
+      return {
+        mode: "transit",
+        vehicle: (line.vehicle?.type || "").toUpperCase(),      // BUS, HEAVY_RAIL, FERRY, ...
+        line: line.short_name || line.name || "",
+        agency: (line.agencies || []).map(a => a.name).filter(Boolean).join(", "),
+        from: td.departure_stop?.name || "",
+        to: td.arrival_stop?.name || "",
+        departure: td.departure_time?.text || "",
+        arrival: td.arrival_time?.text || "",
+        duration: s.duration?.text || "",
+        stops: td.num_stops,
+      };
+    });
+
+    // The ferry legs on their own, because for an island entry this is THE
+    // fact that decides the getting-there section, and it should not have to be
+    // dug out of a step list by whatever reads this.
+    // DRIVING ROUTES DO NOT HAVE transit_details, so a car journey to an island
+    // yields no FERRY step even though it plainly crosses one. Measured live:
+    // Copenhagen to Sønderho returns ZERO_RESULTS by transit at every time of
+    // day, but 4h03 / 318km by car, and you cannot drive to Fanø without the
+    // boat. Google marks those segments in the step's own instruction text.
+    //
+    // So this detects that a crossing is REQUIRED without inventing its name.
+    // "A ferry is part of this journey" is a true and useful fact on its own,
+    // and it is the one that stops a draft claiming an island is unreachable.
+    const drivingFerryStep = (leg.steps || []).some(s =>
+      /\bferry\b|\bfærge|\bfaerge/i.test(String(s.html_instructions || "") + " " + String(s.maneuver || "")));
+
+    const ferries = steps.filter(s => s.vehicle === "FERRY").map(s => ({
+      line: s.line, agency: s.agency, from: s.from, to: s.to,
+      departure: s.departure, arrival: s.arrival, duration: s.duration,
+    }));
+
     return res.status(200).json({
+      steps,
+      ferries,
+      // Named ferries when the transit feed carries them, otherwise the honest
+      // weaker fact: this journey requires a crossing, we just cannot name it
+      // from here. Both are better than the silence that produced "no confirmed
+      // public transport route" for an island with a frequent, well-used ferry.
+      hasFerry: ferries.length > 0 || drivingFerryStep,
+      ferryUnnamed: ferries.length === 0 && drivingFerryStep,
       durationText: leg.duration.text,   // e.g. "24 mins" — Google's own real number
       durationMinutes: Math.round(leg.duration.value / 60),
       distanceText: leg.distance.text,

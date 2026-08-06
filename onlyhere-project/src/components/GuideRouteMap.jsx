@@ -51,6 +51,7 @@ export const GuideRouteMap = ({ points, legs }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
+  const didFitRef = useRef(false);
   // One entry per leg: the real polyline, or null once we know there isn't one.
   const [geometry, setGeometry] = useState({});
 
@@ -122,9 +123,24 @@ export const GuideRouteMap = ({ points, legs }) => {
         drawn.push(a, b);
       }
     });
+    // MORE TO SEE: numbered stop pins instead of anonymous dots, so the map
+    // shows the ORDER of the day rather than just where things are, and the
+    // first and last stop are visually distinct because "where I start" and
+    // "where I end up" are the two a traveler actually looks for.
     points.forEach((p, i) => {
-      L.circleMarker([p.lat, p.lon], { radius: 7, color: "#0A0F1E", weight: 2, fillColor: C.gold, fillOpacity: 1 })
-        .bindTooltip(`${i + 1}. ${p.name}`, { permanent: true, direction: "top", offset: [0, -8], className: "gemlyx-map-label" })
+      const isFirst = i === 0, isLast = i === points.length - 1;
+      const size = isFirst || isLast ? 26 : 22;
+      const bg = isFirst ? "#4CAF50" : isLast ? C.accent : C.gold;
+      const icon = L.divIcon({
+        className: "gemlyx-stop-pin",
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};color:#0A0F1E;`
+            + `font:700 ${isFirst || isLast ? 12 : 11}px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;`
+            + `border:2px solid #0A0F1E;box-shadow:0 2px 6px rgba(0,0,0,.55);">${i + 1}</div>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+      });
+      L.marker([p.lat, p.lon], { icon, riseOnHover: true })
+        .bindTooltip(p.name, { permanent: true, direction: "top", offset: [0, -(size / 2 + 2)], className: "gemlyx-map-label" })
         .addTo(group);
     });
     // BUG FIX, same report: padding 28 with no zoom cap meant a day with only
@@ -151,10 +167,23 @@ export const GuideRouteMap = ({ points, legs }) => {
       (Math.max(...lats) - Math.min(...lats)) * 111.32,
       (Math.max(...lons) - Math.min(...lons)) * 62.06
     );
+    // ANIMATED, not snapped (Oliver: "better animated more things to see on the
+    // maps"). Leaflet jumps instantly by default, so a day map that re-fits when
+    // its real route geometry arrives used to teleport. flyTo/flyToBounds eases
+    // the pan and zoom together, which reads as the map settling rather than
+    // flickering. `animate` is switched off on the very first fit, because
+    // animating from the arbitrary initial view to the real one is just a long
+    // swoop across Denmark nobody asked for.
+    const firstFit = !didFitRef.current;
+    didFitRef.current = true;
     if (spreadKm < 0.6) {
-      map.setView([lats.reduce((a, b) => a + b, 0) / lats.length, lons.reduce((a, b) => a + b, 0) / lons.length], 12);
-    } else {
+      const c = [lats.reduce((a, b) => a + b, 0) / lats.length, lons.reduce((a, b) => a + b, 0) / lons.length];
+      if (firstFit) map.setView(c, 12);
+      else map.flyTo(c, 12, { duration: 0.8, easeLinearity: 0.25 });
+    } else if (firstFit) {
       map.fitBounds(extent, { padding: [44, 44], maxZoom: 14 });
+    } else {
+      map.flyToBounds(extent, { padding: [44, 44], maxZoom: 14, duration: 0.9, easeLinearity: 0.25 });
     }
     return () => { group.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
