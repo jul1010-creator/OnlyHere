@@ -34,7 +34,7 @@ export default async function handler(req, res) {
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": key,
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.businessStatus,places.regularOpeningHours,places.currentOpeningHours",
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.businessStatus,places.regularOpeningHours,places.currentOpeningHours,places.websiteUri",
       },
       body: JSON.stringify(body),
     });
@@ -56,6 +56,20 @@ export default async function handler(req, res) {
       address: place.formattedAddress || "",
       businessStatus: place.businessStatus || "", // e.g. "OPERATIONAL", "CLOSED_TEMPORARILY", "CLOSED_PERMANENTLY"
       openingHours,
+      // THE VENUE'S OWN OFFICIAL WEBSITE, straight from Google's business
+      // listing (added Aug 2026, Oliver: "how do we make sure that
+      // Tavily/Perplexity in the future uses these websites?").
+      //
+      // This is the authoritative answer to that question for anything that is
+      // a real business. It is not a search result that mentions the place and
+      // it is not a model recalling a domain from memory, which is exactly how
+      // plausible-looking wrong URLs get invented. It is the URL the owner
+      // registered on their own Google listing.
+      //
+      // COSTS NOTHING EXTRA: websiteUri sits in the same Place Details
+      // Enterprise SKU as regularOpeningHours, which this request already asks
+      // for, so it rides along on a call we are already paying for.
+      website: place.websiteUri || "",
     });
   } catch (err) {
     console.error("Places hours fetch failed:", err);

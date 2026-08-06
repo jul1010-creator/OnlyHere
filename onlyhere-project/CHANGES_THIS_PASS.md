@@ -1,3 +1,45 @@
+# PASS 49: finding the official website is now its own job, not a lucky byproduct
+
+Oliver: "how do we make sure that Tavily/Perplexity in the future uses these websites? Can't you make Tavily/Perplexity search 'official website' or input Gemini and only use Gemini for the sole purpose of finding the official website"
+
+Your first idea is right and is now built. Your second one I would not do, and there is a third source that beats both.
+
+## 1. Google already knew the answer and we were not asking
+
+`/api/places-hours` calls Google's Places API for opening hours. Google's business listing also carries **`websiteUri`, the URL the owner registered on their own listing.** The request just never asked for that field.
+
+That is the authoritative answer for anything that is a real business. It is not a search result that happens to mention the place, and it is not a model recalling a domain from memory, which is exactly how plausible-looking wrong URLs get invented.
+
+**It costs nothing extra.** `websiteUri` sits in the same Place Details Enterprise SKU as `regularOpeningHours`, which this call already pays for. One word added to the FieldMask.
+
+## 2. A dedicated official-website search, for the things Google has no listing for
+
+Your idea, and the right tool where Places cannot help. A town is not a business, and neither is a festival.
+
+For a town the query is deliberately not "Møgeltønder official website", because a village's own site is rarely the thing that decides a draft. It asks for the **attractions inside it**: castle, museum, church, opening hours, tickets. Those are the pages that kept getting missed, and `schackenborg.dk` is the page that would have settled two separate errors.
+
+Results from this query are **prepended**, so answering the official-site question directly outranks URLs that merely turned up while asking about something else.
+
+## 3. Why not Gemini for this
+
+It would be a third API and a third bill to answer a question the first two already answer better. Asking a language model for an exact URL is asking the one thing models are worst at: they produce domains that look right. Gemini with search grounding would just be Tavily with extra steps and extra latency, and `api/gemini.js` is already dead code in this repo. If a search index and a curated business listing both disagree with a model's recollection, the model is the one that should lose.
+
+## The bug testing caught, which mattered more than the feature
+
+For a venue, the fetch list is built from hostnames that share a word with the entry name. So a Google-registered URL whose domain does **not** contain the venue name was being discarded, which is precisely the case the Places lookup exists to rescue. Chickie's at `spisechick.dk` would have been thrown away.
+
+The Places URL now bypasses the matcher entirely and always goes first. It is not a guess about which site belongs to this place, so it should never have been subject to a guessing heuristic.
+
+## Ordering
+
+The Places lookup used to run *after* the official-site fetch, so its URL arrived too late to be opened. The fetch block now runs after it, still before any prompt is assembled. Sequence is: general research, then the dedicated official-site query, then Google's registered URL, then the fetch, then the prompts.
+
+## Verification
+
+The selection logic was executed across nine cases: a venue with a matching domain, a venue whose registered domain shares no word with its name, a venue with no Places result, a venue with nothing usable at all, and towns with and without the dedicated query. That is how the discarded-URL bug surfaced. Bundle and minify scope check clean, `places-hours.js` parses and imports clean, and the execution order was re-checked by line number after moving the block.
+
+**Not verified live:** the Places `websiteUri` response and the new query both need deploying. Both fail soft, leaving the previous behaviour.
+
 # PASS 48: traveler accounts, optional, saves only
 
 Your three calls: **Google sign in and email + password, both offered. Fully optional. Accounts and saves first**, no traveler profile, nothing near the chat.
