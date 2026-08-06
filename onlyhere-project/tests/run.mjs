@@ -174,6 +174,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("auditAll survives junk", auditAll(null).length, 0);
 }
 
+// ── nearest-station validation ─────────────────────────────────────
+// Bug: the At a Glance row read "Tranekær Slot (Langeland Kommune) (9 mins
+// walk)" as the nearest STATION. It is a castle. Google's transit_station search
+// falls back to the most prominent landmark where there is no station, and the
+// old code trusted it and glued the walk time into the name.
+{
+  const NOT_TRANSIT = /\(.*kommune\)|\bslot\b|\bkirke\b|\bmuseum\b|\bkro\b|\bcamping\b|\bstrand\b|\bfyr\b|\bmølle\b|\bcastle\b|\bchurch\b/i;
+  const LOOKS_TRANSIT = /\bst\.?\b|station|banegård|banegaard|havn|terminal|færge|faerge|ferry|holdeplads|busstop|bus stop|rutebil|lufthavn|airport|metro|letbane/i;
+  const keep = (n) => !(NOT_TRANSIT.test(n) && !LOOKS_TRANSIT.test(n));
+  ["Tranekær Slot (Langeland Kommune)", "Rudkøbing (Langeland Kommune)", "Møgeltønder Kirke", "Moesgaard Museum", "Nysted Strand"]
+    .forEach(n => is(`station rejects "${n}"`, keep(n), false));
+  ["Ribe St.", "Odense Banegård Center", "Hou Havn", "Sælvig Færgehavn", "Rudkøbing Rutebilstation", "Kastrup Lufthavn", "Tranekær Slot Station"]
+    .forEach(n => is(`station keeps "${n}"`, keep(n), true));
+}
+
 // ── the dash ban, enforced on the files themselves ─────────────────
 // The rule is absolute in published prose, and the deterministic strip only
 // covers generated text. This checks the SOURCE of the rule files, since a

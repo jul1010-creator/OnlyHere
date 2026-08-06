@@ -1,3 +1,54 @@
+# PASS 59: Open was innocent, and a note on fact-checkers that contradict themselves
+
+## "I click open it just starts researching the draft again"
+
+It does not. `loadQueueResult` sets the draft into the editor and touches nothing else; there is no research call anywhere in it.
+
+**The queue was still running.** That is the thing you asked for two messages ago: items research back to back with nobody clicking. So when you press Open on result one, result two is already in progress, the progress bar moves, and it looks caused by your click.
+
+The real bug was that the progress panel said a bare "Researching" with no name attached, so there was no way to tell whose draft it was. It now says `Queue: Ribe, Researching`, the note under the results says Open starts nothing and names what the queue is separately working on, and the button's tooltip says the same.
+
+Nothing about the behaviour changed. Only whether the app tells you what it is doing.
+
+## Gemini contradicting itself
+
+This is the most useful thing you have noticed all week, and it changes what a fact-checker is for.
+
+An AI checker that says Kirkeladen is the oldest preserved wooden building, then later says the original was right, is not a source of truth. It is a **lead generator**. Both answers came from the same model reading different search results on different runs, and neither run went to a primary source.
+
+That is not a reason to stop using it. It has caught real errors: the Rejsekort advice, the Kombardo coach lines, the Hou ferry, the Odense date. But it means the workflow has to be:
+
+1. The checker flags a claim.
+2. **A primary source settles it**, not a second opinion from the same or another model.
+3. If no primary source can settle it, the claim comes out of the entry rather than being argued about.
+
+Step 3 is the one worth adopting. "Oldest preserved wooden building in Denmark" is exactly the superlative class from the last pass: unverifiable without a stated scope, contested even among people who care, and it adds almost nothing to a traveler deciding whether to go. The entry loses nothing by describing the building instead of ranking it.
+
+The audit already flags that pattern, so any entry carrying an unqualified "oldest" is findable rather than something you have to remember.
+
+## Moving to events
+
+Sensible, and the timing is good. Events are a better fit for the machinery now:
+
+- The failures that dominated towns were transport, coordinates, and contested history. Events have a **date, a venue and a ticket status**, which are all checkable against one official source rather than argued over.
+- The Monday check already re-verifies published events automatically, so they have a maintenance path towns still lack.
+- Discover has a dedicated Events shortcut, and the queue now runs a batch back to back.
+
+Worth knowing before you start: the official-site fetch reaches festivals now, the journey research runs for them too, and the audit's date and ranking checks apply to them the same as towns. What is NOT built for events specifically is a ticket-status freshness check beyond the Monday sweep.
+
+
+## "Tranekær Slot (Langeland Kommune) (9 mins walk)" as a station
+
+Two bugs in one string, and you were right about both halves.
+
+**It is a castle.** Google's `transit_station` search does not reliably return transit in rural Denmark; where there is no station nearby it hands back the most prominent point of interest instead, and the old code trusted whatever came back and printed it under a train icon. A "(... Kommune)" suffix is the giveaway, since that is how the Places API formats a locality or landmark and never a station.
+
+It now rejects obvious non-transit results and returns **null**, so the field is left empty. "We could not verify a nearby station" is true. Naming a castle is not.
+
+**The walk time should never have been in the name.** The row renders as `Nearest Station: X`, so appending it produced a value that reads as part of the station's name. The lookup now returns the name and the walk separately, and the prompt is explicit that only the name goes in the field.
+
+Twelve new tests cover both, including the case that must still pass: "Tranekær Slot Station" is a real station name and is kept.
+
 # PASS 58: two error classes from the Odense draft, and where the rules actually were
 
 Both errors were real, and neither was a hallucination. The research found true things and the sentences still came out false. Those are different failures and they need different fixes.

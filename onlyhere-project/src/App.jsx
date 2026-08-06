@@ -685,6 +685,7 @@ function GemlyxApp() {
   // discipline as studioLoadingRef above.
   const draftQueueRef = useRef([]);
   const [draftQueue, setDraftQueue] = useState([]);
+  const [queueDrafting, setQueueDrafting] = useState(null); // the name the queue is researching right now
   const [queueResults, setQueueResults] = useState([]);
   const queueBusyRef = useRef(false);
   // DRAFT PROGRESS (Oliver: "when I click 'draft it' I wanna see the progress
@@ -1155,9 +1156,15 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         try {
           const coords = await geocodePlace(name);
           if (coords) {
-            const station = await findRealNearestStation(coords.lat, coords.lon);
+            // Now returns { name, walk } so the walk time can be stated as its
+            // own fact instead of being glued onto the station's name, which is
+            // how "Tranekær Slot (Langeland Kommune) (9 mins walk)" ended up in
+            // a field labelled Nearest Station. Null when Places could not find
+            // anything that is genuinely transit.
+            const st = await findRealNearestStation(coords.lat, coords.lon);
+            const station = st?.name || null;
             frozenGeo = { lat: coords.lat, lon: coords.lon, station };
-            frozenFactsText = `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station ? ` The real nearest station, confirmed by actual walking-route time (not straight-line distance): ${station}.` : ""} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
+            frozenFactsText = `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station ? ` The real nearest station is ${station}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. Put ONLY the station name in the nearestStation field; if the walking time is worth mentioning, put it in the prose, never inside the name.` : " No nearby transit stop could be verified, so leave nearestStation empty rather than naming a landmark."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
           }
         } catch { /* geocoding/places failed — draft proceeds without this, publishDraft's override step just won't have anything to apply */ }
       }
@@ -1500,7 +1507,7 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
           if (hlCoords && frozenGeo) {
             const distFromTownCenter = haversineKm(hlCoords, frozenGeo);
             if (distFromTownCenter > 1.5) { // walking-friction threshold — beyond this, "the town's station" stops being a useful answer for THIS specific place
-              const hlStation = await findRealNearestStation(hlCoords.lat, hlCoords.lon);
+              const hlStation = (await findRealNearestStation(hlCoords.lat, hlCoords.lon))?.name || null;
               setStudioIdentityWarning(
                 `"${t.highlight}" is ${distFromTownCenter.toFixed(1)} km from ${name}'s town-center station (verified) — that's too far to describe reaching it the same way as the town center. ${hlStation ? `The real nearest station to "${t.highlight}" specifically is ${hlStation}.` : "Couldn't verify its actual nearest station — check this manually."} Compare this against what "Getting There & Reality" actually says before publishing.`
               );
@@ -1824,7 +1831,15 @@ Respond with ONLY strict JSON: {"name": ${J(name)}, "category": "e.g. 'Food mark
         const item = draftQueueRef.current[0];
         draftQueueRef.current = draftQueueRef.current.slice(1);
         setDraftQueue([...draftQueueRef.current]);
+        // Naming what the QUEUE is working on (Oliver: "I click 'open' it just
+        // starts researching the draft again!"). It was not starting anything.
+        // Open only loads a finished draft into the editor. The queue was simply
+        // still running the NEXT item in the background, which is what he asked
+        // for, but the progress panel said a bare "Researching" with no name, so
+        // it appeared immediately after the click and looked caused by it.
+        setQueueDrafting(item.name);
         const res = await generateArea(item.name, item.type);
+        setQueueDrafting(null);
         setQueueResults(prev => [...prev, { name: item.name, type: item.type, ok: !!res?.ok, draft: res?.ok ? res.draft : null, error: res?.ok ? null : (res?.error || "failed") }]);
       }
     } finally {
@@ -5052,7 +5067,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           <div key={`r${i}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 3 }}>
                             <span style={{ color: r.ok ? C.gold : "#FFB347" }}>{r.ok ? "◆" : "✕"} {r.name}</span>
                             {r.ok ? (
-                              <button onClick={() => loadQueueResult(r)}
+                              <button onClick={() => loadQueueResult(r)} title="Loads this finished draft into the editor. It does not start any research."
                                 style={{ background: "none", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "3px 10px", fontSize: 10.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                 Open
                               </button>
@@ -5062,7 +5077,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           </div>
                         ))}
                         {queueResults.length > 0 && (
-                          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6 }}>Open a finished draft to review and publish it — re-run the fact-check buttons on it like any other draft.</div>
+                          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+                            Open loads a finished draft into the editor. It does not start any research.
+                            {queueDrafting ? ` The queue is separately still working on ${queueDrafting}, which is why the progress bar keeps moving.` : ""}
+                          </div>
                         )}
                       </div>
                     )}
@@ -5073,7 +5091,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     {studioLoading && studioStage && (
                       <div style={{ marginBottom: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 11.5, marginBottom: 7 }}>
-                          <span style={{ color: C.light, fontWeight: 600 }}>{studioStage.label}</span>
+                          <span style={{ color: C.light, fontWeight: 600 }}>
+                            {queueDrafting ? `Queue: ${queueDrafting} — ${studioStage.label}` : studioStage.label}
+                          </span>
                           <span style={{ color: C.muted }}>{studioStage.percent}%</span>
                         </div>
                         <div style={{ height: 3, background: C.border, borderRadius: 2, overflow: "hidden" }}>
