@@ -52,6 +52,9 @@ import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeFor
 import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { PhotoPlate } from "./components/PhotoPlate";
+import { AuthSheet } from "./components/AuthSheet";
+import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
+import { fetchCloudSaves, pushCloudSaves, mergeSaves } from "./utils/userSaves";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 
 import "leaflet/dist/leaflet.css";
@@ -2452,6 +2455,105 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   const [savedPlaces, setSavedPlaces] = useState(() => {
     try { return JSON.parse(localStorage.getItem("gemlyx_saved_places") || "[]"); } catch { return []; }
   });
+
+  // ── TRAVELER ACCOUNTS (optional, saves only) ──────────────────────
+  // Oliver's decisions: Google OR email+password, fully optional, and this first
+  // pass covers accounts and saves only. No traveler profile, nothing near the
+  // chat. Local storage stays exactly as it was, as the offline store and the
+  // store for signed-out people; an account is a sync layer on top of it.
+  const [userSession, setUserSession] = useState(() => getStoredSession());
+  const [authOpen, setAuthOpen] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const syncedOnceRef = useRef(false);
+
+  // Google returns through a full page redirect with tokens in the URL fragment.
+  // Caught on mount, before anything else reads the session.
+  useEffect(() => {
+    const fromRedirect = captureRedirectSession();
+    if (fromRedirect) { setUserSession(fromRedirect); return; }
+    // Refreshes an expiring token, or clears a dead one, so the UI never shows
+    // someone as signed in while their saves have silently stopped syncing.
+    getSession().then(s => setUserSession(s)).catch(() => setUserSession(null));
+  }, []);
+
+  // FIRST SYNC AFTER SIGN IN: merge, never overwrite.
+  //
+  // The failure this avoids: plan a trip on your phone, sign in on a laptop
+  // holding an older list, and a naive "cloud wins" or "local wins" rule
+  // silently destroys one side. Neither list is more correct, so both are kept.
+  useEffect(() => {
+    if (!userSession?.token || syncedOnceRef.current) return;
+    syncedOnceRef.current = true;
+    (async () => {
+      const cloud = await fetchCloudSaves(userSession);
+      if (!cloud) {
+        // Table missing or unreachable. Stay signed in and keep working from
+        // local storage rather than pretending the whole account is broken.
+        setToast("Signed in, but your saves could not sync right now");
+        setTimeout(() => setToast(null), 3000);
+        return;
+      }
+      const merged = mergeSaves(savedPlaces, cloud.places, savedGuides, cloud.guides);
+      const gained = (merged.places.length - savedPlaces.length) + (merged.guides.length - savedGuides.length);
+      setSavedPlaces(merged.places);
+      setSavedGuides(merged.guides);
+      try {
+        localStorage.setItem("gemlyx_saved_places", JSON.stringify(merged.places));
+        localStorage.setItem("gemlyx_saved_guides", JSON.stringify(merged.guides));
+      } catch { /* private mode */ }
+      await pushCloudSaves(userSession, merged.places, merged.guides);
+      setToast(gained > 0 ? `Signed in · ${gained} saved ${gained === 1 ? "item" : "items"} restored` : "Signed in · saves synced");
+      setTimeout(() => setToast(null), 2600);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userSession]);
+
+  // Mirror every later change up. Debounced, because hearting three places in a
+  // row should be one write, not three. Deliberately fire and forget: a failed
+  // sync must never block the UI or lose the local copy, which is already saved.
+  const pushTimerRef = useRef(null);
+  useEffect(() => {
+    if (!userSession?.token || !syncedOnceRef.current) return;
+    clearTimeout(pushTimerRef.current);
+    pushTimerRef.current = setTimeout(() => { pushCloudSaves(userSession, savedPlaces, savedGuides); }, 1200);
+    return () => clearTimeout(pushTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedPlaces, savedGuides, userSession]);
+
+  const handleSignedIn = (session) => {
+    syncedOnceRef.current = false;   // a new session must re-merge
+    setUserSession(session);
+    setAuthOpen(false);
+  };
+
+  const handleSignOut = async () => {
+    await authSignOut();
+    setUserSession(null);
+    syncedOnceRef.current = false;
+    // Local saves deliberately STAY. Signing out is not "delete my trips", and
+    // wiping the device copy would be a nasty surprise for someone signing out
+    // on a shared laptop who then goes back to their own phone.
+    setToast("Signed out · saves on this device are untouched");
+    setTimeout(() => setToast(null), 2600);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!userSession) return;
+    setAccountBusy(true);
+    try {
+      await deleteMyData(userSession);
+      await authSignOut();
+      setUserSession(null);
+      syncedOnceRef.current = false;
+      setToast("Your saved data has been deleted from our servers");
+      setTimeout(() => setToast(null), 3400);
+    } catch (e) {
+      setToast(`Could not delete: ${String(e.message || e).slice(0, 60)}`);
+      setTimeout(() => setToast(null), 4000);
+    }
+    setAccountBusy(false);
+  };
+
   const isPlaceSaved = (kind, id) => savedPlaces.some(p => p.kind === kind && p.id === id);
   const toggleSavePlace = (kind, item, townName) => {
     setSavedPlaces(prev => {
@@ -6515,7 +6617,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
             ))}
             <div style={{ borderTop: `1px solid ${C.border}`, margin: "6px 0" }} />
             {[
-              { id: "login", label: "Login", ico: "user", action: "login" },
+              { id: "login", label: userSession ? "Account" : "Sign in", ico: "user", action: "login" },
               { id: "faq", label: "FAQ", ico: "help", action: "faq" },
               { id: "credits", label: "Photo credits", ico: "book", action: "credits" },
               { id: "support", label: "Support", ico: "mail", action: "mail" },
@@ -6526,7 +6628,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   if (item.action === "faq") setActive("essentials");
                   else if (item.action === "credits") setShowCredits(true);
                   else if (item.action === "mail") window.open("mailto:hello@gemlyx.com");
-                  else if (item.action === "login") { setToast("Login coming soon"); setTimeout(() => setToast(null), 2200); }
+                  else if (item.action === "login") setAuthOpen(true);
                 }}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", color: C.light, border: "none", borderRadius: 10, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 2, animation: `fadeSlideIn 0.2s ease ${(i + 11) * 0.04}s both` }}>
                 <Ico name={item.ico} size={15} color={C.muted} />
@@ -6885,6 +6987,43 @@ You also have a web_search tool. Use it whenever someone asks about something th
           used. Images whose licence legally requires the credit are listed
           first and marked, so a missing one is obvious at a glance rather than
           buried in an alphabetical list. */}
+      {/* Sign in / sign up. An account is optional and buys one thing: saves that
+          follow you between devices. When already signed in, this same entry
+          becomes the account view instead. */}
+      <AuthSheet open={authOpen && !userSession} onClose={() => setAuthOpen(false)} onSignedIn={handleSignedIn}
+        localSaveCount={savedPlaces.length + savedGuides.length} />
+
+      {authOpen && userSession && (
+        <div onClick={() => setAuthOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 980, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 460, padding: "24px 22px calc(32px + env(safe-area-inset-bottom))", border: `1px solid ${C.border}`, borderBottom: "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Your account</div>
+              <button onClick={() => setAuthOpen(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
+            </div>
+            <div style={{ fontSize: 12.5, color: C.light, marginBottom: 4 }}>{userSession.email || "Signed in"}</div>
+            <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 18 }}>
+              {savedPlaces.length} saved {savedPlaces.length === 1 ? "place" : "places"} and {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}, synced to this account.
+            </div>
+            <button onClick={() => { setAuthOpen(false); handleSignOut(); }}
+              style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
+              Sign out
+            </button>
+            {/* GDPR gives people a right to deletion, so this is a real button
+                rather than an email address and a promise. It says exactly what
+                it removes, because claiming more than it does would be worse
+                than saying nothing. */}
+            <button onClick={() => { if (window.confirm("Delete your saved places and guides from our servers? Saves on this device stay, and this cannot be undone.")) handleDeleteAccount(); }}
+              disabled={accountBusy}
+              style={{ width: "100%", background: "none", border: "1px solid #FF8A8055", color: "#FF8A80", borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 700, cursor: accountBusy ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+              {accountBusy ? "Deleting…" : "Delete my saved data"}
+            </button>
+            <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
+              This deletes everything we hold for you: your saved places and guides. To also remove the sign-in record itself, email hello@gemlyx.com and it will be done.
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCredits && (
         <div onClick={() => setShowCredits(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.bg, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", padding: "24px 22px 32px", border: `1px solid ${C.border}`, borderBottom: "none" }}>
@@ -6938,16 +7077,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
               <div style={{ fontSize: 24, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text }}>Privacy & Data</div>
               <button onClick={() => setShowPrivacy(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Close</button>
             </div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>Last updated July 2026 · Gemlyx is built in Denmark and designed to collect as little as possible. No accounts, no ads, no tracking cookies, no analytics.</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>Last updated August 2026 · Gemlyx is built in Denmark and designed to collect as little as possible. Accounts are optional, and there are no ads, no tracking cookies and no analytics.</div>
 
             {[
               ["📍 Your location", "Only requested when you tap the location button — never in the background. Your coordinates are used directly in your browser to calculate distances to towns and events. They are not stored on any server and are not sent to anyone. You can revoke access anytime in your browser's site settings."],
               ["✦ AI chats (Gemlyx Detour & Route Builder)", "When you use the AI Guide, your messages are sent to OpenAI (a US company) to generate the answer, and in some cases to Tavily to search for live information like opening status. Please don't include personal details in your messages — the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
-              ["💾 Saved routes & guides", "Guides and road-trip routes you save are stored only in your browser's local storage, on your own device. We never see them. Delete them in the app, or by clearing your browser data for this site."],
+              ["💾 Saved routes & guides", "Without an account, everything you save stays only in your browser's local storage, on your own device, and we never see it. If you create an account, your saved places and guides are also stored on our database (Supabase) so they follow you between your phone and laptop. Nothing else about your activity is stored. Delete them in the app, by deleting your account, or by clearing your browser data for this site."],
+              ["👤 Accounts", "An account is entirely optional. You can browse, plan and build a guide without one. If you create an account we store your email address and your saved list, and nothing else: no profile, no location history, no record of what you looked at. Sign in is handled by Supabase Auth, and if you use Google sign in, Google will know you signed in to Gemlyx. We do not send marketing email. \"Delete my saved data\" in the account menu removes everything we hold for you, and emailing hello@gemlyx.com also removes the sign-in record itself."],
               ["◈ Booking requests", "If you send a booking or craft request, the details you enter (name, email, message) are stored in our database (Supabase) so the maker can get back to you. We use them for nothing else. Email hello@gemlyx.com to have a request deleted."],
               ["💡 Suggestions", "If you suggest a place via 'Suggest a Place', what you type is stored so we can review it. We don't ask for your name or contact details — suggestions are anonymous."],
               ["🌦 Weather & maps", "Weather comes from Yr.no (Norwegian Meteorological Institute) and map tiles from OpenStreetMap. Like any website loading content, these services can see your IP address when data loads. Neither is used to track you."],
-              ["🇪🇺 Your rights", "Under GDPR you can ask what data we hold about you, and have it corrected or deleted. Since almost everything lives on your own device, this usually means booking requests. Contact: hello@gemlyx.com. Data controller: Gemlyx, Denmark."],
+              ["🇪🇺 Your rights", "Under GDPR you can ask what data we hold about you, and have it corrected or deleted. Without an account almost everything lives on your own device, so this usually means booking requests; with an account it also covers your email address and saved list, which you can delete yourself at any time from the account menu. Contact: hello@gemlyx.com. Data controller: Gemlyx, Denmark."],
             ].map(([h, body]) => (
               <div key={h} style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: 0.5, marginBottom: 5 }}>{h}</div>

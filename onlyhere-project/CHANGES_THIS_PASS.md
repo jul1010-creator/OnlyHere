@@ -1,3 +1,59 @@
+# PASS 48: traveler accounts, optional, saves only
+
+Your three calls: **Google sign in and email + password, both offered. Fully optional. Accounts and saves first**, no traveler profile, nothing near the chat.
+
+## What it does
+
+An account buys exactly one thing: saved places and guides that follow you between devices instead of living on one browser. The copy says that plainly, with no "unlock", no countdown, and no suggestion the app is worse without one, because it isn't. You can still browse, plan and build a guide having never signed in.
+
+Sign in offers Google as one tap, or email and password underneath, with create-account and forgotten-password flows. Google returns through a page redirect carrying its tokens in the URL fragment, which is read once and then scrubbed from the address bar so a token never sits in history or a shareable link.
+
+## The parts that actually matter
+
+**Merging, not overwriting, on first sign in.** This is the one place an account can destroy something. Plan a trip on your phone, sign in on a laptop holding an older list, and a naive "cloud wins" or "local wins" rule silently deletes one side. Neither list is more correct, so both are kept and duplicates dropped. I executed this against eight cases including every destructive one: both sides kept, no duplicates, same id under a different kind kept separate, a brand new account not wiping the device, a brand new device pulling everything down, the existing 40 and 20 caps held, newest guide first, and malformed entries discarded without crashing.
+
+**Signing out does not delete local saves.** Signing out is not "delete my trips". Wiping the device copy would be a nasty surprise for someone signing out on a shared laptop who then goes back to their own phone.
+
+**Tokens expire after an hour**, and without a refresh saves would quietly stop syncing with no error and no sign anything was wrong. The session refreshes early, and if the refresh fails the session is cleared so the UI can honestly say signed out rather than pretend.
+
+**One row per user**, holding both lists as jsonb, rather than one row per saved item as the plan doc proposed. The app never queries an individual save, both lists are already capped, and per-item rows would mean insert and delete reconciliation, orphan rows and partial-sync states for no benefit any screen can use. One row makes a save atomic.
+
+**Local storage is untouched as the store for signed-out people and as the offline cache.** The account is a sync layer on top, so nothing breaks offline, signed out, or in private mode. If the sync fails you stay signed in and keep working locally, with an honest message rather than a broken account.
+
+## The privacy page had to change, and it was the interesting part
+
+Three of its claims stopped being true the moment this shipped, and they were load-bearing promises, not boilerplate: "No accounts", and that saved guides are "stored only in your browser's local storage, on your own device. We never see them", and the GDPR section's assumption that almost everything lives on the user's device.
+
+All three are corrected, and there is a new Accounts section stating what is stored (your email and your saved list, nothing else), what is not (no profile, no location history, no record of what you looked at), and that Google will know you signed in to Gemlyx if you use that route.
+
+**Delete is a real button**, because GDPR gives people a right to deletion and an email address plus a promise is not that. It says exactly what it removes and no more: the saved data. Removing the sign-in record itself needs a service-role key and therefore a server endpoint, so the button does not claim to do it and the text tells you how to get it done.
+
+## Run this SQL first
+
+Supabase dashboard → SQL editor, once:
+
+```sql
+create table if not exists gemlyx_user_data (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  saved_places jsonb default '[]'::jsonb,
+  saved_guides jsonb default '[]'::jsonb,
+  updated_at timestamptz default now()
+);
+alter table gemlyx_user_data enable row level security;
+create policy "own data" on gemlyx_user_data for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+```
+
+That row level security policy is not optional. Without it one anon key reads every user's saved trips.
+
+**Also in the Supabase dashboard**, two things this code cannot do for you: enable the Google provider under Authentication → Providers (needs a Google OAuth client id and secret), and add your site URL plus the Vercel domain to Authentication → URL Configuration, or the redirect will bounce.
+
+## Verification
+
+The merge was executed against eight cases, listed above. Bundle and minify scope check clean on all fifteen new identifiers. Confirmed the dead "Login coming soon" toast is gone from the built bundle, and that both stale privacy claims no longer appear in it. Both sheet states were rendered and screenshotted.
+
+**Not verified live:** the actual sign in round trip, since it needs the table, the Google provider and the redirect URLs configured on your side. Everything degrades honestly if any of those is missing rather than breaking the app.
+
 # PASS 47: the same departure-time bug was in the guide's leg durations, and it was worse there
 
 Oliver, after PASS 46: "Can you solve this on the guide as well? Just the duration between locations." Scoped exactly to that.
