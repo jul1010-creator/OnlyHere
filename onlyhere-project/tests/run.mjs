@@ -623,6 +623,65 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a search hit opens the real entry through the existing dispatcher", /onClick=\{\(\) => \{ openStopDetail\(p\); setSearch\(""\); \}\}/.test(app));
 }
 
+// ── the provenance block never invents provenance ──────────────────
+// "How we know this" prints the primary source, the corrections with their
+// source links, and verbatim, the things that could not be confirmed. That last
+// section is the entire reason it is worth shipping, and it only works if the
+// block is silent when there is nothing real behind it. A "verified" badge on
+// an entry with no evidence would be the app doing the exact thing it exists
+// to stop, so the render gate is tested rather than trusted.
+{
+  const src = readFileSync(join(root, "src/components/HowWeKnow.jsx"), "utf8");
+  ok("the block bails when there is nothing to show",
+    /if \(corrections\.length === 0 && uncertainties\.length === 0 && !official\) return null;/.test(src));
+  ok("only a real URL counts as a source", /const isLink = \(s\) => typeof s === "string" && \/\^https\?/.test(src));
+  ok("blank uncertainties are filtered out, not counted", /\.filter\(u => typeof u === "string" && u\.trim\(\)\)/.test(src));
+  ok("the uncertainties are printed, never summarised", /What we could not confirm/.test(src));
+  // The standing rule: nothing anywhere may claim anyone went there.
+  ok("it does not claim a visit", !/\b(we visited|personally visited|been there in person|our visit)\b/i.test(src));
+  ok("and it says so out loud", /do not claim to have been anywhere in person/.test(src));
+
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("every entry page renders it", /<HowWeKnow item=\{item\} \/>/.test(detail));
+}
+
+// ── the traveler's question limit is real, not decorative ──────────
+// Oliver's decision was: no paywall yet, but a small daily allowance per
+// logged-in traveler, ENFORCED SERVER SIDE. A limit counted in the browser is
+// not a limit, it is a suggestion with a devtools bypass, and the thing on the
+// other side of it is his Anthropic and Perplexity credit.
+{
+  const api = readFileSync(join(root, "api/ask.js"), "utf8");
+  const ui = readFileSync(join(root, "src/components/AskGemlyx.jsx"), "utf8");
+
+  ok("the token is resolved by Supabase, not decoded here", /auth\/v1\/user/.test(api));
+  ok("an unverified caller is refused", /return json\(res, 401/.test(api));
+  // A quota that cannot be read must never become a quota that does not apply.
+  ok("an unreadable quota fails CLOSED", /Could not check your question allowance/.test(api));
+  ok("being over the limit returns 429", /return json\(res, 429/.test(api));
+  // Charging before answering would bill someone for a request that then failed.
+  // lastIndexOf, not indexOf: the FIRST mention of the table is the quota count
+  // at the top. The last is the insert, and that is the one that must come after
+  // the answer exists.
+  ok("the log is written after the answer, not before", api.indexOf("CHARGE ONLY FOR AN ANSWER") < api.lastIndexOf("gemlyx_ask_log"));
+  // Vite inlines anything prefixed VITE_ into the public bundle, so the service
+  // role key must never be read from one. The words appear in a comment in that
+  // file warning about exactly this, hence matching the env read specifically.
+  ok("the service role key never comes from a public env var", !/process\.env\.VITE_/.test(api));
+
+  // The browser must not be able to talk itself into extra questions.
+  ok("the component holds no limit of its own", !/DAILY_LIMIT|const LIMIT/.test(ui));
+  ok("it cannot write anything", !/method: "PATCH"|method: "PUT"|method: "DELETE"/.test(ui));
+  ok("it only ever calls the one server route", (ui.match(/fetch\(/g) || []).length === 1 && /fetch\("\/api\/ask"/.test(ui));
+  ok("no API key is anywhere near it", !/api[_-]?key|ANTHROPIC|PERPLEXITY/i.test(ui));
+
+  // The rule shared with the Studio assistant: a looked-up answer must never be
+  // mistakable for one that came from the fact-checked entry.
+  ok("a live answer is labelled as one", /Not in the entry, looked up just now/.test(ui));
+  ok("and carries its sources", /l\.sources\?\.length > 0/.test(ui));
+  ok("the entry is asked first", api.indexOf("THE ENTRY FIRST") < api.indexOf("api.perplexity.ai"));
+}
+
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

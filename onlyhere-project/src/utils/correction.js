@@ -320,9 +320,25 @@ export const offersCorrection = (text) => {
 // The read-only half. Answers about an entry from the entry itself plus its
 // audit, never from the model's own memory of Denmark, because a confident
 // answer sourced from nowhere is what this whole tool exists to stop.
+// ── THE HANDOFF MARKER ─────────────────────────────────────────────
+// Oliver, 7 Aug 2026: "the assistant that is ready on blogs and what not are
+// about questions only. And if it can't answer, then perplexity will quickly
+// research to answer the question."
+//
+// The entry stays the FIRST source, because it is the thing that was actually
+// fact-checked. This marker is how the answering step says "I genuinely do not
+// have this" in a way code can act on, instead of the caller trying to detect
+// a hedge in prose. The two kinds of answer are never blended afterwards: an
+// answer from the entry is quiet about its origin, an answer from a live search
+// announces itself and carries its sources, so a reader can always tell which
+// one they are holding.
+export const NOT_IN_ENTRY = "NOT_IN_ENTRY";
+
 export const ASK_PROMPT = (entryJson, auditText, question) => `You are Gemlyx Studio's own assistant, answering the founder about ONE published entry.
 
-Answer ONLY from the entry below and its automated audit. If the answer is not in there, say plainly that the entry does not say, and say what would settle it. Never fill a gap from general knowledge, and never state a Danish fact the entry does not contain: this tool exists because unsourced confidence is the problem.
+Answer ONLY from the entry below and its automated audit. Never fill a gap from general knowledge, and never state a Danish fact the entry does not contain: this tool exists because unsourced confidence is the problem.
+
+IF THE ENTRY DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} followed by one short sentence naming what is missing, and nothing else. Do not apologise, do not guess, and do not answer anyway from what you happen to know. Something else will go and look it up. Getting this wrong in the other direction is the expensive mistake: answering from memory is how a fact nobody checked ends up on the page.
 
 Be short. No preamble, no restating the question. Never use an em dash or an en dash.
 
@@ -336,6 +352,15 @@ ${auditText || "No findings."}
 
 Question:
 ${question}`;
+
+// The lookup that runs when the entry genuinely does not have it. Scoped hard to
+// the one gap, because this is a reader waiting for an answer, not a research
+// pass: a broad prompt here would take ten seconds and come back with an essay.
+export const LOOKUP_PROMPT = (name, question, gap) => `Using real, current web search, answer this specific question about ${name || "this place"} in Denmark.
+
+Question: ${question}
+${gap ? `What is missing: ${gap}\n` : ""}
+Be short and concrete: the answer, and nothing else. Prefer the venue's own site, the organiser, or an official transport or tourism source over an aggregator. If you cannot confirm it, say exactly that rather than offering a likely answer.`;
 
 // The whole pass. `deps` is injected so this file stays testable and has no
 // knowledge of App.jsx's component state.

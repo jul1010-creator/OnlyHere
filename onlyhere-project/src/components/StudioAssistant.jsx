@@ -3,7 +3,7 @@ import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { askClaude, askPerplexity, parseClaudeJSON } from "../utils/aiClient";
 import { auditEntry, auditAll } from "../utils/entryAudit";
-import { correctEntry, routeMessage, offersCorrection, ASK_PROMPT } from "../utils/correction";
+import { correctEntry, routeMessage, offersCorrection, ASK_PROMPT, LOOKUP_PROMPT, NOT_IN_ENTRY } from "../utils/correction";
 import { departureParam } from "../utils/helpers";
 
 // ── The founder's assistant, on every page ──────────────────────────
@@ -97,6 +97,20 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
   const onDraft = !item && !!draft;
   const target = item || draft || null;
   const targetKind = item ? kind : draftKind;
+  // ── EDITING IS A STUDIO ACT (Oliver, 7 Aug) ────────────────────────
+  // "the fact-checker assistant should only be for studio.. the assistant that
+  // is ready on blogs and what not are about questions only."
+  //
+  // He is drawing the right line. On a blog page he is a READER, and a reader
+  // asking "why does this say the ferry is required" should get an answer, not
+  // a verification pass that rewrites the page under him. Correcting is
+  // deliberate work and belongs where the draft and the diff and the Save
+  // button are. Published rows are still correctable: open the row in Studio,
+  // which loads it into the editor, and the assistant is in Studio mode again.
+  //
+  // This is a HARD gate, not a hint to the router. routeMessage still does its
+  // job in Studio; on a blog its answer is discarded before it can act.
+  const studioMode = onDraft;
   const say = (role, text, extra = {}) => setLog(l => [...l, { role, text, ...extra }]);
 
   // The same routing call the drafting pipeline makes, so a correction can
@@ -181,11 +195,35 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
       ? audit.findings.map(f => `${f.severity}: ${f.field}. ${f.detail}`).join("\n")
       : "No findings.";
     const res = await askClaude(ASK_PROMPT(JSON.stringify(target, null, 2), auditText, message), 900);
-    // THE ONE-TAP ESCAPE HATCH. The router is better than it was but it will
-    // still answer something he meant as an instruction. Carrying the original
-    // message on the reply means a wrong guess costs a tap, never a retype.
-    say("gemlyx", res.error ? `Could not reach Claude: ${res.error}` : res.text,
-      offersCorrection(message) ? { retryAs: message } : {});
+    if (res.error) { say("gemlyx", `Could not reach Claude: ${res.error}`); return; }
+
+    // ── "AND IF IT CAN'T ANSWER, THEN PERPLEXITY WILL QUICKLY RESEARCH
+    // TO ANSWER THE QUESTION" (Oliver, 7 Aug) ────────────────────────
+    // The entry is still the first and preferred source, because it is the
+    // thing that was actually fact-checked. Only when the entry genuinely does
+    // not contain the answer does this go and look, and the two kinds of answer
+    // are never blended: an answer from the entry is silent about where it came
+    // from, an answer from a live search says so and carries its source. A
+    // reader must always be able to tell which one they are holding.
+    const answer = (res.text || "").trim();
+    if (!answer.startsWith(NOT_IN_ENTRY)) {
+      say("gemlyx", answer, (studioMode && offersCorrection(message)) ? { retryAs: message } : {});
+      return;
+    }
+    setStage({ label: "Not in the entry. Looking it up" });
+    const gap = answer.slice(NOT_IN_ENTRY.length).replace(/^[\s:.-]+/, "").trim();
+    const research = await askPerplexity(LOOKUP_PROMPT(target?.name, message, gap));
+    setStage(null);
+    if (research.error || !(research.text || "").trim()) {
+      say("gemlyx", `The entry does not say, and the lookup failed: ${research.error || "nothing came back"}. ${gap || ""}`.trim());
+      return;
+    }
+    const written = await askClaude(
+      `Answer the question below using ONLY the fresh research provided. Be short and direct. If the research does not actually settle it, say so plainly rather than hedging into a non-answer. Never use an em dash or an en dash.\n\nQuestion: ${message}\n\nFresh research:\n${research.text}`,
+      500
+    );
+    const cites = (research.citations || []).slice(0, 3).filter(u => typeof u === "string");
+    say("gemlyx", `Not in the entry, so I looked it up just now.\n\n${written.error ? research.text : written.text}${cites.length ? `\n\nSources: ${cites.join("  ")}` : ""}`);
   };
 
   const runAudit = async () => {
@@ -208,7 +246,9 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     if (!override) say("you", message);
     setBusy(true);
     try {
-      const intent = forceCorrect ? "correct" : routeMessage(message);
+      const routed = forceCorrect ? "correct" : routeMessage(message);
+      // Reading a blog: answer, always. Nothing here can change a published row.
+      const intent = studioMode ? routed : "ask";
       if (intent === "correct") await runCorrection(message);
       else if (intent === "audit") await runAudit();
       else await runAsk(message);
@@ -286,7 +326,7 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
           <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>✦ Gemlyx assistant</div>
           <div style={{ fontSize: 10.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {item
-              ? `Looking at ${item.name}${rowId ? "" : " (not a published row)"}`
+              ? `Reading ${item.name} · questions only`
               : onDraft
               ? `Studio draft: ${draft?.name || "unnamed"} (not published yet)`
               : "No entry open"}
@@ -305,15 +345,15 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: 8 }}>
         {log.length === 0 && (
           <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-            Tell me what is wrong and what is right, in your own words. "Fact-checkers say the station is wrong, it is really Aarhus H" is enough, you do not have to say "correct it".
-            Every claim gets checked before a word changes. A source that contradicts you wins and I will say so. Nothing settling it does not block you: if you gave me the value, it goes in marked as yours.
-            Works on an open entry or on the draft sitting in Studio. Ask which ones need work and I will scan everything published.
+            {studioMode
+              ? `Tell me what is wrong and what is right, in your own words. "Fact-checkers say the station is wrong, it is really Aarhus H" is enough, you do not have to say "correct it". Every claim gets checked before a word changes. A source that contradicts you wins and I will say so, and nothing settling it does not block you: if you gave me the value, it goes in marked as yours.`
+              : `Ask me anything about this page. I answer from what is actually stored, and if the entry does not say, I will look it up and show you the source. Nothing here changes the page: corrections happen in Studio, on the draft.`}
           </div>
         )}
         {log.map((l, i) => (
           <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: l.role === "you" ? "flex-end" : "flex-start", gap: 4 }}>
             <div style={bubble(l.role)}>{l.text}</div>
-            {l.retryAs && !busy && (
+            {l.retryAs && !busy && studioMode && (
               <button onClick={() => send(l.retryAs, true)}
                 style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                 Did you mean correct it? Run the correction pass
@@ -359,7 +399,7 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
       <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-end" }}>
         <textarea value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
-          placeholder={target ? `Paste a fact-check about ${target.name || "this draft"}, or just ask` : "Ask which entries need work"}
+          placeholder={!target ? "Ask which entries need work" : studioMode ? `Paste a fact-check about ${target.name || "this draft"}, or just ask` : `Ask anything about ${target.name || "this page"}`}
           rows={2}
           style={{ flex: 1, resize: "vertical", minHeight: 40, maxHeight: 160, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 12.5, padding: "8px 10px", outline: "none", fontFamily: "'Inter', sans-serif" }} />
         <button onClick={() => send()} disabled={busy || !input.trim()}

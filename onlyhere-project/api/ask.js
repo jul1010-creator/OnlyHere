@@ -1,0 +1,203 @@
+// /api/ask.js
+//
+// ── THE TRAVELER'S ASSISTANT, ANSWERED SERVER SIDE ───────────────────
+// Oliver, 7 Aug 2026: "There is a studio/admin assistant and a paid subscriber
+// assistant ready on every page to answer questions", and earlier, on cost:
+// give every logged-in traveler a small daily budget, enforced server side, no
+// paywall yet.
+//
+// WHY THIS IS A SERVER ROUTE AND NOT A FEW LINES IN THE COMPONENT.
+// A limit counted in the browser is not a limit. Anyone can open devtools, set
+// the counter to zero, and spend his Anthropic and Perplexity credit all night.
+// The count has to live somewhere the person asking cannot reach, which means
+// the database, written with the service role key, from here.
+//
+// THE SHAPE OF AN ANSWER, and it matches the Studio assistant on purpose:
+//   1. Answer from the published entry, which is the thing that was actually
+//      fact-checked. If it is in there, that is the answer and it is free of
+//      a live search.
+//   2. If the entry genuinely does not have it, the model says NOT_IN_ENTRY and
+//      Perplexity goes and looks, once, narrowly.
+//   3. The two are never blended. A looked-up answer says so and carries its
+//      sources, so a reader can always tell which kind they are holding.
+//
+// SETUP: exactly ONE new environment variable in Vercel.
+//
+//   SUPABASE_SERVICE_ROLE_KEY   Supabase > Project Settings > API > service_role
+//
+// It bypasses row level security, which is precisely why the quota can be
+// trusted and precisely why it must never be prefixed VITE_: Vite inlines
+// anything with that prefix straight into the public bundle.
+//
+// The project URL is NOT an environment variable, because it is not a secret.
+// It already ships inside the browser bundle in src/config.js, so asking Oliver
+// to copy it into Vercel would have been one more step protecting nothing.
+// ANTHROPIC_API_KEY and PERPLEXITY_API_KEY are already set for the existing
+// routes. The gemlyx_ask_log table is in SETUP_ASK.md.
+
+const DAILY_LIMIT = 10;          // per logged-in traveler, per UTC day
+const MAX_QUESTION = 500;        // characters. A question, not a document.
+const NOT_IN_ENTRY = "NOT_IN_ENTRY";
+
+const json = (res, code, body) => res.status(code).json(body);
+
+// The day key. UTC on purpose: a local-midnight reset would hand anyone willing
+// to change their clock a second allowance every day.
+const todayKey = () => new Date().toISOString().slice(0, 10);
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") return json(res, 405, { error: "POST only" });
+
+  // Public, and already in the client bundle. The env var is only here so a
+  // future project move needs no code change.
+  const SUPABASE_URL = process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co";
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const ANTHROPIC = process.env.ANTHROPIC_API_KEY;
+  if (!SERVICE_KEY) return json(res, 500, { error: "The question service is not switched on yet." });
+  if (!ANTHROPIC) return json(res, 500, { error: "The question service is not switched on yet." });
+
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return json(res, 401, { error: "Sign in to ask a question." });
+
+  // WHO IS ASKING. Supabase is asked to resolve the token rather than this
+  // route decoding it: a decoded JWT proves the shape of a string, not that the
+  // account still exists or that the session was not revoked.
+  let userId = null;
+  try {
+    const who = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` },
+    });
+    if (!who.ok) return json(res, 401, { error: "Your session has expired. Sign in again." });
+    const u = await who.json();
+    userId = u?.id;
+  } catch {
+    return json(res, 503, { error: "Could not verify your session just now." });
+  }
+  if (!userId) return json(res, 401, { error: "Sign in to ask a question." });
+
+  const { question, entry, entryName } = req.body || {};
+  const q = String(question || "").trim().slice(0, MAX_QUESTION);
+  if (!q) return json(res, 400, { error: "Ask me something first." });
+
+  // ── THE QUOTA ──────────────────────────────────────────────────────
+  // Counted from the log rather than an incrementing column, so a crash between
+  // "charge" and "answer" cannot leave someone charged for nothing. The row is
+  // written AFTER a successful answer for the same reason: a failed request
+  // should not cost a traveler one of their ten.
+  const day = todayKey();
+  let used = 0;
+  try {
+    const countRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/gemlyx_ask_log?select=id&user_id=eq.${userId}&day=eq.${day}`,
+      { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Prefer: "count=exact", Range: "0-0" } }
+    );
+    const range = countRes.headers.get("content-range") || "";
+    used = parseInt(range.split("/")[1], 10);
+    if (!Number.isFinite(used)) used = 0;
+  } catch {
+    // A quota that cannot be read must not become a quota that does not apply.
+    return json(res, 503, { error: "Could not check your question allowance just now. Try again in a moment." });
+  }
+  if (used >= DAILY_LIMIT) {
+    return json(res, 429, {
+      error: `That is your ${DAILY_LIMIT} questions for today. It resets at midnight UTC.`,
+      used, limit: DAILY_LIMIT,
+    });
+  }
+
+  const askClaude = async (prompt, maxTokens) => {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d?.error?.message || `Claude failed (${r.status})`);
+    return (d.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
+  };
+
+  try {
+    // 1. THE ENTRY FIRST. It is the only text here that has been fact-checked,
+    // so it outranks anything a model happens to know about Denmark.
+    const entryJson = JSON.stringify(entry || {}, null, 2).slice(0, 24000);
+    const first = await askClaude(
+      `You are Gemlyx's assistant, answering a traveler about ONE place they are reading about.
+
+Answer ONLY from the entry below. Never add a Danish fact the entry does not contain, and never fill a gap from general knowledge: this guide's whole value is that what it says has been checked.
+
+IF THE ENTRY DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} and one short sentence naming what is missing, and nothing else. Something else will go and look it up. Answering from memory instead is the one mistake that matters here.
+
+Be short and plain. No preamble. Never use an em dash or an en dash.
+
+Entry:
+${entryJson}
+
+Question:
+${q}`,
+      700
+    );
+
+    let answer = first;
+    let sources = [];
+    let lookedUp = false;
+
+    // 2. ONLY IF IT GENUINELY IS NOT THERE.
+    if (first.startsWith(NOT_IN_ENTRY)) {
+      const PPLX = process.env.PERPLEXITY_API_KEY;
+      if (!PPLX) {
+        answer = `The entry does not say, and I cannot look it up right now.`;
+      } else {
+        lookedUp = true;
+        const gap = first.slice(NOT_IN_ENTRY.length).replace(/^[\s:.-]+/, "").trim();
+        const pr = await fetch("https://api.perplexity.ai/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${PPLX}` },
+          body: JSON.stringify({
+            model: "sonar",
+            max_tokens: 500,
+            messages: [{
+              role: "user",
+              content: `Using real, current web search, answer this specific question about ${entryName || "this place"} in Denmark.
+
+Question: ${q}
+${gap ? `What is missing: ${gap}\n` : ""}
+Be short and concrete. Prefer the venue's own site, the organiser, or an official transport or tourism source over an aggregator. If you cannot confirm it, say exactly that rather than offering a likely answer.`,
+            }],
+          }),
+        });
+        const pd = await pr.json();
+        if (!pr.ok) throw new Error(pd?.error?.message || `Search failed (${pr.status})`);
+        const research = pd?.choices?.[0]?.message?.content || "";
+        sources = Array.isArray(pd?.citations) ? pd.citations.slice(0, 3) : [];
+        answer = research.trim()
+          ? await askClaude(
+              `Answer the traveler's question using ONLY the fresh research below. Short and direct. If the research does not actually settle it, say so plainly rather than hedging. Never use an em dash or an en dash.\n\nQuestion: ${q}\n\nFresh research:\n${research}`,
+              400
+            )
+          : "I could not find an answer to that just now.";
+      }
+    }
+
+    // 3. CHARGE ONLY FOR AN ANSWER THAT HAPPENED.
+    let spent = used;
+    try {
+      const logged = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_ask_log`, {
+        method: "POST",
+        headers: {
+          apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`,
+          "Content-Type": "application/json", Prefer: "return=minimal",
+        },
+        // The question text is stored so Oliver can see what travelers actually
+        // ask, which is the most useful signal this feature produces. No IP, no
+        // device, nothing beyond the account that already exists.
+        body: JSON.stringify({ user_id: userId, day, question: q, place: entryName || null, looked_up: lookedUp }),
+      });
+      if (logged.ok) spent = used + 1;
+    } catch { /* the answer is already written; losing the log entry is the cheaper failure */ }
+
+    return json(res, 200, { answer, sources, lookedUp, used: spent, limit: DAILY_LIMIT });
+  } catch (err) {
+    return json(res, 502, { error: String(err?.message || err) });
+  }
+}

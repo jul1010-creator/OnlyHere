@@ -7,6 +7,7 @@ import { ReviewsSection } from "./ReviewsSection";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, STAY_DISCLOSURE } from "../utils/affiliates";
+import { HowWeKnow } from "./HowWeKnow";
 import { events, majorEvents } from "../data/events";
 import { TOWN_COORDS } from "../data/towns";
 
@@ -434,6 +435,12 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             ))}
           </div>
         )}
+
+        {/* The provenance block. Renders only where there is real provenance
+            to show, so an entry with nothing behind it gets no badge at all.
+            Placed directly under the article, where someone who has just read a
+            claim is standing when they wonder where it came from. */}
+        <HowWeKnow item={item} />
 
         {/* Where this actually is. Renders only when the entry carries real
             verified coordinates, which today means towns; TOWN_COORDS is the

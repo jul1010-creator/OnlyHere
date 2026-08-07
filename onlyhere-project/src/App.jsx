@@ -56,6 +56,7 @@ import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
+import { AskGemlyx } from "./components/AskGemlyx";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
@@ -781,6 +782,15 @@ function GemlyxApp() {
   // can share the exact same API-calling logic instead of duplicating it.
   const [googlePrecheckRan, setGooglePrecheckRan] = useState(false);
   const [googleCheckLoading, setGoogleCheckLoading] = useState(false);
+  // ── "WHY WASN'T TRIPADVISOR AND THEIR WEBSITE CHECKED FOR THIS?" ──
+  // Oliver, in the Gemini feedback doc, about an Old Irish Pub draft whose
+  // uncertainties box was full of things the pub's own site and its TripAdvisor
+  // page answered outright. His fix, in his own words: "you can add on the
+  // studio where I tell the AI what websites it should go look at about
+  // uncertenties."
+  // A search engine picks its own sources and sometimes picks badly. When he
+  // already knows where the answer lives, typing it should beat hoping.
+  const [checkSites, setCheckSites] = useState("");
   const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
   const [googleCheckError, setGoogleCheckError] = useState(null);
   const [factCheckFixLoading, setFactCheckFixLoading] = useState(false);
@@ -810,7 +820,13 @@ function GemlyxApp() {
   const googleAICheck = async () => {
     if (!studioDraft || googleCheckLoading) return;
     setGoogleCheckLoading(true); setGoogleCheckError(null); setGoogleCheckResult(null);
-    const prompt = `Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${RESEARCH_SOURCE_RULES}\n\nDraft: ${JSON.stringify(studioDraft)}`;
+    // Sites he named, if any. Put FIRST in the prompt, because a source
+    // instruction buried after four rules gets weighted like a suggestion.
+    const named = checkSites.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+    const namedRule = named.length
+      ? `OPEN THESE SPECIFIC SOURCES FIRST, before any general search, and say what each one said: ${named.join(", ")}. If one of them answers something the draft left uncertain, that answer is what the entry should use. If a named source does not load or does not cover it, say so explicitly rather than quietly falling back to a search result.\n\n`
+      : "";
+    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${RESEARCH_SOURCE_RULES}\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
     if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
     setGoogleCheckResult({ text: result.text, citations: result.citations });
@@ -1211,7 +1227,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // time in publishDraft, so nothing any model does to them survives regardless.
       let frozenGeo = null;
       let frozenFactsText = "";
-      if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(sType)) {
+      // Nightlife added: a bar has an address like everything else here, and
+      // leaving it off the list was the reason a venue page could never show
+      // where it is. nightTown is a town by another name.
+      if (["town", "festival", "free", "booking", "food", "foodStreet", "night", "nightTown"].includes(sType)) {
         try {
           const coords = await geocodePlace(name);
           if (coords) {
@@ -1996,7 +2015,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
   // with nothing in front of it. Now it is Claude, with expectJson set so a
   // conversational reply gets one strict re-ask instead of failing the fact.
   // A fact that cannot be verified is returned as a failure, never saved.
-  const FACT_CATEGORIES = ["history", "attractions", "nature", "food", "nightlife"];
+  // "culture" added (Oliver, 7 Aug: "I would also appreciate if the 'facts
+  // generator' could include cultural norms in Denmark like janteloven").
+  // It is the category a traveler actually gets caught out by: nobody arrives
+  // unable to find a museum, they arrive not knowing that standing in a cycle
+  // lane is a real offence to real people.
+  const FACT_CATEGORIES = ["history", "attractions", "nature", "food", "nightlife", "culture"];
   const [factDrafts, setFactDrafts] = useState([]);      // drafted, not yet saved
   const [factBusy, setFactBusy] = useState(false);
   const [factStage, setFactStage] = useState(null);
@@ -2060,7 +2084,11 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
     setFactStage("Researching");
     const researchPrompt = subject
       ? `Find ONE genuinely interesting, specific, verifiable fact about ${subject} in Denmark. Prefer something a well-informed traveler would not already know. Give the fact plainly, and give the single best source URL that confirms it. If you cannot confirm anything specific and interesting, say exactly "NOTHING CONFIRMED".`
-      : `Pick ONE real, specific, verifiable fact about Denmark that an ordinary international traveler would find genuinely interesting. It can be about history, food, nature, design, language or daily life. Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the most obvious tourist facts (the Little Mermaid statue, LEGO, "happiest country"). State the subject, the fact, and the single best source URL that confirms it. If you cannot confirm one, say exactly "NOTHING CONFIRMED".`;
+      : `Pick ONE real, specific, verifiable fact about Denmark that an ordinary international traveler would find genuinely interesting. It can be about history, food, nature, design, language, daily life, or A CULTURAL NORM: an unwritten rule of behaviour a visitor would not know and could get wrong. Janteloven, cycle-lane etiquette, how tipping actually works, why nobody makes small talk on the bus, what hygge is used to mean in practice rather than in marketing, Sunday opening, splitting the bill, taking your shoes off indoors.
+
+CULTURAL NORMS NEED MORE CARE THAN OTHER FACTS, NOT LESS. They are the easiest thing on this list to state confidently and wrongly, because the popular version is usually a flattened stereotype. Two rules: name the real origin where there is one (Janteloven is a set of rules from Aksel Sandemose's 1933 novel En flygtning krydser sit spor, satirising a fictional town, and Danes argue about how much it still applies, so it must never be presented as an official code Danes follow), and describe what people actually DO rather than what a listicle says they are like. If the honest version is "this is contested", that IS the interesting fact, and it is more useful to a traveler than a tidy one.
+
+Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the most obvious tourist facts (the Little Mermaid statue, LEGO, "happiest country"). State the subject, the fact, and the single best source URL that confirms it. If you cannot confirm one, say exactly "NOTHING CONFIRMED".`;
     let research;
     try {
       // askPerplexity also returns an object, so the retry predicate must look at
@@ -2413,6 +2441,57 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   // Meant to be clicked periodically (Oliver said weekly) rather than on every
   // visit — capped per run so a click doesn't silently burn a huge API bill.
   const UPDATE_EVENTS_BATCH_CAP = 20;
+
+  // ── BACKFILL THE MISSING COORDINATES ───────────────────────────────
+  // Storing coordinates for every content type (see publishDraft) only helps
+  // entries published AFTER it. Everything already live still has none, so the
+  // mini map still shows on towns only and "what else is near this" has nothing
+  // to work with. This walks the published rows that are missing them, geocodes
+  // each one, and patches just those two fields.
+  //
+  // WHY IT ONLY EVER ADDS: a row that already has __lat/__lon is skipped
+  // entirely, so this can never overwrite a verified coordinate with a fresh
+  // geocode. Nominatim is also rate-limited by etiquette, hence the deliberate
+  // pause between lookups rather than firing them all at once.
+  const [geoFixState, setGeoFixState] = useState(null); // null | {running, done, total, fixed, failed:[]}
+  const backfillCoordinates = async () => {
+    if (geoFixState?.running) return;
+    setGeoFixState({ running: true, done: 0, total: 0, fixed: 0, failed: [] });
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
+      });
+      const rows = await res.json();
+      if (!Array.isArray(rows)) { setGeoFixState({ running: false, done: 0, total: 0, fixed: 0, failed: ["Could not read the published rows."] }); return; }
+      const missing = rows.filter(r => r?.payload?.name && (r.payload.__lat == null || r.payload.__lon == null));
+      setGeoFixState({ running: true, done: 0, total: missing.length, fixed: 0, failed: [] });
+      let fixed = 0; const failed = [];
+      for (let i = 0; i < missing.length; i++) {
+        const row = missing[i];
+        // The town or city the entry names is real context: "Ribers Gaard" alone
+        // geocodes badly, "Ribers Gaard, Ribe" does not.
+        const where = row.payload.town || row.payload.city || row.payload.location || row.payload.region || "";
+        let coords = null;
+        try { coords = await geocodePlace(where && !row.payload.name.includes(where) ? `${row.payload.name}, ${where}` : row.payload.name); } catch { /* handled below */ }
+        if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lon)) {
+          const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+            method: "PATCH",
+            headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({ payload: { ...row.payload, __lat: coords.lat, __lon: coords.lon } }),
+          });
+          if (patch.ok) fixed++; else failed.push(`${row.payload.name}: save failed (${patch.status})`);
+        } else {
+          failed.push(`${row.payload.name}: could not be located`);
+        }
+        setGeoFixState({ running: true, done: i + 1, total: missing.length, fixed, failed });
+        await new Promise(r => setTimeout(r, 1100)); // Nominatim asks for one request a second. Honour it.
+      }
+      setGeoFixState({ running: false, done: missing.length, total: missing.length, fixed, failed });
+      if (fixed > 0) refreshLiveContent();
+    } catch (err) {
+      setGeoFixState({ running: false, done: 0, total: 0, fixed: 0, failed: [String(err?.message || err)] });
+    }
+  };
   const updateCurrentEvents = async () => {
     if (updateEventsLoading) return;
     setUpdateEventsLoading(true); setUpdateEventsError(null); setUpdateEventsResults(null); setUpdateEventsProgress(null);
@@ -2631,8 +2710,21 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       // an edit of an older published row has no matching studioFrozenGeo to apply.
       if (!isEditing && studioFrozenGeo) {
         if ("nearestStation" in shaped && studioFrozenGeo.station) shaped.nearestStation = studioFrozenGeo.station;
-        if ("__lat" in shaped) shaped.__lat = studioFrozenGeo.lat;
-        if ("__lon" in shaped) shaped.__lon = studioFrozenGeo.lon;
+        // ── OPEN FINDING 4, FIXED AT THE SOURCE ────────────────────
+        // These two lines used to read `if ("__lat" in shaped)`, and only the
+        // TOWN shape declares those keys, so every festival, attraction, food
+        // spot and bar was published with no coordinates at all. That is the
+        // whole reason PlaceMiniMap only ever appeared on towns: not a map
+        // problem, a storage problem, exactly as handoff 6 suspected.
+        //
+        // The geo is already measured by this point, from real geocoding, and
+        // it is the same value the draft was written against. Writing it for
+        // every type makes the map appear on those pages by itself, and makes
+        // "what else is near this" possible at all.
+        if (Number.isFinite(studioFrozenGeo.lat) && Number.isFinite(studioFrozenGeo.lon)) {
+          shaped.__lat = studioFrozenGeo.lat;
+          shaped.__lon = studioFrozenGeo.lon;
+        }
       }
       // Same enforcement for stay duration — never let the model's guess survive
       // when a reliable category-based real duration exists. Free-entrance items
@@ -3917,10 +4009,12 @@ If the conversation only covers a single day or a few stops with no explicit day
     const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce) { setEntered(true); window.scrollTo(0, 0); return; }
     setLeaving(true);
-    // Matches gxaEnter's duration below. A timer rather than animationend
-    // because the animation runs on a child, and a backgrounded tab must not
-    // be able to strand someone on a half-faded landing page forever.
-    setTimeout(() => { setEntered(true); window.scrollTo(0, 0); }, 720);
+    // A timer rather than animationend because the animation runs on a child,
+    // and a backgrounded tab must not be able to strand someone on a half-lit
+    // landing page forever.
+    // 700ms, against the 780ms portal: the swap happens while the screen is
+    // already white, so the landing is never seen disappearing.
+    setTimeout(() => { setEntered(true); window.scrollTo(0, 0); }, 700);
   };
   // Corner-flight opening splash (restored per Oliver: "darkness, logo spins
   // while the background fades in, settles in the corner" — a prior pass had
@@ -5459,6 +5553,38 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       </div>
                     )}
 
+                    {/* ── ADD THE MISSING COORDINATES ────────────────────
+                        Everything published before coordinates were stored for
+                        non-town types has none, so the mini map still only
+                        appears on towns. This fills them in once. It only ever
+                        ADDS: a row that already has coordinates is skipped, so
+                        it cannot overwrite a verified pin with a geocode. */}
+                    <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: geoFixState ? 10 : 0 }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>📍 Add missing coordinates</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Finds published entries with no pin and geocodes them. Entries that already have one are left alone. About a second each.</div>
+                        </div>
+                        <button onClick={backfillCoordinates} disabled={geoFixState?.running}
+                          style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+                          {geoFixState?.running ? `${geoFixState.done}/${geoFixState.total}` : "Run it"}
+                        </button>
+                      </div>
+                      {geoFixState && !geoFixState.running && (
+                        <div style={{ fontSize: 11.5, color: C.light }}>
+                          {geoFixState.total === 0
+                            ? "Every published entry already has coordinates."
+                            : `Located ${geoFixState.fixed} of ${geoFixState.total}. Reload to see the maps appear.`}
+                          {geoFixState.failed.length > 0 && (
+                            <div style={{ marginTop: 6, fontSize: 11, color: "#FFB347" }}>
+                              {geoFixState.failed.length} could not be placed, so they were left without a pin rather than given a wrong one:
+                              <div style={{ color: C.muted, marginTop: 3 }}>{geoFixState.failed.slice(0, 6).join(" · ")}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {studioType === "festival" && (
                       <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: updateEventsResults || updateEventsError ? 10 : 0 }}>
@@ -5720,9 +5846,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             style={{ width: "100%", background: "none", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginTop: 10, marginBottom: 8, fontFamily: "'Inter', sans-serif" }}>
                             {verifyLoading ? "Searching…" : "🔎 Verify dates, prices & venue names"}
                           </button>
+                          {/* Name the sources yourself when you already know
+                              where the answer is. See checkSites above. */}
+                          <input value={checkSites} onChange={e => setCheckSites(e.target.value)}
+                            placeholder="Sites to open first, e.g. oldirishpub.dk tripadvisor.com"
+                            style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 11, color: C.text, outline: "none", fontFamily: "monospace", marginBottom: 6, boxSizing: "border-box" }} />
                           <button onClick={googleAICheck} disabled={googleCheckLoading}
                             style={{ width: "100%", background: "none", border: "1px solid #4285F466", color: "#8AB4F8", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                            {googleCheckLoading ? "Asking Perplexity…" : "◆ Ask Perplexity to fact-check this"}
+                            {googleCheckLoading ? "Asking Perplexity…" : `◆ Ask Perplexity to fact-check this${checkSites.trim() ? " (using your sources)" : ""}`}
                           </button>
                         </div>
 
@@ -5939,35 +6070,89 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 </div>
               </div>
 
-              {/* WHAT'S ON. Real published festivals with real dates, soonest
-                  first, past ones already dropped by isUpcoming. If nothing is
-                  upcoming the whole block disappears rather than showing an
-                  empty shelf, which is the same rule the rest of the app uses. */}
+              {/* ── THIS WEEK'S PICKS ──────────────────────────────────
+                  Oliver, 7 Aug, looking at the live page: "You have a 'live
+                  events and coming events'. And then underneath you have more
+                  'current events and coming events'. Maybe make sections that
+                  change every week or something. Like 'trendy attractions and
+                  places' and 'Hidden Gems'. But only a few. Not a whole gallery."
+                  He is right and it was my mistake. The section I put here
+                  listed Skanderborg Festival and Bork Vikingemarked as large
+                  cards, roughly 200 pixels under the LIVE EVENTS strip that was
+                  already listing Skanderborg Festival and Bork Vikingemarked.
+                  Same two events, twice, on one screen.
+                  So the events belong to the strip, and this space becomes the
+                  thing the strip cannot be: a small, changing, editorially
+                  chosen handful from ANY category.
+                  THE ROTATION IS BY WEEK, NOT RANDOM. A random pick would
+                  reshuffle on every navigation, so the front page would never
+                  look the same twice and nothing would feel chosen. Seeding
+                  from the week number means it is stable for seven days,
+                  identical for every visitor, and moves on by itself.
+                  ENTRIES WITH A REAL PHOTO WIN. The duplicated section also
+                  showed a wall of letter monograms, because most events have no
+                  photo yet. Picking only a few means it can afford to prefer
+                  the ones that look like something. */}
               {(() => {
-                const soon = [...events, ...majorEvents, ...vikingEvents]
-                  .filter(e => isUpcoming(e.date) || isCurrentlyLive(e.date, e.dateEnd))
-                  .sort((a, b) => new Date(a.date) - new Date(b.date))
-                  .slice(0, 6);
-                if (soon.length === 0) return null;
+                // Stable per week. Deterministic, so the same week always deals
+                // the same hand rather than a fresh one on every render.
+                const week = Math.floor(Date.now() / 604800000);
+                const rand = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+                const dealt = (pool, n, seed) => {
+                  const r = rand(seed);
+                  const a = pool.slice();
+                  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+                  return a.slice(0, n);
+                };
+                const withPhoto = (x) => !!x.photo;
+                const pool = [
+                  ...towns.map(x => ({ ...x, _src: "town", _where: x.region })),
+                  ...freeEntrance.map(x => ({ ...x, _src: "free", _where: x.city })),
+                  ...foodSpots.map(x => ({ ...x, _src: "food", _where: x.location || x.city })),
+                  ...nightlifeSpots.map(x => ({ ...x, _src: "nightlife", _where: x.location || x.city })),
+                  ...craftItems.map(x => ({ ...x, _src: "craft", _where: x.location })),
+                ].filter(x => x.name);
+                const lenses = [
+                  { key: "gems", title: "Hidden gems this week", sub: "Places most visitors never reach",
+                    pick: (x) => x.popularityTag === "Hidden Gem" || x.tier === "Worth Considering" },
+                  { key: "trend", title: "Worth the trip right now", sub: "The ones we would go out of our way for",
+                    pick: (x) => x.tier === "Can't Miss Out" || x.nomiPotential === "Very High" || x.popularityTag === "Popular" },
+                ];
+                const rows = lenses.map((lens, li) => {
+                  const matched = pool.filter(lens.pick);
+                  // Photos first, then anything, so a thin category still fills
+                  // the row rather than leaving a gap.
+                  const ranked = [...matched.filter(withPhoto), ...matched.filter(x => !withPhoto(x))];
+                  return { ...lens, items: dealt(ranked, 3, week * 31 + li) };
+                }).filter(r => r.items.length > 0);
+                if (rows.length === 0) return null;
                 return (
-                  <div style={{ padding: "20px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
-                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase" }}>What's on in Denmark</div>
-                        <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Soonest first, and every date is checked against the organiser</div>
+                  <div style={{ padding: "22px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+                    {rows.map(row => (
+                      <div key={row.key} style={{ marginBottom: 22 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase" }}>{row.title}</div>
+                        <div style={{ fontSize: 12, color: C.muted, margin: "3px 0 12px" }}>{row.sub}</div>
+                        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+                          {row.items.map(x => (
+                            <button key={`${x._src}-${x.id}`} onClick={() => openStopDetail(x)}
+                              style={{ flexShrink: 0, width: 236, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 0, overflow: "hidden", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              <div style={{ height: 116, position: "relative" }}>
+                                <PhotoPlate photo={x.photo} name={x.name} color={x.color || C.gold} />
+                              </div>
+                              <div style={{ padding: "9px 11px 11px" }}>
+                                <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</div>
+                                <div style={{ fontSize: 11, color: C.muted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {[{ town: "Town", free: "Free entry", food: "Food", nightlife: "Nightlife", craft: "Workshop" }[x._src], x._where].filter(Boolean).join(" · ")}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <button onClick={() => { goTab("events"); window.scrollTo(0, 0); }}
-                        style={{ background: "none", border: "none", color: C.gold, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
-                        All events →
-                      </button>
-                    </div>
-                    <div className="cards-grid">
-                      {soon.map(e => <EventCard key={`${e.id}-${e.name}`} event={e} />)}
-                    </div>
+                    ))}
                   </div>
                 );
               })()}
-
               {/* NEAR YOU. Only for someone actually standing in Denmark:
                   isInDenmark already gates nearYou, and a distance shown to
                   someone browsing from abroad before they have booked is noise.
@@ -7244,6 +7429,26 @@ You also have a web_search tool. Use it whenever someone asks about something th
             .gxa-why { opacity:0; transform: translate3d(0, 8px, 0);
               transition: opacity .7s ease-out .72s, transform .7s cubic-bezier(.16,.84,.36,1) .72s; }
             .gxa-choose.gxa-in .gxa-why { opacity:1; transform:none; }
+            /* ── LIFE IN THE DENMARK PANEL (Oliver, 7 Aug: "can the front-page
+               kinda shine the 'Denmark' panel up a bit? Give it some life") ──
+               Three slow things, none of them fast enough to read as animation:
+               a sheen crossing the card, the gold edge breathing, and the photo
+               inside drifting. The sheen is on a long cycle on purpose. A card
+               that glints every two seconds is a casino; one that catches the
+               light every eleven is alive. */
+            .gxa-card { position:relative; overflow:hidden; animation: gxaCardGlow 7.5s ease-in-out infinite alternate; }
+            .gxa-card::after { content:""; position:absolute; top:-60%; bottom:-60%; width:55%; left:-70%; pointer-events:none; z-index:3;
+              background:linear-gradient(100deg, transparent 0%, rgba(255,244,214,.13) 42%, rgba(255,248,228,.26) 50%, rgba(255,244,214,.13) 58%, transparent 100%);
+              transform:skewX(-14deg); animation: gxaSheen 11s cubic-bezier(.5,0,.5,1) 2.4s infinite; }
+            @keyframes gxaSheen { 0% { left:-70%; } 26% { left:130%; } 100% { left:130%; } }
+            @keyframes gxaCardGlow {
+              from { box-shadow: 0 24px 70px -20px rgba(0,0,0,0.85), 0 0 0 1px rgba(217,164,65,0.10); }
+              to   { box-shadow: 0 26px 76px -18px rgba(0,0,0,0.88), 0 0 22px -2px rgba(217,164,65,0.30), 0 0 0 1px rgba(217,164,65,0.30); }
+            }
+            .gxa-cardphoto { animation: gxaCardPhoto 30s ease-in-out infinite alternate; transform-origin: 68% 42%; }
+            @keyframes gxaCardPhoto { from { transform:scale(1.03); } to { transform:scale(1.12); } }
+            .gxa-live { animation: gxaLive 3.4s ease-in-out infinite; }
+            @keyframes gxaLive { 0%,100% { box-shadow:0 0 0 0 rgba(143,227,175,0); } 45% { box-shadow:0 0 0 4px rgba(143,227,175,0.16); } }
             /* BUG FIX (Oliver: "flies up but doesn't settle"): this was 0.5s —
                the real corner logo used to only reach full opacity a HALF
                SECOND after the flying compass had already vanished (it
@@ -7252,23 +7457,37 @@ You also have a web_search tool. Use it whenever someone asks about something th
                the flight lands. Shortened so the real logo appears
                essentially the same instant the compass does. */
             .gxa-topbar { transition: opacity 0.15s ease-out; }
-            /* The exit. The scene pushes forward and past you while the light
-               through the gate blows out, the front layer travelling furthest
-               because it is the nearest thing to the eye, which is the same
-               depth cue the pointer parallax uses, just resolved in one move.
-               The interface leaves first so nothing is floating over the zoom,
-               and the whole layer fades on the last third so the app is already
-               there when it clears. */
+            /* ── THROUGH THE PORTAL (Oliver, 7 Aug: "the zoom in is very
+               poor animated, sorry. Maybe a 'opening book' can also work or a
+               open portal") ────────────────────────────────────────────
+               He was right, and the cause was not the easing curve. The old
+               version scaled the 5504px painting to 1.62x AND a second masked
+               copy of it to 2.35x, at the same time, for 720ms. That is an
+               enormous amount of bitmap to resample every frame, so it dropped
+               frames, and a slow move that stutters reads as cheap no matter
+               what curve it is on.
+               The painting is already a stone arch with a lit path through it,
+               so the honest transition was never a camera zoom, it was walking
+               into the gate. What animates now is ONE small radial glow sitting
+               at the archway, growing until it fills the screen and washes
+               everything white. The scene itself barely moves: a 4% drift, just
+               enough to feel like stepping forward. A single scaling gradient
+               costs the GPU almost nothing, so this cannot stutter the way the
+               zoom did, and the white-out covers the swap completely. */
             .gxa-root { transform-origin: 50% 46%; }
-            .gxa-leaving { animation: gxaEnterFade .72s ease-in forwards; pointer-events:none; }
-            .gxa-leaving .gxa-kb { animation: gxaEnterZoom .72s cubic-bezier(.42,0,.72,.44) forwards; }
-            .gxa-leaving .gxa-front { animation: gxaEnterFront .72s cubic-bezier(.42,0,.72,.44) forwards; }
-            .gxa-leaving .gxa-archlight { animation: gxaEnterLight .72s ease-in forwards; }
-            .gxa-leaving .gxa-choose, .gxa-leaving .gxa-topbar { opacity:0 !important; transition: opacity .2s ease-in !important; }
-            @keyframes gxaEnterZoom  { to { transform: scale(1.62); } }
-            @keyframes gxaEnterFront { to { transform: scale(2.35); opacity:0; } }
-            @keyframes gxaEnterLight { 0% { opacity:1; } 55% { opacity:1; transform:scale(1.9); } 100% { opacity:0; transform:scale(3.4); } }
-            @keyframes gxaEnterFade  { 0% { opacity:1; } 62% { opacity:1; } 100% { opacity:0; } }
+            .gxa-leaving { pointer-events:none; }
+            .gxa-leaving .gxa-kb { animation: gxaStepIn .78s cubic-bezier(.36,0,.62,.5) forwards; }
+            .gxa-leaving .gxa-front { animation: gxaStepFront .78s cubic-bezier(.36,0,.62,.5) forwards; }
+            .gxa-leaving .gxa-choose, .gxa-leaving .gxa-topbar { opacity:0 !important; transition: opacity .18s ease-in !important; }
+            /* The gate itself. Pinned to the arch, sized in vmax so it is
+               guaranteed to cover any screen shape by the time it is done. */
+            .gxa-portal { position:absolute; left:var(--gx-ax,50%); top:var(--gx-ay,31%); width:26vmax; height:26vmax;
+              margin:-13vmax 0 0 -13vmax; border-radius:50%; pointer-events:none; z-index:40; opacity:0; transform:scale(.12);
+              background:radial-gradient(circle, #FFFFFF 0%, #FFF6DF 26%, rgba(255,226,160,.92) 46%, rgba(255,205,120,.55) 64%, transparent 78%); }
+            .gxa-leaving .gxa-portal { animation: gxaPortal .78s cubic-bezier(.5,0,.72,.42) forwards; }
+            @keyframes gxaPortal { 0% { opacity:0; transform:scale(.12); } 18% { opacity:.95; } 100% { opacity:1; transform:scale(9); } }
+            @keyframes gxaStepIn { to { transform: scale(1.04); } }
+            @keyframes gxaStepFront { to { transform: scale(1.09); } }
             /* OPENING SPLASH, corner-flight version (restored per Oliver: darkness,
                the compass spins while the background fades in behind it, then it
                flies and settles into the actual corner logo's spot, and ONLY once
@@ -7313,7 +7532,8 @@ You also have a web_search tool. Use it whenever someone asks about something th
               .gxa-brand.gxa-lit, .gxa-brand.gxa-lit::after, .gxa-brand.gxa-lit::before { animation: none !important; }
               .gxa-choose { transform: none !important; }
               .gxa-why { opacity:1 !important; transform:none !important; }
-              .gxa-leaving, .gxa-leaving .gxa-kb, .gxa-leaving .gxa-front, .gxa-leaving .gxa-archlight { animation: none !important; }
+              .gxa-card, .gxa-card::after, .gxa-cardphoto, .gxa-live { animation: none !important; }
+              .gxa-leaving, .gxa-leaving .gxa-kb, .gxa-leaving .gxa-front, .gxa-leaving .gxa-portal { animation: none !important; }
               .gxa-choose, .gxa-topbar { transition: none !important; }
               .gxa-fly { opacity: 0 !important; }
               .gxa-choose, .gxa-topbar { opacity: 1 !important; }
@@ -7392,6 +7612,11 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div key={i} className="gxa-glow" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.916}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(255,190,90,0.5) 0%, rgba(255,160,60,0.18) 45%, transparent 70%)", animationDelay: `${i * 0.9}s` }} />
               ))}
               <div className="gxa-archlight" style={{ left: `${LANDING_ART.arch[0]}%`, top: `${LANDING_ART.arch[1]}%`, width: `${LANDING_ART.arch[2]}%`, aspectRatio: "1.2", background: "radial-gradient(circle, rgba(255,214,140,0.4) 0%, rgba(255,190,110,0.14) 50%, transparent 72%)" }} />
+              {/* The doorway light, dark until you step through it. Centred on
+                  the arch opening of whichever painting is on screen, so it
+                  opens where the path actually is and not in the middle of a
+                  tree. */}
+              <div className="gxa-portal" style={{ "--gx-ax": `${LANDING_ART.arch[0] + LANDING_ART.arch[2] / 2}%`, "--gx-ay": `${LANDING_ART.arch[1] + LANDING_ART.arch[2] * 0.42}%` }} />
               {LANDING_ART.shrooms.map(([x, y, s], i) => (
                 <div key={i} className="gxa-shroom" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.916}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(110,225,255,0.4) 0%, rgba(90,190,240,0.14) 48%, transparent 72%)", animationDelay: `${i * 2.1}s` }} />
               ))}
@@ -7442,14 +7667,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 Denmark" while it's still invisible. */}
             <div className={`gxa-choose${introFlightDone ? " gxa-in" : ""}`} style={{ width: "100%", maxWidth: 340, pointerEvents: introFlightDone ? "auto" : "none", opacity: introFlightDone ? 1 : 0 }}>
               {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "68% 42%" }].map(cn => (
-                <div key={cn.id} style={{ background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, overflow: "hidden", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
+                <div key={cn.id} className="gxa-card" style={{ background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
                   <div style={{ height: 158, position: "relative", overflow: "hidden" }}>
-                    <img src={cn.photo} alt={cn.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: cn.photoPos }} />
+                    <img className="gxa-cardphoto" src={cn.photo} alt={cn.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: cn.photoPos }} />
                     <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(12,11,7,0.72), transparent 55%)" }} />
                     <div style={{ position: "absolute", bottom: 10, left: 14, display: "flex", alignItems: "center", gap: 8 }}>
                       <FlagDK height={12} />
                       <span style={{ fontSize: 18, fontWeight: 600, fontFamily: "'Fraunces', serif", color: "#F5F2E8" }}>{cn.name}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: "#8FE3AF", background: "rgba(110,207,151,0.16)", border: "1px solid rgba(110,207,151,0.32)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
+                      <span className="gxa-live" style={{ fontSize: 10, fontWeight: 700, color: "#8FE3AF", background: "rgba(110,207,151,0.16)", border: "1px solid rgba(110,207,151,0.32)", borderRadius: 100, padding: "3px 9px", letterSpacing: 0.5, textTransform: "uppercase" }}>Live</span>
                     </div>
                   </div>
                   <div style={{ padding: "12px 14px 14px" }}>
@@ -7642,6 +7867,22 @@ You also have a web_search tool. Use it whenever someone asks about something th
           navigation between the tabs and sits above an open entry page. It is
           handed whichever detail page is currently open, which is what turns
           "this one is wrong" into a specific row without a screenshot. */}
+      {/* ── THE TRAVELER'S ASSISTANT ───────────────────────────────
+          The second of the two Oliver described: on every entry page, questions
+          only, never able to change anything. It renders whether or not someone
+          is signed in, because the sign-in prompt is how a reader finds out the
+          feature exists at all; the server refuses anything without a valid
+          token, so an anonymous visitor gets a button and nothing else.
+          Anchored to whichever entry page is open, since a question needs
+          something to be about. General trip questions already have a home in
+          Gemlyx Detour. */}
+      {(() => {
+        const reading = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail || craftDetail;
+        const readingKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
+        if (!reading) return null;
+        return <AskGemlyx session={userSession} item={reading} kind={readingKind} onSignIn={() => setAuthOpen(true)} />;
+      })()}
+
       {studioSession && (() => {
         const openDetail = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail;
         const openKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : null;
