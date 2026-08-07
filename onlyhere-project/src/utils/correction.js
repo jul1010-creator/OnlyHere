@@ -87,10 +87,16 @@ export const resolveField = (entry, hint) => {
 // holding a guessed value is the failure mode this project keeps hitting.
 export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "gemlyxFind", "desc", "blogBody", "intro", "body"];
 
+// A claim reaches the patch step under one of two verdicts. "confirmed" means a
+// primary source backed it. "asserted" means nothing settled it either way and
+// Oliver supplied the value himself, so it is applied on his authority and
+// labelled as such. See THE FOUNDER IS NOT GEMINI below for why that exists.
+export const APPLIED_VERDICTS = new Set(["confirmed", "asserted"]);
+
 export const allowedFieldsFor = (entry, claims) => {
   const out = new Set();
   for (const c of claims) {
-    if (c.verdict !== "confirmed") continue;
+    if (!APPLIED_VERDICTS.has(c.verdict)) continue;
     const f = resolveField(entry, c.field);
     if (f) out.add(f);
     else PROSE_FIELDS.forEach(p => { if (p in (entry || {})) out.add(p); });
@@ -171,8 +177,8 @@ Absolute rules:
 - A short At a Glance field takes a NAME or a VALUE, never a sentence, never advice to the reader, never a hedge. If the right value is unknown, leave it as an empty string.
 - If applying a correction makes an existing sentence wrong, fix that sentence too, but only inside the keys listed above.
 
-Verified corrections:
-${confirmed.map((c, i) => `${i + 1}. Field: ${c.field}. What was wrong: ${c.says}. The verified correct value: ${c.correctValue || c.proposed}. Source: ${c.sourceUrl || "verified by live routing data"}`).join("\n")}
+Corrections to apply:
+${confirmed.map((c, i) => `${i + 1}. Field: ${c.field}. What was wrong: ${c.says}. The correct value: ${c.correctValue || c.proposed}. ${c.verdict === "asserted" ? "Given by the site's founder. Write it as stated, plainly and without hedging. Do not add \"reportedly\" or \"said to be\"." : `Source: ${c.sourceUrl || "verified by live routing data"}`}`).join("\n")}
 
 Respond with ONLY the complete corrected JSON object, nothing before or after.
 
@@ -260,15 +266,55 @@ export const verifyTransportClaim = async (claim, entry, { directions, origin = 
 export const CORRECT_INTENT = /\b(correct|fix|change|update|amend|rewrite|redo|apply|patch)\b/i;
 export const AUDIT_INTENT = /\b(which|what) (ones?|entries|towns|pages|are)\b|needs? (a )?(redraft|work|fixing)|worst|audit|scan (them|everything|all)/i;
 
+// ── WHY THIS GOT REWRITTEN (Oliver, 7 Aug 2026) ─────────────────────
+// "the AI assistant that is meant to put in the newly fact-checked things is
+// not thaaat great... I would like to have an AI I can write to after the draft
+// where I can say 'Fact-checkers say bla bla bla is wrong, and that really bla
+// bla bla is true.'"
+//
+// The first version demanded an imperative verb. Run his own sentence through
+// it and it routes to "ask", so the assistant discusses the fact-check instead
+// of applying it. Five of six realistic correction messages did the same:
+//
+//   "The station is wrong. It should be Aarhus H."                    -> ask
+//   "Google says the date is wrong, it is actually 25 August."        -> ask
+//   "This says the ferry is required but that is not true."           -> ask
+//
+// Nobody types "correct it" every time. A correction is not an imperative, it
+// is an ASSERTION: something is wrong, and here is what is right. Either half
+// on its own is enough of a tell, because a person does not say "should be
+// Aarhus H" to make conversation.
+export const WRONG_HALF = /\b(wrong|incorrect|inaccurate|untrue|false|mistaken|a mistake|an error|errors?|not right|isn'?t right|not true|isn'?t true|not correct|doesn'?t exist|does not exist|misleading|misleads)\b/i;
+export const RIGHT_HALF = /\b(should (be|say|read|actually)|shouldn'?t (be|say)|it'?s actually|is actually|actually is|actually,|\breally\b|in fact|in reality|the real |the correct |instead of|rather than|supposed to be)\b/i;
+
+// A question is answered, never acted on, even when it is about something being
+// wrong. Guessing "correct" on "is the ferry thing right?" would run a whole
+// verification pass because he wondered aloud.
+export const QUESTION = /^\s*(why|what|how|is|are|does|do|did|can|could|should|would|which|who|when|where|was|were|any|anything)\b|\?\s*$/i;
+
 export const routeMessage = (text) => {
   const t = String(text || "").trim();
   if (!t) return "ask";
   if (AUDIT_INTENT.test(t) && !CORRECT_INTENT.test(t)) return "audit";
+  // An explicit instruction wins over everything, including a question mark:
+  // "why is this wrong? fix it" is an instruction with a preamble.
   if (CORRECT_INTENT.test(t)) return "correct";
+  if (QUESTION.test(t)) return "ask";
+  if (WRONG_HALF.test(t) || RIGHT_HALF.test(t)) return "correct";
   // A long paste with no instruction is a fact-check dropped in whole. That is
   // still a correction request, it just did not come with a covering sentence.
   if (t.length > 400 && /\b(wrong|incorrect|inaccurate|error|should be|actually|resolved|verify)\b/i.test(t)) return "correct";
   return "ask";
+};
+
+// The one-tap escape hatch for everything the router still answers instead of
+// acting on. When a message reads like it MIGHT be a correction, the reply
+// carries a "Correct it" button, so a wrong guess costs a tap and never a
+// retype. This is the safe direction to be wrong in: answering is free.
+export const offersCorrection = (text) => {
+  const t = String(text || "").trim();
+  if (!t || routeMessage(t) !== "ask") return false;
+  return WRONG_HALF.test(t) || RIGHT_HALF.test(t) || t.length > 200;
 };
 
 // The read-only half. Answers about an entry from the entry itself plus its
@@ -356,18 +402,49 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
     });
   }
 
+  // ── THE FOUNDER IS NOT GEMINI (Oliver, 7 Aug 2026) ─────────────────
+  // Rule 1 at the top of this file, that criticism is a lead and not a source,
+  // was written about a MODEL's criticism, and it is still right about that.
+  // Applied to Oliver himself it produced a tool that ignored him: he types
+  // "really it is X", no primary source turns up, the claim lands as unresolved
+  // and NOTHING CHANGES. Handoff 6 records the opposite of that instinct,
+  // "he is right more often than the fact-checker is", with the Samso ferry as
+  // the case in point.
+  //
+  // So silence no longer blocks him, but evidence still overrules him:
+  //   rejected   a source actively CONTRADICTS the claim. Never applied. This
+  //              is the protection that caught Gemini's 90-minute ferry, and it
+  //              is untouched.
+  //   unresolved nothing settled it either way. If he supplied a value, it is
+  //              applied on his authority as "asserted", labelled in the verdict
+  //              list, in uncertainties and in __corrections, so it is never
+  //              mistaken later for something a source confirmed.
+  //   unresolved with no value supplied. Still changes nothing, because there
+  //              is nothing to write.
+  const asserted = [];
+  for (const v of verified) {
+    if (v.verdict !== "unresolved") continue;
+    const value = String(v.proposed || "").trim();
+    if (!value) continue;
+    v.verdict = "asserted";
+    v.correctValue = value;
+    v.evidence = `Applied on your word. Nothing contradicted it, and no primary source confirmed it either. ${v.evidence || ""}`.trim();
+    asserted.push(v);
+  }
+
   const confirmed = verified.filter(v => v.verdict === "confirmed");
   const rejected = verified.filter(v => v.verdict === "rejected");
   const unresolved = verified.filter(v => v.verdict === "unresolved");
+  const applying = [...confirmed, ...asserted];
 
-  if (confirmed.length === 0) {
-    return { claims: verified, confirmed, rejected, unresolved, patched: null, changed: [], reverted: [], unchangedReason: "Nothing was confirmed, so the entry was left exactly as it is." };
+  if (applying.length === 0) {
+    return { claims: verified, confirmed, rejected, unresolved, asserted, patched: null, changed: [], reverted: [], unchangedReason: "Nothing was confirmed, and nothing came with a value to apply, so the entry was left exactly as it is." };
   }
 
   // 3. patch, scoped
-  stage("Applying the confirmed corrections", 82);
-  const allowed = allowedFieldsFor(entry, confirmed);
-  const patchRaw = await askClaude(PATCH_PROMPT(entryJson, confirmed, allowed), 8192, "claude-sonnet-5", true);
+  stage("Applying the corrections", 82);
+  const allowed = allowedFieldsFor(entry, applying);
+  const patchRaw = await askClaude(PATCH_PROMPT(entryJson, applying, allowed), 8192, "claude-sonnet-5", true);
   if (patchRaw?.error) throw new Error(patchRaw.error);
   const candidate = await parseJSON(patchRaw.text, 8192);
   if (!candidate || typeof candidate !== "object") throw new Error("The correction came back unreadable.");
@@ -380,17 +457,32 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
   const at = new Date().toISOString().slice(0, 10);
   patched.__corrections = [
     ...(Array.isArray(entry?.__corrections) ? entry.__corrections : []),
-    ...confirmed.map(c => ({ at, field: resolveField(entry, c.field) || c.field, was: c.says, source: c.sourceUrl || "live routing measurement" })),
+    ...applying.map(c => ({
+      at,
+      field: resolveField(entry, c.field) || c.field,
+      was: c.says,
+      // An asserted value must never read later like a sourced one. This line
+      // is what a future audit or handoff sees, so it says plainly whose word
+      // it is standing on.
+      source: c.verdict === "asserted"
+        ? "asserted by the founder, not source-verified"
+        : (c.sourceUrl || "live routing measurement"),
+    })),
   ];
   // Unresolved claims do not change a word, but they are not thrown away
   // either. They go where the next reviewer will actually see them.
-  if (unresolved.length) {
+  if (unresolved.length || asserted.length) {
     patched.uncertainties = [
       ...(Array.isArray(patched.uncertainties) ? patched.uncertainties : []),
       ...unresolved.map(u => `Raised in a correction pass and NOT changed, because no primary source settled it: ${u.says}`),
+      // An applied-on-authority value is still an open item, not a closed one.
+      // It belongs in front of the next reviewer exactly like an unresolved
+      // claim does, or "applied because Oliver said so" quietly becomes
+      // indistinguishable from "verified" a month from now.
+      ...asserted.map(a => `Applied from your own correction and still UNCONFIRMED by a primary source: ${a.field} is now "${a.correctValue}". Worth a source when one turns up.`),
     ];
   }
 
   const changed = Object.keys(patched).filter(k => JSON.stringify(patched[k]) !== JSON.stringify(entry?.[k]));
-  return { claims: verified, confirmed, rejected, unresolved, patched, changed, reverted, allowed };
+  return { claims: verified, confirmed, rejected, unresolved, asserted, patched, changed, reverted, allowed };
 };

@@ -3,7 +3,7 @@ import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { askClaude, askPerplexity, parseClaudeJSON } from "../utils/aiClient";
 import { auditEntry, auditAll } from "../utils/entryAudit";
-import { correctEntry, routeMessage, ASK_PROMPT } from "../utils/correction";
+import { correctEntry, routeMessage, offersCorrection, ASK_PROMPT } from "../utils/correction";
 import { departureParam } from "../utils/helpers";
 
 // ── The founder's assistant, on every page ──────────────────────────
@@ -36,6 +36,21 @@ import { departureParam } from "../utils/helpers";
 // ONLY FOR HIM: it renders only when a Studio session exists. There is no
 // visitor-facing path to it, and it is not lazy-gated behind a flag that could
 // be flipped by a URL.
+//
+// ── IT WORKS ON A DRAFT TOO (Oliver, 7 Aug 2026) ────────────────────
+// "I would like to have an AI I can write to after the draft where I can say
+// 'Fact-checkers say bla bla bla is wrong, and that really bla bla bla is true.'"
+//
+// The first version could only correct a PUBLISHED row: runCorrection bailed
+// unless the entry carried a Supabase row id, so standing in Studio with a
+// fresh draft on screen, the assistant told him to go open an entry first. The
+// exact moment he wants this is the one moment it refused to work.
+//
+// So it now takes a second target. Whichever detail page is open still wins,
+// because that is what he is looking at. With none open and a draft in the
+// Studio editor, the draft is the target, and a correction is written back into
+// studioDraftText, which is the thing Publish actually reads. Nothing new to
+// learn: the same diff, the same Save, and the normal publish path after it.
 
 const bubble = (role) => ({
   alignSelf: role === "you" ? "flex-end" : "flex-start",
@@ -59,7 +74,7 @@ export const rowIdForItem = (item) => {
   return Number.isFinite(n) && n >= 100000 ? n - 100000 : null;
 };
 
-export const StudioAssistant = ({ session, item, kind, onSaved }) => {
+export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraftPatched, onSaved }) => {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
@@ -76,6 +91,12 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
   if (!session) return null;
 
   const rowId = rowIdForItem(item);
+  // An open detail page wins over the Studio draft: it is what he is looking at,
+  // and a correction landing on the wrong one of the two would be the most
+  // expensive kind of surprise this tool can produce.
+  const onDraft = !item && !!draft;
+  const target = item || draft || null;
+  const targetKind = item ? kind : draftKind;
   const say = (role, text, extra = {}) => setLog(l => [...l, { role, text, ...extra }]);
 
   // The same routing call the drafting pipeline makes, so a correction can
@@ -98,29 +119,40 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
   };
 
   const runCorrection = async (message) => {
-    if (!rowId) {
+    // Three possible targets, and only one of them is an error case now.
+    let entry = null, before = null;
+    if (onDraft) {
+      entry = draft;
+    } else if (rowId) {
+      const row = await fetchRow(rowId);
+      if (!row?.payload) { say("gemlyx", "Could not load that row from Supabase. Your Studio login may have expired."); return; }
+      entry = row.payload;
+    } else {
       say("gemlyx", item
         ? `"${item.name}" is one of the old hardcoded entries, so there is no published row to correct. Redraft it through Studio and this will work on it.`
-        : "Open the entry you want corrected first, then paste the criticism here.");
+        : "Open an entry, or draft one in Studio, then paste the fact-check here.");
       return;
     }
-    const row = await fetchRow(rowId);
-    if (!row?.payload) { say("gemlyx", "Could not load that row from Supabase. Your Studio login may have expired."); return; }
+    before = entry;
 
     const result = await correctEntry({
-      entry: row.payload,
+      entry,
       criticism: message,
       deps: { askClaude, askPerplexity, parseJSON: parseClaudeJSON, directions, onStage: setStage },
     });
     setStage(null);
 
+    // ✍️ is deliberately not a tick. A value applied on his own word has to look
+    // different from one a primary source confirmed, at a glance, forever.
     const lines = result.claims.map(c => {
-      const mark = c.verdict === "confirmed" ? "✅" : c.verdict === "rejected" ? "❌" : "❓";
+      const mark = c.verdict === "confirmed" ? "✅" : c.verdict === "rejected" ? "❌" : c.verdict === "asserted" ? "✍️" : "❓";
       const head = `${mark} ${c.field}: ${c.says}`;
       const why = c.verdict === "rejected"
-        ? `\n   Not applied. ${c.evidence}`
+        ? `\n   Not applied, a source says otherwise. ${c.evidence}`
         : c.verdict === "unresolved"
-        ? `\n   Left alone, nothing settled it. ${c.evidence}`
+        ? `\n   Left alone, nothing settled it and you gave no value to use. ${c.evidence}`
+        : c.verdict === "asserted"
+        ? `\n   Applied on your word, still unconfirmed. ${c.evidence}`
         : `\n   ${c.evidence}${c.sourceUrl ? `\n   Source: ${c.sourceUrl}` : ""}`;
       return head + why;
     });
@@ -132,18 +164,28 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
     const revertNote = result.reverted.length
       ? `\n\nIt also tried to change ${result.reverted.join(", ")}, which nothing asked for. Those were put back.`
       : "";
-    say("gemlyx", `${result.confirmed.length} confirmed, ${result.rejected.length} rejected, ${result.unresolved.length} unsettled.\n\n${lines.join("\n\n")}${revertNote}`);
-    setPending({ rowId, before: row.payload, after: result.patched, changed: result.changed });
+    const counts = [
+      `${result.confirmed.length} confirmed`,
+      result.asserted?.length ? `${result.asserted.length} on your word` : null,
+      `${result.rejected.length} rejected`,
+      `${result.unresolved.length} unsettled`,
+    ].filter(Boolean).join(", ");
+    say("gemlyx", `${counts}.\n\n${lines.join("\n\n")}${revertNote}`);
+    setPending({ mode: onDraft ? "draft" : "row", rowId, before, after: result.patched, changed: result.changed });
   };
 
   const runAsk = async (message) => {
-    if (!item) { say("gemlyx", "Open an entry and ask me about it, or ask which entries need work."); return; }
-    const audit = auditEntry({ id: rowId, type: kind, payload: item });
+    if (!target) { say("gemlyx", "Open an entry or draft one in Studio and ask me about it, or ask which entries need work."); return; }
+    const audit = auditEntry({ id: rowId, type: targetKind, payload: target });
     const auditText = audit.findings.length
       ? audit.findings.map(f => `${f.severity}: ${f.field}. ${f.detail}`).join("\n")
       : "No findings.";
-    const res = await askClaude(ASK_PROMPT(JSON.stringify(item, null, 2), auditText, message), 900);
-    say("gemlyx", res.error ? `Could not reach Claude: ${res.error}` : res.text);
+    const res = await askClaude(ASK_PROMPT(JSON.stringify(target, null, 2), auditText, message), 900);
+    // THE ONE-TAP ESCAPE HATCH. The router is better than it was but it will
+    // still answer something he meant as an instruction. Carrying the original
+    // message on the reply means a wrong guess costs a tap, never a retype.
+    say("gemlyx", res.error ? `Could not reach Claude: ${res.error}` : res.text,
+      offersCorrection(message) ? { retryAs: message } : {});
   };
 
   const runAudit = async () => {
@@ -158,15 +200,15 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
       + scored.map(r => `${r.verdict} · ${r.name} (${r.type})\n   ${r.findings.slice(0, 2).map(f => f.detail).join("\n   ")}`).join("\n\n"));
   };
 
-  const send = async () => {
-    const message = input.trim();
+  const send = async (override, forceCorrect = false) => {
+    const message = (override ?? input).trim();
     if (!message || busy) return;
-    setInput("");
+    if (!override) setInput("");
     setPending(null);
-    say("you", message);
+    if (!override) say("you", message);
     setBusy(true);
     try {
-      const intent = routeMessage(message);
+      const intent = forceCorrect ? "correct" : routeMessage(message);
       if (intent === "correct") await runCorrection(message);
       else if (intent === "audit") await runAudit();
       else await runAsk(message);
@@ -179,6 +221,15 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
 
   const savePending = async () => {
     if (!pending) return;
+    // A draft has no row to PATCH. It goes back into studioDraftText, which is
+    // what Publish reads, so the correction rejoins the normal path instead of
+    // creating a second way to put content live.
+    if (pending.mode === "draft") {
+      onDraftPatched?.(pending.after);
+      say("gemlyx", `Written into the Studio draft. ${pending.changed.filter(k => k !== "__corrections").length} field${pending.changed.filter(k => k !== "__corrections").length === 1 ? "" : "s"} changed. Review it in the editor and Publish when you are happy.`);
+      setPending(null);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${pending.rowId}`, {
@@ -234,7 +285,11 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>✦ Gemlyx assistant</div>
           <div style={{ fontSize: 10.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item ? `Looking at ${item.name}${rowId ? "" : " (not a published row)"}` : "No entry open"}
+            {item
+              ? `Looking at ${item.name}${rowId ? "" : " (not a published row)"}`
+              : onDraft
+              ? `Studio draft: ${draft?.name || "unnamed"} (not published yet)`
+              : "No entry open"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
@@ -250,12 +305,22 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: 8 }}>
         {log.length === 0 && (
           <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-            Paste a fact-check and say "correct it" and I will verify every claim before changing a word, then show you the patch.
-            Ask me anything about the entry you have open, and I answer from what is actually stored, never from memory.
-            Ask which ones need work and I will scan everything published.
+            Tell me what is wrong and what is right, in your own words. "Fact-checkers say the station is wrong, it is really Aarhus H" is enough, you do not have to say "correct it".
+            Every claim gets checked before a word changes. A source that contradicts you wins and I will say so. Nothing settling it does not block you: if you gave me the value, it goes in marked as yours.
+            Works on an open entry or on the draft sitting in Studio. Ask which ones need work and I will scan everything published.
           </div>
         )}
-        {log.map((l, i) => <div key={i} style={bubble(l.role)}>{l.text}</div>)}
+        {log.map((l, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: l.role === "you" ? "flex-end" : "flex-start", gap: 4 }}>
+            <div style={bubble(l.role)}>{l.text}</div>
+            {l.retryAs && !busy && (
+              <button onClick={() => send(l.retryAs, true)}
+                style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                Did you mean correct it? Run the correction pass
+              </button>
+            )}
+          </div>
+        ))}
         {stage && (
           <div style={{ ...bubble("gemlyx"), color: C.muted, fontSize: 11.5 }}>
             {stage.label}{typeof stage.percent === "number" ? ` · ${stage.percent}%` : ""}
@@ -280,7 +345,7 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
             <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
               <button onClick={savePending} disabled={saving}
                 style={{ background: C.gold, border: "none", color: "#000", borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                {saving ? "Saving…" : "Save to the live entry"}
+                {saving ? "Saving…" : pending.mode === "draft" ? "Put it in the draft" : "Save to the live entry"}
               </button>
               <button onClick={() => { setPending(null); say("gemlyx", "Discarded, nothing was saved."); }}
                 style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
@@ -294,10 +359,10 @@ export const StudioAssistant = ({ session, item, kind, onSaved }) => {
       <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-end" }}>
         <textarea value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
-          placeholder={item ? `Paste a fact-check about ${item.name}, or just ask` : "Ask which entries need work"}
+          placeholder={target ? `Paste a fact-check about ${target.name || "this draft"}, or just ask` : "Ask which entries need work"}
           rows={2}
           style={{ flex: 1, resize: "vertical", minHeight: 40, maxHeight: 160, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 12.5, padding: "8px 10px", outline: "none", fontFamily: "'Inter', sans-serif" }} />
-        <button onClick={send} disabled={busy || !input.trim()}
+        <button onClick={() => send()} disabled={busy || !input.trim()}
           style={{ background: busy || !input.trim() ? C.surface : C.gold, border: `1px solid ${C.border}`, color: busy || !input.trim() ? C.muted : "#000", borderRadius: 100, padding: "9px 14px", fontSize: 12, fontWeight: 700, cursor: busy ? "default" : "pointer", flexShrink: 0 }}>
           {busy ? "…" : "Send"}
         </button>

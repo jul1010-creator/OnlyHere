@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, offersCorrection, allowedFieldsFor, APPLIED_VERDICTS, correctEntry } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
 `);
 const esbuild = [
@@ -414,6 +414,142 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     !/complete entry[^<]*via Tavily \+ OpenAI/.test(app));
   ok("the Studio panel names Claude as the writer",
     /Claude writes every word of the actual entry/.test(app));
+}
+
+// ── the assistant hears a correction the way he actually types one ─
+// Oliver, 7 Aug 2026: "the AI assistant that is meant to put in the newly
+// fact-checked things is not thaaat great... I would like to have an AI I can
+// write to after the draft where I can say 'Fact-checkers say bla bla bla is
+// wrong, and that really bla bla bla is true.'"
+//
+// The router demanded an imperative verb, so five of six realistic correction
+// messages, INCLUDING HIS OWN EXAMPLE, routed to "ask" and got discussed
+// instead of applied. A correction is an assertion, not a command.
+{
+  const corrects = [
+    "Fact-checkers say bla bla bla is wrong, and that really bla bla bla is true.",
+    "The station is wrong. It should be Aarhus H.",
+    "Google says the date is wrong, it is actually 25 August.",
+    "This says the ferry is required but that is not true, it is optional.",
+    "The fact-checkers found that the nearestStation should be Aarhus H, not Aarhus.",
+    "Google AI says this is wrong. Correct it.",
+  ];
+  corrects.forEach(t => is(`corrects: ${t.slice(0, 42)}`, M.routeMessage(t), "correct"));
+
+  // The other direction matters just as much. Wondering aloud must never fire a
+  // verification pass, and an explicit instruction must beat a question mark.
+  is("a question about wrongness still answers", M.routeMessage("is the ferry thing right on this one?"), "ask");
+  is("a bare observation still answers", M.routeMessage("this looks off to me"), "ask");
+  is("a question with an instruction in it corrects", M.routeMessage("why is this wrong? fix it"), "correct");
+  is("a plain lookup still answers", M.routeMessage("what does the entry say about tickets?"), "ask");
+  is("an audit request is untouched", M.routeMessage("which ones need work?"), "audit");
+
+  // The escape hatch for whatever the router still gets wrong: one tap, never a
+  // retype. Offered only where it is plausible, so it is not on every answer.
+  ok("an ambiguous wrongness question offers the button", M.offersCorrection("Is this wrong?"));
+  ok("a plain lookup does not offer it", !M.offersCorrection("what does the entry say about tickets?"));
+}
+
+// ── silence does not block him, but evidence still overrules him ────
+// Rule 1 of correction.js ("the criticism is a lead, not a source") was written
+// about a MODEL's criticism and is still right about that. Applied to Oliver it
+// produced a tool that ignored him: he states the real value, no primary source
+// turns up, the claim lands unresolved and NOTHING CHANGES. Handoff 6 records
+// the opposite instinct, "he is right more often than the fact-checker is".
+//
+// These four cases are the whole trust model, and the second one is the reason
+// the other three are safe.
+{
+  const entry = { name: "Aarhus Festuge", nearestStation: "Aarhus", desc: "A festival in Aarhus.", uncertainties: [] };
+  // Fake deps so this stays a pure, offline test: the split step returns one
+  // claim, the verification step returns whichever verdict the case is about,
+  // and the patch step applies it.
+  const deps = (verdict, proposed = "Aarhus H") => ({
+    askClaude: async (prompt) => prompt.includes("Break the criticism into SEPARATE, ATOMIC claims")
+      ? { text: JSON.stringify({ claims: [{ field: "nearestStation", says: "the station is wrong", proposed, checkable: "yes" }] }) }
+      : { text: JSON.stringify({ ...entry, nearestStation: proposed || "Aarhus" }) },
+    askPerplexity: async () => ({ text: JSON.stringify({ verdict, correctValue: "", evidence: "nothing decisive", sourceUrl: "" }) }),
+    parseJSON: async (t) => JSON.parse(t),
+    directions: async () => ({ error: "not used in this claim" }),
+  });
+  const criticism = "The station is wrong, it is really Aarhus H.";
+
+  const unresolved = await M.correctEntry({ entry, criticism, deps: deps("unresolved") });
+  is("nothing settled it, so his own value is applied", unresolved.patched?.nearestStation, "Aarhus H");
+  is("and it is counted as asserted, never as confirmed", [unresolved.asserted.length, unresolved.confirmed.length], [1, 0]);
+  ok("the audit trail says whose word it rests on", /asserted by the founder/.test(JSON.stringify(unresolved.patched.__corrections)));
+  ok("and it stays flagged as unconfirmed for the next reviewer", unresolved.patched.uncertainties.some(u => /still UNCONFIRMED/.test(u)));
+
+  // THE ONE THAT KEEPS THIS SAFE. A source actively contradicting the claim
+  // still wins, which is what caught Gemini's 90-minute Samso ferry. Applying
+  // on his word is about SILENCE, never about overriding evidence.
+  const rejected = await M.correctEntry({ entry, criticism, deps: deps("rejected") });
+  is("a source that contradicts him still wins", rejected.patched, null);
+  is("and the rejection is reported, not swallowed", rejected.rejected.length, 1);
+
+  const novalue = await M.correctEntry({ entry, criticism: "The station is wrong.", deps: deps("unresolved", "") });
+  is("wrong with no replacement value changes nothing", novalue.patched, null);
+
+  ok("asserted is an applicable verdict", M.APPLIED_VERDICTS.has("asserted") && M.APPLIED_VERDICTS.has("confirmed"));
+  is("an asserted claim opens its field for patching",
+    M.allowedFieldsFor(entry, [{ field: "nearestStation", verdict: "asserted" }]).sort(), ["nearestStation", "uncertainties"]);
+}
+
+// ── a background queue run never touches the editor ────────────────
+// Oliver, 7 Aug 2026: "the /#studio queues are good but, whenever it is the
+// next in queue, it can't publish because the other is published."
+//
+// He found one symptom of a shared-state bug with three of them. generateArea
+// wrote the finished draft, the photo name, the publish status, the verified
+// coordinates and both warnings into the SAME state the editor renders from,
+// and the queue calls it in the background while he reviews something else.
+//
+//   1. loadQueueResult never reset publishStatus, so the next draft inherited
+//      the last one's "✓ Published" line, which RENDERS IN PLACE OF the button.
+//   2. A background item completing could replace the draft under review.
+//   3. Silent and expensive: publishDraft force-overrides the published station
+//      and coordinates from studioFrozenGeo, so publishing Ribe after the queue
+//      moved on to Skagen published Ribe with Skagen's station.
+//
+// These are text assertions on App.jsx because the logic lives in component
+// state that no offline test can drive. They are still worth having: each one
+// pins a specific line that, if it goes back, reintroduces a named bug.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // Slice generateArea's real body only: up to its own `return draftOutcome`,
+  // not as far as runDraftQueue, or addToDraftQueue's setters land in the slice
+  // and read as leaks.
+  const gaStart = app.indexOf("const generateArea = async");
+  const generateArea = app.slice(gaStart, app.indexOf("return draftOutcome;", gaStart));
+  const loadQueue = app.slice(app.indexOf("const loadQueueResult"), app.indexOf("const loadQueueResult") + 3000);
+
+  ok("generateArea takes a queued flag", /const generateArea = async \(overrideTown, overrideType, opts\)/.test(app));
+  ok("and derives it into a guard", /const queued = !!\(opts && opts\.queued\)/.test(generateArea));
+  ok("the queue runner marks its runs as background", /generateArea\(item\.name, item\.type, \{ queued: true \}\)/.test(app));
+
+  // Every write to editor state must go through ui(). The lock and the progress
+  // stage are the only two that may fire during a background run.
+  const bareSetters = [...generateArea.matchAll(/(?<![\w$.])(set[A-Za-z]+)\(/g)].map(m => m[1]);
+  // setter( is the ui() helper invoking whatever it was handed, which is the
+  // guard itself, not a leak.
+  const allowed = new Set(["setStudioLoading", "setStudioStage", "setTimeout", "setter"]);
+  const leaked = [...new Set(bareSetters.filter(x => !allowed.has(x)))];
+  is("no editor state is written directly during a queued run", leaked, []);
+
+  // The three specific regressions, each pinned to the line that fixes it.
+  ok("opening a queue draft clears the previous publish state", /setPublishStatus\(null\)/.test(loadQueue));
+  ok("opening a queue draft clears editingId so Publish cannot PATCH the wrong row", /setEditingId\(null\)/.test(loadQueue));
+  ok("opening a queue draft restores ITS OWN verified geo", /setStudioFrozenGeo\(r\.frozenGeo \|\| null\)/.test(loadQueue));
+  ok("and its own warnings rather than the last draft's", /setStudioInventedWarning\(r\.inventedWarning \|\| null\)/.test(loadQueue));
+
+  // The draft has to carry its verified geo, or there is nothing to restore.
+  ok("a finished draft returns its verified geo", /draftOutcome = \{ ok: true, draft: t, code, frozenGeo, identityWarning, inventedWarning \}/.test(generateArea));
+  ok("the queue result stores it", /frozenGeo: res\?\.frozenGeo \|\| null/.test(app));
+
+  // A fourth bug found while fixing these: the auto-correction pass updated the
+  // editor but not `t`, and `t` is what a queued run returns, so every queued
+  // draft was stored and later published in its UNCORRECTED form.
+  ok("an auto-correction is written back into the returned draft", /t = corrected;/.test(generateArea));
 }
 
 rmSync(dir, { recursive: true, force: true });

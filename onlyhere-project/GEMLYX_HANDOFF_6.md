@@ -88,6 +88,30 @@ Not pushed yet. `node tests/run.mjs` has not been run on the real machine, only 
 
 ---
 
+## PASS 65, 7 Aug: the assistant hears a correction the way he types one
+
+Oliver: *"the AI assistant that is meant to put in the newly fact-checked things is not thaaat great. I like having the assistant. But I would like to have an AI I can write to after the draft where I can say 'Fact-checkers say bla bla bla is wrong, and that really bla bla bla is true.'"*
+
+Three separate causes, and none of them was the model.
+
+**1. The router was deaf.** `routeMessage` fired a correction only on an imperative verb (correct / fix / change / apply). His own example sentence routed to `ask`, and so did five of six realistic correction messages: *"The station is wrong. It should be Aarhus H."*, *"Google says the date is wrong, it is actually 25 August."* The assistant discussed the fact-check instead of applying it, and he had to know the magic word. A correction is not a command, it is an **assertion**: something is wrong, and here is what is right. `WRONG_HALF` and `RIGHT_HALF` now trigger it, either half alone is enough, and `QUESTION` still wins so wondering aloud never fires a verification pass.
+
+**2. It could not touch a draft.** `runCorrection` bailed unless the entry carried a Supabase row id, so standing in Studio with a fresh draft on screen it told him to go open an entry first. The exact moment he wants this was the one moment it refused. The Studio draft is now a second target. It is parsed from `studioDraftText`, **not** `studioDraft`, because that string is what `publishDraft` actually reads and he hand-edits it; correcting the object while he publishes the text would break the standing rule that what you review is what you publish. An open detail page still wins, because that is what he is looking at.
+
+**3. It ignored him.** Rule 1 of `correction.js`, that criticism is a lead and not a source, was written about a *model's* criticism and is still right about that. Applied to Oliver it meant: he states the real value, no primary source turns up, the claim lands `unresolved`, and nothing changes. His call, and the trust model now is:
+
+- **rejected** a source actively contradicts the claim. Never applied. This is the Samsø-ferry protection and it is untouched.
+- **asserted** (new) nothing settled it either way and he supplied a value. Applied on his authority, marked ✍️ not ✅, written into `__corrections` as "asserted by the founder, not source-verified", and listed in `uncertainties` as still unconfirmed so it can never later pass for something a source backed.
+- **unresolved** nothing settled it and no value was given. Still changes nothing, because there is nothing to write.
+
+Silence no longer blocks him. Evidence still overrules him.
+
+Also added: a one-tap **"Run the correction pass"** button on any answer that might have been meant as an instruction, so whatever the router still gets wrong costs a tap and never a retype.
+
+Tests now **177**, up from 146. The new correction tests run `correctEntry` end to end against stubbed deps, offline, and the load-bearing one is *"a source that contradicts him still wins"*. Not pushed, and `node tests/run.mjs` still needs a real run on his machine.
+
+---
+
 ## OPEN FINDINGS, not yet acted on
 
 **1. The eight draft prompts contain 110 em and en dashes.** This is the exact bug already fixed once in `STUDIO_VOICE`, which contained 41 of them inside the rule that bans them. The model reads its instructions and sees 110 counter-examples. It is now easy to see because the prompts are isolated in `src/utils/studioPrompts.js`.

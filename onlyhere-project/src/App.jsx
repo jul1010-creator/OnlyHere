@@ -890,7 +890,7 @@ function GemlyxApp() {
   // setTimeout(() => generateArea(), 50) and could silently draft/redraft the
   // WRONG town (the one from before the click) because generateArea's own
   // closure still held the pre-click studioTown value when it ran.
-  const generateArea = async (overrideTown, overrideType) => {
+  const generateArea = async (overrideTown, overrideType, opts) => {
     // overrideType (draft QUEUE support, Oliver: "put others in queue... have a
     // bunch being searched in the background while I go eat"): the queue runner
     // is a long-lived async loop whose closure holds a STALE sType — the
@@ -899,9 +899,48 @@ function GemlyxApp() {
     const name = (overrideTown ?? studioTown).trim();
     const sType = overrideType ?? studioType;
     if (!name || studioLoading || studioLoadingRef.current) return { ok: false, error: "busy" };
-    setStudioLoading(true); studioLoadingRef.current = true; setStudioResult(null); setStudioError(null); setStudioIdentityWarning(null); setStudioInventedWarning(null);
-    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
-    setStudioInstagramUrl(""); setStudioFrozenGeo(null);
+    // ── A BACKGROUND QUEUE RUN MUST NOT TOUCH THE EDITOR ───────────
+    // Oliver, 7 Aug 2026: "whenever it is the next in queue, it can't publish
+    // because the other is published."
+    //
+    // He found the visible half. This function writes the finished draft, the
+    // photo name, the publish status, the frozen coordinates and both warnings
+    // straight into the SAME component state the editor renders from, and the
+    // queue calls it in the background while he is reviewing something else.
+    // So every background item stomped whatever he was looking at. Three real
+    // consequences, in rising order of cost:
+    //
+    //   1. The one he reported. loadQueueResult never reset publishStatus, so
+    //      the next draft arrived wearing the previous one's green "Published"
+    //      banner, and the button that renders in its place was simply absent.
+    //   2. The finished draft in the editor could be replaced mid-review by a
+    //      background item completing.
+    //   3. THE EXPENSIVE ONE, silent. studioFrozenGeo is the verified station
+    //      and coordinates, and publishDraft FORCE-OVERRIDES the payload with
+    //      it. Queue drafts Ribe, starts Skagen, Skagen overwrites the frozen
+    //      geo, he publishes Ribe: Ribe goes live carrying SKAGEN's station and
+    //      coordinates. The mechanism built to stop coordinate hallucination was
+    //      causing it, in the workflow he uses most, with nothing on screen to
+    //      show it happened.
+    //
+    // Fix: a queued run computes and RETURNS everything, and writes none of it.
+    // Only loadQueueResult puts a draft into the editor, so what he reviews is
+    // what he publishes, which is the standing rule this had quietly broken.
+    // Progress state (studioStage) and the lock (studioLoading) are deliberately
+    // NOT guarded: the stage is how the queue shows what it is working on, and
+    // the lock is what stops two runs colliding.
+    const queued = !!(opts && opts.queued);
+    const ui = (setter, value) => { if (!queued) setter(value); };
+    // Carried out in the return value so a queued draft keeps its own warnings
+    // and verified geo instead of leaving them in shared state to be overwritten.
+    let identityWarning = null, inventedWarning = null;
+    // A scan hint belongs to the draft the founder started from the scan chip.
+    // A background item reading it would inject another entry's town and dates
+    // into its own research.
+    const hint = queued ? null : scanHint;
+    setStudioLoading(true); studioLoadingRef.current = true; ui(setStudioResult, null); ui(setStudioError, null); ui(setStudioIdentityWarning, null); ui(setStudioInventedWarning, null);
+    ui(setVerifyResults, null); ui(setVerifyError, null); ui(setGoogleCheckResult, null); ui(setGoogleCheckError, null); ui(setGooglePrecheckRan, false);
+    ui(setStudioInstagramUrl, ""); ui(setStudioFrozenGeo, null);
     setStudioStage({ label: "Planning what to research", percent: 5 });
     let draftOutcome = { ok: false, error: null };
     try {
@@ -1120,10 +1159,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // this is what actually gives the founder a "did you mean...?" moment before
           // publishing, without needing a full extra confirmation step in the flow.
           const warningMatch = preCheck.text.match(/^IDENTITY WARNING:\s*(.+?)(?:\n|$)/);
-          if (warningMatch) setStudioIdentityWarning(warningMatch[1].trim());
+          if (warningMatch) ui(setStudioIdentityWarning, (identityWarning = warningMatch[1].trim()));
         }
       }
-      setGooglePrecheckRan(!!googleFindings);
+      ui(setGooglePrecheckRan, !!googleFindings);
 
       // Real, automatic night-transport check — nightlife only, since that's the one
       // content type where "can I actually get home at 3am" is load-bearing. Runs
@@ -1180,7 +1219,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           }
         } catch { /* geocoding/places failed — draft proceeds without this, publishDraft's override step just won't have anything to apply */ }
       }
-      setStudioFrozenGeo(frozenGeo);
+      ui(setStudioFrozenGeo, frozenGeo);
 
       // ── REAL TRANSPORT CHECK, for anywhere a traveler has to GET TO ──
       // Oliver, 5 Aug 2026: "We gotta keep going until the transport is correct."
@@ -1407,8 +1446,8 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // the pre-split originals on every run, so a silent drift here fails.
       const prompts = studioPrompts(name);
 
-      const rawResearch = (scanHint && (scanHint.town || scanHint.dates)
-        ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[scanHint.town && `town/city = ${scanHint.town}`, scanHint.dates && `dates = ${scanHint.dates}`].filter(Boolean).join(", ")}\n\n`
+      const rawResearch = (hint && (hint.town || hint.dates)
+        ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[hint.town && `town/city = ${hint.town}`, hint.dates && `dates = ${hint.dates}`].filter(Boolean).join(", ")}\n\n`
         : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below; if it conflicts, prefer whichever is more specific/recent):\n${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
 
       // STAGE 4 — OpenAI structures the raw research into organized notes per
@@ -1491,7 +1530,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             const distFromTownCenter = haversineKm(hlCoords, frozenGeo);
             if (distFromTownCenter > 1.5) { // walking-friction threshold — beyond this, "the town's station" stops being a useful answer for THIS specific place
               const hlStation = (await findRealNearestStation(hlCoords.lat, hlCoords.lon))?.name || null;
-              setStudioIdentityWarning(
+              ui(setStudioIdentityWarning, identityWarning =
                 `"${t.highlight}" is ${distFromTownCenter.toFixed(1)} km from ${name}'s town-center station (verified) — that's too far to describe reaching it the same way as the town center. ${hlStation ? `The real nearest station to "${t.highlight}" specifically is ${hlStation}.` : "Couldn't verify its actual nearest station — check this manually."} Compare this against what "Getting There & Reality" actually says before publishing.`
               );
             }
@@ -1609,8 +1648,8 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         const isClub = !!t.isClub;
         code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who Is It For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter]] : [["Who Is It For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
       }
-      setStudioResult(code);
-      setScanHint(null);
+      ui(setStudioResult, code);
+      ui(setScanHint, null);
 
       // ── RECONCILE THE DRAFT WITH WHAT WILL ACTUALLY PUBLISH ──────
       // Oliver, 5 Aug 2026, on a fact-check flagging coordinates 130 km from the
@@ -1756,12 +1795,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         }
       }
 
-      setStudioDraft(t);
-      setStudioDraftText(JSON.stringify(t, null, 2));
-      setDraftEditError(null);
-      setStudioPhotoName(`${slugify(name)}.jpg`);
-      setPublishStatus(null);
-      setPublishErrorDetail(null);
+      ui(setStudioDraft, t);
+      ui(setStudioDraftText, JSON.stringify(t, null, 2));
+      ui(setDraftEditError, null);
+      ui(setStudioPhotoName, `${slugify(name)}.jpg`);
+      ui(setPublishStatus, null);
+      ui(setPublishErrorDetail, null);
 
       // FINAL STAGE — Gemini checks the finished draft against the actual research
       // gathered above, specifically hunting for anything that reads like it was
@@ -1801,14 +1840,18 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               if (!fixResult.error) {
                 const corrected = await parseClaudeJSON(fixResult.text, 8192);
                 if (corrected && corrected.name) {
-                  setStudioDraft(corrected);
-                  setStudioDraftText(JSON.stringify(corrected, null, 2));
-                  setStudioInventedWarning(`AUTO-CORRECTED — these claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${inventedCheck.text}`);
-                } else setStudioInventedWarning(inventedCheck.text);
-              } else setStudioInventedWarning(inventedCheck.text);
-            } else setStudioInventedWarning(inventedCheck.text);
+                  // t, not just the editor. draftOutcome below returns t, and
+                  // for a queued draft that return value IS the draft, so an
+                  // auto-correction that only reached state was thrown away.
+                  t = corrected;
+                  ui(setStudioDraft, corrected);
+                  ui(setStudioDraftText, JSON.stringify(corrected, null, 2));
+                  ui(setStudioInventedWarning, inventedWarning = `AUTO-CORRECTED — these claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${inventedCheck.text}`);
+                } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
+              } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
+            } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
           } catch {
-            setStudioInventedWarning(inventedCheck.text); // correction failed — fall back to the plain warning, never lose it
+            ui(setStudioInventedWarning, inventedWarning = inventedCheck.text); // correction failed — fall back to the plain warning, never lose it
           }
         }
       } catch { /* final check failed — draft already shown, this just skips silently rather than blocking */ }
@@ -1829,7 +1872,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           });
         }
       } catch { /* memory save is best-effort, never blocks a finished draft */ }
-      draftOutcome = { ok: true, draft: t, code };
+      // frozenGeo is the whole point of this change: publishDraft force-overrides
+      // the published station and coordinates with it, so it has to travel WITH
+      // the draft rather than sitting in state a later background run overwrites.
+      draftOutcome = { ok: true, draft: t, code, frozenGeo, identityWarning, inventedWarning };
     } catch (err) {
       console.error("Studio draft failed:", err);
       // Surface the real underlying error alongside the friendly message —
@@ -1837,7 +1883,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // making it impossible to tell a bad API key, a rejected model name, or a
       // JSON-parse failure apart from each other without opening devtools.
       const detail = err?.message && err.message !== "empty" ? err.message : null;
-      setStudioError(`Couldn't draft that — try again, or check the name.${detail ? ` (${detail})` : ""}`);
+      ui(setStudioError, `Couldn't draft that — try again, or check the name.${detail ? ` (${detail})` : ""}`);
       draftOutcome = { ok: false, error: detail || "Couldn't draft that" };
     }
     setStudioStage(null);
@@ -1895,9 +1941,21 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // for, but the progress panel said a bare "Researching" with no name, so
         // it appeared immediately after the click and looked caused by it.
         setQueueDrafting(item.name);
-        const res = await generateArea(item.name, item.type);
+        // queued: true is what keeps this run out of the editor. See the long
+        // comment at the top of generateArea for the three bugs it fixes.
+        const res = await generateArea(item.name, item.type, { queued: true });
         setQueueDrafting(null);
-        setQueueResults(prev => [...prev, { name: item.name, type: item.type, ok: !!res?.ok, draft: res?.ok ? res.draft : null, code: res?.code || null, error: res?.ok ? null : (res?.error || "failed") }]);
+        setQueueResults(prev => [...prev, {
+          name: item.name, type: item.type, ok: !!res?.ok,
+          draft: res?.ok ? res.draft : null, code: res?.code || null,
+          error: res?.ok ? null : (res?.error || "failed"),
+          // Everything that used to live in shared state now rides with the
+          // result it belongs to. frozenGeo is the load-bearing one: it is what
+          // publishDraft force-overrides the live station and coordinates with.
+          frozenGeo: res?.frozenGeo || null,
+          identityWarning: res?.identityWarning || null,
+          inventedWarning: res?.inventedWarning || null,
+        }]);
       }
     } finally {
       queueBusyRef.current = false;
@@ -2158,6 +2216,26 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
     setStudioTown(r.name);
     setStudioDraft(r.draft);
     setStudioDraftText(JSON.stringify(r.draft, null, 2));
+    // ── THE SECOND BUG (Oliver, 7 Aug): "whenever it is the next in queue, it
+    // can't publish because the other is published." ──────────────
+    // Exactly right, and it was not the button being disabled, it was the button
+    // not being RENDERED: the panel shows a green "✓ Published" line INSTEAD of
+    // the button while publishStatus is "sent". Nothing here reset it, so the
+    // handover after a publish carried the previous draft's success state onto
+    // the next draft and left it with no way to publish at all.
+    setPublishStatus(null);
+    setPublishErrorDetail(null);
+    setDraftEditError(null);
+    // A queue draft is always a fresh publish. If he had been editing a
+    // published row and then opened a queue result, editingId was still set and
+    // Publish would have PATCHED the row he was editing with this new draft.
+    setEditingId(null);
+    setStudioPhotoName(`${slugify(r.name)}.jpg`);
+    setStudioInstagramUrl("");
+    // THE SILENT ONE. Without this, publishing a draft opened from the queue
+    // stamped it with whatever verified station and coordinates the most recent
+    // BACKGROUND run happened to leave in state, which is a different place.
+    setStudioFrozenGeo(r.frozenGeo || null);
     // ── THE BUG (Oliver, four reports, and he was right every time) ──
     // The whole draft editor renders inside `{studioResult && (...)}`. This line
     // used to be `setStudioResult(null)`, so Open loaded the draft into state and
@@ -2169,8 +2247,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
     // renders on. The draft was there the whole time, with no UI attached to it.
     setStudioResult(r.code || `// Draft for ${r.name} loaded from the queue. Review the JSON below and press Publish.`);
     setStudioError(null);
-    setStudioInventedWarning(null);
-    setStudioIdentityWarning(null);
+    // Its OWN warnings, not blank and not the previous draft's. A queued run
+    // used to write these into shared state where the next background item
+    // wiped them, so a draft that had been auto-corrected or had a station
+    // mismatch flagged arrived in the editor looking clean.
+    setStudioInventedWarning(r.inventedWarning || null);
+    setStudioIdentityWarning(r.identityWarning || null);
   };
 
   // ── DISCOVER: OpenAI plans search angles → Tavily runs them → OpenAI reads
@@ -7253,7 +7335,27 @@ You also have a web_search tool. Use it whenever someone asks about something th
       {studioSession && (() => {
         const openDetail = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail;
         const openKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : null;
-        return <StudioAssistant session={studioSession} item={openDetail} kind={openKind} onSaved={() => refreshLiveContent()} />;
+        // SECOND TARGET (Oliver, 7 Aug: "an AI I can write to AFTER THE DRAFT").
+        // studioDraftText, not studioDraft, is the source of truth: it is what
+        // publishDraft actually reads, and he edits it by hand. Correcting the
+        // object while he publishes the text would break the standing rule that
+        // what you review is what you publish. If his edits have left it
+        // temporarily unparseable, fall back to the last good object rather than
+        // handing the assistant nothing.
+        let liveDraft = null;
+        if (studioDraftText.trim()) {
+          try { const parsed = JSON.parse(studioDraftText); if (parsed && typeof parsed === "object") liveDraft = parsed; }
+          catch { liveDraft = studioDraft; }
+        } else liveDraft = studioDraft;
+        const draftKind = { festival: "event", night: "nightlife", nightTown: "town", foodStreet: "food" }[studioType] || studioType;
+        return <StudioAssistant
+          session={studioSession}
+          item={openDetail}
+          kind={openKind}
+          draft={liveDraft}
+          draftKind={draftKind}
+          onDraftPatched={(next) => { setStudioDraft(next); setStudioDraftText(JSON.stringify(next, null, 2)); setDraftEditError(null); }}
+          onSaved={() => refreshLiveContent()} />;
       })()}
 
       <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
