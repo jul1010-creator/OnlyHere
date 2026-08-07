@@ -6,8 +6,70 @@ import { InstagramEmbed } from "./InstagramEmbed";
 import { ReviewsSection } from "./ReviewsSection";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
+import { bookingUrl, airbnbUrl, STAY_DISCLOSURE } from "../utils/affiliates";
 import { events, majorEvents } from "../data/events";
 import { TOWN_COORDS } from "../data/towns";
+
+// ── WHERE THE PICTURES GO (Oliver, 7 Aug: "I would appreciate if the
+// pictures were put at the sides.. it looks odd") ────────────────────
+//
+// The side-float already existed. It just never had anything to float against,
+// for two separate reasons, both visible in the Copenhagen payload he pasted:
+//
+// 1. EVERY IMAGE SITS AT THE END. The Studio media panel appends to blogBody,
+//    so uploads and Wikimedia finds all land after the last paragraph. Four
+//    images floated with no prose left to wrap them just stack up against each
+//    other in a block, which is exactly the "odd" he is describing.
+// 2. THE ALTERNATION NEVER WORKED. The CSS used .gx-fig:nth-of-type(even), and
+//    nth-of-type counts siblings by TAG, not by class. Paragraphs and headings
+//    are divs too, so the "even" rule was landing on whichever figures happened
+//    to fall on an even div index. Left and right were effectively arbitrary.
+//
+// So the order is decided here instead of being trusted. Images that the author
+// placed inside the prose stay exactly where they are. Images stranded at the
+// end get dealt back in after the paragraphs, spaced out, and every figure is
+// told which side it is on rather than inferring it from its tag position.
+export const layoutBody = (blocks) => {
+  if (!Array.isArray(blocks) || blocks.length === 0) return [];
+  const isImage = (b) => b && (b.type === "image" || b.type === "video");
+  // The trailing run of images, i.e. everything after the last real content.
+  let cut = blocks.length;
+  while (cut > 0 && isImage(blocks[cut - 1])) cut--;
+  const body = blocks.slice(0, cut);
+  const stranded = blocks.slice(cut);
+  // Anchor after paragraphs, never straight after a heading: a photo wedged
+  // between a heading and its first line reads as a mistake.
+  let anchors = [];
+  body.forEach((b, i) => { if (b && (b.type === "paragraph" || b.type === undefined || b.type === "bullets")) anchors.push(i); });
+  // Skip anchors that already have a picture next to them, or an entry whose
+  // author placed photos inline gets a second one dealt on top of the first.
+  const free = anchors.filter(i => !isImage(body[i + 1]));
+  if (free.length) anchors = free;
+  const out = body.map(b => b);
+  if (stranded.length) {
+    if (anchors.length === 0) {
+      out.push(...stranded); // nothing to wrap around, leave them where they were
+    } else {
+      // Spread them across the available anchors, last first so the earlier
+      // insertion indices stay valid as we splice.
+      // Round-robin across the anchors rather than proportional spacing: with
+      // four images and three paragraphs, proportional put two at the end and
+      // left the first paragraph bare. If two do land together they alternate
+      // sides, so they sit one left one right rather than stacking.
+      //
+      // Splice from the HIGHEST anchor down, not in image order. Inserting at a
+      // low index shifts every later index by one, so walking the images in
+      // order silently drops the rest a slot early, which is how the first
+      // version put a photo above the paragraph it was meant to sit beside.
+      const drops = stranded.map((b, n) => ({ at: anchors[n % anchors.length], b, n }));
+      drops.sort((x, y) => y.at - x.at || y.n - x.n);
+      for (const d of drops) out.splice(d.at + 1, 0, d.b);
+    }
+  }
+  // Alternate sides counting FIGURES only, which is what nth-of-type could not do.
+  let fig = 0;
+  return out.map(b => (isImage(b) ? { ...b, _side: (fig++ % 2 === 0) ? "right" : "left" } : b));
+};
 
 // Which published festivals genuinely belong to this town.
 //
@@ -190,6 +252,34 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
               { icon: "💰", label: "Typical Costs", value: item.typicalCosts },
             ]} />
+            {/* ── WHERE TO STAY (Oliver, 7 Aug: "on accommodation, put
+                booking.com and AirBnB as affiliate links for me") ────────
+                The guide's day cards already had a Booking link under a
+                standing rule never to remove it. A town page had the
+                accommodation ADVICE and no way to act on it, which is the
+                worse of the two places to be missing it: the town page is
+                where someone decides they want to sleep there.
+                Searches the specific neighbourhood the entry recommends when
+                it names one, and the town itself when it does not, because
+                "Indre By or Vesterbro" is a far better search than
+                "Copenhagen". Only one of the two links can pay, and the note
+                underneath says which. */}
+            {(() => {
+              const area = (item.accommodationGlance || "").trim() || item.name;
+              const b = bookingUrl({ area: `${area}${area === item.name ? "" : `, ${item.name}`}` });
+              const a = airbnbUrl({ area: `${area}${area === item.name ? "" : `, ${item.name}`}` });
+              if (!b && !a) return null;
+              const link = { flex: 1, textAlign: "center", display: "block", borderRadius: 100, padding: "10px 12px", fontSize: 12.5, fontWeight: 700, textDecoration: "none", border: `1px solid ${C.border}` };
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <a href={b} target="_blank" rel="noreferrer sponsored" style={{ ...link, background: `${C.gold}1f`, borderColor: `${C.gold}66`, color: C.gold }}>🏨 Stays on Booking.com ↗</a>
+                    <a href={a} target="_blank" rel="noreferrer" style={{ ...link, background: C.surface, color: C.light }}>🏡 Homes on Airbnb ↗</a>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>{STAY_DISCLOSURE}</div>
+                </div>
+              );
+            })()}
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{travelLabel(userCoords, item.name, item.travelTime)}</div>
 
             {/* WHAT'S ON IN THIS TOWN (Oliver's ask, Aug 5 2026: "is it possible to
@@ -305,14 +395,14 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             cannot ride up beside a tall photo. */}
         <style>{`
           @media (min-width: 760px) {
-            .gx-fig { float: right; width: 44%; margin: 4px 0 16px 22px; }
-            .gx-fig:nth-of-type(even) { float: left; margin: 4px 22px 16px 0; }
+            .gx-fig-right { float: right; width: 44%; margin: 4px 0 16px 22px; }
+            .gx-fig-left  { float: left;  width: 44%; margin: 4px 22px 16px 0; }
           }
           .gx-body::after { content: ""; display: block; clear: both; }
         `}</style>
         {item.blogBody && item.blogBody.length > 0 && (
           <div className="gx-body" style={{ marginBottom: 24 }}>
-            {item.blogBody.map((block, i) => (
+            {layoutBody(item.blogBody).map((block, i) => (
               block.type === "bullets" ? (
                 <ul key={i} style={{ margin: "0 0 16px", paddingLeft: 20, color: C.light, fontSize: 14, lineHeight: 1.75 }}>
                   {block.items.map((it, j) => <li key={j} style={{ marginBottom: 4 }}>{it}</li>)}
@@ -320,12 +410,12 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               ) : block.type === "instagram" ? (
                 <InstagramEmbed key={i} url={block.url} />
               ) : block.type === "video" ? (
-                <div key={i} style={{ marginBottom: 16 }}>
+                <div key={i} className={`gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>
                   <video src={block.src} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 14, display: "block", background: "#000" }} />
                   {block.caption && <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontStyle: "italic" }}>{block.caption}</div>}
                 </div>
               ) : block.type === "image" ? (
-                <div key={i} className="gx-fig" style={{ marginBottom: 16 }}>
+                <div key={i} className={`gx-fig-${block._side || "right"}`} style={{ marginBottom: 16 }}>
                   {/* referrerPolicy matters for Wikimedia-hosted images: some
                       CDNs refuse a hotlink based on the Referer header, and a
                       refused image is invisible because of the onError below.

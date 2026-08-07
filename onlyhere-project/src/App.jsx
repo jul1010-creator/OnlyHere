@@ -322,7 +322,9 @@ function GemlyxApp() {
       .map(e => ({ ...e, _kind: "event", _km: ranked.find(t => t.name === e.town)?.km ?? 999 }))
       .sort((a, b) => a._km - b._km).slice(0, 8);
 
-    return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches };
+    // `towns` is the ranked list itself, kept so the Explore page can show the
+    // nearest places without recomputing the same distances a second time.
+    return { town: nearestTown, distanceKm: Math.round(ranked[0]?.km ?? 0), matches, towns: ranked.slice(0, 10) };
   })() : (userCoords === "denied" ? "denied" : userCoords === "requesting" ? "loading" : null);
 
   const [guideModal, setGuideModal] = useState(null); // null | "choosing" | "loading" | { title, days } — "choosing"/"loading" are the only cases that still render a modal (see below); a real object exists purely to carry live enrichment updates through to GuidePage, it is never shown as a popup.
@@ -3900,6 +3902,26 @@ If the conversation only covers a single day or a few stops with no explicit day
   // and the country picker; choosing Denmark drops you into the app. Shown on
   // every fresh load — it's the brand moment, and it's one click to pass.
   const [entered, setEntered] = useState(false);
+  // ── WALKING THROUGH THE ARCH (Oliver, 7 Aug: "a better page swap when you
+  // click enter Denmark. Could be a zoom in or fade again") ──────────
+  // Entering used to be a hard cut: setEntered(true) and the landing is simply
+  // gone in one frame. The painting is a gate with a lit path through it, so
+  // the honest transition is walking into it: the whole scene pushes forward
+  // and past you, the front layer moves fastest because it is nearest, the
+  // interface gets out of the way first, and the app fades up underneath.
+  // `leaving` runs the animation; `entered` flips when it finishes, so the
+  // landing stays mounted for exactly as long as it is still visible.
+  const [leaving, setLeaving] = useState(false);
+  const enterDenmark = () => {
+    if (leaving) return;
+    const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { setEntered(true); window.scrollTo(0, 0); return; }
+    setLeaving(true);
+    // Matches gxaEnter's duration below. A timer rather than animationend
+    // because the animation runs on a child, and a backgrounded tab must not
+    // be able to strand someone on a half-faded landing page forever.
+    setTimeout(() => { setEntered(true); window.scrollTo(0, 0); }, 720);
+  };
   // Corner-flight opening splash (restored per Oliver: "darkness, logo spins
   // while the background fades in, settles in the corner" — a prior pass had
   // replaced this with a plain full-screen-fade version that never actually
@@ -5879,42 +5901,103 @@ You also have a web_search tool. Use it whenever someone asks about something th
               
               </div>
 
-              {/* Navigation sections */}
-              {[
-                { id: "essentials", img: "/picture6.png", title: "Essentials", sub: "Everything you need to travel Denmark like a local", ico: "map" },
-                { id: "events", img: "/picture1.jpg", title: "Events", sub: "Festivals, markets & hidden happenings", ico: "calendar" },
-                { id: "food", img: "/picture5.jpg", title: "Food", sub: "From a 1965 hot dog cart to Copenhagen's biggest food market", ico: "utensils" },
-                { id: "nightlife", img: "/picture3.png", title: "Nightlife", sub: "Where Danes actually drink, vs. where tourists do", ico: "beer" },
-                { id: "roadtrips", img: "/picture1.jpg", title: "Road Trips", sub: "The drive is half the adventure", ico: "car" },
-                { id: "visits", img: "/picture4.png", title: "Towns", sub: "Denmark's most beautiful hidden towns", ico: "town" },
-                // { id: "craft", ... } merged into attractions below
-                { id: "attractions", img: "/picture7.jpg", title: "Attractions", sub: "Free places worth your time, plus workshops and tickets worth booking ahead", ico: "ticket" },
-                { id: "ai", img: "/picture9.jpg", title: "Gemlyx Detour", sub: "Your personal Denmark guide — plans trips, checks what's live", ico: null, glyph: "✦" },
-              ].map((section, i) => (
-                <div key={section.id} onClick={() => {
-                  // "roadtrips" isn't its own tab anymore — it now lives inside
-                  // Gemlyx Detour's Road Trip picker, so route there directly
-                  // with that sub-tab preselected instead of a dead tab id.
-                  if (section.id === "roadtrips") { setDetourTab("roadtrip"); goTab("ai"); } else { goTab(section.id); }
-                  window.scrollTo(0,0);
-                }}
-                  style={{ height: 280, position: "relative", overflow: "hidden", cursor: "pointer" }}>
-                  <img src={section.img} alt={section.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s" }}
-                    onMouseOver={e => e.target.style.transform = "scale(1.04)"}
-                    onMouseOut={e => e.target.style.transform = "scale(1)"} />
-                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.85) 0%, rgba(10,15,30,0.2) 60%)" }} />
-                  <div style={{ position: "absolute", bottom: 24, left: 24, right: 24 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                      {section.ico ? <Ico name={section.ico} size={20} color="rgba(255,255,255,0.85)" strokeWidth={1.8} /> : <span style={{ fontSize: 18, color: "#fff" }}>{section.glyph}</span>}
-                      <span style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: "#fff" }}>{section.title}</span>
+              {/* ── WHAT'S ON, AND WHAT'S NEAR (Oliver, 7 Aug, relaying a
+                  friend: "The banners at the explore page, I'm not sure if
+                  works either. Perhaps we shall swap that out with
+                  recommendations or events?") ─────────────────────────
+                  He and his friend were right, and the reason is worth writing
+                  down: the eight banners were 280px-tall photo cards carrying
+                  ZERO content. They were a third copy of the navigation, after
+                  the hamburger menu and the page dots, and one of them pointed
+                  at Road Trips, which has nothing in it. A visitor scrolled
+                  through eight screens of stock photography to reach the same
+                  links that were already one tap away.
+                  What replaced them is the two things that are actually true
+                  right now and cannot be known from a menu: what is happening
+                  in Denmark soon, and what is near the person reading. Both are
+                  built from published rows, so this section grows by itself
+                  every time he publishes and never needs touching. The
+                  navigation survives as one line of chips, because the front
+                  page should still route people, just not with eight billboards. */}
+              <div style={{ padding: "4px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                  {[
+                    { id: "visits", label: "Towns", ico: "town" },
+                    { id: "events", label: "Events", ico: "calendar" },
+                    { id: "food", label: "Food", ico: "utensils" },
+                    { id: "nightlife", label: "Nightlife", ico: "beer" },
+                    { id: "attractions", label: "Attractions", ico: "ticket" },
+                    { id: "essentials", label: "Essentials", ico: "map" },
+                    { id: "ai", label: "Gemlyx Detour", ico: null, glyph: "✦" },
+                  ].map(c => (
+                    <button key={c.id} onClick={() => { goTab(c.id); window.scrollTo(0, 0); }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, color: C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
+                      {c.ico ? <Ico name={c.ico} size={14} color={C.muted} /> : <span style={{ color: C.gold }}>{c.glyph}</span>}
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* WHAT'S ON. Real published festivals with real dates, soonest
+                  first, past ones already dropped by isUpcoming. If nothing is
+                  upcoming the whole block disappears rather than showing an
+                  empty shelf, which is the same rule the rest of the app uses. */}
+              {(() => {
+                const soon = [...events, ...majorEvents, ...vikingEvents]
+                  .filter(e => isUpcoming(e.date) || isCurrentlyLive(e.date, e.dateEnd))
+                  .sort((a, b) => new Date(a.date) - new Date(b.date))
+                  .slice(0, 6);
+                if (soon.length === 0) return null;
+                return (
+                  <div style={{ padding: "20px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase" }}>What's on in Denmark</div>
+                        <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Soonest first, and every date is checked against the organiser</div>
+                      </div>
+                      <button onClick={() => { goTab("events"); window.scrollTo(0, 0); }}
+                        style={{ background: "none", border: "none", color: C.gold, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                        All events →
+                      </button>
                     </div>
-                    <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>{section.sub}</div>
-                    <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", borderRadius: 100, padding: "8px 18px", fontSize: 12, fontWeight: 700, boxShadow: "0 4px 14px rgba(226,59,78,0.3)" }}>
-                      Explore →
+                    <div className="cards-grid">
+                      {soon.map(e => <EventCard key={`${e.id}-${e.name}`} event={e} />)}
                     </div>
                   </div>
+                );
+              })()}
+
+              {/* NEAR YOU. Only for someone actually standing in Denmark:
+                  isInDenmark already gates nearYou, and a distance shown to
+                  someone browsing from abroad before they have booked is noise.
+                  No prompt to turn location on here either, because the strip
+                  above already asks once and asking twice on one screen is
+                  nagging. */}
+              {nearYou && (nearYou.towns?.length > 0 || nearYou.matches?.length > 0) && (
+                <div style={{ padding: "20px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 3 }}>Near you right now</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Straight-line distance from where you are</div>
+                  <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6 }}>
+                    {(nearYou.towns || []).slice(0, 8).map(t => {
+                      const real = towns.find(x => x.name === t.name);
+                      if (!real) return null;
+                      return (
+                        <button key={t.name} onClick={() => setTownDetail(real)}
+                          style={{ flexShrink: 0, width: 168, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 0, overflow: "hidden", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          <div style={{ height: 96, position: "relative" }}>
+                            <PhotoPlate photo={real.photo} name={real.name} color={C.gold} />
+                          </div>
+                          <div style={{ padding: "8px 10px 10px" }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{real.name}</div>
+                            <div style={{ fontSize: 11, color: C.gold, marginTop: 2 }}>{t.km < 10 ? t.km.toFixed(1) : Math.round(t.km)} km away</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              ))}
+              )}
 
               {/* ── WHAT INSPIRED US ──────────────────────────────
                   Oliver's structure: hero, then Denmark, then the reason this
@@ -7065,7 +7148,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           its own. Served from a 2x-upscaled export (front-page-2x.jpg) to
           cut the phone blur from the 1024px original. */}
       {!entered && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
+        <div className={`gxa-root${leaving ? " gxa-leaving" : ""}`} style={{ position: "fixed", inset: 0, zIndex: 2000, overflow: "hidden", background: "#0F0D08" }}>
           <style>{`
             .gxa-pan { position:absolute; inset:0; overflow:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
             .gxa-pan::-webkit-scrollbar { display:none; }
@@ -7123,13 +7206,44 @@ You also have a web_search tool. Use it whenever someone asks about something th
                touches down, so the intro ARRIVES rather than just stopping. Runs
                once, keyed on introFlightDone, and is skipped under reduced
                motion along with everything else. */
-            .gxa-brand { position:relative; display:inline-flex; overflow:hidden; }
-            .gxa-brand::after { content:""; position:absolute; inset:0; pointer-events:none;
-              background:linear-gradient(105deg, transparent 25%, rgba(255,240,190,.95) 48%, transparent 72%);
-              transform:translateX(-130%); }
-            .gxa-brand.gxa-lit::after { animation: gxaSweep 1.05s cubic-bezier(.22,.7,.2,1) .06s 1; }
-            @keyframes gxaSweep { to { transform:translateX(130%); } }
-            .gxa-choose { transition: opacity 0.9s ease-out 0.35s; }
+            /* A sweep alone was invisible here: the corner mark is 19px tall,
+               and a gradient crossing 19 pixels is not a flash, it is a rumour.
+               So the landing is three things at once, which is what actually
+               reads as light catching the metal: the mark brightens hard for a
+               moment, a warm bloom expands out of it and fades, and the sweep
+               crosses the wordmark. The bloom is what makes it visible at this
+               size, and it is drawn OUTSIDE the mark, so it is not clipped. */
+            .gxa-brand { position:relative; display:inline-flex; }
+            .gxa-brand > * { position:relative; z-index:1; }
+            .gxa-brand::before { content:""; position:absolute; left:50%; top:50%; width:130%; aspect-ratio:2.2;
+              transform:translate(-50%,-50%) scale(.4); opacity:0; pointer-events:none; border-radius:50%;
+              background:radial-gradient(ellipse, rgba(255,235,170,.85) 0%, rgba(255,205,110,.35) 38%, transparent 72%); }
+            /* opacity:0 at rest is load-bearing. There is no overflow:hidden on
+               this element any more (the bloom has to escape it), so a sweep
+               parked at translateX(-160%) would otherwise sit there as a bright
+               band permanently floating to the left of the logo. */
+            .gxa-brand::after { content:""; position:absolute; inset:-2px; pointer-events:none; z-index:2; opacity:0;
+              background:linear-gradient(102deg, transparent 34%, rgba(255,246,215,.98) 50%, transparent 66%);
+              transform:translateX(-160%); }
+            .gxa-brand.gxa-lit { animation: gxaLit .74s ease-out .04s 1; }
+            .gxa-brand.gxa-lit::before { animation: gxaBloom .92s cubic-bezier(.2,.75,.3,1) .04s 1; }
+            .gxa-brand.gxa-lit::after  { animation: gxaSweep .78s cubic-bezier(.3,.62,.28,1) .1s 1; }
+            @keyframes gxaSweep { 0% { opacity:0; transform:translateX(-160%); } 12% { opacity:1; } 88% { opacity:1; } 100% { opacity:0; transform:translateX(160%); } }
+            @keyframes gxaBloom { 0% { opacity:0; transform:translate(-50%,-50%) scale(.35); }
+                                  22% { opacity:1; }
+                                  100% { opacity:0; transform:translate(-50%,-50%) scale(1.75); } }
+            @keyframes gxaLit { 0% { filter:brightness(1); } 18% { filter:brightness(2.15); } 100% { filter:brightness(1); } }
+            /* Was a bare opacity fade, so the card materialised in place like a
+               tooltip. Now it rises and settles, on a curve with no overshoot
+               (he asked for the bounce to be taken off the compass, and the
+               same taste applies here), and the "Why we built Gemlyx" link
+               follows a beat later so the two do not arrive as one slab. */
+            .gxa-choose { transform: translate3d(0, 16px, 0) scale(.984); will-change: transform, opacity;
+              transition: opacity .82s ease-out .3s, transform .9s cubic-bezier(.16,.84,.36,1) .3s; }
+            .gxa-choose.gxa-in { transform: none; }
+            .gxa-why { opacity:0; transform: translate3d(0, 8px, 0);
+              transition: opacity .7s ease-out .72s, transform .7s cubic-bezier(.16,.84,.36,1) .72s; }
+            .gxa-choose.gxa-in .gxa-why { opacity:1; transform:none; }
             /* BUG FIX (Oliver: "flies up but doesn't settle"): this was 0.5s —
                the real corner logo used to only reach full opacity a HALF
                SECOND after the flying compass had already vanished (it
@@ -7138,6 +7252,23 @@ You also have a web_search tool. Use it whenever someone asks about something th
                the flight lands. Shortened so the real logo appears
                essentially the same instant the compass does. */
             .gxa-topbar { transition: opacity 0.15s ease-out; }
+            /* The exit. The scene pushes forward and past you while the light
+               through the gate blows out, the front layer travelling furthest
+               because it is the nearest thing to the eye, which is the same
+               depth cue the pointer parallax uses, just resolved in one move.
+               The interface leaves first so nothing is floating over the zoom,
+               and the whole layer fades on the last third so the app is already
+               there when it clears. */
+            .gxa-root { transform-origin: 50% 46%; }
+            .gxa-leaving { animation: gxaEnterFade .72s ease-in forwards; pointer-events:none; }
+            .gxa-leaving .gxa-kb { animation: gxaEnterZoom .72s cubic-bezier(.42,0,.72,.44) forwards; }
+            .gxa-leaving .gxa-front { animation: gxaEnterFront .72s cubic-bezier(.42,0,.72,.44) forwards; }
+            .gxa-leaving .gxa-archlight { animation: gxaEnterLight .72s ease-in forwards; }
+            .gxa-leaving .gxa-choose, .gxa-leaving .gxa-topbar { opacity:0 !important; transition: opacity .2s ease-in !important; }
+            @keyframes gxaEnterZoom  { to { transform: scale(1.62); } }
+            @keyframes gxaEnterFront { to { transform: scale(2.35); opacity:0; } }
+            @keyframes gxaEnterLight { 0% { opacity:1; } 55% { opacity:1; transform:scale(1.9); } 100% { opacity:0; transform:scale(3.4); } }
+            @keyframes gxaEnterFade  { 0% { opacity:1; } 62% { opacity:1; } 100% { opacity:0; } }
             /* OPENING SPLASH, corner-flight version (restored per Oliver: darkness,
                the compass spins while the background fades in behind it, then it
                flies and settles into the actual corner logo's spot, and ONLY once
@@ -7179,7 +7310,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
             @media (prefers-reduced-motion: reduce) {
               .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-front { animation: none !important; }
               .gxa-front { transform: none !important; }
-              .gxa-brand.gxa-lit::after { animation: none !important; }
+              .gxa-brand.gxa-lit, .gxa-brand.gxa-lit::after, .gxa-brand.gxa-lit::before { animation: none !important; }
+              .gxa-choose { transform: none !important; }
+              .gxa-why { opacity:1 !important; transform:none !important; }
+              .gxa-leaving, .gxa-leaving .gxa-kb, .gxa-leaving .gxa-front, .gxa-leaving .gxa-archlight { animation: none !important; }
               .gxa-choose, .gxa-topbar { transition: none !important; }
               .gxa-fly { opacity: 0 !important; }
               .gxa-choose, .gxa-topbar { opacity: 1 !important; }
@@ -7306,7 +7440,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 lands rather than popping in on the exact same frame). Also not
                 clickable until visible, so a fast tapper can't hit "Enter
                 Denmark" while it's still invisible. */}
-            <div className="gxa-choose" style={{ width: "100%", maxWidth: 340, pointerEvents: introFlightDone ? "auto" : "none", opacity: introFlightDone ? 1 : 0 }}>
+            <div className={`gxa-choose${introFlightDone ? " gxa-in" : ""}`} style={{ width: "100%", maxWidth: 340, pointerEvents: introFlightDone ? "auto" : "none", opacity: introFlightDone ? 1 : 0 }}>
               {[{ id: "denmark", name: "Denmark", tagline: "The home of H.C. Andersen", photo: "/denmark-hero.jpg", photoPos: "68% 42%" }].map(cn => (
                 <div key={cn.id} style={{ background: "rgba(12,11,7,0.66)", backdropFilter: "blur(10px)", border: "1px solid rgba(240,239,230,0.22)", borderRadius: 18, overflow: "hidden", boxShadow: "0 24px 70px -20px rgba(0,0,0,0.85)" }}>
                   <div style={{ height: 158, position: "relative", overflow: "hidden" }}>
@@ -7320,7 +7454,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                   <div style={{ padding: "12px 14px 14px" }}>
                     <div style={{ fontSize: 13.5, fontStyle: "italic", fontFamily: "'Fraunces', serif", color: "#EFE9D6", textAlign: "center", marginBottom: 11 }}>{cn.tagline}</div>
-                    <button onClick={() => { setEntered(true); window.scrollTo(0, 0); }}
+                    <button onClick={enterDenmark}
                       style={{ display: "block", width: "100%", background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "12px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}>
                       Enter {cn.name} →
                     </button>
@@ -7332,7 +7466,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   drop-shadow (same treatment the corner logo uses) so it holds
                   up over any part of the busy background, not just the darker
                   patches. */}
-              <button onClick={() => setShowWhyGemlyx(true)}
+              <button className="gxa-why" onClick={() => setShowWhyGemlyx(true)}
                 style={{ display: "block", width: "100%", background: "none", border: "none", color: "#FFFFFF", textShadow: "0 1px 6px rgba(0,0,0,0.85)", fontSize: 12, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 12, textAlign: "center" }}>
                 Why we built Gemlyx
               </button>
