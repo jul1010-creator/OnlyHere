@@ -3510,7 +3510,19 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     deepLinkDone.current = true;
     setEntered(true);     // a shared link goes straight to the entry, not the front door
     ENTRY_SETTERS[kind]?.(found);
-  }, [liveContentVersion, entered]);
+    // ── DEPS: liveContentVersion ONLY ────────────────────────────
+    // `entered` was in here too, and it crashed the entire front page.
+    // It is declared with `const` about six hundred lines BELOW this effect,
+    // and a dependency array is evaluated where it is written, so every single
+    // render of GemlyxApp threw "Cannot access 'entered' before
+    // initialization" and the app rendered the ErrorBoundary instead of the
+    // landing page. Shipped in the entry-routing pass and not caught, because
+    // the guide route is a different component that never mounts this one, so
+    // /guide/:id kept working perfectly while / was dead.
+    //
+    // It was never needed: this effect only WRITES entered, it never reads it,
+    // and deepLinkDone already guards against running twice.
+  }, [liveContentVersion]);
 
   // Looks up a stop name against everything real Gemlyx already knows, so the guide
   // shows real price/hours/type instead of just repeating the AI's own prose.

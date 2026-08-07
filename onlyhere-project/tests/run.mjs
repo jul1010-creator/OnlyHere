@@ -18,7 +18,7 @@
 // or React, so it always runs in about a second and can never be flaky.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -520,6 +520,83 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     "GFDL", "GFDL 1.2"];
   use.forEach(l => ok(`licence usable: ${l}`, M.licenseIsUsable(l)));
   drop.forEach(l => ok(`licence refused: ${JSON.stringify(l)}`, !M.licenseIsUsable(l)));
+}
+
+// ── NOTHING MAY BE USED IN A HOOK BEFORE IT EXISTS ─────────────────
+// 7 Aug 2026. The entire front page was throwing on every render, and had been
+// since the entry-routing pass shipped:
+//
+//   ReferenceError: Cannot access 'entered' before initialization
+//
+// The deep-link effect listed `entered` in its dependency array. `entered` is
+// declared with const about six hundred lines further down the same component.
+// A dependency array is evaluated where it is written, so GemlyxApp threw
+// before it could render anything and the ErrorBoundary took the page. It
+// survived a whole pass because /guide/:id is a different component that never
+// mounts GemlyxApp, so every guide link kept working perfectly while the front
+// door was dead, and because nothing in this suite had ever executed a
+// component. Every test here was a pure function.
+//
+// This does not execute anything either, which is the point: it is a text scan
+// that costs nothing and catches the whole class. A name used in a dependency
+// array whose only declaration comes LATER in the file is a temporal dead zone
+// error at runtime, every time, with no exceptions.
+{
+  const declarationsIn = (src) => {
+    const at = new Map();
+    const note = (name, i) => { if (name && !at.has(name)) at.set(name, i); };
+    for (const m of src.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)) note(m[1], m.index);
+    for (const m of src.matchAll(/\b(?:const|let|var)\s*\[([^\]]*)\]/g))
+      m[1].split(",").forEach(x => note(x.trim().replace(/[:=].*$/, "").trim(), m.index));
+    for (const m of src.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}/g))
+      m[1].split(",").forEach(x => note(x.trim().split(":").pop().replace(/=.*$/, "").trim(), m.index));
+    // function declarations and imports are hoisted, so they are never too late
+    for (const m of src.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)/g)) note(m[1], 0);
+    for (const m of src.matchAll(/\bimport\s*\{([^}]*)\}/g))
+      m[1].split(",").forEach(x => note(x.trim().split(/\s+as\s+/).pop().trim(), 0));
+    return at;
+  };
+  const GLOBALS = new Set(["true", "false", "null", "undefined", "this", "typeof", "void", "new", "await",
+    "in", "of", "window", "document", "JSON", "Math", "Object", "Array", "String", "Number", "Boolean",
+    "Date", "console", "localStorage", "navigator", "location", "fetch", "setTimeout", "clearTimeout"]);
+
+  const forwardRefs = (src) => {
+    const at = declarationsIn(src);
+    const found = [];
+    for (const m of src.matchAll(/\}\s*,\s*\[([^\]]*)\]\s*\)/g)) {
+      for (const id of m[1].matchAll(/[A-Za-z_$][\w$]*/g)) {
+        const name = id[0];
+        if (GLOBALS.has(name)) continue;
+        const d = at.get(name);
+        if (d !== undefined && d > m.index) {
+          found.push(`${name} (used line ${src.slice(0, m.index).split("\n").length}, declared line ${src.slice(0, d).split("\n").length})`);
+        }
+      }
+    }
+    return found;
+  };
+
+  const FILES = ["src/App.jsx", "src/pages/GuidePage.jsx", "src/components/DetailPage.jsx",
+    "src/components/StudioAssistant.jsx", "src/components/AskGemlyx.jsx",
+    "src/components/GuidePreviewScreen.jsx", "src/components/WeatherHeaderStrip.jsx"];
+  FILES.forEach(f => {
+    const full = join(root, f);
+    if (!existsSync(full)) return;
+    const hits = forwardRefs(readFileSync(full, "utf8"));
+    is(`${f} uses nothing in a hook before it is declared`, hits, []);
+  });
+
+  // And the scan itself is checked, because a checker that silently matches
+  // nothing passes forever. This is the real bug, reduced.
+  const REAL_BUG = [
+    "const Comp = () => {",
+    "  useEffect(() => { setEntered(true); }, [version, entered]);",
+    "  const [entered, setEntered] = useState(false);",
+    "};",
+  ].join("\n");
+  ok("the scan catches the bug it was written for", forwardRefs(REAL_BUG).length === 1);
+  ok("and passes the same code with the order fixed",
+    forwardRefs(REAL_BUG.replace(", entered]", "]")).length === 0);
 }
 
 rmSync(dir, { recursive: true, force: true });
