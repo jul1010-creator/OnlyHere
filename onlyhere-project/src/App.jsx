@@ -3917,6 +3917,74 @@ If the conversation only covers a single day or a few stops with no explicit day
   // with two logos both visible in the corner.
   const [introFlightDone, setIntroFlightDone] = useState(false);
   const cornerMarkRef = useRef(null);
+
+  // ── WHICH PAINTING IS ON SCREEN ────────────────────────────────────
+  // Two real renders, not one image cropped: 5504x3072 for wide screens and
+  // 3072x5504 for a phone held upright. The <picture> element picks the file,
+  // but the lights are absolutely positioned in percentages, and a lantern is
+  // not in the same place in both compositions, so React has to know too.
+  const [landingPortrait, setLandingPortrait] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia
+      ? window.matchMedia("(orientation: portrait) and (max-width: 900px)").matches : false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(orientation: portrait) and (max-width: 900px)");
+    const on = () => setLandingPortrait(mq.matches);
+    on();
+    mq.addEventListener ? mq.addEventListener("change", on) : mq.addListener(on);
+    return () => { mq.removeEventListener ? mq.removeEventListener("change", on) : mq.removeListener(on); };
+  }, []);
+
+  // Measured off each render by locating the actual warm lantern highlights and
+  // the cyan mushroom glows, rather than typed by eye. x, y and size are all
+  // percentages of the painting.
+  const LANDING_ART = landingPortrait
+    ? { glows: [[44.0, 38.5, 9], [65.5, 38.8, 9], [42.5, 45.6, 8], [75.6, 33.7, 8], [75.6, 42.1, 8], [21.4, 37.0, 7]],
+        arch: [36, 33, 24],
+        shrooms: [[5.5, 61.3, 11], [95.0, 62.9, 11], [71.0, 73.5, 10]] }
+    : { glows: [[47.1, 41.5, 7], [57.2, 33.5, 6.5], [37.0, 32.3, 6], [24.5, 44.0, 7], [85.4, 59.0, 5.5]],
+        arch: [42, 22, 18],
+        shrooms: [[13.6, 63.5, 7], [95.3, 57.5, 6.5], [70.6, 70.7, 7]] };
+
+  // ── PARALLAX AND BREATHING ─────────────────────────────────────────
+  // Written straight onto the element as CSS variables rather than through
+  // React state: this updates on every pointer move and every tilt event, and
+  // re-rendering a component this size at that rate would be the whole frame
+  // budget. The CSS below reads --gx-px and --gx-py and does the rest.
+  //
+  // The front layer only ever moves a little against the back. That is
+  // deliberate: both layers are the same painting, so the travel has to stay
+  // inside what the blurred shade layer can cover. Past roughly 1% of the
+  // width the tree starts ghosting against itself.
+  const landingKbRef = useRef(null);
+  useEffect(() => {
+    if (entered) return;
+    if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let px = 0, py = 0, tx = 0, ty = 0, raf = 0, alive = true;
+    const setFromPoint = (cx, cy) => {
+      const el = landingKbRef.current; if (!el) return;
+      const r = el.getBoundingClientRect();
+      tx = Math.max(-1, Math.min(1, ((cx - r.left) / r.width - 0.5) * 2));
+      ty = Math.max(-1, Math.min(1, ((cy - r.top) / r.height - 0.5) * 2));
+    };
+    const onMouse = (e) => setFromPoint(e.clientX, e.clientY);
+    const onTilt = (e) => {
+      if (e.gamma == null) return;
+      tx = Math.max(-1, Math.min(1, e.gamma / 26));
+      ty = Math.max(-1, Math.min(1, ((e.beta == null ? 45 : e.beta) - 45) / 26));
+    };
+    const tick = () => {
+      if (!alive) return;
+      px += (tx - px) * 0.07; py += (ty - py) * 0.07;
+      const el = landingKbRef.current;
+      if (el) { el.style.setProperty("--gx-px", px.toFixed(4)); el.style.setProperty("--gx-py", py.toFixed(4)); }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    window.addEventListener("mousemove", onMouse, { passive: true });
+    window.addEventListener("deviceorientation", onTilt);
+    return () => { alive = false; cancelAnimationFrame(raf); window.removeEventListener("mousemove", onMouse); window.removeEventListener("deviceorientation", onTilt); };
+  }, [entered]);
   // BUG FIX (Oliver, 7th flight report: "the logo needs to fully rotate before
   // settling in the left corner"): the spin is a CSS animation whose clock is
   // the document timeline — it starts ticking the moment the splash mounts,
@@ -7001,8 +7069,43 @@ You also have a web_search tool. Use it whenever someone asks about something th
           <style>{`
             .gxa-pan { position:absolute; inset:0; overflow:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
             .gxa-pan::-webkit-scrollbar { display:none; }
-            .gxa-kb { position:relative; width:max(124vw, 227.1vh); aspect-ratio: 1024 / 559; animation: gxaKb 26s ease-in-out infinite alternate; transform-origin: 50% 50%; will-change: transform; }
+            /* 227.1vh was tuned for the old 1.832 painting. The new landscape
+               render is 5504x3072 (1.792), so the same 24% pan headroom is
+               222.2vh. Portrait is a different painting entirely, 3072x5504,
+               and needs almost no magnification: filling a phone takes 100vw,
+               and 112vw leaves a little room to drag. That single change is
+               most of the sharpness win, because the old page was stretching
+               1024 real pixels across 5750. */
+            .gxa-kb { position:relative; width:max(124vw, 222.2vh); aspect-ratio: 5504 / 3072; animation: gxaKb 26s ease-in-out infinite alternate; transform-origin: 50% 50%; will-change: transform; --gx-px:0; --gx-py:0; }
+            @media (orientation: portrait) and (max-width: 900px) {
+              .gxa-kb { width:max(112vw, 62.6vh); aspect-ratio: 3072 / 5504; }
+            }
             @keyframes gxaKb { from { transform:scale(1); } to { transform:scale(1.045); } }
+            .gxa-layer { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+            /* THE FRONT LAYER. Kept only at the edges, feathered so the cut can
+               never show a seam, and moved further than the back on pointer or
+               tilt. gxaFront is the idle half of it: the slow lean that makes
+               the scene breathe when nobody is touching anything. */
+            .gxa-front {
+              will-change: transform;
+              transform: translate3d(calc(var(--gx-px) * 1.05%), calc(var(--gx-py) * 0.62%), 0) scale(1.012);
+              animation: gxaFront 26s ease-in-out infinite alternate;
+              -webkit-mask-image: linear-gradient(to right, #000 0 9%, transparent 20%, transparent 80%, #000 91% 100%), linear-gradient(to bottom, #000 0 6%, transparent 17%);
+              mask-image: linear-gradient(to right, #000 0 9%, transparent 20%, transparent 80%, #000 91% 100%), linear-gradient(to bottom, #000 0 6%, transparent 17%);
+              -webkit-mask-composite: source-over; mask-composite: add;
+            }
+            /* Portrait leans on the FLOOR instead of the sides: held upright,
+               the cart and the flowerbeds are what is nearest the eye. */
+            .gxa-front-port {
+              -webkit-mask-image: linear-gradient(to bottom, #000 0 7%, transparent 19%, transparent 76%, #000 92% 100%), linear-gradient(to right, #000 0 5%, transparent 14%, transparent 86%, #000 95% 100%);
+              mask-image: linear-gradient(to bottom, #000 0 7%, transparent 19%, transparent 76%, #000 92% 100%), linear-gradient(to right, #000 0 5%, transparent 14%, transparent 86%, #000 95% 100%);
+            }
+            @keyframes gxaFront { from { transform: translate3d(calc(var(--gx-px) * 1.05%), calc(var(--gx-py) * 0.62%), 0) scale(1.012); }
+                                    to { transform: translate3d(calc(var(--gx-px) * 1.05% + 0.34%), calc(var(--gx-py) * 0.62% + 0.16%), 0) scale(1.028); } }
+            /* The blurred, darkened band that lives between the two copies. It
+               is the only thing the front layer can uncover, which is what
+               stops the painting ghosting against itself. 7 KB. */
+            .gxa-shade { pointer-events:none; }
             .gxa-glow { position:absolute; border-radius:50%; pointer-events:none; animation: gxaGlowPulse 4.2s ease-in-out infinite; }
             @keyframes gxaGlowPulse { 0%,100% { opacity:.55; } 50% { opacity:1; } }
             .gxa-shroom { position:absolute; border-radius:50%; pointer-events:none; animation: gxaShroomPulse 6.5s ease-in-out infinite; }
@@ -7015,6 +7118,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
                (introFlightDone), not a fixed CSS delay — see the inline opacity/
                pointerEvents on each below. These two rules are just the
                transition timing, the actual on/off is inline. */
+            /* THE LANDING FLASH (Oliver: "Maybe with a flash on the 'Gemlyx'").
+               A light sweep across the wordmark at the moment the flying compass
+               touches down, so the intro ARRIVES rather than just stopping. Runs
+               once, keyed on introFlightDone, and is skipped under reduced
+               motion along with everything else. */
+            .gxa-brand { position:relative; display:inline-flex; overflow:hidden; }
+            .gxa-brand::after { content:""; position:absolute; inset:0; pointer-events:none;
+              background:linear-gradient(105deg, transparent 25%, rgba(255,240,190,.95) 48%, transparent 72%);
+              transform:translateX(-130%); }
+            .gxa-brand.gxa-lit::after { animation: gxaSweep 1.05s cubic-bezier(.22,.7,.2,1) .06s 1; }
+            @keyframes gxaSweep { to { transform:translateX(130%); } }
             .gxa-choose { transition: opacity 0.9s ease-out 0.35s; }
             /* BUG FIX (Oliver: "flies up but doesn't settle"): this was 0.5s —
                the real corner logo used to only reach full opacity a HALF
@@ -7063,7 +7177,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
             @keyframes gxSplashCurtain { from { opacity: 1; } to { opacity: 0; } }
             .gx-splash-mark { position: relative; z-index: 1; }
             @media (prefers-reduced-motion: reduce) {
-              .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly { animation: none !important; }
+              .gxa-kb, .gxa-glow, .gxa-shroom, .gxa-archlight, .gxa-fly, .gxa-front { animation: none !important; }
+              .gxa-front { transform: none !important; }
+              .gxa-brand.gxa-lit::after { animation: none !important; }
               .gxa-choose, .gxa-topbar { transition: none !important; }
               .gxa-fly { opacity: 0 !important; }
               .gxa-choose, .gxa-topbar { opacity: 1 !important; }
@@ -7086,13 +7202,63 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
           {/* The painting — pannable, breathing, with light pinned to it */}
           <div className="gxa-pan" ref={landingPanRef}>
-            <div className="gxa-kb">
-              <img src="/front-page-2x.jpg" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "fill" }} />
-              {[[41.6, 41.5, 7], [42.2, 27.5, 6], [62.4, 34.5, 6.5], [63.2, 46.5, 7], [25.7, 41.5, 7.5]].map(([x, y, s], i) => (
+            {/* ── THE PAINTING, IN THREE LAYERS (Oliver, 7 Aug: "more 3D and
+                lively with better quality", and "let it breathe a bit") ────
+                A single flat image cannot have depth: the pan moves the whole
+                world as one plane, which is why it read as a picture rather
+                than a place. So the same painting is drawn twice, and a third
+                layer sits between the two copies.
+
+                  back   the whole scene
+                  shade  a blurred, darkened copy of the edge bands only
+                  front  the same scene, masked to the edge bands, moving more
+
+                When the front slides, what it uncovers is the shade layer, not
+                a second sharp copy of the same tree. That is the whole trick,
+                and it is why the shade layer exists: without it the tree ghosts
+                against itself the moment the movement is big enough to notice.
+                Measured, with the shade in place, at 55px of travel the reveal
+                reads as depth. Without it, you can count the duplicated roses.
+
+                PORTRAIT GETS ITS OWN PAINTING. A 1.79 landscape image filling a
+                tall phone needs about 4600 device pixels of width before any
+                pan headroom, which is why the old one looked soft: 1024 real
+                pixels stretched across 5750. The portrait render needs 1170.
+                <picture> picks by media query, so a phone never downloads the
+                5504px landscape plate at all. */}
+            <div className="gxa-kb" ref={landingKbRef}>
+              <picture>
+                <source media="(orientation: portrait) and (max-width: 900px)" type="image/avif" srcSet="/fp-port-1280.avif 1280w, /fp-port-2048.avif 2048w" sizes="100vw" />
+                <source media="(orientation: portrait) and (max-width: 900px)" type="image/webp" srcSet="/fp-port-1280.webp 1280w, /fp-port-2048.webp 2048w" sizes="100vw" />
+                <source type="image/avif" srcSet="/fp-land-2752.avif 2752w, /fp-land-5504.avif 5504w" sizes="100vw" />
+                <source type="image/webp" srcSet="/fp-land-2752.webp 2752w, /fp-land-5504.webp 5504w" sizes="100vw" />
+                <img className="gxa-layer gxa-back" src="/fp-land-2752.jpg" alt="" fetchpriority="high" decoding="async" />
+              </picture>
+              <picture>
+                <source media="(orientation: portrait) and (max-width: 900px)" type="image/avif" srcSet="/fp-port-shade.avif" />
+                <source media="(orientation: portrait) and (max-width: 900px)" type="image/webp" srcSet="/fp-port-shade.webp" />
+                <source type="image/avif" srcSet="/fp-land-shade.avif" />
+                <img className="gxa-layer gxa-shade" src="/fp-land-shade.webp" alt="" decoding="async" />
+              </picture>
+              <picture>
+                <source media="(orientation: portrait) and (max-width: 900px)" type="image/avif" srcSet="/fp-port-1280.avif 1280w, /fp-port-2048.avif 2048w" sizes="100vw" />
+                <source media="(orientation: portrait) and (max-width: 900px)" type="image/webp" srcSet="/fp-port-1280.webp 1280w, /fp-port-2048.webp 2048w" sizes="100vw" />
+                <source type="image/avif" srcSet="/fp-land-2752.avif 2752w, /fp-land-5504.avif 5504w" sizes="100vw" />
+                <source type="image/webp" srcSet="/fp-land-2752.webp 2752w, /fp-land-5504.webp 5504w" sizes="100vw" />
+                <img className={`gxa-layer gxa-front ${landingPortrait ? "gxa-front-port" : "gxa-front-land"}`} src="/fp-land-2752.jpg" alt="" decoding="async" />
+              </picture>
+              {/* Every light below is placed on a REAL light in the painting.
+                  The old numbers were hand-typed against the old painting and
+                  two of them landed on nothing once it changed (one sat on a
+                  stone lion, the arch glow sat on leaves beside the opening).
+                  These were measured off each render by finding the actual warm
+                  and cyan highlights, so they sit on the lanterns and the
+                  glowing mushrooms rather than near them. */}
+              {LANDING_ART.glows.map(([x, y, s], i) => (
                 <div key={i} className="gxa-glow" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.916}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(255,190,90,0.5) 0%, rgba(255,160,60,0.18) 45%, transparent 70%)", animationDelay: `${i * 0.9}s` }} />
               ))}
-              <div className="gxa-archlight" style={{ left: "43%", top: "18%", width: "18%", aspectRatio: "1.2", background: "radial-gradient(circle, rgba(255,214,140,0.4) 0%, rgba(255,190,110,0.14) 50%, transparent 72%)" }} />
-              {[[12.5, 63, 7], [74.5, 67, 7.5], [93, 57.5, 6.5]].map(([x, y, s], i) => (
+              <div className="gxa-archlight" style={{ left: `${LANDING_ART.arch[0]}%`, top: `${LANDING_ART.arch[1]}%`, width: `${LANDING_ART.arch[2]}%`, aspectRatio: "1.2", background: "radial-gradient(circle, rgba(255,214,140,0.4) 0%, rgba(255,190,110,0.14) 50%, transparent 72%)" }} />
+              {LANDING_ART.shrooms.map(([x, y, s], i) => (
                 <div key={i} className="gxa-shroom" style={{ left: `${x - s / 2}%`, top: `${y - s * 0.916}%`, width: `${s}%`, aspectRatio: "1", background: "radial-gradient(circle, rgba(110,225,255,0.4) 0%, rgba(90,190,240,0.14) 48%, transparent 72%)", animationDelay: `${i * 2.1}s` }} />
               ))}
             </div>
@@ -7113,7 +7279,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               introFlightDone directly instead of a fixed CSS delay, so this only
               ever appears the instant the flying compass actually lands here. */}
           <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none", opacity: introFlightDone ? 1 : 0 }}>
-            <span ref={cornerMarkRef} style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
+            <span ref={cornerMarkRef} className={`gxa-brand${introFlightDone ? " gxa-lit" : ""}`} style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
             <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
               <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
                 style={{ background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>

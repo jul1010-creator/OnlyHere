@@ -112,6 +112,43 @@ Tests now **177**, up from 146. The new correction tests run `correctEntry` end 
 
 ---
 
+## PASS 66, 7 Aug: the queue was writing into the editor
+
+Oliver: *"the /#studio queues are good but, whenever it is the next in queue, it can't publish because the other is published."*
+
+He found one symptom. There were four, all from one cause: `generateArea` writes the finished draft, the photo name, the publish status, the verified coordinates and both warnings into the **same component state the editor renders from**, and the queue calls it in the background while he is reviewing something else.
+
+1. **His.** `loadQueueResult` never reset `publishStatus`, and the panel renders a green "✓ Published" line *instead of* the button. So the next draft arrived wearing the previous one's success state, with no button at all.
+2. A background item completing could **replace the draft under review**.
+3. **Silent and expensive.** `publishDraft` force-overrides the published station and coordinates from `studioFrozenGeo`. Queue drafts Ribe, moves on to Skagen, Skagen overwrites the frozen geo, he publishes Ribe: **Ribe goes live carrying Skagen's station and coordinates.** The mechanism built to stop coordinate hallucination was causing it, in the workflow he uses most, with nothing on screen to show it.
+4. Found while fixing the rest: the auto-correction pass wrote the corrected draft to state but not to `t`, and `t` is what a queued run returns. **Every queued draft was stored and published uncorrected.**
+
+Fix: `generateArea(name, type, { queued: true })`. Every editor-state write goes through a `ui()` guard that no-ops in a background run; the progress stage and the loading lock are deliberately not guarded. The draft's own geo and warnings travel in the return value, and only `loadQueueResult` puts anything into the editor. It also clears `editingId` now, because opening a queue draft while editing a published row would have PATCHed that row with the new draft.
+
+A test walks `generateArea` and fails if any editor setter is ever called outside the guard again.
+
+---
+
+## PASS 67, 7 Aug: order, filters, and a search that searched nothing
+
+From a friend's review, relayed by Oliver: alphabetical order, better filters.
+
+**Danish alphabetical, not plain.** `daCompare` / `byName` in `helpers.js` use `localeCompare` with `"da"`. Æ, Ø and Å come after Z, and Aa is the same letter as Å, so a default sort files Ærø and Ålborg up among the A's on a site about Denmark. Applied to hidden towns, major cities, food, nightlife venues, the nightlife town list and camping, every one of which was rendering in source-array order: hardcoded rows first, then Studio rows in fetch order, an order that rearranges itself every time he publishes. Events keep soonest-first with an Alphabetical option, since for an event the date is the point. Attractions gained the same option, and it matters there because the old rating sort sinks everything unrated to the bottom and most of the list is unrated.
+
+**Note for anyone writing a test against this: Ø sorts BEFORE Å**, so Ørsted comes before Aalborg. I asserted it the other way round and the test corrected me.
+
+**Filter options are derived now, not typed.** The event month pills were hardcoded to Jun, Jul, Aug, Sep: written in summer and read all year, so in August there were events no pill could reach and in January every pill would be empty. Town regions were nine hardcoded strings. Both come from the rows themselves now, so a pill exists exactly when something is behind it. The region pills also filter the Major Cities grid, which they sit under and previously did not affect.
+
+**Food gained a town filter.** It had budget and kind and nothing for location, on a guide covering a country.
+
+**Deleted:** the "Sort & Filter" sheet, which could never open (nothing ever set its open flag true) and offered Fashion, Accessories, Bags and a 50 to 5000 DKK slider; and `craftType`, read by the Attractions filter with no UI anywhere to set it. `bookableOnly`, the one live control the sheet held, has its own pill and is untouched.
+
+**The header search now searches Gemlyx.** It ran only against `data/shop.js`, so typing "Ribe" found nothing real, and the one thing it did surface is the invented content in open finding 2 below. It now covers towns, events, food, nightlife, free entry and workshops, ranks name matches above town matches, and opens the real entry through `openStopDetail`, the dispatcher a guide stop already uses.
+
+Tests **215**, up from 146 at the start of the day. 35 fail against the pre-PASS-67 App.jsx.
+
+---
+
 ## OPEN FINDINGS, not yet acted on
 
 **1. The eight draft prompts contain 110 em and en dashes.** This is the exact bug already fixed once in `STUDIO_VOICE`, which contained 41 of them inside the rule that bans them. The model reads its instructions and sees 110 counter-examples. It is now easy to see because the prompts are isolated in `src/utils/studioPrompts.js`.
