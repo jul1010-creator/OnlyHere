@@ -21,7 +21,8 @@ import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
   isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
   dedupeAgainstExisting, getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
-  parsePrice, getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, departureParam, transitDepartureAnchor,
+  getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, departureParam, transitDepartureAnchor,
+  daCompare, byName,
   hostMatchesName, officialSiteFromCandidates,
 } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, findRealNearestStation } from "./utils/geo";
@@ -215,12 +216,18 @@ function GemlyxApp() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [stillHereMap, setStillHereMap] = useState({});
   const [search, setSearch] = useState("");
-  const [showFilter, setShowFilter] = useState(false);
-  const [filterCategories, setFilterCategories] = useState([]);
-  const [filterTypes, setFilterTypes] = useState([]);
-  const [priceMax, setPriceMax] = useState(5000);
+  // Not a field on any event, a group of towns. Named once so the filter and the
+  // pill that offers it can never drift apart, which they previously could:
+  // the town list was inline inside filteredEvents and nowhere else.
+  const NORTH_ZEALAND_TOWNS = ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"];
   const [bookableOnly, setBookableOnly] = useState(false);
-  const [craftSort, setCraftSort] = useState("recommended"); // "recommended" | "near"
+  const [craftSort, setCraftSort] = useState("recommended"); // "recommended" | "near" | "az"
+  const [eventSort, setEventSort] = useState("soonest");     // "soonest" | "az"
+  // FOOD had no location filter at all, which on a national guide means the only
+  // way to find somewhere to eat in the town you are actually standing in was to
+  // read every card. Options are derived from the data, never hardcoded, so a
+  // newly published town appears in the pills by itself.
+  const [foodCity, setFoodCity] = useState("All");
   const [mapCity, setMapCity] = useState(null);
   const [selectedPin, setSelectedPin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
@@ -231,7 +238,6 @@ function GemlyxApp() {
   const [townFilter, setTownFilter] = useState(null);
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
-  const [craftType, setCraftType] = useState(null);
   const [craftKind, setCraftKind] = useState(null);
   const [foodTab, setFoodTab] = useState("All");
   const [foodKind, setFoodKind] = useState("All"); // "All" | "Restaurants" | "Food Streets"
@@ -1109,11 +1115,11 @@ function GemlyxApp() {
       }
 
 
-      // Automatic Perplexity pre-check, BEFORE anything is written — a second,
+      // Automatic Perplexity pre-check, BEFORE anything is written. A second,
       // independent search pass (different index, different model than Tavily) that
       // caught real errors Studio's own research missed (e.g. Skagen Festival's fabricated
       // venue and wrong currency). Its findings get folded in as extra grounding for the
-      // draft, not as a rewrite — CLAUDE still writes every word. If the key's missing or
+      // draft, not as a rewrite. CLAUDE still writes every word. If the key's missing or
       // the call fails, this just skips silently — drafting must never depend on Gemini.
       let googleFindings = "";
       {
@@ -1196,7 +1202,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // programmatically BEFORE any model ever sees this draft. This is the actual
       // architectural fix for coordinate/station hallucination (per Gemini's
       // pipeline report): a language model "smooths" a real number into whichever
-      // one reads more naturally in a sentence, even when fed the correct one — so
+      // one reads more naturally in a sentence, even when fed the correct one, so
       // instead of asking it to state these, they're computed once here, handed over
       // as facts to reference (not restate character-for-character, since it still
       // shouldn't need to type them), and then FORCE-OVERRIDDEN again at publish
@@ -1846,12 +1852,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                   t = corrected;
                   ui(setStudioDraft, corrected);
                   ui(setStudioDraftText, JSON.stringify(corrected, null, 2));
-                  ui(setStudioInventedWarning, inventedWarning = `AUTO-CORRECTED — these claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${inventedCheck.text}`);
+                  ui(setStudioInventedWarning, inventedWarning = `AUTO-CORRECTED. These claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${inventedCheck.text}`);
                 } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
               } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
             } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
           } catch {
-            ui(setStudioInventedWarning, inventedWarning = inventedCheck.text); // correction failed — fall back to the plain warning, never lose it
+            ui(setStudioInventedWarning, inventedWarning = inventedCheck.text); // correction failed, fall back to the plain warning, never lose it
           }
         }
       } catch { /* final check failed — draft already shown, this just skips silently rather than blocking */ }
@@ -1883,7 +1889,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // making it impossible to tell a bad API key, a rejected model name, or a
       // JSON-parse failure apart from each other without opening devtools.
       const detail = err?.message && err.message !== "empty" ? err.message : null;
-      ui(setStudioError, `Couldn't draft that — try again, or check the name.${detail ? ` (${detail})` : ""}`);
+      ui(setStudioError, `Couldn't draft that. Try again, or check the name.${detail ? ` (${detail})` : ""}`);
       draftOutcome = { ok: false, error: detail || "Couldn't draft that" };
     }
     setStudioStage(null);
@@ -2522,7 +2528,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
             content: `Read this draft travel-guide content and find sentences that genuinely read as generic AI writing — not because they use an obvious cliché word, but because of tone, rhythm, or structure: unnecessary hedging ("it could be argued", "some might say"), suspiciously tidy three-item lists, over-smooth even-toned phrasing with no real edge or specificity, sentences that could describe any place rather than THIS one. Be selective — only flag genuine problems, not every sentence, and don't invent issues if the writing is actually fine. For each real problem, quote the EXACT sentence as it appears in the text (verbatim, so it can be found) and give a short reason.\n\nRespond with ONLY a JSON array, no other text: [{"sentence": "exact sentence from the text", "reason": "short reason"}] — return [] if nothing genuine stands out.\n\nDraft:\n${studioDraftText}`
           }],
           // Same rejected-parameter bug as scanSource above: gpt-5.6-sol refuses
-          // max_tokens. This one failed SILENTLY — the catch below only logs to
+          // max_tokens. This one failed SILENTLY: the catch below only logs to
           // console, so the AI voice scan has been quietly returning nothing at
           // all rather than reporting itself broken. Budget also raised, since a
           // reasoning model spends part of it thinking before it writes anything.
@@ -2618,7 +2624,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       const shaped = isEditing ? editedDraft : shapeForLive(studioType, editedDraft);
       if (!isEditing && studioPhotoName) shaped.photo = `/${{ town: "towns", festival: "events", free: "free", food: "food", foodStreet: "food", night: "nightlife", booking: "craft" }[studioType]}/${studioPhotoName}`;
       // Force-override with the real pre-computed values from generateArea, regardless
-      // of what the draft itself says — this is the actual enforcement step, not
+      // of what the draft itself says. This is the actual enforcement step, not
       // just an instruction the model could ignore. Only applies to a fresh draft;
       // an edit of an older published row has no matching studioFrozenGeo to apply.
       if (!isEditing && studioFrozenGeo) {
@@ -2813,7 +2819,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
           const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} Denmark train bus travel time best hotel hostel names and prices per night ${nowMonth} ${new Date().getFullYear()}`)}`);
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
-        } catch { /* search down — Claude will fall back to safe wording */ }
+        } catch { /* search down, Claude will fall back to safe wording */ }
         const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with genuinely leaving for a new town (a departure/travel leg to somewhere the traveler will actually be based from for the following day(s)), the accommodation for THIS day must reflect where they'll ACTUALLY be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
 Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
@@ -4295,19 +4301,41 @@ If the conversation only covers a single day or a few stops with no explicit day
   const savedProducts = allProducts.filter(p => savedItems.includes(p.id));
 
 
-  const displayProducts = (selectedCity
-    ? selectedCity.products.map(p => ({ ...p, city: selectedCity.name, color: selectedCity.color }))
-    : allProducts
-  ).filter(p => {
-    const catOk = filterCategories.length === 0 || filterCategories.includes(p.category);
-    const typeOk = filterTypes.length === 0 || filterTypes.includes(p.locationType);
-    const priceOk = parsePrice(p.price) <= priceMax;
-    return catOk && typeOk && priceOk;
-  });
-
-  const searchResults = search.length > 1 ? allProducts.filter(p =>
-    [p.name, p.city, p.shop, p.category].some(f => f?.toLowerCase().includes(search.toLowerCase()))
-  ) : [];
+  // ── THE SEARCH BOX NOW SEARCHES GEMLYX ─────────────────────────────
+  // It searched `allProducts` from data/shop.js and nothing else. Two problems,
+  // and the second is the serious one:
+  //
+  //   1. Typing "Ribe" found nothing. Not the town, not an event in it, not a
+  //      restaurant. Every real content type the app is built on was invisible
+  //      to its own search box, which is a strange thing for a guide to be.
+  //   2. data/shop.js is the INVENTED content flagged as open finding 2 in
+  //      handoff 6, so the one thing the search did surface was the one thing
+  //      that should never reach a reader.
+  //
+  // Now it searches everything published, orders the hits Danish-alphabetically,
+  // and opens the real entry through openStopDetail, the same dispatcher a guide
+  // stop already uses, so there is one code path from a name to a page.
+  const searchResults = (() => {
+    const q = search.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const pools = [
+      ...towns.map(p => ({ ...p, _src: "town", _kindLabel: "Town", _where: p.region })),
+      ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event", _kindLabel: "Event", _where: p.town })),
+      ...foodSpots.map(p => ({ ...p, _src: "food", _kindLabel: "Food", _where: p.location || p.city })),
+      ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife", _kindLabel: "Nightlife", _where: p.location || p.city })),
+      ...freeEntrance.map(p => ({ ...p, _src: "free", _kindLabel: "Free entry", _where: p.city })),
+      ...craftItems.map(p => ({ ...p, _src: "craft", _kindLabel: "Workshop", _where: p.location })),
+    ];
+    const hit = (p) => [p.name, p._where, p.tag, p.type, p.region].some(f => String(f || "").toLowerCase().includes(q));
+    // A name match beats a match on the town it happens to sit in: someone typing
+    // "Ribe" wants Ribe itself first, not the six entries that mention it.
+    const nameFirst = (a, b) => {
+      const an = String(a.name || "").toLowerCase().startsWith(q) ? 0 : String(a.name || "").toLowerCase().includes(q) ? 1 : 2;
+      const bn = String(b.name || "").toLowerCase().startsWith(q) ? 0 : String(b.name || "").toLowerCase().includes(q) ? 1 : 2;
+      return an - bn || byName(a, b);
+    };
+    return pools.filter(hit).sort(nameFirst).slice(0, 12);
+  })();
 
 
   const confirmStillHere = (id) => {
@@ -4685,13 +4713,34 @@ You also have a web_search tool. Use it whenever someone asks about something th
     );
   };
 
-  const filteredEvents = (eventTab === "local" ? events : eventTab === "viking" ? vikingEvents : majorEvents)
-    .filter(e => isUpcoming(e.date))
+  // ── FILTER OPTIONS COME FROM THE EVENTS, NOT FROM A LIST I TYPED ──
+  // The date pills were hardcoded to Jun, Jul, Aug and Sep. Written in summer,
+  // read all year: by August there are events in the list that no pill can
+  // reach, and in January every pill is empty. Same for the type pills, three
+  // hardcoded sets that a newly published event type simply would not appear in.
+  //
+  // Derived from the same array filteredEvents runs on, so a pill exists exactly
+  // when something is behind it, and months stay in calendar order rather than
+  // alphabetical (a January that sorts before August is worse than useless).
+  const eventTabSource = eventTab === "local" ? events : eventTab === "viking" ? vikingEvents : majorEvents;
+  const upcomingInTab = eventTabSource.filter(e => isUpcoming(e.date));
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const eventMonthOptions = MONTHS.filter(m => upcomingInTab.some(e => new Date(e.date).toLocaleString("en", { month: "short" }) === m));
+  const eventTypeOptions = [
+    ...[...new Set(upcomingInTab.map(e => e.type).filter(Boolean))].sort(daCompare),
+    // North Zealand is not a type on any record, it is a group of towns. It stays
+    // hand-added because there is nothing in the data to derive it from.
+    ...(eventTab === "local" && upcomingInTab.some(e => NORTH_ZEALAND_TOWNS.includes(e.town)) ? ["North Zealand"] : []),
+  ];
+
+  const filteredEvents = upcomingInTab
     .filter(e => {
       const em = new Date(e.date).toLocaleString("en", { month: "short" });
-      return (!eventMonth || em === eventMonth) && (!eventType || e.type === eventType || (eventType === "North Zealand" && ["Gilleleje","Tisvildeleje","Hundested","Frederiksværk","Liseleje"].includes(e.town)));
+      return (!eventMonth || em === eventMonth) && (!eventType || e.type === eventType || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)));
     })
-    .sort((a,b) => new Date(a.date) - new Date(b.date));
+    // Soonest first stays the default, because for an event the date IS the
+    // point. A to Z is there for when you know the name and want to find it.
+    .sort(eventSort === "az" ? byName : (a, b) => new Date(a.date) - new Date(b.date));
 
   const aiHelperBlock = () => (
     <div id="ai-helper-anchor" style={{ marginTop: 8 }}>
@@ -5873,13 +5922,17 @@ You also have a web_search tool. Use it whenever someone asks about something th
               if (attractionCity !== "All" && attractionCity !== "🍬 Handmade" && item._city !== attractionCity) return false;
               if (priceFilter === "free" && item._kind !== "free") return false;
               if (priceFilter === "paid" && item._kind !== "craft") return false;
-              if (craftType && item._kind === "craft" && item.type !== craftType) return false;
               if (craftKind && item._kind === "craft" && !(item.what || []).some(w => (kindKeys[craftKind] || []).some(k => w.toLowerCase().includes(k)))) return false;
               if (bookableOnly && item._kind === "craft" && item.bookingType !== "online") return false;
               if (hiddenGemOnly && item.popularityTag !== "Hidden Gem") return false;
               return true;
-            }).sort((a, b) => (craftSort === "near" && isInDenmark(userCoords))
+            }).sort((a, b) => craftSort === "az"
+              ? byName(a, b)
+              : (craftSort === "near" && isInDenmark(userCoords))
               ? (townKmFromUser(a._kind === "craft" ? a.location : a.city) ?? 9999) - (townKmFromUser(b._kind === "craft" ? b.location : b.city) ?? 9999)
+              // Rating descending puts everything UNRATED at the bottom, which is
+              // most of the list, so A to Z above is the honest default for anyone
+              // actually looking for a specific place.
               : (b.rating || 0) - (a.rating || 0));
 
             return (
@@ -5934,6 +5987,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Sort</div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
+                          <Pill label="Alphabetical" active={craftSort === "az"} onClick={() => setCraftSort("az")} />
                           <Pill label="📍 Closest" active={craftSort === "near"} color={C.gold}
                             onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
                         </div>
@@ -6070,15 +6124,20 @@ You also have a web_search tool. Use it whenever someone asks about something th
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
-                  {["All", "Jun", "Jul", "Aug", "Sep"].map(m => (
+                  {["All", ...eventMonthOptions].map(m => (
                     <Pill key={m} label={m} active={(m === "All" && !eventMonth) || eventMonth === m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))} />
                   ))}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                  {(eventTab === "local" ? ["All", "Festival", "Market", "Concert", "Music", "North Zealand"] : eventTab === "viking" ? ["All", "Market", "Battle & Market", "Craftsmen Gathering", "Market & Combat"] : ["All", "Music", "Cultural"]).map(f => (
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                  {["All", ...eventTypeOptions].map(f => (
                     <Pill key={f} label={f} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />
                   ))}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Order</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                  <Pill label="Soonest" active={eventSort === "soonest"} onClick={() => setEventSort("soonest")} />
+                  <Pill label="Alphabetical" active={eventSort === "az"} onClick={() => setEventSort("az")} />
                 </div>
               </div>
               {filteredEvents.length === 0 ? (
@@ -6106,6 +6165,23 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 ))}
               </div>
 
+              {/* WHERE. Food had a budget filter and a kind filter and nothing at
+                  all for location, on a guide covering a whole country: the only
+                  way to find dinner in the town you are standing in was to read
+                  every card. Towns are taken from the food entries themselves, so
+                  a pill exists exactly when there is something behind it. */}
+              {(() => {
+                const cities = [...new Set(foodSpots.map(f => f.location || f.city).filter(Boolean))].sort(daCompare);
+                if (cities.length < 2) return null;
+                return (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
+                    {["All", ...cities].map(c => (
+                      <Pill key={c} label={c} active={foodCity === c} onClick={() => setFoodCity(foodCity === c ? "All" : c)} />
+                    ))}
+                  </div>
+                );
+              })()}
+
               <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}`, flexWrap: "wrap" }}>
                 {[{ id: "All", label: "All" }, { id: "Budget", label: "Budget" }, { id: "Mid-range", label: "Mid-range" }, { id: "Splurge", label: "Splurge" }].map(t => (
                   <button key={t.id} onClick={() => setFoodTab(t.id)}
@@ -6119,7 +6195,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   real cards — media plate (photo or monogram), name, meta, price,
                   two-sentence description, whole card tappable, tilt on hover. */}
               <div className="cards-grid">
-                {foodSpots.filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet))).map(spot => (
+                {foodSpots.filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet)) && (foodCity === "All" || (f.location || f.city || "").includes(foodCity))).sort(byName).map(spot => (
                   <div key={spot.id} onClick={() => setFoodDetail(spot)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
                     style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease", willChange: "transform" }}>
                     <div style={{ height: 128, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${spot.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
@@ -6155,7 +6231,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
               const t = townOf(s.location);
               (townGroups[t] = townGroups[t] || []).push(s);
             });
-            const townList = Object.keys(townGroups).sort((a, b) => townGroups[b].length - townGroups[a].length);
+            const townList = Object.keys(townGroups).sort(daCompare);
 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
@@ -6249,7 +6325,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).length === 0 && (
                     <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet — try the other tab.</div>
                   )}
-                  {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).map(spot => (
+                  {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).slice().sort(byName).map(spot => (
                     <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                         <span style={{ fontSize: 22 }}>{spot.emoji}</span>
@@ -6295,7 +6371,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                 <div style={{ marginBottom: 28 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>Major Cities — not hidden, but real</div>
                   <div className="towns-grid">
-                    {towns.filter(t => t.isMajorCity).map(town => (
+                    {towns.filter(t => t.isMajorCity && (!townFilter || t.region === townFilter)).sort(byName).map(town => (
                       <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                         <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
@@ -6316,13 +6392,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 </div>
               )}
+              {/* Regions come from the towns themselves. The old list was nine
+                  hardcoded strings, so a region a published entry introduced had
+                  no pill, and regions with nothing left in them still had one.
+                  These pills now also filter the Major Cities grid above, which
+                  they visually sit under and previously did not affect at all. */}
               <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
-                {["All", "Copenhagen Area", "Zealand", "Funen", "South Jutland", "North Jutland", "East Jutland", "Bornholm", "Fanø Island"].map(r => (
+                {["All", ...[...new Set(towns.map(t => t.region).filter(Boolean))].sort(daCompare)].map(r => (
                   <Pill key={r} label={r} active={(r === "All" && !townFilter) || townFilter === r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))} />
                 ))}
               </div>
               <div className="towns-grid">
-                {towns.filter(t => !t.isMajorCity && (!townFilter || t.region === townFilter)).map(town => (
+                {towns.filter(t => !t.isMajorCity && (!townFilter || t.region === townFilter)).sort(byName).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                     <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
@@ -6437,7 +6518,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <div style={{ fontSize: 18, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>⛺ Camping & Tent Spots</div>
                     <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 16 }}>Denmark's shelters and coastal campsites are one of its best-kept secrets — many are completely free. Perfect stops to break up any road trip.</div>
                     <div className="products-grid">
-                      {campingSpots.map(spot => (
+                      {[...campingSpots].sort(byName).map(spot => (
                         <div key={spot.id} onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(spot.mapHint)}`, "_blank")}
                           style={{ background: C.surface, borderRadius: 16, padding: "14px", border: `1px solid ${C.border}`, cursor: "pointer" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -7157,14 +7238,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
         {search.length > 1 && searchResults.length > 0 && (
           <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: C.surface, borderBottom: `1px solid ${C.border}`, zIndex: 200, maxHeight: 240, overflowY: "auto" }}>
             {searchResults.map(p => (
-              <div key={p.id} onClick={() => { setSelectedProduct({ ...p }); setSearch(""); }}
+              <div key={`${p._src}-${p.id}`} onClick={() => { openStopDetail(p); setSearch(""); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                <span style={{ fontSize: 18 }}>{p.emoji}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: C.muted }}>{p.shop} · {p.city}</div>
+                <span style={{ fontSize: 18 }}>{p.emoji || "📍"}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{p._kindLabel}{p._where ? ` · ${p._where}` : ""}</div>
                 </div>
-                <span style={{ fontWeight: 700, color: C.gold, fontSize: 13 }}>{p.price}</span>
               </div>
             ))}
           </div>
@@ -7237,85 +7317,15 @@ You also have a web_search tool. Use it whenever someone asks about something th
         </div>
       </div>
 
-      {/* ── FILTER PANEL (Hotels.com style) ──────────────── */}
-      {showFilter && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 400, display: "flex", alignItems: "flex-end" }} onClick={() => setShowFilter(false)}>
-          <div style={{ background: C.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 500, margin: "0 auto", padding: "20px 20px 40px" }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Sort & Filter</div>
-              <button onClick={() => { setFilterCategories([]); setFilterTypes([]); setPriceMax(5000); setBookableOnly(false); }} style={{ background: "none", border: "none", color: C.accent, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Reset</button>
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 }}>Category</div>
-              {["Fashion", "Accessories", "Bags"].map(cat => {
-                const checked = filterCategories.includes(cat);
-                return (
-                  <label key={cat} onClick={() => setFilterCategories(prev => checked ? prev.filter(x => x !== cat) : [...prev, cat])}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                    <span style={{ fontSize: 14, color: C.text }}>{cat}</span>
-                    <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${checked ? C.accent : C.border}`, background: checked ? C.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
-                      {checked && <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>✓</span>}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 }}>Availability</div>
-              {[{ id: "permanent", label: "Permanent shops" }, { id: "seasonal", label: "Seasonal" }, { id: "popup", label: "Pop-up" }].map(opt => {
-                const checked = filterTypes.includes(opt.id);
-                return (
-                  <label key={opt.id} onClick={() => setFilterTypes(prev => checked ? prev.filter(x => x !== opt.id) : [...prev, opt.id])}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                    <span style={{ fontSize: 14, color: C.text }}>{opt.label}</span>
-                    <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${checked ? C.accent : C.border}`, background: checked ? C.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
-                      {checked && <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>✓</span>}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Max price</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "'Fraunces', serif" }}>{priceMax >= 5000 ? "Any price" : `Up to ${priceMax.toLocaleString()} DKK`}</div>
-              </div>
-              <input type="range" min="50" max="5000" step="50" value={priceMax} onChange={e => setPriceMax(Number(e.target.value))}
-                style={{ width: "100%", accentColor: C.accent }} />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.muted, marginTop: 4 }}>
-                <span>50 DKK</span><span>5,000+ DKK</span>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 24 }}>
-              <label onClick={() => setBookableOnly(v => !v)}
-                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", cursor: "pointer" }}>
-                <div>
-                  <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>● Bookable online only</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Skip anything needing a request first</div>
-                </div>
-                <div style={{ width: 44, height: 26, borderRadius: 100, background: bookableOnly ? C.accent : C.border, position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: bookableOnly ? 21 : 3, transition: "all 0.2s" }} />
-                </div>
-              </label>
-            </div>
-
-            <button onClick={() => setShowFilter(false)}
-              style={{ width: "100%", background: C.accent, border: "none", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-              Show {displayProducts.length} results
-            </button>
-            {(filterCategories.length > 0 || filterTypes.length > 0 || priceMax < 5000 || bookableOnly) && (
-              <button onClick={() => { setFilterCategories([]); setFilterTypes([]); setPriceMax(5000); setBookableOnly(false); }}
-                style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px", fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 8 }}>
-                Clear all filters
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* THE "Sort & Filter" SHEET IS GONE (Oliver, 7 Aug: "Better filters").
+          It could never open: nothing in the file ever set its open flag to true,
+          only to false, twice, from inside the sheet itself. Its options
+          were leftovers from a shop the app is no longer: Fashion, Accessories,
+          Bags, a permanent/seasonal/popup toggle and a 50 to 5000 DKK price
+          slider. Deleted rather than repaired, because the real filters live on
+          the pages they belong to, where they are actually reachable. The one
+          live control it held, bookableOnly, already has its own pill on the
+          Attractions page and is untouched. */}
 
       <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a

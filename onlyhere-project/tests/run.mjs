@@ -40,7 +40,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells, daCompare, byName } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
@@ -550,6 +550,77 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // editor but not `t`, and `t` is what a queued run returns, so every queued
   // draft was stored and later published in its UNCORRECTED form.
   ok("an auto-correction is written back into the returned draft", /t = corrected;/.test(generateArea));
+}
+
+// ── Danish alphabetical order ──────────────────────────────────────
+// Oliver, 7 Aug 2026, relaying a friend's review: "We need alphabetical order."
+// On a site about Denmark it has to be DANISH alphabetical. Æ, Ø and Å come
+// after Z, and a default sort files them up among the A's and O's.
+{
+  const names = ["Ærø", "Aarhus", "Skagen", "Odense", "Ørsted", "Ålborg", "Zealand", "Møn", "Ribe"];
+  const sorted = names.slice().sort(M.daCompare);
+  is("Æ, Ø and Å sort after Z, not near A and O", sorted,
+    ["Møn", "Odense", "Ribe", "Skagen", "Zealand", "Ærø", "Ørsted", "Ålborg", "Aarhus"]);
+
+  // Aa is the older spelling of Å and the Danish collator treats them as the
+  // same letter, so Aarhus files with Århus instead of at the top of every list.
+  is("Aarhus and Århus are the same word", M.daCompare("Aarhus", "Århus"), 0);
+  ok("å is still its own letter, not an accented a", M.daCompare("a", "å") < 0);
+
+  // A plain sort is what this replaces. Pinned so nobody "simplifies" it back.
+  ok("a default sort really does get this wrong", names.slice().sort()[0] !== sorted[0]);
+
+  // The last three letters are Æ, then Ø, then Å, in that order. So Ørsted
+  // really does come before Aalborg, because Aa is Å. I expected the opposite
+  // when writing this test and the test was right.
+  is("Æ then Ø then Å, in that order", ["Ålborg", "Ærø", "Ørsted"].sort(M.daCompare), ["Ærø", "Ørsted", "Ålborg"]);
+  is("byName reads the name off a row", [{ name: "Ærø" }, { name: "Ribe" }].sort(M.byName).map(x => x.name), ["Ribe", "Ærø"]);
+  is("a missing name does not throw", [{ name: "Ribe" }, {}].sort(M.byName).length, 2);
+  is("numbers inside a name sort like numbers", ["Café 10", "Café 2"].sort(M.daCompare), ["Café 2", "Café 10"]);
+}
+
+// ── the lists a reader actually reads are ordered ──────────────────
+// Every one of these rendered in source-array order, which is "hardcoded
+// entries first, then whatever Studio published, in fetch order". That is not
+// an order, it only looks like one until you publish and the page rearranges.
+// Text assertions because the lists live in JSX inside a 7900-line component.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const sortedList = (label, re) => ok(`${label} is in Danish alphabetical order`, re.test(app));
+
+  sortedList("the hidden towns grid", /towns\.filter\(t => !t\.isMajorCity[\s\S]{0,80}?\.sort\(byName\)/);
+  sortedList("the major cities grid", /towns\.filter\(t => t\.isMajorCity[\s\S]{0,80}?\.sort\(byName\)/);
+  sortedList("the food grid", /foodSpots\.filter\([\s\S]{0,400}?\)\.sort\(byName\)/);
+  sortedList("the nightlife town list", /Object\.keys\(townGroups\)\.sort\(daCompare\)/);
+  sortedList("the venues inside a nightlife town", /townGroups\[nightlifeTownView\][\s\S]{0,120}?\.sort\(byName\)/);
+  sortedList("the camping list", /\[\.\.\.campingSpots\]\.sort\(byName\)/);
+
+  // The region pills sat visually under the Major Cities grid and did not
+  // filter it, so picking Bornholm left Copenhagen on screen.
+  ok("the region pills filter the major cities too", /isMajorCity && \(!townFilter \|\| t\.region === townFilter\)/.test(app));
+
+  // Filter options must come from the data. The month pills were hardcoded to
+  // Jun, Jul, Aug, Sep: written in summer, read all year, so by August there
+  // were events no pill could reach and in January every pill was empty.
+  ok("event months are derived from the events", /const eventMonthOptions = MONTHS\.filter/.test(app));
+  ok("event types are derived from the events", /const eventTypeOptions = \[/.test(app));
+  ok("town regions are derived from the towns", /new Set\(towns\.map\(t => t\.region\)/.test(app));
+  ok("no hardcoded Jun Jul Aug Sep pill row survives", !/\["All", "Jun", "Jul", "Aug", "Sep"\]/.test(app));
+  ok("no hardcoded nine-region pill row survives", !/"Copenhagen Area", "Zealand", "Funen"/.test(app));
+
+  // The unreachable sheet, and the two filters that could never be set.
+  ok("the dead Sort & Filter sheet is gone", !/setShowFilter\(true\)|const \[showFilter/.test(app));
+  ok("its leftover shop categories are gone", !/"Fashion", "Accessories", "Bags"/.test(app));
+  ok("craftType, a filter with no UI to set it, is gone", !/craftType/.test(app));
+  ok("bookableOnly, the one live control it held, is untouched", /bookableOnly/.test(app));
+
+  // Search used to run against data/shop.js, which is the invented content in
+  // open finding 2 of handoff 6, and against nothing else.
+  ok("search no longer runs on the invented shop data", !/searchResults = search\.length > 1 \? allProducts/.test(app));
+  ok("search covers towns, events, food, nightlife, free entry and workshops",
+    /_kindLabel: "Town"/.test(app) && /_kindLabel: "Event"/.test(app) && /_kindLabel: "Food"/.test(app) &&
+    /_kindLabel: "Nightlife"/.test(app) && /_kindLabel: "Free entry"/.test(app) && /_kindLabel: "Workshop"/.test(app));
+  ok("a search hit opens the real entry through the existing dispatcher", /onClick=\{\(\) => \{ openStopDetail\(p\); setSearch\(""\); \}\}/.test(app));
 }
 
 rmSync(dir, { recursive: true, force: true });

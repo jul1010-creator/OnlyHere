@@ -359,3 +359,22 @@ export const officialSiteFromCandidates = (candidateUrls, name) => {
   }
   return null;
 };
+
+// ── Danish alphabetical order ───────────────────────────────────────
+// Oliver, 7 Aug 2026, relaying a friend's review of the site: "We need
+// alphabetical order."
+//
+// It has to be DANISH alphabetical, not a plain sort. Æ, Ø and Å come after Z
+// in Danish, so a default sort files Ærø, Ørsted and Ålborg up among the A's
+// and O's, which is the one ordering mistake a Danish reader spots instantly on
+// a site about Denmark. Å and the older spelling Aa are the same letter, and
+// the Danish collator already knows it, so Aarhus lands with Århus instead of
+// at the very top of every list.
+//
+// numeric:true so "Café 2" comes before "Café 10". sensitivity:"base" so case
+// and spelling variants of the same word sit together rather than splitting the
+// list in two.
+export const daCompare = (a, b) => String(a ?? "").localeCompare(String(b ?? ""), "da", { sensitivity: "base", numeric: true });
+
+// The usual case: a list of content rows, ordered by the name a reader reads.
+export const byName = (a, b) => daCompare(a?.name, b?.name);
