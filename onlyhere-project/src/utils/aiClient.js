@@ -96,12 +96,24 @@ export const withRetry = async (fn, isFailure, label, attempts = 3) => {
   return lastResult;
 };
 
-// Claude is the actual WRITER in Gemlyx's pipeline — every rewrite/rephrase/
-// fix task routes through here, never OpenAI. OpenAI's role is narrowed to
-// structuring research into the schema during the initial draft; once real
-// prose needs to be written or fixed, it's Claude's job specifically.
-// OpenAI's role is narrowed to planning + structuring — research query planning
-// (Stage 1) and organizing raw research into notes (Stage 4), never final prose.
+// THE WRITER RULE, and it is a rule, not a preference:
+//
+//   Perplexity and Tavily research. OpenAI PLANS and STRUCTURES. Claude WRITES.
+//
+// OpenAI's entire job is research query planning, organizing raw findings into
+// notes, extracting named candidates out of search results, and flagging bad
+// prose it is never allowed to rewrite itself. Every sentence that reaches a
+// traveler is Claude's, including short ones: a 40-word loading-screen fact is
+// published prose exactly like a 400-word blog section is.
+//
+// HISTORY, so this does not rot again: this comment already said all of the
+// above, twice, in slightly different words, while the Studio fact generator
+// two files away called askOpenAI to write the fact text itself. It had done so
+// since PASS 40. A comment cannot fail a build, so the rule is now enforced in
+// tests/run.mjs ("OPENAI NEVER WRITES PROSE"), which reads App.jsx as text and
+// fails if a new askOpenAI call site appears without a human signing off on it.
+// If that test fails, do not raise its expected count to make it green. Read
+// the new call site and ask whether OpenAI is planning or writing.
 export const askOpenAI = async (prompt, maxTokens = 800) => {
   try {
     const res = await fetch("/api/openai", {

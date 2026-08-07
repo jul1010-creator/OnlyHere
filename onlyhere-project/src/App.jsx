@@ -386,7 +386,8 @@ function GemlyxApp() {
   const [glancePending, setGlancePending] = useState(0);
   const [weatherPending, setWeatherPending] = useState(0);
 
-  // ── Founder studio (visible only at /#studio): Tavily+OpenAI drafts complete
+  // ── Founder studio (visible only at /#studio): research (Tavily + Perplexity)
+  // is planned and sorted by OpenAI and then WRITTEN BY CLAUDE into complete
   // entries — card + long-form blogBody — for any content type, following the
   // Gemlyx editorial documents. Output is paste-ready code the founder verifies
   // before committing, keeping "never invented content" true.
@@ -846,7 +847,13 @@ function GemlyxApp() {
             { role: "system", content: `Extract every distinct Danish festival/event mentioned in this page text into strict JSON: {"items": [{"name": "exact name as written", "town": "town/city if given, else empty string", "dates": "date range as written, else empty string"}]}. Only include items ACTUALLY present in the text — never invent, never guess at ones you think might exist. If the same festival appears twice (e.g. a duplicate listing), include it once. This is a discovery list only, not final content — the founder will individually research and verify each one before anything is published.` },
             { role: "user", content: pageData.text },
           ],
-          max_tokens: 8000,
+          // max_tokens -> max_completion_tokens: "gpt-5.6-sol" REJECTS max_tokens
+          // with "Unsupported parameter... Use 'max_completion_tokens' instead"
+          // (confirmed live, see askOpenAI in utils/aiClient.js, which was fixed
+          // for this months ago). This raw call never got the same fix, so every
+          // source scan has been failing with an OpenAI error since the model
+          // string changed. Two of these existed; the other is runAIVoiceScan.
+          max_completion_tokens: 8000,
         }),
       });
       const data = await res.json();
@@ -1063,19 +1070,19 @@ function GemlyxApp() {
       }
 
 
-      // Automatic Gemini + Google Search pre-check, BEFORE OpenAI writes a word — a second,
-      // independent search pass (different index, different model than Tavily+OpenAI) that
+      // Automatic Perplexity pre-check, BEFORE anything is written — a second,
+      // independent search pass (different index, different model than Tavily) that
       // caught real errors Studio's own research missed (e.g. Skagen Festival's fabricated
       // venue and wrong currency). Its findings get folded in as extra grounding for the
-      // draft, not as a rewrite — OpenAI still writes every word. If the key's missing or
+      // draft, not as a rewrite — CLAUDE still writes every word. If the key's missing or
       // the call fails, this just skips silently — drafting must never depend on Gemini.
       let googleFindings = "";
       {
         // For Food and Town: Gemini's job is no longer just "fact-check" — it's the
         // actual "Data Clerk" step (per Oliver's proposed pipeline). It organizes real,
         // searched facts into the SAME narrative buckets the final draft uses, so
-        // OpenAI's job narrows down to pure prose transformation of already-sorted
-        // material, instead of also having to research AND organize AND write at once.
+        // the WRITER's job (Claude) narrows down to pure prose transformation of
+        // already-sorted material, instead of researching AND organizing AND writing.
         // Other content types still get the general fact-check version until this
         // approach is validated on these two.
         const precheckPrompt = ((sType === "food" || sType === "foodStreet")
@@ -1120,7 +1127,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
 
       // Real, automatic night-transport check — nightlife only, since that's the one
       // content type where "can I actually get home at 3am" is load-bearing. Runs
-      // BEFORE OpenAI drafts anything, so the model's own first output is grounded in
+      // BEFORE anything is drafted, so the writer's own first output is grounded in
       // a real Directions API result instead of something that needs correcting after
       // the fact. Checks a weekday AND a weekend night separately — Danish night
       // transport genuinely differs between them, same as UK transport stopping
@@ -1147,14 +1154,14 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       }
 
       // FROZEN FACTS — real geocoding + real nearest-station lookup, computed
-      // programmatically BEFORE OpenAI ever sees this draft. This is the actual
+      // programmatically BEFORE any model ever sees this draft. This is the actual
       // architectural fix for coordinate/station hallucination (per Gemini's
-      // pipeline report): OpenAI "smooths" a real number into whichever one reads
-      // more naturally in a sentence, even when fed the correct one — so instead
-      // of asking it to state these, they're computed once here, told to OpenAI
+      // pipeline report): a language model "smooths" a real number into whichever
+      // one reads more naturally in a sentence, even when fed the correct one — so
+      // instead of asking it to state these, they're computed once here, handed over
       // as facts to reference (not restate character-for-character, since it still
       // shouldn't need to type them), and then FORCE-OVERRIDDEN again at publish
-      // time in publishDraft, so nothing OpenAI does to them survives regardless.
+      // time in publishDraft, so nothing any model does to them survives regardless.
       let frozenGeo = null;
       let frozenFactsText = "";
       if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(sType)) {
@@ -1911,8 +1918,17 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
   // "denmark" widens to the country generally, for breadth he has not published
   // yet.
   //
-  // Both go through askPerplexity for real research and then askOpenAI to write
+  // Both go through askPerplexity for real research and then askClaude to write
   // it, under the same STUDIO_VOICE rules and dash ban as every other draft.
+  //
+  // RULE VIOLATION FIXED (PASS 64): this stage used askOpenAI to write the fact
+  // text itself. A published fact is final prose, and the standing rule (see the
+  // header of utils/aiClient.js and the guide pipeline spec in buildGuide) is that
+  // OpenAI plans and structures, Claude writes, always. There is no research or
+  // structuring step left for OpenAI here either, since askPerplexity already
+  // returns the researched fact, so this stage was OpenAI writing published copy
+  // with nothing in front of it. Now it is Claude, with expectJson set so a
+  // conversational reply gets one strict re-ask instead of failing the fact.
   // A fact that cannot be verified is returned as a failure, never saved.
   const FACT_CATEGORIES = ["history", "attractions", "nature", "food", "nightlife"];
   const [factDrafts, setFactDrafts] = useState([]);      // drafted, not yet saved
@@ -1994,12 +2010,14 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
     let parsed;
     try {
       // BUG FIX (Oliver, 6 Aug, first real run of the fact generator): "Writing
-      // failed: '[object Object]' is not valid JSON". askOpenAI returns an
-      // OBJECT, { text } or { error }, not a raw string, so String()-ing it
+      // failed: '[object Object]' is not valid JSON". The AI helpers return an
+      // OBJECT, { text } or { error }, not a raw string, so String()-ing one
       // produced "[object Object]" and every fact failed to parse. My mistake in
       // PASS 40: I wrote the call without checking the helper's return shape,
       // which every other call site in this file already handles correctly.
-      const res = await askOpenAI(writePrompt, 500);
+      // 500 -> 700: the same JSON now has to survive Claude writing it, and a
+      // truncated object fails the parse below rather than degrading gracefully.
+      const res = await askClaude(writePrompt, 700, "claude-sonnet-5", true);
       if (res?.error) return { ok: false, error: `Writing failed: ${res.error}` };
       const raw = typeof res === "string" ? res : (res?.text || "");
       if (!raw.trim()) return { ok: false, error: "The writer returned nothing." };
@@ -2421,7 +2439,12 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
             role: "user",
             content: `Read this draft travel-guide content and find sentences that genuinely read as generic AI writing — not because they use an obvious cliché word, but because of tone, rhythm, or structure: unnecessary hedging ("it could be argued", "some might say"), suspiciously tidy three-item lists, over-smooth even-toned phrasing with no real edge or specificity, sentences that could describe any place rather than THIS one. Be selective — only flag genuine problems, not every sentence, and don't invent issues if the writing is actually fine. For each real problem, quote the EXACT sentence as it appears in the text (verbatim, so it can be found) and give a short reason.\n\nRespond with ONLY a JSON array, no other text: [{"sentence": "exact sentence from the text", "reason": "short reason"}] — return [] if nothing genuine stands out.\n\nDraft:\n${studioDraftText}`
           }],
-          max_tokens: 800,
+          // Same rejected-parameter bug as scanSource above: gpt-5.6-sol refuses
+          // max_tokens. This one failed SILENTLY — the catch below only logs to
+          // console, so the AI voice scan has been quietly returning nothing at
+          // all rather than reporting itself broken. Budget also raised, since a
+          // reasoning model spends part of it thinking before it writes anything.
+          max_completion_tokens: 1600,
         }),
       });
       const data = await res.json();
@@ -2513,7 +2536,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       const shaped = isEditing ? editedDraft : shapeForLive(studioType, editedDraft);
       if (!isEditing && studioPhotoName) shaped.photo = `/${{ town: "towns", festival: "events", free: "free", food: "food", foodStreet: "food", night: "nightlife", booking: "craft" }[studioType]}/${studioPhotoName}`;
       // Force-override with the real pre-computed values from generateArea, regardless
-      // of what OpenAI's own draft says — this is the actual enforcement step, not
+      // of what the draft itself says — this is the actual enforcement step, not
       // just an instruction the model could ignore. Only applies to a fresh draft;
       // an edit of an older published row has no matching studioFrozenGeo to apply.
       if (!isEditing && studioFrozenGeo) {
@@ -2637,7 +2660,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     } catch (err) { setPublishStatus("error"); setPublishErrorDetail(String(err)); }
   };
 
-  // For each guide day: one Tavily search for live facts, then OpenAI distills them into
+  // For each guide day: one Tavily search for live facts, then Claude distills them into
   // (a) how to travel between consecutive stops and (b) where to stay. Never invents —
   // falls back to "Check Rejseplanen" wording when the context doesn't support a claim.
   const fetchGuideWeather = (days, gid, arrivalDate) => {
@@ -2708,7 +2731,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
           const sRes = await fetch(`/api/search?q=${encodeURIComponent(`travel between ${names.slice(0, 4).join(" and ")} Denmark train bus travel time best hotel hostel names and prices per night ${nowMonth} ${new Date().getFullYear()}`)}`);
           const sData = await sRes.json();
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
-        } catch { /* search down — OpenAI will fall back to safe wording */ }
+        } catch { /* search down — Claude will fall back to safe wording */ }
         const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with genuinely leaving for a new town (a departure/travel leg to somewhere the traveler will actually be based from for the following day(s)), the accommodation for THIS day must reflect where they'll ACTUALLY be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
 Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
@@ -4898,7 +4921,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         )}
                       </div>
                     )}
-                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>Drafts a complete entry — card + full detail page — via Tavily + OpenAI, following the Gemlyx editorial docs. Output is paste-ready code — verify every fact before committing. Not visible to users.</div>
+                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>Drafts a complete entry, card plus full detail page, following the Gemlyx editorial docs. Tavily and Perplexity research it, OpenAI plans the queries and sorts the findings into notes, and Claude writes every word of the actual entry. Output is paste-ready code, so verify every fact before committing. Not visible to users.</div>
 
                     <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 16 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 3 }}>🔗 Scan a Source</div>
@@ -7583,7 +7606,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
             {[
               ["📍 Your location", "Only requested when you tap the location button — never in the background. Your coordinates are used directly in your browser to calculate distances to towns and events. They are not stored on any server and are not sent to anyone. You can revoke access anytime in your browser's site settings."],
-              ["✦ AI chats (Gemlyx Detour & Route Builder)", "When you use the AI Guide, your messages are sent to OpenAI (a US company) to generate the answer, and in some cases to Tavily to search for live information like opening status. Please don't include personal details in your messages — the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
+              ["✦ AI chats (Gemlyx Detour & Route Builder)", "When you use the AI Guide, your messages are sent to Anthropic (Claude), which writes the answer, and to OpenAI, which only plans and organises the research behind it. Both are US companies. In some cases your messages also go to Tavily and Perplexity to search for live information like opening status. Please don't include personal details in your messages, as the AI doesn't need your name or contact information to plan a great trip. We don't store your chats on our servers."],
               ["💾 Saved routes & guides", "Without an account, everything you save stays only in your browser's local storage, on your own device, and we never see it. If you create an account, your saved places and guides are also stored on our database (Supabase) so they follow you between your phone and laptop. Nothing else about your activity is stored. Delete them in the app, by deleting your account, or by clearing your browser data for this site."],
               ["👤 Accounts", "An account is entirely optional. You can browse, plan and build a guide without one. If you create an account we store your email address and your saved list, and nothing else: no profile, no location history, no record of what you looked at. Sign in is handled by Supabase Auth, and if you use Google sign in, Google will know you signed in to Gemlyx. We do not send marketing email. \"Delete my saved data\" in the account menu removes everything we hold for you, and emailing hello@gemlyx.com also removes the sign-in record itself."],
               ["◈ Booking requests", "If you send a booking or craft request, the details you enter (name, email, message) are stored in our database (Supabase) so the maker can get back to you. We use them for nothing else. Email hello@gemlyx.com to have a request deleted."],

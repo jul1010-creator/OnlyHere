@@ -18,7 +18,7 @@
 // or React, so it always runs in about a second and can never be flaky.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -364,6 +364,56 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const trickyName = "Chickie" + apos + "s " + q + "Best" + q + " " + tick + "Bar" + tick;
   const tricky = M.studioPrompts(trickyName);
   ok("a quoted name is JSON-escaped into the schema", tricky.food.includes('"name": ' + JSON.stringify(trickyName)));
+}
+
+// ── OPENAI NEVER WRITES PROSE, enforced on the source itself ───────
+// The standing rule: Perplexity and Tavily research, OpenAI plans queries and
+// sorts findings into notes, CLAUDE writes every published sentence. It was
+// written in comments in four places and still got broken, because a comment
+// cannot fail a build. This block reads App.jsx as text and does what a comment
+// could not.
+//
+// What actually happened (found 7 Aug 2026): the Studio fact generator called
+// askOpenAI to write the fact text a traveler reads on the loading screen. It
+// had been that way since PASS 40, under a comment two functions above saying
+// OpenAI is never the writer. Separately, the Studio panel told Oliver on screen
+// that entries were drafted "via Tavily + OpenAI" long after Claude took over,
+// which is how he came to believe the pipeline was still wrong.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // Every legitimate askOpenAI call site is a PLANNER or a STRUCTURER: research
+  // query planning, note organizing, candidate extraction, and flag-only prose
+  // scans that never write the replacement themselves. There are seven. This
+  // count is not a style rule — a new one means someone gave OpenAI a new job,
+  // and that job has to be checked against the rule by a human before it ships.
+  const openAiCalls = (app.match(/askOpenAI\(/g) || []).length;
+  is("askOpenAI call sites stay at the seven audited planning/structuring ones", openAiCalls, 7);
+
+  // The specific regression: the fact generator writes PUBLISHED prose.
+  const factWriter = app.slice(app.indexOf("const draftOneFact"), app.indexOf("const generateFacts"));
+  ok("draftOneFact exists to be checked", factWriter.length > 500);
+  ok("the fact generator writes with Claude", /await askClaude\(writePrompt/.test(factWriter));
+  ok("the fact generator never writes with OpenAI", !/askOpenAI/.test(factWriter));
+
+  // Every raw /api/openai body must use max_completion_tokens. "gpt-5.6-sol"
+  // REJECTS max_tokens outright, so a body carrying it is not a slow path or a
+  // degraded path, it is a 400 every single time. Two shipped that way: the
+  // source scanner surfaced it as an OpenAI error, the AI voice scan swallowed
+  // it in a catch and looked like it simply found nothing.
+  const rawOpenAiBodies = app.split('fetch("/api/openai"').slice(1).map(chunk => chunk.slice(0, 3000));
+  ok("at least one raw OpenAI call still exists to check", rawOpenAiBodies.length >= 2);
+  rawOpenAiBodies.forEach((body, i) => {
+    const line = (body.match(/^\s*max_tokens:.*$/m) || [])[0];
+    ok(`raw OpenAI call ${i + 1} does not send the rejected max_tokens parameter`, !line);
+  });
+
+  // The panel Oliver actually reads while drafting must not name the wrong
+  // writer. This is the exact text that made him report the pipeline as broken.
+  ok("the Studio panel no longer claims entries are drafted via OpenAI",
+    !/complete entry[^<]*via Tavily \+ OpenAI/.test(app));
+  ok("the Studio panel names Claude as the writer",
+    /Claude writes every word of the actual entry/.test(app));
 }
 
 rmSync(dir, { recursive: true, force: true });

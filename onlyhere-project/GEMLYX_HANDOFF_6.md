@@ -55,7 +55,7 @@ The assistant floats on every page, renders only with a Studio session, routes d
 
 ## STATE OF THE REPO, read this before doing anything
 
-**Everything from PASS 52 onward is on disk and NOT DEPLOYED.** The last push was around PASS 51. Nothing in the newest work is live.
+**PASS 52 to 63 IS NOW DEPLOYED.** Oliver pushed on 7 Aug 2026. The line that used to sit here saying none of it was live is no longer true. PASS 64 (below) is on disk and not yet pushed.
 
 Oliver's repo is at `C:\Users\olive\OneDrive\Dokumenter\GitHub\OnlyHere\onlyhere-project` and **the device bridge is connected**, so you can read and write his real files rather than a snapshot. You cannot run commands on his machine: `npm run dev`, `node tests/run.mjs` and `git` are his to run.
 
@@ -67,6 +67,24 @@ Before writing to any file he may have touched: stage his copy, diff it against 
 2. The consolidated SQL at the top of `CHANGES_THIS_PASS.md`: `gemlyx_facts` (with `photo_credit jsonb`), the `gemlyx-media` storage bucket and its policies, `gemlyx_user_data` with RLS.
 3. Supabase dashboard, only if he wants Google sign-in: enable the Google provider and set Authentication → URL Configuration. Email and password needs zero setup and already works.
 4. Delete the duplicate "Dragør" town row in Studio.
+
+---
+
+## PASS 64, 7 Aug: OpenAI removed from every writing step
+
+Oliver reported: *"the blog writing about events is openAI, which should be claude. So clear some rules are not implemented."*
+
+He was reading the Studio drafting panel, which still said entries are drafted "via Tavily + OpenAI" from before Claude took over the writing. The entry drafts themselves were already Claude. But he was right that rules were not implemented, because tracing that one sentence turned up three real violations sitting behind it:
+
+1. **The Studio fact generator wrote with OpenAI.** `draftOneFact` called `askOpenAI` to write the fact text a traveler reads on the loading screen. It had been that way since PASS 40, underneath a comment two functions above stating that OpenAI is never the writer. A 40-word fact is published prose. Now `askClaude`, with `expectJson`.
+2. **Both raw `/api/openai` calls were dead.** The source scanner and the AI voice scan still sent `max_tokens`, which `gpt-5.6-sol` rejects outright. `askOpenAI` was fixed for this months ago; these two never were. The scanner surfaced it as an OpenAI error, the voice scan swallowed it in a `catch` and looked like it simply found nothing.
+3. **The privacy copy named OpenAI as the writer** and never named Claude at all.
+
+Also corrected: the Studio panel text, and every comment across App.jsx asserting OpenAI writes.
+
+**The lesson, which is the reusable part.** The rule was written in comments in four separate places and still got broken, because a comment cannot fail a build. `tests/run.mjs` now has an **OPENAI NEVER WRITES PROSE** block that reads App.jsx as text: it pins the `askOpenAI` call sites at the seven audited planning/structuring ones, asserts the fact generator writes with Claude, asserts no raw OpenAI body carries the rejected parameter, and asserts the panel names the right writer. It was verified to fail 7 of its 9 assertions against the pre-fix file. **If that test fails, do not raise the expected count to make it green.** Read the new call site and ask whether OpenAI is planning or writing.
+
+Not pushed yet. `node tests/run.mjs` has not been run on the real machine, only the new block in isolation, since npm and node are Oliver's to run.
 
 ---
 
