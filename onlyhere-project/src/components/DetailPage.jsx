@@ -8,7 +8,11 @@ import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, STAY_DISCLOSURE } from "../utils/affiliates";
 import { HowWeKnow } from "./HowWeKnow";
-import { events, majorEvents } from "../data/events";
+import { events, majorEvents, vikingEvents } from "../data/events";
+import { freeEntrance } from "../data/freeEntrance";
+import { foodSpots } from "../data/food";
+import { nightlifeSpots } from "../data/nightlife";
+import { towns } from "../data/towns";
 import { TOWN_COORDS } from "../data/towns";
 
 // ── WHERE THE PICTURES GO (Oliver, 7 Aug: "I would appreciate if the
@@ -141,7 +145,42 @@ const eventsForTown = (townName) => {
     });
 };
 
-export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, onOpenEvent }) => {
+// ── WHAT ELSE IS NEAR THIS ─────────────────────────────────────────
+// Straight-line kilometres, which is honest for orientation and would not be
+// for routing: this answers "is there anything else around here", not "how do I
+// get there", and Get Directions already owns the second question.
+//
+// PUBLISHED ENTRIES ONLY, and only ones carrying real coordinates. Both halves
+// matter. A dot that opens nothing is a dead end, and a dot placed from a guess
+// is a confident wrong answer in the most believable possible format.
+const KM_PER_DEG_LAT = 111.32;
+const NEAR_RADIUS_KM = 30;   // a realistic same-visit radius, not "in the region"
+const NEAR_MAX = 5;          // the map's job is orientation. A dozen pins is a different feature.
+
+export const nearbyEntries = (item, pools) => {
+  const lat = Number(item?.__lat), lon = Number(item?.__lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+  // Longitude degrees shrink towards the poles. At Danish latitudes that is a
+  // factor of about 0.56, and ignoring it would stretch every east-west
+  // distance by nearly double.
+  const lonScale = Math.cos((lat * Math.PI) / 180) * KM_PER_DEG_LAT;
+  const out = [];
+  for (const { rows, src } of pools) {
+    for (const r of rows || []) {
+      if (!r || r.name === item.name) continue;
+      const rl = Number(r.__lat), ro = Number(r.__lon);
+      if (!Number.isFinite(rl) || !Number.isFinite(ro)) continue;
+      const dy = (rl - lat) * KM_PER_DEG_LAT;
+      const dx = (ro - lon) * lonScale;
+      const km = Math.sqrt(dx * dx + dy * dy);
+      if (km > NEAR_RADIUS_KM || km < 0.01) continue;   // 0.01 drops an entry sitting on itself under another name
+      out.push({ name: r.name, lat: rl, lon: ro, km, src, item: r });
+    }
+  }
+  return out.sort((a, b) => a.km - b.km).slice(0, NEAR_MAX);
+};
+
+export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, onOpenEvent, onOpenNearby }) => {
   if (!item) return null;
   const color = item.color || C.accent;
   const townEvents = kind === "town" ? eventsForTown(item.name).slice(0, 4) : [];
@@ -442,14 +481,27 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             claim is standing when they wonder where it came from. */}
         <HowWeKnow item={item} />
 
-        {/* Where this actually is. Renders only when the entry carries real
-            verified coordinates, which today means towns; TOWN_COORDS is the
-            fallback for towns published before __lat/__lon was stored. */}
+        {/* Where this actually is, and what else is around it. Renders only
+            when the entry carries real coordinates; TOWN_COORDS is the fallback
+            for towns published before __lat/__lon was stored. Coordinates are
+            now written for every content type, so entries drafted from PASS 73
+            onward get a map too, and older ones once the Studio backfill has
+            been run. */}
         <PlaceMiniMap
           lat={item.__lat ?? TOWN_COORDS[item.name]?.[0]}
           lon={item.__lon ?? TOWN_COORDS[item.name]?.[1]}
           name={item.name}
           color={color}
+          neighbours={nearbyEntries(item, [
+            { rows: towns, src: "town" },
+            { rows: [...events, ...majorEvents, ...vikingEvents], src: "event" },
+            { rows: freeEntrance, src: "free" },
+            { rows: foodSpots, src: "food" },
+            { rows: nightlifeSpots, src: "nightlife" },
+          ])}
+          // openStopDetail dispatches on _src, so the neighbour is handed
+          // over carrying the pool it came from.
+          onOpenNeighbour={(n) => onOpenNearby?.({ ...n.item, _src: n.src })}
         />
 
         {kind === "town" && item.highlight && (

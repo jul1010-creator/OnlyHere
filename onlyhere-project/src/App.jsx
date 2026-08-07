@@ -16,13 +16,12 @@ import { WEATHER_CITIES } from "./data/mapShapes";
 import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
-import { C } from "./utils/theme";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
   isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
   dedupeAgainstExisting, getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, departureParam, transitDepartureAnchor,
-  daCompare, byName,
+  daCompare, byName, seasonFit, isConfirmedUpcoming,
   hostMatchesName, officialSiteFromCandidates,
 } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, findRealNearestStation } from "./utils/geo";
@@ -57,6 +56,7 @@ import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
+import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
@@ -128,7 +128,35 @@ So, before reporting any correction, check that it matches on the specific varia
 NEVER REPLACE A SPECIFIC FIGURE WITH A VAGUER ONE. Going from "1 hour 20 minutes" to "about an hour" is a regression, not a correction, even when the vaguer phrasing is technically defensible. If you cannot beat the draft's precision with a source that is genuinely about the same thing, leave it alone.
 If the draft's own figure and your source disagree by a small amount and both look credible, say exactly that, name both numbers and both sources, and let the human decide. Do not silently pick one.`;
 
+// ── GETYOURGUIDE, AND WHAT IT IS ACTUALLY GOOD FOR ─────────────────
+// Oliver, 7 Aug 2026: "make getyourguide.com a must-research as well!!!"
+//
+// Worth being precise about, because this site already appears in this file on
+// a BLOCKLIST (AGGREGATOR_HOSTS, in the official-site picker) and both things
+// are correct at once. GetYourGuide is never the official website of anything:
+// it is a reseller, and letting it fill the officialSite field would send a
+// reader to a checkout page instead of to the museum. That stays.
+//
+// But it answers one question better than any official site does: what can you
+// actually BOOK here, for how much, and does it sell out. Danish attractions
+// are frequently poor at listing their own guided tours, boat trips and
+// experiences in English, and a listing on a booking platform is hard evidence
+// that a thing runs, in a way "the harbour offers boat trips" never is.
+//
+// The price caveat is the important part. A reseller's price is what the
+// RESELLER charges, which is routinely above the gate price and sometimes
+// bundles things. So it is authoritative for "this tour exists and is bookable"
+// and never for "this is what it costs to get in".
+const BOOKING_PLATFORM_RULES = `GETYOURGUIDE, MANDATORY on any attraction, tour, boat trip, guided walk or experience: check getyourguide.com for the place as part of your research, every time. It is the fastest way to establish what is genuinely BOOKABLE there, what it costs to book, whether it runs in the season being written about, and whether it sells out in advance. Danish venues are often bad at listing their own tours in English, so a real listing there is evidence a tour runs when the venue's own site is silent.
+
+TWO HARD LIMITS ON IT, because it is a reseller and not the venue:
+1. It is NEVER the official website. Never put a getyourguide.com link in an official site or website field. The venue's own domain is the official site; if there is not one, that field stays empty.
+2. Its price is the RESELLER'S price, not the gate price, and the two often differ. Use the venue's own site for what entry costs, and cite GetYourGuide only for what a booked tour costs, saying so.
+A listing there is evidence that something is sold. It is not evidence that it is good, that it is the only way in, or that it is the best value, and its own review scores are not a fact about the place.`;
+
 const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's actually like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would actually know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before 2025 should be treated as stale, not current.
+
+${BOOKING_PLATFORM_RULES}
 
 ${ISLAND_FERRY_RULES}`;
 
@@ -187,7 +215,10 @@ function GemlyxApp() {
   // There is now exactly ONE loader, in utils/liveContent.js, with a module-level
   // guard whose lifetime matches the arrays it protects. Do not reintroduce a local
   // copy here, and never guard a module-level array with component-scoped state.
-  const [, bumpLiveContent] = useState(0);
+  // The version number is read by the deep-link effect below: a shared address
+  // arrives before Supabase has answered, so the lookup has to run again each
+  // time live content lands rather than once on mount.
+  const [liveContentVersion, bumpLiveContent] = useState(0);
   const heroVideoRef = useRef(null);
   useEffect(() => {
     let cancelled = false;
@@ -237,6 +268,15 @@ function GemlyxApp() {
   const [eventType, setEventType] = useState(null);
   const [eventTab, setEventTab] = useState("local");
   const [townFilter, setTownFilter] = useState(null);
+  // null | "hidden" | "must". Read off the entry's own tier so the filter agrees
+  // with what the page says about each town, rather than being a second opinion.
+  const [townKind, setTownKind] = useState(null);
+  const townKindOk = (t) => {
+    if (!townKind) return true;
+    const tier = String(t?.tier || "").toLowerCase();
+    if (townKind === "must") return tier.includes("can't miss") || tier.includes("cant miss");
+    return !(tier.includes("can't miss") || tier.includes("cant miss"));
+  };
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
   const [craftKind, setCraftKind] = useState(null);
@@ -316,8 +356,10 @@ function GemlyxApp() {
     const closeTowns = ranked.filter(t => t.km <= 30).map(t => t.name); // realistic same-day-trip radius
 
     const allTracked = [...events, ...majorEvents, ...vikingEvents];
+    // isConfirmedUpcoming, not isUpcoming: this feeds the LIVE / COMING EVENTS
+    // strip, and an entry with no announced dates has nothing to say there.
     const nearbyEvents = allTracked.filter(e => closeTowns.includes(e.town))
-      .filter(e => isUpcoming(e.date) || isCurrentlyLive(e.date, e.dateEnd));
+      .filter(e => isConfirmedUpcoming(e) || isCurrentlyLive(e.date, e.dateEnd));
 
     const matches = nearbyEvents
       .map(e => ({ ...e, _kind: "event", _km: ranked.find(t => t.name === e.town)?.km ?? 999 }))
@@ -905,7 +947,7 @@ function GemlyxApp() {
   const [publishErrorDetail, setPublishErrorDetail] = useState(null);
   const [studioPhotoName, setStudioPhotoName] = useState("");
   const [studioInstagramUrl, setStudioInstagramUrl] = useState("");
-  const [studioFrozenGeo, setStudioFrozenGeo] = useState(null); // { lat, lon, station } — real, computed once, never touched by OpenAI
+  const [studioFrozenGeo, setStudioFrozenGeo] = useState(null); // { lat, lon, station, stopKind } — real, computed once, never touched by OpenAI
 
 
   // overrideTown lets a caller pass the exact name it just set via setStudioTown,
@@ -1234,15 +1276,27 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         try {
           const coords = await geocodePlace(name);
           if (coords) {
-            // Now returns { name, walk } so the walk time can be stated as its
-            // own fact instead of being glued onto the station's name, which is
-            // how "Tranekær Slot (Langeland Kommune) (9 mins walk)" ended up in
-            // a field labelled Nearest Station. Null when Places could not find
-            // anything that is genuinely transit.
+            // Now returns { name, walk, kind } so the walk time can be stated as
+            // its own fact instead of being glued onto the name, which is how
+            // "Tranekær Slot (Langeland Kommune) (9 mins walk)" ended up in a
+            // field labelled Nearest Station. Null when Places could not find
+            // anything that is genuinely transit AND reachable on foot.
+            //
+            // THE KIND IS PASSED TO THE WRITER ON PURPOSE. Oliver, 7 Aug:
+            // "Maybe it shouldn't be nearest station, but nearest stop. If it's
+            // an Island, this will often be awkward." A model handed the bare
+            // string "Sælvig" will write "the station at Sælvig", because that
+            // is the sentence the field name suggests. Handed "ferry terminal",
+            // it writes about a crossing, which is what actually happens there.
             const st = await findRealNearestStation(coords.lat, coords.lon);
             const station = st?.name || null;
-            frozenGeo = { lat: coords.lat, lon: coords.lon, station };
-            frozenFactsText = `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station ? ` The real nearest station is ${station}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. Put ONLY the station name in the nearestStation field; if the walking time is worth mentioning, put it in the prose, never inside the name.` : " No nearby transit stop could be verified, so leave nearestStation empty rather than naming a landmark."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
+            const stopKind = st?.kind || null;
+            const KIND_WORD = { rail: "railway station", ferry: "ferry terminal", bus: "bus stop", air: "airport", other: "transit stop" };
+            const kindWord = KIND_WORD[stopKind] || "transit stop";
+            frozenGeo = { lat: coords.lat, lon: coords.lon, station, stopKind };
+            frozenFactsText = `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station
+              ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here, so it is genuinely the stop that serves this place. Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it. Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
+              : " No arrival point could be verified nearby, so leave nearestStation EMPTY rather than naming a landmark or a stop on the other side of water. Many Danish islands have no station at all, and an empty field reads honestly as 'we do not know'."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
           }
         } catch { /* geocoding/places failed — draft proceeds without this, publishDraft's override step just won't have anything to apply */ }
       }
@@ -3384,6 +3438,80 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     return Math.sqrt(dLat * dLat + dLon * dLon);
   };
 
+  // ── AN ENTRY IS A PAGE NOW (Oliver, 7 Aug: "can we make blogs their own
+  // page? It's annoying having to click 'back' all the time") ────────
+  //
+  // Entry pages are overlays driven by component state, which is why the
+  // browser and the phone's back gesture did nothing to them: as far as the
+  // browser was concerned nothing had happened, so back left the site entirely
+  // and the only way out was the small close button, every single time.
+  //
+  // Rather than move the whole app onto a router, which would touch every
+  // screen for one behaviour, opening an entry now pushes a real history entry
+  // with a real address, and back pops it. The gain is the same three things a
+  // router would have given: the back button closes the entry, the URL names
+  // what you are reading, and that address can be shared and opened cold.
+  //
+  // WHY A HASH: the site is a static SPA on Vercel with no rewrite rules, so a
+  // real path like /town/ribe would 404 on a hard refresh. A hash cannot.
+  const ENTRY_SETTERS = { town: setTownDetail, event: setEventDetail, food: setFoodDetail, nightlife: setNightlifeDetail, free: setFreeDetail, craft: setCraftDetail };
+  const closeAllEntries = () => Object.values(ENTRY_SETTERS).forEach(set => set(null));
+  const entryPath = (item, kind) => `#/${kind}/${slugify(item?.name || "")}`;
+
+  const openEntryNow = eventDetail || townDetail || nightlifeDetail || freeDetail || foodDetail || craftDetail || null;
+  const openEntryKind = eventDetail ? "event" : townDetail ? "town" : nightlifeDetail ? "nightlife" : freeDetail ? "free" : foodDetail ? "food" : craftDetail ? "craft" : null;
+
+  // Push when one opens. Guarded on the address so re-renders cannot stack up
+  // duplicate history entries, which would need several presses of back to
+  // escape one page and would feel worse than what it replaced.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!openEntryNow || !openEntryKind) return;
+    const path = entryPath(openEntryNow, openEntryKind);
+    if (window.location.hash !== path) window.history.pushState({ gxEntry: true }, "", path);
+  }, [openEntryNow, openEntryKind]);
+
+  // Back closes whatever is open. Registered once, and deliberately closes
+  // everything rather than trying to work out which one was on top.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPop = () => { if (!window.location.hash.startsWith("#/")) closeAllEntries(); };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // The close button behaves like back, so the history stack cannot drift out
+  // of step with what is on screen. If the entry was opened cold from a shared
+  // link there is nothing to go back to, so it just closes and tidies the URL.
+  const closeEntry = () => {
+    if (typeof window !== "undefined" && window.history.state?.gxEntry) { window.history.back(); return; }
+    closeAllEntries();
+    if (typeof window !== "undefined" && window.location.hash.startsWith("#/")) {
+      window.history.replaceState({}, "", window.location.pathname + window.location.search);
+    }
+  };
+
+  // Opening a shared address cold. Runs again as live content arrives, because
+  // the arrays are filled from Supabase after first paint and a link to a
+  // published entry would otherwise find nothing and silently do nothing.
+  const deepLinkDone = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || deepLinkDone.current) return;
+    const m = window.location.hash.match(/^#\/(town|event|food|nightlife|free|craft)\/([a-z0-9-]+)$/i);
+    if (!m) return;
+    const [, kind, slug] = m;
+    const pools = { town: towns, event: [...events, ...majorEvents, ...vikingEvents], food: foodSpots, nightlife: nightlifeSpots, free: freeEntrance, craft: craftItems };
+    // Lowercased on both sides: the address may arrive with different casing
+    // from a copy-paste or a link shortener, and a shared link that silently
+    // opens nothing is worse than one that errors.
+    const want = slug.toLowerCase();
+    const found = (pools[kind] || []).find(x => x?.name && slugify(x.name).toLowerCase() === want);
+    if (!found) return;   // content may still be loading; try again on the next version
+    deepLinkDone.current = true;
+    setEntered(true);     // a shared link goes straight to the entry, not the front door
+    ENTRY_SETTERS[kind]?.(found);
+  }, [liveContentVersion, entered]);
+
   // Looks up a stop name against everything real Gemlyx already knows, so the guide
   // shows real price/hours/type instead of just repeating the AI's own prose.
   const lookupRealPlace = (name) => {
@@ -3790,79 +3918,80 @@ If the conversation only covers a single day or a few stops with no explicit day
     }
   };
 
-  // Studio's "Random guide" test button: builds a plausible trip brief entirely
-  // from real Gemlyx data (a real town plus a couple of real attractions) and
-  // hands it to generateGuide as a fabricated one-line conversation, skipping
-  // the real Detour chat entirely. Only for testing the build pipeline, never
-  // shown to regular visitors.
+  // ── Studio's "Random guide" test button ────────────────────────────
+  // Oliver, 7 Aug: "can you make the pipeline generator just generate a random.
+  // not like 'the person wanted Amalienborg and Planetarium included..' just a
+  // legit random."
+  //
+  // He is right, and it was a worse TEST as well as an unrealistic brief. The
+  // old version reached into the published data and named three or four real
+  // entries the traveler wanted fitted in, which quietly pre-solved the hardest
+  // thing the pipeline does: deciding which real places belong on this trip. A
+  // test that hands over the answer only ever proves the app can copy a list.
+  //
+  // Real travelers do not name four attractions from a database they have never
+  // seen. They say how long they have, who they are with, how they are getting
+  // around, and what they like. So that is the brief now, and finding the
+  // places is left to the thing being tested.
   const generateRandomGuide = () => {
     if (guideModal === "loading") return;
-    // isMajorCity (round 5: Copenhagen/Aarhus/Aalborg) excluded here for the
-    // same reason "Common Attraction" already was — this test brief is meant
-    // to sample the curated hidden-gem list, not the well-known cities.
-    const realTowns = towns.filter(t => t.popularityTag !== "Common Attraction" && !t.isMajorCity);
-    // PASS 27 ROUND 2 (Oliver: "Only 1 town?"): this used to pick exactly ONE
-    // town and name only that one in the brief, so the preview screen's new
-    // "Towns" section could never show more than 1 match on a test click —
-    // not a bug in the matching/sectioning itself, just an honest reflection
-    // of a brief that only ever mentioned one town by name. Picks a second,
-    // different town now and names both, so a test click gives the Towns
-    // section something to actually group.
-    const shuffledTowns = realTowns.slice().sort(() => Math.random() - 0.5);
-    const pickTown = shuffledTowns[0];
-    // GEOGRAPHIC COHERENCE (Oliver's test click produced "3 days, based around
-    // Samsø + Møgeltønder... asked to fit in Faxe Kalkbrud, Amalienborg Slot,
-    // Ny Carlsberg Glyptotek" — an island in the Kattegat, the far south-west
-    // corner of Jutland, rural Zealand and two Copenhagen museums, in three
-    // days. That is where his "why that 16 hour trip?" came from, and it was
-    // this brief's fault, not the planner's). The second town is now picked
-    // from the SAME region as the first whenever the published data has one,
-    // so a test trip is something a real traveler could actually do.
-    const sameRegion = shuffledTowns.slice(1).filter(t => t.region && pickTown?.region && t.region === pickTown.region);
-    const secondTown = sameRegion[0] || null;
-    const days = 2 + Math.floor(Math.random() * 3);
-    // "festivals and live events" added (Oliver: "did they include events..") —
-    // without an event-leaning interest in the pool, no test traveler ever asked
-    // for events, so the pipeline's event handling never got exercised by tests.
-    const interestPool = ["history", "local food", "quiet walks", "craft and workshops", "coastal views", "architecture", "markets", "nightlife", "festivals and live events"];
-    const interests = interestPool.slice().sort(() => Math.random() - 0.5).slice(0, 2);
-    // INTEREST-MATCHED EXTRAS (Oliver: "into nightlife and local food... How the
-    // fk is this for night life and local food?" — a fair question. The extras
-    // were drawn only from freeEntrance + craft, so a test traveler could say
-    // they were into nightlife and then be handed three museums. The stated
-    // interests now actually choose which published pools the extras come from,
-    // which is also what makes the test meaningful: it exercises the same
-    // matching a real traveler's stated interests would.)
-    const poolFor = (interest) => {
-      if (/nightlife/i.test(interest)) return nightlifeSpots;
-      if (/food|market/i.test(interest)) return foodSpots;
-      if (/craft|workshop/i.test(interest)) return craftItemsFallback;
-      if (/festival|event/i.test(interest)) return [...events, ...majorEvents];
-      return freeEntrance; // history, architecture, coastal views, quiet walks
-    };
-    // Prefer places genuinely near the chosen towns, so the extras don't drag
-    // the trip across the country either — same reason as the region rule above.
-    const nearChosen = (p) => {
-      const where = `${p.city || ""} ${p.location || ""} ${p.town || ""}`.toLowerCase();
-      return [pickTown?.name, secondTown?.name, pickTown?.region].filter(Boolean).some(n => where.includes(String(n).toLowerCase()));
-    };
-    const seenExtra = new Set();
-    const extras = interests
-      .flatMap(i => {
-        const pool = (poolFor(i) || []).filter(p => p && p.name);
-        const local = pool.filter(nearChosen);
-        // Local matches first; fall back to anything in the right pool so the
-        // brief still exercises the interest even when nothing nearby is published.
-        return [...local.sort(() => Math.random() - 0.5), ...pool.filter(p => !local.includes(p)).sort(() => Math.random() - 0.5)].slice(0, 2);
-      })
-      .filter(p => { if (seenExtra.has(p.name)) return false; seenExtra.add(p.name); return true; })
-      .slice(0, 4);
-    const secondTownText = secondTown ? `, with a day trip out to ${secondTown.name}` : "";
-    // Supabase-only content (Aug 5): the pools above are now whatever's actually
-    // been published via Studio, so either can legitimately be empty — build the
-    // brief from what really exists instead of interpolating empty lists.
-    const extrasText = extras.length ? ` I'd also like to fit in a visit to ${extras.map(e => e.name).join(" and ")} if it makes sense with the route.` : "";
-    const brief = `I'm planning ${days} days in Denmark, based mostly around ${pickTown?.name || "Copenhagen"}${secondTownText}. I like ${interests.join(" and ")}.${extrasText}`;
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const some = (arr, n) => arr.slice().sort(() => Math.random() - 0.5).slice(0, n);
+
+    const days = 2 + Math.floor(Math.random() * 6);            // 2 to 7
+    const who = pick([
+      { text: "just me", travelers: "1" },
+      { text: "me and my partner", travelers: "2" },
+      { text: "two of us, old friends", travelers: "2" },
+      { text: "my family, two adults and two kids aged 7 and 10", travelers: "4" },
+      { text: "three of us in our twenties", travelers: "3" },
+      { text: "my parents and me, they are in their sixties", travelers: "3" },
+    ]);
+    const arrival = pick([
+      "We land at Copenhagen airport in the morning",
+      "We land at Copenhagen airport late in the evening",
+      "We fly into Billund",
+      "We are coming up by train from Hamburg",
+      "We arrive by ferry from Germany with a car",
+      "We are already in Copenhagen and want to get out of the city",
+    ]);
+    const moving = pick([
+      "We would rather stay in one place and take day trips",
+      "We are happy to move hotel a couple of times",
+      "We want to move on most nights and see as much as possible",
+      "We would like one base for the first half and another for the second",
+    ]);
+    const transport = pick([
+      "We will use trains and buses",
+      "We are renting a car",
+      "We want to cycle where it makes sense",
+      "Trains mostly, but we might rent a car for a day",
+      "We have not decided how to get around yet",
+    ]);
+    const budget = pick([
+      "We are on a tight budget",
+      "Mid range, we do not mind paying for one or two good meals",
+      "Budget is not really the constraint, time is",
+      "",
+    ]);
+    // Interests are the one thing kept from the old version, because a stated
+    // interest is a real thing a traveler says. What they no longer do is
+    // choose which published rows get named: nothing is named at all.
+    const interestPool = ["history", "local food", "quiet walks", "craft and workshops", "coastal views", "architecture", "markets", "nightlife", "festivals and live events", "castles", "islands", "modern design", "beaches", "museums", "cycling"];
+    const interests = some(interestPool, 1 + Math.floor(Math.random() * 3));
+    const month = pick(["", "", " We are coming in June", " We are coming in October", " We are travelling in February", " This is in late August"]);
+    // Sometimes a region, sometimes nothing at all. "Surprise us" is the most
+    // valuable case to test and the old brief could never produce it.
+    const steer = pick([
+      "",
+      "",
+      " We have heard about Jutland and would like to see some of it",
+      " We would like to see at least one island",
+      " Somewhere away from the obvious tourist places would be ideal",
+      " We do not know Denmark at all, so surprise us",
+    ]);
+    const testProfile = { days, who: who.text, arrival, transport, moving, interests, budget: budget || "unstated" };
+    const brief = `I'm planning ${days} days in Denmark. It is ${who.text}. ${arrival}. ${transport}. ${moving}. We like ${interests.join(" and ")}.${budget ? ` ${budget}.` : ""}${month}${steer}`;
     // ROOT CAUSE of Oliver's "wtf happened to maps? Both leaflet and Google
     // Maps???" report: this used to randomly alternate mode, 50/50, so any
     // given test click had a coin-flip chance of landing on "plain" —
@@ -3907,7 +4036,10 @@ If the conversation only covers a single day or a few stops with no explicit day
     // isolated pipeline test, it was never meant to accumulate a real
     // conversation history, and now it can't get confused by leftover state
     // from an earlier click or an earlier real chat.
-    randomTestProfileRef.current = { brief, towns: [pickTown?.name, secondTown?.name].filter(Boolean), days, interests, extras: extras.map(e => e.name) };
+    // No `towns` and no `extras` any more: the brief names no published entry,
+    // which is the whole point. What the pipeline panel shows is who the test
+    // traveler is, not a list of answers handed to it in advance.
+    randomTestProfileRef.current = { brief, days, interests, ...testProfile };
     setAiMessages(prev => [prev[0], { role: "user", text: brief }]);
     setPendingRandomGuideMode(mode);
     setGuideModal("preview");
@@ -4039,6 +4171,19 @@ If the conversation only covers a single day or a few stops with no explicit day
   // 3072x5504 for a phone held upright. The <picture> element picks the file,
   // but the lights are absolutely positioned in percentages, and a lantern is
   // not in the same place in both compositions, so React has to know too.
+  // ── THEME (Oliver, 7 Aug: "Keep both. Give people an option to either
+  // have Light, Dark, or that warm one. But let the warm one be default.") ──
+  // C is mutated in place by applyTheme rather than passed down, because every
+  // colour in this file is already read as C.something at render time and a
+  // context would mean touching all of them. The counter below is what forces
+  // the repaint after the swap: without it the object has changed and nothing
+  // has re-read it. See utils/theme.js for the tradeoff this accepts.
+  const [themeName, setThemeName] = useState(() => storedTheme());
+  const [, bumpTheme] = useState(0);
+  useEffect(() => { applyTheme(themeName); bumpTheme(v => v + 1); }, [themeName]);
+
+  // Which category the front page picks are showing. "all" mixes everything.
+  const [pickCategory, setPickCategory] = useState("all");
   const [landingPortrait, setLandingPortrait] = useState(() =>
     typeof window !== "undefined" && window.matchMedia
       ? window.matchMedia("(orientation: portrait) and (max-width: 900px)").matches : false);
@@ -4562,9 +4707,12 @@ If the conversation only covers a single day or a few stops with no explicit day
       const attractionsList = freeEntrance.map(a => `${a.name} in ${a.city} (${a.type}, free entry)`).join("; ");
       const handmadeList = handmadeCraftShops.map(s => `${s.name} in ${s.location} (${s.yearRound ? "open year-round" : "seasonal"})`).join("; ");
       const eventTicketNote = (e) => e.ticketStatus === "sold_out" ? " [SOLD OUT]" : e.ticketInfo ? ` [tickets: ${e.ticketInfo}]` : "";
-      const upcomingLocal = events.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
-      const upcomingMajor = majorEvents.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
-      const upcomingViking = vikingEvents.filter(e => isUpcoming(e.date)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
+      // isConfirmedUpcoming: an event with no announced dates cannot go into a
+      // day plan, and handing one to the writer is how "check the dates" ends up
+      // scheduled at 14:00 on a Tuesday.
+      const upcomingLocal = events.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
+      const upcomingMajor = majorEvents.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
+      const upcomingViking = vikingEvents.filter(e => isConfirmedUpcoming(e)).slice(0, 8).map(e => `${e.name} in ${e.town} (${getEventDate(e.date, e.dateEnd)})${eventTicketNote(e)}`).join("; ");
       const craftList = craftItems.map(c => `${c.name} in ${c.location} (${c.price}${c.rating ? ", ★" + c.rating : ""})`).join("; ");
       const shuffledTowns = [...towns].sort(() => Math.random() - 0.5);
       const townsList = shuffledTowns.map(t => `${t.name}${t.region ? ` (${t.region})` : ""}${t.highlight ? ` — ${t.highlight}` : ""}`).join("; ");
@@ -5699,6 +5847,29 @@ You also have a web_search tool. Use it whenever someone asks about something th
                         <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
                           {googlePrecheckRan ? "✦ Written with a Perplexity cross-check folded in before drafting" : "Perplexity pre-check didn't run (no key set, or the call failed) — Tavily research only"}
                         </div>
+                        {/* ── THE AI, WHERE THE DRAFT IS ─────────────────
+                            Oliver, 7 Aug: "Is it possible you can install an AI
+                            in the studio draft? That I can talk to.. like if
+                            Gemini says something, then I can use Claude and
+                            Perplexity as a like 'Hold on.. let me confirm
+                            that.'"
+                            It already worked, and it was already exactly that.
+                            It just lived behind a small ✦ in the screen corner,
+                            so from inside the editor there was nothing to
+                            suggest the draft could be argued with. Same
+                            component, same verification, mounted where the work
+                            is. He also said he would rather do this than hand
+                            Perplexity a list of links, so the sources box above
+                            stays as the option, not the expectation. */}
+                        {studioSession && studioDraft && (
+                          <StudioAssistant
+                            inline
+                            session={studioSession}
+                            draft={(() => { try { return JSON.parse(studioDraftText); } catch { return studioDraft; } })()}
+                            draftKind={{ festival: "event", night: "nightlife", nightTown: "town", foodStreet: "food" }[studioType] || studioType}
+                            onDraftPatched={(next) => { setStudioDraft(next); setStudioDraftText(JSON.stringify(next, null, 2)); setDraftEditError(null); }}
+                          />
+                        )}
                         <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); }}
                           rows={12}
                           style={{ width: "100%", background: C.bg, border: `1px solid ${draftEditError ? "#E23B4E" : C.border}`, borderRadius: 10, padding: "12px", fontSize: 11, color: C.light, lineHeight: 1.6, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
@@ -6050,23 +6221,36 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   every time he publishes and never needs touching. The
                   navigation survives as one line of chips, because the front
                   page should still route people, just not with eight billboards. */}
+              {/* ── THE CHIPS FILTER, THEY DO NOT NAVIGATE ────────────
+                  Oliver, 7 Aug: "When clicking Towns Events Food Nightlife
+                  Attractions Essentials it takes you to the blogs. What about
+                  they each show different hidden gems and popular places?"
+                  Right, and it is the better idea. As navigation they were a
+                  fourth copy of the menu. As a filter they turn the picks below
+                  into something you steer: tap Attractions and this week's
+                  hidden gems become attractions.
+                  Essentials and Gemlyx Detour are deliberately NOT here. They
+                  are not places, so there is nothing to pick from, and they
+                  already live in the menu. */}
               <div style={{ padding: "4px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
                   {[
-                    { id: "visits", label: "Towns", ico: "town" },
-                    { id: "events", label: "Events", ico: "calendar" },
+                    { id: "all", label: "Everything", ico: "compass" },
+                    { id: "town", label: "Towns", ico: "town" },
+                    { id: "free", label: "Attractions", ico: "ticket" },
                     { id: "food", label: "Food", ico: "utensils" },
                     { id: "nightlife", label: "Nightlife", ico: "beer" },
-                    { id: "attractions", label: "Attractions", ico: "ticket" },
-                    { id: "essentials", label: "Essentials", ico: "map" },
-                    { id: "ai", label: "Gemlyx Detour", ico: null, glyph: "✦" },
-                  ].map(c => (
-                    <button key={c.id} onClick={() => { goTab(c.id); window.scrollTo(0, 0); }}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, color: C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
-                      {c.ico ? <Ico name={c.ico} size={14} color={C.muted} /> : <span style={{ color: C.gold }}>{c.glyph}</span>}
-                      {c.label}
-                    </button>
-                  ))}
+                    { id: "craft", label: "Workshops", ico: null, glyph: "🔨" },
+                  ].map(c => {
+                    const on = pickCategory === c.id;
+                    return (
+                      <button key={c.id} onClick={() => setPickCategory(c.id)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, background: on ? `${C.gold}22` : C.surface, border: `1px solid ${on ? C.gold : C.border}`, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, color: on ? C.gold : C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
+                        {c.ico ? <Ico name={c.ico} size={14} color={on ? C.gold : C.muted} /> : <span>{c.glyph}</span>}
+                        {c.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -6105,13 +6289,24 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   return a.slice(0, n);
                 };
                 const withPhoto = (x) => !!x.photo;
+                const month = new Date().getMonth();
                 const pool = [
                   ...towns.map(x => ({ ...x, _src: "town", _where: x.region })),
                   ...freeEntrance.map(x => ({ ...x, _src: "free", _where: x.city })),
                   ...foodSpots.map(x => ({ ...x, _src: "food", _where: x.location || x.city })),
                   ...nightlifeSpots.map(x => ({ ...x, _src: "nightlife", _where: x.location || x.city })),
                   ...craftItems.map(x => ({ ...x, _src: "craft", _where: x.location })),
-                ].filter(x => x.name);
+                ].filter(x => x.name)
+                  .filter(x => pickCategory === "all" || x._src === pickCategory)
+                  // ── NOT NOW (Oliver: "Visiting Bonbon Land during winter is
+                  // not great") ────────────────────────────────────────
+                  // Out of season is DROPPED from the front page, because the
+                  // front page is a recommendation and recommending a closed
+                  // water park in January is the kind of small wrongness that
+                  // costs trust everywhere else. It is only ever dropped on a
+                  // positive signal from the entry itself, never on silence:
+                  // see seasonFit in helpers.js.
+                  .filter(x => seasonFit(x, month).fit !== "poor");
                 const lenses = [
                   { key: "gems", title: "Hidden gems this week", sub: "Places most visitors never reach",
                     pick: (x) => x.popularityTag === "Hidden Gem" || x.tier === "Worth Considering" },
@@ -6122,10 +6317,26 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   const matched = pool.filter(lens.pick);
                   // Photos first, then anything, so a thin category still fills
                   // the row rather than leaving a gap.
-                  const ranked = [...matched.filter(withPhoto), ...matched.filter(x => !withPhoto(x))];
+                  // In season first, then the ones that look like something.
+                  // Both are preferences, not filters: a thin category still
+                  // fills its row rather than leaving a gap.
+                  const good = matched.filter(x => seasonFit(x, month).fit === "good");
+                  const rest = matched.filter(x => seasonFit(x, month).fit !== "good");
+                  const order = (arr) => [...arr.filter(withPhoto), ...arr.filter(x => !withPhoto(x))];
+                  const ranked = [...order(good), ...order(rest)];
                   return { ...lens, items: dealt(ranked, 3, week * 31 + li) };
                 }).filter(r => r.items.length > 0);
-                if (rows.length === 0) return null;
+                // A category with nothing to show says so, rather than the whole
+                // section vanishing and leaving the chips looking broken.
+                if (rows.length === 0) {
+                  return (
+                    <div style={{ padding: "22px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+                      <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>
+                        Nothing published in that category yet{pickCategory !== "all" ? ", or nothing in it is at its best this time of year" : ""}.
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div style={{ padding: "22px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
                     {rows.map(row => (
@@ -6689,8 +6900,16 @@ You also have a web_search tool. Use it whenever someone asks about something th
           {tab === "visits" && (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
               <div style={{ marginBottom: 18, paddingTop: 8 }}>
-                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Hidden Towns</div>
-                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Denmark's most beautiful towns are the ones the guidebooks skip. Cobblestones, smokehouses and family workshops — every one of them hand-researched and checked against multiple sources.</div>
+{/* Oliver, 7 Aug: "on hidden towns, it shouldn't be called 'hidden' anymore."
+                    Right, and it had stopped being true. The page carries major
+                    cities, towns that are genuinely off the usual route, and
+                    everything between, so a title claiming they are all hidden
+                    was overselling half of them and quietly making the word
+                    meaningless for the ones it actually fits. Hidden is now a
+                    FILTER, applied to the entries that earn it, rather than a
+                    label stamped across the whole page. */}
+                <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Towns</div>
+                <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>From the cities everyone lands in to the places the guidebooks skip. Cobblestones, smokehouses and family workshops, every one hand-researched and checked against multiple sources.</div>
               </div>
               {/* ROUND 5 (Oliver: "Copenhagen is technically a major city..
                   I suppose we can make it its own... Major City / Town /
@@ -6705,9 +6924,9 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   are. */}
               {towns.some(t => t.isMajorCity) && (
                 <div style={{ marginBottom: 28 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>Major Cities — not hidden, but real</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>Major Cities</div>
                   <div className="towns-grid">
-                    {towns.filter(t => t.isMajorCity && (!townFilter || t.region === townFilter)).sort(byName).map(town => (
+                    {towns.filter(t => t.isMajorCity && (!townFilter || t.region === townFilter) && townKindOk(t)).sort(byName).map(town => (
                       <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                         <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
@@ -6733,13 +6952,23 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   no pill, and regions with nothing left in them still had one.
                   These pills now also filter the Major Cities grid above, which
                   they visually sit under and previously did not affect at all. */}
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Region</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14 }}>
                 {["All", ...[...new Set(towns.map(t => t.region).filter(Boolean))].sort(daCompare)].map(r => (
                   <Pill key={r} label={r} active={(r === "All" && !townFilter) || townFilter === r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))} />
                 ))}
               </div>
+              {/* Hidden becomes a filter rather than the page's name, and it is
+                  derived from the tier the entry actually carries, not from
+                  which grid it happens to sit in. */}
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Kind of place</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+                {[{ id: null, label: "All" }, { id: "hidden", label: "◆ Off the usual route" }, { id: "must", label: "★ Can't miss out" }].map(k => (
+                  <Pill key={k.label} label={k.label} active={townKind === k.id} onClick={() => setTownKind(townKind === k.id ? null : k.id)} />
+                ))}
+              </div>
               <div className="towns-grid">
-                {towns.filter(t => !t.isMajorCity && (!townFilter || t.region === townFilter)).sort(byName).map(town => (
+                {towns.filter(t => !t.isMajorCity && (!townFilter || t.region === townFilter) && townKindOk(t)).sort(byName).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                     <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
@@ -7786,6 +8015,27 @@ You also have a web_search tool. Use it whenever someone asks about something th
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 300 }} onClick={() => setShowMenu(false)}>
           <div style={{ position: "absolute", top: 70, right: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "8px", minWidth: 220, boxShadow: "0 8px 32px rgba(0,0,0,0.6)", maxHeight: "70vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
             <style>{`@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }`}</style>
+            {/* Three swatches rather than a dropdown: the choice is entirely
+                about how something looks, so showing the colour is the whole
+                control. Warm is first because it is the default. */}
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>Theme</div>
+            <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
+              {THEME_ORDER.map(key => {
+                const t = THEMES[key];
+                const on = themeName === key;
+                return (
+                  <button key={key} onClick={() => setThemeName(key)} title={t.hint}
+                    style={{ flex: 1, background: "transparent", border: `1px solid ${on ? C.gold : C.border}`, borderRadius: 10, padding: "7px 6px 6px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    <span style={{ display: "flex", gap: 3, justifyContent: "center", marginBottom: 5 }}>
+                      {[t.bg, t.surface, t.gold].map((col, ci) => (
+                        <span key={ci} style={{ width: 11, height: 11, borderRadius: "50%", background: col, border: `1px solid ${t.border}`, display: "inline-block" }} />
+                      ))}
+                    </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? C.gold : C.muted }}>{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", padding: "8px 16px 6px" }}>Navigate</div>
             {NAV_ITEMS.map((item, i) => item.id === "ai" ? (
               <button key={item.id} onClick={() => { setShowMenu(false); goTab("ai"); }}
@@ -7852,14 +8102,14 @@ You also have a web_search tool. Use it whenever someone asks about something th
           live control it held, bookableOnly, already has its own pill on the
           Attractions page and is untouched. */}
 
-      <DetailPage item={eventDetail} onClose={() => setEventDetail(null)} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} />
+      <DetailPage item={eventDetail} onClose={closeEntry} kind="event" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={eventDetail && isPlaceSaved("event", eventDetail.id)} onToggleSave={eventDetail ? () => toggleSavePlace("event", eventDetail, eventDetail.town) : null} onOpenNearby={openStopDetail} />
       {/* onOpenEvent powers the new "What's on in <town>" section: tapping a
           festival closes the town page and opens that event's real entry, so the
           traveler lands on the full page with dates, tickets and directions
           rather than a dead-end list item. */}
-      <DetailPage item={townDetail} onClose={() => setTownDetail(null)} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} />
-      <DetailPage item={nightlifeDetail} onClose={() => setNightlifeDetail(null)} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} />
-      <DetailPage item={freeDetail} onClose={() => setFreeDetail(null)} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} />
+      <DetailPage item={townDetail} onClose={closeEntry} kind="town" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={townDetail && isPlaceSaved("town", townDetail.id)} onToggleSave={townDetail ? () => toggleSavePlace("town", townDetail, townDetail.region) : null} onOpenEvent={(e) => { setTownDetail(null); setEventDetail(e); }} onOpenNearby={openStopDetail} />
+      <DetailPage item={nightlifeDetail} onClose={closeEntry} kind="nightlife" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={nightlifeDetail && isPlaceSaved("nightlife", nightlifeDetail.id)} onToggleSave={nightlifeDetail ? () => toggleSavePlace("nightlife", nightlifeDetail, nightlifeDetail.location) : null} onOpenNearby={openStopDetail} />
+      <DetailPage item={freeDetail} onClose={closeEntry} kind="free" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={freeDetail && isPlaceSaved("free", freeDetail.id)} onToggleSave={freeDetail ? () => toggleSavePlace("free", freeDetail, freeDetail.city) : null} onOpenNearby={openStopDetail} />
       {/* ── The assistant that follows him (Oliver, 6 Aug: "some sort of
           assistant for the admin /#studio guy? That will always be with me?
           Even when I'm on the blogs")  ────────────────────────────────
@@ -7909,7 +8159,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           onSaved={() => refreshLiveContent()} />;
       })()}
 
-      <DetailPage item={foodDetail} onClose={() => setFoodDetail(null)} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} />
+      <DetailPage item={foodDetail} onClose={closeEntry} kind="food" liveInfo={liveInfo} liveInfoLoading={liveInfoLoading} checkLiveInfo={checkLiveInfo} userCoords={userCoords} isSaved={foodDetail && isPlaceSaved("food", foodDetail.id)} onToggleSave={foodDetail ? () => toggleSavePlace("food", foodDetail, foodDetail.location) : null} onOpenNearby={openStopDetail} />
 
       {/* Per Oliver ("get rid of the popup"): once a guide finishes building, we
           navigate straight to the full-page GuidePage instead of showing a
@@ -8330,7 +8580,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
           {/* Hero */}
           <div style={{ height: 200, background: `${craftDetail.color}22`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
             <span style={{ fontSize: 72 }}>{craftDetail.emoji}</span>
-            <button onClick={() => setCraftDetail(null)}
+            <button onClick={closeEntry}
               style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 14, background: "rgba(10,15,30,0.7)", border: "none", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
               ‹ Back
             </button>

@@ -1,4 +1,4 @@
-import { nextWeekdayTimestamp } from "./helpers";
+import { nextWeekdayTimestamp, arrivalRow } from "./helpers";
 
 // Empirically checks real late-night transit — not the AI's guess — for both a
 // weekday and a weekend night, since Danish night transport genuinely differs
@@ -39,50 +39,134 @@ export const geocodePlace = async (query) => {
   } catch { return null; }
 };
 
-// Finds the REAL nearest station via Google Places (not a straight-line/radius
-// guess) then confirms the actual WALKING time via Directions — straight-line
-// distance alone is exactly what breaks for a site like Rosenborg, walled off
-// by its own gardens, where the geometrically-closest station isn't the one a
-// pedestrian can actually reach quickly.
-export const findRealNearestStation = async (lat, lon) => {
-  try {
-    const placeRes = await fetch(`/api/places?lat=${lat}&lon=${lon}&type=transit_station`);
-    const place = await placeRes.json();
-    if (place.error || !place.name) return null;
-    // BUG FIX: this was sending mode=walk, which isn't one of api/directions.js's
-    // validModes (driving/walking/bicycling/transit) — an invalid mode silently
-    // fell back to "transit", so every "walking distance to nearest station"
-    // shown across the app (Studio's frozen facts, Detour's highlight-distance
-    // check) was actually a TRANSIT time mislabeled as a walk — real source of
-    // wildly-off-looking estimates.
-    // ── IS THIS ACTUALLY A STATION? ──────────────────────────────
-    // Oliver, 6 Aug 2026: the At a Glance row read "Tranekær Slot (Langeland
-    // Kommune) (9 mins walk)" as the nearest STATION. Tranekær Slot is a castle.
-    //
-    // Google's transit_station search does not reliably return transit in rural
-    // Denmark; where there is no station nearby it hands back the most prominent
-    // point of interest instead. The old code trusted whatever came back and put
-    // it under a train icon, which is a confident wrong answer in a field a
-    // traveler plans around.
-    //
-    // A name carrying a "(... Kommune)" suffix is a giveaway: that is how the
-    // Places API formats a general locality or landmark, never a station. Same
-    // for an explicitly non-transit Danish noun. NULL when unsure, because "we
-    // do not know the nearest station" is a true statement and naming a castle
-    // is not.
-    const NOT_TRANSIT = /\(.*kommune\)|\bslot\b|\bkirke\b|\bmuseum\b|\bkro\b|\bcamping\b|\bstrand\b|\bfyr\b|\bmølle\b|\bcastle\b|\bchurch\b/i;
-    const LOOKS_TRANSIT = /\bst\.?\b|station|banegård|banegaard|havn|terminal|færge|faerge|ferry|holdeplads|busstop|bus stop|rutebil|lufthavn|airport|metro|letbane/i;
-    if (NOT_TRANSIT.test(place.name) && !LOOKS_TRANSIT.test(place.name)) return null;
+// ── THE NEAREST STOP, NOT THE NEAREST STATION ───────────────────────
+// Two complaints, one day apart, and they turn out to be the same bug.
+//
+// Oliver, 7 Aug 2026: "the draft now just made a 'nearestStation' a bus stop. I
+// thought we fixed that."
+// Oliver, minutes later: "Maybe it shouldn't be nearest station, but nearest
+// stop. If it's an Island, this will often be awkward."
+//
+// What was fixed before was the LABEL. arrivalRow() reads the value and calls
+// the row Nearest Bus Stop, Terminal, Airport or Station to match, so nothing
+// on screen was lying. But the VALUE is chosen here, and it was simply "the
+// nearest thing Google files under transit_station", which includes bus
+// shelters. In a Danish town that is very often a shelter 200 m away while the
+// railway station is 900 m down the road, and the railway station is what a
+// traveler is planning around.
+//
+// His island point is the sharper one, and it kills the whole idea of a
+// "nearest station". Ærøskøbing has no station and never will. Sønderho on Fanø
+// is two kilometres from Esbjerg Station in a straight line, across open water:
+// a radius search finds it, and putting it in a field a traveler plans around
+// is a confident wrong answer. The way you reach a Danish island is a FERRY.
+//
+// So three tiers, asked in the order a traveler actually thinks in:
+//   1. RAIL, in a wide search. Where rail exists it is nearly always the answer.
+//   2. FERRY TERMINAL, wider still. On an island it IS the arrival point, and
+//      the berth can sit several kilometres from the village it serves.
+//   3. ANY transit stop, close only. A bus shelter is a fine answer when it is
+//      the only one; it just must not outrank a station or a harbour.
+//
+// AND EVERY CANDIDATE MUST BE WALKABLE FROM THE PLACE. That single gate is what
+// fixes the island case: there is no footpath from Sønderho to Esbjerg Station,
+// so Google returns ZERO_RESULTS and the rail tier is rejected, and the ferry
+// terminal at Nordby wins instead. A routing engine's own index saying "no path"
+// is real evidence. An API key error is not, so only an explicit no-route
+// verdict rejects a candidate; any other failure keeps it and drops the walk
+// time. (That distinction is the same rule this project already applies to
+// Places lookups: never conclude a fact from a failed lookup.)
+const TIERS = [
+  { kind: "rail",  types: "train_station,subway_station,light_rail_station", radius: 3000 },
+  { kind: "ferry", types: "ferry_terminal",                                  radius: 6000 },
+  { kind: "any",   types: "transit_station",                                 radius: 1500 },
+];
 
-    // The walk time is deliberately NOT folded into the name. The At a Glance row
-    // renders this value after a label, so appending it produced
-    // "Nearest Station: X (9 mins walk)", which reads as part of the station's
-    // name. It is returned separately for any caller that wants it.
+// Google's own status strings for "I looked and there is no route", as opposed
+// to "I could not look". Only these are allowed to rule a candidate out.
+const NO_ROUTE = /ZERO_RESULTS|NOT_FOUND|No route found/i;
+
+// ── IS THIS ACTUALLY TRANSIT? ────────────────────────────────
+// Oliver, 6 Aug 2026: the At a Glance row read "Tranekær Slot (Langeland
+// Kommune) (9 mins walk)" as the nearest STATION. Tranekær Slot is a castle.
+//
+// Google's transit search does not reliably return transit in rural Denmark;
+// where there is nothing nearby it hands back the most prominent point of
+// interest instead. A name carrying a "(... Kommune)" suffix is the giveaway:
+// that is how the Places API formats a locality or landmark, never a stop.
+const NOT_TRANSIT = /\(.*kommune\)|\bslot\b|\bkirke\b|\bmuseum\b|\bkro\b|\bcamping\b|\bstrand\b|\bfyr\b|\bmølle\b|\bcastle\b|\bchurch\b/i;
+const LOOKS_TRANSIT = /\bst\.?\b|station|banegård|banegaard|havn|terminal|færge|faerge|ferry|holdeplads|busstop|bus stop|rutebil|lufthavn|airport|metro|letbane/i;
+export const looksLikeTransit = (name) => {
+  const n = String(name || "");
+  if (!n.trim()) return false;
+  return !(NOT_TRANSIT.test(n) && !LOOKS_TRANSIT.test(n));
+};
+
+// A name alone can tell us a bus shelter from a harbour often enough to be
+// worth doing, for the tier that asked for "anything".
+//
+// DELIBERATELY BUILT ON arrivalRow RATHER THAN ITS OWN REGEXES. The first draft
+// of this duplicated the patterns and immediately disagreed with the label the
+// user would see: it called "Rutebilstation" rail, because its own rail test
+// matched the word "station" inside a Danish word meaning coach station, while
+// arrivalRow correctly said bus stop. Two lists of Danish transport nouns will
+// always drift. One list, read twice, cannot.
+const LABEL_TO_KIND = {
+  "Ferry Terminal": "ferry",
+  "Nearest Bus Stop": "bus",
+  "Nearest Airport": "air",
+  "Nearest Metro": "rail",
+  "Nearest Station": "rail",
+  "Nearest Stop": "other",
+};
+export const kindFromName = (name) => LABEL_TO_KIND[arrivalRow(name).label] || "other";
+
+// The walking check. Returns null when there is genuinely no footpath, which is
+// how an island is detected without ever having to know it is an island.
+const walkTo = async (lat, lon, place) => {
+  // BUG FIX kept from before: this once sent mode=walk, which isn't one of
+  // api/directions.js's validModes (driving/walking/bicycling/transit). An
+  // invalid mode silently fell back to "transit", so every "walking distance to
+  // nearest station" in the app was actually a TRANSIT time mislabeled.
+  try {
     const dirRes = await fetch(`/api/directions?origin=${lat},${lon}&destination=${place.lat},${place.lon}&mode=walking`);
     const dir = await dirRes.json();
-    return { name: place.name, walk: dir.error ? null : dir.durationText };
-  } catch { return null; }
+    if (dir.error) return NO_ROUTE.test(String(dir.error)) ? null : { walk: null };
+    return { walk: dir.durationText || null, minutes: dir.durationMinutes ?? null };
+  } catch {
+    return { walk: null };   // the lookup failed, which says nothing about the path
+  }
 };
+
+export const findRealNearestStop = async (lat, lon) => {
+  for (const tier of TIERS) {
+    let place = null;
+    try {
+      const r = await fetch(`/api/places?lat=${lat}&lon=${lon}&type=${tier.types}&radius=${tier.radius}`);
+      const d = await r.json();
+      if (!d.error && d.name) place = d;
+    } catch { continue; }          // this tier is unavailable, try the next one
+    if (!place || !looksLikeTransit(place.name)) continue;
+
+    const reach = await walkTo(lat, lon, place);
+    if (reach === null) continue;  // no footpath: across water, or otherwise cut off
+
+    // The walk time is deliberately NOT folded into the name. The At a Glance
+    // row renders this value after a label, so appending it produced
+    // "Nearest Station: X (9 mins walk)", which reads as part of the name.
+    return {
+      name: place.name,
+      walk: reach.walk,
+      walkMinutes: reach.minutes ?? null,
+      kind: tier.kind === "any" ? kindFromName(place.name) : tier.kind,
+    };
+  }
+  return null;   // "we do not know" is a true statement; naming a castle is not
+};
+
+// The old name, kept because App.jsx and the Detour code both call it and a
+// rename across a 700 KB file buys nothing.
+export const findRealNearestStation = findRealNearestStop;
 
 // Back-compatible string form: the plain station name, nothing appended.
 export const nearestStationName = async (lat, lon) => {

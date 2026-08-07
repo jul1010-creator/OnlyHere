@@ -24,14 +24,37 @@ export const getSeason = () => {
 };
 
 export const getEventDate = (dateStr, dateEnd) => {
-  if (!dateStr) return "Dates TBA";
+  // "Dates TBA" read like an abbreviation nobody had explained. It means the
+  // entry has no confirmed date: either the organiser has not announced one, or
+  // the drafting pipeline stripped a date it could not stand up (a festival date
+  // already in the past is treated as a guess and removed rather than shown).
+  // Saying that plainly is also more honest than a three letter acronym.
+  if (!dateStr) return "Dates not confirmed";
   const d = new Date(dateStr);
   const opts = { day: "numeric", month: "short" };
   if (dateEnd) return d.toLocaleDateString("en-GB", opts) + " – " + new Date(dateEnd).toLocaleDateString("en-GB", opts);
   return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
 };
 
+// NOTE THE `!d`: an entry with NO date counts as upcoming here, deliberately,
+// because a festival whose dates have not been announced has not finished
+// either and should still be findable on the Events page.
 export const isUpcoming = (d) => !d || new Date(d) >= new Date();
+
+// ── "Don't have it showing it in 'coming events' then" ─────────────
+// Oliver, 7 Aug, on seeing "Dates not confirmed" inside a list headed COMING
+// EVENTS. He is right: a browse page can honestly list something whose dates
+// are unannounced, but a strip promising what is COMING cannot, because the one
+// thing it claims is the one thing that entry does not have. isUpcoming stays
+// as it is, since the Events page still wants those entries; this is the
+// stricter test for anywhere that presents a date as the point.
+export const hasConfirmedDate = (e) => {
+  const d = e?.date ?? e;
+  if (!d) return false;
+  const parsed = new Date(d);
+  return !isNaN(parsed);
+};
+export const isConfirmedUpcoming = (e) => hasConfirmedDate(e) && isUpcoming(e?.date ?? e);
 
 export const isCurrentlyLive = (start, end) => {
   const now = new Date();
@@ -258,11 +281,49 @@ export const tiltLeave = (e) => { e.currentTarget.style.transform = ""; };
 // matters: ferry beats bus beats train, because a value like "Bus to Sælvig
 // Ferry Terminal" is fundamentally a ferry arrival. Danish and English terms
 // both, since published entries genuinely use both.
-export const arrivalRow = (value) => {
+//
+// ── AND THE FALLBACK IS "STOP", NOT "STATION" ──────────────────────
+// Oliver, 7 Aug 2026: "Maybe it shouldn't be nearest station, but nearest stop.
+// If it's an Island, this will often be awkward."
+//
+// Right, and the awkwardness is not cosmetic. "Nearest Station" on an Ærø or
+// Samsø page promises a platform that does not exist anywhere on the island.
+// The specific labels below stay, because when we DO know it is rail, "Nearest
+// Station" is the more useful word. What changes is the case where we do not
+// know: that now reads Nearest Stop, which is true of a platform, a quay and a
+// roadside shelter alike.
+//
+// The optional `kind` argument comes from geo.js, which knows the answer from
+// the Places category rather than from guessing at a name. When it is present
+// it wins; when it is absent the name is read, which is all any of the already
+// published entries can offer.
+const ARRIVAL_BY_KIND = {
+  rail:  { icon: "🚆", label: "Nearest Station" },
+  ferry: { icon: "⛴", label: "Ferry Terminal" },
+  bus:   { icon: "🚌", label: "Nearest Bus Stop" },
+  air:   { icon: "✈️", label: "Nearest Airport" },
+};
+
+export const arrivalRow = (value, kind) => {
   const v = String(value || "").toLowerCase();
-  if (!v.trim()) return { icon: "🚆", label: "Nearest Station", value };
-  if (/ferry|færge|faerge|terminal|havn(en)?\b|harbour|harbor|quay|kaj\b/.test(v)) {
-    return { icon: "⛴", label: "Nearest Terminal", value };
+  if (kind && ARRIVAL_BY_KIND[kind]) return { ...ARRIVAL_BY_KIND[kind], value };
+  if (!v.trim()) return { icon: "🚆", label: "Nearest Stop", value };
+  // ── AIRPORT BEFORE FERRY, AND \bhavn NOT havn ──────────────────
+  // Found by the tests on 7 Aug, and it had been shipping the whole time:
+  // "Billund Lufthavn" was labelled a Ferry Terminal, because "lufthavn" ends in
+  // the Danish word for harbour. So did "København H", for the same reason
+  // hiding inside the city's name. Both are among the most likely arrival
+  // points in the country, and both were being sent to a quay.
+  //
+  // Two fixes, because either alone leaves the other case broken: airport is
+  // tested first, and the harbour pattern now requires a word boundary before
+  // "havn" so it matches "Hou Havn" and refuses "lufthavn" and "København".
+  // (Danish letters are non-word characters to \b, so this had to be checked
+  // rather than assumed: in "københavn" the h follows an n, which is a word
+  // character, so no boundary exists there. It holds.)
+  if (/airport|lufthavn/.test(v)) return { icon: "✈️", label: "Nearest Airport", value };
+  if (/ferry|færge|faerge|terminal|\bhavn(en)?\b|harbour|harbor|quay|kaj\b/.test(v)) {
+    return { icon: "⛴", label: "Ferry Terminal", value };
   }
   if (/bus stop|busstop|busstoppested|stoppested|rutebil|coach stop/.test(v)) {
     return { icon: "🚌", label: "Nearest Bus Stop", value };
@@ -271,9 +332,15 @@ export const arrivalRow = (value) => {
   if (/\bbus\b|\bcoach\b/.test(v) && !/station|banegård|banegaard/.test(v)) {
     return { icon: "🚌", label: "Nearest Bus Stop", value };
   }
-  if (/airport|lufthavn/.test(v)) return { icon: "✈️", label: "Nearest Airport", value };
   if (/metro/.test(v)) return { icon: "🚇", label: "Nearest Metro", value };
-  return { icon: "🚆", label: "Nearest Station", value };
+  // "København H" and "Aarhus H" are the real names of those two stations: H is
+  // short for hovedbanegård, central station. Without this they read as an
+  // unknown stop, which is a strange thing to say about the busiest railway
+  // station in the country. Same for the "St." suffix on smaller ones.
+  if (/station|banegård|banegaard|\bst\.?$|\bh$/.test(v)) return { icon: "🚆", label: "Nearest Station", value };
+  // Something real, but nothing in the name says what it is. Do not promise a
+  // platform.
+  return { icon: "📍", label: "Nearest Stop", value };
 };
 
 // ── When a transit query should pretend to depart ──────────────────
@@ -343,7 +410,15 @@ export const hostMatchesName = (url, name) => {
 // Aggregators, booking sites and social platforms are never "the official
 // site", however well their URL happens to match. Kept next to the matcher so
 // the two cannot drift apart.
-const NOT_OFFICIAL = /facebook|instagram|tripadvisor|booking\.com|expedia|wikipedia|wikimedia|youtube|tiktok|eventbrite|ticketmaster|billetlugen|visitdenmark|visitaarhus|google\.|yelp|foursquare|reddit/i;
+//
+// THE EXPERIENCE RESELLERS WERE MISSING FROM THIS LIST. Added 7 Aug 2026, the
+// same hour GetYourGuide became a required research source: the two changes
+// have to land together. Telling the pipeline to go and read getyourguide.com
+// for every attraction, while this list still let a getyourguide.com URL
+// through as an official website, would have put a checkout page in the field
+// that is supposed to send a reader to the museum. Viator, Tiqets and Headout
+// are the same business and were missing for the same reason.
+const NOT_OFFICIAL = /facebook|instagram|tripadvisor|booking\.com|expedia|getyourguide|viator|tiqets|headout|klook|musement|wikipedia|wikimedia|youtube|tiktok|eventbrite|ticketmaster|billetlugen|visitdenmark|visitaarhus|google\.|yelp|foursquare|reddit/i;
 
 // The first candidate URL whose domain is the name. Returns null rather than a
 // best guess, because an empty website field is honest and a wrong one is not.
@@ -378,3 +453,79 @@ export const daCompare = (a, b) => String(a ?? "").localeCompare(String(b ?? "")
 
 // The usual case: a list of content rows, ordered by the name a reader reads.
 export const byName = (a, b) => daCompare(a?.name, b?.name);
+
+// ── IS THIS A GOOD TIME TO GO ───────────────────────────────────────
+// Oliver, 7 Aug 2026: "it has to be places that are considered great during the
+// season. Visiting Bonbon Land during winter is not great."
+//
+// THE RULE THAT KEEPS THIS HONEST: this only ever says "not now" when the entry
+// itself gives a POSITIVE reason to think so. Silence is never treated as
+// evidence. An entry with nothing to say about seasons comes back "unknown" and
+// is left alone, because demoting a perfectly good year-round place on a guess
+// is the same class of mistake as recommending a closed water park, and this
+// app does not get to make either one quietly.
+//
+// Two signals, both read off text the entry already carries:
+//   1. It says so. "Year-round" is a clear yes. A named open season, "open May
+//      to September", is a clear window.
+//   2. It is obviously an outdoor summer thing. A Danish sommerland, a water
+//      park, a beach, a lido, an open-air pool. These are not open in January
+//      and everyone in Denmark knows it, which is exactly why a guide that
+//      suggests one in January looks like it has never been there.
+// And the reverse: a Christmas market is wonderful in December and meaningless
+// in June.
+const MONTH_WORDS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const MONTH_ABBR = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+// Outdoor and warm-weather by nature. Deliberately short and specific: every
+// word here is a thing that genuinely shuts or stops being pleasant in a Danish
+// winter. Museums, castles, bars and restaurants are NOT on this list, because
+// they are fine in February and a longer list would start guessing.
+const SUMMER_ONLY = /\b(sommerland|summerland|water\s?park|vandland|aquapark|amusement park|theme park|forlystelsespark|tivoli friheden|beach|strand(en)?\b|lido|open-air pool|friluftsbad|outdoor pool|badeland|mini ?golf|surf|kayak|kajak|camping|campsite|teltplads)\b/i;
+const WINTER_ONLY = /\b(christmas market|julemarked|jul(e|emarked)?\b.*market|advent|christmas fair|ice rink|skøjtebane|winter market)\b/i;
+const YEAR_ROUND  = /\b(year[-\s]?round|all year|open all year|hele året|året rundt)\b/i;
+
+// Danish summer, generously: the parks are typically open from spring holidays
+// to the end of the school break, so May through September is the honest window
+// rather than a meteorological one.
+const SUMMER_MONTHS = [4, 5, 6, 7, 8];      // May..September, zero indexed
+const WINTER_SEASON = [10, 11];             // November, December
+
+export const seasonFit = (item, month) => {
+  const m = Number.isFinite(month) ? month : new Date().getMonth();
+  const text = [item?.bestTimeGlance, item?.desc, item?.type, item?.category, item?.name, item?.tag,
+    ...(Array.isArray(item?.thingsToKnow) ? item.thingsToKnow : [])].filter(Boolean).join(" ").toLowerCase();
+  if (!text) return { fit: "unknown", why: "" };
+
+  if (YEAR_ROUND.test(text)) return { fit: "good", why: "open year round" };
+
+  if (WINTER_ONLY.test(text)) {
+    return WINTER_SEASON.includes(m)
+      ? { fit: "good", why: "this is its season" }
+      : { fit: "poor", why: "a Christmas market outside December" };
+  }
+  if (SUMMER_ONLY.test(text)) {
+    return SUMMER_MONTHS.includes(m)
+      ? { fit: "good", why: "this is its season" }
+      : { fit: "poor", why: "an outdoor summer place in the cold half of the year" };
+  }
+
+  // "Open May to September", "best June to August". Only trusted when the text
+  // is actually talking about opening or the best time, so a passing mention of
+  // a month in a history sentence cannot close a place for nine months.
+  const windowish = /\b(open|opens|opening|season|best time|best in|closed)\b/i.test(text);
+  if (windowish) {
+    const named = MONTH_ABBR.map((a, i) => (text.includes(MONTH_WORDS[i]) || new RegExp(`\\b${a}\\b`).test(text) ? i : -1)).filter(i => i >= 0);
+    // Two or more named months read as a range. One is an anecdote.
+    if (named.length >= 2) {
+      const lo = Math.min(...named), hi = Math.max(...named);
+      const inWindow = m >= lo && m <= hi;
+      return inWindow ? { fit: "good", why: "inside its stated season" } : { fit: "poor", why: "outside the season the entry names" };
+    }
+  }
+  return { fit: "unknown", why: "" };
+};
+
+// Sorting helper: good first, unknown next, out of season last. Used to shape
+// the front page picks without ever hiding something outright on a guess.
+export const seasonRank = (item, month) => ({ good: 0, unknown: 1, poor: 2 }[seasonFit(item, month).fit]);

@@ -39,6 +39,75 @@ import { BOOKING_AFFILIATE_ID } from "../config";
 
 const dayIcon = (i) => ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭"][i] || `Day ${i + 1}`;
 
+// ── THE SHAPE OF THE TRIP, BEFORE ANY OF THE DETAIL ─────────────────
+// Oliver, 7 Aug 2026: "We just need to make the guide less overwhelming as
+// well. Easier to understand." And, when I offered to collapse the days to do
+// it: "I, personally, think putting it up as days is good though. Some people
+// like a schedule. And people coming to Denmark, have no idea about Denmark.
+// How long the transport is. How long it takes to settle, etc."
+//
+// That rules out the obvious fix and points at the real problem. The page was
+// never overwhelming because it had too much in it; it was overwhelming because
+// it opened straight into Day 1 with no answer to "how big is this thing". You
+// scroll for a while and still cannot say how many towns you are visiting or
+// how much of the week is spent moving.
+//
+// So nothing is removed. This computes the four numbers a person actually wants
+// first, and they go above the days: how many days, how many stops, which towns
+// in order, and how much travelling that adds up to.
+//
+// EVERY FIGURE IS ALL-OR-NOTHING. A distance total built from the legs that
+// happened to resolve, silently missing the ferry crossing, is worse than no
+// total: it reads as complete and understates the trip. So if one leg cannot be
+// measured, the whole figure is withheld rather than quietly wrong. Same for
+// time, and the longest single journey is only claimed to BE the longest when
+// every journey was measured.
+export const tripShape = (guide, legKm) => {
+  const days = guide?.days || [];
+  const stops = days.flatMap(d => d.stops || []).filter(s => s && s.name);
+  const towns = [];
+  stops.forEach(s => {
+    const t = String(s.town || "").trim();
+    if (t && !towns.some(x => x.toLowerCase() === t.toLowerCase())) towns.push(t);
+  });
+  const geo = guide?._geo || {};
+  const durations = guide?._exactDurations || {};
+  let km = 0, kmKnown = stops.length > 1;
+  let minutes = 0, minutesKnown = stops.length > 1;
+  let longest = null;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i].name, b = stops[i + 1].name;
+    const d = legKm(a, b, geo);
+    if (d == null) kmKnown = false; else km += d;
+    // The mode is resolved down in the render, so match on the pair and take
+    // whichever mode was actually measured for it.
+    const hit = Object.keys(durations).find(k => k.startsWith(`${a}|${b}|`));
+    const mins = hit ? durations[hit]?.durationMinutes : null;
+    if (typeof mins !== "number") minutesKnown = false;
+    else {
+      minutes += mins;
+      if (!longest || mins > longest.minutes) longest = { minutes: mins, from: a, to: b, text: durations[hit].durationText };
+    }
+  }
+  return {
+    dayCount: days.length,
+    stopCount: stops.length,
+    towns,
+    km: kmKnown && km >= 1 ? Math.round(km) : null,
+    minutes: minutesKnown && minutes > 0 ? minutes : null,
+    longest: minutesKnown ? longest : null,
+  };
+};
+
+// "3h 20m", or "45m". Hours matter to someone working out whether a day is
+// mostly travelling; seconds-level precision does not.
+export const humanMinutes = (m) => {
+  if (typeof m !== "number" || m <= 0) return null;
+  const h = Math.floor(m / 60), rest = Math.round(m % 60);
+  if (!h) return `${rest}m`;
+  return rest ? `${h}h ${rest}m` : `${h}h`;
+};
+
 export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   const { guideId } = useParams();
   const navigate = useNavigate();
@@ -156,7 +225,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_guides`, {
         method: "POST",
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify({ id, payload: guide }),
+        // TEST SCAFFOLDING NEVER GETS SAVED. _testProfile and _testPlan exist
+        // so Oliver can see what went into a Random-guide run; they are for him
+        // and nobody else. Saving them puts them in the payload permanently, and
+        // the shared link then shows a stranger a dashed gold box headed
+        // "Pipeline test" describing a traveler who does not exist. Stripped
+        // here rather than only hidden at render, because the render guard
+        // cannot help a payload that is already in the database.
+        body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, ...rest }) => rest)(guide) }),
       });
       if (!res.ok) { setSaveError("Couldn't save this guide — try again."); setSaving(false); return; }
       // Also bookmark it into the same "gemlyx_saved_guides" localStorage list
@@ -185,6 +261,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   // (using the itinerary as context below) or anything else Denmark-related,
   // but it doesn't edit the saved guide object directly; it points back to the
   // main chat for that, same as the itinerary rebuild flow already works.
+  // ── STOP NOTES OPEN ON DEMAND ──────────────────────────────────
+  // The note was cut at 140 characters with an ellipsis, which is the worst of
+  // both: it spends the space AND withholds the sentence. Nothing on this page
+  // let you read the rest. Keyed by day and stop index.
+  const [openNotes, setOpenNotes] = useState({});
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { role: "assistant", text: "Hi again ◆ I'm still here if you want to talk through this trip, ask about a stop, or anything else about Denmark." }
@@ -237,6 +318,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   // the plain day-by-day pick, so no route map and no leg time chips here,
   // just the stop cards, photos, click-through, accommodation, and weather.
   const lightMode = !!guide._lightMode;
+  const shape = tripShape(guide, legDistanceKm);
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 60 }}>
@@ -280,6 +362,58 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           </div>
         )}
 
+        {/* ── AT A GLANCE, BEFORE THE DETAIL ──────────────────────────
+            The answer to "how big is this trip", which the page previously made
+            you scroll the whole thing to work out. Only figures that are
+            genuinely known appear: tripShape withholds a total rather than
+            build one out of the legs that happened to resolve. */}
+        {shape.stopCount > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 18, maxWidth: 640 }}>
+            {[
+              { n: shape.dayCount, label: shape.dayCount === 1 ? "day" : "days" },
+              { n: shape.stopCount, label: shape.stopCount === 1 ? "stop" : "stops" },
+              shape.towns.length ? { n: shape.towns.length, label: shape.towns.length === 1 ? "town" : "towns" } : null,
+              shape.km ? { n: shape.km, label: "km of travel", sub: true } : null,
+              shape.minutes ? { n: humanMinutes(shape.minutes), label: "moving in total", sub: true } : null,
+            ].filter(Boolean).map((s2, i) => (
+              <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "9px 14px", minWidth: 76 }}>
+                <div style={{ fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", color: s2.sub ? C.light : C.gold, lineHeight: 1.1 }}>{s2.n}</div>
+                <div style={{ fontSize: 10, color: C.muted, letterSpacing: 0.9, textTransform: "uppercase", marginTop: 3 }}>{s2.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {shape.towns.length > 1 && (
+          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7, marginBottom: shape.longest ? 8 : 24, maxWidth: 640 }}>
+            <span style={{ color: C.muted, fontWeight: 700 }}>Your route: </span>{shape.towns.join(" → ")}
+          </div>
+        )}
+        {/* His words, on why the transport has to stay visible: "people coming
+            to Denmark, have no idea about Denmark. How long the transport is."
+            The single longest journey is the one that decides whether a day is
+            a day out or a travel day, so it is named rather than buried in a
+            chip halfway down. */}
+        {shape.longest && (
+          <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.7, marginBottom: 24, maxWidth: 640 }}>
+            <span style={{ color: C.muted, fontWeight: 700 }}>Longest single journey: </span>
+            {shape.longest.text}, {shape.longest.from} to {shape.longest.to}
+          </div>
+        )}
+
+        {/* A seven day guide is a long page. Jumping is not a substitute for the
+            day structure, which he asked to keep, it is a way to get back to
+            Thursday without scrolling past Monday again. */}
+        {days.length >= 3 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 26 }}>
+            {days.map((d, i) => (
+              <button key={i} onClick={() => document.getElementById(`gx-day-${d.day || i + 1}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                Day {d.day || i + 1}
+              </button>
+            ))}
+          </div>
+        )}
+
         {guide.essentials && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 30, maxWidth: 640 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>Before you go</div>
@@ -309,17 +443,29 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             see App.jsx's randomTestProfileRef). Shows the fabricated traveler,
             the planner's raw day/stop skeleton BEFORE the writer touched it,
             and whether any real events made it into the final guide. */}
-        {guide._testProfile && (() => {
+        {guide._testProfile && isUnsaved && (() => {
           const p = guide._testProfile;
           let plan = null;
           try { plan = guide._testPlan ? JSON.parse(guide._testPlan) : null; } catch { /* skeleton unparseable — show the rest without it */ }
           const eventStops = (guide.days || []).flatMap(d => d.stops || []).map(s => ({ s, real: lookupRealPlace(s.name) })).filter(x => x.real?._src === "event").map(x => x.s.name);
+          // The brief no longer names towns or "extras", because naming
+          // published entries pre-solved the hardest thing the pipeline does.
+          // This panel used to read p.towns.join() unguarded, which would have
+          // thrown on the very first Random-guide click after that change: a
+          // white screen, from a debug panel. What it shows now is WHO the
+          // fabricated traveler is, which is the thing that varies.
+          const line = [
+            `${p.days} day${p.days !== 1 ? "s" : ""}`,
+            p.who, p.arrival, p.transport, p.moving,
+            (p.interests || []).length ? `into ${(p.interests || []).join(" and ")}` : null,
+            p.budget && p.budget !== "unstated" ? p.budget : null,
+          ].filter(Boolean).join(" · ");
           return (
             <div style={{ background: `${C.gold}0D`, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "14px 16px", marginBottom: 24, maxWidth: 640, fontSize: 12.5, lineHeight: 1.7 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>◈ Pipeline test — what went in</div>
-              <div style={{ color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Test traveler:</span> {p.days} day{p.days !== 1 ? "s" : ""}, based around {p.towns.join(" + ")}, into {p.interests.join(" and ")}.</div>
-              {p.extras?.length > 0 && (
-                <div style={{ color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Asked to fit in:</span> {p.extras.join(", ")}</div>
+              <div style={{ color: C.light }}><span style={{ color: C.text, fontWeight: 700 }}>Test traveler:</span> {line}</div>
+              {p.brief && (
+                <div style={{ color: C.muted, fontStyle: "italic", marginTop: 6, paddingLeft: 10, borderLeft: `2px solid ${C.gold}44` }}>{p.brief}</div>
               )}
               {plan?.days?.length > 0 && (
                 <div style={{ marginTop: 8 }}>
@@ -470,7 +616,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             return { mode };
           });
           return (
-          <div key={day.day || dayIdx} style={{ marginBottom: 44 }}>
+          <div key={day.day || dayIdx} id={`gx-day-${day.day || dayIdx + 1}`} style={{ marginBottom: 44, scrollMarginTop: 70 }}>
             {/* Redesign pass: day headers went from a cramped gold uppercase micro-line
                 to a proper serif heading with a hairline rule — the day number stays
                 small and gold, the day's title gets the size it deserves. */}
@@ -515,14 +661,55 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   layered gradient — rather than a lonely ◆ in a void. Now also clickable
                   when the stop matches something real Gemlyx already has its own page
                   for (a town, a free attraction, a restaurant, a venue, an event). */}
+              {/* ── NOT EVERY STOP IS A POSTCARD ────────────────────────
+                  This is where the page got heavy. Every stop rendered as a big
+                  card, and since only stops matching a published Gemlyx entry
+                  have a photo, most days were three or four 96px monogram
+                  plates: a large decorated box whose entire content is the
+                  first letter of a name you can already read underneath it. A
+                  four day trip was a very long scroll made mostly of gradient.
+
+                  Nothing is dropped, the weight is just spent where there is
+                  something to look at. A stop with a real photo keeps the full
+                  card. Everything else becomes a compact row, which also makes
+                  the ones with photos read as the highlights of the day rather
+                  than as four equal things in a queue. */}
               {(day.stops || []).map((stop, stopIdx) => {
                 const matched = lookupRealPlace(stop.name);
                 const real = matched && matched._src !== "craft" ? matched : null;
                 const nextStop = day.stops[stopIdx + 1];
+                const noteKey = `${dayIdx}-${stopIdx}`;
+                const noteOpen = !!openNotes[noteKey];
+                const NOTE_CLAMP = 160;
+                const note = stop.note || "";
+                const longNote = note.length > NOTE_CLAMP;
+                const noteBlock = note ? (
+                  <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginTop: 7 }}>
+                    {longNote && !noteOpen ? `${note.slice(0, NOTE_CLAMP).trimEnd()}… ` : `${note} `}
+                    {longNote && (
+                      <button onClick={e => { e.stopPropagation(); setOpenNotes(o => ({ ...o, [noteKey]: !noteOpen })); }}
+                        style={{ background: "none", border: "none", padding: 0, color: C.gold, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {noteOpen ? "Less" : "Read more"}
+                      </button>
+                    )}
+                  </div>
+                ) : null;
+                const titleRow = (
+                  <>
+                    <div style={{ fontSize: real?.photo ? 17 : 15, fontWeight: 600, color: real ? C.gold : C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.2, textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}55` : "none", textUnderlineOffset: 3 }}>{stop.name}{real ? " ↗" : ""}</div>
+                    {(stop.town || stop.suggestedStay || (!real?.photo && stop.arrivalTime)) && (
+                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1, marginTop: 5 }}>
+                        {[!real?.photo && stop.arrivalTime, stop.town, stop.suggestedStay].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                    {noteBlock}
+                  </>
+                );
                 return (
                 <div key={stopIdx} style={{ marginBottom: nextStop && lightMode ? 14 : 0 }}>
-                  <div onClick={real ? () => openStopDetail(real) : undefined}
-                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: real ? "pointer" : "default" }}>
+                  {real?.photo ? (
+                  <div onClick={() => openStopDetail(real)}
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer" }}>
                     {/* Per Oliver: "avoid the horizontal pictures, you can't see the
                         whole castle — go with the same size as on the town
                         navigation." This was a much shorter/wider box (116px tall)
@@ -530,27 +717,23 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                         .towns-grid column width) — a short, wide crop of a tall
                         subject like a castle cuts off its towers/spires. Now
                         matches Towns exactly. */}
-                    {/* EMPTY-BOX FIX (Oliver's screenshots: stops without photos
-                        rendered a full 210px of near-black nothing, reading as
-                        broken): the tall header is only worth its height when
-                        there's a real photo in it — photoless stops get a
-                        compact 96px monogram band instead. */}
-                    <div style={{ position: "relative", height: real?.photo ? 210 : 96, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: real?.photo ? undefined : `radial-gradient(120% 90% at 18% 0%, #1B2946 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
-                      {real?.photo ? (
-                        <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      ) : (
-                        <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 44, fontWeight: 500, color: "rgba(148,163,199,0.35)" }}>{(stop.name || "◆").slice(0, 1)}</span>
-                      )}
+                    <div style={{ position: "relative", height: 210, overflow: "hidden" }}>
+                      <img src={real.photo} alt={stop.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       {stop.arrivalTime && (
-                        <div style={{ position: "absolute", top: 10, left: 10, background: "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, border: `1px solid ${C.gold}44` }}>{stop.arrivalTime}</div>
+                        <div style={{ position: "absolute", top: 10, left: 10, background: C.scrim || "rgba(10,15,30,0.78)", backdropFilter: "blur(6px)", color: C.gold, fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, border: `1px solid ${C.gold}44` }}>{stop.arrivalTime}</div>
                       )}
                     </div>
-                    <div style={{ padding: "12px 14px 14px" }}>
-                      <div style={{ fontSize: 17, fontWeight: 600, color: real ? C.gold : C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}55` : "none", textUnderlineOffset: 3 }}>{stop.name}{real ? " ↗" : ""}</div>
-                      {stop.town && <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1, marginTop: 5 }}>{stop.town}{stop.suggestedStay ? ` · ${stop.suggestedStay}` : ""}</div>}
-                      {stop.note && <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginTop: 7 }}>{stop.note.slice(0, 140)}{stop.note.length > 140 ? "…" : ""}</div>}
-                    </div>
+                    <div style={{ padding: "12px 14px 14px" }}>{titleRow}</div>
                   </div>
+                  ) : (
+                  <div onClick={real ? () => openStopDetail(real) : undefined}
+                    style={{ display: "flex", gap: 12, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", cursor: real ? "pointer" : "default" }}>
+                    <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: `${C.gold}18`, border: `1px solid ${C.gold}33` }}>
+                      <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 16, fontWeight: 500, color: C.gold }}>{(stop.name || "◆").slice(0, 1)}</span>
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>{titleRow}</div>
+                  </div>
+                  )}
                   {/* Connector: the leg chip sits ON the line between the two
                       stops it joins, centered — reads as "then you travel",
                       not as a stray label under a random card. */}

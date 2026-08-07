@@ -18,7 +18,7 @@
 // or React, so it always runs in about a second and can never be flaky.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,15 +40,17 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells, daCompare, byName } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, offersCorrection, allowedFieldsFor, APPLIED_VERDICTS, correctEntry } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
+  export { looksLikeTransit, kindFromName, findRealNearestStop } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
+  export { licenseIsUsable } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
 `);
 const esbuild = [
   join(root, "node_modules/.bin/esbuild"),
@@ -70,18 +72,147 @@ const { arrivalRow, transitDepartureAnchor, departureParam, auditEntry, auditAll
 // ── arrivalRow: label the arrival point for what it IS ─────────────
 // Bug: every content type was hardcoded to "🚆 Nearest Station", so
 // "Sælvig Ferry Terminal" appeared under a train icon and the word Station.
-is("arrivalRow ferry terminal", arrivalRow("Sælvig Ferry Terminal").label, "Nearest Terminal");
-is("arrivalRow danish havn", arrivalRow("Hou Havn").label, "Nearest Terminal");
-is("arrivalRow danish faerge", arrivalRow("Odden Færgehavn").label, "Nearest Terminal");
-is("arrivalRow ferry beats bus", arrivalRow("Bus to Sælvig Ferry Terminal").label, "Nearest Terminal");
+is("arrivalRow ferry terminal", arrivalRow("Sælvig Ferry Terminal").label, "Ferry Terminal");
+is("arrivalRow danish havn", arrivalRow("Hou Havn").label, "Ferry Terminal");
+is("arrivalRow danish faerge", arrivalRow("Odden Færgehavn").label, "Ferry Terminal");
+is("arrivalRow ferry beats bus", arrivalRow("Bus to Sælvig Ferry Terminal").label, "Ferry Terminal");
 is("arrivalRow bus stop", arrivalRow("Bus stop at the village square").label, "Nearest Bus Stop");
 is("arrivalRow rutebilstation", arrivalRow("Rutebilstation").label, "Nearest Bus Stop");
 is("arrivalRow airport", arrivalRow("Kastrup Airport").label, "Nearest Airport");
 is("arrivalRow metro", arrivalRow("Nørreport Metro").label, "Nearest Metro");
 is("arrivalRow real station", arrivalRow("Ribe Station").label, "Nearest Station");
-is("arrivalRow empty", arrivalRow("").label, "Nearest Station");
-is("arrivalRow null", arrivalRow(null).label, "Nearest Station");
 is("arrivalRow never rewrites value", arrivalRow("Hou Havn").value, "Hou Havn");
+
+// ── "Nearest Stop", not "Nearest Station" ──────────────────────────
+// Oliver, 7 Aug 2026: "Maybe it shouldn't be nearest station, but nearest stop.
+// If it's an Island, this will often be awkward."
+//
+// A label promising a platform is wrong on every island page in Denmark. When
+// the kind IS known the specific word is better and stays; the FALLBACK is what
+// had to stop guessing "Station".
+is("an unknown arrival point is a Stop, not a Station", arrivalRow("").label, "Nearest Stop");
+is("a null arrival point is a Stop", arrivalRow(null).label, "Nearest Stop");
+is("a name that says nothing is a Stop", arrivalRow("Sønderho Kirkevej").label, "Nearest Stop");
+// The kind, when geo.js knows it from the Places category, beats reading a name.
+is("a known ferry kind overrides the name", arrivalRow("Nordby", "ferry").label, "Ferry Terminal");
+is("a known rail kind overrides the name", arrivalRow("Sælvig", "rail").label, "Nearest Station");
+is("a known bus kind overrides the name", arrivalRow("Torvet", "bus").label, "Nearest Bus Stop");
+is("an unknown kind falls back to reading the name", arrivalRow("Ribe Station", "other").label, "Nearest Station");
+is("a known kind still never rewrites the value", arrivalRow("Nordby", "ferry").value, "Nordby");
+
+// ── kindFromName ───────────────────────────────────────────────────
+is("kindFromName rail", M.kindFromName("Ribe Station"), "rail");
+is("kindFromName danish rail", M.kindFromName("Aarhus Banegård"), "rail");
+is("kindFromName ferry", M.kindFromName("Hou Havn"), "ferry");
+is("kindFromName bus", M.kindFromName("Rutebilstation"), "bus");
+is("kindFromName air", M.kindFromName("Billund Lufthavn"), "air");
+
+// ── two labels that had been wrong since the row was written ───────
+// Both found by these tests rather than by a human, which is the whole point of
+// having them. "lufthavn" ends in the Danish word for harbour, so every Danish
+// airport was labelled a Ferry Terminal; and the same word hides inside
+// "København", so the busiest railway station in the country was too.
+is("lufthavn is an airport, not a harbour", arrivalRow("Billund Lufthavn").label, "Nearest Airport");
+is("Copenhagen airport is an airport", arrivalRow("Københavns Lufthavn").label, "Nearest Airport");
+is("Kobenhavn H is a station, not a quay", arrivalRow("København H").label, "Nearest Station");
+is("Kobenhavn H reads as rail", M.kindFromName("København H"), "rail");
+is("Odense St. is a station", arrivalRow("Odense St.").label, "Nearest Station");
+is("a real harbour is still a harbour", arrivalRow("Hou Havn").label, "Ferry Terminal");
+is("havnen is still a harbour", arrivalRow("Havnen").label, "Ferry Terminal");
+
+// ── a reseller is never the official website ───────────────────────
+// Oliver, 7 Aug 2026: "make getyourguide.com a must-research as well!!!"
+//
+// Making it a required research source and leaving it out of this blocklist
+// would have been a net loss: the pipeline would start finding GetYourGuide
+// URLs for every attraction, and the official-site picker would have happily
+// published one as the venue's own website. It sells tickets to the place; it
+// is not the place.
+is("getyourguide is never the official site", M.officialSiteFromCandidates(["https://www.getyourguide.com/tivoli-gardens-l1234/"], "Tivoli"), null);
+is("viator is never the official site", M.officialSiteFromCandidates(["https://www.viator.com/tours/Copenhagen/tivoli"], "Tivoli"), null);
+is("tiqets is never the official site", M.officialSiteFromCandidates(["https://www.tiqets.com/en/tivoli-gardens"], "Tivoli"), null);
+// And the real one still wins when it is in the same list.
+is("the venue's own domain still wins", M.officialSiteFromCandidates(["https://www.getyourguide.com/tivoli-l1/", "https://www.tivoli.dk/en/"], "Tivoli"), "https://www.tivoli.dk");
+is("kindFromName gives up honestly", M.kindFromName("Torvet"), "other");
+
+// ── looksLikeTransit: a castle is not a station ────────────────────
+// Bug: "Tranekær Slot (Langeland Kommune)" shipped as a nearest station.
+ok("a kommune-suffixed landmark is rejected", !M.looksLikeTransit("Tranekær Slot (Langeland Kommune)"));
+ok("a plain station is accepted", M.looksLikeTransit("Ribe Station"));
+ok("a harbour is accepted", M.looksLikeTransit("Hou Havn"));
+ok("an empty name is rejected", !M.looksLikeTransit(""));
+// A church WITH a stop in the name is a real stop called after the church.
+ok("a church bus stop survives", M.looksLikeTransit("Sønderho Kirke busstop"));
+
+// ── findRealNearestStop: the tiers, and the island gate ────────────
+// Network is stubbed, not called. These assert the ORDERING RULE and the
+// WALKABILITY GATE, which are the two things that were actually wrong, and both
+// are decided in geo.js rather than by Google.
+{
+  const realFetch = globalThis.fetch;
+  // places[type] -> the place that search returns. walks[name] -> what
+  // /api/directions says about walking there.
+  const stub = (places, walks) => {
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      if (u.startsWith("/api/places")) {
+        const type = decodeURIComponent(u.match(/type=([^&]*)/)[1]);
+        const hit = places[type];
+        return { json: async () => (hit || { error: "No nearby place found" }) };
+      }
+      const dest = u.match(/destination=([^&]*)/)[1];
+      const w = walks[dest];
+      return { json: async () => (w || { durationText: "8 mins", durationMinutes: 8 }) };
+    };
+  };
+  const RAIL = "train_station,subway_station,light_rail_station";
+  const station = { name: "Esbjerg Station", lat: 55.466, lon: 8.459 };
+  const berth = { name: "Nordby Færgehavn", lat: 55.446, lon: 8.409 };
+  const shelter = { name: "Sønderho busstop", lat: 55.35, lon: 8.42 };
+
+  // 1. Rail wins even when a bus shelter is closer. This is the bug he reported.
+  stub({ [RAIL]: station, transit_station: shelter }, {});
+  let r = await M.findRealNearestStop(55.46, 8.45);
+  is("rail beats a nearer bus stop", [r.name, r.kind], ["Esbjerg Station", "rail"]);
+
+  // 2. THE ISLAND. Google finds a mainland station two km away across open
+  // water. There is no footpath, so it must be rejected and the ferry berth
+  // must win, rather than promising a platform nobody can reach.
+  stub(
+    { [RAIL]: station, ferry_terminal: berth, transit_station: shelter },
+    { "55.466,8.459": { error: "ZERO_RESULTS" } }
+  );
+  r = await M.findRealNearestStop(55.44, 8.41);
+  is("a station across water is rejected for the ferry berth", [r.name, r.kind], ["Nordby Færgehavn", "ferry"]);
+
+  // 3. A bus stop is a fine answer when it is the only one, and it says so.
+  stub({ transit_station: shelter }, {});
+  r = await M.findRealNearestStop(55.35, 8.42);
+  is("a bus stop is returned as a bus stop", [r.name, r.kind], ["Sønderho busstop", "bus"]);
+
+  // 4. Nothing at all is null. Empty reads as "we do not know"; a landmark lies.
+  stub({}, {});
+  is("nothing found is null, never a guess", await M.findRealNearestStop(55.1, 9.1), null);
+
+  // 5. A landmark returned by the transit search is still refused.
+  stub({ transit_station: { name: "Tranekær Slot (Langeland Kommune)", lat: 55, lon: 10.9 } }, {});
+  is("a castle is never the nearest stop", await M.findRealNearestStop(55, 10.9), null);
+
+  // 6. NEVER CONCLUDE A FACT FROM A FAILED LOOKUP. A directions call that fails
+  // for a reason other than "no route" says nothing about whether a path exists,
+  // so the candidate stands and only the walk time is dropped.
+  stub({ [RAIL]: station }, { "55.466,8.459": { error: "REQUEST_DENIED" } });
+  r = await M.findRealNearestStop(55.46, 8.45);
+  is("a denied directions call does not reject the stop", [r.name, r.walk], ["Esbjerg Station", null]);
+
+  // 7. The walk time is returned separately and never glued onto the name.
+  stub({ [RAIL]: station }, {});
+  r = await M.findRealNearestStop(55.46, 8.45);
+  is("the walk time stays out of the name", r.name, "Esbjerg Station");
+  is("the walk time is its own field", r.walk, "8 mins");
+
+  globalThis.fetch = realFetch;
+}
 
 // ── transit departure anchor ───────────────────────────────────────
 // Bug: no departure_time meant "if you left right now", so a town's PERMANENT
@@ -366,320 +497,29 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a quoted name is JSON-escaped into the schema", tricky.food.includes('"name": ' + JSON.stringify(trickyName)));
 }
 
-// ── OPENAI NEVER WRITES PROSE, enforced on the source itself ───────
-// The standing rule: Perplexity and Tavily research, OpenAI plans queries and
-// sorts findings into notes, CLAUDE writes every published sentence. It was
-// written in comments in four places and still got broken, because a comment
-// cannot fail a build. This block reads App.jsx as text and does what a comment
-// could not.
+// ── the Commons photo licence gate ─────────────────────────────────
+// Oliver, 7 Aug 2026: "I searched up Wikipedia about Ringkøbing, there are a
+// lot more pictures there than on Wikimedia. Why can't I take those and give
+// credits as well??? ... It's the same license."
 //
-// What actually happened (found 7 Aug 2026): the Studio fact generator called
-// askOpenAI to write the fact text a traveler reads on the loading screen. It
-// had been that way since PASS 40, under a comment two functions above saying
-// OpenAI is never the writer. Separately, the Studio panel told Oliver on screen
-// that entries were drafted "via Tavily + OpenAI" long after Claude took over,
-// which is how he came to believe the pipeline was still wrong.
+// He was right, and the reason was a full-text search that never looked in the
+// article or the category. Fixing that meant more files reaching this gate, so
+// the gate is now pinned in both directions. The MISSES matter as much as the
+// leaks: a jurisdiction-ported CC BY-SA is the same licence written for another
+// legal system, and rejecting it silently cost real usable photographs.
 {
-  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-
-  // Every legitimate askOpenAI call site is a PLANNER or a STRUCTURER: research
-  // query planning, note organizing, candidate extraction, and flag-only prose
-  // scans that never write the replacement themselves. There are seven. This
-  // count is not a style rule — a new one means someone gave OpenAI a new job,
-  // and that job has to be checked against the rule by a human before it ships.
-  const openAiCalls = (app.match(/askOpenAI\(/g) || []).length;
-  is("askOpenAI call sites stay at the seven audited planning/structuring ones", openAiCalls, 7);
-
-  // The specific regression: the fact generator writes PUBLISHED prose.
-  const factWriter = app.slice(app.indexOf("const draftOneFact"), app.indexOf("const generateFacts"));
-  ok("draftOneFact exists to be checked", factWriter.length > 500);
-  ok("the fact generator writes with Claude", /await askClaude\(writePrompt/.test(factWriter));
-  ok("the fact generator never writes with OpenAI", !/askOpenAI/.test(factWriter));
-
-  // Every raw /api/openai body must use max_completion_tokens. "gpt-5.6-sol"
-  // REJECTS max_tokens outright, so a body carrying it is not a slow path or a
-  // degraded path, it is a 400 every single time. Two shipped that way: the
-  // source scanner surfaced it as an OpenAI error, the AI voice scan swallowed
-  // it in a catch and looked like it simply found nothing.
-  const rawOpenAiBodies = app.split('fetch("/api/openai"').slice(1).map(chunk => chunk.slice(0, 3000));
-  ok("at least one raw OpenAI call still exists to check", rawOpenAiBodies.length >= 2);
-  rawOpenAiBodies.forEach((body, i) => {
-    const line = (body.match(/^\s*max_tokens:.*$/m) || [])[0];
-    ok(`raw OpenAI call ${i + 1} does not send the rejected max_tokens parameter`, !line);
-  });
-
-  // The panel Oliver actually reads while drafting must not name the wrong
-  // writer. This is the exact text that made him report the pipeline as broken.
-  ok("the Studio panel no longer claims entries are drafted via OpenAI",
-    !/complete entry[^<]*via Tavily \+ OpenAI/.test(app));
-  ok("the Studio panel names Claude as the writer",
-    /Claude writes every word of the actual entry/.test(app));
-}
-
-// ── the assistant hears a correction the way he actually types one ─
-// Oliver, 7 Aug 2026: "the AI assistant that is meant to put in the newly
-// fact-checked things is not thaaat great... I would like to have an AI I can
-// write to after the draft where I can say 'Fact-checkers say bla bla bla is
-// wrong, and that really bla bla bla is true.'"
-//
-// The router demanded an imperative verb, so five of six realistic correction
-// messages, INCLUDING HIS OWN EXAMPLE, routed to "ask" and got discussed
-// instead of applied. A correction is an assertion, not a command.
-{
-  const corrects = [
-    "Fact-checkers say bla bla bla is wrong, and that really bla bla bla is true.",
-    "The station is wrong. It should be Aarhus H.",
-    "Google says the date is wrong, it is actually 25 August.",
-    "This says the ferry is required but that is not true, it is optional.",
-    "The fact-checkers found that the nearestStation should be Aarhus H, not Aarhus.",
-    "Google AI says this is wrong. Correct it.",
-  ];
-  corrects.forEach(t => is(`corrects: ${t.slice(0, 42)}`, M.routeMessage(t), "correct"));
-
-  // The other direction matters just as much. Wondering aloud must never fire a
-  // verification pass, and an explicit instruction must beat a question mark.
-  is("a question about wrongness still answers", M.routeMessage("is the ferry thing right on this one?"), "ask");
-  is("a bare observation still answers", M.routeMessage("this looks off to me"), "ask");
-  is("a question with an instruction in it corrects", M.routeMessage("why is this wrong? fix it"), "correct");
-  is("a plain lookup still answers", M.routeMessage("what does the entry say about tickets?"), "ask");
-  is("an audit request is untouched", M.routeMessage("which ones need work?"), "audit");
-
-  // The escape hatch for whatever the router still gets wrong: one tap, never a
-  // retype. Offered only where it is plausible, so it is not on every answer.
-  ok("an ambiguous wrongness question offers the button", M.offersCorrection("Is this wrong?"));
-  ok("a plain lookup does not offer it", !M.offersCorrection("what does the entry say about tickets?"));
-}
-
-// ── silence does not block him, but evidence still overrules him ────
-// Rule 1 of correction.js ("the criticism is a lead, not a source") was written
-// about a MODEL's criticism and is still right about that. Applied to Oliver it
-// produced a tool that ignored him: he states the real value, no primary source
-// turns up, the claim lands unresolved and NOTHING CHANGES. Handoff 6 records
-// the opposite instinct, "he is right more often than the fact-checker is".
-//
-// These four cases are the whole trust model, and the second one is the reason
-// the other three are safe.
-{
-  const entry = { name: "Aarhus Festuge", nearestStation: "Aarhus", desc: "A festival in Aarhus.", uncertainties: [] };
-  // Fake deps so this stays a pure, offline test: the split step returns one
-  // claim, the verification step returns whichever verdict the case is about,
-  // and the patch step applies it.
-  const deps = (verdict, proposed = "Aarhus H") => ({
-    askClaude: async (prompt) => prompt.includes("Break the criticism into SEPARATE, ATOMIC claims")
-      ? { text: JSON.stringify({ claims: [{ field: "nearestStation", says: "the station is wrong", proposed, checkable: "yes" }] }) }
-      : { text: JSON.stringify({ ...entry, nearestStation: proposed || "Aarhus" }) },
-    askPerplexity: async () => ({ text: JSON.stringify({ verdict, correctValue: "", evidence: "nothing decisive", sourceUrl: "" }) }),
-    parseJSON: async (t) => JSON.parse(t),
-    directions: async () => ({ error: "not used in this claim" }),
-  });
-  const criticism = "The station is wrong, it is really Aarhus H.";
-
-  const unresolved = await M.correctEntry({ entry, criticism, deps: deps("unresolved") });
-  is("nothing settled it, so his own value is applied", unresolved.patched?.nearestStation, "Aarhus H");
-  is("and it is counted as asserted, never as confirmed", [unresolved.asserted.length, unresolved.confirmed.length], [1, 0]);
-  ok("the audit trail says whose word it rests on", /asserted by the founder/.test(JSON.stringify(unresolved.patched.__corrections)));
-  ok("and it stays flagged as unconfirmed for the next reviewer", unresolved.patched.uncertainties.some(u => /still UNCONFIRMED/.test(u)));
-
-  // THE ONE THAT KEEPS THIS SAFE. A source actively contradicting the claim
-  // still wins, which is what caught Gemini's 90-minute Samso ferry. Applying
-  // on his word is about SILENCE, never about overriding evidence.
-  const rejected = await M.correctEntry({ entry, criticism, deps: deps("rejected") });
-  is("a source that contradicts him still wins", rejected.patched, null);
-  is("and the rejection is reported, not swallowed", rejected.rejected.length, 1);
-
-  const novalue = await M.correctEntry({ entry, criticism: "The station is wrong.", deps: deps("unresolved", "") });
-  is("wrong with no replacement value changes nothing", novalue.patched, null);
-
-  ok("asserted is an applicable verdict", M.APPLIED_VERDICTS.has("asserted") && M.APPLIED_VERDICTS.has("confirmed"));
-  is("an asserted claim opens its field for patching",
-    M.allowedFieldsFor(entry, [{ field: "nearestStation", verdict: "asserted" }]).sort(), ["nearestStation", "uncertainties"]);
-}
-
-// ── a background queue run never touches the editor ────────────────
-// Oliver, 7 Aug 2026: "the /#studio queues are good but, whenever it is the
-// next in queue, it can't publish because the other is published."
-//
-// He found one symptom of a shared-state bug with three of them. generateArea
-// wrote the finished draft, the photo name, the publish status, the verified
-// coordinates and both warnings into the SAME state the editor renders from,
-// and the queue calls it in the background while he reviews something else.
-//
-//   1. loadQueueResult never reset publishStatus, so the next draft inherited
-//      the last one's "✓ Published" line, which RENDERS IN PLACE OF the button.
-//   2. A background item completing could replace the draft under review.
-//   3. Silent and expensive: publishDraft force-overrides the published station
-//      and coordinates from studioFrozenGeo, so publishing Ribe after the queue
-//      moved on to Skagen published Ribe with Skagen's station.
-//
-// These are text assertions on App.jsx because the logic lives in component
-// state that no offline test can drive. They are still worth having: each one
-// pins a specific line that, if it goes back, reintroduces a named bug.
-{
-  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  // Slice generateArea's real body only: up to its own `return draftOutcome`,
-  // not as far as runDraftQueue, or addToDraftQueue's setters land in the slice
-  // and read as leaks.
-  const gaStart = app.indexOf("const generateArea = async");
-  const generateArea = app.slice(gaStart, app.indexOf("return draftOutcome;", gaStart));
-  const loadQueue = app.slice(app.indexOf("const loadQueueResult"), app.indexOf("const loadQueueResult") + 3000);
-
-  ok("generateArea takes a queued flag", /const generateArea = async \(overrideTown, overrideType, opts\)/.test(app));
-  ok("and derives it into a guard", /const queued = !!\(opts && opts\.queued\)/.test(generateArea));
-  ok("the queue runner marks its runs as background", /generateArea\(item\.name, item\.type, \{ queued: true \}\)/.test(app));
-
-  // Every write to editor state must go through ui(). The lock and the progress
-  // stage are the only two that may fire during a background run.
-  const bareSetters = [...generateArea.matchAll(/(?<![\w$.])(set[A-Za-z]+)\(/g)].map(m => m[1]);
-  // setter( is the ui() helper invoking whatever it was handed, which is the
-  // guard itself, not a leak.
-  const allowed = new Set(["setStudioLoading", "setStudioStage", "setTimeout", "setter"]);
-  const leaked = [...new Set(bareSetters.filter(x => !allowed.has(x)))];
-  is("no editor state is written directly during a queued run", leaked, []);
-
-  // The three specific regressions, each pinned to the line that fixes it.
-  ok("opening a queue draft clears the previous publish state", /setPublishStatus\(null\)/.test(loadQueue));
-  ok("opening a queue draft clears editingId so Publish cannot PATCH the wrong row", /setEditingId\(null\)/.test(loadQueue));
-  ok("opening a queue draft restores ITS OWN verified geo", /setStudioFrozenGeo\(r\.frozenGeo \|\| null\)/.test(loadQueue));
-  ok("and its own warnings rather than the last draft's", /setStudioInventedWarning\(r\.inventedWarning \|\| null\)/.test(loadQueue));
-
-  // The draft has to carry its verified geo, or there is nothing to restore.
-  ok("a finished draft returns its verified geo", /draftOutcome = \{ ok: true, draft: t, code, frozenGeo, identityWarning, inventedWarning \}/.test(generateArea));
-  ok("the queue result stores it", /frozenGeo: res\?\.frozenGeo \|\| null/.test(app));
-
-  // A fourth bug found while fixing these: the auto-correction pass updated the
-  // editor but not `t`, and `t` is what a queued run returns, so every queued
-  // draft was stored and later published in its UNCORRECTED form.
-  ok("an auto-correction is written back into the returned draft", /t = corrected;/.test(generateArea));
-}
-
-// ── Danish alphabetical order ──────────────────────────────────────
-// Oliver, 7 Aug 2026, relaying a friend's review: "We need alphabetical order."
-// On a site about Denmark it has to be DANISH alphabetical. Æ, Ø and Å come
-// after Z, and a default sort files them up among the A's and O's.
-{
-  const names = ["Ærø", "Aarhus", "Skagen", "Odense", "Ørsted", "Ålborg", "Zealand", "Møn", "Ribe"];
-  const sorted = names.slice().sort(M.daCompare);
-  is("Æ, Ø and Å sort after Z, not near A and O", sorted,
-    ["Møn", "Odense", "Ribe", "Skagen", "Zealand", "Ærø", "Ørsted", "Ålborg", "Aarhus"]);
-
-  // Aa is the older spelling of Å and the Danish collator treats them as the
-  // same letter, so Aarhus files with Århus instead of at the top of every list.
-  is("Aarhus and Århus are the same word", M.daCompare("Aarhus", "Århus"), 0);
-  ok("å is still its own letter, not an accented a", M.daCompare("a", "å") < 0);
-
-  // A plain sort is what this replaces. Pinned so nobody "simplifies" it back.
-  ok("a default sort really does get this wrong", names.slice().sort()[0] !== sorted[0]);
-
-  // The last three letters are Æ, then Ø, then Å, in that order. So Ørsted
-  // really does come before Aalborg, because Aa is Å. I expected the opposite
-  // when writing this test and the test was right.
-  is("Æ then Ø then Å, in that order", ["Ålborg", "Ærø", "Ørsted"].sort(M.daCompare), ["Ærø", "Ørsted", "Ålborg"]);
-  is("byName reads the name off a row", [{ name: "Ærø" }, { name: "Ribe" }].sort(M.byName).map(x => x.name), ["Ribe", "Ærø"]);
-  is("a missing name does not throw", [{ name: "Ribe" }, {}].sort(M.byName).length, 2);
-  is("numbers inside a name sort like numbers", ["Café 10", "Café 2"].sort(M.daCompare), ["Café 2", "Café 10"]);
-}
-
-// ── the lists a reader actually reads are ordered ──────────────────
-// Every one of these rendered in source-array order, which is "hardcoded
-// entries first, then whatever Studio published, in fetch order". That is not
-// an order, it only looks like one until you publish and the page rearranges.
-// Text assertions because the lists live in JSX inside a 7900-line component.
-{
-  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  const sortedList = (label, re) => ok(`${label} is in Danish alphabetical order`, re.test(app));
-
-  sortedList("the hidden towns grid", /towns\.filter\(t => !t\.isMajorCity[\s\S]{0,80}?\.sort\(byName\)/);
-  sortedList("the major cities grid", /towns\.filter\(t => t\.isMajorCity[\s\S]{0,80}?\.sort\(byName\)/);
-  sortedList("the food grid", /foodSpots\.filter\([\s\S]{0,400}?\)\.sort\(byName\)/);
-  sortedList("the nightlife town list", /Object\.keys\(townGroups\)\.sort\(daCompare\)/);
-  sortedList("the venues inside a nightlife town", /townGroups\[nightlifeTownView\][\s\S]{0,120}?\.sort\(byName\)/);
-  sortedList("the camping list", /\[\.\.\.campingSpots\]\.sort\(byName\)/);
-
-  // The region pills sat visually under the Major Cities grid and did not
-  // filter it, so picking Bornholm left Copenhagen on screen.
-  ok("the region pills filter the major cities too", /isMajorCity && \(!townFilter \|\| t\.region === townFilter\)/.test(app));
-
-  // Filter options must come from the data. The month pills were hardcoded to
-  // Jun, Jul, Aug, Sep: written in summer, read all year, so by August there
-  // were events no pill could reach and in January every pill was empty.
-  ok("event months are derived from the events", /const eventMonthOptions = MONTHS\.filter/.test(app));
-  ok("event types are derived from the events", /const eventTypeOptions = \[/.test(app));
-  ok("town regions are derived from the towns", /new Set\(towns\.map\(t => t\.region\)/.test(app));
-  ok("no hardcoded Jun Jul Aug Sep pill row survives", !/\["All", "Jun", "Jul", "Aug", "Sep"\]/.test(app));
-  ok("no hardcoded nine-region pill row survives", !/"Copenhagen Area", "Zealand", "Funen"/.test(app));
-
-  // The unreachable sheet, and the two filters that could never be set.
-  ok("the dead Sort & Filter sheet is gone", !/setShowFilter\(true\)|const \[showFilter/.test(app));
-  ok("its leftover shop categories are gone", !/"Fashion", "Accessories", "Bags"/.test(app));
-  ok("craftType, a filter with no UI to set it, is gone", !/craftType/.test(app));
-  ok("bookableOnly, the one live control it held, is untouched", /bookableOnly/.test(app));
-
-  // Search used to run against data/shop.js, which is the invented content in
-  // open finding 2 of handoff 6, and against nothing else.
-  ok("search no longer runs on the invented shop data", !/searchResults = search\.length > 1 \? allProducts/.test(app));
-  ok("search covers towns, events, food, nightlife, free entry and workshops",
-    /_kindLabel: "Town"/.test(app) && /_kindLabel: "Event"/.test(app) && /_kindLabel: "Food"/.test(app) &&
-    /_kindLabel: "Nightlife"/.test(app) && /_kindLabel: "Free entry"/.test(app) && /_kindLabel: "Workshop"/.test(app));
-  ok("a search hit opens the real entry through the existing dispatcher", /onClick=\{\(\) => \{ openStopDetail\(p\); setSearch\(""\); \}\}/.test(app));
-}
-
-// ── the provenance block never invents provenance ──────────────────
-// "How we know this" prints the primary source, the corrections with their
-// source links, and verbatim, the things that could not be confirmed. That last
-// section is the entire reason it is worth shipping, and it only works if the
-// block is silent when there is nothing real behind it. A "verified" badge on
-// an entry with no evidence would be the app doing the exact thing it exists
-// to stop, so the render gate is tested rather than trusted.
-{
-  const src = readFileSync(join(root, "src/components/HowWeKnow.jsx"), "utf8");
-  ok("the block bails when there is nothing to show",
-    /if \(corrections\.length === 0 && uncertainties\.length === 0 && !official\) return null;/.test(src));
-  ok("only a real URL counts as a source", /const isLink = \(s\) => typeof s === "string" && \/\^https\?/.test(src));
-  ok("blank uncertainties are filtered out, not counted", /\.filter\(u => typeof u === "string" && u\.trim\(\)\)/.test(src));
-  ok("the uncertainties are printed, never summarised", /What we could not confirm/.test(src));
-  // The standing rule: nothing anywhere may claim anyone went there.
-  ok("it does not claim a visit", !/\b(we visited|personally visited|been there in person|our visit)\b/i.test(src));
-  ok("and it says so out loud", /do not claim to have been anywhere in person/.test(src));
-
-  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("every entry page renders it", /<HowWeKnow item=\{item\} \/>/.test(detail));
-}
-
-// ── the traveler's question limit is real, not decorative ──────────
-// Oliver's decision was: no paywall yet, but a small daily allowance per
-// logged-in traveler, ENFORCED SERVER SIDE. A limit counted in the browser is
-// not a limit, it is a suggestion with a devtools bypass, and the thing on the
-// other side of it is his Anthropic and Perplexity credit.
-{
-  const api = readFileSync(join(root, "api/ask.js"), "utf8");
-  const ui = readFileSync(join(root, "src/components/AskGemlyx.jsx"), "utf8");
-
-  ok("the token is resolved by Supabase, not decoded here", /auth\/v1\/user/.test(api));
-  ok("an unverified caller is refused", /return json\(res, 401/.test(api));
-  // A quota that cannot be read must never become a quota that does not apply.
-  ok("an unreadable quota fails CLOSED", /Could not check your question allowance/.test(api));
-  ok("being over the limit returns 429", /return json\(res, 429/.test(api));
-  // Charging before answering would bill someone for a request that then failed.
-  // lastIndexOf, not indexOf: the FIRST mention of the table is the quota count
-  // at the top. The last is the insert, and that is the one that must come after
-  // the answer exists.
-  ok("the log is written after the answer, not before", api.indexOf("CHARGE ONLY FOR AN ANSWER") < api.lastIndexOf("gemlyx_ask_log"));
-  // Vite inlines anything prefixed VITE_ into the public bundle, so the service
-  // role key must never be read from one. The words appear in a comment in that
-  // file warning about exactly this, hence matching the env read specifically.
-  ok("the service role key never comes from a public env var", !/process\.env\.VITE_/.test(api));
-
-  // The browser must not be able to talk itself into extra questions.
-  ok("the component holds no limit of its own", !/DAILY_LIMIT|const LIMIT/.test(ui));
-  ok("it cannot write anything", !/method: "PATCH"|method: "PUT"|method: "DELETE"/.test(ui));
-  ok("it only ever calls the one server route", (ui.match(/fetch\(/g) || []).length === 1 && /fetch\("\/api\/ask"/.test(ui));
-  ok("no API key is anywhere near it", !/api[_-]?key|ANTHROPIC|PERPLEXITY/i.test(ui));
-
-  // The rule shared with the Studio assistant: a looked-up answer must never be
-  // mistakable for one that came from the fact-checked entry.
-  ok("a live answer is labelled as one", /Not in the entry, looked up just now/.test(ui));
-  ok("and carries its sources", /l\.sources\?\.length > 0/.test(ui));
-  ok("the entry is asked first", api.indexOf("THE ENTRY FIRST") < api.indexOf("api.perplexity.ai"));
+  const use = ["CC BY-SA 4.0", "CC BY-SA 3.0", "CC BY 2.0", "CC0", "Public domain", "PD-old-70",
+    "Attribution", "CC BY-SA 2.5", "CC-BY-SA-3.0", "cc-by-sa-4.0", "No restrictions", "Copyrighted free use",
+    // The ported and multi-version forms, all of which used to be rejected.
+    "CC BY-SA 3.0 de", "CC BY-SA 2.0 fr", "CC BY-SA 3.0 es", "CC BY 3.0 us",
+    "CC BY-SA 3.0,2.5,2.0,1.0", "CC BY-SA 4.0 International", "CC BY-SA 2.0 Generic"];
+  const drop = ["CC BY-NC 3.0", "CC BY-ND 4.0", "CC BY-NC-SA 2.0", "CC BY-NC-ND 4.0", "CC BY-NC 2.0 de",
+    "All rights reserved", "Fair use", "Non-free logo", "", null,
+    // Free, but it needs the full licence text alongside the image, which a one
+    // line photo credit does not provide. Excluded on purpose, not by accident.
+    "GFDL", "GFDL 1.2"];
+  use.forEach(l => ok(`licence usable: ${l}`, M.licenseIsUsable(l)));
+  drop.forEach(l => ok(`licence refused: ${JSON.stringify(l)}`, !M.licenseIsUsable(l)));
 }
 
 rmSync(dir, { recursive: true, force: true });

@@ -74,8 +74,21 @@ export const rowIdForItem = (item) => {
   return Number.isFinite(n) && n >= 100000 ? n - 100000 : null;
 };
 
-export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraftPatched, onSaved }) => {
-  const [open, setOpen] = useState(false);
+// `inline` (Oliver, 7 Aug: "Is it possible you can install an AI in the studio
+// draft? That I can talk to.. like if Gemini says something, then I can use
+// Claude and Perplexity as a like 'Hold on.. let me confirm that.'")
+//
+// That machine already existed, and that is the problem: it lived behind a
+// small floating ✦ in the corner, so from inside the draft editor there was
+// nothing to suggest the draft could be argued with at all. A feature nobody
+// can find is a feature that does not exist.
+//
+// So the same component now also renders as an ordinary block, mounted
+// directly under the draft it is talking about. Same routing, same claim
+// splitting, same Perplexity verification, same scope guard, same Save. The
+// only difference is that it is sitting where the work is.
+export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraftPatched, onSaved, inline }) => {
+  const [open, setOpen] = useState(!!inline);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -310,6 +323,97 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     catch { say("gemlyx", "Clipboard was blocked. Here it is to copy by hand:\n\n" + block.slice(0, 4000)); }
   };
 
+  // The conversation itself. Declared once and rendered by both forms, so the
+  // inline panel in the draft editor and the floating one on a blog page can
+  // never drift into being two slightly different assistants.
+  const body = (
+    <>
+          {/* maxHeight rather than flex:1 alone: inside the floating panel the
+              flex parent gives this its height, but the inline form is an
+              ordinary block with no height of its own, and flex:1 in that
+              context collapses the conversation to zero pixels. */}
+          <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: 8, maxHeight: inline ? 300 : undefined, minHeight: inline && log.length ? 120 : undefined }}>
+            {log.length === 0 && (
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+                {studioMode
+                  ? `Tell me what is wrong and what is right, in your own words. "Fact-checkers say the station is wrong, it is really Aarhus H" is enough, you do not have to say "correct it". Every claim gets checked before a word changes. A source that contradicts you wins and I will say so, and nothing settling it does not block you: if you gave me the value, it goes in marked as yours.`
+                  : `Ask me anything about this page. I answer from what is actually stored, and if the entry does not say, I will look it up and show you the source. Nothing here changes the page: corrections happen in Studio, on the draft.`}
+              </div>
+            )}
+            {log.map((l, i) => (
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: l.role === "you" ? "flex-end" : "flex-start", gap: 4 }}>
+                <div style={bubble(l.role)}>{l.text}</div>
+                {l.retryAs && !busy && studioMode && (
+                  <button onClick={() => send(l.retryAs, true)}
+                    style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    Did you mean correct it? Run the correction pass
+                  </button>
+                )}
+              </div>
+            ))}
+            {stage && (
+              <div style={{ ...bubble("gemlyx"), color: C.muted, fontSize: 11.5 }}>
+                {stage.label}{typeof stage.percent === "number" ? ` · ${stage.percent}%` : ""}
+              </div>
+            )}
+            {pending && (
+              <div style={{ background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: "10px 12px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 6 }}>
+                  {pending.changed.length} field{pending.changed.length === 1 ? "" : "s"} would change
+                </div>
+                {pending.changed.filter(k => k !== "__corrections").map(k => (
+                  <div key={k} style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 10.5, color: C.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>{k}</div>
+                    <div style={{ fontSize: 11.5, color: "#E57373", textDecoration: "line-through", whiteSpace: "pre-wrap" }}>
+                      {String(JSON.stringify(pending.before?.[k] ?? "") ?? "").slice(0, 260)}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#8BC34A", whiteSpace: "pre-wrap" }}>
+                      {String(JSON.stringify(pending.after?.[k] ?? "") ?? "").slice(0, 260)}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                  <button onClick={savePending} disabled={saving}
+                    style={{ background: C.gold, border: "none", color: "#000", borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                    {saving ? "Saving…" : pending.mode === "draft" ? "Put it in the draft" : "Save to the live entry"}
+                  </button>
+                  <button onClick={() => { setPending(null); say("gemlyx", "Discarded, nothing was saved."); }}
+                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <textarea value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
+              placeholder={!target ? "Ask which entries need work" : studioMode ? `Paste a fact-check about ${target.name || "this draft"}, or just ask` : `Ask anything about ${target.name || "this page"}`}
+              rows={2}
+              style={{ flex: 1, resize: "vertical", minHeight: 40, maxHeight: 160, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 12.5, padding: "8px 10px", outline: "none", fontFamily: "'Inter', sans-serif" }} />
+            <button onClick={() => send()} disabled={busy || !input.trim()}
+              style={{ background: busy || !input.trim() ? C.surface : C.gold, border: `1px solid ${C.border}`, color: busy || !input.trim() ? C.muted : "#000", borderRadius: 100, padding: "9px 14px", fontSize: 12, fontWeight: 700, cursor: busy ? "default" : "pointer", flexShrink: 0 }}>
+              {busy ? "…" : "Send"}
+            </button>
+          </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div style={{ border: `1px solid ${C.gold}44`, borderRadius: 14, background: C.surface, overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ padding: "11px 13px 9px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.gold }}>✦ Argue with this draft</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.55 }}>
+            Paste what Gemini said. Every claim gets checked against a real source before a word changes, and anything that fails the check is rejected with the evidence.
+          </div>
+        </div>
+        {body}
+      </div>
+    );
+  }
+
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} title="Gemlyx assistant"
@@ -342,71 +446,7 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
         </div>
       </div>
 
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: 8 }}>
-        {log.length === 0 && (
-          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-            {studioMode
-              ? `Tell me what is wrong and what is right, in your own words. "Fact-checkers say the station is wrong, it is really Aarhus H" is enough, you do not have to say "correct it". Every claim gets checked before a word changes. A source that contradicts you wins and I will say so, and nothing settling it does not block you: if you gave me the value, it goes in marked as yours.`
-              : `Ask me anything about this page. I answer from what is actually stored, and if the entry does not say, I will look it up and show you the source. Nothing here changes the page: corrections happen in Studio, on the draft.`}
-          </div>
-        )}
-        {log.map((l, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: l.role === "you" ? "flex-end" : "flex-start", gap: 4 }}>
-            <div style={bubble(l.role)}>{l.text}</div>
-            {l.retryAs && !busy && studioMode && (
-              <button onClick={() => send(l.retryAs, true)}
-                style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                Did you mean correct it? Run the correction pass
-              </button>
-            )}
-          </div>
-        ))}
-        {stage && (
-          <div style={{ ...bubble("gemlyx"), color: C.muted, fontSize: 11.5 }}>
-            {stage.label}{typeof stage.percent === "number" ? ` · ${stage.percent}%` : ""}
-          </div>
-        )}
-        {pending && (
-          <div style={{ background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: "10px 12px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 6 }}>
-              {pending.changed.length} field{pending.changed.length === 1 ? "" : "s"} would change
-            </div>
-            {pending.changed.filter(k => k !== "__corrections").map(k => (
-              <div key={k} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10.5, color: C.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>{k}</div>
-                <div style={{ fontSize: 11.5, color: "#E57373", textDecoration: "line-through", whiteSpace: "pre-wrap" }}>
-                  {String(JSON.stringify(pending.before?.[k] ?? "") ?? "").slice(0, 260)}
-                </div>
-                <div style={{ fontSize: 11.5, color: "#8BC34A", whiteSpace: "pre-wrap" }}>
-                  {String(JSON.stringify(pending.after?.[k] ?? "") ?? "").slice(0, 260)}
-                </div>
-              </div>
-            ))}
-            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-              <button onClick={savePending} disabled={saving}
-                style={{ background: C.gold, border: "none", color: "#000", borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                {saving ? "Saving…" : pending.mode === "draft" ? "Put it in the draft" : "Save to the live entry"}
-              </button>
-              <button onClick={() => { setPending(null); say("gemlyx", "Discarded, nothing was saved."); }}
-                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                Discard
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <textarea value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
-          placeholder={!target ? "Ask which entries need work" : studioMode ? `Paste a fact-check about ${target.name || "this draft"}, or just ask` : `Ask anything about ${target.name || "this page"}`}
-          rows={2}
-          style={{ flex: 1, resize: "vertical", minHeight: 40, maxHeight: 160, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 12.5, padding: "8px 10px", outline: "none", fontFamily: "'Inter', sans-serif" }} />
-        <button onClick={() => send()} disabled={busy || !input.trim()}
-          style={{ background: busy || !input.trim() ? C.surface : C.gold, border: `1px solid ${C.border}`, color: busy || !input.trim() ? C.muted : "#000", borderRadius: 100, padding: "9px 14px", fontSize: 12, fontWeight: 700, cursor: busy ? "default" : "pointer", flexShrink: 0 }}>
-          {busy ? "…" : "Send"}
-        </button>
-      </div>
+      {body}
     </div>
   );
 };
