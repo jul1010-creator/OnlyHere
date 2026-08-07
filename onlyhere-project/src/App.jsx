@@ -4521,18 +4521,41 @@ If the conversation only covers a single day or a few stops with no explicit day
   // title. Non-fatal — if the call fails, the preview just shows without it.
   const [previewWhy, setPreviewWhy] = useState(null);
   const previewWhyForRef = useRef(null);
+  // ── THE SENTENCE WAS ONE ROLL BEHIND ───────────────────────────
+  // Oliver's screenshots, 7 Aug: a card reading "4 days, craft and workshops
+  // and castles" sitting directly above an italic line describing beaches,
+  // museums and "your 5 days". Two different travelers on one screen.
+  //
+  // This request is slow and nothing cancelled it. Close the preview and the
+  // cleanup clears previewWhy, then the in-flight answer for the PREVIOUS roll
+  // lands and puts itself straight back on screen next to the new one. Reading
+  // aiMessages while depending only on guideModal made it likelier still.
+  //
+  // A counter fixes it properly: every run takes a ticket, and an answer is
+  // only allowed to paint if its ticket is still the one being served. A late
+  // reply from an abandoned roll now goes in the bin, which is where it
+  // belongs, and no request has to be cancelled to make that true.
+  const previewWhyRunRef = useRef(0);
   useEffect(() => {
-    if (guideModal !== "preview") { setPreviewWhy(null); previewWhyForRef.current = null; return; }
+    if (guideModal !== "preview") { setPreviewWhy(null); previewWhyForRef.current = null; previewWhyRunRef.current += 1; return; }
     const convo = aiMessages.filter(m => !m.hidden).map(m => `${m.role}: ${m.text}`).join("\n").slice(-3000);
     if (!convo || previewWhyForRef.current === convo) return;
     previewWhyForRef.current = convo;
+    const run = ++previewWhyRunRef.current;
     (async () => {
       const r = await askClaude(
-        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation — never generic praise, never invented places or facts. Never use em dashes or en dashes. Respond with only the sentence(s), nothing else.\n\n${convo}`,
+        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes. Respond with only the sentence(s), nothing else.\n\n${convo}`,
         200
       );
+      if (run !== previewWhyRunRef.current) return;   // a later roll owns the screen now
       if (!r.error && r.text) setPreviewWhy(r.text.trim());
     })();
+    // aiMessages IS read here and is deliberately not a dependency: the chat
+    // keeps growing while the preview is open (the corner assistant writes into
+    // it), and rerunning on every message would buy a new paragraph each time
+    // for no gain. guideModal plus the convo equality check above is the intent:
+    // once per opening, per distinct conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guideModal]);
   const [showMenu, setShowMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);

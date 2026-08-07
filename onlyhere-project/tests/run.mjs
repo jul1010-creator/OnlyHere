@@ -51,6 +51,7 @@ writeFileSync(entry, `
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
+  export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
 `);
 const esbuild = [
   join(root, "node_modules/.bin/esbuild"),
@@ -597,6 +598,29 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the scan catches the bug it was written for", forwardRefs(REAL_BUG).length === 1);
   ok("and passes the same code with the order fixed",
     forwardRefs(REAL_BUG.replace(", entered]", "]")).length === 0);
+}
+
+// ── the random-guide test card describes a real traveler ───────────
+// Oliver's screenshot: "4 days, based around , into coastal views and local
+// food". The blank is the point. The random brief stopped naming published
+// towns, on purpose, and one of the two screens printing that list was never
+// updated. Both read testTravelerLine now, and a missing field must vanish
+// rather than leave a gap with punctuation around it.
+{
+  const full = { days: 4, who: "me and my partner", arrival: "We land at Copenhagen airport in the morning",
+    transport: "We are renting a car", moving: "We are happy to move hotel a couple of times",
+    interests: ["castles", "local food"], budget: "We are on a tight budget" };
+  const line = M.testTravelerLine(full);
+  ok("the line names the party", line.includes("me and my partner"));
+  ok("the line names the interests", line.includes("into castles and local food"));
+  ok("the line pluralises days", line.startsWith("4 days"));
+  is("one day is singular", M.testTravelerLine({ days: 1 }), "1 day");
+  // The regression itself: nothing the profile does not carry may be printed.
+  ok("no empty gap where towns used to be", !/·\s*·/.test(line) && !/,\s*,/.test(line));
+  ok("an unstated budget is left out", !M.testTravelerLine({ days: 3, budget: "unstated" }).includes("unstated"));
+  is("a profile with only interests still reads", M.testTravelerLine({ interests: ["beaches"] }), "into beaches");
+  is("no profile is an empty string, never the word undefined", M.testTravelerLine(null), "");
+  ok("an empty interests list is dropped entirely", M.testTravelerLine({ days: 2, interests: [] }) === "2 days");
 }
 
 rmSync(dir, { recursive: true, force: true });

@@ -529,3 +529,31 @@ export const seasonFit = (item, month) => {
 // Sorting helper: good first, unknown next, out of season last. Used to shape
 // the front page picks without ever hiding something outright on a guess.
 export const seasonRank = (item, month) => ({ good: 0, unknown: 1, poor: 2 }[seasonFit(item, month).fit]);
+
+// ── WHAT THE RANDOM-GUIDE TEST ACTUALLY PICKED ─────────────────────
+// Oliver, 7 Aug 2026, on the preview screen: "we definitely gotta fix that."
+// The card read "4 days, based around , into coastal views and local food",
+// with nothing between "around" and the comma.
+//
+// The blank is my fault and it is the visible half of a deliberate change. The
+// random brief used to NAME published entries ("the person wanted Amalienborg
+// and Planetarium included"), which pre-solved the hardest thing the pipeline
+// does, so it stopped naming them. Two screens were printing that list, and
+// only one of them was updated.
+//
+// So the description lives HERE now, in one place both screens read, because
+// two copies of the same sentence built from the same object will drift again
+// the next time the object changes. Anything the profile does not carry is
+// simply left out rather than printed as an empty gap.
+export const testTravelerLine = (p) => {
+  if (!p) return "";
+  return [
+    typeof p.days === "number" ? `${p.days} day${p.days !== 1 ? "s" : ""}` : null,
+    p.who,
+    p.arrival,
+    p.transport,
+    p.moving,
+    (p.interests || []).length ? `into ${(p.interests || []).join(" and ")}` : null,
+    p.budget && p.budget !== "unstated" ? p.budget : null,
+  ].filter(Boolean).join(" · ");
+};

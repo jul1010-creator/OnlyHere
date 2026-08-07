@@ -9,6 +9,7 @@ import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES } from "../utils/guideEnrichment";
 import { askClaude } from "../utils/aiClient";
+import { testTravelerLine } from "../utils/helpers";
 import { BOOKING_AFFILIATE_ID } from "../config";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
@@ -454,12 +455,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           // thrown on the very first Random-guide click after that change: a
           // white screen, from a debug panel. What it shows now is WHO the
           // fabricated traveler is, which is the thing that varies.
-          const line = [
-            `${p.days} day${p.days !== 1 ? "s" : ""}`,
-            p.who, p.arrival, p.transport, p.moving,
-            (p.interests || []).length ? `into ${(p.interests || []).join(" and ")}` : null,
-            p.budget && p.budget !== "unstated" ? p.budget : null,
-          ].filter(Boolean).join(" · ");
+          const line = testTravelerLine(p);
           return (
             <div style={{ background: `${C.gold}0D`, border: `1px dashed ${C.gold}66`, borderRadius: 14, padding: "14px 16px", marginBottom: 24, maxWidth: 640, fontSize: 12.5, lineHeight: 1.7 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>◈ Pipeline test — what went in</div>

@@ -1,4 +1,5 @@
 import { C } from "../utils/theme";
+import { testTravelerLine } from "../utils/helpers";
 
 // ── "Here's what's coming up" preview screen ────────────────────────
 // PASS 27 EXTRACTION (App.jsx file-split, per Oliver: "you gotta start
@@ -134,7 +135,9 @@ export const GuidePreviewScreen = ({
       <div style={{ maxWidth: 560, margin: "0 auto" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8, textAlign: "center" }}>Here's what's coming up</div>
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, textAlign: "center" }}>
-          {totalShown > 0 ? "A quick look at the real places on this route before Gemlyx builds your full guide." : "Gemlyx will build your full guide next — real places, checked and mapped out."}
+          {totalShown > 0
+            ? "Places you have already mentioned that Gemlyx has its own page for. The route itself comes next."
+            : "Gemlyx will pick the stops and build your full guide next."}
         </div>
         {/* TEST-PROFILE CARD (Oliver: "When I click the random guide, I have
             to know what was picked") — shows the fabricated traveler right
@@ -145,9 +148,13 @@ export const GuidePreviewScreen = ({
         {testProfile && (
           <div style={{ background: `${C.gold}0D`, border: `1px dashed ${C.gold}66`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 12.5, lineHeight: 1.7 }}>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 }}>◈ Pipeline test — the traveler that was picked</div>
-            <div style={{ color: C.light }}>{testProfile.days} day{testProfile.days !== 1 ? "s" : ""}, based around <span style={{ color: C.text, fontWeight: 700 }}>{(testProfile.towns || []).join(" + ")}</span>, into <span style={{ color: C.text, fontWeight: 700 }}>{(testProfile.interests || []).join(" and ")}</span>.</div>
-            {testProfile.extras?.length > 0 && (
-              <div style={{ color: C.light }}>Asked to fit in: {testProfile.extras.join(", ")}</div>
+            {/* "based around , into coastal views and local food" is what this
+                line used to say, with nothing between "around" and the comma,
+                because the brief stopped naming towns and this screen was not
+                updated with the other one. Both now read the same helper. */}
+            <div style={{ color: C.light }}>{testTravelerLine(testProfile)}</div>
+            {testProfile.brief && (
+              <div style={{ color: C.muted, fontStyle: "italic", marginTop: 6, paddingLeft: 10, borderLeft: `2px solid ${C.gold}44` }}>{testProfile.brief}</div>
             )}
             <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>The planner's full day-by-day breakdown and whether events made it in show on the finished guide.</div>
           </div>
@@ -195,6 +202,24 @@ export const GuidePreviewScreen = ({
             </div>
           </div>
         ))}
+        {/* ── AN EMPTY LIST IS NOT A BROKEN SCREEN ──────────────────
+            Oliver's screenshots: one preview with a single Copenhagen card for
+            a five day coastal trip, and one with nothing on it at all.
+            Both were correct behaviour badly presented. This list is NOT the
+            route: it is published entries whose NAME appears in the chat so
+            far, matched by substring. It looked full before only because the
+            random brief used to name entries outright, and it is empty for any
+            real traveler who says "beaches and museums" rather than naming a
+            town. Saying that out loud costs one line and stops an honest empty
+            state from reading as a failure.
+
+            The real answer is to plan the route BEFORE this screen and show
+            that instead, which is the next piece of work. */}
+        {totalShown === 0 && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 18, fontSize: 12.5, color: C.light, lineHeight: 1.65 }}>
+            Nothing here yet, and that is expected: this list only fills in once you have named a place Gemlyx already covers. Your stops get chosen in the next step.
+          </div>
+        )}
         <button onClick={() => {
             // PASS 27: the random-guide test button already picked its mode
             // (map/plain) itself and has nothing more to ask — go straight to
