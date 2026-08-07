@@ -8,7 +8,8 @@ import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
-import { isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES } from "./utils/guideEnrichment";
+import { isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
+import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
 import { roadTrips, seasonalItineraries } from "./data/roadtrips";
@@ -22,8 +23,7 @@ import {
   dedupeAgainstExisting, getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
-  hostMatchesName, officialSiteFromCandidates,
-} from "./utils/helpers";
+  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep} from "./utils/helpers";
 import { checkNightTransport, geocodePlace, findRealNearestStation } from "./utils/geo";
 import { Pill } from "./components/Pill";
 
@@ -587,9 +587,19 @@ function GemlyxApp() {
       const src = String(hit.url || "").split("?")[0];
       if (!src) throw new Error("That result had no usable image URL.");
       const block = { type: "image", src, credit: { ...hit.credit } };
+      // ── p.photo || src WAS NOT ENOUGH ──────────────────────────
+      // Measured across all 71 published entries on 7 Aug: 53 carry a local
+      // hero path like /towns/ringkobing.jpg and 52 of those files do not
+      // exist, because the Studio code template writes the path and leaves
+      // adding the file as a manual step. Under the old rule those 52 heroes
+      // were "already set", so choosing a Commons photo appended it to the body
+      // and left the broken path in place as the card image. A hero that does
+      // not load is not a hero.
+      const heroBroken = !(await imageLoads(p.photo));
       await patchContentPayload(row, {
         ...p,
-        photo: p.photo || src,
+        photo: heroBroken ? src : p.photo,
+        ...(heroBroken ? { __photoCredit: { ...hit.credit } } : {}),
         blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block],
       });
       setPhotoFinder(null);
@@ -2507,6 +2517,102 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   // entirely, so this can never overwrite a verified coordinate with a fresh
   // geocode. Nominatim is also rate-limited by etiquette, hence the deliberate
   // pause between lookups rather than firing them all at once.
+  // ── DOES THIS IMAGE ACTUALLY EXIST? ────────────────────────────────
+  // Harder than it sounds on a static SPA. Vercel serves index.html with a 200
+  // for any path it does not recognise, so a missing /towns/ringkobing.jpg is
+  // NOT a 404: it is a perfectly successful response containing a web page.
+  // Checking res.ok would call every single broken photo fine. The content type
+  // is the honest signal, and a HEAD request is enough to read it without
+  // downloading anything.
+  const imageLoads = async (url) => {
+    const u = String(url || "");
+    if (!u) return false;
+    try {
+      const r = await fetch(u, { method: "HEAD" });
+      if (!r.ok) return false;
+      return /^image\//i.test(r.headers.get("content-type") || "");
+    } catch { return false; }
+  };
+
+  // ── REPAIR THE PHOTOS THAT WERE NEVER THERE ────────────────────────
+  // Oliver, 7 Aug 2026: "so the pictures from Wikipedia is not being shown?
+  // That has to be sorted."
+  //
+  // The Wikimedia lookup was never the broken part: the twelve entries whose
+  // hero is a Commons URL all load fine. The problem is the other 53, which
+  // carry a local path the Studio code template wrote alongside an instruction
+  // to add the file by hand. 52 of those files do not exist. On a browse page
+  // that is a grey box; in a guide it is 210 pixels of nothing.
+  //
+  // So this walks every published row, actually checks whether its hero
+  // resolves to an image, and for the ones that do not, asks Commons for a
+  // freely licensed photograph of that place and stores it WITH its credit.
+  //
+  // IT NEVER TOUCHES A PHOTO THAT WORKS, and it never invents a credit: the
+  // attribution comes back in the same response as the image, which is the
+  // whole reason this project uses Commons rather than an image search. An
+  // entry Commons has nothing usable for is listed as still needing a photo
+  // rather than quietly left looking finished.
+  const PHOTO_FIX_BATCH_CAP = 40;
+  const [photoFixState, setPhotoFixState] = useState(null);
+  const backfillPhotos = async () => {
+    if (photoFixState?.running) return;
+    setPhotoFixState({ running: true, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: [] });
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
+      });
+      const rows = await res.json();
+      if (!Array.isArray(rows)) { setPhotoFixState({ running: false, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: ["Could not read the published rows."] }); return; }
+
+      // Check first, repair second. Checking is cheap and tells us the real size
+      // of the job before a single paid lookup happens.
+      const named = rows.filter(r => r?.payload?.name);
+      const broken = [];
+      for (const r of named) {
+        if (!(await imageLoads(r.payload.photo))) broken.push(r);
+      }
+      const batch = broken.slice(0, PHOTO_FIX_BATCH_CAP);
+      // NO SILENT CAPS: if the cap bites, say how many were left.
+      const skipped = broken.length - batch.length;
+      setPhotoFixState({ running: true, done: 0, total: batch.length, fixed: 0, skipped, notFound: [], failed: [] });
+
+      let fixed = 0; const notFound = []; const failed = [];
+      for (let i = 0; i < batch.length; i++) {
+        const row = batch[i];
+        const p = row.payload;
+        // The town is real disambiguation: "Bones" alone finds a skeleton.
+        const where = p.town || p.city || p.location || p.region || "";
+        const query = `${p.name}${where && !p.name.includes(where) ? ` ${where}` : ""} Denmark`;
+        try {
+          const r = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&article=${encodeURIComponent(p.name)}&category=${encodeURIComponent(p.name)}&limit=1`);
+          const d = await r.json();
+          const hit = (d.results || [])[0];
+          if (!hit || !hit.url) { notFound.push(p.name); }
+          else {
+            const src = String(hit.url).split("?")[0];
+            const block = { type: "image", src, credit: { ...hit.credit } };
+            const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
+              method: "PATCH",
+              headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+              body: JSON.stringify({ payload: { ...p, photo: src, __photoCredit: { ...hit.credit }, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block] } }),
+            });
+            if (patch.ok) fixed++; else failed.push(`${p.name}: save failed (${patch.status})`);
+          }
+        } catch (e) {
+          failed.push(`${p.name}: ${String(e?.message || e).slice(0, 80)}`);
+        }
+        setPhotoFixState({ running: true, done: i + 1, total: batch.length, fixed, skipped, notFound, failed });
+        // Wikimedia's API policy asks for restraint from an automated caller.
+        await new Promise(r2 => setTimeout(r2, 350));
+      }
+      setPhotoFixState({ running: false, done: batch.length, total: batch.length, fixed, skipped, notFound, failed });
+      if (fixed > 0) refreshLiveContent();
+    } catch (err) {
+      setPhotoFixState({ running: false, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: [String(err?.message || err)] });
+    }
+  };
+
   const [geoFixState, setGeoFixState] = useState(null); // null | {running, done, total, fixed, failed:[]}
   const backfillCoordinates = async () => {
     if (geoFixState?.running) return;
@@ -2757,7 +2863,16 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       // Drafting fresh: shape the raw AI draft into the final object first, as before.
       const isEditing = editingId !== null;
       const shaped = isEditing ? editedDraft : shapeForLive(studioType, editedDraft);
-      if (!isEditing && studioPhotoName) shaped.photo = `/${{ town: "towns", festival: "events", free: "free", food: "food", foodStreet: "food", night: "nightlife", booking: "craft" }[studioType]}/${studioPhotoName}`;
+      // ── "/undefined/aarhus.jpg" ────────────────────────────────
+      // A real published hero path, found while auditing photos on 7 Aug. This
+      // map had no entry for nightTown, and an undefined lookup interpolates as
+      // the string "undefined" rather than throwing, so the row published with
+      // a folder that has never existed. nightTown added, and an unknown type
+      // now falls back to a real folder instead of inventing one.
+      if (!isEditing && studioPhotoName) {
+        const folder = { town: "towns", festival: "events", free: "free", food: "food", foodStreet: "food", night: "nightlife", nightTown: "nightlife", booking: "craft" }[studioType] || "towns";
+        shaped.photo = `/${folder}/${studioPhotoName}`;
+      }
       // Force-override with the real pre-computed values from generateArea, regardless
       // of what the draft itself says. This is the actual enforcement step, not
       // just an instruction the model could ignore. Only applies to a fresh draft;
@@ -2899,7 +3014,11 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   // For each guide day: one Tavily search for live facts, then Claude distills them into
   // (a) how to travel between consecutive stops and (b) where to stay. Never invents —
   // falls back to "Check Rejseplanen" wording when the context doesn't support a claim.
-  const fetchGuideWeather = (days, gid, arrivalDate) => {
+  // Same fix as enrichGuideDays, same reason, same evidence: weather is null on
+  // every day of every one of the last eight saved guides, because this wrote
+  // into GemlyxApp's state after the route had already destroyed GemlyxApp.
+  // Returns its results now so the caller can bake them on before navigating.
+  const fetchGuideWeather = async (days, arrivalDate) => {
     setWeatherPending(days.length);
     // How many days from today the trip's Day 1 actually starts — 0 if arrivalDate is
     // unknown (falls back to the old assume-it-starts-today behavior) or already today.
@@ -2920,7 +3039,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     // there's a single, reliable "every day has now been checked" point to
     // build that summary from, instead of no way to know when the last one lands.
     const results = new Array(days.length).fill(null);
-    Promise.allSettled(days.map(async (day, idx) => {
+    const note = await Promise.allSettled(days.map(async (day, idx) => {
       const forecastIdx = startOffset + idx;
       // Yr.no's forecast only reliably covers about 9 days out — showing something
       // for day 12 of a trip booked months ahead would just be wrong, not helpful.
@@ -2928,7 +3047,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       const point = day.stops.map(s => {
         const real = lookupRealPlace(s.name);
         if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
-        const key = Object.keys(TOWN_COORDS).find(t => s.name.includes(t));
+        const key = townKeyFor(s.name);
         return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
       }).find(Boolean);
       if (!point) return;
@@ -2938,25 +3057,38 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       if (!slot) return;
       const cond = (slot.condition || "").toLowerCase();
       const risk = /rain|sleet|thunder|snow/.test(cond) ? "high" : /cloudy|fog/.test(cond) ? "low" : "none";
-      const weather = { icon: weatherIcon(slot.condition), temp: Math.round(slot.temperature_c), risk };
-      results[idx] = weather;
-      setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
-        ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, weather } : d) }
-        : prev);
+      results[idx] = { icon: weatherIcon(slot.condition), temp: Math.round(slot.temperature_c), risk };
     })).then(() => {
       const rainyDayNums = results.map((w, i) => (w?.risk === "high" ? i + 1 : null)).filter(Boolean);
-      if (rainyDayNums.length === 0) return; // nothing genuinely worth flagging — say nothing, rather than a generic "check the forecast" filler line
+      if (rainyDayNums.length === 0) return null; // nothing genuinely worth flagging, rather than a generic "check the forecast" filler line
       const dayList = rainyDayNums.length === 1 ? `Day ${rainyDayNums[0]}` : `Days ${rainyDayNums.slice(0, -1).join(", ")} and ${rainyDayNums[rainyDayNums.length - 1]}`;
-      const weatherNote = `Real forecast currently shows rain likely on ${dayList} — worth packing a light rain layer.`;
-      setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid)
-        ? { ...prev, essentials: { ...(prev.essentials || {}), weatherNote } }
-        : prev);
+      return `Real forecast currently shows rain likely on ${dayList}, worth packing a light rain layer.`;
     }).finally(() => setWeatherPending(0));
+    return { weatherByDay: results, weatherNote: note };
   };
 
-  const enrichGuideDays = (days, gid, travelMode, mixedModes) => {
+  // ── "Why did you remove accommodation? I need that for affiliation/booking"
+  // Oliver, 7 Aug 2026. Nobody removed it. It has never once survived a build.
+  //
+  // This function is the ONLY producer of the Where to stay card, the
+  // Booking.com search term, and the per-leg "how" texts. It used to be called
+  // fire-and-forget AFTER navigation, writing its answers into setGuideModal,
+  // which is state on GemlyxApp. GemlyxApp is mounted only at "/" and React
+  // Router unmounts it the instant the app moves to /guide/new. So every one of
+  // these answers was computed, paid for, and thrown into a component that no
+  // longer existed. Checked against the eight most recently saved guides: glance
+  // is null on every day of every one of them.
+  //
+  // fetchExactDurations had exactly this bug and was fixed by returning its
+  // results so the caller could bake them onto the guide BEFORE navigating.
+  // This does the same now, and the ordering matters as much as the fix:
+  // fetchExactDurations reads day.glance.legs[i].how to decide each leg's
+  // transport mode, and that was always undefined, so every leg mode on every
+  // guide has been a guess from the trip's primary mode. This has to run first.
+  const enrichGuideDays = async (days, travelMode, mixedModes) => {
     setGlancePending(days.length);
-    days.forEach(async (day, idx) => {
+    const glances = new Array(days.length).fill(null);
+    await Promise.all(days.map(async (day, idx) => {
       try {
         const names = (day.stops || []).map(s => s.name);
         if (names.length === 0) return;
@@ -2994,49 +3126,14 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         ), r => !!r.error, `Day ${idx + 1} glance (accommodation + legs)`);
         if (enrichResult.error) console.warn(`Day ${idx + 1} glance enrichment failed after retries:`, enrichResult.error);
         const glance = JSON.parse(enrichResult.text?.replace(/^```json\s*|\s*```$/g, "").trim() || "{}");
+        // RETURNED, not written into state. The whole per-day re-fetch of
+        // durations that used to live here is gone with it: it existed only
+        // because this ran AFTER the durations were fetched and had to correct
+        // them. Running before them makes the correction unnecessary, and it
+        // deletes the mode-key parity problem that came with having two places
+        // fetch the same leg.
         if ((Array.isArray(glance.legs) && glance.legs.length > 0) || glance.accommodation) {
-          setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid && prev.days)
-            ? { ...prev, days: prev.days.map((d, i) => i === idx ? { ...d, glance } : d) }
-            : prev);
-          // The first duration fetch (fired before this resolved) had no real leg text to
-          // work from, so it guessed every leg was the trip's primary mode. Now that we
-          // know what each leg actually is (e.g. "ferry" for a Bornholm crossing on an
-          // otherwise-bike trip), re-fetch just this day's legs with their real per-leg
-          // modes — this is what lets mixed-mode trips show a correct route instead of a
-          // failed bike-route-across-water guess silently falling back to a wrong km estimate.
-          if (Array.isArray(glance.legs) && glance.legs.length > 0) {
-            const dayLegTriples = [];
-            if (names.length === 1 && idx > 0) {
-              const prevLast = days[idx - 1]?.stops?.[days[idx - 1].stops.length - 1];
-              if (prevLast) dayLegTriples.push([prevLast.name, names[0], glance.legs[0]?.how || ""]);
-            }
-            for (let i = 0; i < names.length - 1; i++) dayLegTriples.push([names[i], names[i + 1], glance.legs[i]?.how || ""]);
-            const foundExact = {};
-            for (const [origin, dest, how] of dayLegTriples) {
-              // MODE-KEY PARITY FIX: this used detectLegMode while GuidePage's
-              // render resolves the mode through resolveLegMode (which also
-              // applies the distance overrides, including the short-transit-
-              // leg-is-a-walk rule) — when the two disagreed, this stored its
-              // result under a key the render never looks up, so the whole
-              // re-fetch was silently wasted. Same function on both sides now.
-              const legMode = resolveLegMode(how, travelMode, origin, dest);
-              try {
-                const res2 = await fetch(`/api/directions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=${legMode}${departureParam(legMode)}`);
-                const d2 = await res2.json();
-                if (!d2.error) foundExact[`${origin}|${dest}|${legMode}`] = d2;
-              } catch { /* falls back to km estimate / AI text, same as always */ }
-            }
-            if (Object.keys(foundExact).length > 0) {
-              setExactDurations(prev => ({ ...prev, ...foundExact }));
-              // Also land these on the guide object itself — GuidePage reads
-              // guide._exactDurations (via the liveGuide prop), never this
-              // component's exactDurations state, so results that only went to
-              // state were invisible to the actual guide view.
-              setGuideModal(prev => (prev && typeof prev === "object" && prev._gid === gid)
-                ? { ...prev, _exactDurations: { ...(prev._exactDurations || {}), ...foundExact } }
-                : prev);
-            }
-          }
+          glances[idx] = glance;
         }
       } catch (e) {
         // Leave this day without travel details, but SAY SO in the console —
@@ -3045,7 +3142,9 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         console.warn(`Day ${idx + 1} glance enrichment failed (no legs/accommodation for this day):`, e);
       }
       finally { setGlancePending(p => Math.max(0, p - 1)); }
-    });
+    }));
+    setGlancePending(0);
+    return glances;
   };
   const [showPrivacy, setShowPrivacy] = useState(false);
   // Photo credits sheet. Reads public/image-credits.json, which already tracked
@@ -3208,19 +3307,26 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // gets that one leg queried as transit, not bicycling (which has no route across
     // open water and used to silently fall back to a wrong straight-line km guess).
     const legs = [];
+    // A stop repeated as a base (an overnight that is also the next morning's
+    // start) is not a journey. Asking Google to route a point to itself is how
+    // "Ærøskøbing to Ærøskøbing, 1 min on foot" got onto a published guide.
+    const samePlace = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
     days.forEach((day, di) => {
       if (day.stops.length === 1 && di > 0) {
         const prevLast = days[di - 1].stops[days[di - 1].stops.length - 1];
-        legs.push([prevLast.name, day.stops[0].name, day.glance?.legs?.[0]?.how || ""]);
+        if (!samePlace(prevLast.name, day.stops[0].name)) legs.push([prevLast.name, day.stops[0].name, day.glance?.legs?.[0]?.how || ""]);
       }
       for (let i = 0; i < day.stops.length - 1; i++) {
+        if (samePlace(day.stops[i].name, day.stops[i + 1].name)) continue;
         legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || ""]);
       }
     });
     // Resolves BOTH already-known coords (towns/landmarks/prior geocodes) and this
     // guide's freshly-geocoded ones passed in directly — never the stale geocodedCoords
     // state var, which isn't updated in this closure until the next re-render.
-    const resolveFresh = (name) => resolveStopCoords(name) || freshGeo[name] || null;
+    // freshGeo is passed IN now rather than being an afterthought behind a ||
+    // that could never be reached. This one line is the "1 min on bike" bug.
+    const resolveFresh = (name) => resolveStopCoordsPrecise(name, freshGeo);
     // Same ambiguity problem as geocoding — a bare name can match the wrong
     // same-named place in a different town, so include real town context in the
     // text fallback too whenever coordinates genuinely aren't available yet.
@@ -3251,6 +3357,20 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // the results so the caller can bake them directly onto the guide object
     // before it's ever handed to GuidePage, instead of only mirroring them
     // into this component's own state.
+    // ── A LEG BETWEEN TWO NAMED PLACES IS NEVER ZERO MINUTES ────
+    // The belt to the resolver fix's braces. If the API ever answers zero
+    // again, for any reason, the honest response is that we do not know: the
+    // render then falls back to a real distance estimate, or to "Check route",
+    // rather than printing "1 min" over a 13 minute ride. Nothing that reaches
+    // a traveler should be able to say a journey takes no time.
+    const usable = (data, a, b) => {
+      if (!data || data.error) return false;
+      if (!(data.durationMinutes >= 1)) return false;
+      // And two stops that both collapsed onto one town centre were never
+      // routed, whatever the API said about it.
+      if (a && b && !a.precise && !b.precise && haversineKm(a, b) < 0.05) return false;
+      return true;
+    };
     await Promise.all(legs.map(async ([origin, dest, how]) => {
       // Same shared function the render uses — guarantees fetch and display can
       // never disagree on mode, and therefore never miss each other's cache entry.
@@ -3273,7 +3393,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       try {
         const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode)}`);
         const data = await res.json();
-        if (!data.error) {
+        if (usable(data, originCoord, destCoord)) {
           // ABSURD-WALK GUARD (Oliver's screenshots: a leg shipped as "1 hour
           // 15 min on foot", another as "27 mins on foot", against his rule
           // "no walking more than 15-20 minutes"). Our own coordinates can be
@@ -3293,9 +3413,9 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
                 console.warn(`Leg ${origin} → ${dest}: Google says ${data.durationMinutes} min on foot, over the ${WALK_MAX_MINUTES} min walking cap — re-routed as ${upgrade}.`);
                 found[`${origin}|${dest}|${upgrade}`] = { ...udata, modeUsed: upgrade };
                 found[key] = { ...udata, modeUsed: upgrade }; // also under the walking key, so an already-built guide's render still finds it
-              } else found[key] = data;
-            } catch { found[key] = data; }
-          } else found[key] = data;
+              } else if (usable(data, originCoord, destCoord)) found[key] = data;
+            } catch { if (usable(data, originCoord, destCoord)) found[key] = data; }
+          } else if (usable(data, originCoord, destCoord)) found[key] = data;
         }
         else {
           // WALKING RETRY before declaring "no route" (Oliver's Ærøskøbing →
@@ -3344,13 +3464,54 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // fallback, which is only used as an absolute last resort when neither
   // exists — see geocodeStopsForGuide below for the matching fix on the
   // geocoding-eligibility side of this same bug.
-  const resolveStopCoords = (name) => {
+  // ── "1 min on bike.. it says 13 on maps. Why is that bug still existing?"
+  // Oliver, 7 Aug 2026, on the Faaborg Havn to Faaborg Camping leg.
+  //
+  // Because the fix went into utils/guideEnrichment.js and this copy never got
+  // it, and this is the copy the guide BUILD actually runs. Both stops here had
+  // real, correct, freshly geocoded coordinates 2.3 km apart, sitting in the
+  // freshGeo object the whole time. This function never looked at freshGeo. It
+  // checked `geocodedCoords`, which is component state that, as the comment in
+  // fetchExactDurations already says, is not updated inside that closure until
+  // the next re-render, so during a build it is empty. Both names then fell
+  // through to the TOWN_COORDS fallback, both matched "Faaborg", and the
+  // Directions API was asked to route from the centre of Faaborg to the centre
+  // of Faaborg. It answered, correctly, zero minutes.
+  //
+  // So the crude fallback beat the precise data, which is the exact failure the
+  // shared version was written to stop. It takes `geo` as an argument for
+  // precisely this reason. This one now does too, checked BEFORE the fallback,
+  // and it reports whether the answer is a real position or a town centre
+  // standing in for one, because "somewhere in Faaborg" and "the harbour" are
+  // not the same claim and everything downstream needs to be able to tell.
+  //
+  // THE REAL PROBLEM IS THAT THIS FUNCTION EXISTS TWICE. It cannot simply call
+  // the shared one: that version matches against the static data files, while
+  // this one matches against live Supabase content too, so they genuinely
+  // answer different questions. Worth merging properly, and until then the
+  // rules below must be kept identical to utils/guideEnrichment.js by hand.
+  const resolveStopCoordsPrecise = (name, extraGeo = null) => {
     const real = lookupRealPlace(name);
-    if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
-    if (geocodedCoords[name]) return geocodedCoords[name];
-    const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
-    if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
+    if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon, precise: true };
+    if (extraGeo && extraGeo[name]) return { ...extraGeo[name], precise: true };
+    if (geocodedCoords[name]) return { ...geocodedCoords[name], precise: true };
+    const key = townKeyFor(name);
+    if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1], precise: false };
     return null;
+  };
+  const resolveStopCoords = (name, extraGeo = null) => resolveStopCoordsPrecise(name, extraGeo);
+
+  // Two stops that both collapsed onto the same town centre are not close
+  // together, they are UNPLACED. Saying so returns null, the same rule
+  // legDistanceKm already applies on the render side. Without it, every
+  // distance check below sees zero and waves a 4 km leg through as a stroll.
+  const legKmOrNull = (originName, destName, extraGeo = null) => {
+    const a = resolveStopCoordsPrecise(originName, extraGeo);
+    const b = resolveStopCoordsPrecise(destName, extraGeo);
+    if (!a || !b) return null;
+    const km = haversineKm(a, b);
+    if (!a.precise && !b.precise && km < 0.05) return null;
+    return km;
   };
   // SINGLE SOURCE OF TRUTH for leg transport mode — used by fetchExactDurations
   // (the background fetch) AND both render sites. Previously each computed mode
@@ -3363,12 +3524,16 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // completely differently than our Nominatim-based distance check did.
   const resolveLegMode = (how, primaryMode, originName, destName, onlyWalking = false, extraGeo = {}) => {
     let mode = detectLegMode(how, primaryMode);
-    const distKm = haversineKm(
-      resolveStopCoords(originName) || extraGeo[originName] || null,
-      resolveStopCoords(destName) || extraGeo[destName] || null
-    );
+    // Was raw haversineKm over an `||` chain that let the town-centre fallback
+    // win, so this saw 0 km for any two stops in one town and left real legs
+    // marked as walks. Same guarded distance the render side uses now.
+    const distKm = legKmOrNull(originName, destName, extraGeo);
     if (distKm != null) {
-      const walkCapKm = onlyWalking ? Infinity : 2.5;
+      // WALK_MAX_KM, not a hand-typed 2.5. The shared copy in guideEnrichment
+      // moved to Oliver's stated 15 to 20 minute ceiling and this one did not,
+      // so a 2.4 km leg was a walk here and a bike ride there, and the two
+      // wrote different cache keys for the same journey.
+      const walkCapKm = onlyWalking ? Infinity : WALK_MAX_KM;
       if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
       else if (mode === "bicycling" && distKm > 60) mode = "transit";
       // Same short-transit-leg-is-a-walk rule as utils/guideEnrichment.js's
@@ -3430,7 +3595,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // Distance (km) from user to the town mentioned in a free-text location string, or null.
   const townKmFromUser = (locStr) => {
     if (!isInDenmark(userCoords) || !locStr) return null;
-    const key = Object.keys(TOWN_COORDS).find(t => locStr.includes(t));
+    const key = townKeyFor(locStr);
     if (!key) return null;
     const [tLat, tLon] = TOWN_COORDS[key];
     const dLat = (tLat - userCoords.lat) * 111.32;
@@ -3641,6 +3806,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       setGuideBuildStage({ label: "Planning your itinerary structure", percent: 25 });
       let plannerSkeleton = "";
       let plannerStopNames = [];
+      let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
           `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.\n\nConversation:\n${convoText}`,
@@ -3650,8 +3816,68 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           const cleaned = plannerRes.text.replace(/^```json\s*|\s*```$/g, "").trim();
           const skeleton = JSON.parse(cleaned);
           if (skeleton?.days?.length) {
-            plannerSkeleton = JSON.stringify(skeleton);
-            plannerStopNames = skeleton.days.flatMap(d => (d.stops || []).map(s => s?.name)).filter(Boolean);
+            // ── THE PLAN GATE ────────────────────────────────────
+            // Oliver's pick for what to fix first, and the reason his Faxe to
+            // Ærø guide read as considered while being three places over three
+            // days with a 172 km middle day. Nothing sat between the planner
+            // and the writer, and the writer is good enough to make a weak plan
+            // sound deliberate.
+            //
+            // Coordinates come from each stop's OWN TOWN, free and instant,
+            // rather than from geocoding fifteen stops before the build has
+            // properly started. Town-centre precision is exactly right for the
+            // only question asked of it here: does this day cross the country.
+            // Where a town cannot be resolved the day is simply not judged on
+            // distance, never guessed at.
+            const gateCoords = {};
+            skeleton.days.forEach(d => (d.stops || []).forEach(st => {
+              if (!st?.name || gateCoords[st.name]) return;
+              const real = lookupRealPlace(st.name);
+              if (real?.lat && real?.lon) { gateCoords[st.name] = { lat: real.lat, lon: real.lon }; return; }
+              const key = townKeyFor(st.town || "") || townKeyFor(st.name);
+              if (key) gateCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
+            }));
+            const isPublished = (n) => !!lookupRealPlace(n);
+            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished });
+            let planDays = skeleton.days;
+
+            // ONE RETRY, NEVER A REFUSAL. Some trips genuinely are awkward, and
+            // a traveler must not be handed an error because theirs is. What
+            // this buys is the difference between "the planner did not think
+            // about it" and "the planner thought about it and it is still like
+            // this", which is worth exactly one more call.
+            if (!verdict.ok) {
+              console.warn("Plan gate rejected the first skeleton:", verdict.problems.map(pr => pr.detail));
+              setGuideBuildStage({ label: "Rebalancing the days", percent: 29 });
+              try {
+                const fixRes = await askOpenAI(
+                  `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
+                  1200
+                );
+                if (!fixRes.error && fixRes.text) {
+                  const fixed = JSON.parse(fixRes.text.replace(/^\`\`\`json\s*|\s*\`\`\`$/g, "").trim());
+                  if (fixed?.days?.length) {
+                    const fixedCoords = { ...gateCoords };
+                    fixed.days.forEach(d => (d.stops || []).forEach(st => {
+                      if (!st?.name || fixedCoords[st.name]) return;
+                      const real = lookupRealPlace(st.name);
+                      if (real?.lat && real?.lon) { fixedCoords[st.name] = { lat: real.lat, lon: real.lon }; return; }
+                      const key = townKeyFor(st.town || "") || townKeyFor(st.name);
+                      if (key) fixedCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
+                    }));
+                    const second = checkPlan(fixed.days, fixedCoords, { isPublished });
+                    // Keep whichever is actually better. A "fix" that trades two
+                    // problems for three is not a fix.
+                    if (second.problems.length < verdict.problems.length) { verdict = second; planDays = fixed.days; }
+                  }
+                }
+              } catch (e) { console.warn("Plan gate retry failed, keeping the original skeleton:", e); }
+            }
+            // Whatever survives is recorded rather than forgotten, so Studio can
+            // see that a published guide was built on a plan that did not pass.
+            planProblems = verdict.problems;
+            plannerSkeleton = JSON.stringify({ days: planDays });
+            plannerStopNames = planDays.flatMap(d => (d.stops || []).map(s => s?.name)).filter(Boolean);
           }
         }
       } catch { /* non-fatal — planner is a hint, not a requirement; Claude structures directly below if this comes back empty */ }
@@ -3859,6 +4085,18 @@ If the conversation only covers a single day or a few stops with no explicit day
           }
         }
       } catch { /* non-fatal — the guide ships with its already-written text if this pass fails */ }
+      // ── WHERE TO STAY AND HOW TO GET AROUND, BEFORE THE ROUTES ──
+      // This has to come first, and not only so it survives. The duration
+      // fetch below reads day.glance.legs[i].how to decide whether a leg is a
+      // train, a ferry or a walk. When glance arrived afterwards, that was
+      // always undefined and every leg was routed as the trip's primary mode,
+      // which is why a bike trip asked Google for a bike route across open
+      // water. Doing it in the right order fixes the accommodation card, the
+      // Booking link and every leg mode in one move.
+      setGuideBuildStage({ label: "Working out where to stay and how you get around", percent: 90 });
+      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes);
+      parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
+
       setGuideBuildStage({ label: "Verifying exact locations and routes", percent: 95 });
       const freshGeo = await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
@@ -3898,14 +4136,54 @@ If the conversation only covers a single day or a few stops with no explicit day
       const { found: exactFound, failed: routeFailed } = mode !== "plain"
         ? await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking)
         : { found: {}, failed: {} };
+      // The forecast, also baked on rather than posted to a component that is
+      // about to stop existing. Cheap: one /api/weather call per distinct day.
+      setGuideBuildStage({ label: "Checking the forecast", percent: 98 });
+      const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate);
+      parsed.days = parsed.days.map((d, i) => (weatherByDay[i] ? { ...d, weather: weatherByDay[i] } : d));
+      const finalEssentials = stripDashesDeep(weatherNote
+        ? { ...(parsed.essentials || {}), weatherNote }
+        : (parsed.essentials || null));
+
+      // ── THE DASH BAN, ENFORCED ─────────────────────────────────
+      // Five em dashes shipped inside a saved guide payload on 7 Aug. The rule
+      // is in every prompt in this project and has been for weeks, which is the
+      // whole argument for doing it here instead: anything the system already
+      // knows is enforced in code, never requested in a prompt. Runs last, so
+      // nothing written after it can slip a dash back in, and it skips keys
+      // starting with _ because those carry machinery rather than prose.
+      parsed.days = stripDashesDeep(parsed.days);
+      parsed.title = stripDashes(parsed.title);
+
+      // ── A TITLE IS THE FIRST FACTUAL CLAIM A READER MEETS ──────
+      // "Cobbled Streets and Chalk Cliffs" led a guide with no cliff in it:
+      // Faxe Kalkbrud is a quarry, and Stevns Klint, the actual chalk cliff
+      // twenty minutes down the road, was never in the itinerary. Checked
+      // against the stops that actually exist, and rewritten rather than
+      // flagged, because nobody is going to read a warning about a headline.
+      const finalStopNames = parsed.days.flatMap(d => (d.stops || []).map(st => st?.name)).filter(Boolean);
+      const finalTowns = parsed.days.flatMap(d => (d.stops || []).map(st => st?.town)).filter(Boolean);
+      const broken = titlePromises(parsed.title, finalStopNames, finalTowns);
+      if (broken.length > 0) {
+        console.warn("Title promises something the itinerary does not contain:", broken);
+        const retitle = await askClaude(
+          `Rewrite this Denmark trip title. It currently promises ${broken.join(" and ")}, and this trip contains none of that, which makes the title a false claim before the reader has read a word.\n\nThe trip actually visits: ${finalStopNames.join(", ")}.\n\nWrite one short, warm title, under nine words, naming or evoking only things genuinely on that list. No colon-subtitle unless it earns it. Never use an em dash or an en dash. Reply with the title and nothing else.\n\nCurrent title: ${parsed.title}`,
+          80
+        );
+        if (!retitle.error && retitle.text) {
+          const cleaned = stripDashes(retitle.text.trim().replace(/^["']|["']$/g, ""));
+          // Only take it if it actually fixed the problem. A rewrite that
+          // promises the same missing thing is not an improvement.
+          if (cleaned && titlePromises(cleaned, finalStopNames, finalTowns).length === 0) parsed.title = cleaned;
+        }
+      }
+
       const travelersMatch = convoText.match(/Who's traveling:\s*([^|]*)/i);
       // Test-pipeline transparency: attach the fabricated profile + the
       // planner's raw skeleton ONLY when this conversation is genuinely the
       // test brief (see randomTestProfileRef's comment for the guard's why).
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, title: parsed.title || "Your Custom Route", essentials: parsed.essentials || null, days: parsed.days });
-      enrichGuideDays(parsed.days, gid, travelMode, mixedModes);
-      fetchGuideWeather(parsed.days, gid, arrivalDate);
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       setGuideModal(null);
       // ERROR-MESSAGE GAP FIX (flagged PASS 27, round 3): this catch-all used to
@@ -4583,7 +4861,7 @@ If the conversation only covers a single day or a few stops with no explicit day
           const point = day.stops.map(s => {
             const real = lookupRealPlace(s.name);
             if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
-            const key = Object.keys(TOWN_COORDS).find(t => s.name.includes(t));
+            const key = townKeyFor(s.name);
             return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
           }).find(Boolean);
           if (!point) continue;
@@ -5762,6 +6040,50 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             <div style={{ marginTop: 6, fontSize: 11, color: "#FFB347" }}>
                               {geoFixState.failed.length} could not be placed, so they were left without a pin rather than given a wrong one:
                               <div style={{ color: C.muted, marginTop: 3 }}>{geoFixState.failed.slice(0, 6).join(" · ")}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── REPAIR THE PHOTOS THAT WERE NEVER THERE ────────
+                        52 of the 53 published entries carrying a local photo
+                        path point at a file that does not exist, because the
+                        code template writes the path and leaves adding the file
+                        as a manual step. This checks every hero for real and
+                        replaces only the ones that fail, from Commons, with the
+                        attribution the licence requires. */}
+                    <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: photoFixState ? 10 : 0 }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>🖼 Repair missing photos</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Checks whether every published entry's photo actually loads, and finds a freely licensed one on Wikimedia for the ones that do not, credit included. A photo that already works is never touched. Up to {PHOTO_FIX_BATCH_CAP} per run.</div>
+                        </div>
+                        <button onClick={backfillPhotos} disabled={photoFixState?.running}
+                          style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+                          {photoFixState?.running ? (photoFixState.total ? `${photoFixState.done}/${photoFixState.total}` : "Checking…") : "Run it"}
+                        </button>
+                      </div>
+                      {photoFixState && !photoFixState.running && (
+                        <div style={{ fontSize: 11.5, color: C.light }}>
+                          {photoFixState.total === 0
+                            ? "Every published entry's photo loads."
+                            : `Replaced ${photoFixState.fixed} of ${photoFixState.total} broken photos. Reload to see them.`}
+                          {photoFixState.skipped > 0 && (
+                            <div style={{ marginTop: 6, fontSize: 11, color: C.muted }}>
+                              {photoFixState.skipped} more were left for the next run, so this click could not quietly cost more than it should. Run it again.
+                            </div>
+                          )}
+                          {photoFixState.notFound.length > 0 && (
+                            <div style={{ marginTop: 6, fontSize: 11, color: "#FFB347" }}>
+                              Wikimedia has nothing freely licensed for {photoFixState.notFound.length}, so they still need a photo rather than being quietly left looking finished:
+                              <div style={{ color: C.muted, marginTop: 3 }}>{photoFixState.notFound.slice(0, 8).join(" · ")}</div>
+                            </div>
+                          )}
+                          {photoFixState.failed.length > 0 && (
+                            <div style={{ marginTop: 6, fontSize: 11, color: "#FFB347" }}>
+                              {photoFixState.failed.length} failed to save:
+                              <div style={{ color: C.muted, marginTop: 3 }}>{photoFixState.failed.slice(0, 5).join(" · ")}</div>
                             </div>
                           )}
                         </div>

@@ -221,7 +221,12 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           which is what CC BY and CC BY-SA actually ask for. Renders nothing when
           the image has no credit on file, so it costs nothing on the many photos
           that need none. */}
-      <PhotoCredit photo={item.photo} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
+      {/* __photoCredit is set when the hero came from Wikimedia Commons rather
+          than from a file Oliver downloaded, so the attribution travels with the
+          entry instead of having to be matched by filename in
+          image-credits.json, which only knows about downloaded files. Falls
+          back to that lookup when it is absent, which is every older entry. */}
+      <PhotoCredit photo={item.photo} credit={item.__photoCredit} style={{ padding: "6px 20px 0", maxWidth: 620, margin: "0 auto" }} />
       <div style={{ padding: "14px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>
           {kind === "event" ? `${item.town}` : kind === "nightlife" ? item.location : kind === "free" ? item.city : kind === "food" ? item.location : item.region}

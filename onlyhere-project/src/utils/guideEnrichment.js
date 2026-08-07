@@ -45,11 +45,49 @@ export const lookupRealPlace = (name) => {
 // never folded into one `||` chain where the crude fallback's near-constant
 // truthiness silently wins every time. See CHANGES_THIS_PASS.md for the full
 // story of how the old ordering broke this.
+
+// ── "Vejlebrovej" IS NOT VEJLE ──────────────────────────────────────
+// Found 7 Aug 2026 while writing the regression test for the "1 min on bike"
+// report, in a real published guide. A stop called "Vejlebrovej coast
+// viewpoint", which the plan placed in Svendborg, was resolving to Vejle:
+// 55.709, 9.536, about eighty kilometres away on the other side of the Belt.
+//
+// Because this fallback asked `name.includes(town)` and "Vejlebrovej" contains
+// "Vejle". A bare substring test means any stop whose name happens to spell a
+// town inside a longer word silently inherits that town's coordinates, and the
+// result looks completely ordinary: a real pin, in a real Danish town, on the
+// wrong side of the country. Danish street names ending in -vej make this far
+// from a freak case.
+//
+// A town counts only when it stands as its own word. `\b` is no good here
+// because Æ, Ø and Å are not word characters to JavaScript, so an Ærøskøbing
+// or a Nykøbing would break in a different direction. This checks the
+// characters on either side for being letters, in any alphabet.
+//
+// LONGEST MATCH WINS, separately: with plain .find(), "Nykøbing" could answer
+// for a stop in "Nykøbing Falster" purely by key order.
+const isLetter = (ch) => !!ch && /\p{L}/u.test(ch);
+export const townInName = (name, town) => {
+  const n = String(name || "").toLowerCase(), t = String(town || "").toLowerCase();
+  if (!n || !t) return false;
+  let from = 0;
+  for (;;) {
+    const i = n.indexOf(t, from);
+    if (i < 0) return false;
+    if (!isLetter(n[i - 1]) && !isLetter(n[i + t.length])) return true;
+    from = i + 1;
+  }
+};
+export const townKeyFor = (name) =>
+  Object.keys(TOWN_COORDS)
+    .filter(t => townInName(name, t))
+    .sort((a, b) => b.length - a.length)[0] || null;
+
 export const resolveStopCoords = (name, geo = {}) => {
   const real = lookupRealPlace(name);
   if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
   if (geo[name]) return geo[name];
-  const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
+  const key = townKeyFor(name);
   if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
   return null;
 };
@@ -83,7 +121,7 @@ export const resolveStopCoordsDetailed = (name, geo = {}) => {
   const real = lookupRealPlace(name);
   if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon, precise: true };
   if (geo[name]) return { ...geo[name], precise: true };
-  const key = Object.keys(TOWN_COORDS).find(t => name.includes(t));
+  const key = townKeyFor(name);
   if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1], precise: false };
   return null;
 };

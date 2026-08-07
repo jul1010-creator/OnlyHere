@@ -4,6 +4,7 @@ import { Ico } from "./Icon";
 import { getEventDate, isUpcoming, isCurrentlyLive, isInDenmark } from "../utils/helpers";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { TOWN_COORDS } from "../data/towns";
+import { townKeyFor } from "../utils/guideEnrichment";
 
 export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo, nearYou, requestLocation, setEventDetail, setFreeDetail, setFoodDetail, userCoords }) => {
   const [segment, setSegment] = useState(null); // null = default (live if any, else coming); "live" or "coming" once the person picks
@@ -11,7 +12,7 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
   const currentlyLive = allTracked.filter(e => isCurrentlyLive(e.date, e.dateEnd));
   const kmFromUserToTown = (locStr) => {
     if (!isInDenmark(userCoords) || !locStr) return null;
-    const key = Object.keys(TOWN_COORDS).find(t => locStr.includes(t));
+    const key = townKeyFor(locStr);
     if (!key) return null;
     const [tLat, tLon] = TOWN_COORDS[key];
     const dLat = (tLat - userCoords.lat) * 111.32;

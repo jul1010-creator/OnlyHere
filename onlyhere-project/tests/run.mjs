@@ -52,6 +52,9 @@ writeFileSync(entry, `
   export { looksLikeTransit, kindFromName, findRealNearestStop } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
 `);
 const esbuild = [
   join(root, "node_modules/.bin/esbuild"),
@@ -621,6 +624,181 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a profile with only interests still reads", M.testTravelerLine({ interests: ["beaches"] }), "into beaches");
   is("no profile is an empty string, never the word undefined", M.testTravelerLine(null), "");
   ok("an empty interests list is dropped entirely", M.testTravelerLine({ days: 2, interests: [] }) === "2 days");
+}
+
+// ── "1 min on bike.. it says 13 on maps" ───────────────────────────
+// Oliver, 7 Aug 2026, on the Faaborg Havn to Faaborg Camping leg of a real
+// published guide. The two stops are 2.27 km apart and both had correct,
+// freshly geocoded coordinates on file the whole time. The guide BUILD called
+// this resolver without passing them, so both names fell through to the
+// TOWN_COORDS entry for Faaborg, and the Directions API was asked to route
+// from the centre of Faaborg to the centre of Faaborg. It said zero minutes.
+//
+// The rules below were already right. What follows pins them, so the next
+// caller that forgets the second argument fails here instead of in a guide:
+// a precise source must beat the town centre, and two stops that both landed
+// on the same town centre are UNPLACED, not adjacent.
+{
+  const HAVN = { lat: 55.0975557, lon: 10.2326148 };
+  const CAMP = { lat: 55.1164511, lon: 10.2463698 };
+  const GEO = { "Faaborg Havn": HAVN, "Faaborg Camping": CAMP };
+
+  const withGeo = M.resolveStopCoordsDetailed("Faaborg Havn", GEO);
+  is("this guide's own geocode wins over the town centre", [withGeo.lat, withGeo.lon], [HAVN.lat, HAVN.lon]);
+  ok("and is marked precise", withGeo.precise === true);
+
+  const noGeo = M.resolveStopCoordsDetailed("Faaborg Havn", {});
+  ok("without it the town centre stands in", noGeo !== null && noGeo.precise === false);
+  ok("the town centre is not the harbour", Math.abs(noGeo.lat - HAVN.lat) > 0.0001);
+
+  // The report itself, in both directions.
+  const km = M.legDistanceKm("Faaborg Havn", "Faaborg Camping", GEO);
+  ok("the real leg is a real distance, not zero", km > 2 && km < 3);
+  is("two stops collapsed onto one town centre read as unknown, never as zero",
+    M.legDistanceKm("Faaborg Havn", "Faaborg Camping", {}), null);
+
+  // A stop with no town in its name and no geocode has no position at all, and
+  // saying so beats inventing one.
+  is("an unplaceable stop resolves to nothing", M.resolveStopCoordsDetailed("Vejlebrovej coast viewpoint", {}), null);
+  is("and a leg to it has no distance", M.legDistanceKm("Faaborg Havn", "Vejlebrovej coast viewpoint", GEO), null);
+
+  // ── "Vejlebrovej" IS NOT VEJLE ───────────────────────────────
+  // The above used to resolve to Vejle, eighty kilometres away on the far side
+  // of the Belt, because the town fallback asked `name.includes("Vejle")`. A
+  // town only counts as a whole word now. Danish street names ending in -vej
+  // make this a common shape, not a freak one.
+  ok("a town inside a longer word does not count", !M.townInName("Vejlebrovej coast viewpoint", "Vejle"));
+  ok("a town as its own word does", M.townInName("Faaborg Camping", "Faaborg"));
+  ok("a town at the very start counts", M.townInName("Roskilde Domkirke", "Roskilde"));
+  ok("a town at the very end counts", M.townInName("Havnen i Svendborg", "Svendborg"));
+  ok("a hyphen is a boundary", M.townInName("Faaborg-Midtfyn Camping", "Faaborg"));
+  // Danish letters are not word characters to a regex \b, which is why this
+  // does not use one. If it ever starts to, these two fail.
+  ok("a name that is only the town counts", M.townInName("Ærøskøbing", "Ærøskøbing"));
+  ok("and Danish letters do not break the boundary", M.townInName("Ærøskøbing Havn", "Ærøskøbing"));
+  // LONGEST MATCH WINS. A real case in the current data: "Nørresundby
+  // (Aalborg)" contains "Aalborg", so plain .find() could answer with either
+  // depending on key order, and they are different places on opposite banks of
+  // the Limfjord.
+  is("the fuller town name wins over one nested inside it", M.townKeyFor("Nørresundby (Aalborg) Havn"), "Nørresundby (Aalborg)");
+  is("no town in the name means no town", M.townKeyFor("Vejlebrovej coast viewpoint"), null);
+  is("the reported stop now resolves to nothing rather than to Vejle", M.townKeyFor("Vejlebrovej coast viewpoint"), null);
+  is("a genuine Vejle stop still finds Vejle", M.townKeyFor("Vejle Fjord bridge"), "Vejle");
+
+  // ZERO MINUTES IS NEVER AN ANSWER. The build applies this to whatever the
+  // Directions API returns; the shape of the rule is pinned here.
+  const usable = (d, a, b) => !(!d || d.error || !(d.durationMinutes >= 1) ||
+    (a && b && !a.precise && !b.precise && Math.abs(a.lat - b.lat) < 1e-9 && Math.abs(a.lon - b.lon) < 1e-9));
+  ok("a zero minute leg is refused", !usable({ durationMinutes: 0 }));
+  ok("a one minute leg is kept", usable({ durationMinutes: 1 }));
+  ok("an errored leg is refused", !usable({ error: "ZERO_RESULTS" }));
+  ok("a leg between two identical town centres is refused",
+    !usable({ durationMinutes: 4 }, { lat: 55.095, lon: 10.243, precise: false }, { lat: 55.095, lon: 10.243, precise: false }));
+  ok("but the same reading between two precise points is kept",
+    usable({ durationMinutes: 4 }, { ...HAVN, precise: true }, { ...CAMP, precise: true }));
+}
+
+// ── the plan gate ──────────────────────────────────────────────────
+// Every rule here is checked against the real guide Oliver asked me to look at
+// on 7 Aug: three days, three actual places, Ærøskøbing counted twice, and a
+// middle day covering 172 km. Nothing sat between the planner and the writer,
+// and the writer is good enough that a weak plan came back reading like a
+// considered one.
+{
+  const REAL = [
+    { day: 1, stops: [{ name: "Amalienborg Slot", town: "Copenhagen" }] },
+    { day: 2, stops: [{ name: "Faxe Kalkbrud", town: "Faxe" }, { name: "Ærøskøbing", town: "Ærøskøbing" }] },
+    { day: 3, stops: [{ name: "Ærøskøbing", town: "Ærøskøbing" }] },
+  ];
+  const GEO = {
+    "Amalienborg Slot": { lat: 55.6846, lon: 12.5934 },
+    "Faxe Kalkbrud": { lat: 55.2613, lon: 12.1288 },
+    "Ærøskøbing": { lat: 54.8897, lon: 10.4112 },
+  };
+  const v = M.checkPlan(REAL, GEO);
+  const codes = v.problems.map(p => p.code).sort();
+  ok("the guide that started this does not pass", !v.ok);
+  is("and it fails for the three real reasons", codes, ["REPEATED_STOP", "TOO_FEW_PLACES", "TOO_MUCH_TRAVEL"]);
+  is("four stops, three places", [v.stats.stops, v.stats.distinct], [4, 3]);
+
+  // A plan with no problems must come back clean, or the gate is just noise.
+  const GOOD = [
+    { day: 1, stops: [{ name: "Nyhavn" }, { name: "Christiania" }] },
+    { day: 2, stops: [{ name: "Roskilde Domkirke" }, { name: "Vikingeskibsmuseet" }, { name: "Roskilde havn" }] },
+    { day: 3, stops: [{ name: "Dragør Havn" }, { name: "Amager Strandpark" }] },
+  ];
+  const G2 = {
+    "Nyhavn": { lat: 55.6797, lon: 12.5909 }, "Christiania": { lat: 55.6772, lon: 12.6105 },
+    "Roskilde Domkirke": { lat: 55.6427, lon: 12.08 }, "Vikingeskibsmuseet": { lat: 55.6503, lon: 12.0836 },
+    "Roskilde havn": { lat: 55.651, lon: 12.085 }, "Dragør Havn": { lat: 55.5925, lon: 12.672 },
+    "Amager Strandpark": { lat: 55.6548, lon: 12.635 },
+  };
+  ok("a sensible plan passes clean", M.checkPlan(GOOD, G2).ok);
+
+  // An edge day may hold one stop: you land at two in the afternoon. A day in
+  // the middle may not.
+  const EDGE = [{ day: 1, stops: [{ name: "A" }] }, { day: 2, stops: [{ name: "B" }, { name: "C" }] }, { day: 3, stops: [{ name: "D" }] }];
+  ok("a single stop on the first or last day is allowed", !M.checkPlan(EDGE).problems.some(p => p.code === "THIN_DAY"));
+  const MIDDLE = [{ day: 1, stops: [{ name: "A" }, { name: "B" }] }, { day: 2, stops: [{ name: "C" }] }, { day: 3, stops: [{ name: "D" }, { name: "E" }] }];
+  ok("a single stop in the middle is not", M.checkPlan(MIDDLE).problems.some(p => p.code === "THIN_DAY" && p.day === 2));
+  ok("an empty day is always a problem", M.checkPlan([{ day: 1, stops: [] }]).problems.some(p => p.code === "EMPTY_DAY"));
+
+  // ── DISTANCE IS ALL OR NOTHING ────────────────────────────
+  // A day total built from the legs that happened to resolve UNDERSTATES the
+  // day, and understating is the exact direction that lets a bad plan through.
+  const FAR = [{ day: 1, stops: [{ name: "X" }, { name: "Y" }] }];
+  ok("a long day with both ends known is flagged",
+    M.checkPlan(FAR, { X: { lat: 55.68, lon: 12.59 }, Y: { lat: 54.89, lon: 10.41 } }).problems.some(p => p.code === "TOO_MUCH_TRAVEL"));
+  ok("the same day with one end unknown is not judged on distance",
+    !M.checkPlan(FAR, { X: { lat: 55.68, lon: 12.59 } }).problems.some(p => p.code === "TOO_MUCH_TRAVEL"));
+  ok("and a short day is left alone",
+    !M.checkPlan(FAR, { X: { lat: 55.68, lon: 12.59 }, Y: { lat: 55.7, lon: 12.61 } }).problems.some(p => p.code === "TOO_MUCH_TRAVEL"));
+
+  // ── the title is the first factual claim a reader meets ───
+  is("chalk cliffs with no cliff anywhere", M.titlePromises("Cobbled Streets and Chalk Cliffs", ["Amalienborg Slot", "Faxe Kalkbrud"], ["Copenhagen", "Faxe"]), ["cliff"]);
+  is("a castle title with a real castle passes", M.titlePromises("Castles of Funen", ["Nyborg Slot"], ["Nyborg"]), []);
+  is("Danish delivers an English promise", M.titlePromises("Cathedral and Viking Ships", ["Roskilde Domkirke", "Vikingeskibsmuseet"], ["Roskilde"]), []);
+  is("colour and mood are never the title's debt", M.titlePromises("Slow, Quiet Days in the North", ["Skagen"], ["Skagen"]), []);
+  // SHORT TOKENS ARE A TRAP, and these two were in the first draft: "borg" is
+  // inside Aalborg and Nyborg, which are towns, and a bare "ø" is inside half
+  // the Danish map. Both would have marked a promise delivered when it was not.
+  is("a town ending in -borg is not a castle", M.titlePromises("Castles of the North", ["Aalborg gamle by"], ["Aalborg"]), ["castle"]);
+  is("an island promise is kept by a real island", M.titlePromises("Island Hopping in the South", ["Ærøskøbing havn"], ["Ærøskøbing"]), []);
+  is("and broken by a place that is not one", M.titlePromises("Island Hopping", ["Nyhavn"], ["Copenhagen"]), ["island"]);
+}
+
+// ── the dash ban, enforced instead of requested ────────────────────
+// Five em dashes shipped inside a saved guide payload on 7 Aug. The rule is in
+// every prompt in this project and has been for weeks, which is the argument
+// for doing it in code: anything the system already knows is enforced, never
+// asked for.
+{
+  is("a dash used as punctuation becomes a comma",
+    M.stripDashes("far cheaper than full-fare rail — book those ahead"),
+    "far cheaper than full-fare rail, book those ahead");
+  is("a dash between numbers becomes the word to",
+    M.stripDashes("Open 09:00–17:00"), "Open 09:00 to 17:00");
+  is("and so does a spaced range", M.stripDashes("12 – 15 minutes"), "12 to 15 minutes");
+  is("hyphens are left alone", M.stripDashes("63-million-year-old fossils"), "63-million-year-old fossils");
+  is("text with no dash is returned untouched", M.stripDashes("nothing to do here"), "nothing to do here");
+  is("a non-string passes straight through", M.stripDashes(42), 42);
+  ok("no dash survives anywhere", !/[–—−―]/.test(
+    M.stripDashes("a — b – c − d ― e")));
+
+  // THE GUARD MUST NOT BE A GLOBAL REGEX. The first version tested with a /g/
+  // pattern, which carries lastIndex between calls, so it alternated true and
+  // false and silently skipped every other string. Caught on the first run:
+  // "12–15 minutes" came back untouched purely because the string before it had
+  // matched. Three in a row is what proves it.
+  is("three dashed strings in a row all get cleaned", [
+    M.stripDashes("a — b"), M.stripDashes("c — d"), M.stripDashes("e — f"),
+  ], ["a, b", "c, d", "e, f"]);
+
+  const guide = { title: "A — B", _convoText: "keep — this", days: [{ title: "Day — one", stops: [{ note: "x — y" }] }] };
+  const clean = M.stripDashesDeep(guide);
+  is("prose is cleaned all the way down", clean.days[0].stops[0].note, "x, y");
+  is("and so are titles", [clean.title, clean.days[0].title], ["A, B", "Day, one"]);
+  is("but keys starting with _ are machinery and stay verbatim", clean._convoText, "keep — this");
 }
 
 rmSync(dir, { recursive: true, force: true });

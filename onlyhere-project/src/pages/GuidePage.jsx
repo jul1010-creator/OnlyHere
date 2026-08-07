@@ -321,6 +321,42 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   const lightMode = !!guide._lightMode;
   const shape = tripShape(guide, legDistanceKm);
 
+  // ── ONE MAP, NOT SIX ────────────────────────────────────────────
+  // Oliver, 7 Aug 2026: "damn, it looks so overwhelming. Let's make the leaflet
+  // map more simple on the Gemlyx Guide. Have one big map at the top or bottom
+  // that shows the entire road on map."
+  //
+  // Measured on his five day guide before this change: six separate Leaflet
+  // maps on one page, 6153 pixels tall. Each one showed a single day in
+  // isolation, so the thing a person most wants to see, the SHAPE of the trip
+  // across Denmark, was the one thing no map showed. Six tile layers is also
+  // six sets of network requests and six Leaflet instances for less
+  // information than one map carries.
+  //
+  // His scaling rule needs no code: "If it is multiple towns in Zealand, then
+  // show all of Zealand. If it's multiple towns around Denmark, then show
+  // Denmark. If it's just in Copenhagen, then show the places around
+  // Copenhagen." That is fitBounds, which GuideRouteMap already does, with a
+  // maxZoom so a tight cluster does not end up at street level. Feed it every
+  // stop and the right scale falls out of the geometry.
+  //
+  // The per-day leg chips stay exactly where they are. He asked to keep the
+  // transport visible and it is the thing first-time visitors need most.
+  const tripGeo = guide._geo || {};
+  const allStops = days.flatMap((d, di) => (d.stops || []).map(st => ({ ...st, _day: d.day || di + 1 })));
+  const tripPoints = allStops.map(st => {
+    const c = resolveStopCoords(st.name, tripGeo);
+    // Labelled with the day so one pin in a fourteen stop route still says
+    // WHEN as well as where.
+    return c ? { name: `Day ${st._day} · ${st.name}`, ...c } : null;
+  }).filter(Boolean);
+  // Consecutive duplicates are the same place twice (an overnight stop that is
+  // also the next morning's start). One pin, not two stacked on each other.
+  const tripRoute = tripPoints.filter((p, i) => i === 0 || Math.abs(p.lat - tripPoints[i - 1].lat) > 1e-6 || Math.abs(p.lon - tripPoints[i - 1].lon) > 1e-6);
+  const tripLegs = tripRoute.slice(0, -1).map((p, i) => ({
+    mode: resolveLegMode(null, guide._mode, p.name, tripRoute[i + 1].name, guide._onlyWalking, tripGeo),
+  }));
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 60 }}>
       {/* BUG FIX: .towns-grid was only ever defined in App.jsx's own <style>
@@ -412,6 +448,17 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 Day {d.day || i + 1}
               </button>
             ))}
+          </div>
+        )}
+
+        {!lightMode && tripRoute.length > 1 && (
+          <div style={{ marginBottom: 28, maxWidth: 640 }}>
+            <div style={{ height: 320, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}` }}>
+              <GuideRouteMap points={tripRoute} legs={tripLegs} />
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 7 }}>
+              The whole route. Every stop below is numbered here in order.
+            </div>
           </div>
         )}
 
@@ -593,24 +640,6 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               </a>
             );
           };
-          const routePoints = (day.stops || []).map(s => {
-            const c = resolveStopCoords(s.name, geo);
-            return c ? { name: s.name, ...c } : null;
-          }).filter(Boolean);
-          // Per-leg travel modes for the route map, resolved EXACTLY the way
-          // legChip resolves them above: same resolveLegMode call, same
-          // same-town-walk override. The map fetches real route geometry per
-          // leg, and a leg's shape depends entirely on its mode, since a ferry
-          // crossing and a walk between the same two points are different
-          // journeys. Sharing the resolution instead of re-deriving it is what
-          // stops the drawn line and the stated duration from drifting apart.
-          const routeLegs = routePoints.slice(0, -1).map((p, i) => {
-            const destName = routePoints[i + 1].name;
-            const how = day.glance?.legs?.[i]?.how;
-            let mode = resolveLegMode(how, guide._mode, p.name, destName, guide._onlyWalking, geo);
-            if (isSameTownWalk(mode, stopTownOf(p.name), stopTownOf(destName), how)) mode = "walking";
-            return { mode };
-          });
           return (
           <div key={day.day || dayIdx} id={`gx-day-${day.day || dayIdx + 1}`} style={{ marginBottom: 44, scrollMarginTop: 70 }}>
             {/* Redesign pass: day headers went from a cramped gold uppercase micro-line
@@ -633,13 +662,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             {/* If today only has one stop, the real journey worth showing is the leg
                 connecting it to yesterday's last stop, not nothing at all.
                 Skipped in light mode, same reasoning as the route map below. */}
-            {!lightMode && day.stops?.length === 1 && dayIdx > 0 && days[dayIdx - 1]?.stops?.length > 0 && (
+            {!lightMode && day.stops?.length === 1 && dayIdx > 0 && days[dayIdx - 1]?.stops?.length > 0
+              && days[dayIdx - 1].stops.slice(-1)[0].name.trim().toLowerCase() !== day.stops[0].name.trim().toLowerCase() && (
               <div style={{ marginBottom: 14 }}>{legChip(days[dayIdx - 1].stops.slice(-1)[0].name, day.stops[0].name, day.glance?.legs?.[0]?.how)}</div>
-            )}
-            {!lightMode && routePoints.length > 1 && (
-              <div style={{ height: 180, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 18, maxWidth: 620 }}>
-                <GuideRouteMap points={routePoints} legs={routeLegs} />
-              </div>
             )}
             {/* TIMELINE LAYOUT (Oliver: "having the transport under each is
                 odd... put it up so it looks a little bit more understanding",
@@ -733,7 +758,13 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   {/* Connector: the leg chip sits ON the line between the two
                       stops it joins, centered — reads as "then you travel",
                       not as a stray label under a random card. */}
-                  {!lightMode && nextStop && (
+                  {/* ── A PLACE IS NOT A JOURNEY FROM ITSELF ───────────
+                      "Ærøskøbing" appeared as Day 2's overnight stop and again
+                      as Day 3, and the connector between them read "1 min on
+                      foot". The Directions API had honestly answered zero for a
+                      route from a point to itself. A stop repeated as a base is
+                      not a leg and gets no chip. */}
+                  {!lightMode && nextStop && nextStop.name.trim().toLowerCase() !== stop.name.trim().toLowerCase() && (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "4px 0" }}>
                       <div style={{ width: 1, height: 16, background: `${C.gold}55` }} />
                       {legChip(stop.name, nextStop.name, day.glance?.legs?.[stopIdx]?.how)}

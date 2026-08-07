@@ -47,6 +47,9 @@ const fetchLegGeometry = async (from, to, mode) => {
   return promise;
 };
 
+// Above this many stops the map stops shouting every name at once.
+const LABEL_LIMIT = 6;
+
 export const GuideRouteMap = ({ points, legs }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
@@ -139,9 +142,23 @@ export const GuideRouteMap = ({ points, legs }) => {
         iconSize: [size, size],
         iconAnchor: [size / 2, size / 2],
       });
-      L.marker([p.lat, p.lon], { icon, riseOnHover: true })
-        .bindTooltip(p.name, { permanent: true, direction: "top", offset: [0, -(size / 2 + 2)], className: "gemlyx-map-label" })
+      // ── LABELS GO QUIET ON A LONG ROUTE ──────────────────────
+      // Oliver, 7 Aug 2026, asking for one map across the whole trip instead
+      // of one per day. Permanent tooltips were fine for a three stop day and
+      // are unreadable at fourteen: the labels collide, overlap the line, and
+      // hide the country the map exists to show. Above the threshold the
+      // numbers carry the order (they match the stop list below) and a name
+      // appears on hover or tap.
+      const marker = L.marker([p.lat, p.lon], { icon, riseOnHover: true })
+        .bindTooltip(p.name, {
+          permanent: points.length <= LABEL_LIMIT,
+          direction: "top",
+          offset: [0, -(size / 2 + 2)],
+          className: "gemlyx-map-label",
+        })
         .addTo(group);
+      // Hover is not a thing on a phone, so a tap has to open it too.
+      if (points.length > LABEL_LIMIT) marker.on("click", () => marker.openTooltip());
     });
     // BUG FIX, same report: padding 28 with no zoom cap meant a day with only
     // 2-3 genuinely close-together stops (common — most days have real stops

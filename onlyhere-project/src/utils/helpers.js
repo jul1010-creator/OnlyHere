@@ -557,3 +557,54 @@ export const testTravelerLine = (p) => {
     p.budget && p.budget !== "unstated" ? p.budget : null,
   ].filter(Boolean).join(" · ");
 };
+
+// ── THE DASH BAN, ENFORCED RATHER THAN REQUESTED ───────────────────
+// Five em dashes shipped inside a saved guide payload on 7 Aug, in text a
+// traveler reads. The rule is in every prompt in this project and has been for
+// weeks. Asking a model not to do something is not a guarantee, and this
+// project already has a standing rule for exactly that situation: anything the
+// system knows is enforced in code, never requested in a prompt.
+//
+// A dash is not simply deleted. "Faxe is on Zealand, Ærø is off Funen — so this
+// is a cross country trip" has to keep reading as a sentence, so a dash acting
+// as punctuation becomes a comma and a dash acting as a range becomes "to".
+// Hyphens are untouched, because "63-million-year-old" is correct.
+const EN = "\u2013", EM = "\u2014", MINUS = "\u2212", HORIZ = "\u2015";
+// NOT global, and that is the entire point. A /g/ regex carries lastIndex
+// between calls, so using one as a guard makes .test() alternate true and false
+// across strings and silently skip every other one. Caught by the first run of
+// this function: "12–15 minutes" came back untouched purely because the string
+// before it had matched. The replacements below are built fresh per call.
+const HAS_DASH = new RegExp(`[${EN}${EM}${MINUS}${HORIZ}]`);
+export const stripDashes = (text) => {
+  if (typeof text !== "string" || !HAS_DASH.test(text)) return text;
+  return text
+    // 12–15, 2024–2026, 09:00–17:00: a range, and the word is "to".
+    .replace(new RegExp(`(\\d)\\s*[${EN}${EM}${MINUS}${HORIZ}]\\s*(\\d)`, "g"), "$1 to $2")
+    // Spaced, or hugging a word on both sides: punctuation. A comma carries it.
+    .replace(new RegExp(`\\s*[${EN}${EM}${MINUS}${HORIZ}]\\s*`, "g"), ", ")
+    // Two clauses now separated by ", ," or a comma landing before another one.
+    .replace(/,\s*,+/g, ",")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*([.!?;:])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+};
+
+// Walks a whole guide object and cleans every string a traveler can read.
+// Deliberately recursive and type-blind: the guide shape has grown several
+// times this month, and a hand-listed set of fields would miss the next one.
+export const stripDashesDeep = (value) => {
+  if (typeof value === "string") return stripDashes(value);
+  if (Array.isArray(value)) return value.map(stripDashesDeep);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      // Keys beginning with _ are machinery, not prose: coordinates, cached
+      // durations, the raw conversation. Leave them exactly as they are.
+      out[k] = k.startsWith("_") ? v : stripDashesDeep(v);
+    }
+    return out;
+  }
+  return value;
+};
