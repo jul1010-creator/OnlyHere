@@ -48,6 +48,7 @@ writeFileSync(entry, `
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
 `);
 const esbuild = [
   join(root, "node_modules/.bin/esbuild"),
@@ -337,6 +338,32 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // A pasted fact-check with no covering sentence is still a correction.
   const paste = "Inaccuracies to correct. ".repeat(20) + " the nearestStation field should be Aarhus H";
   is("a long paste with no instruction still corrects", M.routeMessage(paste), "correct");
+}
+
+// ── the prompts survived being moved out of App.jsx (PASS 63) ──────
+// 37 KB of prompt text was lifted out of generateArea verbatim. These are the
+// invariants that would break if a future edit quietly damaged one: a prompt
+// that silently loses the voice rules, or stops asking for JSON, or starts
+// interpolating the wrong thing, still LOOKS fine and produces worse drafts for
+// weeks before anyone notices.
+{
+  const TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightTown", "booking"];
+  const p = M.studioPrompts("Aarhus Festuge");
+  is("all eight draft types still have a prompt", Object.keys(p).sort(), TYPES.slice().sort());
+  TYPES.forEach(t => {
+    ok(`${t} still carries the voice rules`, p[t].includes("NEVER USE THE EM DASH"));
+    ok(`${t} still demands strict JSON`, /Respond with ONLY strict JSON/.test(p[t]));
+    ok(`${t} interpolates the real name`, p[t].includes("Aarhus Festuge"));
+  });
+  ok("the town prompt still refuses the copied example coordinate", /NEVER copy a number out of this schema/.test(p.town));
+  ok("the town prompt still bans a guessed travel time", /never guess/.test(p.town));
+
+  // A name carrying a quote and a backtick must come through the JSON-escaping
+  // helper intact, or the model is handed broken JSON to copy into its answer.
+  const q = String.fromCharCode(34), tick = String.fromCharCode(96), apos = String.fromCharCode(39);
+  const trickyName = "Chickie" + apos + "s " + q + "Best" + q + " " + tick + "Bar" + tick;
+  const tricky = M.studioPrompts(trickyName);
+  ok("a quoted name is JSON-escaped into the schema", tricky.food.includes('"name": ' + JSON.stringify(trickyName)));
 }
 
 rmSync(dir, { recursive: true, force: true });

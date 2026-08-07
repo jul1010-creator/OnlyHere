@@ -1,3 +1,21 @@
+# PASS 63b: the prompts came out of App.jsx
+
+`generateArea` carried 37 KB of prompt text inline, which is most of the reason the one function that matters most in the app was unreadable. It now lives in `src/utils/studioPrompts.js`.
+
+**Safe to move because the dependency surface turned out to be tiny.** Across all eight prompts there are exactly three interpolations: `${name}`, `${J(name)}` and `${STUDIO_VOICE}`, and the last two were already imported from studioContent. So it is a pure function of the entry name. It reads no component state, so there is no closure to go stale.
+
+**Verified, not assumed.** Both versions were built and all eight strings compared byte for byte against the pre-split originals, across five names including one carrying a single quote, a double quote, a backtick, a backslash and a literal `${x}`. Identical. `tests/run.mjs` now checks the invariants that would break quietly on a future edit: all eight types still present, each still carries the voice rules, each still demands strict JSON, each interpolates the real name, the town prompt still refuses the copied example coordinate, and a name with quotes still comes through the JSON escaper intact.
+
+**146 tests passing**, up from 118.
+
+## One thing I found and deliberately did not fix
+
+Now that the prompts sit in their own file it is easy to count: **they contain 110 em and en dashes.**
+
+That is the same bug already fixed once in `STUDIO_VOICE`, which contained 41 of them inside the rule that bans them. The model reads its instructions and sees counter-examples.
+
+I have not touched it. It is 37 KB of prompt text, a mass replace changes drafting behaviour across every content type at once, and you are asleep and cannot review it. It belongs in a pass where you are awake, done one content type at a time, with a dash-count test added per prompt exactly like the one guarding STUDIO_VOICE. It is the first item in the handoff.
+
 # PASS 63: an assistant that follows you, and the ferry that was never required
 
 Three things, and they turned out to be the same thing.
