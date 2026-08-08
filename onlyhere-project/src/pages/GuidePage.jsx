@@ -12,6 +12,7 @@ import { askClaude } from "../utils/aiClient";
 import { testTravelerLine } from "../utils/helpers";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
+import { shareMessage, shareTitle } from "../utils/share";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
 // The ONLY place a guide is ever shown, per Oliver ("get rid of the popup") —
@@ -127,6 +128,87 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   const [saveError, setSaveError] = useState(null);
   const isUnsaved = !!freshGuide && !guideId;
 
+  // ── SENDING IT TO SOMEBODY ────────────────────────────────────
+  // Oliver, 8 Aug 2026, after the competitor research: "Aight, let's try!" —
+  // sharing was the first of the four things worth taking from the rest of the
+  // category. Wanderlog's most praised feature is collaboration; G8Trip won its
+  // own bake-off on coordinating four people. Almost nobody plans a trip alone.
+  //
+  // What was here before was a "Copy link ↗" button that called
+  // navigator.clipboard.writeText and said NOTHING afterwards — no toast, no
+  // state change, no error if the browser refused. Clicking it and clicking a
+  // dead button were the same experience, so there was no way to learn which
+  // one you had done. Every path below reports what happened.
+  // ── OPENING THE PANEL ON THE TRANSITION, NOT AT MOUNT ─────────
+  // useState(justSaved) was wrong in both directions, and wrong in the useful
+  // one. saveGuide navigates /guide/new → /guide/:id WITHOUT unmounting this
+  // component (that is what the liveGuide comment below is about), so the
+  // initialiser had already run with justSaved false and the panel never opened
+  // on the one path that sets it. Meanwhile history.state SURVIVES A RELOAD, so
+  // pressing F5 on the guide an hour later remounted with justSaved true and
+  // announced "Saved." all over again. The only case it fired was the wrong one.
+  //
+  // Same class of bug as keptAlready below, which reads guideId. Anything
+  // derived from route state in here needs an effect, not an initialiser.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  useEffect(() => {
+    if (!location.state?.justSaved) return;
+    setShareOpen(true);
+    setJustSaved(true);
+    // Consume it: replace the history entry with the same guide and no flag, so
+    // a reload shows the guide rather than re-announcing the save. The guide
+    // stays in state, so nothing refetches. Re-running this effect is harmless
+    // because the flag it keys on is now gone.
+    navigate(location.pathname, { replace: true, state: { guide: location.state.guide } });
+  }, [location]);
+  const [copied, setCopied] = useState(null);
+  const urlRef = useRef(null);
+  const copyTimer = useRef(null);
+  // Read once: navigator.share disappearing mid-session is not a thing, and
+  // reading it during render on every keystroke is pointless work.
+  const [canSend] = useState(() => typeof navigator !== "undefined" && typeof navigator.share === "function");
+  // Built from the id this page is actually showing, on the origin it is
+  // actually running on. Not window.location.href, which would carry whatever
+  // query string the person happened to arrive with; not a hardcoded domain,
+  // which would send somebody testing on localhost to production.
+  const shareUrl = typeof window === "undefined" ? ""
+    : guideId ? `${window.location.origin}/guide/${guideId}`
+      : window.location.origin + window.location.pathname;
+
+  const copyLink = async () => {
+    clearTimeout(copyTimer.current);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("no clipboard api");
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied("done");
+      // "✓ Copied" is a confirmation and has a job that is finished in two
+      // seconds. The refusal message below is an instruction, so it STAYS —
+      // clearing it on a timer left somebody reading it halfway through with a
+      // Copy button that had visibly done nothing, which is the exact dead end
+      // this whole change set out to remove. Timer is held in a ref so a second
+      // click cannot have its confirmation cancelled by the first one's timeout.
+      copyTimer.current = setTimeout(() => setCopied(null), 2600);
+    } catch {
+      // An insecure context, an old browser, or a refused permission. Select
+      // the field so the link is one keystroke away instead of telling somebody
+      // it failed and leaving them there.
+      try { urlRef.current?.select(); } catch { /* ignore */ }
+      setCopied("manual");
+    }
+  };
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
+
+  const sendLink = async () => {
+    if (!canSend) return copyLink();
+    try {
+      await navigator.share({ title: shareTitle(guide), text: shareMessage(guide), url: shareUrl });
+    } catch {
+      // Closing the share sheet throws AbortError. A person changing their mind
+      // is not an error and must not surface as one.
+    }
+  };
+
   // App.jsx's generateGuide navigates here as soon as a guide first exists, then
   // keeps enriching it in the background (exact travel times, weather, where to
   // stay) via the same object, identified by _gid. GemlyxApp never unmounts
@@ -189,6 +271,30 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
     try { return JSON.parse(localStorage.getItem("gemlyx_saved_places") || "[]"); } catch { return []; }
   });
   const isPlaceSaved = (kind, id) => savedPlaces.some(p => p.kind === kind && p.id === id);
+
+  // "Your Saved Guides" on the home page reads this list. saveGuide writes to
+  // it, but saveGuide only runs for the person who BUILT the trip — so the
+  // friend who opened the link had nowhere to put it. Same list, same shape.
+  const keptCheck = (id) => {
+    try { return JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]").some(g => g && g.id === id); }
+    catch { return false; }
+  };
+  // Initialised AND re-checked, because guideId changes under this component:
+  // the page starts life at /guide/new with no id, and saveGuide navigates it
+  // to /guide/:id without unmounting. Read only at mount, this said "＋ Keep"
+  // to the very person who had just saved the guide.
+  const [keptAlready, setKeptAlready] = useState(() => keptCheck(guideId));
+  useEffect(() => { setKeptAlready(keptCheck(guideId)); }, [guideId]);
+  const keepGuide = () => {
+    if (!guide || !guideId) return;
+    try {
+      const list = JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]");
+      if (list.some(g => g && g.id === guideId)) { setKeptAlready(true); return; }
+      const updated = [{ id: guideId, title: guide.title, days: guide.days, savedAt: new Date().toISOString() }, ...list].slice(0, 20);
+      localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated));
+      setKeptAlready(true);
+    } catch { /* a full or blocked localStorage is not worth an error message here */ }
+  };
   const toggleSavePlace = (kind, item, townName) => {
     setSavedPlaces(prev => {
       const exists = prev.some(p => p.kind === kind && p.id === item.id);
@@ -248,7 +354,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
         const updated = [{ id, title: guide.title, days: guide.days, savedAt: new Date().toISOString() }, ...bookmarks].slice(0, 20);
         localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated));
       } catch { /* bookmark list is a convenience, never block the real save over it */ }
-      navigate(`/guide/${id}`, { replace: true });
+      // The guide travels WITH the navigation for two reasons. It skips the
+      // refetch-from-Supabase flash on a page the person has been staring at
+      // for a minute already, and justSaved opens the share panel — the moment
+      // somebody actually wants to send a trip is the second it becomes real,
+      // not whenever they think to look for a button.
+      navigate(`/guide/${id}`, { replace: true, state: { guide, justSaved: true } });
     } catch {
       setSaveError("Couldn't save this guide — check your connection and try again.");
     }
@@ -380,12 +491,87 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           ‹ Back
         </button>
         {!isUnsaved && (
-          <button onClick={() => navigator.clipboard?.writeText(window.location.href)}
-            style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-            Copy link ↗
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {/* Someone who opened a link a friend sent them had no way to keep
+                it: the bookmark into "Your Saved Guides" only ever happened
+                inside saveGuide, which only the person who BUILT the trip runs.
+                A shared guide that the recipient cannot keep is a dead end. */}
+            {guideId && !keptAlready && (
+              <button onClick={keepGuide}
+                style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+                ＋ Keep
+              </button>
+            )}
+            {guideId && keptAlready && (
+              <span style={{ color: C.muted, fontSize: 12.5, fontWeight: 700, padding: "8px 4px" }}>✓ Kept</span>
+            )}
+            <button onClick={() => setShareOpen(o => !o)}
+              style={{ background: shareOpen ? C.surface : "none", border: `1px solid ${shareOpen ? C.gold + "77" : C.border}`, color: shareOpen ? C.gold : C.light, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+              Share ↗
+            </button>
+          </div>
         )}
       </div>
+
+      {/* ── THE SHARE PANEL ──────────────────────────────────────────
+          Under the header rather than floating over it: a dropdown here would
+          have to win a z-index argument with the sticky bar, the chat launcher
+          and the save bar, all of which already collided once (see the PASS 27
+          comment further down). Pushing the page down cannot collide with
+          anything. */}
+      {shareOpen && !isUnsaved && (
+        <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ maxWidth: 960, margin: "0 auto", padding: "18px 16px 20px" }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>
+              {justSaved ? "Saved. This link is your guide." : "Send this to whoever you're travelling with."}
+            </div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 13, maxWidth: 520 }}>
+              Anyone with the link can open it, on any device. Nobody needs an account, and it does not expire.
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              {/* The FULL url including https://, not a prettified one. When
+                  the clipboard is refused, this field is what a person copies
+                  by hand, and a scheme-less link pasted into an email body is
+                  not always linkified. */}
+              <input ref={urlRef} readOnly value={shareUrl}
+                onFocus={e => e.target.select()}
+                style={{ flex: "1 1 260px", minWidth: 0, background: C.bg, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "10px 16px", fontSize: 12.5, fontFamily: "'Inter', sans-serif" }} />
+              <button onClick={copyLink}
+                style={{ background: copied === "done" ? C.gold : "none", border: `1px solid ${copied === "done" ? C.gold : C.border}`, color: copied === "done" ? C.onGold : C.light, borderRadius: 100, padding: "10px 18px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                {copied === "done" ? "✓ Copied" : "Copy link"}
+              </button>
+              {canSend && (
+                <button onClick={sendLink}
+                  style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, color: "#fff", border: "none", borderRadius: 100, padding: "10px 20px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                  Send ↗
+                </button>
+              )}
+            </div>
+            {/* The clipboard can be refused: an insecure context, an old
+                browser, a denied permission. Saying nothing is what the old
+                button did. Naming it, and pointing at the link that is now
+                selected, is the difference between a failure and a dead end.
+                Not "press Ctrl+C" — half the people reading this are on a Mac. */}
+            {copied === "manual" && (
+              <div style={{ fontSize: 12, color: C.gold, marginTop: 9 }}>
+                Your browser wouldn't let the page copy for you. The link is selected above, so copy it by hand.
+              </div>
+            )}
+            {/* Desktop has no share sheet, and "copy it then go and find the
+                app yourself" is where a share flow loses people. These two
+                cover almost everything a trip actually gets sent through. */}
+            {!canSend && (
+              <div style={{ display: "flex", gap: 14, marginTop: 12 }}>
+                <a href={`https://wa.me/?text=${encodeURIComponent(`${shareMessage(guide)} ${shareUrl}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>WhatsApp ↗</a>
+                <a href={`mailto:?subject=${encodeURIComponent(shareTitle(guide))}&body=${encodeURIComponent(`${shareMessage(guide)}\n\n${shareUrl}`)}`}
+                  style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>Email ↗</a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "36px 16px 28px" }}>
         {/* Redesign pass: kicker + roomier title, and the essentials box became a

@@ -7,6 +7,38 @@
     <title>Gemlyx — It exists nowhere else.</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+
+    <!-- ── WHAT A GEMLYX LINK LOOKS LIKE WHEN SOMEBODY PASTES IT ──────────
+         Until 8 Aug 2026 there was nothing here at all, so every Gemlyx URL
+         ever shared — a guide, a town, the front page — arrived in WhatsApp,
+         iMessage, Slack or Discord as a bare grey link with no title, no
+         picture and no description. None of those apps run JavaScript; they
+         read these tags and nothing else. This is the baseline card for every
+         page of the site. A saved guide gets its own, built from the guide,
+         by api/guide-preview.js.
+
+         og:image MUST be an absolute URL — the crawler fetches it in a
+         separate request with no page context, so a relative path silently
+         produces a card with no picture. The domain is written once in
+         src/config.js as SITE_ORIGIN and tests/run.mjs checks that this line
+         still agrees with it, so changing the domain fails a test instead of
+         quietly killing every preview. -->
+    <meta name="description" content="Denmark past the three days everybody spends in Copenhagen. Towns, workshops and nights out, each one checked against the place's own sources before it is printed." />
+    <link rel="canonical" href="https://only-here-three.vercel.app/" />
+    <meta property="og:site_name" content="Gemlyx" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://only-here-three.vercel.app/" />
+    <meta property="og:title" content="Gemlyx — It exists nowhere else." />
+    <meta property="og:description" content="Denmark past the three days everybody spends in Copenhagen. Towns, workshops and nights out, each one checked against the place's own sources before it is printed." />
+    <meta property="og:image" content="https://only-here-three.vercel.app/og-default.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Gemlyx" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Gemlyx — It exists nowhere else." />
+    <meta name="twitter:description" content="Denmark past the three days everybody spends in Copenhagen. Towns, workshops and nights out, each one checked against the place's own sources before it is printed." />
+    <meta name="twitter:image" content="https://only-here-three.vercel.app/og-default.jpg" />
+
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { background: #0A0F1E; }

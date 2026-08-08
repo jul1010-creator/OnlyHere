@@ -54,7 +54,18 @@ export const HowWeKnow = ({ item }) => {
   const official = isLink(item.website) ? item.website : null;
 
   // Nothing real to show means nothing shown. See rule 1 above.
-  if (corrections.length === 0 && uncertainties.length === 0 && !official) return null;
+  // ── THE OTHER PAGES THE RESEARCH ACTUALLY OPENED ─────────────────
+  // "showing 1 source.. lmao." His words, and he is right: the paragraph above
+  // claims entries are checked against primary sourceS and then produced one
+  // link. Every page the pipeline opened for this place now travels on the
+  // entry as __sources, minus aggregators and minus the official site, which
+  // has its own line. Absent on everything published before 8 Aug, so this
+  // renders nothing rather than an empty heading.
+  const officialHost = official ? hostOf(official) : null;
+  const sources = (Array.isArray(item.__sources) ? item.__sources : [])
+    .filter(u => isLink(u) && hostOf(u) !== officialHost);
+
+  if (corrections.length === 0 && uncertainties.length === 0 && !official && sources.length === 0) return null;
 
   // The most recent thing that actually happened to this entry. `verified` is
   // the festival stamp written at draft time; a correction is newer and more
@@ -106,6 +117,20 @@ export const HowWeKnow = ({ item }) => {
                 style={{ fontSize: 12.5, color: C.gold, fontWeight: 700, textDecoration: "none", wordBreak: "break-word" }}>
                 {hostOf(official)} ↗
               </a>
+            </div>
+          )}
+
+          {sources.length > 0 && (
+            <div style={{ marginBottom: uncertainties.length || corrections.length ? 16 : 0 }}>
+              <div style={label}>Also checked</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 10px" }}>
+                {sources.map((u, i) => (
+                  <a key={i} href={u} target="_blank" rel="noreferrer"
+                    style={{ fontSize: 11.5, color: C.light, textDecoration: "none", borderBottom: `1px solid ${C.border}`, wordBreak: "break-word" }}>
+                    {hostOf(u)} ↗
+                  </a>
+                ))}
+              </div>
             </div>
           )}
 

@@ -367,27 +367,47 @@ export const factsIn = (text) => {
     .filter(Boolean)
     .forEach(m => out.add(m));
   (t.match(LINK) || []).forEach(m => out.add(m.toLowerCase().replace(/[.,;:]+$/, "")));
-  (t.match(NAME) || []).forEach(m => {
-    const stripped = m.replace(LEADING, "").trim();
-    // A single leftover word only counts as a name when it is long enough to
-    // be one. "Open" and "See" are not places.
+  // ── A CAPITALISED WORD OPENING A SENTENCE IS NOT A NAME ────
+  // Found by testing the edit path end to end on 8 Aug. The whoFor field read
+  // "Anyone with an hour to spare around midday", and EVERY rewrite of it was
+  // refused for "dropping anyone", because Anyone is capitalised, longer than
+  // six letters and sits at the start of a sentence, so it counted as a proper
+  // noun. Families, Visitors, Everyone and Sunday all do the same. That one
+  // rule was quietly rejecting most honest rewrites of most fields.
+  //
+  // A single capitalised word only counts when it appears MID-SENTENCE, where
+  // English has no other reason to capitalise it. A multi-word run still counts
+  // anywhere, because "Roskilde Domkirke" is a name wherever it falls.
+  for (const m of t.matchAll(NAME)) {
+    const stripped = m[0].replace(LEADING, "").trim();
+    if (!stripped) continue;
     const words = stripped.split(/\s+/).filter(Boolean);
-    if (!stripped) return;
-    if (words.length === 1 && stripped.length < 6) return;
+    if (words.length === 1) {
+      if (stripped.length < 6) continue;
+      // What comes before it in the raw text, ignoring the whitespace.
+      const before = t.slice(0, m.index).replace(/\s+$/, "");
+      const opensSentence = before === "" || /[.!?:;]$/.test(before) || /^\s*[-*•]/.test(t.slice(0, m.index));
+      if (opensSentence) continue;
+    }
     out.add(stripped.toLowerCase());
-  });
+  }
   return out;
 };
 
 // Returns what went missing and what appeared from nowhere. Empty on both
 // counts is the only result that lets a rewrite through.
-export const factsPreserved = (before, after) => {
+export const factsPreserved = (before, after, opts = {}) => {
   const a = factsIn(before), b = factsIn(after);
   const lost = [...a].filter(x => !b.has(x));
   // A NEW number or link is as bad as a lost one: it is an invention wearing
   // the clothes of an edit. New proper names are allowed, since a rewrite may
   // legitimately name a street the original described.
-  const invented = [...b].filter(x => !a.has(x) && /\d|https?:|\.(dk|com|org|net|eu)\b/i.test(x));
+  //
+  // `source`, when given, is the whole entry, and it widens what counts as
+  // already known. A rewrite may move a fact between fields; it may not conjure
+  // one the entry has never contained.
+  const known = opts.source ? factsIn(opts.source) : a;
+  const invented = [...b].filter(x => !a.has(x) && !known.has(x) && /\d|https?:|\.(dk|com|org|net|eu)\b/i.test(x));
   return { ok: lost.length === 0 && invented.length === 0, lost, invented };
 };
 
@@ -644,6 +664,26 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
 // This is the other half: no verification, because no fact is in dispute, and
 // in its place a hard guard that no fact MOVED. Claude does the writing, as it
 // does everywhere in this project.
+// ── WHAT AN EDIT IS ALLOWED TO TOUCH ────────────────────────────────
+// Found in the same test run: "rename nothing, just tighten the writing"
+// resolved to the `name` field, because resolveField matches a key as a
+// substring of the instruction and "rename" contains "name". "make it less
+// stereotypical" contains "type". "See the price" contains "price". Every short
+// key in the schema is a word fragment of ordinary English, so an editorial
+// instruction could rewrite an entry's identity, its category, or a glance
+// value that is supposed to be a verified fact.
+//
+// An edit is for PROSE. Anything a resolver comes back with that is not a
+// writing field is treated as if it resolved to nothing, which falls through to
+// the prose fields the entry actually has.
+export const EDITABLE_FIELDS = new Set([
+  "desc", "intro", "body",
+  "special", "whoFor", "whoItsFor", "whoItsForText", "realityCheck",
+  "atmosphere", "whatToDo", "gettingThereReality", "characterAndFit",
+  "howItsMade", "vibeLocation", "afterDark", "beforeDark", "bestTime",
+  "whenEnter", "highlight", "gemlyxFind", "thingsToKnow", "accommodationTip",
+]);
+
 export const editEntry = async ({ entry, instruction, deps }) => {
   const { askClaude, voice, onStage } = deps || {};
   const stage = (label, percent) => { try { onStage?.({ label, percent }); } catch { /* UI only */ } };
@@ -654,11 +694,28 @@ export const editEntry = async ({ entry, instruction, deps }) => {
   // shorter" must not be allowed to rewrite nearestStation into something
   // prettier, because a glance field is a value and not a sentence.
   stage("Working out what to rewrite", 15);
-  const named = resolveField(entry, instruction);
+  const resolved = resolveField(entry, instruction);
+  // NAMING A FACT FIELD IS A REFUSAL, NOT A FALLBACK. The first version let it
+  // fall through to the prose fields, so "shorten the ticketsGlance" quietly
+  // rewrote the description instead. Rewriting something the person did not ask
+  // about is worse than doing nothing, and it is the kind of wrong that only
+  // gets noticed after it is published.
+  if (resolved && !EDITABLE_FIELDS.has(resolved)) {
+    return { error: `"${resolved}" holds a verified value, not writing, so a style note is the wrong tool for it. Correct it instead, for example: the ${resolved} is wrong, it should be X.` };
+  }
+  const named = resolved || null;
+  // BUG 4: blogBody was in the fallback list. It is an array of {type, text}
+  // blocks that the publish step BUILDS from the prose fields, so rewriting it
+  // from a style instruction reshapes the rendered article and is then thrown
+  // away at publish. Never a target.
   const targets = named
     ? [named]
-    : PROSE_FIELDS.filter(f => f in entry && entry[f] != null && entry[f] !== "");
-  if (targets.length === 0) return { error: "I could not tell which part you meant. Name the field, for example \"rewrite the realityCheck\"." };
+    : PROSE_FIELDS.filter(f => f !== "blogBody" && EDITABLE_FIELDS.has(f) && f in entry && entry[f] != null && entry[f] !== "");
+  if (targets.length === 0) {
+    return { error: resolved
+      ? `"${resolved}" is a fact field, not writing, so I will not rewrite it from a style note. Correct it instead, for example: the ${resolved} is wrong, it should be X.`
+      : "I could not tell which part you meant. Name the field, for example \"rewrite the realityCheck\"." };
+  }
 
   const patched = { ...entry };
   const changed = [];
@@ -667,8 +724,13 @@ export const editEntry = async ({ entry, instruction, deps }) => {
   for (let i = 0; i < targets.length; i++) {
     const field = targets[i];
     const current = entry[field];
-    if (current == null || current === "") continue;
-    stage(`Rewriting ${field}`, 20 + Math.round((i / targets.length) * 70));
+    if (current == null) continue;
+    // AN EMPTY FIELD IS THE POINT, NOT A REASON TO SKIP. This used to `continue`
+    // on an empty string, so asking for a reality check on an entry that has
+    // none did nothing at all and reported nothing. That is now the single most
+    // common thing to ask for, since four types only just gained the field.
+    const writingFresh = current === "" || (Array.isArray(current) && current.length === 0);
+    stage(`${writingFresh ? "Writing" : "Rewriting"} ${field}`, 20 + Math.round((i / targets.length) * 70));
 
     const res = await askClaude(EDIT_PROMPT(field, current, instruction, voice), 1400);
     if (res?.error || !res?.text) { refused.push({ field, reason: "the rewrite call failed" }); continue; }
@@ -685,7 +747,18 @@ export const editEntry = async ({ entry, instruction, deps }) => {
     // and SAID SO, rather than quietly kept because it reads better.
     const beforeText = typeof current === "string" ? current : JSON.stringify(current);
     const afterText = typeof next === "string" ? next : JSON.stringify(next);
-    const check = factsPreserved(beforeText, afterText);
+    // Writing an empty field has nothing to preserve, so the question changes
+    // from "did a fact move" to "did a fact come from nowhere". The rest of the
+    // entry is the allowed source: moving a price out of ticketsGlance and into
+    // the prose is fine, inventing one is not.
+    // LOST is measured against the field, INVENTED against the whole entry.
+    // Moving a price out of ticketsGlance and into the prose is a legitimate
+    // edit; conjuring one that appears nowhere in the entry is not. Measuring
+    // invention against the field alone refused "mention the price in the
+    // description", which is a perfectly reasonable thing to ask for.
+    const check = writingFresh
+      ? factsPreserved(afterText, afterText, { source: JSON.stringify(entry) })
+      : factsPreserved(beforeText, afterText, { source: JSON.stringify(entry) });
     if (!check.ok) {
       refused.push({
         field,

@@ -386,7 +386,7 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
               <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
                 {studioMode
                   ? `Tell me what is wrong and what is right, in your own words. "Fact-checkers say the station is wrong, it is really Aarhus H" is enough, you do not have to say "correct it". Every claim gets checked before a word changes. A source that contradicts you wins and I will say so, and nothing settling it does not block you: if you gave me the value, it goes in marked as yours.`
-                  : `Ask me anything about this page. I answer from what is actually stored, and if the entry does not say, I will look it up and show you the source. Nothing here changes the page: corrections happen in Studio, on the draft.`}
+                  : `Anything I can help you with about ${target?.name || "this place"}? Ask away.`}
               </div>
             )}
             {log.map((l, i) => (

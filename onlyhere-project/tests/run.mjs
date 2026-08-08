@@ -47,15 +47,18 @@ writeFileSync(entry, `
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
-  export { looksLikeTransit, kindFromName, findRealNearestStop } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
+  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { stopKind, tripScaleLine, tripCharacter, bookingActions } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
+  export { buildPreviewHtml, injectMeta, default as guidePreview } from ${JSON.stringify(join(root, "api/guide-preview.js"))};
+  export { SITE_ORIGIN } from ${JSON.stringify(join(root, "src/config.js"))};
 `);
 const esbuild = [
   join(root, "node_modules/.bin/esbuild"),
@@ -1001,6 +1004,307 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The one that made the old rule toothless: a criticism immediately balanced
   // by a positive reads as marketing.
   ok("and it forbids pre-cushioning the criticism", /pre-cushioned|immediately balancing/i.test(prompts));
+}
+
+// ── the draft rewrite, tested end to end ───────────────────────────
+// Oliver, 8 Aug 2026: "Can you please test if the AI client on the draft
+// properly edits the draft? Check for any bugs among it." It did not, and
+// running it against a realistic draft with a stubbed writer found seven.
+{
+  const DRAFT = {
+    name: "Amalienborg Slot", city: "Copenhagen", type: "Royal palace",
+    desc: "Four rococo palaces around an octagonal square. The square is free; the museum charges.",
+    ticketsGlance: "125 DKK online, 135 at the door", nearestStation: "Marmorkirken",
+    special: "The octagonal square feels like an outdoor room.",
+    whoFor: "Anyone with an hour to spare around midday and a soft spot for pageantry.",
+    realityCheck: "",
+    thingsToKnow: ["The noon guard change pulls a crowd, get there by 11:45."],
+    blogBody: [{ type: "h", text: "Being There" }],
+  };
+  const writer = (text) => async () => ({ text });
+  const edit = (instruction, text) => M.editEntry({ entry: DRAFT, instruction, deps: { askClaude: writer(text) } });
+
+  // BUG 1, THE WORST ONE. "Anyone" is capitalised, over six letters, and opens
+  // the sentence, so it counted as a proper noun and EVERY rewrite of whoFor
+  // was refused for "dropping anyone". Families, Visitors, Everyone and Sunday
+  // all did the same, which quietly rejected most honest rewrites of most
+  // fields. A single capitalised word only counts mid-sentence now.
+  ok("a sentence-opening capital is not a name", !M.factsIn("Anyone with an hour to spare.").has("anyone"));
+  ok("but the same word mid-sentence is", M.factsIn("Good for Anyone really").has("anyone"));
+  ok("and a multi-word name counts wherever it falls", M.factsIn("Roskilde Domkirke is old.").has("roskilde domkirke"));
+  const clean = await edit("rewrite the whoFor, it is bland", "For anyone near the square at noon. Skip it otherwise.");
+  is("an honest rewrite is applied", clean.changed, ["whoFor"]);
+
+  // BUG 2. Markdown fences round the reply used to survive into the comparison.
+  const fenced = await edit("rewrite the whoFor", "```\nFor anyone near the square at noon.\n```");
+  is("a fenced reply is unwrapped, not refused", fenced.changed, ["whoFor"]);
+
+  // BUG 3. Every short key in the schema is a fragment of ordinary English, so
+  // "rename nothing" resolved to `name` and "shorten the ticketsGlance" would
+  // have rewritten the description instead. Naming a fact field is a refusal.
+  const renamed = await edit("rename nothing, just tighten the writing", "X");
+  ok("a style note may not rewrite the entry's name", /name.*verified value/.test(renamed.error || ""));
+  const glance = await edit("shorten the ticketsGlance", "X");
+  ok("nor a glance value", /ticketsGlance.*verified value/.test(glance.error || ""));
+  ok("and it never silently rewrites something else instead", !glance.changed);
+  ok("prose fields are editable", M.EDITABLE_FIELDS.has("realityCheck") && M.EDITABLE_FIELDS.has("desc"));
+  ok("identity and glance fields are not", !M.EDITABLE_FIELDS.has("name") && !M.EDITABLE_FIELDS.has("nearestStation") && !M.EDITABLE_FIELDS.has("website"));
+
+  // BUG 4. blogBody is built FROM the prose fields at publish, so rewriting it
+  // reshapes the article and is then discarded. It was in the fallback list.
+  const vague = await edit("this is too wordy", "Rewritten.");
+  ok("a vague instruction never targets blogBody", !vague.targets.includes("blogBody"));
+
+  // BUG 5. An empty field used to be skipped silently, which is now the single
+  // most common thing to ask for: four types only just gained realityCheck.
+  const fresh = await edit("write the realityCheck", "Away from noon this is a handsome empty square.");
+  is("an empty field is written, not skipped", fresh.changed, ["realityCheck"]);
+
+  // BUG 6. Invention was measured against the FIELD, so "mention the price in
+  // the desc" was refused for inventing a price the entry already held.
+  const moved = await edit("mention the price in the desc",
+    "Four rococo palaces around an octagonal square. The square is free; the museum is 125 DKK online, 135 at the door.");
+  is("moving a fact between fields is allowed", moved.changed, ["desc"]);
+  // But conjuring one the entry has never contained is not.
+  const conjured = await edit("rewrite the desc", "Four rococo palaces, built in 1750 for 4000 kr.");
+  is("a fact from nowhere is refused", conjured.changed, []);
+  ok("and the refusal names it", /1750|4000/.test(JSON.stringify(conjured.refused)));
+
+  // BUG 7. A list field that comes back as prose is refused rather than saved.
+  const wrongShape = await edit("rewrite the thingsToKnow", "Just a sentence, not an array.");
+  is("a list that comes back as prose is refused", wrongShape.changed, []);
+}
+
+// ── "Logistik-Optimering v/Bo Trygve Mortensen" ────────────────────
+// Oliver, 8 Aug: that shipped as a nearestStation. It is a freight consultancy
+// named after the man who runs it. The old guard was a BLOCKLIST of non-transit
+// words, so anything not on the list walked through, and the list of things
+// that are not a bus stop cannot be finished. Google already answers this.
+{
+  const t = M.hasTransitType;
+  is("a company is not a stop", t({ types: ["moving_company", "point_of_interest", "establishment"] }), false);
+  is("a shop is not a stop", t({ types: ["grocery_store", "store"] }), false);
+  is("a station is", t({ types: ["train_station", "transit_station"], primaryType: "train_station" }), true);
+  is("a ferry terminal is", t({ types: ["ferry_terminal"] }), true);
+  is("a bus stop is", t({ types: ["bus_stop"] }), true);
+  // NEVER CONCLUDE FROM A MISSING LOOKUP. No types means not told, which falls
+  // back to reading the name rather than rejecting a real stop.
+  is("no types means unknown, not rejected", t({ name: "Ribe Station", types: [] }), null);
+  is("and no place at all is unknown too", t(null), null);
+}
+
+
+// ── SENDING A TRIP TO SOMEBODY ─────────────────────────────────────
+// Oliver, 8 Aug 2026: "Aight, let's try!" — sharing, the first of the four
+// things the competitor research said were worth taking from the rest of the
+// category. Every word of the share copy is COUNTED from the plan, never
+// written, so all of it is testable and none of it can drift into something
+// that reads well and is not true. It goes out in a message to somebody else's
+// phone, where it cannot be corrected afterwards.
+{
+  const { shareSummary, shareMessage, shareTitle, metaDescription, routeTowns, countStops, orderedStops, hasMeasuredTravel, escapeHtml } = M;
+  const guide = {
+    title: "Islands & Harbours of South Funen",
+    days: [
+      { day: 1, stops: [{ name: "Ærøskøbing", town: "Ærøskøbing" }, { name: "Ærø Bryggeri", town: "Ærøskøbing" }] },
+      { day: 2, stops: [{ name: "Svendborg Havn", town: "Svendborg" }] },
+      { day: 3, stops: [{ name: "Egeskov Slot", town: "Kværndrup" }, { name: "Odense Domkirke", town: "Odense" }] },
+    ],
+  };
+  is("each town appears once, in order", routeTowns(guide), ["Ærøskøbing", "Svendborg", "Kværndrup", "Odense"]);
+  is("stops are counted across days", countStops(guide), 5);
+  is("and flattened in travel order", orderedStops(guide).map(s2 => s2.name)[4], "Odense Domkirke");
+  is("the summary is counted, not written", shareSummary(guide), "3 days, 5 stops, Ærøskøbing to Odense");
+  ok("the message leads with the title", shareMessage(guide).startsWith("Islands & Harbours of South Funen — "));
+
+  // ALL OR NOTHING, the same rule tripShape follows. A day count with no stops
+  // behind it is a number, not a trip.
+  is("days with no stops says nothing", shareSummary({ days: [{ day: 1, stops: [] }] }), null);
+  is("no guide at all says nothing", shareSummary(null), null);
+  is("and the message falls back to the title", shareMessage({ title: "Five days in Jutland", days: [] }), "Five days in Jutland");
+  is("an untitled guide still has a name", shareTitle({}), "A Denmark guide");
+
+  // A stop with no name is not a stop, in every function. These disagreed once:
+  // countStops required a name and routeTowns did not, so a malformed day could
+  // put a town in the route that contributed nothing to the count.
+  const halfStop = { days: [{ day: 1, stops: [{ name: "Ribe Domkirke", town: "Ribe" }, { town: "Nowhere" }] }] };
+  is("a nameless stop is not counted", countStops(halfStop), 1);
+  is("and does not reach the route either", routeTowns(halfStop), ["Ribe"]);
+
+  // ── A ROUND TRIP DOES NOT END WHERE THE DEDUPED LIST ENDS ────────
+  // routeTowns names each town once, so its last entry is the last town FIRST
+  // REACHED, not the last town of the trip. Almost every Denmark trip flies in
+  // and out of Copenhagen, so almost every share message said "Copenhagen to
+  // Odense" about a trip that starts and ends in Copenhagen. Naming the wrong
+  // endpoint is not a shortened truth like dropping the middle towns.
+  const loop = { title: "A week from Copenhagen", days: [
+    { day: 1, stops: [{ name: "Nyhavn", town: "Copenhagen" }] },
+    { day: 2, stops: [{ name: "Odense Domkirke", town: "Odense" }] },
+    { day: 3, stops: [{ name: "Assistens Kirkegård", town: "Copenhagen" }] },
+  ] };
+  is("a round trip is named as one", shareSummary(loop), "3 days, 3 stops, a loop from Copenhagen");
+  is("one town is just that town", shareSummary({ days: [{ day: 1, stops: [{ name: "Rundetaarn", town: "Copenhagen" }] }] }), "1 day, 1 stop, Copenhagen");
+
+  // ── THE CARD MUST NOT CLAIM WHAT THE GUIDE DOES NOT HAVE ─────────
+  // A "simple guide" is built deliberately without transport times (lightMode
+  // on GuidePage), and the first version of metaDescription promised measured
+  // travel times on every guide including those. The second version asked only
+  // whether _exactDurations had ANY keys — it is keyed per leg, so one resolved
+  // road leg out of nine made the card announce that every travel time was
+  // measured, on a guide whose page showed no travel total at all because
+  // tripShape withholds one unless every leg is known. The card would have
+  // contradicted the page it linked to.
+  is("a simple guide has no measured travel", hasMeasuredTravel(guide), false);
+  ok("so the card does not claim any", !/travel time/i.test(metaDescription(guide)));
+  const oneLeg = { ...guide, _exactDurations: { "Ærøskøbing|Ærø Bryggeri|walking": { durationMinutes: 7 } } };
+  is("one leg out of four is not every leg", hasMeasuredTravel(oneLeg), false);
+  const allLegs = { ...guide, _exactDurations: {
+    "Ærøskøbing|Ærø Bryggeri|walking": { durationMinutes: 7 },
+    "Ærø Bryggeri|Svendborg Havn|ferry": { durationMinutes: 75 },
+    "Svendborg Havn|Egeskov Slot|transit": { durationMinutes: 41 },
+    "Egeskov Slot|Odense Domkirke|transit": { durationMinutes: 38 },
+  } };
+  is("all four legs is", hasMeasuredTravel(allLegs), true);
+  ok("and then the card says so", /measured rather than guessed/.test(metaDescription(allLegs)));
+  ok("still leading with the counted facts", metaDescription(allLegs).startsWith("3 days, 5 stops"));
+  // A zero-minute leg is the "1 min on bike, 13 on Maps" bug's own signature:
+  // present in the map, not actually measured.
+  const zeroLeg = { ...allLegs, _exactDurations: { ...allLegs._exactDurations, "Svendborg Havn|Egeskov Slot|transit": { durationMinutes: 0 } } };
+  is("a zero-minute leg does not count as measured", hasMeasuredTravel(zeroLeg), false);
+
+  // A guide title is text a person typed, going into an HTML attribute.
+  is("attributes are escaped, ampersand first", escapeHtml(`"A" & <b>`), "&quot;A&quot; &amp; &lt;b&gt;");
+}
+
+// ── WHAT THE LINK LOOKS LIKE BEFORE ANYBODY CLICKS IT ──────────────
+// The invisible half of sharing, and the reason a share button on its own would
+// have been a silent failure that looked like a working feature: index.html
+// carried no og: tags, so every Gemlyx link ever pasted into WhatsApp,
+// iMessage, Slack or Discord arrived as a bare grey URL. None of those apps run
+// JavaScript, so the app painting a beautiful page changes nothing.
+{
+  const { buildPreviewHtml, injectMeta } = M;
+  const guide = { title: `Bornholm & the "smoked" east`, days: [{ day: 1, stops: [{ name: "Rønne Havn", town: "Rønne" }] }] };
+  const html = buildPreviewHtml({ guide, url: "https://x.dev/guide/abc", image: "https://x.dev/og-default.jpg" });
+  ok("the card carries a real og:title", /property="og:title" content="Bornholm &amp; the &quot;smoked&quot; east"/.test(html));
+  ok("and an absolute og:image", /property="og:image" content="https:\/\//.test(html));
+  ok("and a large twitter card", /name="twitter:card" content="summary_large_image"/.test(html));
+  ok("and a canonical url", /rel="canonical" href="https:\/\/x.dev\/guide\/abc"/.test(html));
+  ok("the title cannot break out of the attribute", !/content="[^"]*<[^"]*"/.test(html));
+
+  // THE NORMAL RESPONSE IS THE REAL APP WITH TAGS FOLDED IN, for crawlers and
+  // people alike. It used to be that anything matching the crawler list got a
+  // script-less stub instead, which was a trap: several tokens on that list
+  // ("Pinterest", "Tumblr", "Flipboard", "Viber", "Line/", "Signal") appear in
+  // the user-agent of the browser EMBEDDED in those apps, which is exactly
+  // where a link opens when a friend taps it. Tapping a guide inside LINE, the
+  // default messenger across much of Asia, produced a page with no app on it
+  // and an "open this guide" link pointing back at the same URL.
+  const shell = `<!DOCTYPE html><html><head><title>Gemlyx — It exists nowhere else.</title>\n  </head><body><div id="root"></div><script src="/assets/index-abc.js"></script></body></html>`;
+  const injected = injectMeta(shell, { guide, url: "https://x.dev/guide/abc", image: "https://x.dev/og.jpg" });
+  ok("the app still boots", injected.includes('<div id="root"></div>') && injected.includes("/assets/index-abc.js"));
+  ok("with the tags folded in", /property="og:description"/.test(injected));
+  is("and nothing duplicated", (injected.match(/og:title/g) || []).length, 1);
+  ok("the tab says which guide it is", /<title>Bornholm &amp; the &quot;smoked&quot; east — Gemlyx<\/title>/.test(injected));
+  is("only one title survives", (injected.match(/<title>/g) || []).length, 1);
+  // String.replace expands $& and $1 in a replacement. A guide called "$100 a
+  // day" would otherwise inject the whole matched <title> tag into itself.
+  const dollars = injectMeta(shell, { guide: { title: "$& $1 for $100 a day", days: guide.days }, url: "u", image: "i" });
+  ok("a dollar sign in a title stays a dollar sign", dollars.includes("$1 for $100 a day"));
+  is("and $& did not splice the match into it", (dollars.match(/<\/head>/g) || []).length, 1);
+  is("a shell with no head is left alone", injectMeta("<p>hi</p>", { guide, url: "u", image: "i" }), "<p>hi</p>");
+}
+
+// ── THE FUNCTION'S THREE OUTCOMES ──────────────────────────────────
+// Network stubbed, so this stays as offline and as fast as everything else in
+// here. What is being checked is that a guide we could not read never becomes a
+// guide we describe.
+{
+  const { guidePreview } = M;
+  const guide = { title: "Ribe in two days", days: [{ day: 1, stops: [{ name: "Ribe Domkirke", town: "Ribe" }] }] };
+  const shell = `<!DOCTYPE html><html><head><title>Gemlyx</title>\n  </head><body><div id="root"></div></body></html>`;
+  const real = globalThis.fetch;
+  const run = async (rows, ua = "WhatsApp/2.23.20 A") => {
+    globalThis.fetch = async (u) => String(u).includes("gemlyx_guides")
+      ? (rows === "throw" ? Promise.reject(new Error("network")) : { ok: true, json: async () => rows })
+      : { ok: true, text: async () => shell };
+    const res = { headers: {}, code: 0, body: "" };
+    res.setHeader = (k, v) => { res.headers[k] = v; };
+    res.status = (c) => { res.code = c; return res; };
+    res.send = (b) => { res.body = b; return res; };
+    await guidePreview({ query: { id: "abc" }, headers: { host: "x.dev", "user-agent": ua } }, res);
+    return res;
+  };
+  const found = await run([{ payload: guide }]);
+  is("a real guide answers 200", found.code, 200);
+  ok("with its own card", /og:title" content="Ribe in two days"/.test(found.body));
+  ok("and the app on the page", found.body.includes('id="root"'));
+  is("and Vary so a CDN cannot cross the wires", found.headers.Vary, "User-Agent");
+
+  // Supabase saying "zero rows" is Supabase saying this id does not exist. A
+  // card headed "A Denmark guide" over a dead URL makes a broken link look
+  // valid to the person it was sent to.
+  const gone = await run([]);
+  ok("a dead link gets the site card, not a fake guide", !/A Denmark guide/.test(gone.body));
+  ok("and is still the working app", gone.body.includes('id="root"'));
+
+  // A lookup that failed says nothing about whether the guide exists — the same
+  // rule this project applies to Places and Directions lookups.
+  const broke = await run("throw");
+  is("a failed lookup still answers 200", broke.code, 200);
+  ok("and claims nothing about a guide", !/og:title/.test(broke.body));
+  globalThis.fetch = real;
+}
+
+// ── THE TAGS AND THE ROUTING, CHECKED AGAINST EACH OTHER ───────────
+// og:image has to be absolute: a crawler fetches it in a separate request with
+// no page context, so a relative path silently produces a card with no picture.
+// That means the domain is hardcoded in index.html, and the day it changes is
+// the day every shared link loses its preview with no error anywhere. This is
+// what makes that loud.
+{
+  const { SITE_ORIGIN } = M;
+  const html = readFileSync(join(root, "index.html"), "utf8");
+  const img = /property="og:image" content="([^"]+)"/.exec(html)?.[1];
+  ok("index.html has an og:image at all", !!img);
+  ok("index.html's og:image matches SITE_ORIGIN", !!img && img.startsWith(SITE_ORIGIN + "/"));
+  ok("and it is a real file in public/", existsSync(join(root, "public", String(img || "").replace(SITE_ORIGIN + "/", ""))));
+  ok("index.html has a description", /name="description" content="[^"]{40,}"/.test(html));
+  ok("and a large twitter card", /name="twitter:card" content="summary_large_image"/.test(html));
+
+  // ORDER IS THE WHOLE THING. Vercel takes the first rewrite that matches and
+  // the catch-all matches everything, so a crawler rule placed after it is dead
+  // code that nobody would ever see fail.
+  const vercel = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8"));
+  const first = vercel.rewrites[0], last = vercel.rewrites[vercel.rewrites.length - 1];
+  is("the crawler rule is first", first.source, "/guide/:id");
+  is("and points at the preview function", first.destination, "/api/guide-preview?id=:id");
+  is("the SPA catch-all is last", last.source, "/(.*)");
+
+  // Vercel matches this value as a full-string regex, hence the .* either side.
+  const ua = new RegExp(`^(?:${first.has[0].value})$`);
+  ok("WhatsApp is recognised", ua.test("WhatsApp/2.23.20 A"));
+  ok("facebook is recognised", ua.test("facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"));
+  ok("Slack is recognised", ua.test("Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)"));
+  ok("Discord is recognised", ua.test("Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"));
+  ok("Telegram is recognised", ua.test("TelegramBot (like TwitterBot)"));
+  ok("LinkedIn is recognised", ua.test("LinkedInBot/1.0 (compatible; Mozilla/5.0; Jakarta Commons-HttpClient/3.1)"));
+
+  // A PERSON MUST NEVER MATCH. Ordinary browsers were always fine; the ones
+  // that caught us out were IN-APP browsers, whose user-agent carries the name
+  // of the app that opened them. Those app names have been taken off the list
+  // and must not come back.
+  const human = [
+    ["Chrome on Windows", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"],
+    ["Safari on iPhone", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"],
+    ["Firefox", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"],
+    ["the LINE in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1 Line/13.13.0"],
+    ["the Viber in-app browser", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Mobile Safari/537.36 Viber/13.4.0.5"],
+    ["the Pinterest in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 [Pinterest/iOS]"],
+    ["the Tumblr in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Tumblr/24.5"],
+    ["the Instagram in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Instagram 320.0.1"],
+  ];
+  human.forEach(([who, s2]) => ok(`${who} does not match`, !ua.test(s2)));
 }
 
 rmSync(dir, { recursive: true, force: true });

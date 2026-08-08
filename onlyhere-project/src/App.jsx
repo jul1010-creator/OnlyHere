@@ -1845,6 +1845,30 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // one; otherwise a candidate domain that IS the name is applied directly.
       // Same principle as the coordinates and the travel time: anything the
       // system already knows is enforced in code, never requested in a prompt.
+      // ── EVERY SOURCE THE RESEARCH ACTUALLY OPENED ───────────────
+      // Oliver, 8 Aug, reading the provenance block: "showing 1 source.. lmao."
+      // Fair. That block says entries are "researched and fact-checked against
+      // primary sources", plural, and then lists the single URL that happened
+      // to survive into the website field. The rest of what the research read
+      // was thrown away the moment the draft finished, so a paragraph about
+      // rigour was standing on one link.
+      //
+      // candidateUrls is every page the pipeline genuinely opened for this
+      // place, so it travels with the draft now and gets shown. Aggregators and
+      // social are dropped, since "we checked TripAdvisor" is not the claim
+      // being made, and the entry's own official site is not repeated because
+      // it already has its own line above the list.
+      const AGG = /tripadvisor|booking\.com|expedia|getyourguide|viator|tiqets|headout|klook|musement|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|yelp/i;
+      const seenHost = new Set();
+      t.__sources = [...new Set(candidateUrls)].filter(u => {
+        try {
+          const h = new URL(u).hostname.replace(/^www\./, "");
+          if (AGG.test(h) || seenHost.has(h)) return false;
+          seenHost.add(h);
+          return true;
+        } catch { return false; }
+      }).slice(0, 8);
+
       if (typeof t.website !== "undefined" && !String(t.website || "").trim()) {
         const forced = placesWebsite || officialSiteFromCandidates(candidateUrls, name);
         if (forced) {

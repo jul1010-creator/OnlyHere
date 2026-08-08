@@ -96,6 +96,34 @@ const NO_ROUTE = /ZERO_RESULTS|NOT_FOUND|No route found/i;
 // that is how the Places API formats a locality or landmark, never a stop.
 const NOT_TRANSIT = /\(.*kommune\)|\bslot\b|\bkirke\b|\bmuseum\b|\bkro\b|\bcamping\b|\bstrand\b|\bfyr\b|\bmølle\b|\bcastle\b|\bchurch\b/i;
 const LOOKS_TRANSIT = /\bst\.?\b|station|banegård|banegaard|havn|terminal|færge|faerge|ferry|holdeplads|busstop|bus stop|rutebil|lufthavn|airport|metro|letbane/i;
+// ── ASK GOOGLE WHAT IT IS, DO NOT READ THE NAME ─────────────────────
+// Oliver, 8 Aug 2026: a published draft carried
+//   "nearestStation": "Logistik-Optimering v/Bo Trygve Mortensen"
+// which is a freight consultancy named after the man who runs it.
+//
+// It passed because looksLikeTransit is a BLOCKLIST: it only rejects a name
+// that matches a known non-transit word (slot, kirke, museum, kommune). A
+// company name, a person's name, a shop, a car park, anything not on that list
+// walks straight through. The list can never be finished, because the space of
+// things that are not a bus stop is infinite.
+//
+// Google already answers this properly. api/places.js asks for `types` and
+// `primaryType` in its FieldMask, and every real stop carries one of these.
+// That is authoritative and the name is not, so the type decides and the name
+// is only consulted when the types are missing, which is the honest fallback
+// rather than rejecting something we simply were not told about.
+const TRANSIT_TYPES = new Set(["transit_station", "train_station", "subway_station",
+  "light_rail_station", "bus_station", "bus_stop", "ferry_terminal", "airport",
+  "international_airport", "heliport", "park_and_ride", "transit_depot"]);
+
+export const hasTransitType = (place) => {
+  const types = Array.isArray(place?.types) ? place.types : [];
+  const primary = place?.primaryType;
+  if (!types.length && !primary) return null;      // not told, so not concluded
+  if (primary && TRANSIT_TYPES.has(primary)) return true;
+  return types.some(t => TRANSIT_TYPES.has(t));
+};
+
 export const looksLikeTransit = (name) => {
   const n = String(name || "");
   if (!n.trim()) return false;
@@ -146,7 +174,13 @@ export const findRealNearestStop = async (lat, lon) => {
       const d = await r.json();
       if (!d.error && d.name) place = d;
     } catch { continue; }          // this tier is unavailable, try the next one
-    if (!place || !looksLikeTransit(place.name)) continue;
+    if (!place) continue;
+    // The type is the real answer. The name is the fallback for a response that
+    // did not carry one, and a second opinion is never needed when Google has
+    // already said what the thing is.
+    const byType = hasTransitType(place);
+    if (byType === false) continue;
+    if (byType === null && !looksLikeTransit(place.name)) continue;
 
     const reach = await walkTo(lat, lon, place);
     if (reach === null) continue;  // no footpath: across water, or otherwise cut off

@@ -114,9 +114,23 @@ export const AskGemlyx = ({ session, item, kind, onSignIn }) => {
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
         {log.length === 0 && (
           <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.65 }}>
+            {/* ── SOUND PLEASED TO BE ASKED ──────────────────────────
+                Oliver, 8 Aug 2026, on the old version of this: "it almost
+                sounds aggressive.. Gemlyx AI should be happy to help. And just
+                leave it with 'Anything I can help you with about Amalienborg'
+                or something."
+                
+                He is right, and it is the same defensiveness as the heading he
+                rejected an hour earlier. The old copy explained the retrieval
+                architecture to a traveller who had not asked: what is checked,
+                what is looked up, where sources come from, what this cannot
+                change. All of it true, none of it what someone opening a chat
+                box wants to read. The honesty still happens where it counts,
+                on the ANSWER, where a looked-up reply carries its sources. It
+                does not need announcing in advance like terms and conditions. */}
             {session?.token
-              ? `Ask anything about ${item.name}. I answer from this entry first, because that is the part that has been fact-checked. If it does not say, I will look it up and show you where the answer came from.`
-              : `Sign in to ask about ${item.name}. Answers come from this entry first, and anything looked up live arrives with its sources.`}
+              ? `Anything I can help you with about ${item.name}? Ask away.`
+              : `Sign in and I will happily answer anything about ${item.name}.`}
           </div>
         )}
         {log.map((l, i) => (
