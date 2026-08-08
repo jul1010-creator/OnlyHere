@@ -618,7 +618,17 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             const legOriginTown = stopTownOf(originName);
             const legDestTown = (day.stops || []).find(s => s.name === destName)?.town;
             if (isSameTownWalk(mode, legOriginTown, legDestTown, how)) mode = "walking";
-            const rawExact = exactDurations[`${originName}|${destName}|${mode}`];
+            // ── A STORED ZERO IS STILL A ZERO ────────────────────
+            // Found on the live site minutes after the fix shipped. Refusing to
+            // RECORD a zero minute leg stops the next guide having one; it does
+            // nothing for the guides already saved carrying
+            // "Faaborg Havn|Faaborg Camping|bicycling" at 0 minutes, which is
+            // still rendering as "1 min by bike" for a 2.27 km ride. The same
+            // rule has to apply on the way out, and then every already-built
+            // guide heals the next time someone opens it, exactly like the
+            // walking cap below.
+            const storedExact = exactDurations[`${originName}|${destName}|${mode}`];
+            const rawExact = storedExact && storedExact.durationMinutes >= 1 ? storedExact : null;
             // Walking cap tightened 180 → WALK_MAX_MINUTES (Oliver: "there has
             // to be rules. No walking more than 15-20 minutes"). 180 minutes
             // is why a three-hour-capped "1 hour 15 min on foot" sailed through
