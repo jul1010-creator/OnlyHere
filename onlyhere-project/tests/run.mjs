@@ -18,7 +18,7 @@
 // or React, so it always runs in about a second and can never be flaky.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,7 +57,7 @@ writeFileSync(entry, `
   export { stopKind, tripScaleLine, tripCharacter, bookingActions } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
-  export { buildPreviewHtml, injectMeta, default as guidePreview } from ${JSON.stringify(join(root, "api/guide-preview.js"))};
+  export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
   export { SITE_ORIGIN } from ${JSON.stringify(join(root, "src/config.js"))};
 `);
 const esbuild = [
@@ -1215,45 +1215,47 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a shell with no head is left alone", injectMeta("<p>hi</p>", { guide, url: "u", image: "i" }), "<p>hi</p>");
 }
 
-// ── THE FUNCTION'S THREE OUTCOMES ──────────────────────────────────
-// Network stubbed, so this stays as offline and as fast as everything else in
-// here. What is being checked is that a guide we could not read never becomes a
-// guide we describe.
+// ── WHO GETS THE TAGS, AND WHO MUST NEVER ──────────────────────────
+// This gate used to be a regex string inside vercel.json, which could only be
+// verified by deploying and squinting at a WhatsApp preview. It is ordinary
+// JavaScript now (the deploy failed on the Hobby plan's 12-function limit, which
+// forced the move to Edge Middleware and made the list testable as a side
+// effect), so it can be checked here in a millisecond.
 {
-  const { guidePreview } = M;
-  const guide = { title: "Ribe in two days", days: [{ day: 1, stops: [{ name: "Ribe Domkirke", town: "Ribe" }] }] };
-  const shell = `<!DOCTYPE html><html><head><title>Gemlyx</title>\n  </head><body><div id="root"></div></body></html>`;
-  const real = globalThis.fetch;
-  const run = async (rows, ua = "WhatsApp/2.23.20 A") => {
-    globalThis.fetch = async (u) => String(u).includes("gemlyx_guides")
-      ? (rows === "throw" ? Promise.reject(new Error("network")) : { ok: true, json: async () => rows })
-      : { ok: true, text: async () => shell };
-    const res = { headers: {}, code: 0, body: "" };
-    res.setHeader = (k, v) => { res.headers[k] = v; };
-    res.status = (c) => { res.code = c; return res; };
-    res.send = (b) => { res.body = b; return res; };
-    await guidePreview({ query: { id: "abc" }, headers: { host: "x.dev", "user-agent": ua } }, res);
-    return res;
-  };
-  const found = await run([{ payload: guide }]);
-  is("a real guide answers 200", found.code, 200);
-  ok("with its own card", /og:title" content="Ribe in two days"/.test(found.body));
-  ok("and the app on the page", found.body.includes('id="root"'));
-  is("and Vary so a CDN cannot cross the wires", found.headers.Vary, "User-Agent");
+  const { isCrawler, guideIdFromPath } = M;
+  ["WhatsApp/2.23.20 A",
+   "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+   "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
+   "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+   "TelegramBot (like TwitterBot)",
+   "LinkedInBot/1.0 (compatible; Mozilla/5.0; Jakarta Commons-HttpClient/3.1)",
+   "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+  ].forEach(ua => ok(`recognised: ${ua.slice(0, 28)}`, isCrawler(ua)));
 
-  // Supabase saying "zero rows" is Supabase saying this id does not exist. A
-  // card headed "A Denmark guide" over a dead URL makes a broken link look
-  // valid to the person it was sent to.
-  const gone = await run([]);
-  ok("a dead link gets the site card, not a fake guide", !/A Denmark guide/.test(gone.body));
-  ok("and is still the working app", gone.body.includes('id="root"'));
+  // A PERSON MUST NEVER MATCH. Ordinary browsers were always fine; the ones that
+  // caught us out were IN-APP browsers, whose user-agent carries the name of the
+  // app that opened them — which is exactly where a shared link gets tapped.
+  // Those app names are off the list and must not come back.
+  [["Chrome on Windows", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"],
+   ["Safari on iPhone", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"],
+   ["Firefox", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"],
+   ["the LINE in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1 Line/13.13.0"],
+   ["the Viber in-app browser", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/119 Mobile Safari/537.36 Viber/13.4.0.5"],
+   ["the Pinterest in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 [Pinterest/iOS]"],
+   ["the Tumblr in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Tumblr/24.5"],
+   ["the Instagram in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Instagram 320.0.1"],
+   ["the Facebook in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 [FBAN/FBIOS;FBAV/450.0]"],
+   ["an empty user-agent", ""],
+  ].forEach(([who, ua]) => ok(`${who} does not match`, !isCrawler(ua)));
 
-  // A lookup that failed says nothing about whether the guide exists — the same
-  // rule this project applies to Places and Directions lookups.
-  const broke = await run("throw");
-  is("a failed lookup still answers 200", broke.code, 200);
-  ok("and claims nothing about a guide", !/og:title/.test(broke.body));
-  globalThis.fetch = real;
+  is("an id is read off the path", guideIdFromPath("/guide/81peftd1w67"), "81peftd1w67");
+  is("a trailing slash is fine", guideIdFromPath("/guide/81peftd1w67/"), "81peftd1w67");
+  // /guide/new is the confirm-before-saving screen. It is nobody's shared link
+  // and there is nothing in the database to describe.
+  is("the unsaved screen has no id", guideIdFromPath("/guide/new"), null);
+  is("neither does the bare path", guideIdFromPath("/guide"), null);
+  is("nor a deeper one", guideIdFromPath("/guide/a/b"), null);
+  is("nor another page entirely", guideIdFromPath("/towns/ribe"), null);
 }
 
 // ── THE TAGS AND THE ROUTING, CHECKED AGAINST EACH OTHER ───────────
@@ -1272,39 +1274,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("index.html has a description", /name="description" content="[^"]{40,}"/.test(html));
   ok("and a large twitter card", /name="twitter:card" content="summary_large_image"/.test(html));
 
-  // ORDER IS THE WHOLE THING. Vercel takes the first rewrite that matches and
-  // the catch-all matches everything, so a crawler rule placed after it is dead
-  // code that nobody would ever see fail.
+  // ── THE HOBBY PLAN'S TWELVE ─────────────────────────────────────
+  // This shipped as api/guide-preview.js and could not deploy at all:
+  // "No more than 12 Serverless Functions can be added to a Deployment on the
+  // Hobby plan." api/ held exactly 12 already. Edge Middleware does not count
+  // against that limit, which is why the preview lives in middleware.js — but
+  // the next person to add an api/ route deserves to find out here, in a second,
+  // rather than from a failed deploy.
+  const fns = readdirSync(join(root, "api")).filter(f => /\.(js|ts|mjs)$/.test(f));
+  ok(`api/ holds ${fns.length} of the 12 serverless functions Hobby allows`, fns.length <= 12);
+  ok("the preview is NOT one of them", !fns.includes("guide-preview.js"));
+
+  // vercel.json is back to the plain single-page-app catch-all: no crawler
+  // rewrite, because middleware runs ahead of routing and does that job.
   const vercel = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8"));
-  const first = vercel.rewrites[0], last = vercel.rewrites[vercel.rewrites.length - 1];
-  is("the crawler rule is first", first.source, "/guide/:id");
-  is("and points at the preview function", first.destination, "/api/guide-preview?id=:id");
-  is("the SPA catch-all is last", last.source, "/(.*)");
+  is("one rewrite, the SPA catch-all", vercel.rewrites.map(r => r.source), ["/(.*)"]);
 
-  // Vercel matches this value as a full-string regex, hence the .* either side.
-  const ua = new RegExp(`^(?:${first.has[0].value})$`);
-  ok("WhatsApp is recognised", ua.test("WhatsApp/2.23.20 A"));
-  ok("facebook is recognised", ua.test("facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"));
-  ok("Slack is recognised", ua.test("Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)"));
-  ok("Discord is recognised", ua.test("Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"));
-  ok("Telegram is recognised", ua.test("TelegramBot (like TwitterBot)"));
-  ok("LinkedIn is recognised", ua.test("LinkedInBot/1.0 (compatible; Mozilla/5.0; Jakarta Commons-HttpClient/3.1)"));
-
-  // A PERSON MUST NEVER MATCH. Ordinary browsers were always fine; the ones
-  // that caught us out were IN-APP browsers, whose user-agent carries the name
-  // of the app that opened them. Those app names have been taken off the list
-  // and must not come back.
-  const human = [
-    ["Chrome on Windows", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"],
-    ["Safari on iPhone", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"],
-    ["Firefox", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"],
-    ["the LINE in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1 Line/13.13.0"],
-    ["the Viber in-app browser", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Mobile Safari/537.36 Viber/13.4.0.5"],
-    ["the Pinterest in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 [Pinterest/iOS]"],
-    ["the Tumblr in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Tumblr/24.5"],
-    ["the Instagram in-app browser", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Instagram 320.0.1"],
-  ];
-  human.forEach(([who, s2]) => ok(`${who} does not match`, !ua.test(s2)));
+  const mw = readFileSync(join(root, "middleware.js"), "utf8");
+  ok("middleware only runs on guide urls", /matcher:\s*"\/guide\/:path\*"/.test(mw));
+  ok("and falls through to the app rather than erroring", /catch\s*{\s*[\s\S]{0,400}?return next\(\);/.test(mw));
 }
 
 rmSync(dir, { recursive: true, force: true });

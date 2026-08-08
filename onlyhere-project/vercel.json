@@ -1,16 +1,5 @@
 {
   "rewrites": [
-    {
-      "source": "/guide/:id",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(facebookexternalhit|WhatsApp|whatsapp|Twitterbot|twitterbot|Slackbot|slackbot|Slack-ImgProxy|Discordbot|discordbot|TelegramBot|telegrambot|LinkedInBot|linkedinbot|redditbot|SkypeUriPreview|Applebot|applebot|bingbot|Googlebot|googlebot|Google-InspectionTool|Embedly|embedly|Iframely|iframely|quora link preview|vkShare|bitlybot|FlipboardProxy|Mastodon/|Yahoo Link Preview|Discourse Forum Onebox).*"
-        }
-      ],
-      "destination": "/api/guide-preview?id=:id"
-    },
     { "source": "/(.*)", "destination": "/" }
   ]
 }
