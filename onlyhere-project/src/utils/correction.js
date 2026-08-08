@@ -151,7 +151,17 @@ ${entryJson}
 Criticism:
 ${criticism}`;
 
-export const VERIFY_PROMPT = (name, claim) => `Check ONE factual claim about "${name}" in Denmark using real, current web search.
+// ── THE CHECKER DOES NOT GET THE LAST WORD EITHER ───────────────────
+// Oliver, 8 Aug 2026: "Of course, Gemini shouldn't have the final word. It
+// should always be a deeper analysis into that claim."
+//
+// `rules` is the standing research policy, appended so the verifier knows where
+// a price actually lives and what a measured duration measures. Both of tonight's
+// failures turn on exactly that: a price called unverified by a checker that
+// never opened the ticket shop, and a real door-to-door figure called incorrect
+// because it was compared against a train's running time. A verifier without
+// those rules repeats the checker's mistake and calls it confirmation.
+export const VERIFY_PROMPT = (name, claim, rules) => `Check ONE factual claim about "${name}" in Denmark using real, current web search.
 
 The claim: ${claim.says}${claim.proposed ? `\nThe correction proposed: ${claim.proposed}` : ""}
 
@@ -163,7 +173,9 @@ Rules for your answer, and they are strict:
 Respond with ONLY strict JSON:
 {"verdict": "confirmed" | "rejected" | "unresolved", "correctValue": "the real verified value, or an empty string", "evidence": "one or two sentences on what the source actually says", "sourceUrl": "the primary source URL, or an empty string"}
 
-"confirmed" means the criticism is right and the entry needs changing. "rejected" means the criticism is wrong and the entry is already correct, and your evidence must say why. "unresolved" means no primary source settled it.`;
+"confirmed" means the criticism is right and the entry needs changing. "rejected" means the criticism is wrong and the entry is already correct, and your evidence must say why. "unresolved" means no primary source settled it.
+
+BOTH THE ENTRY AND THE CRITICISM CAN BE RIGHT AT ONCE, and when that happens the verdict is "rejected", not "confirmed". Two real figures measuring different things are not a disagreement: a door to door journey time and a train's running time are both true and neither corrects the other. Before returning "confirmed", check that the criticism is talking about the SAME measure, the same route, the same ticket and the same variant as the entry. If it is measuring something else, reject it and say what it measured instead.${rules ? `\n${rules}` : ""}`;
 
 export const PATCH_PROMPT = (entryJson, confirmed, allowed) => `Here is a published Gemlyx entry (JSON) and a list of corrections that have each been independently verified against a primary source.
 
@@ -551,7 +563,7 @@ Be short and concrete: the answer, and nothing else. Prefer the venue's own site
 // The whole pass. `deps` is injected so this file stays testable and has no
 // knowledge of App.jsx's component state.
 export const correctEntry = async ({ entry, criticism, deps }) => {
-  const { askClaude, askPerplexity, parseJSON, directions, onStage } = deps || {};
+  const { askClaude, askPerplexity, parseJSON, directions, onStage, rules } = deps || {};
   const stage = (label, percent) => { try { onStage?.({ label, percent }); } catch { /* UI only */ } };
   const name = entry?.name || "this entry";
   const entryJson = JSON.stringify(entry, null, 2);
@@ -585,7 +597,7 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
       continue;
     }
 
-    const res = await askPerplexity(VERIFY_PROMPT(name, c));
+    const res = await askPerplexity(VERIFY_PROMPT(name, c, rules));
     if (res?.error || !res?.text) {
       verified.push({ ...c, kind, verdict: "unresolved", evidence: "The verification search could not run.", sourceUrl: "" });
       continue;

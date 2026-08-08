@@ -42,7 +42,8 @@ const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
   export { journeyParts, journeyBlock, vehicleWord } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
-  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -2461,7 +2462,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // a call site that quietly stops passing its place fails here.
   is("five of them pass the place they know", (app3.match(/\$\{researchRules\([a-zA-Z"]+, [a-zA-Z]+\)\}/g) || []).length, 5);
   is("and two deliberately carry only the universal ones", (app3.match(/\$\{researchRules\(\)\}/g) || []).length, 2);
-  ok("which is where the founder's list is folded in", /const researchRules = \(type, where\) => `\$\{RESEARCH_SOURCE_RULES\}\$\{sourceRulesBlock\(founderSources, type, where\)\}`/.test(app3));
+  ok("which is where the founder's list is folded in", /return `\$\{RESEARCH_SOURCE_RULES\}\$\{both\}\$\{sourceRulesBlock\(founderSources, type, where\)\}`;/.test(app3));
   // The guide pipeline runs for visitors, where no Studio state exists, so the
   // list is loaded app-wide rather than threaded through React state.
   ok("the list is loaded on mount, not only in Studio", /ensureSourcesLoaded\(\)/.test(app3));
@@ -2470,6 +2471,150 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a missing table is named as missing", /if \(status === 404 \|\| code === "PGRST205"/.test(app3));
   ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\. \(Nothing is wrong with the table\.\)/.test(app3));
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
+}
+
+// ── "COPENHAGEN ON DANISH IS KØBENHAVN" ───────────────────────────
+// Oliver, 8 Aug 2026: "remember languages can be different. I type copenhagen,
+// but Copenhagen on Danish is København. So it has to go over those sources too.
+// Not sure if it already translates." It did not, in either half: not in the
+// matcher that decides which of his sources apply, and not in the queries.
+{
+  // THE FOLD WAS BROKEN, and this is the assertion that says so. NFD ran before
+  // the Danish letter rules, and å decomposes while ø and æ do not, so the
+  // å→"aa" line never fired: "Århus" folded to "arhus" and "Aarhus" to
+  // "aarhus". Both spellings are in live use on real Danish sites.
+  is("the two live spellings of Aarhus fold together", M.fold("Århus"), M.fold("Aarhus"));
+  is("and of Aalborg", M.fold("Ålborg"), M.fold("Aalborg"));
+  is("å folds to aa, not to a", M.fold("Ålborg"), "aalborg");
+  // The letters that do NOT decompose still have to keep working.
+  is("ø and æ still fold", M.fold("Ærøskøbing"), "aeroskobing");
+
+  is("a place with one name is just itself", M.variantsOf("Odense"), ["Odense"]);
+  is("a place with two carries both, given spelling first", M.variantsOf("Copenhagen"), ["Copenhagen", "København"]);
+  is("in either direction", M.variantsOf("København"), ["København", "Copenhagen"]);
+  is("nothing in, nothing out", M.variantsOf(""), []);
+  is("the other name, when there is one", M.otherNameFor("Copenhagen"), "København");
+  is("and empty when there is not", M.otherNameFor("Odense"), "");
+
+  ok("the two names of the capital are the same place", M.samePlaceName("Copenhagen", "København"));
+  ok("both ways round", M.samePlaceName("København", "Copenhagen"));
+  ok("spelling variants too", M.samePlaceName("Aarhus", "Århus"));
+  ok("and parts of the country", M.samePlaceName("Jutland", "Jylland"));
+  ok("a name matches itself", M.samePlaceName("Odense", "Odense"));
+  // THE GUARD THAT MAKES IT SAFE. This matcher decides whether a source scoped
+  // to one city gets sent along on a draft about another, so widening it is
+  // exactly the failure the scoping exists to prevent.
+  ok("but two different cities never do", !M.samePlaceName("Copenhagen", "Aarhus"));
+  ok("nor two different parts", !M.samePlaceName("Jutland", "Funen"));
+  ok("and nothing matches nothing", !M.samePlaceName("", ""));
+
+  // SIGHTS ARE A SEPARATE LIST ON PURPOSE, and this is why: a source scoped to
+  // Copenhagen must not start applying to every draft that mentions Tivoli.
+  ok("a sight's two names are NOT treated as the same place", !M.samePlaceName("The Little Mermaid", "Den Lille Havfrue"));
+  // They are still worth searching under both names, which is the other half.
+  ok("but searching uses both", /Den Lille Havfrue/.test(M.searchNames("The Little Mermaid")));
+  ok("searching a town uses both too", /København/.test(M.searchNames("Copenhagen")));
+  is("and a name with no second form is not padded", M.searchNames("Odense"), "Odense");
+
+  // ── THE CASE HE RAISED, END TO END ───────────────────────────────
+  // He types the scope in English because that is how the entry is filed. A
+  // Danish-named entry, parent or day-trip base then failed to match, and a
+  // source scoped to Copenhagen was silently LEFT OUT of a København draft,
+  // which looks exactly like the scoping working correctly.
+  ok("a source scoped in English matches a Danish-named draft", M.placeMatches("Copenhagen", { name: "København" }));
+  ok("and scoped in Danish matches an English-named draft", M.placeMatches("København", { name: "Copenhagen" }));
+  ok("a part of the country matches across languages", M.placeMatches("Jutland", { name: "Aarhus", part: "Jylland" }));
+  ok("it still refuses another city", !M.placeMatches("Copenhagen", { name: "Aarhus" }));
+  ok("and still refuses an unknown place", !M.placeMatches("Copenhagen", null));
+  is("a part typed in Danish is stored as the app spells it", M.cleanPlace("Jylland"), "Jutland");
+
+  const bothWays = [{ id: 1, domain: "visitcopenhagen.com", applies_to: "", applies_place: "Copenhagen", enabled: true }];
+  is("so the source actually reaches the Danish-named draft",
+     M.sourcesFor(bothWays, "town", { name: "København" }).map(x => x.domain), ["visitcopenhagen.com"]);
+
+  // The search bar, same problem: typing one spelling could not find the other.
+  ok("the search bar finds a Danish-named place by its English name", M.matchesSearch({ name: "København" }, "copenhagen"));
+  ok("and the other way round", M.matchesSearch({ name: "Copenhagen" }, "københavn"));
+  ok("without matching an unrelated town", !M.matchesSearch({ name: "Odense" }, "copenhagen"));
+}
+
+// ── "YOU'RE 100% SURE THAT IT INCLUDES THE SOURCES I PUT IN?" ──────
+// Oliver, 8 Aug 2026, holding a finished Copenhagen draft's eight-URL source
+// list against the two domains he had added. He was not sure, and he was right:
+// the list reached the PROMPTS, so Perplexity and Gemini were told about it, but
+// Tavily builds its own queries and had never seen it. Being named in a prompt
+// is not being searched.
+{
+  const rows = [
+    { id: 1, domain: "visitdenmark.dk", applies_to: "", applies_place: "", enabled: true },
+    { id: 2, domain: "visitcopenhagen.com", applies_to: "", applies_place: "Copenhagen", enabled: true },
+    { id: 3, domain: "visitaarhus.com", applies_to: "", applies_place: "Aarhus", enabled: true },
+  ];
+  const cph = M.directSourceSearches(rows, "town", { name: "Copenhagen" });
+  is("one real search per source that applies", cph.map(x => x.domain).sort(), ["visitcopenhagen.com", "visitdenmark.dk"]);
+  ok("each restricted to its own domain", cph.every(x => x.domain && !x.domain.includes("/")));
+  // BOTH SPELLINGS IN THE QUERY, because a Danish tourist board files the
+  // capital under København and an English-only query cannot reach that page.
+  ok("the query carries both names of the place", cph.every(x => /Copenhagen/.test(x.query) && /København/.test(x.query)));
+  ok("and asks in Danish as well as English", cph.every(x => /åbningstider/.test(x.query)));
+  is("a name with one spelling is not doubled up",
+     (M.directSourceSearches(rows, "town", { name: "Odense" })[0].query.match(/Odense/g) || []).length, 1);
+  // The scoping still holds: this is a second consumer of sourcesFor, not a
+  // bypass of it. An Aarhus draft must not search visitcopenhagen.
+  is("scoping applies to the searches too", M.directSourceSearches(rows, "town", { name: "Aarhus" }).map(x => x.domain).sort(),
+     ["visitaarhus.com", "visitdenmark.dk"]);
+  // No name means no query worth spending, same direction of caution as
+  // placeMatches: when we do not know where the draft is, do less.
+  is("no place known means no paid searches", M.directSourceSearches(rows, "town", null), []);
+  is("and an empty list means none either", M.directSourceSearches([], "town", { name: "Copenhagen" }), []);
+
+  // CAPPED, because it is his money and the list is meant to grow. An uncapped
+  // version turns a twelve-site list into twelve extra searches per draft.
+  const many = Array.from({ length: 12 }, (_, i) => ({ id: i, domain: `site${i}.dk`, applies_to: "", applies_place: "", enabled: true }));
+  is("the number of paid searches is capped", M.directSourceSearches(many, "town", { name: "Copenhagen" }).length, M.MAX_DIRECT_SEARCHES);
+  ok("and the cap is a small number", M.MAX_DIRECT_SEARCHES > 0 && M.MAX_DIRECT_SEARCHES <= 6);
+
+  const app5 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // The wiring, asserted on the file, because the whole defect was a function
+  // that existed and was never called from the half that matters.
+  ok("the draft pipeline actually runs them", /directSourceSearches\(founderSources, sType, \{ name \}\)/.test(app5));
+  ok("through the endpoint's domain restriction", /\/api\/search\?q=\$\{encodeURIComponent\(query\)\}&domains=\$\{encodeURIComponent\(domain\)\}/.test(app5));
+  // /api/search has accepted this parameter the whole time and nothing used it.
+  const api = readFileSync(join(root, "api/search.js"), "utf8");
+  ok("which the endpoint has always supported", /include_domains/.test(api));
+  // WHAT THEY FOUND TRAVELS WITH THE DRAFT, first, so the next time he asks this
+  // question the draft itself answers it.
+  ok("and what they found rides in the draft's source list", /\[\.\.\.new Set\(\[\.\.\.founderUrls, \.\.\.candidateUrls\]\)\]/.test(app5));
+  ok("with the result shown per domain, zeroes included", /\(nothing there\)/.test(app5));
+  // Kept OUT of candidateUrls before the official-site pick on purpose: a
+  // tourist board is not a venue's own website, and candidateUrls feeds that.
+  ok("a vouched source is not promoted into the official-site pick",
+     !/candidateUrls\.unshift\(\.\.\.founderUrls\)/.test(app5));
+
+  // ── AND THE RESEARCH ASKS IN DANISH ──────────────────────────────
+  ok("a standing rule tells every research pass to search Danish", /const DANISH_LANGUAGE_RULES = /.test(app5));
+  ok("and it is folded into the rules every prompt carries", /\$\{DANISH_LANGUAGE_RULES\}/.test(app5));
+  // The general rule is advice. The other name of the actual place is a search
+  // term, and it goes into all seven prompts.
+  ok("every research prompt names the place's other spelling", /THIS PLACE HAS TWO NAMES/.test(app5));
+  ok("and one Tavily query is asked in Danish", /const daName = otherNameFor\(name, \{ includeSights: true \}\)/.test(app5));
+  ok("only when there is a Danish name to ask under", /\.\.\.\(daName \? \[`\$\{daName\} \$\{daWords\}`\] : \[\]\)/.test(app5));
+  // The dash ban applies to prompt text exactly as it does to STUDIO_VOICE: a
+  // dash in a rule teaches every future draft to use one.
+  const dan = app5.slice(app5.indexOf("const DANISH_LANGUAGE_RULES = "), app5.indexOf("const RESEARCH_SOURCE_RULES = "));
+  is("the Danish rules carry no em or en dashes", (dan.match(/[—–]/g) || []).length, 0);
+
+  // ── A DOMAIN WITH A TYPO IN IT DOES NOTHING, FOREVER, SILENTLY ───
+  // He typed visitcopenhagen.dk. The real site is visitcopenhagen.com, and
+  // normaliseDomain accepts both because both are shaped like domains. Checked
+  // once, when he adds it, rather than discovered never.
+  ok("a new source is checked against the search index", /probeSource\(domain\);/.test(app5));
+  ok("with the same domain restriction the drafts use", /const probeSource = async \(domain\) => \{/.test(app5));
+  // ADDED EITHER WAY. A thin index is not proof a site is fake, and a real
+  // parish page with two pages on it is exactly what he should be able to add.
+  is("the check reports rather than refuses, in BOTH outcomes", (app5.match(/It is added either way/g) || []).length, 2);
+  ok("and an empty result says what is usually wrong", /the Danish site may be the \.dk and the English one the \.com/.test(app5));
+  ok("the row is saved before the check runs", app5.indexOf("await loadSources();") < app5.indexOf("probeSource(domain);"));
 }
 
 // ── AN EVENT'S ARRIVAL POINT IS NOT ALWAYS A STATION ───────────────

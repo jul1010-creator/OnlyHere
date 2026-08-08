@@ -56,7 +56,8 @@ import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock } from "./utils/journey";
 import { correctEntry } from "./utils/correction";
-import { sourceRulesBlock, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
+import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
+import { otherNameFor } from "./utils/danishNames";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -217,6 +218,34 @@ A PRICE IS ONLY A FACT IF YOU SAY WHICH TICKET IT IS. Danish festival tickets ar
 A SOLD-OUT EARLY TIER IS NOT THE PRICE. It is a price nobody can pay any more, and quoting it sends a reader to a checkout that will charge them more.
 A SINGLE FIGURE FOR A MULTI-DAY FESTIVAL is usually a full-festival or partout ticket rather than a day ticket. Say which it is, or leave it out.`;
 
+// ── "COPENHAGEN ON DANISH IS KØBENHAVN" ────────────────────────────
+// Oliver, 8 Aug 2026: "remember languages can be different. I type copenhagen,
+// but Copenhagen on Danish is København. So it has to go over those sources too.
+// Not sure if it already translates."
+//
+// It did not, anywhere. Every research query this app builds is `${name} Denmark
+// ...` in English, and every research prompt names the place exactly as it was
+// typed into Studio. So the research asked English questions and got English
+// answers, which is precisely why a Copenhagen draft came back sourced to
+// cntraveler and bontraveler while the Danish pages that actually carry the
+// opening hours went unread.
+//
+// The known name pairs are handled in code (utils/danishNames.js) because a
+// matcher must be checkable. The open-ended half belongs here, because the
+// models can actually read Danish and I cannot generate it safely: a guessed
+// translation is not a harmless miss, it is a query spent asking about a place
+// that does not exist under that name, and a search will always return
+// something.
+const DANISH_LANGUAGE_RULES = `SEARCH IN DANISH AS WELL AS ENGLISH, EVERY TIME. This is Denmark. The page that actually carries an opening hour, a ticket price, a ferry departure or a closure notice is very often written only in Danish, and it does not rank for an English query. An English-only search quietly returns the English-language layer of the internet, which for Denmark means international travel magazines and blog round-ups rather than the museum, the municipality or the operator.
+
+So for anything you look up, also run the Danish form of the question. Useful Danish words for this work: åbningstider (opening hours), priser (prices), billetter (tickets), entré (admission), praktisk information, sådan kommer du hertil (getting here), afgange (departures), færge (ferry), lukket (closed), helligdage (public holidays), seværdigheder (sights), arrangementer (events).
+
+USE THE DANISH NAME OF THE PLACE. Many Danish places have a different name in each language and the Danish page is filed under the Danish one: København not Copenhagen, Helsingør not Elsinore, Sjælland not Zealand, Jylland not Jutland, Fyn not Funen, Den Lille Havfrue not The Little Mermaid, Rundetårn not The Round Tower, and any castle or palace is Slot. Both older and newer Danish spellings are in live use and both find real pages: Aarhus and Århus, Aalborg and Ålborg.
+
+WHERE A DANISH PAGE AND AN ENGLISH ONE DISAGREE about a Danish place, the Danish page is normally the more current of the two. The English version of a Danish site is frequently a stale translation of a page that has since been updated, so a price or an opening hour found only in the English version is worth re-checking against the Danish one before you report it.
+
+WRITE THE ANSWER IN ENGLISH. Reading Danish is the job here; the guide is in English. When you quote a Danish name, keep it as it is written rather than translating it into something a visitor would not find on a sign.`;
+
 const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's actually like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would actually know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before 2025 should be treated as stale, not current.
 
 ${BOOKING_PLATFORM_RULES}
@@ -224,6 +253,8 @@ ${BOOKING_PLATFORM_RULES}
 ${TICKET_SOURCE_RULES}
 
 ${MEASURED_JOURNEY_RULES}
+
+${DANISH_LANGUAGE_RULES}
 
 ${ISLAND_FERRY_RULES}`;
 
@@ -263,7 +294,18 @@ alter table gemlyx_sources add column if not exists applies_place text default '
 // `where` is whatever the caller knows about the place: usually a name, and a
 // whole entry where one exists. A source scoped to a town is left OUT when
 // nothing says where the draft is, which is the cheap direction to be wrong in.
-const researchRules = (type, where) => `${RESEARCH_SOURCE_RULES}${sourceRulesBlock(founderSources, type, where)}`;
+const researchRules = (type, where) => {
+  // The general Danish rule lives in RESEARCH_SOURCE_RULES. This adds the one
+  // thing a general rule cannot: the actual other name of the actual place, in
+  // every one of the seven research prompts a draft makes. "Search in Danish
+  // too" is advice; "this place is also called Helsingør" is a search term.
+  const nm = typeof where === "string" ? where : where?.name;
+  const other = nm ? otherNameFor(nm, { includeSights: true }) : "";
+  const both = other
+    ? `\n\nTHIS PLACE HAS TWO NAMES: "${nm}" and "${other}". Search under BOTH. Danish pages about it are filed under the Danish one and are usually the more current of the two, and a source that has nothing under one name very often has a full page under the other.`
+    : "";
+  return `${RESEARCH_SOURCE_RULES}${both}${sourceRulesBlock(founderSources, type, where)}`;
+};
 
 // The original component (previously the default export) is now mounted as the
 // "/" route below, with a new "/guide/:guideId" route alongside it for the
@@ -1057,6 +1099,10 @@ function GemlyxApp() {
   // silent failure that looks like a working feature is the single thing that
   // has cost the most time on this project.
   const [researchMemory, setResearchMemory] = useState(null); // null | {status, detail}
+  // Which vouched domains were searched directly for this draft, and how many
+  // pages each returned. Shown in Studio because "are my sources actually being
+  // used" was a question the app could not answer.
+  const [sourceSearch, setSourceSearch] = useState(null);
 
   const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
   const [googleCheckError, setGoogleCheckError] = useState(null);
@@ -1331,7 +1377,28 @@ function GemlyxApp() {
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[sType];
-      const allQueries = [...cfg.queries, ...plannedQueries];
+      // ── ONE QUERY IN DANISH, WHERE THE NAME DIFFERS ─────────────
+      // Every query above is English and templated on the name as typed. When
+      // the place has a genuinely different Danish name, none of them can reach
+      // the Danish page: "Copenhagen Denmark travel guide" and the municipality's
+      // own "København praktisk information" do not share a single word.
+      //
+      // Only fires when there IS another name, so most of Denmark, whose towns
+      // are spelled the same in both languages, pays nothing for this. The words
+      // are Danish on purpose: an English query with a Danish place name in it
+      // still ranks English pages.
+      const daName = otherNameFor(name, { includeSights: true });
+      const daWords = {
+        town: "seværdigheder praktisk information hvad kan man lave åbningstider",
+        festival: "billetter datoer program praktisk information",
+        free: "åbningstider gratis adgang praktisk information",
+        food: "menukort priser åbningstider anmeldelse",
+        foodStreet: "boder madmarked åbningstider",
+        night: "åbningstider entré natteliv anmeldelse",
+        nightTown: "natteliv barer udeliv studerende",
+        booking: "værksted booking priser åbningstider",
+      }[sType] || "praktisk information åbningstider";
+      const allQueries = [...cfg.queries, ...plannedQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
       let context = "";
       let candidateUrls = [];
       // RESEARCH MEMORY (Oliver: "make the AI learn... if some very important
@@ -1464,6 +1531,54 @@ function GemlyxApp() {
         } catch { /* the general research still stands on its own */ }
       }
 
+
+      // ── THE FOUNDER'S SOURCES, ACTUALLY SEARCHED ────────────────
+      // Oliver, 8 Aug 2026, holding a finished draft's source list up against
+      // the two domains he had added: "you're 100% sure that it includes the
+      // sources I put in? I put in visitDenmark.dk and visitcopenhagen.dk".
+      //
+      // No, and he was right to ask. The list reached the PROMPTS, through
+      // researchRules, so Perplexity and Gemini were told to include those
+      // domains. Tavily was not, and Tavily is the half of this pipeline that
+      // actually fetches pages: its queries are built from the fixed template
+      // above plus whatever OpenAI planned, and neither has ever seen the list.
+      // So __sources, which records the URLs Tavily returned, was an accurate
+      // report that his sources had not been opened.
+      //
+      // Being named in a prompt is not the same as being searched. /api/search
+      // has accepted an include_domains parameter this whole time and nothing
+      // used it. One query per vouched domain, restricted to that domain, both
+      // language spellings of the name in the query so a Danish page can match.
+      //
+      // A domain returning nothing is ORDINARY and must stay cheap to be wrong
+      // about, which is his own "include, not restrict" rule: a village with no
+      // page on visitdenmark.dk is the normal case, the general search above
+      // already ran, and nothing here changes what the writer is allowed to say.
+      const founderUrls = [];
+      const sourceHits = [];
+      {
+        const searches = directSourceSearches(founderSources, sType, { name });
+        for (const { domain, query } of searches) {
+          try {
+            const fRes = await fetch(`/api/search?q=${encodeURIComponent(query)}&domains=${encodeURIComponent(domain)}`);
+            const fData = await fRes.json();
+            const urls = fRes.ok && !fData.error ? (fData.results || []).map(r => r.url).filter(Boolean) : [];
+            const snips = fRes.ok && !fData.error
+              ? (fData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 3).join(" ")
+              : "";
+            founderUrls.push(...urls);
+            sourceHits.push({ domain, count: urls.length, ok: fRes.ok && !fData.error });
+            if (fData.answer || snips) {
+              context += ` SOURCE THE FOUNDER VOUCHES FOR (${domain}), searched directly for this place: ${fData.answer || ""} ${snips}`;
+            }
+          } catch {
+            // One vouched domain failing is not a reason to lose a draft that
+            // already has a full general search behind it.
+            sourceHits.push({ domain, count: 0, ok: false });
+          }
+        }
+        if (searches.length) ui(setSourceSearch, sourceHits);
+      }
 
       // Automatic Perplexity pre-check, BEFORE anything is written. A second,
       // independent search pass (different index, different model than Tavily) that
@@ -2103,7 +2218,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // it already has its own line above the list.
       const AGG = /tripadvisor|booking\.com|expedia|getyourguide|viator|tiqets|headout|klook|musement|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|yelp/i;
       const seenHost = new Set();
-      t.__sources = [...new Set(candidateUrls)].filter(u => {
+      // Founder-vouched pages FIRST, and not merged into candidateUrls before
+      // this point on purpose: candidateUrls also feeds the official-site pick
+      // and the deep-scan ranking, and a tourist board is not a venue's own
+      // site. Here they belong, because this list answers "what did the
+      // research actually open", and it is the only place he can check.
+      t.__sources = [...new Set([...founderUrls, ...candidateUrls])].filter(u => {
         try {
           const h = new URL(u).hostname.replace(/^www\./, "");
           if (AGG.test(h) || seenHost.has(h)) return false;
@@ -3070,6 +3190,19 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     } catch (e) { setSourceError(String(e.message || e)); }
   };
 
+  // null | { domain, state: "checking" | "found" | "empty" | "failed", count }
+  const [sourceProbe, setSourceProbe] = useState(null);
+  const probeSource = async (domain) => {
+    setSourceProbe({ domain, state: "checking", count: 0 });
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(`${domain} Denmark`)}&domains=${encodeURIComponent(domain)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) { setSourceProbe({ domain, state: "failed", count: 0 }); return; }
+      const n = (data.results || []).length;
+      setSourceProbe({ domain, state: n > 0 ? "found" : "empty", count: n });
+    } catch { setSourceProbe({ domain, state: "failed", count: 0 }); }
+  };
+
   const addSource = async () => {
     const domain = normaliseDomain(newSourceDomain);
     if (!domain) { setSourceError(`"${newSourceDomain.trim()}" is not a domain I can use. Paste the address of the site, like visitdenmark.dk or a link to one of its pages.`); return; }
@@ -3090,6 +3223,20 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       setNewSourceDomain(""); setNewSourceNote(""); setNewSourcePlace("");
       await loadSources();
       refreshSources();
+      // ── DOES THIS DOMAIN EXIST AT ALL ───────────────────────────
+      // He typed "visitcopenhagen.dk" on 8 Aug. The real site is
+      // visitcopenhagen.com. normaliseDomain accepts both, because both are
+      // shaped like domains, and a domain that does not exist returns nothing
+      // from every search forever without ever once saying so. That is the
+      // worst failure this feature can have: a source he believes is working,
+      // silently doing nothing, on every draft.
+      //
+      // One search, once, at the moment he adds it. Not a verdict, a report:
+      // "nothing came back" can also mean a site the index is thin on, so it
+      // asks rather than refusing. Refusing would be worse, since a real Danish
+      // parish site with two pages is exactly the kind of source he should be
+      // allowed to add.
+      probeSource(domain);
     } catch (e) { setSourceError(String(e.message || e)); }
     setSourceBusy(false);
   };
@@ -6222,6 +6369,21 @@ You also have a web_search tool. Use it whenever someone asks about something th
                     <>
                       {sourceError && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 9, lineHeight: 1.5 }}>{sourceError}</div>}
 
+                      {/* The add-time probe. Not a verdict on the source, a
+                          report on whether the search engine can see it: a
+                          domain with a typo in it does nothing on every draft
+                          forever and never says so. */}
+                      {sourceProbe && (
+                        <div style={{ fontSize: 11.5, marginBottom: 9, lineHeight: 1.5, color: sourceProbe.state === "empty" ? "#FFB347" : C.muted }}>
+                          {sourceProbe.state === "checking" && `Checking that ${sourceProbe.domain} is a site the search can actually reach...`}
+                          {sourceProbe.state === "found" && `${sourceProbe.domain} checks out, the search reached it.`}
+                          {sourceProbe.state === "failed" && `Could not check ${sourceProbe.domain} just now. It is added either way.`}
+                          {sourceProbe.state === "empty" && (
+                            <>A search restricted to <b>{sourceProbe.domain}</b> came back with nothing at all. That usually means the address is not quite right: Danish tourism sites often split by language, so the Danish site may be the .dk and the English one the .com, or the other way round. Worth opening it in a tab to check. It is added either way, and every draft will tell you what it found.</>
+                          )}
+                        </div>
+                      )}
+
                       {sourceRows.length === 0 && <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 10 }}>Nothing added yet. The built-in rules (Wikipedia, the venue's own site, the ferry operator) still apply on their own.</div>}
 
                       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
@@ -7223,6 +7385,26 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
                           {googlePrecheckRan ? "✦ Written with a Perplexity cross-check folded in before drafting" : "Perplexity pre-check didn't run (no key set, or the call failed) — Tavily research only"}
                         </div>
+                        {/* ── "YOU'RE 100% SURE THAT IT INCLUDES THE SOURCES
+                               I PUT IN?" ─────────────────────────────────
+                            He asked because he could not tell, and he was right
+                            not to trust it: his domains were in the prompts and
+                            had never been searched. So the answer is printed on
+                            the draft, per domain, including the zeroes. A source
+                            with nothing about this place is the ordinary case
+                            and saying so out loud is the point: it is the
+                            difference between "not searched" and "searched,
+                            nothing there", which is exactly what he could not
+                            see before. */}
+                        {Array.isArray(sourceSearch) && sourceSearch.length > 0 && (
+                          <div style={{ fontSize: 9.5, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
+                            🔎 Your own sources, searched directly: {sourceSearch.map((h, i) => (
+                              <span key={h.domain} style={{ color: h.ok && h.count > 0 ? "#8AB4F8" : C.muted }}>
+                                {i > 0 ? ", " : ""}{h.domain} {!h.ok ? "(search failed)" : h.count > 0 ? `(${h.count} ${h.count === 1 ? "page" : "pages"})` : "(nothing there)"}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         {/* ── THE AI, WHERE THE DRAFT IS ─────────────────
                             Oliver, 7 Aug: "Is it possible you can install an AI
                             in the studio draft? That I can talk to.. like if

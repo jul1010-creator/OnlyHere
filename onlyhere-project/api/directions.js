@@ -121,7 +121,11 @@ export default async function handler(req, res) {
     const steps = (leg.steps || []).map(s => {
       const td = s.transit_details;
       if (!td) {
-        return { mode: (s.travel_mode || "").toLowerCase(), duration: s.duration?.text || "", distance: s.distance?.text || "" };
+        // `mins` alongside the text: the caller needs to ADD these up to say how
+        // much of a journey is spent on board and how much on foot, and parsing
+        // "1 hour 22 mins" back out of prose to do arithmetic is how a lazy
+        // quantifier turned "5 hours 53 mins" into "5h" once already.
+        return { mode: (s.travel_mode || "").toLowerCase(), duration: s.duration?.text || "", mins: Math.round((s.duration?.value || 0) / 60), distance: s.distance?.text || "" };
       }
       const line = td.line || {};
       return {
@@ -134,6 +138,7 @@ export default async function handler(req, res) {
         departure: td.departure_time?.text || "",
         arrival: td.arrival_time?.text || "",
         duration: s.duration?.text || "",
+        mins: Math.round((s.duration?.value || 0) / 60),
         stops: td.num_stops,
       };
     });
