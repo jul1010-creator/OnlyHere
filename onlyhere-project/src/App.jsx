@@ -843,6 +843,18 @@ function GemlyxApp() {
   // A search engine picks its own sources and sometimes picks badly. When he
   // already knows where the answer lives, typing it should beat hoping.
   const [checkSites, setCheckSites] = useState("");
+  // ── IS THE RESEARCH MEMORY ACTUALLY THERE? ─────────────────────────
+  // Oliver's console, 7 Aug 2026: two 401s against gemlyx_research, on the read
+  // and on the write. The table has never existed. The setup SQL for it lives
+  // in a code comment, which is a place nobody has ever looked, and both calls
+  // sit inside `catch {}` blocks commented "memory is a bonus, never a blocker".
+  // So the feature he is now ASKING FOR has been built and silently dead for
+  // weeks, and the only symptom was a line in a console he had no reason to
+  // open. Recorded and shown in Studio now, with the SQL to fix it, because a
+  // silent failure that looks like a working feature is the single thing that
+  // has cost the most time on this project.
+  const [researchMemory, setResearchMemory] = useState(null); // null | {status, detail}
+
   const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
   const [googleCheckError, setGoogleCheckError] = useState(null);
   const [factCheckFixLoading, setFactCheckFixLoading] = useState(false);
@@ -858,7 +870,15 @@ function GemlyxApp() {
     if (!googleCheckResult?.text || !studioDraftText.trim()) return;
     setFactCheckFixLoading(true); setFactCheckFixError(null); setFactCheckFixPreview(null);
     const prompt = `Here is a draft (JSON) and a list of factual issues an independent fact-checker found in it. Rewrite ONLY the specific parts that are actually flagged as wrong, fixing them to match the fact-checker's findings. Leave every other field completely untouched — same structure, same keys, same wording for anything not flagged. If the fact-checker didn't find real numbers/dates to replace a wrong value with, leave that field an honest empty string rather than guessing. Respond with ONLY the complete corrected JSON, valid JSON, nothing else — no explanation, no markdown code fences.\n\nBEFORE APPLYING ANY FINDING, CHECK IT IS ABOUT THE SAME THING THE FIELD IS ABOUT. A finding that describes a different variant (a different ferry route or pair of ports, a different branch, a different ticket type, a different season) is NOT a correction to this draft, and you must leave the field exactly as it is. A real, confirmed near-miss: a draft about one ferry route was nearly \"corrected\" with a different route's sailing time. NEVER replace a specific figure with a vaguer one (\"1 hour 20 minutes\" to \"about an hour\" is a regression, not a fix). If the finding does not clearly beat what is already there, on the same thing, keep what is already there.\n\nFact-checker's findings:\n${googleCheckResult.text}\n\nCurrent draft:\n${studioDraftText}`;
-    const result = await askClaude(prompt, 3000);
+    // ── THE BUDGET HAS TO SCALE WITH THE DRAFT ──────────────────
+    // Oliver's console: "Claude returned no text block. Claude won't rewrite
+    // after fact-checking." A hardcoded 3000 for a task whose OUTPUT is the
+    // entire draft again, when the draft going in is routinely larger than
+    // that. It was never going to fit, and it failed silently every time on a
+    // long entry. A rough four characters per token, doubled for headroom,
+    // floored at 4000 and capped so a runaway draft cannot ask for the moon.
+    const fixBudget = Math.min(16000, Math.max(4000, Math.ceil(studioDraftText.length / 2)));
+    const result = await askClaude(prompt, fixBudget);
     if (result.error) { setFactCheckFixError(result.error); setFactCheckFixLoading(false); return; }
     const cleaned = result.text.replace(/^```json\s*|\s*```$/g, "").trim();
     try {
@@ -1089,15 +1109,32 @@ function GemlyxApp() {
         const memRes = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?name=eq.${encodeURIComponent(name)}&type=eq.${encodeURIComponent(sType)}&select=*`, {
           headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
         });
-        const memRows = await memRes.json();
-        if (Array.isArray(memRows) && memRows[0]?.notes) {
-          const ageDays = (Date.now() - new Date(memRows[0].created_at).getTime()) / 86400000;
-          if (ageDays < 180) {
-            context = `PREVIOUS GEMLYX RESEARCH ON THIS EXACT PLACE (saved ${String(memRows[0].created_at).slice(0, 10)} — treat every price, date, and opening hour in it as needing fresh re-verification; stable facts like history, location, and official sites can be trusted): ${memRows[0].notes}\n\nFRESH RESEARCH: `;
-            if (Array.isArray(memRows[0].urls)) candidateUrls.push(...memRows[0].urls.filter(u => typeof u === "string"));
+        if (!memRes.ok) {
+          ui(setResearchMemory, { status: memRes.status === 401 || memRes.status === 404 ? "missing" : "error", detail: `HTTP ${memRes.status}` });
+        } else {
+          ui(setResearchMemory, { status: "ok" });
+          const memRows = await memRes.json();
+          if (Array.isArray(memRows) && memRows[0]?.notes) {
+            const ageDays = (Date.now() - new Date(memRows[0].created_at).getTime()) / 86400000;
+            if (ageDays < 180) {
+              context = `PREVIOUS GEMLYX RESEARCH ON THIS EXACT PLACE (saved ${String(memRows[0].created_at).slice(0, 10)}, treat every price, date, and opening hour in it as needing fresh re-verification; stable facts like history, location, and official sites can be trusted): ${memRows[0].notes}\n\nFRESH RESEARCH: `;
+              if (Array.isArray(memRows[0].urls)) candidateUrls.push(...memRows[0].urls.filter(u => typeof u === "string"));
+            }
+            // ── "SO IF I EVER CLICK UPDATE THEN THESE DRAFTS WILL GO
+            //     INTO THESE SOURCES AGAIN AND CHECK FOR UPDATES" ──────
+            // His words, and the last piece of it. The sources this place was
+            // researched from go straight into the box that tells the
+            // fact-check which pages to open FIRST, so a re-check goes back to
+            // the same places rather than starting from a fresh web search
+            // that may land somewhere else entirely. Age is not a filter here:
+            // an official site does not stop being the official site because
+            // the notes beside it went stale.
+            if (Array.isArray(memRows[0].urls) && memRows[0].urls.length) {
+              ui(setCheckSites, memRows[0].urls.filter(u => typeof u === "string").slice(0, 6).join(" "));
+            }
           }
         }
-      } catch { /* memory is a bonus, never a blocker */ }
+      } catch (e) { ui(setResearchMemory, { status: "error", detail: String(e?.message || e).slice(0, 80) }); }
       let queryIdx = 0;
       for (const q of allQueries) {
         queryIdx += 1;
@@ -1714,16 +1751,16 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         const targetArr = isMajor ? majorEvents : events;
         const targetName = isMajor ? "majorEvents" : "events";
         const nextId = Math.max(0, ...targetArr.map(x => x.id)) + 1;
-        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
+        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (sType === "free") {
         const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, timeNeeded: ${J(t.timeNeeded)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
+        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, timeNeeded: ${J(t.timeNeeded)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
       } else if (sType === "booking") {
         const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, timeNeeded: ${J(t.timeNeeded)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Why People Love It", t.special], ["Perfect For", t.whoFor]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
+        code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, timeNeeded: ${J(t.timeNeeded)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
       } else if (sType === "nightTown") {
         const nextId = Math.max(0, ...nightlifeTowns.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who Is It Perfect For", t.whoFor], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
+        code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
       } else if (sType === "food") {
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
@@ -1737,7 +1774,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       } else {
         const nextId = Math.max(0, ...nightlifeSpots.map(x => x.id)) + 1;
         const isClub = !!t.isClub;
-        code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who Is It For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter]] : [["Who Is It For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
+        code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]] : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
       }
       ui(setStudioResult, code);
       ui(setScanHint, null);
@@ -1956,13 +1993,16 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       try {
         const freshOnly = (rawResearch || "").includes("FRESH RESEARCH: ") ? (rawResearch || "").split("FRESH RESEARCH: ").pop() : (rawResearch || "");
         if (freshOnly.trim()) {
-          await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?on_conflict=name,type`, {
+          const saved = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?on_conflict=name,type`, {
             method: "POST",
             headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
             body: JSON.stringify({ name, type: sType, notes: freshOnly.slice(0, 6000), urls: [...new Set(candidateUrls)].slice(0, 8), created_at: new Date().toISOString() }),
           });
+          // Still never blocks a finished draft. It just stops pretending it
+          // worked.
+          if (!saved.ok) ui(setResearchMemory, { status: saved.status === 401 || saved.status === 404 ? "missing" : "error", detail: `HTTP ${saved.status} on save` });
         }
-      } catch { /* memory save is best-effort, never blocks a finished draft */ }
+      } catch (e) { ui(setResearchMemory, { status: "error", detail: String(e?.message || e).slice(0, 80) }); }
       // frozenGeo is the whole point of this change: publishDraft force-overrides
       // the published station and coordinates with it, so it has to travel WITH
       // the draft rather than sitting in state a later background run overwrites.
@@ -6380,8 +6420,26 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             style={{ width: "100%", background: "none", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginTop: 10, marginBottom: 8, fontFamily: "'Inter', sans-serif" }}>
                             {verifyLoading ? "Searching…" : "🔎 Verify dates, prices & venue names"}
                           </button>
+                          {/* ── THE RESEARCH MEMORY, AND WHETHER IT EXISTS ──
+                              Two 401s in his console on 7 Aug, one on the read
+                              and one on the write, both swallowed by a catch
+                              block. The table has never been created, so a
+                              feature that has shipped for weeks has done
+                              nothing, and the setup SQL for it was sitting in a
+                              code comment. Shown here, once, with the SQL. */}
+                          {researchMemory && researchMemory.status !== "ok" && (
+                            <div style={{ background: "#FFB34714", border: "1px solid #FFB34755", borderRadius: 8, padding: "9px 11px", marginBottom: 8, fontSize: 11, color: C.light, lineHeight: 1.6 }}>
+                              <b style={{ color: "#FFB347" }}>Research memory is not switched on</b> ({researchMemory.detail}). Drafts are not remembering their sources, so a redraft starts from scratch every time. Run this once in the Supabase SQL editor:
+                              <div style={{ fontFamily: "monospace", fontSize: 10, color: C.text, background: C.bg, borderRadius: 6, padding: "7px 8px", marginTop: 6, whiteSpace: "pre-wrap", userSelect: "all" }}>{`create table if not exists gemlyx_research (name text not null, type text not null, notes text, urls jsonb, created_at timestamptz default now(), primary key (name, type));
+alter table gemlyx_research enable row level security;
+create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);`}</div>
+                            </div>
+                          )}
                           {/* Name the sources yourself when you already know
-                              where the answer is. See checkSites above. */}
+                              where the answer is. Pre-filled from this place's
+                              own remembered sources when it has been drafted
+                              before, so a re-check goes back to the same pages
+                              rather than starting from a fresh search. */}
                           <input value={checkSites} onChange={e => setCheckSites(e.target.value)}
                             placeholder="Sites to open first, e.g. oldirishpub.dk tripadvisor.com"
                             style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 11, color: C.text, outline: "none", fontFamily: "monospace", marginBottom: 6, boxSizing: "border-box" }} />

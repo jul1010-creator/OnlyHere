@@ -15,14 +15,14 @@
 // first; this re-ask approach is plain user-messages only, so no model can
 // reject it.
 export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-5", expectJson = false) => {
-  const callOnce = async (p) => {
+  const callOnce = async (p, budget = maxTokens) => {
     try {
       const res = await fetch("/api/anthropic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model,
-          max_tokens: maxTokens,
+          max_tokens: budget,
           messages: [{ role: "user", content: p }],
         }),
       });
@@ -39,14 +39,34 @@ export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-
       return { error: "Couldn't reach Claude — check the API key and your connection." };
     }
   };
-  let out = await callOnce(prompt);
+  let out = await callOnce(prompt, maxTokens);
+  // ── AN EMPTY REPLY ON A TIGHT BUDGET IS NOT A FAILURE, IT IS A
+  //    BUDGET PROBLEM, AND IT HAS AN OBVIOUS ANSWER ─────────────────
+  // Oliver's console, 7 Aug 2026: "Claude returned no text block. Claude won't
+  // rewrite after fact-checking." That call asks for the ENTIRE corrected draft
+  // back as JSON, on a hardcoded 3000 tokens, while the draft going in is
+  // routinely bigger than that. There was nothing wrong with the request and
+  // nothing wrong with the model. It ran out of room.
+  //
+  // Warning about it in the console, which is what happened before, means the
+  // only person who ever finds out is someone who had devtools open at the
+  // time. Retrying once with double the room costs one call and fixes the
+  // entire class, including every future call whose budget someone guesses too
+  // low. Only ONE retry, and only when the reply was genuinely empty: an empty
+  // response for any other reason will be empty again and there is no point
+  // paying twice to learn that.
+  if (out.error && /Empty response from Claude/.test(out.error) && maxTokens < 16000) {
+    const bigger = Math.min(16000, maxTokens * 2);
+    console.warn(`Claude came back empty on ${maxTokens} tokens. Retrying once with ${bigger}.`);
+    out = await callOnce(prompt, bigger);
+  }
   // JSON-expected reply came back as pure prose (no object anywhere in it) —
   // one strict re-ask. The preamble guard in parseClaudeJSON already handles
   // the milder case of chit-chat FOLLOWED by intact JSON; this catches the
   // rarer all-prose reply that used to end as "Guide build failed: empty".
   if (expectJson && !out.error && out.text && !out.text.includes("{")) {
     console.warn("Claude replied with prose instead of JSON — re-asking once with a stricter instruction.");
-    out = await callOnce(`${prompt}\n\nIMPORTANT: Your previous attempt replied with conversational text instead of JSON. Respond with ONLY the JSON object itself, starting immediately with the { character — no greeting, no explanation, nothing before or after the JSON.`);
+    out = await callOnce(`${prompt}\n\nIMPORTANT: Your previous attempt replied with conversational text instead of JSON. Respond with ONLY the JSON object itself, starting immediately with the { character, no greeting, no explanation, nothing before or after the JSON.`, Math.min(16000, maxTokens * 2));
   }
   return out;
 };
@@ -115,6 +135,18 @@ export const withRetry = async (fn, isFailure, label, attempts = 3) => {
 // If that test fails, do not raise its expected count to make it green. Read
 // the new call site and ask whether OpenAI is planning or writing.
 export const askOpenAI = async (prompt, maxTokens = 800) => {
+  const out = await openAIOnce(prompt, maxTokens);
+  // One retry, tripled, for the same reason as askClaude above, and see the
+  // comment on the empty branch for why tripled and not doubled.
+  if (out.empty && maxTokens < 12000) {
+    const bigger = Math.min(12000, maxTokens * 3);
+    console.warn(`OpenAI came back empty on ${maxTokens} tokens. Retrying once with ${bigger}.`);
+    return await openAIOnce(prompt, bigger);
+  }
+  return out;
+};
+
+const openAIOnce = async (prompt, maxTokens) => {
   try {
     const res = await fetch("/api/openai", {
       method: "POST",
@@ -149,8 +181,16 @@ export const askOpenAI = async (prompt, maxTokens = 800) => {
       // actually failed — finish_reason: "length" with reasoning_tokens > 0 in
       // usage is the fingerprint of exactly this. Logging both here so a future
       // empty-response report shows which cause it actually was.
+      // ── AND THE SAME FOR THE REASONING MODEL, WHICH IS WORSE ──
+      // max_completion_tokens is shared between the model's internal reasoning
+      // and the reply you actually see, so a budget that would be generous on
+      // an older model can be spent entirely on thinking, leaving nothing to
+      // write with. finish_reason "length" with reasoning_tokens in usage is
+      // the fingerprint. Tripled rather than doubled, because that is the shape
+      // of the problem: it is not slightly short, it is short by however much
+      // it decided to think.
       console.warn("OpenAI returned no text.", { finish_reason: data.choices?.[0]?.finish_reason, usage: data.usage });
-      return { error: "Empty response from OpenAI" };
+      return { error: "Empty response from OpenAI", empty: true };
     }
     return { text };
   } catch (err) {

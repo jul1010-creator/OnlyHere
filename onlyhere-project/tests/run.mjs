@@ -949,6 +949,60 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     M.factsPreserved("A yellow town by the water.", "A yellow town along Vestergade by the water.").ok);
 }
 
+// ── EVERY TYPE NEEDS SOMEWHERE HONEST TO PUT THE VERDICT ───────────
+// Oliver, 8 Aug 2026, holding a published Amalienborg entry next to a town:
+// "Make it more similar to towns where we see brutal criticism as well... only
+// towns seem to genuinely be good. Do you agree?"
+//
+// He was right, and the split was sharper than towns versus everything. Four
+// types already had a reality check. Four did not: attractions, workshops,
+// nightlife venues and nightlife towns. Those same four carried the two worst
+// headings in the app, "Why People Love It" and "Perfect For". A model cannot
+// write "skip this" under a heading that opens Why People Love It, so it was
+// never disobeying: the schema was asking for praise and got it.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // Each published type builds its page from one bb([...]) call listing its
+  // section headings. Pulling them out of the source is the only way to check
+  // the thing that actually ships.
+  const headingSets = [...app.matchAll(/bb\(\s*(?:isClub \? )?\[\[([\s\S]{0,400}?)\]\]/g)]
+    .map(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2]));
+  ok("every published type still builds a page", headingSets.length >= 7);
+
+  // 1. NOTHING MAY PRESUPPOSE THE VERDICT. A heading is an instruction to the
+  // writer before it is a label for the reader.
+  const PRESUPPOSING = /why people love|perfect for|you'll love|what makes .* special|must see/i;
+  const guilty = headingSets.flat().filter(h => PRESUPPOSING.test(h));
+  is("no heading tells the writer the answer before it writes", guilty, []);
+
+  // 2. AND EVERY TYPE NEEDS THE SLOT. Without one there is nowhere for an
+  // honest negative to live, whatever the prompt asks for.
+  const noVerdict = headingSets.filter(set => !set.some(h => /reality check/i.test(h)));
+  is("every type has a reality check section", noVerdict, []);
+
+  // 3. Named the same everywhere, or it reads as a different feature per page.
+  const variants = [...new Set(headingSets.flat().filter(h => /reality check/i.test(h)))];
+  is("and it is called the same thing on every one", variants, ["The Reality Check"]);
+
+  // 4. The schema has to carry the field, or the heading renders empty forever.
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  const TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightTown", "booking"];
+  const p = M.studioPrompts("Amalienborg Slot");
+  TYPES.forEach(t => {
+    ok(`${t} asks for a verdict field`, /realityCheck|gettingThereReality/.test(p[t]));
+  });
+
+  // 5. A DOWNSIDE IS NOT A LOGISTICS NOTE. The Amalienborg entry satisfied the
+  // old rule with "get there by 11:45 for a clear view", which is advice for
+  // somebody who has already decided to come.
+  ok("the rule now says what a downside is not", /logistics note|already decided/i.test(prompts));
+  ok("and names the useless kinds outright", /arrive by|book ahead|wear good shoes/i.test(prompts));
+  ok("no manufactured complaint when a place is simply good", /rather than manufacturing a complaint/i.test(prompts));
+  // The one that made the old rule toothless: a criticism immediately balanced
+  // by a positive reads as marketing.
+  ok("and it forbids pre-cushioning the criticism", /pre-cushioned|immediately balancing/i.test(prompts));
+}
+
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
