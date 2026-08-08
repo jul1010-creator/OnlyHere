@@ -47,6 +47,7 @@ writeFileSync(entry, `
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
@@ -2471,6 +2472,42 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a missing table is named as missing", /if \(status === 404 \|\| code === "PGRST205"/.test(app3));
   ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\. \(Nothing is wrong with the table\.\)/.test(app3));
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
+}
+
+// ── "IT'S SUCH A NERD WORD TO BE USING SO MUCH" ───────────────────
+// Oliver, 8 Aug 2026, on "actually". Not a cliché to ban outright, a crutch to
+// count: it is a real word when it corrects an expectation the reader holds.
+{
+  is("one use is not a tic", M.fillerWordCounts("The door is actually round the back."), {});
+  is("two is", M.fillerWordCounts("It is actually free, and actually open late."), { actually: 2 });
+  // WORD BOUNDARIES, not substrings. AI_TELL_PHRASES can use indexOf because
+  // its entries are multi-word; a bare word inside another word cannot.
+  is("a word inside another word is not a hit", M.fillerWordCounts("factually factually factually"), {});
+  is("case does not matter", M.fillerWordCounts("Actually. actually."), { actually: 2 });
+  is("nothing in, nothing out", M.fillerWordCounts(""), {});
+  ok("the word he named is on the list", M.FILLER_WORDS.includes("actually"));
+  // KEPT OFF the outright-ban list on purpose: everything there is never right,
+  // and this one sometimes is. Merging them would make two uses of "actually"
+  // count toward the threshold that marks an entry as a high-severity problem.
+  ok("and deliberately NOT on the outright-ban list", !M.AI_TELL_PHRASES.includes("actually"));
+
+  const tic = M.auditEntry({ id: 9, type: "town", payload: {
+    name: "Somewhere", desc: "It is actually free. The bakery is actually good. Actually worth the trip.",
+    region: "Funen", __lat: 55.4, __lon: 10.4,
+  } });
+  const voice = tic.findings.filter(f => f.field === "voice");
+  ok("an entry leaning on it is flagged", voice.some(f => /filler words/i.test(f.detail || f.why || JSON.stringify(f))));
+  ok("but only as a style note, never as a hard problem", voice.every(f => f.severity !== "critical"));
+
+  // The writer is told, which is the half that stops it happening again. A ban
+  // list only catches what has already been written.
+  const voiceRules = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("the voice rules name it outright", /FILLER WORDS THAT SOUND LIKE THINKING OUT LOUD/.test(voiceRules));
+  ok("with the test for when it is real", /the entrance looks closed, it is actually round the back/.test(voiceRules));
+  // THE MECHANISM UNDERNEATH: a model mirrors the register of its instructions,
+  // and these instructions argue with sources for a living, so they use the
+  // word legitimately and often. Saying so is what stops it being copied.
+  ok("and it says why the instructions themselves use it", /Instructions argue, entries state/.test(voiceRules));
 }
 
 // ── "COPENHAGEN ON DANISH IS KØBENHAVN" ───────────────────────────

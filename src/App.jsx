@@ -285,11 +285,15 @@ const SOURCES_SQL = `create table if not exists gemlyx_sources (
   created_at timestamptz default now()
 );
 alter table gemlyx_sources enable row level security;
-create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
-create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);
+alter table gemlyx_sources add column if not exists applies_place text default '';
 
--- Safe to run again if the table already exists from an earlier version:
-alter table gemlyx_sources add column if not exists applies_place text default '';`;
+-- Dropped first so the whole script is safe to run again. Supabase runs the
+-- editor as one transaction, so a "policy already exists" error rolls back
+-- everything, including the column add above.
+drop policy if exists "read gemlyx_sources" on gemlyx_sources;
+create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
+drop policy if exists "auth all gemlyx_sources" on gemlyx_sources;
+create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);`;
 
 // `where` is whatever the caller knows about the place: usually a name, and a
 // whole entry where one exists. A source scoped to a town is left OUT when
