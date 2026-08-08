@@ -3,7 +3,8 @@ import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { askClaude, askPerplexity, parseClaudeJSON } from "../utils/aiClient";
 import { auditEntry, auditAll } from "../utils/entryAudit";
-import { correctEntry, editEntry, routeMessage, offersCorrection, ASK_PROMPT, LOOKUP_PROMPT, NOT_IN_ENTRY } from "../utils/correction";
+import { correctEntry, editEntry, routeMessage, offersCorrection, ASK_PROMPT, LOOKUP_PROMPT, NOT_IN_ENTRY, SWEEP_PROMPT } from "../utils/correction";
+import { SWEEPS, sweepById } from "../utils/sweeps";
 import { STUDIO_VOICE } from "../utils/studioContent";
 import { departureParam } from "../utils/helpers";
 
@@ -88,19 +89,20 @@ export const rowIdForItem = (item) => {
 // directly under the draft it is talking about. Same routing, same claim
 // splitting, same Perplexity verification, same scope guard, same Save. The
 // only difference is that it is sitting where the work is.
-export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraftPatched, onSaved, inline }) => {
+export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraftPatched, onSaved, onSweepRequested, inline }) => {
   const [open, setOpen] = useState(!!inline);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState(null);
   const [pending, setPending] = useState(null);   // a correction awaiting Save
+  const [sweepOffer, setSweepOffer] = useState(null); // a sweep awaiting Run
   const [saving, setSaving] = useState(false);
   const scrollRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [log, pending, stage]);
+  }, [log, pending, stage, sweepOffer]);
 
   if (!session) return null;
 
@@ -125,6 +127,12 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
   // This is a HARD gate, not a hint to the router. routeMessage still does its
   // job in Studio; on a blog its answer is discarded before it can act.
   const studioMode = onDraft;
+  // ── A SWEEP IS NOT ABOUT THE OPEN ENTRY ─────────────────────────
+  // Correcting and editing need a draft on screen, because they change the
+  // thing he is looking at. A sweep changes a column across everything
+  // published, so it needs the opposite: nowhere in particular. What it does
+  // need is to be in Studio, which is what the callback existing means.
+  const sweepMode = typeof onSweepRequested === "function";
   const say = (role, text, extra = {}) => setLog(l => [...l, { role, text, ...extra }]);
 
   // The same routing call the drafting pipeline makes, so a correction can
@@ -287,6 +295,29 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     say("gemlyx", `Not in the entry, so I looked it up just now.\n\n${written.error ? research.text : written.text}${cites.length ? `\n\nSources: ${cites.join("  ")}` : ""}`);
   };
 
+  // ── "OR TALKING TO AN AI THAT ARE ABLE TO DO TINY CHANGES WITH THEM ALL" ──
+  // The chat door, and it is a door rather than a second machine. It composes a
+  // sweep and hands it to the panel that already has the guardrails: the scope
+  // lock, the proposal table, the snapshot, the capped write pass. Nothing here
+  // touches Supabase, exactly as a draft correction rejoins the normal publish
+  // path instead of creating a second way to put content live.
+  const runSweep = async (message) => {
+    const res = await askClaude(SWEEP_PROMPT(SWEEPS, message), 400, "claude-sonnet-5", true);
+    if (res.error) { say("gemlyx", `Could not reach Claude: ${res.error}`); return; }
+    let parsed = null;
+    try { parsed = await parseClaudeJSON(res.text); } catch { parsed = null; }
+    // An id that is not in the registry is the same as no answer. A sweep
+    // invented in a chat message has never been checked against shapeForLive,
+    // so it could write a field that renders and is silently dropped on the
+    // next redraft.
+    const sweep = sweepById(parsed?.sweep);
+    if (!sweep) {
+      say("gemlyx", `I cannot do that one as a sweep yet. Studio only knows how to run these across everything: ${SWEEPS.map(s => s.label.toLowerCase()).join(", ")}.\n\nA new one has to be added in code, because a sweep has to declare which fields it may write and that list is checked against the publish path before it can run. ${parsed?.why ? `\n\nWhat I understood you to want: ${parsed.why}` : ""}`);
+      return;
+    }
+    setSweepOffer({ sweep, why: String(parsed?.why || "").trim() });
+  };
+
   const runAudit = async () => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}` },
@@ -303,14 +334,26 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     const message = (override ?? input).trim();
     if (!message || busy) return;
     if (!override) setInput("");
-    setPending(null);
+    setPending(null); setSweepOffer(null);
     if (!override) say("you", message);
     setBusy(true);
     try {
       const routed = forceCorrect ? "correct" : routeMessage(message);
       // Reading a blog: answer, always. Nothing here can change a published row.
-      const intent = studioMode ? routed : "ask";
-      if (intent === "edit") await runEdit(message);
+      // Reading a blog: answer, always. In Studio with nothing open: a sweep is
+      // still a legitimate thing to ask for, because it is about everything
+      // published rather than about whatever happens to be on screen.
+      // A SWEEP IS CHECKED FIRST, because it is the one intent that is not
+      // about whatever is on screen. Routing it through studioMode meant the
+      // inline assistant (which has a draft, so studioMode is true) reached
+      // runSweep, rendered the offer card, and then called an onSweepRequested
+      // that was never passed to it: the button said "Running it" and ran
+      // nothing at all.
+      const intent = routed === "sweep" ? (sweepMode ? "sweep" : "ask")
+                   : studioMode ? routed
+                   : "ask";
+      if (intent === "sweep") await runSweep(message);
+      else if (intent === "edit") await runEdit(message);
       else if (intent === "correct") await runCorrection(message);
       else if (intent === "audit") await runAudit();
       else await runAsk(message);
@@ -403,6 +446,30 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
             {stage && (
               <div style={{ ...bubble("gemlyx"), color: C.muted, fontSize: 11.5 }}>
                 {stage.label}{typeof stage.percent === "number" ? ` · ${stage.percent}%` : ""}
+              </div>
+            )}
+            {sweepOffer && (
+              <div style={{ background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: "10px 12px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 6 }}>{sweepOffer.sweep.label}</div>
+                {/* Said in plain words BEFORE anything is read, because "it will
+                    look at 34 entries and may change one field" is the sentence
+                    that lets him say no. */}
+                <div style={{ fontSize: 11.5, color: C.text, lineHeight: 1.6 }}>
+                  This looks at published <b>{sweepOffer.sweep.types.join(" and ")}</b> entries that have no <b>{sweepOffer.sweep.missing.join(", ")}</b> yet, up to {sweepOffer.sweep.cap} of them.
+                  <br />It may change <b>{sweepOffer.sweep.fields.length === 1 ? "one field" : `${sweepOffer.sweep.fields.length} fields`}: {sweepOffer.sweep.fields.join(", ")}</b>. Nothing else can be touched.
+                  <br />It writes nothing. You get a table, and you decide row by row.
+                </div>
+                {sweepOffer.why && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 5 }}>Read as: {sweepOffer.why}</div>}
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <button onClick={() => { onSweepRequested?.(sweepOffer.sweep.id); say("gemlyx", "Running it. The table is in the Sweep panel in Studio, under the maintenance tools. Nothing saves until you press the button under it."); setSweepOffer(null); }}
+                    style={{ background: C.gold, border: "none", color: "#000", borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                    Look at them
+                  </button>
+                  <button onClick={() => { setSweepOffer(null); say("gemlyx", "Left alone."); }}
+                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
             {pending && (

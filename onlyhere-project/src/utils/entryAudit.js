@@ -61,6 +61,188 @@ const textOf = (payload) => {
   return parts.join(" ");
 };
 
+// ── ONE ENTRY, TWO CONTRADICTORY ANSWERS ────────────────────────────
+// Found by eye on the Copenhagen entry, 8 Aug 2026. The body says water costs
+// 1.20 to 1.50 EUR and a hot dog about 7. The typicalCosts glance field says
+// water is about 4 EUR and a hot dog about 1,20. Read those two lines together
+// and the hot dog price in the glance field is the WATER price from the body:
+// two fields written in separate passes, one of them shifted by a row.
+//
+// Nothing existing could have caught it. Every individual figure is plausible,
+// every field parses, and the only thing wrong is that they disagree with each
+// other. So the check is not "is this price right", which needs research and a
+// source, but "does this entry answer the same question twice, differently",
+// which is free, deterministic, and finds every entry with the shape rather
+// than the one somebody happened to read.
+//
+// It runs on all 71 in milliseconds and always scores the same, which is the
+// standing reason this file has no AI in it.
+
+// A glance field is a short answer meant to be scanned. Where a figure in one
+// of these disagrees with the prose, the glance field is usually the wrong one,
+// because it was filled in second and by itself.
+const GLANCE_COST_FIELDS = ["typicalCosts", "price", "extraCosts", "ticketInfo"];
+
+// Only things that genuinely carry one price. "lunch" and "dinner" are left out
+// on purpose: a range for a meal is not the same claim as a range for a bottle,
+// and two honest figures for "dinner" in one entry is normal writing.
+const PRICED_NOUNS = [
+  ["water", /\b(?:bottled\s+)?water\b|\bvand\b/gi],
+  ["a hot dog", /\bhot\s?dogs?\b|\bp(?:ø|o)lser?\b/gi],
+  ["coffee", /\bcoffee\b|\bkaffe\b/gi],
+  ["beer", /\bbeers?\b|\bpints?\b|\b(?:ø|oe)l\b/gi],
+  ["a pastry", /\bpastr(?:y|ies)\b|\bcinnamon\s+(?:roll|swirl)\b|\bwienerbr(?:ø|o)d\b/gi],
+  ["a bike hire", /\bbike\s+(?:hire|rental)\b|\bcycle\s+hire\b/gi],
+  ["a single ticket", /\bsingle\s+(?:ticket|fare|journey)\b|\bone\s+way\s+ticket\b/gi],
+];
+
+const CURRENCY_TOKEN = /(eur\b|euros?\b|€|dkk\b|kroner\b|kr\.?(?=\s|$|\)|,))/gi;
+const normCurrency = (raw) => {
+  const t = String(raw || "").toLowerCase().replace(/\./g, "").trim();
+  if (!t) return null;
+  if (t === "eur" || t === "euro" || t === "euros" || t === "€") return "eur";
+  if (t === "dkk" || t === "kr" || t === "kroner") return "dkk";
+  return null;
+};
+
+// A number followed by a unit is a duration, a distance or a headcount, not a
+// price, and a four-digit number in this range is a year. Both appear beside
+// priced nouns often enough to matter ("coffee from 2019", "a 15 minute walk
+// from the hot dog stand").
+const NOT_A_PRICE_AFTER = /^\s*(?:min\b|mins\b|minutes?\b|hours?\b|hrs?\b|km\b|metres?\b|meters?\b|m\b|people\b|persons?\b|years?\b|%|:)/i;
+// The number is grabbed WHOLE and interpreted afterwards. An earlier version
+// pattern-matched the shape inline and read "2,400 DKK" as 2.40 followed by a
+// separate 0, which is the kind of quiet arithmetic error that would have put a
+// contradiction finding on entries that do not have one.
+const NUM = "(\\d[\\d.,]*\\d|\\d)";
+const PRICE_RE = new RegExp(`${NUM}\\s*(?:(?:–|—|-|to)\\s*${NUM})?\\s*(eur\\b|euros?\\b|€|dkk\\b|kroner\\b|kr\\.?)?`, "gi");
+
+// Danish writes a decimal comma and a full-stop thousands separator, English
+// does the opposite, and Gemlyx entries contain both because the sources do.
+// Every shape that is genuinely ambiguous is REFUSED rather than guessed:
+// "1.234" could be a price or twelve hundred and thirty four, and a wrong guess
+// here invents a disagreement that is not in the entry.
+const toNumber = (raw) => {
+  const s = String(raw || "").trim();
+  if (/^\d+$/.test(s)) return Number(s);
+  if (/^\d{1,3}(?:,\d{3})+$/.test(s)) return Number(s.replace(/,/g, ""));      // 2,400
+  if (/^\d{1,3}(?:\.\d{3})+$/.test(s)) return Number(s.replace(/\./g, ""));    // 2.400
+  if (/^\d+,\d{1,2}$/.test(s)) return Number(s.replace(",", "."));             // 1,20
+  if (/^\d+\.\d{1,2}$/.test(s)) return Number(s);                              // 1.20
+  return null;
+};
+
+export const pricesIn = (text) => {
+  const t = String(text || "");
+  const out = [];
+  PRICE_RE.lastIndex = 0;
+  let m;
+  while ((m = PRICE_RE.exec(t)) !== null) {
+    if (m[0].trim() === "") { PRICE_RE.lastIndex++; continue; }
+    const rest = t.slice(m.index + m[0].length);
+    if (NOT_A_PRICE_AFTER.test(rest)) continue;
+    const lo = toNumber(m[1]);
+    const hi = m[2] ? toNumber(m[2]) : lo;
+    if (lo == null || hi == null) continue;
+    // A bare four-digit number in living memory is a year, not a price.
+    if (!m[3] && lo >= 1000 && lo <= 2100 && !m[2]) continue;
+    out.push({ at: m.index, lo: Math.min(lo, hi), hi: Math.max(lo, hi), currency: normCurrency(m[3]) });
+  }
+  return out;
+};
+
+// The currency the whole field is written in, when it states exactly one. A
+// field mixing EUR and DKK cannot lend its currency to a figure that has none,
+// so it lends nothing.
+const fieldCurrency = (text) => {
+  const found = new Set((String(text || "").match(CURRENCY_TOKEN) || []).map(normCurrency).filter(Boolean));
+  return found.size === 1 ? [...found][0] : null;
+};
+
+// The price a noun is carrying: the first one after it, as long as another
+// priced noun does not come first. "water 1.20 to 1.50 EUR and hotdog 7" gives
+// water the range and the hot dog the seven, which is the whole point.
+export const priceForNoun = (text, nounRe) => {
+  const t = String(text || "");
+  if (!t) return null;
+  const nouns = [];
+  for (const [, re] of PRICED_NOUNS) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(t)) !== null) nouns.push(m.index);
+  }
+  nouns.sort((a, b) => a - b);
+
+  const prices = pricesIn(t);
+  const fc = fieldCurrency(t);
+
+  nounRe.lastIndex = 0;
+  let hit;
+  while ((hit = nounRe.exec(t)) !== null) {
+    const start = hit.index + hit[0].length;
+    const nextNoun = nouns.find(n => n > hit.index) ?? t.length;
+    const p = prices.find(x => x.at >= start && x.at < nextNoun && x.at - start <= 60);
+    if (p) return { ...p, currency: p.currency || fc };
+    // "7 EUR for a hot dog" reads the other way round. Only a very short reach
+    // backwards, because a price twenty words earlier belongs to something else.
+    const before = prices.filter(x => x.at < hit.index && hit.index - x.at <= 24).pop();
+    if (before && !nouns.some(n => n < hit.index && n > before.at)) return { ...before, currency: before.currency || fc };
+  }
+  return null;
+};
+
+// Two figures for the same thing disagree when their ranges do not overlap AND
+// they are far enough apart that rounding cannot explain it. 1.20 to 1.50
+// against "about 1.50" is one entry written twice; 1.20 against 4 is two
+// different claims.
+const DISAGREEMENT_RATIO = 1.6;
+// THREE LINES, AND ONE HONEST NOTE ABOUT THE MIDDLE ONE.
+//
+// The first draft of this had a stack of guards: an overlap check, a zero
+// check, and the ratio. Mutation testing showed two of them could be deleted
+// without a single test going red, because each was shadowed by arithmetic that
+// happened to give the same answer, and they were propping each other up.
+// Rewriting it to make every line load-bearing produced something that leaned
+// on `0/0` being NaN, which is worse: correct by accident and unreadable.
+//
+// So it is written plainly instead, and the redundancy is stated rather than
+// hidden. Given prices are never negative, the overlap line below is provably
+// implied by the ratio that follows it (under overlap, a.lo <= b.hi, so the
+// ratio is at most 1). It stays because it is the DEFINITION of two figures
+// agreeing, and a future edit to the ratio should not silently take agreement
+// with it. It cannot be isolated by a mutation, and pretending otherwise with a
+// contrived test would be the exact failure this suite exists to prevent.
+const contradicts = (a, b) => {
+  if (a.currency && b.currency && a.currency !== b.currency) return false;   // 30 kr and 4 EUR is one price
+  if (a.lo <= b.hi && b.lo <= a.hi) return false;                            // overlap: both can be true
+  // Disjoint, so this is the real gap. Free on one side divides by zero, and
+  // Infinity is the right answer to "how far apart are free and five euros".
+  const [low, high] = a.hi < b.lo ? [a.hi, b.lo] : [b.hi, a.lo];
+  return high / low >= DISAGREEMENT_RATIO;
+};
+
+const showPrice = (p) => `${p.lo === p.hi ? p.lo : `${p.lo} to ${p.hi}`}${p.currency ? ` ${p.currency.toUpperCase()}` : ""}`;
+
+export const costContradictions = (payload) => {
+  const p = payload || {};
+  const glanceParts = GLANCE_COST_FIELDS.map(f => (typeof p[f] === "string" ? p[f] : "")).filter(Boolean);
+  if (!glanceParts.length) return [];
+  const glance = glanceParts.join(" ; ");
+
+  // Everything that is not a glance cost field, so the prose is compared
+  // against the summary rather than against itself.
+  const prose = textOf(Object.fromEntries(Object.entries(p).filter(([k]) => !GLANCE_COST_FIELDS.includes(k))));
+
+  const out = [];
+  for (const [label, re] of PRICED_NOUNS) {
+    const a = priceForNoun(glance, re);
+    const b = priceForNoun(prose, re);
+    if (!a || !b) continue;
+    if (contradicts(a, b)) out.push({ noun: label, glance: showPrice(a), body: showPrice(b) });
+  }
+  return out;
+};
+
 // Severity is about what a traveler LOSES, not about how untidy the entry is.
 // "critical" means someone could waste a day or money on it. "high" means a
 // visibly wrong or missing fact. "low" means it reads badly but misleads nobody.
@@ -119,6 +301,15 @@ export const auditEntry = (row) => {
   if (ns && (/;|\.\s+\S|,.*,/.test(ns) || ns.split(/\s+/).length > 6 || ns.length > 48
              || /\b(check|likely|probably|see |consult|rejseplanen|google maps|no train|unknown|varies)\b/i.test(ns))) {
     add("high", "nearest stop", `The Nearest Station field holds a sentence rather than a name: "${ns.slice(0, 70)}". It renders straight after the label, so it reads as the stop's name. Put the name there or leave it empty, and explain the journey in the prose.`);
+  }
+
+  // Critical rather than high: a traveller reading the glance row budgets from
+  // it, and an entry that answers the same question two ways is wrong in one of
+  // them for certain. Which one is wrong needs a human, which is exactly why it
+  // is worth naming both figures here.
+  const crossed = costContradictions(p);
+  if (crossed.length) {
+    add("critical", "costs", `The glance cost field and the body disagree about ${crossed.length === 1 ? "a price" : `${crossed.length} prices`}: ${crossed.map(c => `${c.noun} reads ${c.glance} at a glance and ${c.body} in the text`).join("; ")}. One of them is wrong, and a reader budgeting from the glance row has no way to tell which.`);
   }
 
   // ── medium: thin or unfinished ────────────────────────────────

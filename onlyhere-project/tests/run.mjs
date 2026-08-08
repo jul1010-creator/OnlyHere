@@ -18,11 +18,11 @@
 // or React, so it always runs in about a second and can never be flaky.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stripNonCode, functionBody, useBeforeDeclare } from "./tdz.mjs";
+import { stripNonCode, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration } from "./tdz.mjs";
 
 let passed = 0, failed = 0;
 const fails = [];
@@ -61,6 +61,11 @@ writeFileSync(entry, `
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
   export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
   export { SITE_ORIGIN } from ${JSON.stringify(join(root, "src/config.js"))};
+  export { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
+  export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
+  export { shapeForLive } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { costContradictions, pricesIn, priceForNoun } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 const esbuild = [
   join(root, "node_modules/.bin/esbuild"),
@@ -1192,7 +1197,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and an absolute og:image", /property="og:image" content="https:\/\//.test(html));
   ok("and a large twitter card", /name="twitter:card" content="summary_large_image"/.test(html));
   ok("and a canonical url", /rel="canonical" href="https:\/\/x.dev\/guide\/abc"/.test(html));
-  ok("the title cannot break out of the attribute", !/content="[^"]*<[^"]*"/.test(html));
+  // THE FIXTURE HAS TO CONTAIN A "<". The old one was `Bornholm & the "smoked"
+  // east` — no angle bracket anywhere in it, so this regex could not match no
+  // matter how broken the escaping was. Verified: gutting escapeHtml to the
+  // identity function left the assertion green.
+  const hostile = buildPreviewHtml({ guide: { ...guide, title: `5 < 6 days <script>alert(1)</script>` }, url: "u", image: "i" });
+  ok("a title cannot break out of the attribute", !/content="[^"]*<[^"]*"/.test(hostile));
+  ok("nor close it early", !/content="[^"]*"[^"\/>]*"/.test(hostile));
+  ok("and the escaped form is what ships", /content="5 &lt; 6 days &lt;script&gt;/.test(hostile));
 
   // THE NORMAL RESPONSE IS THE REAL APP WITH TAGS FOLDED IN, for crawlers and
   // people alike. It used to be that anything matching the crawler list got a
@@ -1229,7 +1241,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
    "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
    "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
-   "TelegramBot (like TwitterBot)",
+   "TelegramBot/1.0",
+   "Mozilla/5.0 (compatible; TwitterBot/1.0)",
    "LinkedInBot/1.0 (compatible; Mozilla/5.0; Jakarta Commons-HttpClient/3.1)",
    "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
   ].forEach(ua => ok(`recognised: ${ua.slice(0, 28)}`, isCrawler(ua)));
@@ -1272,7 +1285,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const img = /property="og:image" content="([^"]+)"/.exec(html)?.[1];
   ok("index.html has an og:image at all", !!img);
   ok("index.html's og:image matches SITE_ORIGIN", !!img && img.startsWith(SITE_ORIGIN + "/"));
-  ok("and it is a real file in public/", existsSync(join(root, "public", String(img || "").replace(SITE_ORIGIN + "/", ""))));
+  // existsSync on a DIRECTORY is true, so a deleted og:image tag made img
+  // undefined, the path collapse to public/ itself, and this pass.
+  ok("and it is a real file in public/", !!img && img.startsWith(SITE_ORIGIN + "/") && statSync(join(root, "public", img.slice(SITE_ORIGIN.length + 1)), { throwIfNoEntry: false })?.isFile() === true);
   ok("index.html has a description", /name="description" content="[^"]{40,}"/.test(html));
   ok("and a large twitter card", /name="twitter:card" content="summary_large_image"/.test(html));
 
@@ -1283,8 +1298,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // against that limit, which is why the preview lives in middleware.js — but
   // the next person to add an api/ route deserves to find out here, in a second,
   // rather than from a failed deploy.
-  const fns = readdirSync(join(root, "api")).filter(f => /\.(js|ts|mjs)$/.test(f));
-  ok(`api/ holds ${fns.length} of the 12 serverless functions Hobby allows`, fns.length <= 12);
+  const fns = existsSync(join(root, "api")) ? readdirSync(join(root, "api")).filter(f => /\.(js|ts|mjs)$/.test(f)) : [];
+  // fns.length > 0 matters: an empty or missing api/ would otherwise satisfy
+  // "<= 12" and read as a pass.
+  ok(`api/ holds ${fns.length} functions, within the Hobby limit of 12`, fns.length > 0 && fns.length <= 12);
   ok("the preview is NOT one of them", !fns.includes("guide-preview.js"));
 
   // vercel.json is back to the plain single-page-app catch-all: no crawler
@@ -1301,49 +1318,83 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // ── NOTHING IN App.jsx READS A CONST BEFORE IT EXISTS ──────────────
 // Two crashes, three days apart, both this exact shape:
 //   6 Aug — the FRONT PAGE, dead on every render, because a useEffect
-//           dependency array named a const declared 600 lines below it. It
-//           survived review because /guide/:id is a different component and
-//           that route kept working perfectly.
-//   8 Aug — the GUIDE BUILD, dead on every run:
-//           "Guide build failed: ReferenceError: Cannot access 'qt' before
-//            initialization"
-//           because reordering the pipeline so accommodation lands before the
-//           route fetch left enrichGuideDays(parsed.days, travelMode,
-//           mixedModes) sitting above the two consts it reads.
+//           dependency array named a const declared 600 lines below it.
+//   8 Aug — the GUIDE BUILD, dead on every run: "Cannot access 'qt' before
+//           initialization", because reordering the pipeline left
+//           enrichGuideDays(parsed.days, travelMode, mixedModes) above the two
+//           consts it reads.
 //
-// A temporal dead zone read is a thrown ReferenceError, not an undefined, so it
-// takes the whole call down, and neither of these was findable by eye in a
-// 774 KB file. This sweeps every function in it, in about a tenth of a second.
-// See tests/tdz.mjs for why the stripping has to be a character walk and what
-// it deliberately skips.
+// TWO DIFFERENT INSTRUMENTS, because the two live in different kinds of scope.
+// A plain function like generateGuide IS its own scope, so comparing positions
+// inside it is exact. A React component is not: GemlyxApp's body is 558 KB of
+// nested closures, and a callback on line 2333 reading a const declared on line
+// 2401 is normal and safe, because it runs after both exist. Position-comparing
+// there produced nine findings and zero bugs — and a check nobody believes is
+// worse than none. A HOOK DEPENDENCY ARRAY is the exception: it is evaluated
+// during render, in the body's own scope, which is exactly the 6 Aug bug, so it
+// gets its own exact check that nothing nested can trip.
+//
+// JSX IS TRANSFORMED AWAY FIRST. The character walk lexes JavaScript, and JSX
+// text is not JavaScript: `<div>Denmark's capital</div>` opened a single-quoted
+// string that ran on for thousands of characters, and `</div>` looked like the
+// start of a regex literal. Between them GemlyxApp's braces never balanced and
+// the largest function in the file could not be extracted at all. esbuild is
+// already required above, so the file is run through it first and the scan reads
+// real JavaScript.
 {
-  const stripped = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
-  ok("App.jsx parses far enough to find generateGuide", !!functionBody(stripped, "const generateGuide = async"));
-  const names = new Set([...stripped.matchAll(/const ([A-Za-z_$][\w$]*) = (?:async )?\(/g)].map(m => m[1]));
+  const appPath = join(root, "src/App.jsx");
+  const transformed = join(dir, "app.transformed.js");
+  execFileSync(esbuild, [appPath, "--loader:.jsx=jsx", "--format=esm", `--outfile=${transformed}`], { stdio: "pipe" });
+  const stripped = stripNonCode(readFileSync(transformed, "utf8"));
+  const fns = namedFunctions(stripped);
+  ok(`${fns.length} named functions discovered in App.jsx`, fns.length > 100);
+
+  // The component itself, by the exact check.
+  const component = functionBody(stripped, "function GemlyxApp(");
+  ok("GemlyxApp's body can actually be extracted", !!component && component.length > 100000);
+  is("no hook depends on a const declared later", hookDepsBeforeDeclaration(component).map(f => `${f.hook} reads ${f.name}`), []);
+
+  // Every plain function, by position. The component is excluded by size for the
+  // reason above; everything else is small enough that its body is its scope.
   const bad = [];
   let swept = 0;
-  for (const nm of names) {
-    const body = functionBody(stripped, `const ${nm} = `);
-    if (!body || body.length < 1200) continue;
+  for (const [nm, decl] of fns) {
+    const body = functionBody(stripped, decl);
+    if (!body || body.length < 1200 || body.length > 200000) continue;
     swept++;
     useBeforeDeclare(body).forEach(f => bad.push(`${nm}(): reads ${f.name} on line ${f.useLine}, declared on line ${f.declLine}`));
+    hookDepsBeforeDeclaration(body).forEach(f => bad.push(`${nm}(): ${f.hook} depends on ${f.name}, declared ${f.declLine - f.useLine} lines later`));
   }
-  ok(`swept ${swept} functions in App.jsx for temporal dead zones`, swept > 20);
+  ok(`swept ${swept} functions in App.jsx for temporal dead zones`, swept >= 20);
   is("nothing reads a const before it is declared", bad, []);
+  // generateGuide by name, because it is where the 8 Aug crash was and a
+  // discovery regression must not quietly drop it.
+  ok("generateGuide is among them", fns.some(([nm]) => nm === "generateGuide") && (functionBody(stripped, "const generateGuide = ") || "").length > 20000);
+  // Same for a function with a defaulted parameter, which the first version of
+  // functionBody truncated to its parameter list and then silently skipped.
+  ok("so is a function with a defaulted parameter", (functionBody(stripped, "const fetchExactDurations = ") || "").length > 2000);
 
-  // And the scanner itself, against the two shapes it exists to catch, so a
-  // future refactor cannot quietly turn it into a function that always passes.
+  // ── THE SCANNER, AGAINST BOTH SHAPES IT EXISTS FOR ───────────────
+  const bodyOf = (src, d) => functionBody(stripNonCode(src), d);
   const rigged = `const f = async () => {\n  const a = one(b);\n  const b = 2;\n  return a;\n};`;
-  is("the scanner catches a real one", useBeforeDeclare(functionBody(stripNonCode(rigged), "const f = ")).map(x => x.name), ["b"]);
-  // A property KEY is not a read. Every false positive left after the parameter
-  // rule was this: setState({ running: true, fixed: 0 }) above a `const fixed`.
+  is("it catches a plain one", useBeforeDeclare(bodyOf(rigged, "const f = ")).map(x => x.name), ["b"]);
+  const hook = `function C() {\n  useEffect(() => { go(); }, [later]);\n  const later = 1;\n  return later;\n}`;
+  is("and the 6 Aug hook shape", hookDepsBeforeDeclaration(bodyOf(hook, "function C(")).map(x => x.name), ["later"]);
+  // A property KEY is not a read: setState({ fixed: 0 }) above a `const fixed`
+  // was every false positive left after the parameter rule.
   const keys = `const f = async () => {\n  setState({ fixed: 0, failed: [] });\n  const fixed = 1; const failed = [];\n  return fixed;\n};`;
-  is("a property key is not a read", useBeforeDeclare(functionBody(stripNonCode(keys), "const f = ")), []);
-  // A word inside a prompt is not a read either — the whole reason the stripper
-  // exists. This template literal mentions travelMode in prose AND interpolates
-  // a real expression, and only the real one counts.
-  const prose = "const f = async () => {\\n  const p = `plan the travelMode carefully ${name.trim()}`;\\n  const travelMode = 1;\\n  return p + travelMode;\\n};";
-  is("a word inside a prompt is not a read", useBeforeDeclare(functionBody(stripNonCode(prose), "const f = ")), []);
+  is("a property key is not a read", useBeforeDeclare(bodyOf(keys, "const f = ")), []);
+  // THE STRIPPER IS WHAT IS BEING TESTED HERE, so this fixture has to have a
+  // real read INSIDE an interpolation and prose OUTSIDE it. The earlier version
+  // asserted [] and passed against a stripper that blanked ${...} too — which
+  // is the whole thing the character walk exists to avoid.
+  const prose = ["const f = async () => {", "  const p = `plan the travelMode carefully ${travelMode}`;", "  const travelMode = 1;", "  return p;", "};"].join("\n");
+  is("prose is ignored but ${…} is not", useBeforeDeclare(bodyOf(prose, "const f = ")).map(x => x.name), ["travelMode"]);
+  // And JSX must survive both hazards that broke it on the real file.
+  const jsx = `function C() {\n  const t = <div>Denmark's capital</div>;\n  useEffect(() => { go(); }, [later]);\n  const later = 1;\n  return t;\n}`;
+  const jsxBody = bodyOf(execFileSync(esbuild, ["--loader=jsx", "--format=esm"], { input: jsx, encoding: "utf8" }), "function C(");
+  ok("an apostrophe in JSX text does not swallow the body", !!jsxBody && jsxBody.length > 80);
+  is("and the hook check still fires through it", hookDepsBeforeDeclaration(jsxBody).map(x => x.name), ["later"]);
 }
 
 // ── A TOWN HAS NO NEAREST STOP ─────────────────────────────────────
@@ -1371,11 +1422,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // BOTH HALVES, because 71 entries were already published with the field
   // filled in and a prompt change cannot reach those.
   const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
-  const townPrompt = prompts.slice(prompts.indexOf("  town: `"), prompts.indexOf("  festival: `"));
+  // ANCHORS ARE ASSERTED BEFORE THEY ARE USED. indexOf returns -1 when it misses,
+  // slice(-1, -1) is "", and !/x/.test("") is true — so a JSX or prompt reformat
+  // silently converts a real guard into a passing one. This suite has already
+  // been bitten by an anchor that moved.
+  ok("the town prompt anchor is found", prompts.indexOf("town: `") >= 0 && prompts.indexOf("festival: `") > prompts.indexOf("town: `"));
+  const townPrompt = prompts.slice(prompts.indexOf("town: `"), prompts.indexOf("festival: `"));
   ok("the town prompt no longer asks for a station", !/nearestStation/.test(townPrompt));
-  ok("but the festival prompt still does", /nearestStation/.test(prompts.slice(prompts.indexOf("  festival: `"), prompts.indexOf("  festival: `") + 9000)));
+  ok("but the festival prompt still does", /nearestStation/.test(prompts.slice(prompts.indexOf("festival: `"), prompts.indexOf("festival: `") + 9000)));
 
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the town glance anchor is found", detail.indexOf('{kind === "town" && (') >= 0);
   const townGlance = detail.slice(detail.indexOf('{kind === "town" && ('), detail.indexOf('{kind === "town" && (') + 1400);
   ok("and the town At a Glance card does not render one", !/arrivalRow/.test(townGlance));
   ok("while attractions still do", /arrivalRow\(item\.nearestStation\)/.test(detail));
@@ -1389,9 +1446,529 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // nobody.
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  const card = app.slice(app.indexOf("src={fact.photo}"), app.indexOf("src={fact.photo}") + 1800);
+  ok("the loading card anchor is found", app.indexOf("src={fact.photo}") >= 0);
+  const card = app.slice(app.indexOf("src={fact.photo}"), app.indexOf("src={fact.photo}") + 2400);
   ok("the loading card credits its photo", /<PhotoCredit\s+photo={fact\.photo}/.test(card));
   ok("and PhotoCredit is actually imported", /^import \{ PhotoCredit \} from/m.test(app));
+}
+
+
+// ── NYHAVN IS NOT A TOWN ───────────────────────────────────────────
+// Oliver, 8 Aug 2026: "Nyhavn is 'technically' a town, but it is within
+// Copenhagen. How do we categorize this? Ticking Filters? Categories? What do we
+// do?" — and then the part that decided the shape: "There are also villages in
+// the 'towns' that are under other towns you know.."
+//
+// His TOWN_COORDS held three different relationships under one label: Nyhavn
+// (inside Copenhagen), "Nørresundby (Aalborg)" (a district, with the
+// relationship stuffed into the NAME STRING where nothing can query it), and
+// Dragør (its own municipality, twelve kilometres out). Filters cannot fix that,
+// because you cannot tick a filter that is not backed by a field.
+{
+  const { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom } = M;
+  const nyhavn = { name: "Nyhavn", partOf: "Copenhagen" };
+  const cph = { name: "Copenhagen", isMajorCity: true };
+  const dragoer = { name: "Dragør", dayTripFrom: "Copenhagen" };
+  const soenderho = { name: "Sønderho", placeKind: "village", dayTripFrom: "Nordby" };
+  const plain = { name: "Ærøskøbing" };
+
+  is("a place inside another is an area", placeKindOf(nyhavn), "area");
+  is("isMajorCity still means city", placeKindOf(cph), "city");
+  is("a stated village is a village", placeKindOf(soenderho), "village");
+  is("a day trip is still its own town", placeKindOf(dragoer), "town");
+  is("and anything unmarked is a town", placeKindOf(plain), "town");
+  is("a stated kind wins over inference", placeKindOf({ partOf: "Copenhagen", placeKind: "town" }), "town");
+  is("nonsense in the field is ignored", placeKindOf({ placeKind: "hamlet" }), "town");
+
+  // NEVER GUESSED. A place is a village only because somebody said so — and the
+  // one thing a traveller uses that word to decide is whether there is anywhere
+  // to eat.
+  is("smallness is not inferred from a name", placeKindOf({ name: "Thorup Strand" }), "town");
+
+  is("only areas are areas", [nyhavn, cph, dragoer, soenderho, plain].filter(isArea).map(t => t.name), ["Nyhavn"]);
+  is("labels read plainly", [cph, plain, soenderho, nyhavn].map(kindLabel), ["City", "Town", "Village", "Area"]);
+
+  // partOf wins for "where do I sleep": if this is a district of Copenhagen then
+  // Copenhagen is the answer whatever else the entry says.
+  is("a district sleeps in its parent", baseTownFor(nyhavn), "Copenhagen");
+  is("a village sleeps in its base", baseTownFor(soenderho), "Nordby");
+  is("and a real town sleeps in itself", baseTownFor(plain), null);
+  is("partOf beats dayTripFrom", baseTownFor({ partOf: "Aalborg", dayTripFrom: "Aarhus" }), "Aalborg");
+
+  // TWO DIFFERENT SENTENCES. "Inside Copenhagen" and "base yourself in Nordby"
+  // are not the same fact, and running them together is how somebody ends up
+  // looking for a hotel in a canal.
+  is("an area says inside", relationLine(nyhavn), { label: "Inside", value: "Copenhagen" });
+  is("a village says where to stay", relationLine(soenderho), { label: "Where to base yourself", value: "Nordby" });
+  is("and a town says nothing at all", relationLine(plain), null);
+
+  // ── ONLY AN AREA COLLAPSES ──────────────────────────────────────
+  // A route through Copenhagen and Nyhavn visits ONE town. A route through
+  // Nordby and Sønderho visits TWO, even though you sleep in one of them,
+  // because Sønderho is genuinely somewhere else. Counting them the same way
+  // either inflates the trip or hides a real stop, and both go out in a share
+  // message where they cannot be corrected.
+  const all = [nyhavn, cph, dragoer, soenderho, plain];
+  const lookup = (n) => all.find(t => t.name.toLowerCase() === String(n).toLowerCase()) || null;
+  is("a district resolves to its parent", collapseToParent("Nyhavn", lookup), "Copenhagen");
+  is("a village does NOT", collapseToParent("Sønderho", lookup), "Sønderho");
+  is("nor does a day trip", collapseToParent("Dragør", lookup), "Dragør");
+  is("an unknown name is returned as given", collapseToParent("Nowhere", lookup), "Nowhere");
+  // With nothing to resolve against, the honest answer is the name itself.
+  is("no lookup means no guessing", collapseToParent("Nyhavn"), "Nyhavn");
+
+  // The reverse lists, which are what the parent's own page is built from.
+  is("Copenhagen contains Nyhavn", areasInside("Copenhagen", all).map(t => t.name), ["Nyhavn"]);
+  is("and Dragør is a trip from it", dayTripsFrom("Copenhagen", all).map(t => t.name), ["Dragør"]);
+  is("matching ignores case", areasInside("COPENHAGEN", all).map(t => t.name), ["Nyhavn"]);
+  is("a place inside somewhere is not also a day trip to it", dayTripsFrom("Copenhagen", [{ name: "X", partOf: "Copenhagen", dayTripFrom: "Copenhagen" }]), []);
+  is("nothing published means empty, not a crash", areasInside("Copenhagen", null), []);
+
+  // Both halves wired: the field has to exist in the draft schema or nothing can
+  // ever carry it.
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  const townPrompt = prompts.slice(prompts.indexOf("town: `"), prompts.indexOf("festival: `"));
+  ok("the town prompt asks for placeKind", /"placeKind"/.test(townPrompt));
+  ok("and partOf", /"partOf"/.test(townPrompt));
+  ok("and dayTripFrom", /"dayTripFrom"/.test(townPrompt));
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("and the publish template carries all three", /placeKind: \$\{J\(t\.placeKind[\s\S]{0,120}partOf: \$\{J\(t\.partOf[\s\S]{0,120}dayTripFrom: \$\{J\(t\.dayTripFrom/.test(app));
+  // EXACT, not a floor: >= 2 let one of the three call sites be deleted with the
+  // test still green.
+  is("areas are kept out of both peer town grids", (app.match(/!isArea\(t\)/g) || []).length, 3);
+  ok("and the publish path carries the fields into Supabase", /placeKind: t\.placeKind[\s\S]{0,120}partOf: t\.partOf[\s\S]{0,120}dayTripFrom: t\.dayTripFrom/.test(readFileSync(join(root, "src/utils/studioContent.js"), "utf8")));
+
+  // A row that does not apply is null, and almost no town has a relationship, so
+  // this crashed every town page: "Cannot read properties of null (reading
+  // 'value')".
+  const glance = readFileSync(join(root, "src/components/AtAGlanceCard.jsx"), "utf8");
+  ok("AtAGlanceCard tolerates a null row", /filter\(r => r && r\.value\)/.test(glance));
+}
+
+// ── A SMALL CHANGE, APPLIED TO MANY ROWS ───────────────────────────
+// Oliver, 8 Aug 2026: "is there a possibility we can create something where we
+// just add on these minor changes to all of them?"
+//
+// Every assertion in this block was checked by breaking the thing it guards and
+// watching it go red, because this suite has already shipped six assertions
+// that could not fail and they all looked exactly like these do. Where a line
+// could NOT be isolated by a mutation it says so in a comment rather than
+// pretending, which is the same rule.
+{
+  const { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy,
+          quoteIsInEntry, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot,
+          readSnapshot, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields, shapeForLive } = M;
+
+  // ── THE RULE THAT STOPS THIS BECOMING BUG #2 AGAIN ───────────────
+  // Publishing an edit bypasses shapeForLive, so a sweep can write a field the
+  // allow-list omits: it saves, it renders, and it is silently thrown away the
+  // next time that row is redrafted. Asserted against the REAL shapeForLive
+  // output rather than a copy of the field list, because a copy drifts.
+  for (const sweep of SWEEPS) {
+    for (const type of sweep.types) {
+      const shapedKeys = Object.keys(shapeForLive(type, { name: "X" }) || {});
+      ok(`sweep "${sweep.id}" writes nothing shapeForLive would drop from a ${type}`,
+         sweep.fields.every(f => shapedKeys.includes(f)));
+    }
+  }
+  ok("...and that check can fail", !Object.keys(shapeForLive("town", { name: "X" })).includes("inventedField"));
+  ok("no sweep may ever declare the audit trail writable", SWEEPS.every(s => !s.fields.includes("__corrections")));
+
+  // ── selection ────────────────────────────────────────────────────
+  const rows = [
+    { id: 1, type: "town", payload: { name: "Copenhagen", isMajorCity: true } },
+    { id: 2, type: "town", payload: { name: "Nyhavn" } },
+    { id: 3, type: "town", payload: { name: "Ribe", placeKind: "town" } },
+    { id: 4, type: "festival", payload: { name: "Roskilde Festival" } },
+    { id: 5, type: "town", payload: {} },
+    { id: 6, type: "town", payload: { name: "Aalborg" } },
+    { id: 7, type: "town", payload: { name: "Samsø" } },
+  ];
+  const tax = sweepById("taxonomy");
+  is("only the right type is selected", selectRows(rows, tax).map(r => r.id), [1, 2, 6, 7]);
+  is("a row that already has the field is left alone", selectRows(rows, tax).some(r => r.id === 3), false);
+  is("a payload with no name is not a row we can work on", selectRows(rows, tax).some(r => r.id === 5), false);
+  is("no sweep means no rows", selectRows(rows, null), []);
+
+  // ── what counts as a place a relationship may name ───────────────
+  // Built from the sweep's OWN types, so a festival cannot become a town's
+  // parent, and it keeps each entry's real spelling.
+  const places = knownPlacesFor(rows, tax);
+  is("only places of the swept type count", [...places.values()].sort(), ["Aalborg", "Copenhagen", "Nyhavn", "Ribe", "Samsø"]);
+  ok("a festival is not a place a town can be inside", !places.has("roskilde festival"));
+  is("lookup is case-insensitive but the spelling is theirs", places.get("aalborg"), "Aalborg");
+
+  // ── NO SILENT CAPS ───────────────────────────────────────────────
+  is("under the cap nothing is skipped", applyCap([1, 2, 3], 40), { batch: [1, 2, 3], skipped: 0 });
+  is("over it, the number dropped is RETURNED", applyCap([1, 2, 3, 4, 5], 3), { batch: [1, 2, 3], skipped: 2 });
+  is("and the two always account for the whole list", applyCap([1, 2, 3, 4, 5], 3).batch.length + applyCap([1, 2, 3, 4, 5], 3).skipped, 5);
+  // A fractional cap used to report "2.5 more were not looked at".
+  is("a fractional cap still accounts for every row", applyCap([1, 2, 3, 4, 5], 2.5).batch.length + applyCap([1, 2, 3, 4, 5], 2.5).skipped, 5);
+
+  // ── tier 1: derived, never guessed ───────────────────────────────
+  is("isMajorCity means city", deterministicTaxonomy({ name: "Copenhagen", isMajorCity: true }, places).patch, { placeKind: "city" });
+  is("a stated partOf means area", deterministicTaxonomy({ name: "Nyhavn", partOf: "Copenhagen" }, places).patch, { placeKind: "area" });
+  is("a small-sounding name derives NOTHING", deterministicTaxonomy({ name: "Sønderho" }, places), null);
+
+  // ── WHAT A PARENTHETICAL IS NOT ──────────────────────────────────
+  // "Nørresundby (Aalborg)" is a district inside a city. "Ballen (Samsø)" is a
+  // village ON an island. They are written identically, and partOf is the one
+  // relationship that COLLAPSES route counting, so guessing wrong quietly loses
+  // a town out of a shared trip. The bracket is a place to LOOK, not evidence.
+  is("a parenthetical never becomes a parent on its own", deterministicTaxonomy({ name: "Nørresundby (Aalborg)" }, places).patch, null);
+  is("not even for the island case that made this rule", deterministicTaxonomy({ name: "Ballen (Samsø)" }, places).patch, null);
+  ok("it is reported so the entry can settle it", deterministicTaxonomy({ name: "Nørresundby (Aalborg)" }, places).notes.some(n => /related but not how/.test(n)));
+  ok("and the rename is flagged as its own job", deterministicTaxonomy({ name: "Nørresundby (Aalborg)" }, places).notes.some(n => /photo path is slugified/.test(n)));
+  ok("the sweep never renames anything itself", !("name" in (deterministicTaxonomy({ name: "Nørresundby (Aalborg)" }, places).patch || {})));
+
+  // The hint itself, which is what tier 2 is told to check.
+  is("a bracket naming a published place is a hint", parentheticalHint({ name: "Nørresundby (Aalborg)" }, places), { bare: "Nørresundby", parent: "Aalborg" });
+  is("a bracket naming nothing published is not", parentheticalHint({ name: "Ribe (Jutland)" }, places), null);
+  is("nor is a bracket repeating the name", parentheticalHint({ name: "Aalborg (Aalborg)" }, places), null);
+  is("nor a year", parentheticalHint({ name: "Sankt Hans (2026)" }, places), null);
+  is("an unbalanced bracket is not parsed", parentheticalHint({ name: "Sankt Hans (Copenhagen" }, places), null);
+  is("nor a nested one", parentheticalHint({ name: "Foo (Bar (Aalborg))" }, places), null);
+  is("a name that is only a bracket is not", parentheticalHint({ name: "(Aalborg)" }, places), null);
+  is("a plain name with a full stop is not", parentheticalHint({ name: "Nykøbing F." }, places), null);
+  // The parent is written in the PUBLISHED entry's spelling, never the bracket's.
+  is("case comes from the published entry", parentheticalHint({ name: "X (aalborg)" }, places).parent, "Aalborg");
+
+  // ── tier 2: the quote is the whole point ─────────────────────────
+  const nyhavn = { name: "Nyhavn", desc: "The painted houses along the old canal in central Copenhagen, packed from noon.", blogBody: [{ type: "paragraph", content: "Walk down from Kongens Nytorv and it is five minutes." }] };
+  ok("a quote that is really in the entry counts", quoteIsInEntry(nyhavn, "the old canal in central Copenhagen"));
+  ok("line wrapping and case do not break it", quoteIsInEntry(nyhavn, "The Old   Canal\nin Central Copenhagen"));
+  ok("a quote in a nested body block counts too", quoteIsInEntry(nyhavn, "Walk down from Kongens Nytorv"));
+  ok("a quote that is NOT in the entry is refused", !quoteIsInEntry(nyhavn, "Nyhavn is a district of Copenhagen municipality"));
+  ok("a quote too short to prove anything is refused", !quoteIsInEntry(nyhavn, "canal"));
+  ok("no quote at all is refused", !quoteIsInEntry(nyhavn, null));
+
+  // ── WHAT COUNTS AS "THE ENTRY" ───────────────────────────────────
+  // __corrections is the log of things that were WRONG. uncertainties is the
+  // list of things nobody could confirm. Both live inside the payload, and
+  // quoting either passes a naive check while citing, literally, a claim
+  // recorded because it was false.
+  const corrected = {
+    name: "Dragør",
+    desc: "A cobbled harbour village of yellow houses at the edge of the airport approach.",
+    photo: "/towns/dragor-by-the-water.jpg",
+    mapHint: "Dragør, Denmark and nowhere else",
+    uncertainties: ["Whether Dragør is administratively part of Copenhagen is unconfirmed"],
+    __corrections: [{ at: "2026-08-01", field: "partOf", was: "Dragør is a district of Copenhagen", source: "x" }],
+  };
+  ok("a quote from the error log is refused", !quoteIsInEntry(corrected, "Dragør is a district of Copenhagen"));
+  ok("a quote from the unconfirmed list is refused", !quoteIsInEntry(corrected, "is administratively part of Copenhagen is unconfirmed"));
+  ok("a quote of the photo path is refused", !quoteIsInEntry(corrected, "/towns/dragor-by-the-water.jpg"));
+  ok("a quote of the map hint is refused", !quoteIsInEntry(corrected, "Dragør, Denmark and nowhere else"));
+  // Assembled out of the seam between two fields, so it exists in neither.
+  ok("a quote spanning two fields is refused", !quoteIsInEntry({ a: "the edge of the airport", b: "approach and the sea" }, "the edge of the airport approach and the sea"));
+  ok("even when the fields are adjacent in the payload", !quoteIsInEntry({ desc: "yellow houses by the harbour", highlight: "and a long walk out to the fort" }, "yellow houses by the harbour and a long walk out to the fort"));
+  ok("but real prose still passes", quoteIsInEntry(corrected, "A cobbled harbour village of yellow houses"));
+
+  // ── only real values survive ─────────────────────────────────────
+  is("an empty answer is not an answer", cleanPatch({ placeKind: "  ", partOf: "" }, ["placeKind", "partOf"], places), {});
+  is("a model's idea of null is not a value", cleanPatch({ placeKind: "unknown", partOf: "N/A" }, ["placeKind", "partOf"], places), {});
+  // dayTripFrom is the ONLY field with no second guard behind it: it takes any
+  // place-name-shaped string, published or not, and "unknown" is exactly the
+  // word RESEARCH_PROMPT tells the model to use. Without this line it lands on
+  // a published page as "Where to base yourself: unknown".
+  is("and 'unknown' is the word the research prompt ASKS for", Object.keys(cleanPatch({ dayTripFrom: "unknown" }, ["dayTripFrom"], places)), []);
+  is("so are none and nothing", Object.keys(cleanPatch({ dayTripFrom: "None" }, ["dayTripFrom"], places)).concat(Object.keys(cleanPatch({ dayTripFrom: "nothing" }, ["dayTripFrom"], places))), []);
+  is("a placeKind outside the four kinds is dropped", cleanPatch({ placeKind: "hamlet" }, ["placeKind"], places), {});
+  is("a real one is kept, lowercased", cleanPatch({ placeKind: "Village" }, ["placeKind"], places), { placeKind: "village" });
+  is("a field the sweep did not declare never appears", cleanPatch({ placeKind: "town", desc: "new prose" }, ["placeKind"], places), { placeKind: "town" });
+
+  // A REAL PERPLEXITY REPLY. It answers in prose however it is asked, and this
+  // exact string would have rendered as "Inside None, it is not inside a larger
+  // place" on the published page.
+  is("a relationship written as a sentence is not a place",
+     cleanPatch({ partOf: "None, it is not inside a larger place", dayTripFrom: "Nordby" }, ["partOf", "dayTripFrom"], places), { dayTripFrom: "Nordby" });
+  is("nor is a polite refusal", cleanPatch({ partOf: "not applicable" }, ["partOf"], places), {});
+  ok("a place name is a place name", looksLikePlaceName("Nørresundby") && looksLikePlaceName("Sankt Hans Torv"));
+  ok("a sentence is not", !looksLikePlaceName("None, it is not inside a larger place"));
+  ok("nor is anything with a number in it", !looksLikePlaceName("Region 5"));
+  ok("nor a paragraph", !looksLikePlaceName("A".repeat(60)));
+
+  // partOf COLLAPSES route counting and drives areasInside, both matched on the
+  // stored name, so a parent Gemlyx does not publish is a dead line on the page
+  // AND a lost stop in a shared trip. This is the real Copenhagen answer.
+  // KEYS, not the object: `is()` compares JSON, and JSON.stringify drops an
+  // undefined value, so a guard writing `undefined` instead of dropping the key
+  // looked exactly like one that worked.
+  is("a parent nobody publishes is refused", Object.keys(cleanPatch({ partOf: "Capital Region of Denmark" }, ["partOf"], places)), []);
+  is("and it is DROPPED, not written as undefined", Object.keys(cleanPatch({ partOf: "Nowhere At All" }, ["partOf"], places)).length, 0);
+  is("a published one is kept, in its own spelling", cleanPatch({ partOf: "copenhagen" }, ["partOf"], places), { partOf: "Copenhagen" });
+  is("with no known places at all, no parent can be trusted", Object.keys(cleanPatch({ partOf: "Copenhagen" }, ["partOf"], undefined)), []);
+  // dayTripFrom renders as plain text, so somewhere unpublished is still useful.
+  is("a base town nobody publishes is still an answer", cleanPatch({ dayTripFrom: "Nordby" }, ["dayTripFrom"], places), { dayTripFrom: "Nordby" });
+  // ...but it still has to be a NAME. This field takes anything published or
+  // not, so the shape check is the only thing standing in front of it.
+  is("a base written as a sentence is not", Object.keys(cleanPatch({ dayTripFrom: "Nordby, but only in summer when the ferry runs" }, ["dayTripFrom"], places)), []);
+
+  // "[object Object]" reached a published field before this line existed.
+  is("a nested answer is not a string and is dropped", cleanPatch({ partOf: { name: "Copenhagen" } }, ["partOf"], places), {});
+  is("nor is an array of them", cleanPatch({ partOf: ["Copenhagen", "Aalborg"] }, ["partOf"], places), {});
+  is("nor a boolean", Object.keys(cleanPatch({ partOf: true }, ["partOf"], places)), []);
+  // ["village"] stringifies to "village", which passes the enum check. The type
+  // check is the only thing that catches it.
+  is("nor a placeKind arriving as an array", Object.keys(cleanPatch({ placeKind: ["village"] }, ["placeKind"], places)), []);
+
+  is("nowhere is inside itself", dropSelfReferences({ partOf: "Ribe", dayTripFrom: "Ribe" }, "Ribe"), {});
+  is("nor is it a day trip from itself, whatever the case", dropSelfReferences({ dayTripFrom: "RIBE" }, "Ribe"), {});
+  is("a real relationship survives", dropSelfReferences({ partOf: "Copenhagen" }, "Nyhavn"), { partOf: "Copenhagen" });
+
+  // ── a field can be settled without being filled ──────────────────
+  is("a city needs no parent and no base", openFields(tax, { name: "Copenhagen" }, { placeKind: "city" }), []);
+  is("an area with a parent already says where you sleep", openFields(tax, { name: "Nyhavn" }, { placeKind: "area", partOf: "Copenhagen" }), []);
+  // The first version closed dayTripFrom on the KIND alone, so an entry that
+  // came back "area" without a parent was never asked where to sleep and ended
+  // up with neither, in no peer grid and under nobody's heading.
+  is("an area with NO parent still needs both", openFields(tax, { name: "X" }, { placeKind: "area" }), ["partOf", "dayTripFrom"]);
+  is("a village still needs a base", openFields(tax, { name: "Sønderho" }, { placeKind: "village" }), ["partOf", "dayTripFrom"]);
+  is("a field already stored is not open", openFields(tax, { name: "X", placeKind: "town", partOf: "Y", dayTripFrom: "Z" }, {}), []);
+
+  // ── the scope lock ───────────────────────────────────────────────
+  const before = { name: "Nyhavn", desc: "original prose", placeKind: "" };
+  const out = applySweepPatch(before, { placeKind: "area", desc: "REWRITTEN" }, tax, { at: "2026-08-08" });
+  is("the declared field is written", out.patched.placeKind, "area");
+  is("a field outside the scope is put BACK", out.patched.desc, "original prose");
+  is("and the attempt is reported, not swallowed", out.reverted, ["desc"]);
+  is("only what really changed is listed as changed", out.changed, ["placeKind"]);
+  is("the audit trail records where it came from", out.patched.__corrections.map(c => [c.field, c.source]), [["placeKind", "sweep: taxonomy"]]);
+  is("and what it was before", out.patched.__corrections[0].was, "(empty)");
+  is("a stored null reads as empty, not as the word null", applySweepPatch({ placeKind: null }, { placeKind: "town" }, tax, {}).patched.__corrections[0].was, "(empty)");
+  const forged = applySweepPatch({ name: "X", placeKind: "", __corrections: [{ at: "old", field: "desc", was: "x", source: "real" }] },
+                                 { placeKind: "town", __corrections: [{ at: "forged", field: "everything", was: "", source: "trust me" }] }, tax, { at: "2026-08-08" });
+  is("a resolver cannot write its own history", forged.patched.__corrections.map(c => c.source), ["real", "sweep: taxonomy"]);
+  is("the trail keeps what was really there and adds only this run", forged.patched.__corrections.length, 2);
+  ok("and the forged entry is nowhere in it", !JSON.stringify(forged.patched.__corrections).includes("trust me"));
+  const noop = applySweepPatch({ name: "X", placeKind: "town" }, { placeKind: "town" }, tax, { at: "2026-08-08" });
+  is("an unchanged row gets no entry in the trail", noop.changed, []);
+  ok("and its payload is returned untouched", !("__corrections" in noop.patched));
+
+  // ── snapshots, which gate everything else ────────────────────────
+  const snapRows = [
+    { id: 7, type: "town", payload: { name: "Ribe", placeKind: "town", nested: { a: [1, 2] } } },
+    { id: 8, type: "town", payload: { name: "Dragør" } },
+  ];
+  const snap = buildSnapshot("taxonomy", snapRows, "2026-08-08T14:22:00Z");
+  const round = readSnapshot(JSON.stringify(snap));
+  is("a snapshot round-trips byte for byte", round.rows, snapRows);
+  is("and remembers which sweep it belongs to", round.sweep, "taxonomy");
+  const refuses = (label, input, pattern) => {
+    let msg = "";
+    try { readSnapshot(input); } catch (e) { msg = e.message; }
+    ok(label, pattern.test(msg));
+  };
+  refuses("a file that is not JSON is refused loudly", "not json at all", /not valid JSON/);
+  refuses("and so is a file that is not a Gemlyx snapshot", JSON.stringify({ rows: [] }), /not a Gemlyx snapshot/);
+  refuses("a row with no id is refused rather than skipped", JSON.stringify({ gemlyxSnapshot: 1, rows: [{ id: 1, payload: {} }, { type: "town" }] }), /Row 2 /);
+  // The id is interpolated straight into a PostgREST filter. Number.isFinite
+  // says yes to null, "", false and [], all of which coerce to 0, and the
+  // restore then PATCHed `?id=eq.null` on every row.
+  refuses("a null id is refused", JSON.stringify({ gemlyxSnapshot: 1, rows: [{ id: null, payload: {} }] }), /Row 1 /);
+  refuses("a boolean id is refused", JSON.stringify({ gemlyxSnapshot: 1, rows: [{ id: true, payload: {} }] }), /Row 1 /);
+  refuses("an array id is refused", JSON.stringify({ gemlyxSnapshot: 1, rows: [{ id: [5], payload: {} }] }), /Row 1 /);
+  refuses("a non-numeric id is refused", JSON.stringify({ gemlyxSnapshot: 1, rows: [{ id: "12abc", payload: {} }] }), /Row 1 /);
+  refuses("an array where a payload should be is refused", JSON.stringify({ gemlyxSnapshot: 1, rows: [{ id: 5, payload: [] }] }), /Row 1 /);
+  is("a numeric string id is fine, because that is what PostgREST returns", readSnapshot(JSON.stringify({ gemlyxSnapshot: 1, rows: [{ id: "12", payload: { a: 1 } }] })).rows[0].id, "12");
+
+  // ── provenance is per VALUE, not per row ─────────────────────────
+  is("a row is only as trustworthy as its weakest value", weakestMark([MARKS.deterministic, MARKS.research]), MARKS.research);
+  is("all read from the entry reads as read from the entry", weakestMark([MARKS.entry, MARKS.entry]), MARKS.entry);
+  is("nothing at all is unresolved", weakestMark([]), MARKS.unresolved);
+
+  // ── the orchestrator writes nothing, and escalates properly ──────
+  const calls = [];
+  const askClaude = async (prompt) => {
+    calls.push("claude");
+    if (/Nyhavn/.test(prompt)) return { text: JSON.stringify({ placeKind: "area", partOf: "Copenhagen", quote: "the old canal in central Copenhagen", evidence: "the description" }) };
+    return { text: JSON.stringify({ placeKind: "village", quote: "Sønderho is a village of about 300 people", evidence: "general knowledge" }) };
+  };
+  const askPerplexity = async () => { calls.push("perplexity"); return { text: "placeKind: village\ndayTripFrom: Nordby", citations: ["https://example.dk/fano"] }; };
+  const soenderho = { name: "Sønderho", desc: "Thatched roofs and a long beach on the south end of the island." };
+
+  const props = await proposeSweep({
+    sweep: tax,
+    rows: [{ id: 1, type: "town", payload: { name: "Copenhagen", isMajorCity: true } },
+           { id: 2, type: "town", payload: nyhavn },
+           { id: 3, type: "town", payload: soenderho }],
+    knownPlaces: places,
+    deps: { askClaude, askPerplexity, parseJSON: (t) => JSON.parse(t) },
+  });
+
+  is("a row answered in code never reaches a model", props[0].mark, MARKS.deterministic);
+  // A CITY IS NOBODY'S DISTRICT, so Copenhagen never reaches a model at all.
+  is("and it costs nothing", calls.filter(c => c === "claude").length, 2);
+  is("a row answered from the entry is marked as read, not researched", props[1].mark, MARKS.entry);
+  is("and carries the value", props[1].patch, { placeKind: "area", partOf: "Copenhagen" });
+  // THE ONE THAT MATTERS: an answer whose quote is not in the entry is thrown
+  // away and escalated, not written.
+  is("an answer from the model's own memory is refused", props[2].patch, { placeKind: "village", dayTripFrom: "Nordby" });
+  ok("and it is reported as having happened", props[2].notes.some(n => /without a quote that is actually in the entry/.test(n)));
+  is("the researched values are marked as researched, per field", props[2].detail.map(d => [d.field, d.mark]), [["placeKind", MARKS.research], ["dayTripFrom", MARKS.research]]);
+  is("with its source", props[2].detail[0].sourceUrl, "https://example.dk/fano");
+  is("the entry tier is tried before the paid one", calls, ["claude", "claude", "perplexity"]);
+  is("a partOf found in the entry closes dayTripFrom without paying for it", calls.filter(c => c === "perplexity").length, 1);
+  ok("nothing is pre-ticked that could not be answered", props.every(p => p.accepted === (p.detail.length > 0)));
+
+  // A row whose values come from two different tiers must not wear one mark:
+  // a green tick with a verbatim quote next to a value the entry never
+  // contained is a lie told exactly when he is deciding whether to accept it.
+  const mixed = await proposeSweep({
+    sweep: tax, rows: [{ id: 11, type: "town", payload: soenderho }], knownPlaces: places,
+    deps: {
+      askClaude: async () => ({ text: JSON.stringify({ placeKind: "village", quote: "Thatched roofs and a long beach", evidence: "the description" }) }),
+      askPerplexity: async () => ({ text: "dayTripFrom: Nordby", citations: [] }),
+      parseJSON: (t) => JSON.parse(t),
+    },
+  });
+  is("each value keeps its own provenance", mixed[0].detail.map(d => [d.field, d.mark]), [["placeKind", MARKS.entry], ["dayTripFrom", MARKS.research]]);
+  is("and the row wears the weaker of the two", mixed[0].mark, MARKS.research);
+
+  // Nothing settled it: left alone, reported, and NOT written as "".
+  const quiet = await proposeSweep({
+    sweep: tax, rows: [{ id: 9, type: "town", payload: { name: "Nowhere" } }], knownPlaces: places,
+    deps: { askClaude: async () => ({ text: '{"placeKind": null, "quote": null}' }), askPerplexity: async () => ({ text: "placeKind: unknown" }), parseJSON: (t) => JSON.parse(t) },
+  });
+  is("an unanswerable row proposes nothing", quiet[0].patch, {});
+  is("is marked unresolved", quiet[0].mark, MARKS.unresolved);
+  is("and is not ticked", quiet[0].accepted, false);
+
+  // Stopping means stopping. A run left going after the panel says it stopped
+  // keeps paying for rows nobody is going to look at.
+  let seen = 0;
+  const stopped = await proposeSweep({
+    sweep: tax, rows: [1, 2, 3, 4].map(id => ({ id, type: "town", payload: { name: `T${id}` } })), knownPlaces: places,
+    deps: { askClaude: async () => { seen++; return { text: "{}" }; }, askPerplexity: async () => ({ text: "" }), parseJSON: (t) => JSON.parse(t), isCancelled: () => seen >= 2 },
+  });
+  is("a cancelled run stops reading rows", stopped.length, 2);
+
+  // ── THE DOOR THAT DECIDES BETWEEN ONE ROW AND A COLUMN ───────────
+  const { routeMessage, SWEEP_PROMPT } = M;
+  is("a set is a sweep", routeMessage("every town that is inside a bigger city should say so"), "sweep");
+  is("so is 'all of them'", routeMessage("can you set the place kind on all of them"), "sweep");
+  is("and 'all the published entries'", routeMessage("fix the place kind on all the published entries"), "sweep");
+  is("and 'them all'", routeMessage("I want to add partOf to them all"), "sweep");
+  is("one entry being wrong is still a correction", routeMessage("the station is wrong, it should be Aarhus H"), "correct");
+  is("a rewrite of the open draft is still an edit", routeMessage("rewrite the intro so it is less like an advert"), "edit");
+  is("asking which need work is still an audit", routeMessage("which ones need a redraft"), "audit");
+  is("a plain question is still a question", routeMessage("why does this say the ferry is required?"), "ask");
+  is("an empty message still answers", routeMessage(""), "ask");
+  // "all" ON ITS OWN IS NOT A SET. He says "this is all wrong" about ONE entry
+  // constantly, and routing that to a bulk pass would put a fact about one town
+  // in front of him as a column-wide proposal.
+  is("'all wrong' about one entry is a correction", routeMessage("this is all wrong, the station should be Aarhus H"), "correct");
+  is("'all of it' about one entry is too", routeMessage("all of it reads like an advert, rewrite it"), "edit");
+  is("naming a set needs a plural to name", routeMessage("check all the information again"), "ask");
+  const sp = SWEEP_PROMPT(SWEEPS, "make every town say what kind of place it is");
+  ok("the prompt lists the real registry", sp.includes(SWEEPS[0].id) && sp.includes(SWEEPS[0].fields.join(", ")));
+  ok("and asks for an id, not a field list", /"sweep": "the id, or null"/.test(sp));
+  ok("and says null is a normal answer", /answer null/i.test(sp));
+
+  // ── Perplexity answers in prose whatever you ask for ─────────────
+  is("field lines are read out of markdown", parseLooseFields("**placeKind:** village\n- dayTripFrom: Nordby", ["placeKind", "dayTripFrom"]), { placeKind: "village", dayTripFrom: "Nordby" });
+  is("a field it did not answer is absent, not empty", parseLooseFields("placeKind: town", ["placeKind", "partOf"]), { placeKind: "town" });
+  // The field name is data, not a pattern. An unescaped bracket used to throw
+  // and discard the whole run.
+  // A REPORTED failure, not a thrown one: an unescaped bracket used to throw out
+  // of proposeSweep and discard the whole run, and a test that dies takes the
+  // rest of the suite's output with it.
+  let looseOut = "threw";
+  try { looseOut = parseLooseFields("day(Trip: Nordby", ["day(Trip"]); } catch { /* reported below */ }
+  is("a field name with a bracket does not blow up the run", looseOut, { "day(Trip": "Nordby" });
+}
+
+// ── ONE ENTRY, TWO CONTRADICTORY ANSWERS ───────────────────────────
+// The Copenhagen entry, found by eye on 8 Aug: the hot dog price in the glance
+// field is the water price from the body.
+{
+  const { costContradictions, pricesIn, priceForNoun } = M;
+
+  const copenhagen = {
+    name: "Copenhagen",
+    typicalCosts: "Bottled water around 4 EUR, a hot dog about 1,20, coffee 5 EUR.",
+    blogBody: [{ type: "paragraph", content: "Bottled water runs 1.20 to 1.50 EUR from a kiosk, and a hot dog from a pølsevogn is about 7 EUR standing up." }],
+  };
+  const found = costContradictions(copenhagen);
+  is("both crossed figures are found", found.map(f => f.noun).sort(), ["a hot dog", "water"]);
+  // `?? null` rather than a bare .find(): a regression here should REPORT a
+  // failure, not throw and take the rest of the suite's output with it.
+  is("and both sides are named so a human can pick", found.find(f => f.noun === "water") ?? null, { noun: "water", glance: "4 EUR", body: "1.2 to 1.5 EUR" });
+  is("the hot dog too", found.find(f => f.noun === "a hot dog")?.glance ?? null, "1.2 EUR");
+  // Coffee appears once, in the glance field only. Nothing to disagree with.
+  ok("a price stated once is not a contradiction", !found.some(f => f.noun === "coffee"));
+
+  // An entry that agrees with itself must come back clean, or this finding is
+  // noise on all 71.
+  is("an entry that agrees with itself is clean", costContradictions({
+    name: "Ribe",
+    typicalCosts: "Coffee about 4 EUR, a beer 6 EUR.",
+    blogBody: [{ type: "paragraph", content: "Coffee is 4 EUR at the square and a beer runs 6 EUR." }],
+  }), []);
+  is("rounding is not a contradiction", costContradictions({
+    typicalCosts: "Coffee 4 EUR.",
+    desc: "Coffee is 4.50 EUR most places.",
+  }), []);
+  is("a range that contains the glance figure is not a contradiction", costContradictions({
+    typicalCosts: "Water 1.50 EUR.",
+    desc: "Water runs 1.20 to 1.80 EUR.",
+  }), []);
+  // The zero boundary, where "they overlap" is the only thing standing between
+  // an honest entry and a finding: the gap maths reads a low edge of 0 as free
+  // and calls anything else a contradiction.
+  is("free-to-something against free is not a contradiction", costContradictions({
+    typicalCosts: "Bottled water 0 to 5 EUR depending where you buy it.",
+    desc: "Bottled water is 0 EUR from the drinking fountains.",
+  }), []);
+  is("but free at a glance and priced in the text IS", costContradictions({
+    typicalCosts: "Bottled water 0 EUR.",
+    desc: "Bottled water costs 5 EUR from a kiosk.",
+  }).map(f => f.noun), ["water"]);
+  // 30 kr and 4 EUR are the same price written twice.
+  is("two currencies are not two answers", costContradictions({
+    typicalCosts: "Water 30 DKK.",
+    desc: "Water is about 4 EUR.",
+  }), []);
+  is("an entry with no glance cost field is skipped entirely", costContradictions({ desc: "Water is 4 EUR and also 40 EUR." }), []);
+
+  // The extractor itself, because a false positive here would poison the audit
+  // for every entry.
+  is("a decimal comma is danish, not a thousands separator", pricesIn("about 1,20 EUR").map(p => p.lo), [1.2]);
+  is("a thousands comma is not a decimal", pricesIn("2,400 DKK").map(p => p.lo), [2400]);
+  is("a range is one price, not two", pricesIn("1.20 to 1.50 EUR").map(p => [p.lo, p.hi]), [[1.2, 1.5]]);
+  is("a duration is not a price", pricesIn("a 15 minute walk").length, 0);
+  is("a distance is not a price", pricesIn("12 km from the centre").length, 0);
+  is("a bare year is not a price", pricesIn("the church dates to 1840").length, 0);
+  is("but a year-sized number with a currency is", pricesIn("1840 DKK").map(p => p.lo), [1840]);
+
+  // The rule that made the Copenhagen case readable at all: a price belongs to
+  // the noun before it, and the next noun ends its reach.
+  is("water takes its own price, not the hot dog's",
+     priceForNoun("water 1.20 to 1.50 EUR and hotdog 7", /\bwater\b/gi), { at: 6, lo: 1.2, hi: 1.5, currency: "eur" });
+  is("and the hot dog takes the one after it",
+     priceForNoun("water 1.20 to 1.50 EUR and hotdog 7", /\bhotdog\b/gi).lo, 7);
+  is("a price written before its noun still lands", priceForNoun("7 EUR for a hot dog", /\bhot\s?dog\b/gi).lo, 7);
+  is("a noun with no price nearby gets none", priceForNoun("the water is cold and the walk is long", /\bwater\b/gi), null);
+  // The bound that matters: a noun with no price of its own must not quietly
+  // adopt the next noun's. This is how the Copenhagen figures got crossed in
+  // the first place, and reading them back the same way would hide it.
+  is("a noun with no price does not borrow the next one's", priceForNoun("water is free here but a hot dog costs 7 EUR", /\bwater\b/gi), null);
+  // A price far enough away belongs to something the noun list does not know
+  // about. Both reaches are bounded, and both bounds are load-bearing.
+  is("a price sixty characters later is not this noun's",
+     priceForNoun("water is free at every fountain in the old centre and nobody charges for it, unlike the 12 EUR ferry", /\bwater\b/gi), null);
+  is("nor is one well before it",
+     priceForNoun("the ferry costs 30 EUR and it takes a while to get across, then you find water", /\bwater\b/gi), null);
+  // The whole field lends its currency to a figure that has none.
+  is("a figure inherits the field's currency when there is only one",
+     priceForNoun("Prices in EUR. Water 4, coffee 5.", /\bwater\b/gi).currency, "eur");
+  is("a field mixing currencies lends nothing",
+     priceForNoun("Water 4, tickets 30 DKK, coffee 5 EUR.", /\bwater\b/gi).currency, null);
+
+  // And it is wired into the audit rather than only existing.
+  const audited = M.auditEntry({ id: 1, type: "town", payload: copenhagen });
+  ok("the audit reports it", audited.findings.some(f => f.field === "costs"));
+  is("as critical, because a reader budgets from the glance row", audited.findings.find(f => f.field === "costs")?.severity ?? null, "critical");
 }
 
 rmSync(dir, { recursive: true, force: true });

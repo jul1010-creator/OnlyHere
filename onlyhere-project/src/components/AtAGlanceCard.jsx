@@ -1,7 +1,15 @@
 import { C } from "../utils/theme";
 
 export const AtAGlanceCard = ({ rows }) => {
-  const present = rows.filter(r => r.value);
+  // NULL ROWS ARE ALLOWED, and they have to be. Every caller builds this list
+  // inline, so the natural way to express "this row only sometimes applies" is a
+  // conditional that evaluates to null — which is exactly what the town card's
+  // relationLine row does, since almost no town is inside another place. The old
+  // `rows.filter(r => r.value)` threw "Cannot read properties of null" on the
+  // first one of those, taking the whole detail page down. Fixed here rather
+  // than by making every caller remember to filter, because the next caller
+  // will not.
+  const present = (Array.isArray(rows) ? rows : []).filter(r => r && r.value);
   if (present.length === 0) return null;
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 22 }}>

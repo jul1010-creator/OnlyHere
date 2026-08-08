@@ -35,7 +35,13 @@ export const stripNonCode = (src) => {
   // regex literal — whose insides are full of quotes and backticks and have to
   // be opaque. This is the standard heuristic and it is good enough here; the
   // test below validates the result against the real file rather than trusting it.
-  const REGEX_CAN_START = /[(,=:[!&|?{};+\-*%^~<>]/;
+  // < AND > ARE DELIBERATELY NOT IN THIS SET, and leaving them in was silently
+  // destroying the scan. In JSX every closing tag is `</div>`, where the slash
+  // follows a `<` — so the walk entered regex mode and blanked everything to the
+  // next slash or newline, braces included. GemlyxApp's braces then never
+  // balanced and the largest function in the file could not be extracted at all.
+  // Nothing real is lost: `a < /re/.test(b)` is not code anybody writes.
+  const REGEX_CAN_START = /[(,=:[!&|?{};+\-*%^~]/;
   while (i < n) {
     const c = src[i], c2 = src[i + 1];
     if (mode === "code") {
@@ -89,16 +95,63 @@ export const stripNonCode = (src) => {
 
 // The body of a named function, by brace matching on ALREADY-STRIPPED code so a
 // brace inside a prompt cannot throw the count off.
+//
+// MATCHING STARTS AT THE BODY BRACE, NOT THE FIRST ONE. Counting from the
+// declaration meant a destructured or defaulted parameter closed depth 0 inside
+// the PARAMETER LIST, so the "body" was the parameter list and nothing else.
+// Measured on the real file: fetchExactDurations came back as 67 characters,
+// resolveLegMode as 98, sendAI as 42 — then all three fell under the size floor
+// the sweep uses and were dropped with no signal. fetchExactDurations is the
+// guide route pipeline, the same function family as the crash this scanner
+// exists for.
 export const functionBody = (stripped, declaration) => {
   const at = stripped.indexOf(declaration);
   if (at < 0) return null;
-  let depth = 0, started = false;
-  for (let i = at; i < stripped.length; i++) {
-    const ch = stripped[i];
-    if (ch === "{") { depth++; started = true; }
-    else if (ch === "}") { depth--; if (started && depth === 0) return stripped.slice(at, i + 1); }
+  // Walk past the parameter list first: balance the parentheses that follow the
+  // name, then take the next { as the body.
+  let i = stripped.indexOf("(", at);
+  if (i < 0) return null;
+  let paren = 0;
+  for (; i < stripped.length; i++) {
+    if (stripped[i] === "(") paren++;
+    else if (stripped[i] === ")") { paren--; if (paren === 0) { i++; break; } }
+  }
+  const open = stripped.indexOf("{", i);
+  if (open < 0) return null;
+  // A concise arrow body (=> expr) has no brace of its own; the next { belongs to
+  // something else entirely, so anything with a newline in between is not a body.
+  if (/\n/.test(stripped.slice(i, open))) return null;
+  let depth = 0;
+  for (let j = open; j < stripped.length; j++) {
+    const ch = stripped[j];
+    if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) return stripped.slice(at, j + 1); }
   }
   return null;
+};
+
+// Every named function in a file, arrow or declaration, as [name, declaration].
+//
+// `function NAME(` HAD TO BE ADDED, and its absence made the sweep close to
+// decorative: App.jsx contains exactly one function declaration, `function
+// GemlyxApp(`, and it holds 761,607 of the file's 776,750 characters and all 26
+// useEffect calls. Discovery only looked for `const X = (` arrows, so the
+// component body — where the 6 August front-page crash actually lived, in a
+// useEffect dependency array — was never scanned at all. Reproduced: injecting
+// that exact bug back into GemlyxApp left the sweep reporting clean.
+export const namedFunctions = (stripped) => {
+  const out = [];
+  const seen = new Set();
+  const re = /(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(|function\s+([A-Za-z_$][\w$]*)\s*\(/g;
+  let m;
+  while ((m = re.exec(stripped))) {
+    const name = m[1] || m[2];
+    const decl = m[1] ? `${stripped.slice(m.index, m.index + 5).trimStart().startsWith("let") ? "let" : "const"} ${name} = ` : `function ${name}(`;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push([name, decl]);
+  }
+  return out;
 };
 
 // Every const/let in the body that is read at a character position before its
@@ -152,6 +205,62 @@ export const useBeforeDeclare = (body) => {
         declLine: body.slice(0, at).split("\n").length,
       });
       break;
+    }
+  }
+  return found;
+};
+
+// ── HOOK DEPENDENCY ARRAYS, WHICH ARE THE COMPONENT'S REAL RISK ─────
+// The general use-before-declare sweep above is right for a plain function like
+// generateGuide, where the body IS the scope. It is the wrong instrument for a
+// React component: GemlyxApp's body is 558 KB of nested closures, and a callback
+// defined on line 2333 that reads a const declared on line 2401 is completely
+// normal and completely safe, because it runs after both exist. Comparing
+// character positions there produces nine findings and zero bugs, and a check
+// nobody believes is worse than no check.
+//
+// A DEPENDENCY ARRAY IS DIFFERENT. It is evaluated during render, synchronously,
+// at that point in the body's own scope. That is precisely the 6 August crash:
+//
+//   useEffect(() => { ... }, [liveContentVersion, entered]);   // line ~600
+//   ...
+//   const entered = ...;                                       // line ~1200
+//
+// which threw on every single render and killed the front page. Nothing nested
+// can produce a false positive here, so this check is exact.
+const HOOK = /\b(useEffect|useLayoutEffect|useMemo|useCallback)\s*\(/g;
+
+export const hookDepsBeforeDeclaration = (body) => {
+  const src = String(body || "");
+  const decl = new Map();
+  for (const m of src.matchAll(/(?:^|[\s;{}(])(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=/g)) {
+    if (!decl.has(m[1])) decl.set(m[1], m.index);
+  }
+  const found = [];
+  let h;
+  HOOK.lastIndex = 0;
+  while ((h = HOOK.exec(src))) {
+    // Balance to the call's own closing paren, then take the last [...] before
+    // it — which is the dependency array, if the call has one.
+    let i = h.index + h[0].length - 1, paren = 0, end = -1;
+    for (; i < src.length; i++) {
+      if (src[i] === "(") paren++;
+      else if (src[i] === ")") { paren--; if (paren === 0) { end = i; break; } }
+    }
+    if (end < 0) continue;
+    const close = src.lastIndexOf("]", end);
+    const open = close > 0 ? src.lastIndexOf("[", close) : -1;
+    if (open < 0 || open < h.index) continue;
+    for (const d of src.slice(open + 1, close).matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$:])/g)) {
+      const at = decl.get(d[1]);
+      if (typeof at === "number" && at > h.index) {
+        found.push({
+          name: d[1],
+          hook: h[1],
+          useLine: src.slice(0, h.index).split("\n").length,
+          declLine: src.slice(0, at).split("\n").length,
+        });
+      }
     }
   }
   return found;

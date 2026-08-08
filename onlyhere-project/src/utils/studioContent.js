@@ -30,6 +30,14 @@ export const bulletsBlock = (heading, raw) => {
 // not template-string code. `id` and TOWN_COORDS are set by the caller after insert.
 export const shapeForLive = (type, t) => {
   if (type === "town") return { name: t.name, photo: `/towns/${slugify(t.name)}.jpg`, region: t.region || "", emoji: t.emoji || "📍", tag: t.tag || "", desc: t.characterAndFit, highlight: t.highlight || "", travelTime: t.travelTime || "", mapHint: t.mapHint || `${t.name}, Denmark`, nomiPotential: t.nomiPotential || "Medium", tier: t.tier || "Worth Considering", __lat: Number(t.lat) || null, __lon: Number(t.lon) || null,
+    // THIS IS AN ALLOW-LIST, and a field missing from it does not reach the
+    // database. placeKind/partOf/dayTripFrom were added to the drafting prompt,
+    // the publish codegen, the towns page and the detail page on 8 Aug and to
+    // THIS on none of them — so the model answered `{"partOf":"Copenhagen"}`,
+    // Publish threw it away, and Nyhavn came back as a peer of Ærøskøbing with
+    // every new render site silently dead. shapeForLive is the only insert path
+    // into gemlyx_content; anything not named here does not exist.
+    placeKind: t.placeKind || "", partOf: t.partOf || "", dayTripFrom: t.dayTripFrom || "",
     nearestStation: t.nearestStation || "", recommendedStayGlance: t.recommendedStayGlance || "", bestTimeGlance: t.bestTimeGlance || "", accommodationGlance: t.accommodationGlance || "", typicalCosts: t.typicalCosts || "", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]]),

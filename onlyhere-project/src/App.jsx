@@ -58,11 +58,13 @@ import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
+import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves } from "./utils/userSaves";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
+import { placeKindOf, kindLabel, isArea } from "./utils/placeKind";
 
 import "leaflet/dist/leaflet.css";
 
@@ -278,6 +280,25 @@ function GemlyxApp() {
     if (townKind === "must") return tier.includes("can't miss") || tier.includes("cant miss");
     return !(tier.includes("can't miss") || tier.includes("cant miss"));
   };
+  // ── SIZE OF PLACE, A SEPARATE AXIS FROM HOW WELL KNOWN IT IS ──
+  // Oliver, 8 Aug 2026: "Nyhavn is 'technically' a town, but it is within
+  // Copenhagen... What do we do?" and then "There are also villages in the
+  // 'towns' that are under other towns you know."
+  //
+  // townKind above filters on TIER, which is how well known a place is. That is
+  // a different question from how big it is, and the two were sharing one row of
+  // pills labelled "Kind of place" — which is why there was nowhere to put
+  // Nyhavn. See utils/placeKind.js for why this needs two axes and not a
+  // cleverer single one.
+  const [townSize, setTownSize] = useState(null);
+  const townSizeOk = (t) => !townSize || placeKindOf(t) === townSize;
+  // ONE PREDICATE, READ IN FOUR PLACES. The Major Cities grid, the main grid,
+  // the areas section and the "nothing matches" line below all have to agree
+  // about what is visible, and four copies of the same three conditions are four
+  // chances to drift — which is how the Major Cities heading ended up rendering
+  // over an empty grid, gated on the UNFILTERED list while the grid under it was
+  // filtered.
+  const townMatches = (t) => (!townFilter || t.region === townFilter) && townKindOk(t) && townSizeOk(t);
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
   const [craftKind, setCraftKind] = useState(null);
@@ -1746,7 +1767,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       let code = "";
       if (sType === "town") {
         const nextId = Math.max(0, ...towns.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
+        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, placeKind: ${J(t.placeKind || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
       } else if (sType === "festival") {
         const isMajor = (t.scale || "").toLowerCase().startsWith("major");
         const targetArr = isMajor ? majorEvents : events;
@@ -2717,6 +2738,219 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       setGeoFixState({ running: false, done: 0, total: 0, fixed: 0, failed: [String(err?.message || err)] });
     }
   };
+  // ── SWEEPS: ONE SMALL CHANGE, APPLIED TO MANY ROWS ──────────────
+  // Oliver, 8 Aug 2026: "is there a possibility we can create something where
+  // we just add on these minor changes to all of them?"
+  //
+  // Seventy-one published entries need placeKind, partOf and dayTripFrom, and
+  // the only path that could put a field into a published row was a full
+  // redraft. The cost of the change had nothing to do with the size of it.
+  //
+  // TWO SEPARATE ACTS, and keeping them apart is the whole safety model.
+  // proposeSweepRun() reads and PROPOSES. writeSweepProposals() writes. Nothing
+  // in the first can reach Supabase, so "review before it lands" is structural
+  // rather than a habit that erodes.
+  //
+  // Modelled on backfillCoordinates above, deliberately: sequential PATCHes,
+  // progress updated after every row, no window.location.reload (publishDraft's
+  // edit branch reloads, and a bulk pass obviously cannot), refreshLiveContent
+  // once at the end. Two things from publishDraft are NOT reused: shapeForLive,
+  // which would mangle a stored payload's built blogBody, and the photo probe,
+  // which loads every hero and deletes the path on failure.
+  const [sweepId, setSweepId] = useState(SWEEPS[0]?.id || "");
+  const [sweepState, setSweepState] = useState(null);        // null | {phase, done, total, name, skipped, error}
+  const [sweepProposals, setSweepProposals] = useState(null);
+  const [sweepWriteState, setSweepWriteState] = useState(null);
+  const [sweepSnapshot, setSweepSnapshot] = useState(null);  // {name, count} once downloaded, gates the Save button
+  const sweepRestoreRef = useRef(null);
+  const sweepCancelRef = useRef(false);
+
+  const sweepHeaders = () => ({ apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` });
+  const sweepBusy = sweepState?.phase === "reading" || sweepState?.phase === "proposing";
+
+  const proposeSweepRun = async (idOverride) => {
+    const id = idOverride || sweepId;
+    const sweep = sweepById(id);
+    // BOTH phases, not just the first. "reading" is one fetch; "proposing" is
+    // the minutes-long loop, and the chat door calls this with no button state
+    // to guard it, so two runs could drive the same progress counter and pay
+    // for every row twice.
+    if (!sweep || sweepBusy) return;
+    if (id !== sweepId) setSweepId(id);
+    sweepCancelRef.current = false;
+    setSweepProposals(null); setSweepWriteState(null); setSweepSnapshot(null);
+    setSweepState({ phase: "reading", done: 0, total: 0, skipped: 0, error: null, sweep: id });
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, { headers: sweepHeaders() });
+      const rows = await res.json();
+      if (!Array.isArray(rows)) { setSweepState({ phase: "done", done: 0, total: 0, skipped: 0, error: "Could not read the published rows. Your Studio login may have expired.", sweep: id }); return; }
+
+      // Every published place of the types this sweep works on, so a proposed
+      // parent can be checked against places that really exist and written in
+      // their own spelling.
+      const knownPlaces = knownPlacesFor(rows, sweep);
+      const { batch, skipped } = applyCap(selectRows(rows, sweep), sweep.cap);
+      if (!batch.length) { setSweepState({ phase: "done", done: 0, total: 0, skipped, error: null, sweep: id }); setSweepProposals([]); return; }
+
+      setSweepState({ phase: "proposing", done: 0, total: batch.length, skipped, error: null, sweep: id });
+      const proposals = await proposeSweep({
+        sweep, rows: batch, knownPlaces,
+        deps: {
+          askClaude, askPerplexity, parseJSON: parseClaudeJSON,
+          isCancelled: () => sweepCancelRef.current,
+          onProgress: ({ done, total, name }) => setSweepState({ phase: "proposing", done, total, name, skipped, error: null, sweep: id }),
+        },
+      });
+      setSweepProposals(proposals);
+      setSweepState({ phase: "done", done: proposals.length, total: batch.length, skipped, error: null, sweep: id, stopped: sweepCancelRef.current });
+    } catch (err) {
+      setSweepState({ phase: "done", done: 0, total: 0, skipped: 0, error: String(err?.message || err), sweep: id });
+    }
+  };
+
+  const toggleProposal = (rowId) => setSweepProposals(ps => (ps || []).map(p => p.rowId === rowId ? { ...p, accepted: !p.accepted } : p));
+
+  // ── THE SNAPSHOT, WHICH GATES THE WRITE ─────────────────────────
+  // gemlyx_content has no versioning, no audit log and no soft delete: every
+  // write overwrites the whole payload with no copy kept. Before this, a bad
+  // bulk pass was simply unrecoverable, and that is the only reason a 71-row
+  // write is something anybody is allowed to run.
+  //
+  // TWO SEPARATE BUTTONS, and that is not friction for its own sake. A browser
+  // gives no signal that a programmatic download actually landed: a blocked
+  // download, a "choose where to save" dialog he cancelled, and a file sitting
+  // safely in Downloads are indistinguishable from in here. The first version
+  // set a flag when it called .click() and then told him "the snapshot is in
+  // your downloads", which is a claim it could not make. So he confirms it.
+  const downloadSweepSnapshot = async () => {
+    const accepted = (sweepProposals || []).filter(p => p.accepted && Object.keys(p.patch || {}).length);
+    if (!accepted.length) return;
+    setSweepWriteState({ running: true, phase: "snapshot", done: 0, total: accepted.length, written: 0, unchanged: 0, failed: [] });
+    try {
+      const ids = [...new Set(accepted.map(p => Number(p.rowId)))];
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&id=in.(${ids.join(",")})`, { headers: sweepHeaders() });
+      const rows = await res.json();
+      if (!Array.isArray(rows) || rows.length !== ids.length) throw new Error(`It came back with ${Array.isArray(rows) ? rows.length : 0} of ${ids.length} rows, so it would not be a complete undo.`);
+      const at = new Date().toISOString();
+      const name = snapshotFilename(sweepId, at);
+      const blob = new Blob([JSON.stringify(buildSnapshot(sweepId, rows, at), null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      setSweepSnapshot({ name, count: rows.length, sweep: sweepId });
+      setSweepWriteState(null);
+    } catch (err) {
+      setSweepSnapshot(null);
+      setSweepWriteState({ running: false, phase: "snapshot", done: 0, total: 0, written: 0, unchanged: 0, failed: [`No snapshot, so nothing can be written yet. ${err?.message || err}`] });
+    }
+  };
+
+  const writeSweepProposals = async () => {
+    const sweep = sweepById(sweepId);
+    const accepted = (sweepProposals || []).filter(p => p.accepted && Object.keys(p.patch || {}).length);
+    if (!sweep || !accepted.length || sweepWriteState?.running || !sweepSnapshot || sweepSnapshot.sweep !== sweepId) return;
+    sweepCancelRef.current = false;
+    setSweepWriteState({ running: true, phase: "writing", done: 0, total: accepted.length, written: 0, unchanged: 0, failed: [] });
+
+    let written = 0, unchanged = 0; const failed = [];
+    for (let i = 0; i < accepted.length; i++) {
+      if (sweepCancelRef.current) {
+        setSweepWriteState({ running: false, phase: "writing", done: i, total: accepted.length, written, unchanged, failed, stopped: true });
+        if (written > 0) { refreshLiveContent(); bumpLiveContent(v => v + 1); }
+        return;
+      }
+      const prop = accepted[i];
+      const step = (extra = {}) => setSweepWriteState({ running: true, phase: "writing", done: i + 1, total: accepted.length, written, unchanged, failed, ...extra });
+      let row = null;
+      try {
+        // Read RIGHT BEFORE writing, one row at a time. A single fetch before
+        // the loop makes "current" fourteen seconds stale by the fortieth row,
+        // and this is the only thing standing between a bulk pass and silently
+        // reverting a correction somebody made while the table sat on screen.
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}&select=id,payload`, { headers: sweepHeaders() });
+        const rows = await r.json();
+        row = Array.isArray(rows) ? rows[0] : null;
+      } catch (err) { failed.push(`${prop.name}: could not be re-read (${err?.message || err})`); step(); continue; }
+      if (!row?.payload) { failed.push(`${prop.name}: the row could not be re-read, so nothing was written to it.`); step(); continue; }
+
+      // A FIELD THAT IS NO LONGER EMPTY IS NOT OURS TO FILL. Every proposal was
+      // made against a row that had nothing there. If something has arrived
+      // since, from a redraft or the assistant or another tab, writing the
+      // proposal over it is a silent revert dressed as a backfill.
+      const taken = Object.keys(prop.patch).filter(f => String(row.payload[f] ?? "").trim() && String(row.payload[f]) !== String(prop.patch[f]));
+      if (taken.length) {
+        failed.push(`${prop.name}: ${taken.join(" and ")} ${taken.length === 1 ? "was" : "were"} filled in by something else after this table was built, so ${taken.length === 1 ? "it" : "they"} would have been overwritten. Skipped. Run the sweep again to see the current state.`);
+        step(); continue;
+      }
+
+      const { patched, changed, reverted } = applySweepPatch(row.payload, prop.patch, sweep, { at: new Date().toISOString().slice(0, 10), source: `sweep: ${sweep.id}` });
+      if (reverted.length) failed.push(`${prop.name}: tried to change ${reverted.join(", ")}, which this sweep may not touch. Put back.`);
+      // Counted and REPORTED rather than absorbed into "Saved N of M". Pressing
+      // Save twice used to print "Saved 0 of 40" with an empty failure list,
+      // which reads as total failure when in fact everything already landed.
+      if (!changed.length) { unchanged++; step(); continue; }
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}`, {
+          method: "PATCH",
+          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({ payload: patched }),
+        });
+        // return=representation, not minimal: PostgREST answers 204 for a PATCH
+        // that matched nothing, so "minimal" cannot tell a write from a no-op
+        // on a row that has since been deleted.
+        const body = res.ok ? await res.json().catch(() => null) : null;
+        if (res.ok && Array.isArray(body) && body.length === 1) written++;
+        else if (res.ok) failed.push(`${prop.name}: the row was not there any more, so nothing was written.`);
+        else failed.push(`${prop.name}: save failed (${res.status})`);
+      } catch (err) { failed.push(`${prop.name}: ${err?.message || err}`); }
+      step();
+      await new Promise(r => setTimeout(r, 350));
+    }
+    setSweepWriteState({ running: false, phase: "writing", done: accepted.length, total: accepted.length, written, unchanged, failed });
+    if (written > 0) { refreshLiveContent(); bumpLiveContent(v => v + 1); }
+  };
+
+  // ── UNDO, WHICH IS ITSELF A BULK WRITE ──────────────────────────
+  // The first version fired the moment a file was chosen in the OS dialog.
+  // Picking the wrong file overwrote forty published rows with no confirmation
+  // and no snapshot of its own, which made the one recovery path the single
+  // most dangerous button in Studio.
+  const restoreSweepSnapshot = async (file) => {
+    if (!file) return;
+    let snap;
+    try { snap = readSnapshot(await file.text()); }
+    catch (err) { setSweepWriteState({ running: false, phase: "restore", done: 0, total: 0, written: 0, unchanged: 0, failed: [String(err?.message || err)] }); return; }
+
+    const when = snap.at ? snap.at.slice(0, 16).replace("T", " ") : "an unknown time";
+    if (!window.confirm(`Put ${snap.rows.length} published entr${snap.rows.length === 1 ? "y" : "ies"} back exactly as they were at ${when}?
+
+This overwrites them whole. Anything changed since, by a redraft, a photo repair or the assistant, goes with it.`)) return;
+
+    sweepCancelRef.current = false;
+    setSweepWriteState({ running: true, phase: "restore", done: 0, total: snap.rows.length, written: 0, unchanged: 0, failed: [] });
+    let written = 0; const failed = [];
+    for (let i = 0; i < snap.rows.length; i++) {
+      if (sweepCancelRef.current) { setSweepWriteState({ running: false, phase: "restore", done: i, total: snap.rows.length, written, unchanged: 0, failed, stopped: true }); if (written) { refreshLiveContent(); bumpLiveContent(v => v + 1); } return; }
+      const row = snap.rows[i];
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${encodeURIComponent(String(row.id))}`, {
+          method: "PATCH",
+          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({ payload: row.payload }),
+        });
+        const body = res.ok ? await res.json().catch(() => null) : null;
+        if (res.ok && Array.isArray(body) && body.length === 1) written++;
+        else if (res.ok) failed.push(`Row ${row.id} is not there any more, so nothing was restored to it.`);
+        else failed.push(`Row ${row.id}: restore failed (${res.status})`);
+      } catch (err) { failed.push(`Row ${row.id}: ${err?.message || err}`); }
+      setSweepWriteState({ running: true, phase: "restore", done: i + 1, total: snap.rows.length, written, unchanged: 0, failed });
+      await new Promise(r => setTimeout(r, 250));
+    }
+    setSweepWriteState({ running: false, phase: "restore", done: snap.rows.length, total: snap.rows.length, written, unchanged: 0, failed });
+    if (written > 0) { refreshLiveContent(); bumpLiveContent(v => v + 1); }
+  };
+
   const updateCurrentEvents = async () => {
     if (updateEventsLoading) return;
     setUpdateEventsLoading(true); setUpdateEventsError(null); setUpdateEventsResults(null); setUpdateEventsProgress(null);
@@ -6213,6 +6447,192 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       </div>
                     )}
 
+                    {/* ── SWEEPS: A SMALL CHANGE, APPLIED TO MANY ROWS ────
+                        The fourth maintenance panel, and the first one with a
+                        model anywhere near it. The other three ask a photo
+                        whether it loads and a geocoder for a coordinate, and
+                        neither can be confidently wrong. This can be, seventy
+                        times over, so it proposes a table and writes nothing
+                        until the table has been seen. */}
+                    <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>🧹 Sweep a small change across everything</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                            {sweepById(sweepId)?.blurb || ""} Up to {sweepById(sweepId)?.cap ?? 0} per run. Nothing is written until you have read the table.
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          {sweepBusy && (
+                            <button onClick={() => { sweepCancelRef.current = true; }}
+                              style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 10, padding: "8px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              Stop
+                            </button>
+                          )}
+                          <button onClick={() => proposeSweepRun()} disabled={sweepBusy || sweepWriteState?.running}
+                            style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            {sweepState?.phase === "reading" ? "Reading…"
+                              : sweepState?.phase === "proposing" ? `${sweepState.done}/${sweepState.total}`
+                              : "Look at them"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {SWEEPS.length > 1 && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                          {SWEEPS.map(sw => (
+                            <button key={sw.id} disabled={sweepBusy || sweepWriteState?.running}
+                              onClick={() => { setSweepId(sw.id); setSweepProposals(null); setSweepState(null); setSweepWriteState(null); setSweepSnapshot(null); }}
+                              style={{ background: sweepId === sw.id ? `${C.gold}22` : "none", border: `1px solid ${sweepId === sw.id ? C.gold : C.border}`, color: sweepId === sw.id ? C.gold : C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              {sw.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {sweepState?.phase === "proposing" && sweepState.name && (
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Reading {sweepState.name}…</div>
+                      )}
+                      {sweepState?.error && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 8 }}>{sweepState.error}</div>}
+
+                      {sweepProposals && sweepProposals.length === 0 && !sweepBusy && (
+                        <div style={{ fontSize: 11.5, color: C.light }}>Nothing needs this sweep. Every published entry already carries these fields.</div>
+                      )}
+
+                      {sweepProposals && sweepProposals.length > 0 && (() => {
+                        const acceptedCount = sweepProposals.filter(p => p.accepted && Object.keys(p.patch).length).length;
+                        const unresolved = sweepProposals.filter(p => !Object.keys(p.patch).length);
+                        const writing = !!sweepWriteState?.running;
+                        const snapReady = !!sweepSnapshot && sweepSnapshot.sweep === sweepId;
+                        return (
+                          <div>
+                            <div style={{ fontSize: 11, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
+                              {sweepProposals.length} looked at. {acceptedCount} would change.
+                              {unresolved.length > 0 && ` ${unresolved.length} could not be answered and will be left exactly as ${unresolved.length === 1 ? "it is" : "they are"}.`}
+                              {sweepState?.stopped && <span style={{ color: "#FFB347" }}> You stopped it early, so the rest of the batch was never looked at.</span>}
+                              {sweepState?.skipped > 0 && (
+                                <span style={{ color: "#FFB347" }}> {sweepState.skipped} more were not looked at this run, so one click cannot quietly cost more than it should. Run it again after this one.</span>
+                              )}
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflowY: "auto", marginBottom: 10 }}>
+                              {sweepProposals.map(prop => {
+                                const has = prop.detail.length > 0;
+                                return (
+                                  <div key={prop.rowId} style={{ background: C.bg, border: `1px solid ${prop.accepted && has ? `${C.gold}55` : C.border}`, borderRadius: 10, padding: "9px 11px", opacity: has ? 1 : 0.65 }}>
+                                    <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                                      <input type="checkbox" checked={!!prop.accepted && has} disabled={!has || writing} onChange={() => toggleProposal(prop.rowId)}
+                                        style={{ marginTop: 3, accentColor: C.gold, cursor: has && !writing ? "pointer" : "default" }} />
+                                      <div style={{ minWidth: 0, flex: 1 }}>
+                                        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>
+                                          <span style={{ marginRight: 6 }}>{prop.mark}</span>{prop.name}
+                                        </div>
+                                        {/* THE MARK SITS ON THE VALUE, NOT THE ROW. One green
+                                            tick over a row holding one value read from the entry
+                                            and one from a web search is a lie told at exactly the
+                                            moment somebody is deciding whether to accept it. */}
+                                        {has ? prop.detail.map(d => (
+                                          <div key={d.field} style={{ marginTop: 4 }}>
+                                            <div style={{ fontSize: 11.5 }}>
+                                              <span style={{ marginRight: 5 }}>{d.mark}</span>
+                                              <span style={{ color: C.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 10 }}>{d.field}</span>{" "}
+                                              <span style={{ color: "#E57373", textDecoration: prop.before[d.field] ? "line-through" : "none" }}>{prop.before[d.field] || "(empty)"}</span>
+                                              <span style={{ color: C.muted }}> → </span>
+                                              <span style={{ color: "#8BC34A" }}>{String(d.value)}</span>
+                                            </div>
+                                            {d.evidence && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, lineHeight: 1.5, paddingLeft: 18 }}>{d.evidence}</div>}
+                                            {d.sourceUrl && <div style={{ fontSize: 10.5, marginTop: 2, paddingLeft: 18 }}><a href={d.sourceUrl} target="_blank" rel="noreferrer" style={{ color: C.gold }}>{d.sourceUrl.slice(0, 70)}</a></div>}
+                                          </div>
+                                        )) : (
+                                          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>Nothing settled it, so nothing changes here.</div>
+                                        )}
+                                        {/* Reported, never swallowed: a model answering from its own
+                                            memory of Denmark is the failure this sweep is built to
+                                            catch, and it should be visible when it happens. */}
+                                        {(prop.notes || []).map((n, i) => (
+                                          <div key={i} style={{ fontSize: 10.5, color: "#FFB347", marginTop: 4, lineHeight: 1.5 }}>⚠ {n}</div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* ── TWO BUTTONS, AND THE ORDER IS THE SAFETY MODEL ──
+                                A browser cannot tell a downloaded file from a
+                                blocked one, so it does not claim to. He says
+                                the snapshot arrived; only then does Save exist. */}
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                              <button onClick={downloadSweepSnapshot} disabled={!acceptedCount || writing}
+                                style={{ background: snapReady ? "none" : C.gold, border: `1px solid ${snapReady ? C.border : "transparent"}`, color: snapReady ? C.light : "#000", borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: acceptedCount && !writing ? "pointer" : "default" }}>
+                                {sweepWriteState?.phase === "snapshot" && writing ? "Saving a copy…" : snapReady ? "↻ Snapshot again" : `1. Download a copy of ${acceptedCount === 1 ? "the row" : `all ${acceptedCount} rows`}`}
+                              </button>
+                              <button onClick={writeSweepProposals} disabled={!acceptedCount || writing || !snapReady}
+                                style={{ background: acceptedCount && !writing && snapReady ? C.gold : C.surface, border: `1px solid ${C.border}`, color: acceptedCount && !writing && snapReady ? "#000" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: snapReady && acceptedCount && !writing ? "pointer" : "default" }}>
+                                {writing && sweepWriteState?.phase === "writing" ? `Writing ${sweepWriteState.done}/${sweepWriteState.total}…` : `2. Save ${acceptedCount} to Gemlyx`}
+                              </button>
+                              {writing ? (
+                                <button onClick={() => { sweepCancelRef.current = true; }}
+                                  style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                  Stop
+                                </button>
+                              ) : (
+                                <button onClick={() => { setSweepProposals(null); setSweepState(null); setSweepWriteState(null); setSweepSnapshot(null); }}
+                                  style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                  Discard
+                                </button>
+                              )}
+                              <div style={{ fontSize: 10.5, color: C.muted, flex: 1, minWidth: 210, lineHeight: 1.5 }}>
+                                {snapReady
+                                  ? <span>Copy saved as <b style={{ color: C.light }}>{sweepSnapshot.name}</b>. Check it is really in your downloads before saving, because it is the only way back.</span>
+                                  : "Nothing can be written until a copy of these rows is on your disk. This is the only undo there is."}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {sweepWriteState && !sweepWriteState.running && (sweepWriteState.total > 0 || sweepWriteState.failed.length > 0) && (
+                        <div style={{ fontSize: 11.5, color: C.light, marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                          {sweepWriteState.phase === "restore"
+                            ? `Put ${sweepWriteState.written} of ${sweepWriteState.total} rows back as they were.`
+                            : sweepWriteState.phase === "writing"
+                            ? `Saved ${sweepWriteState.written} of ${sweepWriteState.total}.`
+                            : ""}
+                          {/* A row that was already correct is NOT a failure and is
+                              not a save. Pressing Save twice used to print
+                              "Saved 0 of 40" with no explanation, which reads as
+                              a total failure when everything had already landed. */}
+                          {sweepWriteState.unchanged > 0 && (
+                            <span style={{ color: C.muted }}> {sweepWriteState.unchanged} {sweepWriteState.unchanged === 1 ? "was" : "were"} already exactly that, so {sweepWriteState.unchanged === 1 ? "it" : "they"} needed no write.</span>
+                          )}
+                          {sweepWriteState.stopped && <span style={{ color: "#FFB347" }}> You stopped it, so the rest were left untouched.</span>}
+                          {sweepWriteState.failed.length > 0 && (
+                            <div style={{ marginTop: 6, fontSize: 11, color: "#FFB347" }}>
+                              {sweepWriteState.failed.slice(0, 8).map((f, i) => <div key={i} style={{ marginTop: 3 }}>{f}</div>)}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── UNDO, WHICH DID NOT EXIST BEFORE THIS ────────
+                          Every write in this app overwrites the whole payload
+                          with no copy kept. This is the only way back, and it
+                          is itself a bulk write, so it asks first. */}
+                      <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 9, display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+                        <button onClick={() => sweepRestoreRef.current?.click()} disabled={sweepWriteState?.running || sweepBusy}
+                          style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          ↩ Restore from a snapshot
+                        </button>
+                        <input ref={sweepRestoreRef} type="file" accept="application/json,.json" style={{ display: "none" }}
+                          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; restoreSweepSnapshot(f); }} />
+                        <div style={{ fontSize: 10.5, color: C.muted, flex: 1, minWidth: 210, lineHeight: 1.5 }}>
+                          Puts every row in the file back exactly as it was, and asks before it does. Anything changed since, by a redraft or a photo repair, goes with it.
+                        </div>
+                      </div>
+                    </div>
+
                     {(() => {
                       // Live "did you mean an existing one?" check — a generic name like "Old Irish
                       // Pub" genuinely exists in multiple Danish towns, so a plain name match alone
@@ -6309,6 +6729,7 @@ You also have a web_search tool. Use it whenever someone asks about something th
                             draft={(() => { try { return JSON.parse(studioDraftText); } catch { return studioDraft; } })()}
                             draftKind={{ festival: "event", night: "nightlife", nightTown: "town", foodStreet: "food" }[studioType] || studioType}
                             onDraftPatched={(next) => { setStudioDraft(next); setStudioDraftText(JSON.stringify(next, null, 2)); setDraftEditError(null); }}
+                            onSweepRequested={(id) => proposeSweepRun(id)}
                           />
                         )}
                         <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); }}
@@ -7381,11 +7802,11 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                   look less special, and the cities look like an afterthought
                   instead of the real, common part of a trip they actually
                   are. */}
-              {towns.some(t => t.isMajorCity) && (
+              {towns.some(t => t.isMajorCity && !isArea(t) && townMatches(t)) && (
                 <div style={{ marginBottom: 28 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>Major Cities</div>
                   <div className="towns-grid">
-                    {towns.filter(t => t.isMajorCity && (!townFilter || t.region === townFilter) && townKindOk(t)).sort(byName).map(town => (
+                    {towns.filter(t => t.isMajorCity && !isArea(t) && townMatches(t)).sort(byName).map(town => (
                       <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                         <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
@@ -7420,14 +7841,44 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
               {/* Hidden becomes a filter rather than the page's name, and it is
                   derived from the tier the entry actually carries, not from
                   which grid it happens to sit in. */}
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Kind of place</div>
+              {/* RELABELLED from "Kind of place". These pills read the TIER,
+                  which is how well known somewhere is, not what kind of place it
+                  is — and once there is a real kind filter sitting next to them
+                  the old label was answering the wrong question. */}
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>How well known</div>
               <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
                 {[{ id: null, label: "All" }, { id: "hidden", label: "◆ Off the usual route" }, { id: "must", label: "★ Can't miss out" }].map(k => (
                   <Pill key={k.label} label={k.label} active={townKind === k.id} onClick={() => setTownKind(townKind === k.id ? null : k.id)} />
                 ))}
               </div>
+              {/* DERIVED, NOT HAND-MAINTAINED. A pill only appears when
+                  something published actually is that kind, so this row is empty
+                  on a list of plain towns and grows a Villages pill the day the
+                  first village is marked as one. A hardcoded list would offer a
+                  filter that returns nothing, which is how the old nine
+                  hardcoded region strings went wrong. */}
+              {(() => {
+                // "area" BELONGS IN THIS LIST. Without it no pill could ever
+                // select areas, while the areas section below bails out on any
+                // non-area selection — so one click on Towns silently deleted
+                // every district from the page with no heading, no count and no
+                // way back except All. The axis has to be complete or it is a
+                // trapdoor.
+                const kinds = ["city", "town", "village", "area"].filter(k => towns.some(t => placeKindOf(t) === k));
+                if (kinds.length < 2) return null;
+                return (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Size of place</div>
+                    <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
+                      {[{ id: null, label: "All" }, ...kinds.map(k => ({ id: k, label: k === "city" ? "🏙 Cities" : k === "village" ? "🌾 Villages" : k === "area" ? "◇ Areas" : "🏘 Towns" }))].map(k => (
+                        <Pill key={k.label} label={k.label} active={townSize === k.id} onClick={() => setTownSize(townSize === k.id ? null : k.id)} />
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
               <div className="towns-grid">
-                {towns.filter(t => !t.isMajorCity && (!townFilter || t.region === townFilter) && townKindOk(t)).sort(byName).map(town => (
+                {towns.filter(t => !t.isMajorCity && !isArea(t) && townMatches(t)).sort(byName).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
                     <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
@@ -7442,7 +7893,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                       )}
                     </div>
                     <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
-                    <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region} · {travelLabel(userCoords, town.name, town.travelTime)}</div>
+                    <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{placeKindOf(town) === "village" ? "Village · " : ""}{town.region} · {travelLabel(userCoords, town.name, town.travelTime)}</div>
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                     <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
                     {town.gemlyxFind && <div style={{ fontSize: 11, color: C.gold, lineHeight: 1.5, marginTop: 5 }}><b>✦ Gemlyx Find:</b> {town.gemlyxFind.slice(0, 80)}{town.gemlyxFind.length > 80 ? "…" : ""}</div>}
@@ -7452,6 +7903,92 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                   </div>
                 ))}
               </div>
+
+              {/* ── INSIDE A CITY ────────────────────────────────────
+                  Oliver, 8 Aug 2026: "Nyhavn is 'technically' a town, but it is
+                  within Copenhagen. How do we categorize this? Ticking Filters?
+                  Categories? What do we do?"
+
+                  Its own section, grouped by the city it is in, exactly as he
+                  asked for Major Cities to be split out in an earlier round and
+                  for the same reason he gave then: this page's promise is the
+                  places guidebooks skip, and a canal in Copenhagen standing as a
+                  peer of Ærøskøbing undersells both. It is a section rather than
+                  only a pill so these entries stay FINDABLE — they are real
+                  published content — while no longer competing.
+
+                  Grouped by partOf rather than by region, so the heading says
+                  the thing a person is actually looking for. Nothing is
+                  hardcoded: the day nobody is marked as inside anywhere, this
+                  renders nothing at all. */}
+              {(() => {
+                if (townSize && townSize !== "area") return null;
+                const areas = towns.filter(t => isArea(t) && (!townFilter || t.region === townFilter) && townKindOk(t));
+                if (!areas.length) return null;
+                // GROUPED CASE-INSENSITIVELY, and NOTHING IS DROPPED. Two
+                // separate ways an entry vanished off the entire page: a
+                // partOf of "copenhagen" got its own second heading spelled in
+                // lower case, and an entry marked as an area with NO partOf at
+                // all — which the draft schema describes as two independent
+                // fields, so it is exactly the shape a model produces — belonged
+                // to no group and was rendered by nothing. Excluded from both
+                // peer grids by isArea and from every group here, it was
+                // reachable only by typing its name into search.
+                const key = (t) => String(t.partOf || "").trim();
+                const parents = [];
+                areas.forEach(t => {
+                  const k = key(t);
+                  if (!parents.some(p => p.toLowerCase() === k.toLowerCase())) parents.push(k);
+                });
+                parents.sort((a, b) => (a === "" ? 1 : b === "" ? -1 : daCompare(a, b)));
+                return (
+                  <div style={{ marginTop: 34 }}>
+                    {parents.map(parent => (
+                      <div key={parent || "__unplaced"} style={{ marginBottom: 26 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>
+                          {parent ? `Inside ${parent}` : "Marked as an area, but not told which place"}
+                        </div>
+                        <div className="towns-grid">
+                          {areas.filter(t => key(t).toLowerCase() === parent.toLowerCase()).sort(byName).map(town => (
+                            <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
+                              <div style={{ position: "relative", height: 210, borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <PhotoPlate photo={town.photo} name={town.name} color={C.gold} />
+                                {/* No DKLocator here. A national map with one pin
+                                    on it is a useful thing to show for a town on
+                                    Ærø and a useless one for a district of
+                                    Copenhagen: at that scale it points at the
+                                    same dot as its parent. */}
+                                {parent && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◇ In {parent}</div>}
+                              </div>
+                              <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
+                              <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{parent ? `${kindLabel(town)} in ${parent}` : `${kindLabel(town)} · no parent set`}</div>
+                              <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
+                              <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
+                                Read more <span style={{ fontSize: 14 }}>›</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* Three rows of pills can be combined into a state where nothing
+                  matches — pick a region with no city, then Cities. The page went
+                  completely blank with no explanation and no hint that a filter
+                  was the cause. Same predicate as the grids, so it can never
+                  disagree with them. */}
+              {!towns.some(t => (isArea(t) ? (!townSize || townSize === "area") && (!townFilter || t.region === townFilter) && townKindOk(t) : townMatches(t))) && towns.length > 0 && (
+                <div style={{ textAlign: "center", padding: "38px 16px", color: C.muted }}>
+                  <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>Nothing published matches these filters yet.</div>
+                  <button onClick={() => { setTownFilter(null); setTownKind(null); setTownSize(null); }}
+                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+                    Clear all filters
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -8615,6 +9152,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
           draft={liveDraft}
           draftKind={draftKind}
           onDraftPatched={(next) => { setStudioDraft(next); setStudioDraftText(JSON.stringify(next, null, 2)); setDraftEditError(null); }}
+          onSweepRequested={isStudio ? (id) => { proposeSweepRun(id); } : undefined}
           onSaved={() => refreshLiveContent()} />;
       })()}
 

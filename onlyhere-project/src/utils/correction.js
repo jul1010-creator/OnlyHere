@@ -427,10 +427,57 @@ ${voice || ""}
 
 Reply with ONLY the rewritten text for that one field. No preamble, no explanation, no quotation marks around it, no markdown fences.${Array.isArray(current) ? " The field is a list, so reply with a JSON array of the same shape and the same number of items." : ""}`;
 
+// ── "OR TALKING TO AN AI THAT ARE ABLE TO DO TINY CHANGES WITH THEM ALL" ──
+// Oliver, 8 Aug 2026. The sentence has two halves and the second one is the
+// whole request: not one entry, all of them.
+//
+// A correction is about THIS row. A sweep is about a column. The tell is that
+// he names a set rather than a thing, and it has to be caught before the
+// correction router sees it, because "every town that is inside a bigger city
+// should say so" trips RIGHT_HALF ("should say") and would otherwise run a
+// fact-checking pass on whatever single entry happened to be open.
+//
+// A wrong guess here is cheap in the safe direction: the sweep intent produces
+// a confirmation card and nothing else. Nothing runs, nothing is written, and
+// no row is read until he presses the button on it.
+export const SWEEP_INTENT = /\b(?:all|every|each)\s+(?:the\s+)?(?:published\s+|single\s+|other\s+)?(?:ones?|entr(?:y|ies)|towns?|places?|pages?|rows?|guides?|cit(?:y|ies)|villages?)\b|\ball of them\b|\bthem all\b|\bacross (?:the board|everything|all entries|all of them)\b|\bin bulk\b|\bevery single one\b/i;
+
+// ── THE CHAT MAY SELECT A SWEEP. IT MAY NOT INVENT ONE ──────────────
+// This is the line that keeps the chat door safe, and it is worth stating
+// plainly because the obvious design does the opposite.
+//
+// It would be easy to have the model return {fields: ["whatever"]} and run it.
+// That would work, and it would quietly walk around the one rule protecting
+// this whole feature: a sweep may only write a field shapeForLive already
+// carries, asserted in tests against the REGISTRY. A sweep invented in a chat
+// message has never been near that assertion, so it could write a field that
+// renders perfectly and is silently dropped the next time that row is
+// redrafted. That is the 8 Aug bug with a three-week fuse on it.
+//
+// So the model's entire job here is to pick an id out of a list, or say none of
+// them fit. An id that is not in the registry is treated as none.
+export const SWEEP_PROMPT = (registry, message) => `The founder of a Danish travel site said this about his published content:
+
+"${message}"
+
+Below are the bulk changes his Studio knows how to make. Each one fills specific fields on many published entries at once.
+
+${registry.map(s => `id: ${s.id}\n  what it does: ${s.blurb}\n  fields it may touch: ${s.fields.join(", ")}`).join("\n\n")}
+
+Which one, if any, is he asking for? Match on what the change would actually DO, not on shared words.
+
+If none of them is what he means, answer null. That is a normal answer and it is better than a near miss: running the wrong bulk change over seventy entries is expensive, and he has no way to know it was the wrong one from the name alone.
+
+Reply with ONLY this JSON:
+{"sweep": "the id, or null", "why": "one plain sentence saying what you think he wants, in his own terms"}`;
+
 export const routeMessage = (text) => {
   const t = String(text || "").trim();
   if (!t) return "ask";
   if (AUDIT_INTENT.test(t) && !CORRECT_INTENT.test(t)) return "audit";
+  // Before edit and correct: a sentence naming a SET is not a claim about the
+  // open entry, however much it reads like one.
+  if (SWEEP_INTENT.test(t)) return "sweep";
   // An explicit instruction wins over everything, including a question mark:
   // "why is this wrong? fix it" is an instruction with a preamble.
   // An edit is checked BEFORE the correction intent, because "rewrite", "fix"

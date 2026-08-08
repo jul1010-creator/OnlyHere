@@ -154,6 +154,15 @@ export const metaDescription = (guide) => {
 // into a document. Ampersand first or it double-escapes the others.
 export const escapeHtml = (s) =>
   String(s == null ? "" : s)
+    // WHITESPACE COLLAPSES FIRST. linkPreview.js builds the tag block by
+    // splitting on newlines and keeping the lines that look like meta tags, so a
+    // title containing a line break put one INSIDE an attribute: the tag was cut
+    // in half, the remainder did not match the filter and was dropped, and the
+    // following <meta> was swallowed into the broken attribute. Titles come out
+    // of model JSON, so a stray newline is entirely reachable. Nothing on a
+    // preview card wants a line break anyway.
+    .replace(/\s+/g, " ")
+    .trim()
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

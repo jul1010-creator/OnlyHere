@@ -1,5 +1,6 @@
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow } from "../utils/helpers";
+import { relationLine, kindLabel, areasInside, dayTripsFrom } from "../utils/placeKind";
 import { AtAGlanceCard } from "./AtAGlanceCard";
 import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
@@ -297,12 +298,67 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 middle of it. Suppressed at RENDER rather than only in the
                 drafting prompt, because 71 entries were already published with
                 the field filled in and a prompt change cannot reach those. */}
+            {/* ── WHAT THIS PLACE HANGS OFF ──────────────────────────
+                Two different facts that were being flattened into one, per
+                Oliver on 8 Aug ("Nyhavn is 'technically' a town, but it is
+                within Copenhagen" and "there are also villages in the 'towns'
+                that are under other towns"). "Inside Copenhagen" and "base
+                yourself in Nordby" are not the same sentence, and running them
+                together is how somebody ends up looking for a hotel in a canal.
+                relationLine picks whichever applies and says nothing when
+                neither does, which is almost every town. */}
             <AtAGlanceCard rows={[
+              (() => { const r = relationLine(item); return r ? { icon: r.label === "Inside" ? "◇" : "🧭", label: r.label, value: r.value } : null; })(),
               { icon: "🛏️", label: "Recommended Stay", value: item.recommendedStayGlance },
               { icon: "☀️", label: "Best Time", value: item.bestTimeGlance },
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
               { icon: "💰", label: "Typical Costs", value: item.typicalCosts },
             ]} />
+            {/* ── WHAT YOU CAN DO FROM HERE WITHOUT MOVING HOTEL ─────
+                The other half of the partOf/dayTripFrom pair, seen from the
+                parent. This is the piece with actual product value in it: "what
+                can I reach from Copenhagen without changing hotel" is one of the
+                most common real questions a visitor has, and it is the lever
+                that gets somebody who only booked Copenhagen to leave
+                Copenhagen — which is the whole anti-concentration argument the
+                competitor research landed on, with a UI attached.
+
+                Built by scanning the live towns array for entries that name THIS
+                place, so it fills itself in as content is published and shows
+                nothing at all until something does. Never a hardcoded list. */}
+            {(() => {
+              const inside = areasInside(item.name, towns);
+              const trips = dayTripsFrom(item.name, towns);
+              if (!inside.length && !trips.length) return null;
+              const group = (heading, list, note) => (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>{heading}</div>
+                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, marginBottom: 9 }}>{note}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                    {/* _src IS REQUIRED BELOW, not decoration. App.jsx's
+                        openStopDetail dispatches entirely on real._src, and
+                        liveContent only stamps that onto the lookup map
+                        guideEnrichment builds, never onto the towns array
+                        itself. A raw town from this list matched none of its
+                        branches, so every one of these buttons would have
+                        looked live and done nothing. */}
+                    {list.map(t => (
+                      <button key={t.id} onClick={() => onOpenNearby && onOpenNearby({ ...t, _src: "town" })}
+                        style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: onOpenNearby ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
+                        {t.emoji ? `${t.emoji} ` : ""}{t.name}
+                        <span style={{ color: C.muted, fontWeight: 600 }}> · {kindLabel(t)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+              return (
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 18 }}>
+                  {inside.length ? group(`Inside ${item.name}`, inside, "Part of the city itself, so you are already there.") : null}
+                  {trips.length ? group(`Without changing hotel`, trips, `Its own place, reached from ${item.name} and back in a day.`) : null}
+                </div>
+              );
+            })()}
             {/* ── WHERE TO STAY (Oliver, 7 Aug: "on accommodation, put
                 booking.com and AirBnB as affiliate links for me") ────────
                 The guide's day cards already had a Booking link under a

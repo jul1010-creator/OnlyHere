@@ -115,6 +115,21 @@ export const injectMeta = (html, { guide, url, image }) => {
     .filter((l) => /<meta (property="og:|name="twitter:|name="description")|<link rel="canonical"/.test(l))
     .join("\n");
   if (!html.includes("</head>")) return html;
+  // ── THE SHELL'S OWN TAGS COME OUT FIRST ───────────────────────────
+  // index.html now carries a site-level card of its own (added the same day as
+  // this file), and these were being APPENDED after it. Every crawler that
+  // matters — Facebook, WhatsApp, Slack — takes the FIRST occurrence of a
+  // singular og property, so the guide's title, description and image all lost
+  // to the site's, and og:url plus rel=canonical pointed a shared trip at the
+  // home page. The feature looked like it worked because <title> is the one
+  // thing that was being replaced rather than added, and `curl | head -30` shows
+  // the title.
+  //
+  // Only the four kinds this function re-emits are removed. theme-color,
+  // viewport, charset and the icon are left exactly where they are.
+  html = html
+    .replace(/[ \t]*<meta\s+(?:property="og:[^"]*"|name="twitter:[^"]*"|name="description")[^>]*>\r?\n?/g, "")
+    .replace(/[ \t]*<link\s+rel="canonical"[^>]*>\r?\n?/g, "");
   // ── EVERY REPLACEMENT HERE IS A FUNCTION, NOT A STRING ────────────
   // String.replace expands $&, $1, $` and $' inside a replacement STRING. The
   // tags carry a guide title, so a guide called "$100 a day in Odense" or one

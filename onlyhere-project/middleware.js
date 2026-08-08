@@ -62,9 +62,15 @@ export default async function middleware(request) {
     //   • the lookup failed       → we do not know, so we claim nothing. The
     //     same rule this project applies to every Places and Directions lookup:
     //     never conclude a fact from a failed lookup.
+    // TIMEOUTS ON BOTH FETCHES. The catch below turns any throw into next(),
+    // but a hang is not a throw: a degraded Supabase would run the invocation
+    // past Vercel's Edge wall-clock limit, and Vercel's own error page would go
+    // out instead — which Facebook and WhatsApp then cache against that URL for
+    // hours. A timeout converts the one failure mode catch cannot see into one
+    // it can.
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/gemlyx_guides?select=payload&id=eq.${encodeURIComponent(id)}`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } },
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) },
     );
     if (!res.ok) return next();
     const rows = await res.json();
@@ -73,7 +79,7 @@ export default async function middleware(request) {
 
     // The real built index.html, so the response is a working page and not a
     // stub. /index.html does not match this file's matcher, so it cannot loop.
-    const shell = await fetch(new URL("/index.html", url.origin));
+    const shell = await fetch(new URL("/index.html", url.origin), { signal: AbortSignal.timeout(2500) });
     // fetch only rejects on a network failure, so a 404 or a deployment-
     // protection login page arrives here as a perfectly resolved response.
     if (!shell.ok) return next();
