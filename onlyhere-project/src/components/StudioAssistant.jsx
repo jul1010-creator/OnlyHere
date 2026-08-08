@@ -343,13 +343,19 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
       // Reading a blog: answer, always. In Studio with nothing open: a sweep is
       // still a legitimate thing to ask for, because it is about everything
       // published rather than about whatever happens to be on screen.
-      // A SWEEP IS CHECKED FIRST, because it is the one intent that is not
-      // about whatever is on screen. Routing it through studioMode meant the
-      // inline assistant (which has a draft, so studioMode is true) reached
-      // runSweep, rendered the offer card, and then called an onSweepRequested
-      // that was never passed to it: the button said "Running it" and ran
-      // nothing at all.
-      const intent = routed === "sweep" ? (sweepMode ? "sweep" : "ask")
+      // ── TWO INTENTS ARE ABOUT THE LIBRARY, NOT THE SCREEN ────────
+      // A sweep and an audit both operate on everything published. Neither
+      // needs a draft open, and routing them through studioMode (which requires
+      // one) meant "which ones need work" answered "open an entry first" while
+      // standing in Studio looking at the whole list. The audit is free,
+      // deterministic and the single most useful thing to run before a sweep,
+      // so it was the wrong thing to hide behind a draft.
+      //
+      // Reading a blog entry still wins over both: on a detail page he is a
+      // READER, and a question there gets an answer, never an action.
+      const wholeLibrary = routed === "sweep" || routed === "audit";
+      const intent = item ? "ask"
+                   : wholeLibrary ? (sweepMode ? routed : "ask")
                    : studioMode ? routed
                    : "ask";
       if (intent === "sweep") await runSweep(message);

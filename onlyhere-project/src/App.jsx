@@ -334,6 +334,34 @@ function GemlyxApp() {
   // has its own size rule. Written once here so the section, the empty state and
   // the count cannot disagree about it.
   const areaMatches = (t) => townPartOk(t) && townKindOk(t) && townThemeOk(t) && townSearchOk(t);
+  // ── WHAT IT IS FOR, AND HOW WELL KNOWN, BEFORE ANYBODY CLICKS ───
+  // Oliver, 8 Aug 2026: "I would also like the 'tier' to be showing on the
+  // captions before clicking the blog. OH, and what category it fits into."
+  //
+  // Both were already stored and neither was readable. The tier only ever
+  // surfaced as a Top Pick badge on the very highest one, so "Can't miss" and
+  // "If you're nearby" rendered as exactly the same card.
+  //
+  // DEFINED ONCE, READ BY ALL THREE TOWN GRIDS. The first version was pasted
+  // inline and landed in the Major Cities grid, which renders nothing at all
+  // because no published entry carries isMajorCity. It shipped, looked fine in
+  // the diff, and was invisible on every card on the site. Three copies would
+  // have been three chances to do it again.
+  const CardChips = ({ town }) => {
+    const tier = tierLabel(town);
+    const themes = themesOf(town);
+    if (!tier && !themes.length) return null;
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+        {tier && (
+          <span style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, background: `${C.gold}1a`, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.3 }}>{tier}</span>
+        )}
+        {themes.map(th => (
+          <span key={th} style={{ fontSize: 9.5, fontWeight: 700, color: C.light, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.3 }}>{THEME_EMOJI[th]} {THEME_LABEL[th]}</span>
+        ))}
+      </div>
+    );
+  };
   const clearTownFilters = () => { setTownPart(null); setTownKind(null); setTownSize(null); setTownTheme(null); setTownSearch(""); };
   const activeTownFilters = [townPart, townKind, townSize, townTheme, townSearch.trim()].filter(Boolean).length;
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
@@ -7884,25 +7912,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                         </div>
                         <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region}</div>
-                        {/* ── WHAT IT IS FOR, AND HOW WELL KNOWN, BEFORE ANYBODY
-                        CLICKS ─────────────────────────────────────────
-                        Oliver, 8 Aug: "I would also like the 'tier' to be
-                        showing on the captions before clicking the blog. OH, and
-                        what category it fits into."
-                        Both were already stored and neither was readable. The
-                        tier only ever surfaced as a Top Pick badge on the very
-                        highest one, so "Can't miss" and "If you're nearby"
-                        rendered as exactly the same card. */}
-                    {(tierLabel(town) || themesOf(town).length > 0) && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
-                        {tierLabel(town) && (
-                          <span style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, background: `${C.gold}1a`, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.3 }}>{tierLabel(town)}</span>
-                        )}
-                        {themesOf(town).map(th => (
-                          <span key={th} style={{ fontSize: 9.5, fontWeight: 700, color: C.light, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.3 }}>{THEME_EMOJI[th]} {THEME_LABEL[th]}</span>
-                        ))}
-                      </div>
-                    )}
+                        <CardChips town={town} />
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                         <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
@@ -8027,6 +8037,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                     </div>
                     <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
                     <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{dotJoin(placeKindOf(town) === "village" ? "Village" : "", town.region, travelLabel(userCoords, town, town.travelTime))}</div>
+                    <CardChips town={town} />
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                     <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
                     {town.gemlyxFind && <div style={{ fontSize: 11, color: C.gold, lineHeight: 1.5, marginTop: 5 }}><b>✦ Gemlyx Find:</b> {town.gemlyxFind.slice(0, 80)}{town.gemlyxFind.length > 80 ? "…" : ""}</div>}
@@ -8095,7 +8106,8 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                               </div>
                               <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
                               <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{parent ? `${kindLabel(town)} in ${parent}` : `${kindLabel(town)} · no parent set`}</div>
-                              <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
+                              <CardChips town={town} />
+                    <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                               <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
                               <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
                                 Read more <span style={{ fontSize: 14 }}>›</span>

@@ -1868,6 +1868,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and asks for an id, not a field list", /"sweep": "the id, or null"/.test(sp));
   ok("and says null is a normal answer", /answer null/i.test(sp));
 
+  // ── TWO INTENTS ARE ABOUT THE LIBRARY, NOT THE SCREEN ────────────
+  // Both operate on everything published, so neither may be gated on a draft
+  // being open. Read off the component, because the routing lives in JSX state
+  // no unit test can reach.
+  const assistant = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
+  ok("a sweep and an audit are routed together", /const wholeLibrary = routed === "sweep" \|\| routed === "audit";/.test(assistant));
+  ok("neither is gated on a draft being open", /wholeLibrary \? \(sweepMode \? routed : "ask"\)/.test(assistant));
+  // Reading a blog entry still wins: there he is a reader, and a question gets
+  // an answer, never an action.
+  ok("an open entry still answers rather than acting", /const intent = item \? "ask"/.test(assistant));
+
   // ── Perplexity answers in prose whatever you ask for ─────────────
   is("field lines are read out of markdown", parseLooseFields("**placeKind:** village\n- dayTripFrom: Nordby", ["placeKind", "dayTripFrom"]), { placeKind: "village", dayTripFrom: "Nordby" });
   is("a field it did not answer is absent, not empty", parseLooseFields("placeKind: town", ["placeKind", "partOf"]), { placeKind: "town" });
@@ -2207,8 +2218,18 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The CHIP, not just a mention of the function: the outer guard names
   // tierLabel too, so a loose match proved the guard and said nothing about
   // whether anything actually rendered.
-  ok("the card renders the tier chip", /\{tierLabel\(town\) && \(/.test(app));
-  ok("and the theme chips", /themesOf\(town\)\.map\(th =>/.test(app));
+  // ONE DEFINITION, READ BY EVERY TOWN GRID. The first version was pasted inline
+  // and landed in the Major Cities grid, which renders nothing because no
+  // published entry carries isMajorCity. It shipped and was invisible on every
+  // card on the site. EXACT count, not a floor: >= 1 would let two of the three
+  // grids lose it silently, which is the same bug again.
+  ok("the chips are defined once, as a component", /const CardChips = \(\{ town \}\) =>/.test(app));
+  is("and every town grid renders them", (app.match(/<CardChips town=\{town\} \/>/g) || []).length, 3);
+  ok("the component reads the tier", /const tier = tierLabel\(town\);/.test(app));
+  ok("and the themes", /const themes = themesOf\(town\);/.test(app));
+  // A grid that renders no cards cannot prove a chip renders, so the count above
+  // is checked against the number of grids that filter on isArea.
+  is("there are exactly three town grids to put them in", (app.match(/!isArea\(t\)/g) || []).length, 3);
   // The free-text region filter is gone from every predicate, or the mess is
   // still there behind a nicer control.
   ok("no filter reads the free-text region any more", !/t\.region === townFilter/.test(app));
