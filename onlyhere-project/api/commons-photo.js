@@ -176,6 +176,24 @@ export const mentionsSubject = (token, ...texts) => {
   return texts.some(t => fold(t).includes(needle));
 };
 
+// ── A PAINTING IS NOT A PHOTOGRAPH ──────────────────────────────────
+// The Danish article on Amalienborg opens with "Sophie Amalienborg (1740
+// painting)", a 1768 engraving of a statue being raised, and two more 18th
+// century works. All correct for an encyclopaedia, all wrong for a travel card,
+// and between them they filled half the results.
+//
+// Demoted rather than dropped: for a ruin or a lost building a painting may be
+// the only image that exists, and refusing it would leave the card blank.
+const HISTORICAL = /\bpainting\b|\bmaleri\b|\bengraving\b|\bkobberstik\b|\betching\b|\blithograph\b|\blitografi\b|\bdrawing\b|\btegning\b|\bwoodcut\b|\bportrait\b|\bportr(æ|ae)t\b|\bby [A-Z][a-z]+ \d{4}\b/i;
+// A year before photography was ordinary in Denmark, written in the title, is
+// the strongest signal of all: "Moltkes Palais 1756 by de Lode".
+const OLD_YEAR = /\b1[0-8]\d{2}\b/;
+export const looksHistorical = (title, description, categories) => {
+  const t = `${title || ""} ${categories || ""}`;
+  if (HISTORICAL.test(t) || HISTORICAL.test(description || "")) return true;
+  return OLD_YEAR.test(title || "");
+};
+
 const UA = {
   // Wikimedia asks for this. A generic agent gets rate limited or blocked.
   "User-Agent": "Gemlyx/1.0 (https://gemlyx.com; hello@gemlyx.com) travel-guide-photo-lookup",
@@ -237,10 +255,27 @@ export default async function handler(req, res) {
   try {
     // Danish first: a Danish place is likelier to have the better article there,
     // and its title is the better category guess.
-    const [daTitle, enTitle] = await Promise.all([
+    const [daTitle, enDirect] = await Promise.all([
       resolveTitle("da.wikipedia.org", articleHint),
       resolveTitle("en.wikipedia.org", articleHint),
     ]);
+    // ── A DANISH NAME IS OFTEN NOT AN ENGLISH TITLE AT ALL ──────────
+    // Oliver, 8 Aug 2026, with a link to a photo on the English article:
+    // "why is this not shown in the media? it's CC BY 2.0".
+    //
+    // It was never fetched. "Amalienborg Slot" resolves on da.wikipedia, and
+    // English Wikipedia has "Amalienborg" with no redirect from the Danish
+    // name, so redirects=1 had nothing to follow and the English article
+    // resolved to null. Every photograph on it, including the aerial view he
+    // linked, was invisible to this endpoint.
+    //
+    // One extra lookup fixes it, on the title the Danish wiki already resolved
+    // to. It is the same trick that fixed the category: let the wiki that DOES
+    // know the place tell us its real name.
+    const enTitle = enDirect
+      || (daTitle && daTitle.toLowerCase() !== articleHint.toLowerCase()
+            ? await resolveTitle("en.wikipedia.org", daTitle)
+            : null);
 
     // A Commons category is almost always named after the article, so the
     // RESOLVED title is a far better guess than the raw search box contents.
@@ -262,18 +297,33 @@ export default async function handler(req, res) {
     // nothing. One missing Danish article must not cost the other three.
     const batches = await Promise.all(queries.map(qy => fetchPages(qy.url)));
 
-    const results = [];
+    // ── ONE SOURCE MUST NOT MONOPOLISE THE RESULTS ─────────────────
+    // The old merge filled the list from source one, then broke out of the loop
+    // entirely. For "Amalienborg Slot" the Danish article alone supplied all
+    // eight slots, four of them 18th-century paintings, and the English
+    // article's photographs could not have appeared no matter how good they
+    // were. Priority meant "first source wins everything" rather than "first
+    // source goes first".
+    //
+    // So every source is filtered in full, and the slots are dealt round-robin.
+    // Order within a round is still the priority order, so the article's best
+    // photo is still the first result; the difference is that the second source
+    // is guaranteed a place at the table.
+    //
+    // AND THE REPORTING IS NOW TRUE. Breaking out early left `found: 0` on
+    // sources that were never looked at, which read as "that source has
+    // nothing" when it meant "we stopped before asking". A diagnostic that
+    // cannot tell those apart is the failure this endpoint exists to stop.
     const seen = new Set();
-    // Counted so a dead source is VISIBLE. Seven results from the worst source
-    // look exactly like seven results from the best one.
-    const sources = queries.map(qy => ({ source: qy.source, found: 0, used: 0, offSubject: 0 }));
+    const sources = queries.map(qy => ({ source: qy.source, found: 0, usable: 0, used: 0, offSubject: 0 }));
+    const perSource = [];
 
     for (let b = 0; b < batches.length; b++) {
       const pages = batches[b];
       const qy = queries[b];
       sources[b].found = pages.length;
+      const keep = [];
       for (const p of pages) {
-        if (results.length >= n) break;
         const title = String(p.title || "").replace(/^File:/, "");
         const key = title.toLowerCase();
         if (!title || seen.has(key)) continue;
@@ -311,9 +361,7 @@ export default async function handler(req, res) {
         // Neither makes the file unfree, and a street scene with people in it
         // is exactly what a town page wants. But personality rights are a real
         // claim someone can bring against a commercial site, so anything
-        // flagged is skipped rather than judged here. If Oliver wants the
-        // street scenes back, this is the line to change, and it is his call
-        // rather than mine.
+        // flagged is skipped rather than judged here.
         const restrictions = strip(m.Restrictions?.value);
         if (restrictions) continue;
         // A photographer we cannot name cannot be credited, and an uncreditable
@@ -323,13 +371,18 @@ export default async function handler(req, res) {
         const isPD = /^(cc0|public domain|pd-)/i.test(license);
         if (!photographer && !isPD) continue;
 
-        sources[b].used++;
-        results.push({
+        keep.push({
           title,
           // Where it came from, shown in Studio. A result from the article and a
           // result from a blind text search are not the same kind of evidence
           // and must never look the same.
           source: qy.source,
+          // A travel card wants a PHOTOGRAPH. The Danish article on Amalienborg
+          // leads with four 18th-century paintings, which are the right images
+          // for an encyclopaedia and the wrong ones for a card. Not excluded,
+          // because sometimes a painting is all there is: pushed behind the
+          // photographs within its own source.
+          historical: looksHistorical(title, strip(m.ImageDescription?.value), strip(m.Categories?.value)),
           // thumburl is a scaled render, which is what a card should load. The
           // original can be several megabytes.
           url: ii.thumburl || ii.url,
@@ -345,8 +398,25 @@ export default async function handler(req, res) {
           },
         });
       }
-      if (results.length >= n) break;
+      // Photographs first, order otherwise untouched.
+      keep.sort((a, b2) => (a.historical === b2.historical ? 0 : a.historical ? 1 : -1));
+      sources[b].usable = keep.length;
+      perSource.push(keep);
     }
+
+    const results = [];
+    for (let round = 0; results.length < n; round++) {
+      let dealt = false;
+      for (let b = 0; b < perSource.length && results.length < n; b++) {
+        const hit = perSource[b][round];
+        if (!hit) continue;
+        dealt = true;
+        sources[b].used++;
+        results.push(hit);
+      }
+      if (!dealt) break;
+    }
+
     return res.status(200).json({ results, subject: token, sources, resolved: { da: daTitle, en: enTitle, categories: catCandidates } });
 
   } catch (err) {

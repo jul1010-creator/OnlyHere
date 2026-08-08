@@ -55,7 +55,7 @@ writeFileSync(entry, `
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
-  export { licenseIsUsable, distinctiveToken, mentionsSubject } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
+  export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
@@ -1990,7 +1990,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // of the four sources returned nothing without erroring, and the fourth's raw
 // text-search ranking was shown as if they had all worked.
 {
-  const { distinctiveToken, mentionsSubject } = M;
+  const { distinctiveToken, mentionsSubject, looksHistorical } = M;
 
   // The word a result actually has to mention. "Slot" is the type, not the
   // subject, and it is an ordinary word on Dutch and German waterway photos
@@ -2015,6 +2015,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and folded spelling counts", mentionsSubject("ringkøbing", "Ringkobing havn 1912.jpg", "", ""));
   ok("with no subject to test, nothing is rejected", mentionsSubject(null, "anything.jpg", "", ""));
 
+  // ── A PAINTING IS NOT A PHOTOGRAPH ───────────────────────────────
+  // Four of the eight Amalienborg results were 18th-century works. Right for an
+  // encyclopaedia, wrong for a travel card. Demoted, never dropped: for a lost
+  // building a painting may be the only image there is.
+  ok("a named painting is historical", looksHistorical("Sophie Amalienborg (1740 painting).jpg", "", ""));
+  ok("so is an engraving", looksHistorical("Rytterstatuen opstilles paa Amalienborg Plads 1768.jpg", "", ""));
+  ok("and a pre-photography year in the title alone", looksHistorical("Moltkes Palais 1756 by de Lode.jpg", "", ""));
+  ok("a modern photograph is not", !looksHistorical("Amalienborg Palace - aerial view.jpg", "Aerial view of the palace", "Amalienborg"));
+  ok("nor is a recent year", !looksHistorical("Amalienborg 2019.jpg", "", ""));
+  ok("nor a plain name", !looksHistorical("Frederik VIII's Palae.jpg", "", ""));
+
   // ── THE THREE SILENT MISSES ──────────────────────────────────────
   // Read off the source, because none of this is reachable without a network.
   const api = readFileSync(join(root, "api/commons-photo.js"), "utf8");
@@ -2031,9 +2042,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // already about the place, whatever its filename says.
   ok("only the text search has to prove its subject", /qy\.isSearch && !mentionsSubject\(/.test(api));
   ok("and a dropped result is counted rather than swallowed", /sources\[b\]\.offSubject\+\+/.test(api));
-  const pushBlock = api.slice(api.indexOf("results.push({"), api.indexOf("credit: {"));
-  ok("the results.push block was found at all", pushBlock.length > 40);
-  ok("every RESULT says which lookup found it", /source: qy\.source,/.test(pushBlock));
+  // The candidate object, not the whole file: `source: qy.source` also appears
+  // on the per-source counter, and matching loosely proved the counter while
+  // saying nothing about whether a RESULT carries its provenance.
+  const keepBlock = api.slice(api.indexOf("keep.push({"), api.indexOf("credit: {"));
+  ok("the keep.push block was found at all", keepBlock.length > 40);
+  ok("every RESULT says which lookup found it", /source: qy\.source,/.test(keepBlock));
+
+  // ── ONE SOURCE MUST NOT MONOPOLISE THE RESULTS ───────────────────
+  // The Danish article on Amalienborg supplied all eight slots on its own, so
+  // the English article's photographs could not appear however good they were.
+  ok("the slots are dealt round-robin, not first-source-wins", /for \(let round = 0; results\.length < n; round\+\+\)/.test(api));
+  ok("and no source is skipped before it is even filtered", !/for \(const p of pages\)[\s\S]{0,400}if \(results\.length >= n\) break;/.test(api));
+  // A source that was never examined reported "found: 0", which reads as "that
+  // source has nothing" when it meant "we stopped before asking".
+  ok("every source reports how many it could actually use", /sources\[b\]\.usable = keep\.length;/.test(api));
+  // A Danish place name is often not an English title at all, and there is no
+  // redirect to follow. The Danish wiki already knows the real name.
+  ok("the English article is retried on the resolved Danish title", /resolveTitle\("en\.wikipedia\.org", daTitle\)/.test(api));
+  ok("a painting is pushed behind the photographs", /keep\.sort\(\(a, b2\) => \(a\.historical/.test(api));
   // A dead source must be visible in the panel, not inferred from odd results.
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the panel warns when only the text search answered", /Only the blind text search found anything/.test(app));
@@ -2235,6 +2262,28 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("no filter reads the free-text region any more", !/t\.region === townFilter/.test(app));
   ok("the geography chips are derived from coordinates", /partsPresent\(towns\)/.test(app));
   ok("and one predicate is still read by every grid", /const townMatches = \(t\) => townPartOk/.test(app));
+}
+
+// ── THE MESSAGE THAT BLAMED HIS SQL FOR AN EXPIRED LOGIN ───────────
+// Oliver, 8 Aug 2026: "it worked before. And facts are in my SQL. so this must
+// be a bug." Verified against the live database: the same query returns 200 and
+// real rows on either key. `Bearer undefined` returns 401 PGRST301, an object
+// rather than an array, and the code reached for the only explanation it had.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // PASS 57 added studioAuth() so a missing token could never masquerade as a
+  // database permission error, and then all three facts call sites kept
+  // interpolating the token by hand. EXACT count: a floor would let one of them
+  // slip back.
+  is("no facts call interpolates the token by hand any more",
+     (app.match(/gemlyx_facts[\s\S]{0,220}Bearer \$\{studioSession\?\.access_token\}/g) || []).length, 0);
+  is("and all three go through studioAuth", (app.match(/studioAuth\(\)/g) || []).length >= 3, true);
+  ok("a missing token names the login, not the database", /Your Studio login has expired\. Log out and back in\. \(The table is fine\.\)/.test(app));
+  // The SQL is suggested for exactly one thing: the relation genuinely not
+  // existing. Not for a 401, which is what it was doing.
+  ok("the SQL is only suggested for a missing relation", /PGRST205[\s\S]{0,160}does not exist yet\. Run the SQL/.test(app));
+  ok("401 and 403 are recognised as auth, not schema", /status === 401 \|\| status === 403 \|\| \/\^PGRST30\[12\]\$\/\.test\(code\)/.test(app));
+  ok("and anything else reports its own status rather than guessing", /Could not read the facts \(\$\{status\}/.test(app));
 }
 
 rmSync(dir, { recursive: true, force: true });

@@ -2261,14 +2261,51 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
     return { apikey: SUPABASE_KEY, Authorization: `Bearer ${tok}` };
   };
 
+  // ── THE MESSAGE THAT BLAMED HIS SQL FOR AN EXPIRED LOGIN ────────
+  // Oliver, 8 Aug 2026: "The gemlyx_facts table is not readable yet. Run the SQL
+  // from CHANGES_THIS_PASS.md in Supabase.. it worked before. And facts are in
+  // my SQL. so this must be a bug."
+  //
+  // He was right, and the table was never the problem. Verified against the live
+  // database: the same query returns 200 and real rows with either the studio
+  // token or the anon key. What produced that message was `Bearer undefined`,
+  // when studioSession is null or its token has expired. PostgREST answers
+  //
+  //   401 PGRST301 "Expected 3 parts in JWT; got 1"
+  //
+  // which is an OBJECT rather than an array, so `Array.isArray(rows)` is false
+  // and the code reached for the only explanation it had.
+  //
+  // This is PASS 57 exactly, a second time. That pass added `studioAuth()` so a
+  // missing token could never masquerade as a database permission error again,
+  // and then all three gemlyx_facts call sites kept interpolating the token by
+  // hand twelve lines below it. Writing the helper is not the same as using it.
+  //
+  // Now: no token means the login is named. A real error names ITSELF, and the
+  // SQL is only suggested for the one PostgREST code that genuinely means the
+  // relation does not exist.
+  const factsErrorFor = (status, body) => {
+    const code = body && typeof body === "object" ? String(body.code || "") : "";
+    if (status === 401 || status === 403 || /^PGRST30[12]$/.test(code)) {
+      return "Your Studio login has expired. Log out and back in. (The table is fine.)";
+    }
+    if (status === 404 || code === "PGRST205" || /does not exist/i.test(String(body?.message || ""))) {
+      return "The gemlyx_facts table does not exist yet. Run the SQL from CHANGES_THIS_PASS.md in Supabase.";
+    }
+    return `Could not read the facts (${status}${code ? ` ${code}` : ""}). ${String(body?.message || "").slice(0, 160)}`.trim();
+  };
+
   const loadSavedFacts = async () => {
+    setFactError(null);
+    let headers;
+    try { headers = studioAuth(); }
+    catch (e) { setFactError(String(e.message || e)); return; }
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?select=*&order=created_at.desc`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
-      });
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?select=*&order=created_at.desc`, { headers });
       const rows = await res.json();
-      setFactSaved(Array.isArray(rows) ? rows : []);
-      if (!Array.isArray(rows)) setFactError("The gemlyx_facts table is not readable yet. Run the SQL from CHANGES_THIS_PASS.md in Supabase.");
+      if (Array.isArray(rows)) { setFactSaved(rows); return; }
+      setFactSaved([]);
+      setFactError(factsErrorFor(res.status, rows));
     } catch (e) { setFactError(String(e.message || e)); }
   };
 
@@ -2412,10 +2449,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts`, {
         method: "POST",
-        headers: {
-          apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`,
-          "Content-Type": "application/json", Prefer: "return=representation",
-        },
+        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify({
           fact: draft.fact, subject: draft.subject, category: draft.category,
           photo: draft.photo || null, source_url: draft.sourceUrl || null, published: true,
@@ -2435,7 +2469,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_facts?id=eq.${row.id}`, {
         method: "DELETE",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
+        headers: studioAuth(),
       });
       if (!res.ok) throw new Error((await res.text()).slice(0, 200));
       setFactSaved(prev => prev.filter(f => f.id !== row.id));
