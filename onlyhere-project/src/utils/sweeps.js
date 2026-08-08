@@ -59,6 +59,7 @@
 
 import { enforceScope } from "./correction";
 import { PLACE_KINDS } from "./placeKind";
+import { PLACE_THEMES, cleanThemes, MAX_THEMES } from "./placeThemes";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 const lower = (v) => clean(v).toLowerCase();
@@ -80,6 +81,22 @@ export const SWEEPS = [
     missing: ["placeKind"],
     cap: 40,
     question: "What kind of place is this (city, town, village or area), is it INSIDE a bigger place, and if it is too small to sleep in, where would a visitor actually base themselves?",
+  },
+  {
+    id: "themes",
+    label: "What it is for",
+    blurb: "Fills the theme chips on entries that have none, so a card says whether somewhere is about nature, history, food or nightlife before anybody clicks it. Read out of the entry's own words.",
+    types: ["town"],
+    fields: ["themes"],
+    missing: ["themes"],
+    cap: 40,
+    // No research tier: what a place is FOR is a judgement about writing that
+    // already exists, not a fact to look up. If the entry does not say it, a web
+    // search saying "Ribe is historic" is the model's opinion with a citation
+    // stapled on, and it would arrive marked as researched, which is worse than
+    // arriving not at all.
+    noResearch: true,
+    question: `What is this place actually FOR? Choose 1 to ${MAX_THEMES} from EXACTLY this list and nothing else: ${PLACE_THEMES.join(", ")}. Pick only what the entry gives a real reason to go for. Almost every Danish town has a church and a bakery, so history and food belong here only when the entry treats them as a reason to visit rather than as scenery. Fewer is better than more.`,
   },
 ];
 
@@ -234,7 +251,7 @@ Leave a field as null when the entry does not settle it. Leaving a field null is
 
 Reply with ONLY this JSON object, nothing before or after it:
 {
-${fields.map(f => `  "${f}": "value or null",`).join("\n")}
+${fields.map(f => (f === "themes" ? `  "${f}": ["one to ${MAX_THEMES} of: ${PLACE_THEMES.join(", ")}"],` : `  "${f}": "value or null",`)).join("\n")}
   "quote": "the exact words from the entry that settled it, or null",
   "evidence": "one short sentence saying which field of the entry you read it in"
 }`;
@@ -329,6 +346,14 @@ export const cleanPatch = (raw, fields, knownPlaces) => {
   const out = {};
   for (const f of fields || []) {
     const val = raw?.[f];
+    // Checked BEFORE the string guard below, because this one is legitimately an
+    // array. cleanThemes takes an array, a comma-separated string or a single
+    // word, keeps only the seven real values, dedupes, and caps the list.
+    if (f === "themes") {
+      const kept = cleanThemes(val);
+      if (kept.length) out[f] = kept;
+      continue;
+    }
     if (typeof val !== "string" && typeof val !== "number") continue;
     const v = clean(val);
     if (!v || /^(null|none|n\/a|na|unknown|unclear|not applicable|nothing)\.?$/i.test(v)) continue;
@@ -501,7 +526,7 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, deps = {} }) => {
     // Tier 3. Paid, and only for what is genuinely left. Recomputed again: a
     // partOf that arrived from the entry has just closed dayTripFrom.
     const lastNeed = openFields(sweep, p, patch);
-    if (lastNeed.length && allowResearch && askPerplexity) {
+    if (lastNeed.length && allowResearch && !sweep.noResearch && askPerplexity) {
       const res = await askPerplexity(RESEARCH_PROMPT(p.name, sweep.question, lastNeed));
       if (!res.error && res.text) {
         const found = cleanPatch(parseLooseFields(res.text, lastNeed), lastNeed, places);

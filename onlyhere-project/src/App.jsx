@@ -19,7 +19,7 @@ import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
-  isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
+  isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
   dedupeAgainstExisting, getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
@@ -58,6 +58,8 @@ import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
+import { partOfCountry, partsPresent, matchesSearch } from "./utils/geography";
+import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel } from "./utils/placeThemes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
@@ -270,7 +272,6 @@ function GemlyxApp() {
   const [eventMonth, setEventMonth] = useState(null);
   const [eventType, setEventType] = useState(null);
   const [eventTab, setEventTab] = useState("local");
-  const [townFilter, setTownFilter] = useState(null);
   // null | "hidden" | "must". Read off the entry's own tier so the filter agrees
   // with what the page says about each town, rather than being a second opinion.
   const [townKind, setTownKind] = useState(null);
@@ -298,7 +299,43 @@ function GemlyxApp() {
   // chances to drift — which is how the Major Cities heading ended up rendering
   // over an empty grid, gated on the UNFILTERED list while the grid under it was
   // filtered.
-  const townMatches = (t) => (!townFilter || t.region === townFilter) && townKindOk(t) && townSizeOk(t);
+  // ── THE FILTERS WERE A DATA PROBLEM WEARING A LAYOUT PROBLEM ────
+  // Oliver, 8 Aug 2026: "the filters gotta change. We need more modern
+  // filtering. This is just a long mess."
+  //
+  // The Region row read `[...new Set(towns.map(t => t.region))]` off a FREE TEXT
+  // field, so "Langeland, Region Syddanmark" and "Langeland, Southern Denmark"
+  // were two pills for one region, sitting next to "Himmerland, Region
+  // Nordjylland" which is a sub-area inside a third. Denmark has five regions
+  // and the page was showing twelve and a scrollbar.
+  //
+  // So the AXIS changed, not the widget. Which part of the country a place is in
+  // is derived from the coordinate every entry already stores, against the five
+  // landmass outlines the card thumbnails are already drawn from. Five values,
+  // always, with no spelling to disagree with itself. The written region stays
+  // on the card, where detail belongs, and stays SEARCHABLE, which is the other
+  // half of the deal: "Himmerland" lost its pill but still finds its towns.
+  const [townSearch, setTownSearch] = useState("");
+  const [townPart, setTownPart] = useState(null);
+  const [townTheme, setTownTheme] = useState(null);
+  const [townFiltersOpen, setTownFiltersOpen] = useState(false);
+  // AN ENTRY THIS CANNOT PLACE IS NOT HIDDEN. partOfCountry returns null for a
+  // row with no stored coordinate, and a filter that silently removes an entry
+  // from every view is the blank-page failure this page already shipped once. It
+  // simply does not match a specific part, and stays under All.
+  const townPartOk = (t) => !townPart || partOfCountry(t) === townPart;
+  const townThemeOk = (t) => hasTheme(t, townTheme);
+  const townSearchOk = (t) => matchesSearch(t, townSearch);
+  // ONE PREDICATE, READ IN FIVE PLACES, for the same reason as before: copies of
+  // the same conditions are chances to drift, which is how the Major Cities
+  // heading once rendered over an empty grid.
+  const townMatches = (t) => townPartOk(t) && townKindOk(t) && townSizeOk(t) && townThemeOk(t) && townSearchOk(t);
+  // An area is judged on every axis EXCEPT size, because the areas section below
+  // has its own size rule. Written once here so the section, the empty state and
+  // the count cannot disagree about it.
+  const areaMatches = (t) => townPartOk(t) && townKindOk(t) && townThemeOk(t) && townSearchOk(t);
+  const clearTownFilters = () => { setTownPart(null); setTownKind(null); setTownSize(null); setTownTheme(null); setTownSearch(""); };
+  const activeTownFilters = [townPart, townKind, townSize, townTheme, townSearch.trim()].filter(Boolean).length;
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
   const [craftKind, setCraftKind] = useState(null);
@@ -583,7 +620,11 @@ function GemlyxApp() {
       const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&limit=8`);
       const data = await res.json();
       if (data.error) setPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
-      else setPhotoFinder(f => ({ ...f, loading: false, results: data.results || [] }));
+      // sources/subject/resolved come back so the panel can say WHICH lookup
+      // found these. "Amalienborg Slot" quietly matched no article and no
+      // category, and the seven results on screen were all from the blind text
+      // search, which is how four Rhine barges ended up under a royal palace.
+      else setPhotoFinder(f => ({ ...f, loading: false, results: data.results || [], sources: data.sources || [], subject: data.subject || null, resolved: data.resolved || null }));
     } catch (e) {
       setPhotoFinder(f => ({ ...f, loading: false, error: String(e.message || e) }));
     }
@@ -5330,7 +5371,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     setAiLoading(true);
     try {
       const productList = allProducts.map(p => `${p.name} in ${p.city} (${p.price}) - ${p.exclusive}`).join(", ");
-      const townList = towns.map(t => `${t.name} (${t.region}, ${t.travelTime} from CPH) — ${t.tag}`).join("; ");
+      const townList = towns.map(t => `${t.name} (${dotJoin(t.region, travelLabel(null, t, t.travelTime))})${t.tag ? ` — ${t.tag}` : ""}`).join("; ");
       const tripList = roadTrips.map(r => `${r.name} (${r.duration}, ${r.distance}) — stops: ${r.stops.map(s => s.name).join(", ")}`).join("; ");
       const campList = campingSpots.map(s => `${s.name} (${s.region}, ${s.type})`).join("; ");
       const foodList = foodSpots.map(f => `${f.name} (${f.category}, ${f.location}, ${f.price})`).join("; ");
@@ -5922,12 +5963,38 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                             Nothing usable found. Commons had no freely licensed photo for that search, or every match was non-commercial, no-derivatives, or had no nameable author. Try a different wording.
                                           </div>
                                         )}
+                                        {/* ── WHICH LOOKUPS ACTUALLY ANSWERED ──────────
+                                            A search that falls back to its worst source and
+                                            returns seven confident-looking results is the
+                                            failure this panel kept hiding. */}
+                                        {photoFinder.results?.length > 0 && photoFinder.sources?.length > 0 && (() => {
+                                          const live = photoFinder.sources.filter(sc => sc.used > 0);
+                                          const dead = photoFinder.sources.filter(sc => sc.found === 0);
+                                          const off = photoFinder.sources.reduce((n2, sc) => n2 + (sc.offSubject || 0), 0);
+                                          const onlySearch = live.length === 1 && live[0].source === "Commons search";
+                                          return (
+                                            <div style={{ fontSize: 10, color: onlySearch ? "#FFB347" : C.muted, lineHeight: 1.55, marginBottom: 8 }}>
+                                              {onlySearch
+                                                ? `Only the blind text search found anything. No Wikipedia article and no Commons category matched "${photoFinder.query}", so nothing here has been judged to be about the right place. Try the name on its own.`
+                                                : `From: ${live.map(sc => `${sc.source} (${sc.used})`).join(", ")}.`}
+                                              {dead.length > 0 && !onlySearch && <span> Found nothing: {dead.map(sc => sc.source).join(", ")}.</span>}
+                                              {off > 0 && <span> {off} text-search {off === 1 ? "result" : "results"} never mentioned {photoFinder.subject ? `"${photoFinder.subject}"` : "the subject"} and {off === 1 ? "was" : "were"} dropped.</span>}
+                                            </div>
+                                          );
+                                        })()}
                                         {photoFinder.results?.length > 0 && (
                                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
                                             {photoFinder.results.map(hit => (
                                               <div key={hit.url} style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", background: C.surface }}>
                                                 <img src={hit.url} alt="" style={{ width: "100%", height: 78, objectFit: "cover", display: "block" }} />
                                                 <div style={{ padding: "6px 7px" }}>
+                                                  {/* THE FILENAME AND THE SOURCE, because a photographer's
+                                                      name tells you nothing about whether the picture is
+                                                      of the right place. Four barges credited to "Rolf
+                                                      Heinrich, Köln" looked exactly as legitimate as the
+                                                      palace did. */}
+                                                  <div title={hit.title} style={{ fontSize: 9.5, color: C.text, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.title}</div>
+                                                  <div style={{ fontSize: 8.5, color: hit.source === "Commons search" ? "#FFB347" : C.muted, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.source === "Commons search" ? "⚠ text search" : hit.source}</div>
                                                   <div style={{ fontSize: 9.5, color: C.light, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.credit.photographer}</div>
                                                   <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>{hit.credit.license}</div>
                                                   <button onClick={() => useCommonsPhoto(row, hit)} disabled={mediaBusy || !!photoFinder.saving}
@@ -7502,7 +7569,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
 
                         <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{item.name}</div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>
-                          {item._kind === "craft" ? item.location : item.city}{item._kind === "craft" ? ` · ${travelLabel(userCoords, item.location, item.travelTime)}` : ""}{item.priceNote ? ` · ${item.priceNote}` : ""}
+                          {dotJoin(item._kind === "craft" ? item.location : item.city, item._kind === "craft" ? travelLabel(userCoords, item.location, item.travelTime) : "", item.priceNote)}
                           {craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item._kind === "craft" ? item.location : item.city); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
@@ -7817,7 +7884,26 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                         </div>
                         <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region}</div>
-                        <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
+                        {/* ── WHAT IT IS FOR, AND HOW WELL KNOWN, BEFORE ANYBODY
+                        CLICKS ─────────────────────────────────────────
+                        Oliver, 8 Aug: "I would also like the 'tier' to be
+                        showing on the captions before clicking the blog. OH, and
+                        what category it fits into."
+                        Both were already stored and neither was readable. The
+                        tier only ever surfaced as a Top Pick badge on the very
+                        highest one, so "Can't miss" and "If you're nearby"
+                        rendered as exactly the same card. */}
+                    {(tierLabel(town) || themesOf(town).length > 0) && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+                        {tierLabel(town) && (
+                          <span style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, background: `${C.gold}1a`, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.3 }}>{tierLabel(town)}</span>
+                        )}
+                        {themesOf(town).map(th => (
+                          <span key={th} style={{ fontSize: 9.5, fontWeight: 700, color: C.light, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.3 }}>{THEME_EMOJI[th]} {THEME_LABEL[th]}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                         <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.text, fontSize: 12, fontWeight: 700, padding: "10px 0 2px" }}>
                           Read more <span style={{ fontSize: 14 }}>›</span>
@@ -7827,56 +7913,103 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                   </div>
                 </div>
               )}
-              {/* Regions come from the towns themselves. The old list was nine
-                  hardcoded strings, so a region a published entry introduced had
-                  no pill, and regions with nothing left in them still had one.
-                  These pills now also filter the Major Cities grid above, which
-                  they visually sit under and previously did not affect at all. */}
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Region</div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14 }}>
-                {["All", ...[...new Set(towns.map(t => t.region).filter(Boolean))].sort(daCompare)].map(r => (
-                  <Pill key={r} label={r} active={(r === "All" && !townFilter) || townFilter === r} onClick={() => setTownFilter(r === "All" ? null : (townFilter === r ? null : r))} />
-                ))}
+              {/* ── SEARCH, ONE ROW OF CHIPS, THE REST BEHIND A BUTTON ──
+                  Three always-open pill rows, two of them scrolling sideways,
+                  was the "long mess". The search box answers what the region
+                  pills were really being used for, the chips are the one axis
+                  worth seeing at a glance, and everything else is one tap away
+                  with a count on it, so nothing is hidden without saying so. */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+                  <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: C.muted, pointerEvents: "none" }}>⌕</span>
+                  <input value={townSearch} onChange={e => setTownSearch(e.target.value)}
+                    placeholder="Search a town, a region, anything…"
+                    style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "9px 34px 9px 30px", fontSize: 12.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
+                  {townSearch && (
+                    <button onClick={() => setTownSearch("")} aria-label="Clear search"
+                      style={{ position: "absolute", right: 11, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.muted, fontSize: 15, cursor: "pointer", lineHeight: 1 }}>×</button>
+                  )}
+                </div>
+                <button onClick={() => setTownFiltersOpen(o => !o)}
+                  style={{ background: townFiltersOpen || activeTownFilters ? `${C.gold}1a` : "none", border: `1px solid ${activeTownFilters ? C.gold : C.border}`, color: activeTownFilters ? C.gold : C.light, borderRadius: 100, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+                  Filters{activeTownFilters ? ` · ${activeTownFilters}` : ""}
+                </button>
               </div>
-              {/* Hidden becomes a filter rather than the page's name, and it is
-                  derived from the tier the entry actually carries, not from
-                  which grid it happens to sit in. */}
-              {/* RELABELLED from "Kind of place". These pills read the TIER,
-                  which is how well known somewhere is, not what kind of place it
-                  is — and once there is a real kind filter sitting next to them
-                  the old label was answering the wrong question. */}
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>How well known</div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
-                {[{ id: null, label: "All" }, { id: "hidden", label: "◆ Off the usual route" }, { id: "must", label: "★ Can't miss out" }].map(k => (
-                  <Pill key={k.label} label={k.label} active={townKind === k.id} onClick={() => setTownKind(townKind === k.id ? null : k.id)} />
-                ))}
-              </div>
-              {/* DERIVED, NOT HAND-MAINTAINED. A pill only appears when
-                  something published actually is that kind, so this row is empty
-                  on a list of plain towns and grows a Villages pill the day the
-                  first village is marked as one. A hardcoded list would offer a
-                  filter that returns nothing, which is how the old nine
-                  hardcoded region strings went wrong. */}
+
+              {/* DERIVED FROM A COORDINATE, so this row is five chips at most and
+                  can never grow a sixth because somebody typed a name
+                  differently. Only parts something is published in appear. */}
               {(() => {
-                // "area" BELONGS IN THIS LIST. Without it no pill could ever
-                // select areas, while the areas section below bails out on any
-                // non-area selection — so one click on Towns silently deleted
-                // every district from the page with no heading, no count and no
-                // way back except All. The axis has to be complete or it is a
-                // trapdoor.
-                const kinds = ["city", "town", "village", "area"].filter(k => towns.some(t => placeKindOf(t) === k));
-                if (kinds.length < 2) return null;
+                const parts = partsPresent(towns);
+                if (parts.length < 2) return null;
                 return (
-                  <>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Size of place</div>
-                    <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16 }}>
-                      {[{ id: null, label: "All" }, ...kinds.map(k => ({ id: k, label: k === "city" ? "🏙 Cities" : k === "village" ? "🌾 Villages" : k === "area" ? "◇ Areas" : "🏘 Towns" }))].map(k => (
-                        <Pill key={k.label} label={k.label} active={townSize === k.id} onClick={() => setTownSize(townSize === k.id ? null : k.id)} />
-                      ))}
-                    </div>
-                  </>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                    {[{ id: null, label: "All of Denmark" }, ...parts.map(x => ({ id: x, label: x }))].map(k => (
+                      <Pill key={k.label} label={k.label} active={townPart === k.id} onClick={() => setTownPart(townPart === k.id ? null : k.id)} />
+                    ))}
+                  </div>
                 );
               })()}
+
+              {townFiltersOpen && (() => {
+                // COUNTS ON EVERY OPTION. A filter that leads to an empty grid
+                // should say so before it is tapped, not after. Each count is the
+                // real number of matches with that ONE axis swapped, so it already
+                // accounts for everything else currently selected.
+                const base = (t) => townPartOk(t) && townSearchOk(t);
+                const nWithTheme = (th) => towns.filter(t => base(t) && townKindOk(t) && townSizeOk(t) && hasTheme(t, th)).length;
+                const nWithSize = (z) => towns.filter(t => base(t) && townKindOk(t) && townThemeOk(t) && (!z || placeKindOf(t) === z)).length;
+                const kinds = ["city", "town", "village", "area"].filter(k => towns.some(t => placeKindOf(t) === k));
+                const themeList = themesPresent(towns);
+                const Row = ({ title, children }) => (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 7 }}>{title}</div>
+                    <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{children}</div>
+                  </div>
+                );
+                return (
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 15px", marginBottom: 14 }}>
+                    {themeList.length > 1 && (
+                      <Row title="What it is for">
+                        {[{ id: null, label: "Anything" }, ...themeList.map(th => ({ id: th, label: `${THEME_EMOJI[th]} ${THEME_LABEL[th]}`, n: nWithTheme(th) }))].map(k => (
+                          <Pill key={k.label} label={k.id ? `${k.label} (${k.n})` : k.label} active={townTheme === k.id} onClick={() => setTownTheme(townTheme === k.id ? null : k.id)} />
+                        ))}
+                      </Row>
+                    )}
+                    <Row title="How well known">
+                      {[{ id: null, label: "All" }, { id: "hidden", label: "◆ Off the usual route" }, { id: "must", label: "★ Can't miss out" }].map(k => (
+                        <Pill key={k.label} label={k.label} active={townKind === k.id} onClick={() => setTownKind(townKind === k.id ? null : k.id)} />
+                      ))}
+                    </Row>
+                    {/* "area" BELONGS IN THIS LIST. Without it no chip could select
+                        districts while the areas section bailed out on any non-area
+                        choice, so one tap deleted every district with no way back. */}
+                    {kinds.length > 1 && (
+                      <Row title="Size of place">
+                        {[{ id: null, label: "All" }, ...kinds.map(k => ({ id: k, label: k === "city" ? "🏙 Cities" : k === "village" ? "🌾 Villages" : k === "area" ? "◇ Areas" : "🏘 Towns", n: nWithSize(k) }))].map(k => (
+                          <Pill key={k.label} label={k.id ? `${k.label} (${k.n})` : k.label} active={townSize === k.id} onClick={() => setTownSize(townSize === k.id ? null : k.id)} />
+                        ))}
+                      </Row>
+                    )}
+                    {activeTownFilters > 0 && (
+                      <button onClick={clearTownFilters}
+                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* What is actually being shown, in one line, whenever anything is
+                  narrowed. Same predicates as the grids, so it can never disagree. */}
+              {activeTownFilters > 0 && (
+                <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span>Showing {towns.filter(t => isArea(t) ? areaMatches(t) : townMatches(t)).length} of {towns.length}</span>
+                  <button onClick={clearTownFilters}
+                    style={{ background: "none", border: "none", color: C.gold, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0, textDecoration: "underline" }}>Clear</button>
+                </div>
+              )}
               <div className="towns-grid">
                 {towns.filter(t => !t.isMajorCity && !isArea(t) && townMatches(t)).sort(byName).map(town => (
                   <div key={town.id} onClick={() => setTownDetail(town)} style={{ cursor: "pointer" }}>
@@ -7893,7 +8026,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                       )}
                     </div>
                     <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
-                    <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{placeKindOf(town) === "village" ? "Village · " : ""}{town.region} · {travelLabel(userCoords, town.name, town.travelTime)}</div>
+                    <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{dotJoin(placeKindOf(town) === "village" ? "Village" : "", town.region, travelLabel(userCoords, town, town.travelTime))}</div>
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
                     <div style={{ fontSize: 12, color: C.light, lineHeight: 1.65, marginTop: 6 }}>{(town.desc || "").slice(0, 90)}{(town.desc || "").length > 90 ? "…" : ""}</div>
                     {town.gemlyxFind && <div style={{ fontSize: 11, color: C.gold, lineHeight: 1.5, marginTop: 5 }}><b>✦ Gemlyx Find:</b> {town.gemlyxFind.slice(0, 80)}{town.gemlyxFind.length > 80 ? "…" : ""}</div>}
@@ -7923,7 +8056,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                   renders nothing at all. */}
               {(() => {
                 if (townSize && townSize !== "area") return null;
-                const areas = towns.filter(t => isArea(t) && (!townFilter || t.region === townFilter) && townKindOk(t));
+                const areas = towns.filter(t => isArea(t) && areaMatches(t));
                 if (!areas.length) return null;
                 // GROUPED CASE-INSENSITIVELY, and NOTHING IS DROPPED. Two
                 // separate ways an entry vanished off the entire page: a
@@ -7980,10 +8113,10 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                   completely blank with no explanation and no hint that a filter
                   was the cause. Same predicate as the grids, so it can never
                   disagree with them. */}
-              {!towns.some(t => (isArea(t) ? (!townSize || townSize === "area") && (!townFilter || t.region === townFilter) && townKindOk(t) : townMatches(t))) && towns.length > 0 && (
+              {!towns.some(t => (isArea(t) ? (!townSize || townSize === "area") && areaMatches(t) : townMatches(t))) && towns.length > 0 && (
                 <div style={{ textAlign: "center", padding: "38px 16px", color: C.muted }}>
                   <div style={{ fontSize: 15, color: C.light, fontFamily: "'Fraunces', serif", marginBottom: 8 }}>Nothing published matches these filters yet.</div>
-                  <button onClick={() => { setTownFilter(null); setTownKind(null); setTownSize(null); }}
+                  <button onClick={clearTownFilters}
                     style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
                     Clear all filters
                   </button>
@@ -8087,7 +8220,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                             <span style={{ fontSize: 10, fontWeight: 700, color: spot.color, background: `${spot.color}22`, padding: "3px 8px", borderRadius: 100 }}>{spot.type}</span>
                           </div>
                           <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 3 }}>{spot.name}</div>
-                          <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>{spot.region} · {spot.travelTime}</div>
+                          <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>{dotJoin(spot.region, spot.travelTime)}</div>
                           {spot.vibe && (
                             <div style={{ fontSize: 10, fontWeight: 700, color: spot.color, marginBottom: 8 }}>{spot.vibe}</div>
                           )}
@@ -9608,7 +9741,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
 
           <div style={{ padding: "20px 20px 40px", maxWidth: 620, margin: "0 auto" }}>
             <div style={{ fontSize: 30, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: 6 }}>{craftDetail.name}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{craftDetail.location} · {travelLabel(userCoords, craftDetail.location, craftDetail.travelTime)}{craftDetail.rating && <span> · <span style={{ color: C.gold, fontWeight: 700 }}>★ {craftDetail.rating}</span></span>}</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{dotJoin(craftDetail.location, travelLabel(userCoords, craftDetail.location, craftDetail.travelTime))}{craftDetail.rating && <span> · <span style={{ color: C.gold, fontWeight: 700 }}>★ {craftDetail.rating}</span></span>}</div>
             {craftDetail.popularityTag && (
               <span style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: craftDetail.popularityTag === "Hidden Gem" ? C.gold : C.muted, background: craftDetail.popularityTag === "Hidden Gem" ? `${C.gold}22` : C.surface, border: `1px solid ${craftDetail.popularityTag === "Hidden Gem" ? C.gold : C.border}`, padding: "4px 11px", borderRadius: 100, marginBottom: 18 }}>
                 {craftDetail.popularityTag === "Hidden Gem" ? "◆ Hidden Gem" : "○ Common Attraction"}
@@ -9767,7 +9900,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
             {craftStatus !== "sent" ? (
               <>
                 <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 2 }}>{craftModal.emoji} {craftModal.name}</div>
-                <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{craftModal.location} · {craftModal.travelTime} from CPH</div>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{dotJoin(craftModal.location, travelLabel(userCoords, craftModal.location, craftModal.travelTime))}</div>
                 <div style={{ fontSize: 13, color: C.light, lineHeight: 1.6, marginBottom: 18 }}>Tell us what you'd like to book — we'll confirm availability and price with the workshop and reply personally.</div>
 
                 {[

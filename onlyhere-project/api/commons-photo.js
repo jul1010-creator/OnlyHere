@@ -109,6 +109,73 @@ export const strip = (s) => String(s || "")
   .replace(/\s+/g, " ")
   .trim();
 
+// ── WHY THIS RETURNED FOUR RHINE BARGES FOR A ROYAL PALACE ──────────
+// Oliver, 8 Aug 2026, searching "Amalienborg Slot" from the media panel and
+// getting a painting, four cargo ships photographed on the Rhine by the same
+// man, and then the palace at positions six and seven.
+//
+// Nothing was broken. Three of the four sources SILENTLY RETURNED NOTHING, and
+// the fourth's raw relevance ranking was presented as if they had all worked:
+//
+//   da/en Wikipedia   titles=Amalienborg Slot, and the article is "Amalienborg".
+//                     Without redirects=1 the API answers "missing" and the
+//                     generator yields zero images. It does not error.
+//   Commons category  Category:Amalienborg Slot does not exist. The real one is
+//                     Category:Amalienborg. Zero files, no error.
+//   full-text search  the only survivor, matching DESCRIPTION TEXT with no
+//                     notion of subject or country. "Slot" is an ordinary word
+//                     on Dutch and German waterway photographs, where it means
+//                     a lock.
+//
+// So the fixes are three, and the third is the one that matters most:
+//
+//   1. redirects=1, so a name that is a redirect finds its article.
+//   2. THE RESOLVED ARTICLE TITLE BECOMES THE CATEGORY NAME. "Amalienborg Slot"
+//      resolves to "Amalienborg", and Category:Amalienborg is right there. One
+//      mechanism fixes both misses, because a Commons category is almost always
+//      named after the article.
+//   3. A full-text hit must MENTION THE SUBJECT. Matching any word of the query
+//      is not evidence; matching the distinctive one is.
+//
+// And every result now says which source it came from, because a search that
+// quietly falls back to its worst source and returns seven confident-looking
+// results is exactly the failure this codebase keeps shipping.
+
+// The words that describe what KIND of thing a place is, in the two languages
+// these names come in. They are the words most likely to collide with something
+// unrelated, so they are never the token a result is judged on.
+const TYPE_WORDS = new Set([
+  "slot", "slottet", "kirke", "kirken", "kirkegaard", "museet", "museum", "havn", "havnen",
+  "borg", "gaard", "gard", "taarn", "sogn", "by", "plads", "torv", "strand", "fyr", "kro",
+  "palace", "castle", "church", "cathedral", "harbour", "harbor", "tower", "square", "beach",
+  "lighthouse", "the", "of", "and", "og", "i", "in", "denmark", "danmark", "danish", "dansk",
+]);
+
+// The word a result has to actually mention. Longest non-type token wins, for
+// the same reason resolveField sorts by length: a short token is a fragment of
+// ordinary language and proves nothing.
+export const distinctiveToken = (term) => {
+  const tokens = String(term || "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(t => t.length >= 4 && !TYPE_WORDS.has(t));
+  if (!tokens.length) return null;
+  return tokens.sort((a, b) => b.length - a.length)[0];
+};
+
+// Danish compounds mean the subject can appear glued to something else
+// ("Amalienborgs", "Amalienborg-pladsen"), so this is a substring test rather
+// than a word test. Accents and case are normalised because file titles are
+// written by everybody.
+const fold = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/ø/g, "o").replace(/æ/g, "ae").replace(/å/g, "aa");
+
+export const mentionsSubject = (token, ...texts) => {
+  if (!token) return true;                       // nothing distinctive to test against
+  const needle = fold(token);
+  return texts.some(t => fold(t).includes(needle));
+};
+
 const UA = {
   // Wikimedia asks for this. A generic agent gets rate limited or blocked.
   "User-Agent": "Gemlyx/1.0 (https://gemlyx.com; hello@gemlyx.com) travel-guide-photo-lookup",
@@ -129,37 +196,82 @@ const fetchPages = async (url) => {
   } catch { return []; }
 };
 
+// ── ONE REQUEST THAT MAKES THE OTHER FOUR WORK ──────────────────────
+// Resolves redirects and normalisation to the title the wiki actually uses.
+// Returns null rather than throwing, because a place with no article is normal
+// and must cost nothing.
+const resolveTitle = async (host, title) => {
+  try {
+    const r = await fetch(`https://${host}/w/api.php?format=json&formatversion=2&action=query&redirects=1&titles=${encodeURIComponent(title)}`, { headers: UA });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const page = d?.query?.pages?.[0];
+    if (!page || page.missing) return null;
+    return String(page.title || "") || null;
+  } catch { return null; }
+};
+
+const uniq = (list) => {
+  const seen = new Set(); const out = [];
+  for (const v of list) {
+    const k = String(v || "").trim().toLowerCase();
+    if (!k || seen.has(k)) continue;
+    seen.add(k); out.push(String(v).trim());
+  }
+  return out;
+};
+
 export default async function handler(req, res) {
   const { q, limit, article, category } = req.query;
   if (!q || !String(q).trim()) return res.status(400).json({ error: "q required" });
 
   const term = String(q).trim();
-  const articleTitle = String(article || term).trim();
-  const categoryTitle = String(category || term).trim();
+  const articleHint = String(article || term).trim();
   const n = Math.min(Math.max(parseInt(limit, 10) || 6, 1), 24);
   // Over-fetch hard. Most of what comes back is filtered out by mime, licence
   // and the not-a-photo rules, and the whole point of this change is to have
   // real candidates left at the end.
   const pool = Math.max(n * 6, 40);
-
-  // THE ORDER OF THIS ARRAY IS THE PRIORITY ORDER. The pictures on the article
-  // come first because they are the ones a person browsing Wikipedia has
-  // actually seen and judged worth putting on the page.
-  const queries = [
-    `https://da.wikipedia.org/w/api.php?format=json&formatversion=2&action=query&generator=images&titles=${encodeURIComponent(articleTitle)}&gimlimit=${pool}&${IMAGEINFO}`,
-    `https://en.wikipedia.org/w/api.php?format=json&formatversion=2&action=query&generator=images&titles=${encodeURIComponent(articleTitle)}&gimlimit=${pool}&${IMAGEINFO}`,
-    `https://commons.wikimedia.org/w/api.php?format=json&formatversion=2&action=query&generator=categorymembers&gcmtitle=${encodeURIComponent("Category:" + categoryTitle)}&gcmtype=file&gcmlimit=${pool}&${IMAGEINFO}`,
-    `https://commons.wikimedia.org/w/api.php?format=json&formatversion=2&action=query&generator=search&gsrnamespace=6&gsrlimit=${pool}&gsrsearch=${encodeURIComponent(term)}&${IMAGEINFO}`,
-  ];
+  const token = distinctiveToken(term);
 
   try {
+    // Danish first: a Danish place is likelier to have the better article there,
+    // and its title is the better category guess.
+    const [daTitle, enTitle] = await Promise.all([
+      resolveTitle("da.wikipedia.org", articleHint),
+      resolveTitle("en.wikipedia.org", articleHint),
+    ]);
+
+    // A Commons category is almost always named after the article, so the
+    // RESOLVED title is a far better guess than the raw search box contents.
+    // The caller's explicit category still wins when it gave one.
+    const catCandidates = uniq([String(category || "").trim(), daTitle, enTitle, term]).slice(0, 3);
+
+    // THE ORDER OF THIS ARRAY IS THE PRIORITY ORDER. The pictures on the article
+    // come first because they are the ones a person browsing Wikipedia has
+    // actually seen and judged worth putting on the page. The full-text search
+    // is last because it is the only one with no idea what it is looking at.
+    const queries = [
+      daTitle && { source: "Danish Wikipedia article", url: `https://da.wikipedia.org/w/api.php?format=json&formatversion=2&action=query&redirects=1&generator=images&titles=${encodeURIComponent(daTitle)}&gimlimit=${pool}&${IMAGEINFO}` },
+      enTitle && { source: "English Wikipedia article", url: `https://en.wikipedia.org/w/api.php?format=json&formatversion=2&action=query&redirects=1&generator=images&titles=${encodeURIComponent(enTitle)}&gimlimit=${pool}&${IMAGEINFO}` },
+      ...catCandidates.map(c => ({ source: `Commons category "${c}"`, url: `https://commons.wikimedia.org/w/api.php?format=json&formatversion=2&action=query&generator=categorymembers&gcmtitle=${encodeURIComponent("Category:" + c)}&gcmtype=file&gcmlimit=${pool}&${IMAGEINFO}` })),
+      { source: "Commons search", url: `https://commons.wikimedia.org/w/api.php?format=json&formatversion=2&action=query&generator=search&gsrnamespace=6&gsrlimit=${pool}&gsrsearch=${encodeURIComponent(term)}&${IMAGEINFO}`, isSearch: true },
+    ].filter(Boolean);
+
     // In parallel, and a source that fails or has no article simply contributes
     // nothing. One missing Danish article must not cost the other three.
-    const batches = await Promise.all(queries.map(fetchPages));
+    const batches = await Promise.all(queries.map(qy => fetchPages(qy.url)));
 
     const results = [];
     const seen = new Set();
-    for (const pages of batches) {
+    // Counted so a dead source is VISIBLE. Seven results from the worst source
+    // look exactly like seven results from the best one.
+    const sources = queries.map(qy => ({ source: qy.source, found: 0, used: 0, offSubject: 0 }));
+
+    for (let b = 0; b < batches.length; b++) {
+      const pages = batches[b];
+      const qy = queries[b];
+      sources[b].found = pages.length;
       for (const p of pages) {
         if (results.length >= n) break;
         const title = String(p.title || "").replace(/^File:/, "");
@@ -181,6 +293,18 @@ export default async function handler(req, res) {
         const m = ii.extmetadata || {};
         const license = strip(m.LicenseShortName?.value);
         if (!licenseIsUsable(license)) continue;
+
+        // ── A SEARCH HIT MUST MENTION THE SUBJECT ─────────────────
+        // Only the full-text search is gated. A file on the article, or filed in
+        // the category, is already about the place whatever its filename says,
+        // which is the entire reason those sources exist. A search hit has no
+        // such standing: it matched some word somewhere, and "Slot" matched four
+        // barges on the Rhine.
+        if (qy.isSearch && !mentionsSubject(token, title, strip(m.ImageDescription?.value), strip(m.Categories?.value))) {
+          sources[b].offSubject++;
+          continue;
+        }
+
         // ── THE ONE FILTER LEFT THAT IS A JUDGEMENT CALL ──────────
         // Commons flags some files with extra usage restrictions: a trademark
         // in shot, or "personality" for a photo with identifiable people in it.
@@ -199,8 +323,13 @@ export default async function handler(req, res) {
         const isPD = /^(cc0|public domain|pd-)/i.test(license);
         if (!photographer && !isPD) continue;
 
+        sources[b].used++;
         results.push({
           title,
+          // Where it came from, shown in Studio. A result from the article and a
+          // result from a blind text search are not the same kind of evidence
+          // and must never look the same.
+          source: qy.source,
           // thumburl is a scaled render, which is what a card should load. The
           // original can be several megabytes.
           url: ii.thumburl || ii.url,
@@ -218,7 +347,8 @@ export default async function handler(req, res) {
       }
       if (results.length >= n) break;
     }
-    return res.status(200).json({ results });
+    return res.status(200).json({ results, subject: token, sources, resolved: { da: daTitle, en: enTitle, categories: catCandidates } });
+
   } catch (err) {
     return res.status(200).json({ error: String(err).slice(0, 200) });
   }

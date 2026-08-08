@@ -41,6 +41,9 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
+  export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
+  export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
@@ -52,7 +55,7 @@ writeFileSync(entry, `
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
-  export { licenseIsUsable } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
+  export { licenseIsUsable, distinctiveToken, mentionsSubject } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
@@ -1969,6 +1972,248 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const audited = M.auditEntry({ id: 1, type: "town", payload: copenhagen });
   ok("the audit reports it", audited.findings.some(f => f.field === "costs"));
   is("as critical, because a reader budgets from the glance row", audited.findings.find(f => f.field === "costs")?.severity ?? null, "critical");
+}
+
+// ── FOUR RHINE BARGES UNDER A ROYAL PALACE ─────────────────────────
+// Oliver, 8 Aug 2026, searching "Amalienborg Slot" from the media panel. Three
+// of the four sources returned nothing without erroring, and the fourth's raw
+// text-search ranking was shown as if they had all worked.
+{
+  const { distinctiveToken, mentionsSubject } = M;
+
+  // The word a result actually has to mention. "Slot" is the type, not the
+  // subject, and it is an ordinary word on Dutch and German waterway photos
+  // where it means a lock.
+  is("the subject beats the type word", distinctiveToken("Amalienborg Slot"), "amalienborg");
+  is("and the language of the type word does not matter", distinctiveToken("Kronborg Castle"), "kronborg");
+  is("nor does the country", distinctiveToken("Ribe Domkirke Denmark"), "domkirke");
+  is("a bare name is its own subject", distinctiveToken("Ringkøbing"), "ringkøbing");
+  // Nothing distinctive left means nothing to test against, and a gate that
+  // cannot judge must not reject.
+  is("a query that is all type words has no subject", distinctiveToken("the castle"), null);
+  is("nor does an empty one", distinctiveToken(""), null);
+
+  ok("a file naming the subject passes", mentionsSubject("amalienborg", "Amalienborg Palace 2019.jpg", "", ""));
+  ok("so does one that only mentions it in the description", mentionsSubject("amalienborg", "DSC00575.jpg", "The square at Amalienborg in winter", ""));
+  ok("or only in its categories", mentionsSubject("amalienborg", "DSC00575.jpg", "", "Amalienborg|Copenhagen"));
+  // The four barges. Whatever they are called, they do not say it.
+  ok("a Rhine barge does not", !mentionsSubject("amalienborg", "Rolf Heinrich Koeln MS Vertrouwen.jpg", "Cargo ship on the Rhine near Cologne", "Ships in Köln"));
+  // Danish compounds glue the subject to other words, so this is a substring
+  // test on purpose.
+  ok("a compound still counts", mentionsSubject("amalienborg", "Amalienborgs kolonnade.jpg", "", ""));
+  ok("and folded spelling counts", mentionsSubject("ringkøbing", "Ringkobing havn 1912.jpg", "", ""));
+  ok("with no subject to test, nothing is rejected", mentionsSubject(null, "anything.jpg", "", ""));
+
+  // ── THE THREE SILENT MISSES ──────────────────────────────────────
+  // Read off the source, because none of this is reachable without a network.
+  const api = readFileSync(join(root, "api/commons-photo.js"), "utf8");
+  const artQueries = api.match(/wikipedia\.org\/w\/api\.php[^`]*generator=images/g) || [];
+  is("both article lookups exist", artQueries.length, 2);
+  ok("and BOTH follow redirects, which is why 'Amalienborg Slot' found nothing",
+     artQueries.every(u => /redirects=1/.test(u)));
+  // The resolved article title becomes the category guess. One mechanism, both
+  // misses: "Amalienborg Slot" resolves to "Amalienborg", and
+  // Category:Amalienborg is right there.
+  ok("the category is guessed from the RESOLVED title, not the search box",
+     /uniq\(\[String\(category[^\]]*daTitle[^\]]*enTitle[^\]]*term\]\)/.test(api));
+  // Only the blind source is gated. A file on the article or in the category is
+  // already about the place, whatever its filename says.
+  ok("only the text search has to prove its subject", /qy\.isSearch && !mentionsSubject\(/.test(api));
+  ok("and a dropped result is counted rather than swallowed", /sources\[b\]\.offSubject\+\+/.test(api));
+  const pushBlock = api.slice(api.indexOf("results.push({"), api.indexOf("credit: {"));
+  ok("the results.push block was found at all", pushBlock.length > 40);
+  ok("every RESULT says which lookup found it", /source: qy\.source,/.test(pushBlock));
+  // A dead source must be visible in the panel, not inferred from odd results.
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the panel warns when only the text search answered", /Only the blind text search found anything/.test(app));
+  ok("and every card shows its filename", /title=\{hit\.title\}/.test(app));
+}
+
+// ── NOWHERE IS A JOURNEY FROM ITSELF ───────────────────────────────
+// Oliver, 8 Aug 2026: "13min from CPH in Copenhagen city.. fix that as well."
+{
+  const { travelLabel, isAtTravelOrigin, dotJoin } = M;
+  const far = null;   // reader not in Denmark, so the CPH fallback is what renders
+
+  is("a real journey still reads normally", travelLabel(far, { name: "Asaa" }, "5h 59min 🚂"), "5h 59min 🚂 from CPH");
+  // THE ONE HE SAW. Copenhagen is CPH, and the figure was a measurement from the
+  // CPH origin to whatever coordinate a geocoder picked for the middle of it.
+  is("Copenhagen is not thirteen minutes from Copenhagen", travelLabel(far, { name: "Copenhagen" }, "13min 🚂"), "");
+  is("and the name alone is enough to know that", travelLabel(far, "Copenhagen", "13min 🚂"), "");
+  // Same class as relationLine and dayTripsFrom: inside it counts as being there.
+  is("nor is anywhere inside it", travelLabel(far, { name: "Nyhavn", partOf: "Copenhagen" }, "9min 🚂"), "");
+  is("case does not rescue it", travelLabel(far, { name: "COPENHAGEN" }, "13min"), "");
+  // Dragør: no travelTime, and the card still printed "· FROM CPH".
+  is("a missing figure withholds its label too", travelLabel(far, { name: "Dragør" }, ""), "");
+  is("and so does an absent one", travelLabel(far, { name: "Dragør" }, undefined), "");
+  // A field holding only whitespace is a field nobody filled in. Trimming is what
+  // makes the guard above catch it rather than rendering " · from CPH".
+  is("whitespace is not a figure", travelLabel(far, { name: "Dragør" }, "   "), "");
+  is("and a real figure keeps its spacing tidy", travelLabel(far, { name: "Asaa" }, "  2h 10min  "), "2h 10min from CPH");
+  is("rather than printing the word undefined", travelLabel(far, { name: "Dragør" }, undefined).includes("undefined"), false);
+  // Distance from the reader is honest even in Copenhagen.
+  const inCph = { lat: 55.6761, lon: 12.5683 };
+  ok("standing in Denmark still gets a distance", /from you$/.test(travelLabel(inCph, "Copenhagen", "13min")));
+
+  is("being the origin is being the origin", isAtTravelOrigin("Copenhagen"), true);
+  is("being inside it counts", isAtTravelOrigin({ name: "Nyhavn", partOf: "Copenhagen" }), true);
+  is("somewhere else does not", isAtTravelOrigin({ name: "Aalborg", partOf: "" }), false);
+  is("and nothing is not somewhere", isAtTravelOrigin(null), false);
+
+  // The separator is joined over what exists, not written and hoped for.
+  is("empty parts cost no separator", dotJoin("Capital Region of Denmark", "", ""), "Capital Region of Denmark");
+  is("real parts are joined", dotJoin("Village", "North Jutland", "5h 59min 🚂 from CPH"), "Village · North Jutland · 5h 59min 🚂 from CPH");
+  is("and nothing at all is nothing", dotJoin("", null, undefined), "");
+
+  // Wired, not merely written: the town card passes the ENTRY so partOf is
+  // visible, and no card builds its subtitle with a bare separator any more.
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the town card hands travelLabel the whole entry", /travelLabel\(userCoords, town, town\.travelTime\)/.test(app));
+  // Nowhere, card or prompt. The prompt one was worse: that list is fed to the
+  // model that writes plans, so "Copenhagen (..., 13min from CPH)" did not just
+  // look wrong on screen, it taught a false fact to the thing doing the writing.
+  ok("nothing writes 'from CPH' by hand any more", !/travelTime\}? from CPH/.test(app));
+  ok("and the plan prompt runs the same guard", /travelLabel\(null, t, t\.travelTime\)/.test(app));
+  // The detail page has its OWN render, and it was live on Dragør's page today
+  // as a line reading nothing but "from CPH".
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the detail page hands over the whole entry too", /travelLabel\(userCoords, item, item\.travelTime\)/.test(detail));
+  ok("and renders no row at all when there is no journey", /\{travelLabel\(userCoords, item, item\.travelTime\) && \(/.test(detail));
+}
+
+// ── "THE FILTERS GOTTA CHANGE. THIS IS JUST A LONG MESS" ───────────
+// Oliver, 8 Aug 2026. The Region row was built from a free-text field, so
+// "Langeland, Region Syddanmark" and "Langeland, Southern Denmark" were two
+// pills for one region. The axis changed, not the widget.
+{
+  const { PARTS, PART_ANCHORS, RESOLVED_PARTS, partOfCountry, partsPresent, unplaced,
+          matchesSearch, fold, MAX_OFFSHORE_KM, RESOLVED_SHAPE_INDEXES } = M;
+
+  // ── THE SHAPES ARE FOUND BY ANCHOR, NOT BY INDEX ─────────────────
+  // DK_SHAPES is a bare array. Reading it positionally means one reordering
+  // silently relabels the whole country and every page still looks fine.
+  is("every landmass still resolves from the town that identifies it", RESOLVED_PARTS, PARTS);
+  // The real invariant. Two names landing on one shape means the map has been
+  // reordered or a shape lost, and half the country is quietly mislabelled while
+  // every page still renders perfectly.
+  is("and each lands on a DIFFERENT shape", new Set(RESOLVED_SHAPE_INDEXES).size, 5);
+  // A DOCUMENTED COINCIDENCE. PART_ANCHORS is currently written in the same
+  // order DK_SHAPES happens to be in, which is why resolving by anchor and
+  // resolving by array index give identical answers today and no mutation can
+  // tell them apart. If this line ever fails, nothing is broken: it means
+  // DK_SHAPES was reordered and the anchors quietly did the job they exist for.
+  is("anchor order and shape order agree, for now", RESOLVED_SHAPE_INDEXES, [0, 1, 2, 3, 4]);
+  is("and there are five of them", PARTS.length, 5);
+  is("named as a traveller thinks about the country", PARTS, ["Jutland", "Funen", "Zealand", "Lolland-Falster", "Bornholm"]);
+
+  const at = (lat, lon) => partOfCountry({ __lat: lat, __lon: lon });
+  is("Aarhus is in Jutland", at(56.1629, 10.2039), "Jutland");
+  is("Odense is on Funen", at(55.4038, 10.4024), "Funen");
+  is("Copenhagen is on Zealand", at(55.6761, 12.5683), "Zealand");
+  is("Rønne is on Bornholm", at(55.0999, 14.7016), "Bornholm");
+  is("Nykøbing F is on Lolland-Falster", at(54.7691, 11.8743), "Lolland-Falster");
+  is("Ribe is in Jutland", at(55.3300, 8.7686), "Jutland");
+  is("Aalborg is in Jutland", at(57.0488, 9.9217), "Jutland");
+
+  // ── THE ISLANDS ARE THE WHOLE POINT OF THIS SITE ─────────────────
+  // The five outlines are coarse and contain none of these. A plain
+  // point-in-polygon test would have answered "nowhere" for most of the best
+  // entries on the site, so a point outside every outline takes the nearest.
+  is("Ærøskøbing is in the Funen part of the country", at(54.8869, 10.4108), "Funen");
+  is("Sønderho on Fanø is in the Jutland part", at(55.3417, 8.4869), "Jutland");
+  is("Samsø is nearest Jutland", at(55.8700, 10.6000), "Jutland");
+  is("Gudhjem is on Bornholm", at(55.2100, 14.9700), "Bornholm");
+  is("Møn is nearest Zealand", at(54.9800, 12.3000), "Zealand");
+
+  // NULL IS NOT A BUCKET. An entry this cannot place must stay visible under
+  // All and be counted, never quietly filtered out of every view.
+  is("no coordinate means no answer", partOfCountry({ name: "Somewhere" }), null);
+  is("nor does half a coordinate", partOfCountry({ __lat: 55.5 }), null);
+  is("nor a coordinate that is not a number", partOfCountry({ __lat: "north", __lon: "east" }), null);
+  // Berlin is 200km past the cap, so it is refused rather than called Jutland.
+  is("somewhere far outside Denmark is refused", at(52.52, 13.40), null);
+  ok("and the cap is a real distance", MAX_OFFSHORE_KM > 0 && MAX_OFFSHORE_KM < 100);
+
+  const townSet = [
+    { name: "Aarhus", __lat: 56.1629, __lon: 10.2039, region: "Central Denmark" },
+    { name: "Odense", __lat: 55.4038, __lon: 10.4024, region: "Southern Denmark" },
+    { name: "Nowhere", region: "Himmerland, Region Nordjylland" },
+  ];
+  is("only parts something is published in get a chip", partsPresent(townSet), ["Jutland", "Funen"]);
+  is("and an unplaceable entry is counted, not hidden", unplaced(townSet).map(t => t.name), ["Nowhere"]);
+
+  // ── SEARCH IS THE OTHER HALF OF THE DEAL ─────────────────────────
+  // Himmerland lost its pill. It must not lose its towns.
+  ok("the written region is still findable by typing it", matchesSearch(townSet[2], "Himmerland"));
+  ok("nobody types the Danish letters", matchesSearch({ name: "Ærøskøbing" }, "aeroskobing"));
+  ok("and they do not have to", matchesSearch({ name: "Ærøskøbing" }, "ærø"));
+  ok("a tag is searchable too", matchesSearch({ name: "Asaa", tag: "small harbor town" }, "harbor"));
+  ok("every word must land, so a second word narrows", !matchesSearch({ name: "Aarhus", region: "Central Denmark" }, "aarhus bornholm"));
+  ok("an empty search matches everything", matchesSearch({ name: "X" }, "   "));
+  is("folding is consistent", fold("Ærøskøbing"), "aeroskobing");
+}
+
+// ── "WHAT CATEGORY IT FITS INTO. LIKE NATURE, HISTORY, NIGHTLIFE" ──
+{
+  const { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme,
+          themesPresent, tierOf, tierLabel, MAX_THEMES, shapeForLive, SWEEPS } = M;
+
+  // A CLOSED VOCABULARY, for the same reason placeKind is one. The `tag` field
+  // it replaces said "small harbor town" on one card and something differently
+  // worded on the next, so it could never be filtered on or compared.
+  ok("every theme has a label and an icon", PLACE_THEMES.every(t => THEME_LABEL[t] && THEME_EMOJI[t]));
+  is("a real theme survives", cleanThemes(["history", "food"]), ["history", "food"]);
+  is("an invented one does not", cleanThemes(["history", "vibes", "wellness"]), ["history"]);
+  is("case and spacing do not matter", cleanThemes([" History ", "FOOD"]), ["history", "food"]);
+  is("a comma-separated string is accepted too", cleanThemes("nature, coast"), ["nature", "coast"]);
+  is("duplicates collapse", cleanThemes(["food", "food", "food"]), ["food"]);
+  // A place that is about five things is about nothing, and five chips is
+  // unreadable at the size these render.
+  is("no more than three", cleanThemes(["nature", "coast", "history", "food", "art"]).length, MAX_THEMES);
+  is("nothing usable is an empty list, never a guess", cleanThemes(["something else"]), []);
+  is("and neither is null", cleanThemes(null), []);
+
+  ok("a theme filter matches", hasTheme({ themes: ["history", "food"] }, "history"));
+  ok("and refuses what is not there", !hasTheme({ themes: ["history"] }, "nightlife"));
+  ok("no filter matches everything", hasTheme({ themes: [] }, null));
+  is("only themes something carries get a chip", themesPresent([{ themes: ["food"] }, { themes: ["food", "art"] }]), ["food", "art"]);
+
+  // ── THE TIER WAS STORED AND INVISIBLE ────────────────────────────
+  // It only ever surfaced as a Top Pick badge on the very highest tier, so
+  // "Can't Miss Out" and "Best If You're Already Nearby" were the same card.
+  is("the top tier reads short", tierLabel({ tier: "Can't Miss Out" }), "★ Can't miss");
+  is("written 71 different ways over several weeks, still matched", tierLabel({ tier: "can't miss out" }), "★ Can't miss");
+  is("and without the apostrophe", tierLabel({ tier: "Cant miss out" }), "★ Can't miss");
+  is("the middle tiers read plainly", tierLabel({ tier: "Worth Considering" }), "Worth a look");
+  is("and the bottom one", tierLabel({ tier: "Best If You're Already Nearby" }), "If you're nearby");
+  // A card showing an invented rank is worse than a card showing none.
+  is("an unrecognised tier shows nothing rather than a guess", tierLabel({ tier: "Quite Good Actually" }), null);
+  is("and so does a missing one", tierLabel({}), null);
+  is("tierOf agrees with the label", tierOf({ tier: "Highly Recommended" }).id, "high");
+
+  // THE RULE, again: a sweep may only write a field shapeForLive carries. themes
+  // was added to the town shape in the same pass as the sweep, deliberately.
+  ok("shapeForLive carries themes", "themes" in shapeForLive("town", { name: "X" }));
+  is("and it defaults to a list, not a string", shapeForLive("town", { name: "X" }).themes, []);
+  is("a draft's themes are capped on the way in too", shapeForLive("town", { name: "X", themes: ["a", "b", "c", "d"] }).themes.length, 3);
+  ok("the themes sweep exists and declares only that field", SWEEPS.some(sw => sw.id === "themes" && sw.fields.length === 1 && sw.fields[0] === "themes"));
+  // What a place is FOR is a judgement about writing that already exists. A web
+  // search saying "Ribe is historic" is an opinion with a citation stapled on,
+  // and it would arrive marked as researched, which is worse than not arriving.
+  ok("and it never reaches the paid research tier", SWEEPS.find(sw => sw.id === "themes").noResearch === true);
+
+  // Wired into the card, not merely written.
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // The CHIP, not just a mention of the function: the outer guard names
+  // tierLabel too, so a loose match proved the guard and said nothing about
+  // whether anything actually rendered.
+  ok("the card renders the tier chip", /\{tierLabel\(town\) && \(/.test(app));
+  ok("and the theme chips", /themesOf\(town\)\.map\(th =>/.test(app));
+  // The free-text region filter is gone from every predicate, or the mess is
+  // still there behind a nicer control.
+  ok("no filter reads the free-text region any more", !/t\.region === townFilter/.test(app));
+  ok("the geography chips are derived from coordinates", /partsPresent\(towns\)/.test(app));
+  ok("and one predicate is still read by every grid", /const townMatches = \(t\) => townPartOk/.test(app));
 }
 
 rmSync(dir, { recursive: true, force: true });

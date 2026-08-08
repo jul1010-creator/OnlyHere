@@ -387,7 +387,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 </div>
               );
             })()}
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{travelLabel(userCoords, item.name, item.travelTime)}</div>
+            {/* Hands travelLabel the WHOLE ENTRY, so partOf is visible and
+                anywhere inside Copenhagen is not a journey from Copenhagen, and
+                renders nothing at all when there is no figure. Dragør's page
+                carried a line reading only "from CPH" until this changed. */}
+            {travelLabel(userCoords, item, item.travelTime) && (
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>{travelLabel(userCoords, item, item.travelTime)}</div>
+            )}
 
             {/* WHAT'S ON IN THIS TOWN (Oliver's ask, Aug 5 2026: "is it possible to
                 show the soon coming events in these towns"). Everything here is a

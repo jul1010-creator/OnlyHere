@@ -38,6 +38,11 @@ export const shapeForLive = (type, t) => {
     // every new render site silently dead. shapeForLive is the only insert path
     // into gemlyx_content; anything not named here does not exist.
     placeKind: t.placeKind || "", partOf: t.partOf || "", dayTripFrom: t.dayTripFrom || "",
+    // A CLOSED VOCABULARY, unlike `tag` above it. `tag` said "small harbor town"
+    // on one card and something differently-worded on the next, so it could
+    // never be filtered on or compared. themes is one of seven values, so two
+    // entries about the same kind of place always say it the same way.
+    themes: Array.isArray(t.themes) ? t.themes.slice(0, 3) : [],
     nearestStation: t.nearestStation || "", recommendedStayGlance: t.recommendedStayGlance || "", bestTimeGlance: t.bestTimeGlance || "", accommodationGlance: t.accommodationGlance || "", typicalCosts: t.typicalCosts || "", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]]),

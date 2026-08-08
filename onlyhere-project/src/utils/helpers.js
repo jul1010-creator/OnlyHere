@@ -108,7 +108,50 @@ export const haversineKm = (a, b) => {
 
 // Straight-line km distance from the user to a named town, falling back to the
 // existing "from Copenhagen" travel-time string whenever it can't be resolved.
-export const travelLabel = (userCoords, townName, fallbackTravelTime) => {
+// ── NOWHERE IS A JOURNEY FROM ITSELF ────────────────────────────────
+// Oliver, 8 Aug 2026, looking at the Copenhagen card: "13min from CPH in
+// Copenhagen city.. fix that as well."
+//
+// He is right and it is the same bug twice over.
+//
+// FIRST, THE ORIGIN. Copenhagen IS CPH. The figure is not even wrong in an
+// interesting way: travelTime is written from a real Directions measurement,
+// and for Copenhagen that measures a route from the CPH origin to whatever
+// coordinate a geocoder picked for the middle of a city of 660,000. Thirteen
+// minutes to a point inside the place you are already standing in. This is
+// exactly the "Nørreport (9 mins walk)" nearest-stop bug, which was fixed on
+// 8 Aug by suppressing it at RENDER so all 71 published entries were fixed at
+// once rather than needing 71 redrafts. Same fix, same reason.
+//
+// It extends to anywhere INSIDE Copenhagen: once Nyhavn carries
+// partOf: "Copenhagen", "X minutes from CPH" is wrong about Nyhavn too, because
+// you are already there. Same self-reference class as relationLine, areasInside
+// and dayTripsFrom, all of which needed this guard and all of which shipped
+// without it first.
+//
+// SECOND, THE MISSING FIGURE. Dragør has no travelTime, and the template
+// interpolated it anyway, so the card read "CAPITAL REGION OF DENMARK · FROM
+// CPH": a label with nothing in front of it, and "undefined from CPH" one
+// missing field away. That breaks the all-or-nothing rule. A figure we do not
+// have is withheld whole, including its label.
+//
+// Returns "" rather than a placeholder, and every call site joins on the
+// non-empty parts, so an absent journey costs no dangling separator either.
+export const TRAVEL_ORIGIN = "Copenhagen";
+const sameName = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+
+// A string is treated as a name. An entry is asked about its parent too,
+// because being inside Copenhagen is being in Copenhagen.
+export const isAtTravelOrigin = (place) => {
+  if (!place) return false;
+  if (typeof place === "string") return sameName(place, TRAVEL_ORIGIN);
+  return sameName(place.name, TRAVEL_ORIGIN) || sameName(place.partOf, TRAVEL_ORIGIN);
+};
+
+export const travelLabel = (userCoords, place, fallbackTravelTime) => {
+  const townName = typeof place === "string" ? place : place?.name;
+  // Distance from where the reader is standing is honest even in Copenhagen:
+  // "~2 km from you" is a real answer to a real question.
   if (isInDenmark(userCoords) && townName && TOWN_COORDS[townName]) {
     const [tLat, tLon] = TOWN_COORDS[townName];
     const dLat = (tLat - userCoords.lat) * 111.32;
@@ -116,8 +159,15 @@ export const travelLabel = (userCoords, townName, fallbackTravelTime) => {
     const km = Math.round(Math.sqrt(dLat * dLat + dLon * dLon));
     return km < 2 ? "~2 km from you" : `~${km} km from you`;
   }
-  return `${fallbackTravelTime} from CPH`;
+  if (isAtTravelOrigin(place)) return "";
+  const t = String(fallbackTravelTime ?? "").trim();
+  if (!t) return "";
+  return `${t} from CPH`;
 };
+
+// A card subtitle is a list of things that may each be absent. Joining with a
+// separator first and hoping is how "· FROM CPH" got onto the page.
+export const dotJoin = (...parts) => parts.map(p => String(p ?? "").trim()).filter(Boolean).join(" · ");
 
 // A message counts as a "full plan" once it lays out 2+ days — these get collapsed
 // to a short line in chat; the real detail only appears inside the generated guide.
