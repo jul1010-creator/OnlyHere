@@ -53,6 +53,8 @@ import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeFor
 import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
+import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
+import { sourceRulesBlock, normaliseDomain, cleanNote, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -131,7 +133,15 @@ const FACT_CHECK_SCOPE_RULES = `SCOPE, AND THIS OVERRIDES EVERYTHING ELSE HERE: 
 This has already caused a real, confirmed near-miss: a draft about one specific ferry route was "corrected" using the sailing time of a DIFFERENT route to the same island. Both durations were genuinely real. Applying the correction would have reverted an entry that had already been fixed.
 So, before reporting any correction, check that it matches on the specific variant the draft names: the exact route and pair of ports, the exact venue rather than another branch of the same chain, the exact ticket type, the exact season or vessel. If a source gives you a figure for a DIFFERENT variant, you may mention it, but you must label it plainly as a different one ("the Hou to Sælvig route is 60 minutes, which is a different crossing") and you must NOT present it as an error in the draft.
 NEVER REPLACE A SPECIFIC FIGURE WITH A VAGUER ONE. Going from "1 hour 20 minutes" to "about an hour" is a regression, not a correction, even when the vaguer phrasing is technically defensible. If you cannot beat the draft's precision with a source that is genuinely about the same thing, leave it alone.
-If the draft's own figure and your source disagree by a small amount and both look credible, say exactly that, name both numbers and both sources, and let the human decide. Do not silently pick one.`;
+If the draft's own figure and your source disagree by a small amount and both look credible, say exactly that, name both numbers and both sources, and let the human decide. Do not silently pick one.
+
+"I COULD NOT FIND IT" IS NOT "IT IS WRONG", AND THE TWO MUST NEVER READ THE SAME. This is the single most misleading thing you can hand back, because both arrive as a flagged line and only one of them is a fact about the world. A real case: a draft's ticket price was reported as unverified because the festival's own page did not state it, when the price was published in full on the ticketing subdomain the checker never opened. The finding was literally true and completely useless, and it read as though the festival had no such price.
+
+So label EVERY finding as exactly one of these two words, at the start of the line:
+CONTRADICTED: you reached a page that states something different. Name the page and give its figure.
+UNVERIFIED: no page you actually reached states this either way. Then name the pages you DID open, and say where you would look next.
+
+Before writing UNVERIFIED about a price, an opening hour or a departure time, check that you went past the front page to the place that would actually carry it: the ticket shop, the operator's timetable, the booking page. Coming back with UNVERIFIED after reading only a marketing page is a report about your own search, not about the draft.`;
 
 // ── GETYOURGUIDE, AND WHAT IT IS ACTUALLY GOOD FOR ─────────────────
 // Oliver, 7 Aug 2026: "make getyourguide.com a must-research as well!!!"
@@ -159,11 +169,76 @@ TWO HARD LIMITS ON IT, because it is a reseller and not the venue:
 2. Its price is the RESELLER'S price, not the gate price, and the two often differ. Use the venue's own site for what entry costs, and cite GetYourGuide only for what a booked tour costs, saying so.
 A listing there is evidence that something is sold. It is not evidence that it is good, that it is the only way in, or that it is the best value, and its own review scores are not a fact about the place.`;
 
+// ── A FESTIVAL'S OWN PAGE DOES NOT LIST ITS PRICES ─────────────────
+// Oliver, 8 Aug 2026, with the ticket shop open in one tab and the fact-check
+// in the other: "so both Gemini and Perplexity is wrong here. Apparently
+// Perplexity didn't even bother to go into the link and search it through."
+//
+// The draft claimed a 945 DKK early-bird price for Rock Under Broen 2027. The
+// fact-check said the price "is not verified by the official sources provided
+// here", which was true of the page it read and useless as a conclusion, because
+// the page it read does not carry prices at all. They were one subdomain away:
+//
+//   www.unitedtickets.dk/events/rock-under-broen-2027    the listing. No prices.
+//   billet.unitedtickets.dk/event/...-fredagsbillet/...  Friday, 635 sold out,
+//                                                        800 current, child 340
+//   billet.unitedtickets.dk/event/...-lordagsbillet/...  Saturday, 835 sold out,
+//                                                        900 current, child 340
+//
+// Not one of those is 945. So the draft's figure was unsupported and the checker
+// was right to withhold it, and it still failed him: it stopped at the front
+// door of a site whose prices were two clicks inside, and its wording made that
+// sound like a fact about the festival rather than a fact about how far it got.
+//
+// THE GENERAL RULE, which is the same shape as the ferry one: the marketing page
+// is not the authority on the thing it markets. The operator's timetable outranks
+// its own front page; the ticket shop outranks the festival's poster.
+const TICKET_SOURCE_RULES = `WHERE A PRICE ACTUALLY LIVES, MANDATORY on any festival, concert, event or anything ticketed: a festival's own website is a poster. It very often carries NO prices at all. The prices live in the TICKET SHOP, which is usually a different address, and you have to go there.
+
+The shop is normally one of: a subdomain of the same site (billet., billetter., tickets., shop., ticket.), a "Billetter"/"Tickets"/"Køb billet" link on the festival page, or a named Danish ticketing partner (Ticketmaster, United Tickets, Billetto, Billetlugen, Ticketbutler, Safeticket, Place2Book). Follow it. A price you could not find on the festival's front page is almost never a price that does not exist, it is a price you have not reached yet.
+
+A PRICE IS ONLY A FACT IF YOU SAY WHICH TICKET IT IS. Danish festival tickets are tiered and dated, and the tiers sell out one after another, so at any moment several different real prices exist at once. A real example: one festival's Friday ticket shows 635 DKK marked SOLD OUT beside 800 DKK on sale, with a child ticket at 340, and Saturday priced differently again. "The ticket costs X" is not checkable against that. Name the day, the ticket type, and whether that tier is still buyable, or give no figure.
+A SOLD-OUT EARLY TIER IS NOT THE PRICE. It is a price nobody can pay any more, and quoting it sends a reader to a checkout that will charge them more.
+A SINGLE FIGURE FOR A MULTI-DAY FESTIVAL is usually a full-festival or partout ticket rather than a day ticket. Say which it is, or leave it out.`;
+
 const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's actually like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would actually know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before 2025 should be treated as stale, not current.
 
 ${BOOKING_PLATFORM_RULES}
 
+${TICKET_SOURCE_RULES}
+
 ${ISLAND_FERRY_RULES}`;
+
+// ── THE SAME RULES, PLUS WHATEVER HE HAS ADDED ──────────────────────
+// Oliver, 8 Aug 2026: "I'd like to be able to write in sources that I demand
+// Perplexity/Tavily research through. So I don't need to write directly to you
+// all the time." And then, correcting the first version of this: "I'm not saying
+// only.. I'm saying 'include'.. so if I find new tourism pages, I'll use that."
+//
+// EVERY research prompt goes through here instead of reading the constant
+// directly, and that is the point rather than tidiness: seven call sites read
+// RESEARCH_SOURCE_RULES, and a list applied to six of them would be worse than
+// no list at all, because the seventh would quietly research differently and
+// nothing anywhere would say so. tests/run.mjs asserts the count.
+//
+// A module-level function, not component state, because two of those call sites
+// are on the traveller-facing guide pipeline where no Studio state exists. It
+// reads founderSources, which liveSources.js fills in place.
+// The one statement this feature needs. Shown in the panel, copyable, and only
+// ever offered when PostgREST actually says the relation is missing.
+const SOURCES_SQL = `create table if not exists gemlyx_sources (
+  id bigserial primary key,
+  domain text not null,
+  note text,
+  applies_to text default '',
+  enabled boolean default true,
+  created_at timestamptz default now()
+);
+alter table gemlyx_sources enable row level security;
+create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
+create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);`;
+
+const researchRules = (type) => `${RESEARCH_SOURCE_RULES}${sourceRulesBlock(founderSources, type)}`;
 
 // The original component (previously the default export) is now mounted as the
 // "/" route below, with a new "/guide/:guideId" route alongside it for the
@@ -364,6 +439,7 @@ function GemlyxApp() {
   };
   const clearTownFilters = () => { setTownPart(null); setTownKind(null); setTownSize(null); setTownTheme(null); setTownSearch(""); };
   const activeTownFilters = [townPart, townKind, townSize, townTheme, townSearch.trim()].filter(Boolean).length;
+  useEffect(() => { ensureSourcesLoaded(); }, []);
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
   const [craftKind, setCraftKind] = useState(null);
@@ -641,6 +717,17 @@ function GemlyxApp() {
   // to publish with attribution: NC and ND are rejected, as is any file with
   // usage restrictions flagged or, for a non-public-domain licence, no
   // nameable author.
+  // ── "MAYBE I SHOULD BE ABLE TO INCLUDE THAT" ────────────────────
+  // Commons carries a description and this app threw it away. Half the good
+  // photographs there are called DSC00575.jpg, so the description is the only
+  // thing that says what you are looking at, and it is also the caption the
+  // entry wants: DetailPage has rendered block.caption all along and nothing
+  // ever gave it one.
+  //
+  // Default ON, because a picture that says what it is beats one that does not,
+  // and every card shows the exact text that would land so the choice is made
+  // with it in front of you rather than after the fact.
+  const [useCommonsCaption, setUseCommonsCaption] = useState(true);
   const [photoFinder, setPhotoFinder] = useState(null);   // { rowId, query, results, loading, error }
   const findCommonsPhotos = async (row, query) => {
     setPhotoFinder({ rowId: row.id, query, results: null, loading: true, error: null });
@@ -677,7 +764,7 @@ function GemlyxApp() {
       // later, so the URL is stored clean.
       const src = String(hit.url || "").split("?")[0];
       if (!src) throw new Error("That result had no usable image URL.");
-      const block = { type: "image", src, credit: { ...hit.credit } };
+      const block = { type: "image", src, credit: { ...hit.credit }, ...(useCommonsCaption && hit.caption ? { caption: hit.caption } : {}) };
       // ── p.photo || src WAS NOT ENOUGH ──────────────────────────
       // Measured across all 71 published entries on 7 Aug: 53 carry a local
       // hero path like /towns/ringkobing.jpg and 52 of those files do not
@@ -989,7 +1076,7 @@ function GemlyxApp() {
     const namedRule = named.length
       ? `OPEN THESE SPECIFIC SOURCES FIRST, before any general search, and say what each one said: ${named.join(", ")}. If one of them answers something the draft left uncertain, that answer is what the entry should use. If a named source does not load or does not cover it, say so explicitly rather than quietly falling back to a search result.\n\n`
       : "";
-    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${RESEARCH_SOURCE_RULES}\n\nDraft: ${JSON.stringify(studioDraft)}`;
+    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(studioType)}\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
     if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
     setGoogleCheckResult({ text: result.text, citations: result.citations });
@@ -1343,7 +1430,7 @@ IDENTITY CHECK, IMPORTANT: a town's real signature event has been mistaken for a
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "festival"
           ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
-          : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${RESEARCH_SOURCE_RULES}`;
+          : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${researchRules(studioType)}`;
         setStudioStage({ label: "Fact-checking the research (Perplexity)", percent: 50 });
         const preCheck = await withRetry(
           () => askPerplexity(precheckPrompt),
@@ -2055,7 +2142,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       try {
         setStudioStage({ label: "Checking for invented claims", percent: 94 });
         const inventedCheck = await askPerplexity(
-          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${RESEARCH_SOURCE_RULES}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
+          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${researchRules(studioType)}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
         );
         if (!inventedCheck.error && inventedCheck.text && !/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
           // AUTO-CORRECTION (Oliver: "The last fact-check was actually pointed
@@ -2073,7 +2160,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           setStudioStage({ label: "Re-researching flagged claims", percent: 97 });
           try {
             const reResearch = await askPerplexity(
-              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${RESEARCH_SOURCE_RULES}\n\nFlagged claims:\n${inventedCheck.text}`
+              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${researchRules(studioType)}\n\nFlagged claims:\n${inventedCheck.text}`
             );
             if (!reResearch.error && reResearch.text) {
               const fixResult = await askClaude(
@@ -2780,7 +2867,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
           if (!hit || !hit.url) { notFound.push(p.name); }
           else {
             const src = String(hit.url).split("?")[0];
-            const block = { type: "image", src, credit: { ...hit.credit } };
+            const block = { type: "image", src, credit: { ...hit.credit }, ...(useCommonsCaption && hit.caption ? { caption: hit.caption } : {}) };
             const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
               method: "PATCH",
               headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -2860,6 +2947,99 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   // once at the end. Two things from publishDraft are NOT reused: shapeForLive,
   // which would mangle a stored payload's built blogBody, and the photo probe,
   // which loads every hero and deletes the path on failure.
+  // ── "SO I DON'T NEED TO WRITE DIRECTLY TO YOU ALL THE TIME" ─────
+  // The founder's own source list, editable here instead of in code. Every
+  // research prompt already reads it through researchRules().
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [sourceRows, setSourceRows] = useState([]);
+  const [sourceError, setSourceError] = useState(null);
+  const [sourceBusy, setSourceBusy] = useState(false);
+  const [newSourceDomain, setNewSourceDomain] = useState("");
+  const [newSourceNote, setNewSourceNote] = useState("");
+  const [newSourceType, setNewSourceType] = useState("");
+
+  // ── THE SAME HONEST MESSAGE THE FACTS PANEL NOW HAS ─────────────
+  // Tonight's gemlyx_facts confusion was an expired login reported as "run the
+  // SQL", which sent him to Supabase to fix a database that was already correct.
+  // This panel is new and its table genuinely may not exist yet, so it has to
+  // tell those two apart from the first day rather than learning the lesson
+  // twice.
+  const sourcesErrorFor = (status, body) => {
+    const code = body && typeof body === "object" ? String(body.code || "") : "";
+    if (status === 401 || status === 403 || /^PGRST30[12]$/.test(code)) {
+      return "Your Studio login has expired. Log out and back in. (Nothing is wrong with the table.)";
+    }
+    if (status === 404 || code === "PGRST205" || /does not exist/i.test(String(body?.message || ""))) {
+      return "MISSING_TABLE";
+    }
+    return `Could not read the source list (${status}${code ? ` ${code}` : ""}). ${String(body?.message || "").slice(0, 160)}`.trim();
+  };
+
+  const loadSources = async () => {
+    setSourceError(null);
+    let headers;
+    try { headers = studioAuth(); }
+    catch (e) { setSourceError(String(e.message || e)); return; }
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?select=*&order=id.asc`, { headers });
+      const rows = await res.json();
+      if (Array.isArray(rows)) { setSourceRows(rows); return; }
+      setSourceRows([]);
+      setSourceError(sourcesErrorFor(res.status, rows));
+    } catch (e) { setSourceError(String(e.message || e)); }
+  };
+
+  const addSource = async () => {
+    const domain = normaliseDomain(newSourceDomain);
+    if (!domain) { setSourceError(`"${newSourceDomain.trim()}" is not a domain I can use. Paste the address of the site, like visitdenmark.dk or a link to one of its pages.`); return; }
+    // A duplicate is not an error worth a message, it is a no-op with a reason.
+    if (sourceRows.some(r => normaliseDomain(r.domain) === domain && (r.applies_to || "") === newSourceType)) {
+      setSourceError(`${domain} is already on the list for ${TYPE_LABEL[newSourceType] || newSourceType}.`);
+      return;
+    }
+    setSourceBusy(true); setSourceError(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources`, {
+        method: "POST",
+        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ domain, note: cleanNote(newSourceNote), applies_to: newSourceType, enabled: true }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setSourceError(sourcesErrorFor(res.status, body)); setSourceBusy(false); return; }
+      setNewSourceDomain(""); setNewSourceNote("");
+      await loadSources();
+      refreshSources();
+    } catch (e) { setSourceError(String(e.message || e)); }
+    setSourceBusy(false);
+  };
+
+  const setSourceEnabled = async (row, enabled) => {
+    setSourceBusy(true); setSourceError(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?id=eq.${Number(row.id)}`, {
+        method: "PATCH",
+        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ enabled }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) setSourceError(sourcesErrorFor(res.status, body));
+      else { setSourceRows(prev => prev.map(r => r.id === row.id ? { ...r, enabled } : r)); refreshSources(); }
+    } catch (e) { setSourceError(String(e.message || e)); }
+    setSourceBusy(false);
+  };
+
+  const deleteSource = async (row) => {
+    setSourceBusy(true); setSourceError(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources?id=eq.${Number(row.id)}`, {
+        method: "DELETE", headers: studioAuth(),
+      });
+      if (!res.ok) setSourceError(sourcesErrorFor(res.status, await res.json().catch(() => null)));
+      else { setSourceRows(prev => prev.filter(r => r.id !== row.id)); refreshSources(); }
+    } catch (e) { setSourceError(String(e.message || e)); }
+    setSourceBusy(false);
+  };
+
   const [sweepId, setSweepId] = useState(SWEEPS[0]?.id || "");
   const [sweepState, setSweepState] = useState(null);        // null | {phase, done, total, name, skipped, error}
   const [sweepProposals, setSweepProposals] = useState(null);
@@ -3065,7 +3245,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       for (let i = 0; i < batch.length; i++) {
         const ev = batch[i];
         setUpdateEventsProgress(`${i + 1} / ${batch.length}`);
-        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${RESEARCH_SOURCE_RULES}`;
+        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival")}`;
         try {
           const result = await askPerplexity(prompt);
           if (result.error) continue;
@@ -4334,7 +4514,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       let guideGrounding = "";
       {
         setGuideBuildStage({ label: "Fact-checking the guide", percent: 42 });
-        const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n${RESEARCH_SOURCE_RULES}\n\n${convoText.slice(0, 3000)}`);
+        const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n${researchRules()}\n\n${convoText.slice(0, 3000)}`);
         if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
       }
       setGuideBuildStage({ label: "Structuring your itinerary", percent: 50 });
@@ -4470,7 +4650,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         const proseFields2 = collectGuideProseFields(parsed); // re-collect — the polish pass above may have rewritten some
         const stopNames = (parsed.days || []).flatMap(d => (d.stops || []).map(s => `${s.name}${s.town ? ` (${s.town})` : ""}`));
         const factCheckRes = await askPerplexity(
-          `Using real, current web search, fact-check this finished Denmark travel guide for genuine factual errors — wrong opening hours, wrong prices, a place that doesn't actually exist, or any claim that's simply incorrect. Don't flag stylistic choices, vague-but-true statements, or anything that's already appropriately hedged (e.g. "check current prices online") — only real factual problems.\n${RESEARCH_SOURCE_RULES}\n\nPlaces in this guide: ${stopNames.join(", ")}\n\nText fields to check (each with an id):\n${JSON.stringify(proseFields2.map(f => ({ id: f.id, text: f.text })))}\n\nRespond with ONLY a JSON array, no other text, no markdown: [{"id": "the exact id given", "issue": "what's factually wrong and the correct fact, if you know it"}] — return [] if nothing is genuinely wrong.`
+          `Using real, current web search, fact-check this finished Denmark travel guide for genuine factual errors — wrong opening hours, wrong prices, a place that doesn't actually exist, or any claim that's simply incorrect. Don't flag stylistic choices, vague-but-true statements, or anything that's already appropriately hedged (e.g. "check current prices online") — only real factual problems.\n${researchRules()}\n\nPlaces in this guide: ${stopNames.join(", ")}\n\nText fields to check (each with an id):\n${JSON.stringify(proseFields2.map(f => ({ id: f.id, text: f.text })))}\n\nRespond with ONLY a JSON array, no other text, no markdown: [{"id": "the exact id given", "issue": "what's factually wrong and the correct fact, if you know it"}] — return [] if nothing is genuinely wrong.`
         );
         if (!factCheckRes.error && factCheckRes.text) {
           let issues = [];
@@ -5770,7 +5950,23 @@ You also have a web_search tool. Use it whenever someone asks about something th
           </div>
           {(event.nearestStation || event.ticketInfo) && (
             <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 12, paddingTop: 11, display: "flex", flexDirection: "column", gap: 5 }}>
-              {event.nearestStation && <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: C.light }}><Ico name="train" size={13} color={C.muted} /> {event.nearestStation}</div>}
+              {/* ── AN EVENT'S ARRIVAL POINT IS NOT ALWAYS A STATION ────
+                  Oliver, 8 Aug 2026: "event still has 'nearestStation' and not
+                  nearest stop."
+                  arrivalRow has labelled these correctly since 7 Aug and the
+                  detail page has used it all along; this card did not, so it
+                  drew a train icon over "Sælvig Ferry Terminal" and called it a
+                  station. The emoji comes from arrivalRow rather than Ico so the
+                  icon can never disagree with the label it sits next to. */}
+              {event.nearestStation && (() => {
+                const row = arrivalRow(event.nearestStation);
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: C.light }}>
+                    <span style={{ fontSize: 12 }}>{row.icon}</span>
+                    <span style={{ color: C.muted }}>{row.label}:</span> {row.value}
+                  </div>
+                );
+              })()}
               {event.ticketInfo && <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: C.light }}><Ico name="ticket" size={13} color={C.muted} /> {event.ticketInfo}</div>}
             </div>
           )}
@@ -5908,6 +6104,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           {factsPanelOpen ? "Hide" : "🎲 Facts"}
                         </button>
+                <button onClick={() => { setSourcesOpen(o => !o); if (!sourcesOpen) loadSources(); }}
+                  style={{ background: sourcesOpen ? `${C.gold}22` : "none", border: `1px solid ${sourcesOpen ? C.gold : C.border}`, color: sourcesOpen ? C.gold : C.light, borderRadius: 100, padding: "6px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  🔗 Research sources
+                </button>
                       </div>
                     </div>
 
@@ -5921,7 +6121,72 @@ You also have a web_search tool. Use it whenever someone asks about something th
                       {guideModal === "loading" ? "Building…" : "🎲 Random guide (test the pipeline)"}
                     </button>
 
-                    {redraftOpen && (
+                    {sourcesOpen && (
+                <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>🔗 Sources to include in every research pass</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.6, marginBottom: 11 }}>
+                    Paste a tourism page as you find it. Every research call, Perplexity and Tavily alike, is told to include these
+                    alongside everything it would normally search. It is an addition, never a restriction: a place with no page on any of
+                    them is still researched everywhere else. They also never outrank a venue's own site on its own prices and hours.
+                  </div>
+
+                  {sourceError === "MISSING_TABLE" ? (
+                    <div style={{ fontSize: 11.5, color: "#FFB347", lineHeight: 1.6 }}>
+                      The <code>gemlyx_sources</code> table does not exist yet. Run this once in Supabase, then reopen this panel:
+                      <pre style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 10.5, color: C.light, overflowX: "auto", marginTop: 8, whiteSpace: "pre" }}>{SOURCES_SQL}</pre>
+                      <button onClick={() => { navigator.clipboard?.writeText(SOURCES_SQL); setToast("SQL copied"); }}
+                        style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy the SQL</button>
+                    </div>
+                  ) : (
+                    <>
+                      {sourceError && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 9, lineHeight: 1.5 }}>{sourceError}</div>}
+
+                      {sourceRows.length === 0 && <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 10 }}>Nothing added yet. The built-in rules (Wikipedia, the venue's own site, the ferry operator) still apply on their own.</div>}
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                        {sourceRows.map(row => (
+                          <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 9, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 11px", opacity: row.enabled === false ? 0.5 : 1 }}>
+                            <input type="checkbox" checked={row.enabled !== false} disabled={sourceBusy}
+                              onChange={e => setSourceEnabled(row, e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer" }} />
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{row.domain}</div>
+                              {row.note && <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.45 }}>{row.note}</div>}
+                            </div>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: row.applies_to ? C.gold : C.muted, background: row.applies_to ? `${C.gold}18` : "none", border: `1px solid ${row.applies_to ? `${C.gold}44` : C.border}`, borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
+                              {TYPE_LABEL[row.applies_to || ""] || row.applies_to}
+                            </span>
+                            <button onClick={() => deleteSource(row)} disabled={sourceBusy} title="Remove"
+                              style={{ background: "none", border: "none", color: C.muted, fontSize: 15, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>×</button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+                        <input value={newSourceDomain} onChange={e => setNewSourceDomain(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addSource(); }}
+                          placeholder="visitdenmark.dk, or paste a link"
+                          style={{ flex: 1, minWidth: 180, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <input value={newSourceNote} onChange={e => setNewSourceNote(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addSource(); }}
+                          placeholder="what it is good for (optional)"
+                          style={{ flex: 1, minWidth: 180, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <select value={newSourceType} onChange={e => setNewSourceType(e.target.value)}
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", cursor: "pointer" }}>
+                          {["", ...CONTENT_TYPES].map(t => <option key={t || "all"} value={t}>{TYPE_LABEL[t] || t}</option>)}
+                        </select>
+                        <button onClick={addSource} disabled={sourceBusy || !newSourceDomain.trim()}
+                          style={{ background: newSourceDomain.trim() && !sourceBusy ? C.gold : C.bg, border: `1px solid ${C.border}`, color: newSourceDomain.trim() && !sourceBusy ? "#000" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: newSourceDomain.trim() ? "pointer" : "default", flexShrink: 0 }}>
+                          {sourceBusy ? "…" : "Add"}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+                        A note is worth writing: "the operator's own timetable" tells the model when to reach for it, which is most of the value.
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {redraftOpen && (
                       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16, maxHeight: 320, overflowY: "auto" }}>
                         <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
                           These towns are baked into the codebase from before Studio existed — they never went through any of the current voice rules. Tap one to research and write it fresh through today's pipeline. Once you publish the new version, manually delete the old line for it from src/data/towns.js so you don't end up with two.
@@ -6018,6 +6283,10 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                           <button onClick={() => setPhotoFinder(null)}
                                             style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "6px 10px", fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>✕</button>
                                         </div>
+                                        <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: C.light, marginBottom: 8, cursor: "pointer" }}>
+                                          <input type="checkbox" checked={useCommonsCaption} onChange={e => setUseCommonsCaption(e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer" }} />
+                                          Save Wikimedia's own description as the caption
+                                        </label>
                                         {photoFinder.loading && <div style={{ fontSize: 11.5, color: C.muted }}>Searching Wikimedia…</div>}
                                         {photoFinder.error && <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.5 }}>{photoFinder.error}</div>}
                                         {photoFinder.results?.length === 0 && (
@@ -6055,7 +6324,12 @@ You also have a web_search tool. Use it whenever someone asks about something th
                                                       of the right place. Four barges credited to "Rolf
                                                       Heinrich, Köln" looked exactly as legitimate as the
                                                       palace did. */}
-                                                  <div title={hit.title} style={{ fontSize: 9.5, color: C.text, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.title}</div>
+                                                  {/* THE DESCRIPTION FIRST, because "Ringkøbing Kirkegård"
+                                                      tells you what the picture is and "DSC00575.jpg"
+                                                      does not. The filename stays underneath it, since
+                                                      it is what identifies the file. */}
+                                                  {hit.caption && <div title={hit.caption} style={{ fontSize: 10, color: C.text, fontWeight: 700, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.caption}</div>}
+                                                  <div title={hit.title} style={{ fontSize: 9.5, color: hit.caption ? C.muted : C.text, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.title}</div>
                                                   <div style={{ fontSize: 8.5, color: hit.source === "Commons search" ? "#FFB347" : C.muted, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.source === "Commons search" ? "⚠ text search" : hit.source}</div>
                                                   <div style={{ fontSize: 9.5, color: C.light, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.credit.photographer}</div>
                                                   <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>{hit.credit.license}</div>

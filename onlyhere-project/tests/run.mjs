@@ -41,6 +41,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
+  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -55,7 +56,7 @@ writeFileSync(entry, `
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
-  export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
+  export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
@@ -1990,7 +1991,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // of the four sources returned nothing without erroring, and the fourth's raw
 // text-search ranking was shown as if they had all worked.
 {
-  const { distinctiveToken, mentionsSubject, looksHistorical } = M;
+  const { distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } = M;
 
   // The word a result actually has to mention. "Slot" is the type, not the
   // subject, and it is an ordinary word on Dutch and German waterway photos
@@ -2026,9 +2027,52 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("nor is a recent year", !looksHistorical("Amalienborg 2019.jpg", "", ""));
   ok("nor a plain name", !looksHistorical("Frederik VIII's Palae.jpg", "", ""));
 
+  // ── WHAT THE PICTURE ACTUALLY IS ─────────────────────────────────
+  // Oliver, 8 Aug 2026: "Sometimes these pictures have a description like
+  // 'Ringkøbing Kirkegård'. Maybe I should be able to include that."
+  //
+  // Commons stores it as MULTILINGUAL HTML, so stripping the tags off the whole
+  // thing glues every translation into one line.
+  const multi = '<div class="description en" lang="en"><span class="language en">English:</span> Ringkøbing churchyard in winter</div><div class="description da" lang="da"><span class="language da">Dansk:</span> Ringkøbing Kirkegård om vinteren</div>';
+  is("English is preferred and its label removed", pickDescription(multi), "Ringkøbing churchyard in winter");
+  is("Danish is used when there is no English", pickDescription('<div class="description da" lang="da"><span>Dansk:</span> Ringkøbing Kirkegård</div>'), "Ringkøbing Kirkegård");
+  // The fixture that makes the Danish fallback load-bearing: with a second
+  // language present and no English, falling through to the raw HTML glues both
+  // translations into one caption.
+  is("Danish beats another language, rather than joining it",
+     pickDescription('<div class="description da" lang="da"><span>Dansk:</span> Ringkøbing Kirkegård</div><div class="description de" lang="de"><span>Deutsch:</span> Friedhof von Ringkøbing</div>'),
+     "Ringkøbing Kirkegård");
+  is("plain text survives untouched", pickDescription("Ringkøbing Kirkegård"), "Ringkøbing Kirkegård");
+  is("nothing is nothing, not the word undefined", pickDescription(null), "");
+  ok("a caption is cut to a caption, on a word boundary", (() => {
+    const out = pickDescription("Ringkøbing ".repeat(40));
+    return out.length <= 182 && out.endsWith("…") && !/\s…$/.test(out);
+  })());
+  // Commons' own short title beats a description when it has a real one, and is
+  // ignored when it is just the filename again, which is what it holds for the
+  // many files nobody titled.
+  is("a real ObjectName wins", bestCaption("Ringkøbing Kirkegård", "<div>a long description</div>", "DSC00575.jpg"), "Ringkøbing Kirkegård");
+  is("an ObjectName that is just the filename does not", bestCaption("DSC00575", "<div>Ringkøbing churchyard</div>", "DSC00575.jpg"), "Ringkøbing churchyard");
+  is("nor does one that only differs by separators", bestCaption("Amalienborg Palace aerial view", "<div>The palace from above</div>", "Amalienborg_Palace-aerial_view.jpg"), "The palace from above");
+  is("with neither, the caption is empty rather than the filename", bestCaption("", "", "DSC00575.jpg"), "");
+
+  // Wired: shown on the card, saved onto the block, and switchable.
+  const app2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the finder shows what the picture is", /\{hit\.caption && <div title=\{hit\.caption\}/.test(app2));
+  ok("and it can be saved as the caption", /useCommonsCaption && hit\.caption \? \{ caption: hit\.caption \}/.test(app2));
+  // BOTH save paths, or one of them silently drops it.
+  is("both places that save a Commons photo carry it", (app2.match(/useCommonsCaption && hit\.caption/g) || []).length, 2);
+  ok("and it is a choice, not a rule", /setUseCommonsCaption\(e\.target\.checked\)/.test(app2));
+  // DetailPage has rendered block.caption all along; assert it still does, or
+  // the caption is saved into a field nothing reads.
+  ok("the detail page renders a caption on an image block", /block\.caption && <div/.test(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8")));
+
   // ── THE THREE SILENT MISSES ──────────────────────────────────────
   // Read off the source, because none of this is reachable without a network.
   const api = readFileSync(join(root, "api/commons-photo.js"), "utf8");
+  // The endpoint has to ATTACH it, or every assertion above tests a function
+  // nothing calls.
+  ok("the endpoint attaches a caption to every candidate", /caption: bestCaption\(m\.ObjectName\?\.value, m\.ImageDescription\?\.value, title\),/.test(api));
   const artQueries = api.match(/wikipedia\.org\/w\/api\.php[^`]*generator=images/g) || [];
   is("both article lookups exist", artQueries.length, 2);
   ok("and BOTH follow redirects, which is why 'Amalienborg Slot' found nothing",
@@ -2284,6 +2328,157 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the SQL is only suggested for a missing relation", /PGRST205[\s\S]{0,160}does not exist yet\. Run the SQL/.test(app));
   ok("401 and 403 are recognised as auth, not schema", /status === 401 \|\| status === 403 \|\| \/\^PGRST30\[12\]\$\/\.test\(code\)/.test(app));
   ok("and anything else reports its own status rather than guessing", /Could not read the facts \(\$\{status\}/.test(app));
+}
+
+// ── "I'M NOT SAYING ONLY.. I'M SAYING INCLUDE" ─────────────────────
+// Oliver, 8 Aug 2026, on being able to add his own research sources without
+// asking anyone to edit code, and then correcting the first version of it.
+{
+  const { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, CONTENT_TYPES, TYPE_LABEL } = M;
+
+  // Whatever gets pasted. A typo here is a rule the models dutifully try to
+  // honour on every draft forever, so the shape is checked rather than trusted.
+  is("a bare domain survives", normaliseDomain("visitdenmark.dk"), "visitdenmark.dk");
+  is("a full link is reduced to its host", normaliseDomain("https://www.visitdenmark.dk/denmark/things-do/x?a=1#b"), "visitdenmark.dk");
+  is("www goes", normaliseDomain("WWW.VisitDenmark.DK"), "visitdenmark.dk");
+  is("a subdomain stays, because it is a different site", normaliseDomain("kultur.aarhus.dk"), "kultur.aarhus.dk");
+  is("a sentence is not a domain", normaliseDomain("check the tourist board please"), "");
+  is("nor is a bare word", normaliseDomain("visitdenmark"), "");
+  is("nor an empty box", normaliseDomain("   "), "");
+  is("an email is reduced to its host rather than stored whole", normaliseDomain("hello@visitdenmark.dk"), "visitdenmark.dk");
+
+  is("a note is collapsed and capped", cleanNote("  events   and\n seasons  "), "events and seasons");
+  is("and a very long one is cut", cleanNote("x".repeat(300)).length, 160);
+
+  // Only a type Studio actually drafts. Anything else is a dead rule nobody can
+  // see, so it falls back to universal rather than silently matching nothing.
+  is("a real type is kept", cleanSource({ domain: "x.dk", applies_to: "town" }).appliesTo, "town");
+  is("an invented type becomes universal", cleanSource({ domain: "x.dk", applies_to: "castles" }).appliesTo, "");
+  is("a junk domain is no source at all", cleanSource({ domain: "not a domain" }), null);
+  ok("every drafted type has a label", CONTENT_TYPES.every(t => TYPE_LABEL[t]));
+  ok("and so does universal", !!TYPE_LABEL[""]);
+
+  const rows = [
+    // The type-specific one FIRST on purpose: with the universal one already
+    // ahead of it, removing the sort changed nothing and the assertion below
+    // could not fail.
+    { id: 2, domain: "faergen.dk", note: "the operator's own timetable", applies_to: "town", enabled: true },
+    { id: 1, domain: "https://www.visitdenmark.dk/", note: "events and seasons", applies_to: "", enabled: true },
+    { id: 3, domain: "kulturarv.dk", note: "listed buildings", applies_to: "free", enabled: true },
+    { id: 4, domain: "oldnews.dk", note: "retired", applies_to: "", enabled: false },
+    { id: 5, domain: "visitdenmark.dk", note: "duplicate", applies_to: "", enabled: true },
+  ];
+  is("universal plus this type, and nothing else", sourcesFor(rows, "town").map(x => x.domain), ["visitdenmark.dk", "faergen.dk"]);
+  is("a different type gets its own", sourcesFor(rows, "free").map(x => x.domain), ["visitdenmark.dk", "kulturarv.dk"]);
+  is("no type at all still gets the universal ones", sourcesFor(rows, undefined).map(x => x.domain), ["visitdenmark.dk"]);
+  ok("a switched-off source is not included", !sourcesFor(rows, "town").some(x => x.domain === "oldnews.dk"));
+  is("the same domain twice is once", sourcesFor(rows, "town").filter(x => x.domain === "visitdenmark.dk").length, 1);
+  is("universal reads before the exception to it", sourcesFor(rows, "town")[0].domain, "visitdenmark.dk");
+
+  // ── THE BLOCK THAT LANDS IN EVERY PROMPT ─────────────────────────
+  const block = sourceRulesBlock(rows, "town");
+  ok("it names the domains", /visitdenmark\.dk/.test(block) && /faergen\.dk/.test(block));
+  ok("and what each is for, which is most of the value", /the operator's own timetable/.test(block));
+  ok("a type-scoped source says so", /for Towns specifically/.test(block));
+  // HIS WORD, and the distinction that decides whether this helps at all.
+  ok("the instruction is INCLUDE", /INCLUDE these in your search every time/.test(block));
+  ok("and it says plainly it is not a restriction", /THIS IS AN ADDITION, NOT A RESTRICTION/.test(block));
+  ok("an empty result from one source is called ordinary, not a failure", /keep looking elsewhere rather than reporting that nothing was found/.test(block));
+  // The rule this project has spent the most time on: a tourist board page must
+  // never beat the operator on the operator's own departure time.
+  ok("and it never outranks a venue on its own details", /DO NOT OUTRANK A VENUE ON ITS OWN DETAILS/.test(block));
+  // Nothing to say means saying nothing. An empty heading in every prompt
+  // teaches the model the section is noise.
+  is("no sources means no block at all", sourceRulesBlock([], "town"), "");
+  is("and neither does a list of only disabled ones", sourceRulesBlock([{ domain: "x.dk", enabled: false }], "town"), "");
+
+  // ── EVERY RESEARCH PROMPT, OR THE LIST IS A LIE ──────────────────
+  // Six of seven would be worse than none: the seventh would quietly research
+  // differently and nothing anywhere would say so.
+  const app3 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("no research prompt reads the constant directly any more", (app3.match(/\$\{RESEARCH_SOURCE_RULES\}/g) || []).length, 1);
+  // INTERPOLATIONS only. A bare /researchRules\(/ also matched the sentence in a
+  // comment that mentions it, which would have let a real call site be removed
+  // while the count stayed right.
+  is("and all seven go through researchRules", (app3.match(/\$\{researchRules\(/g) || []).length, 7);
+  ok("which is where the founder's list is folded in", /const researchRules = \(type\) => `\$\{RESEARCH_SOURCE_RULES\}\$\{sourceRulesBlock\(founderSources, type\)\}`/.test(app3));
+  // The guide pipeline runs for visitors, where no Studio state exists, so the
+  // list is loaded app-wide rather than threaded through React state.
+  ok("the list is loaded on mount, not only in Studio", /ensureSourcesLoaded\(\)/.test(app3));
+  // And the panel tells an expired login apart from a missing table, from day
+  // one, rather than learning tonight's lesson a second time.
+  ok("a missing table is named as missing", /if \(status === 404 \|\| code === "PGRST205"/.test(app3));
+  ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\. \(Nothing is wrong with the table\.\)/.test(app3));
+  ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
+}
+
+// ── AN EVENT'S ARRIVAL POINT IS NOT ALWAYS A STATION ───────────────
+// Oliver, 8 Aug 2026: "event still has 'nearestStation' and not nearest stop."
+// arrivalRow has labelled these correctly since 7 Aug and the detail page has
+// used it all along. The event card drew a train icon over "Sælvig Ferry
+// Terminal" and called it a station.
+{
+  const app4 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the event card asks arrivalRow what the stop IS", /const row = arrivalRow\(event\.nearestStation\);/.test(app4));
+  ok("and prints its label rather than assuming Station", /\{row\.label\}:/.test(app4));
+  // The icon comes from the same call as the label, so the two can never
+  // disagree, which is precisely how a ferry ended up under a train.
+  ok("with the icon from the same call", /\{row\.icon\}/.test(app4));
+  ok("no hardcoded train icon is left on that row", !/name="train" size=\{13\} color=\{C\.muted\} \/> \{event\.nearestStation\}/.test(app4));
+}
+
+// ── "PERPLEXITY DIDN'T EVEN BOTHER TO GO INTO THE LINK" ────────────
+// Oliver, 8 Aug 2026, with the ticket shop open in one tab and the fact-check in
+// the other. The draft claimed 945 DKK for Rock Under Broen 2027; the checker
+// reported it unverified because the festival's own page did not state it. The
+// prices were one subdomain away, and none of them was 945.
+//
+// READ OUT OF THE BUILT PROMPT, not the source, because the rules are template
+// literals and an escaping artifact would show the model something different
+// from what the file appears to say. That method has already caught ten of them.
+{
+  const app5 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const between = (from, to) => {
+    const i = app5.indexOf(from), j = app5.indexOf(to, i);
+    ok(`${from.slice(0, 28)} block was found`, i !== -1 && j > i);
+    return i === -1 ? "" : app5.slice(i, j);
+  };
+
+  // The marketing page is not the authority on the thing it markets. Same shape
+  // as the ferry rule: the operator's timetable outranks its own front page.
+  const ticket = between("const TICKET_SOURCE_RULES = `", "`;");
+  ok("it says a festival page often carries no prices", /carries NO prices at all/.test(ticket));
+  ok("and names where the shop actually is", /billet\.|billetter\.|tickets\./.test(ticket));
+  ok("including the Danish ticketing partners by name", /United Tickets/.test(ticket) && /Billetlugen/.test(ticket));
+  // The rule that generalises, and the same discipline as "a ranking needs a
+  // stated measure": several real prices exist at once, so a bare figure is not
+  // checkable against any of them.
+  ok("a price must say which ticket it is", /A PRICE IS ONLY A FACT IF YOU SAY WHICH TICKET IT IS/.test(ticket));
+  ok("a sold-out tier is not the price", /A SOLD-OUT EARLY TIER IS NOT THE PRICE/.test(ticket));
+  ok("and one figure for a multi-day festival is called out", /MULTI-DAY FESTIVAL/.test(ticket));
+  // Not found is not wrong, and this is where that failure actually happened.
+  ok("not finding a price is not evidence it does not exist", /is almost never a price that does not exist, it is a price you have not reached yet/.test(ticket));
+
+  // ── "COULD NOT REACH" MUST NOT READ AS "WRONG" ───────────────────
+  const scope = between("const FACT_CHECK_SCOPE_RULES = `", "`;");
+  ok("the two are named as different things", /"I COULD NOT FIND IT" IS NOT "IT IS WRONG"/.test(scope));
+  ok("and every finding must pick one of two words", /CONTRADICTED:/.test(scope) && /UNVERIFIED:/.test(scope));
+  ok("a contradiction has to name the page and the figure", /Name the page and give its figure/.test(scope));
+  ok("and an unverified one has to say where it actually looked", /name the pages you DID open/.test(scope));
+  ok("reading only a marketing page is called what it is", /a report about your own search, not about the draft/.test(scope));
+
+  // Both blocks have to REACH the models, or they are comments. They ride in
+  // through RESEARCH_SOURCE_RULES, which every research prompt now folds in.
+  const research = between("const RESEARCH_SOURCE_RULES = `", "`;");
+  ok("the ticket rules are carried into every research prompt", /\$\{TICKET_SOURCE_RULES\}/.test(research));
+  ok("alongside the ferry and booking-platform ones", /\$\{ISLAND_FERRY_RULES\}/.test(research) && /\$\{BOOKING_PLATFORM_RULES\}/.test(research));
+  // And the fact-check prompt is the one that carries the scope rules.
+  ok("the fact-check prompt carries the scope rules", /\$\{FACT_CHECK_SCOPE_RULES\}\\n\$\{researchRules\(studioType\)\}/.test(app5));
+
+  // The dash ban applies to these exactly as it does to STUDIO_VOICE: a dash in
+  // a rule teaches every future draft to use one.
+  is("the ticket rules carry no em or en dashes", (ticket.match(/[—–]/g) || []).length, 0);
+  is("and neither do the scope rules", (scope.match(/[—–]/g) || []).length, 0);
 }
 
 rmSync(dir, { recursive: true, force: true });

@@ -194,6 +194,50 @@ export const looksHistorical = (title, description, categories) => {
   return OLD_YEAR.test(title || "");
 };
 
+// ── WHAT THE PICTURE ACTUALLY IS ────────────────────────────────────
+// Oliver, 8 Aug 2026: "Sometimes these pictures have a description like
+// 'Ringkøbing Kirkegård'. Maybe I should be able to include that."
+//
+// Commons stores it and this endpoint was throwing it away. Half the good
+// photographs on Commons are called DSC00575.jpg, and the description is the
+// only thing that says what you are looking at. It is also the caption the
+// entry wants: DetailPage already renders `block.caption` and nothing has ever
+// given it one.
+//
+// IT IS MULTILINGUAL HTML, not a string. A Danish file typically carries
+//   <div class="description en" lang="en"><span>English:</span> Ringkøbing churchyard</div>
+//   <div class="description da" lang="da"><span>Dansk:</span> Ringkøbing Kirkegård</div>
+// and stripping the tags off the lot glues every translation into one line.
+// So the language is chosen first, English then Danish, and only then stripped.
+const langChunk = (html, lang) => {
+  const parts = String(html || "").split(/<div\b/i);
+  const hit = parts.find(p => new RegExp(`lang=["']${lang}["']`, "i").test(p));
+  return hit ? "<div" + hit : "";
+};
+
+// The "English:" label Commons prints in front of its own description is part
+// of the markup, not part of what the photographer wrote.
+const LANG_LABEL = /^(english|dansk|danish|deutsch|german|fran(ç|c)ais|french|espa(ñ|n)ol|spanish|italiano|italian|svenska|swedish|norsk|norwegian)\s*:\s*/i;
+
+export const pickDescription = (html) => {
+  const raw = String(html || "");
+  const chosen = langChunk(raw, "en") || langChunk(raw, "da") || raw;
+  let t = strip(chosen).replace(LANG_LABEL, "").trim();
+  // A caption, not an essay. Cut on a word boundary so it never ends mid-name.
+  if (t.length > 180) t = t.slice(0, 180).replace(/\s+\S*$/, "") + "…";
+  return t;
+};
+
+// ObjectName is Commons' own short title for the file and is usually the
+// cleanest thing available. Ignored when it is just the filename again, which is
+// what it holds for the many files nobody titled.
+export const bestCaption = (objectName, description, title) => {
+  const on = strip(objectName).replace(LANG_LABEL, "").trim();
+  const bare = String(title || "").replace(/\.(jpe?g|png|webp)$/i, "").replace(/[_-]+/g, " ").trim();
+  if (on && on.toLowerCase() !== bare.toLowerCase() && on.length <= 120) return on;
+  return pickDescription(description);
+};
+
 const UA = {
   // Wikimedia asks for this. A generic agent gets rate limited or blocked.
   "User-Agent": "Gemlyx/1.0 (https://gemlyx.com; hello@gemlyx.com) travel-guide-photo-lookup",
@@ -373,6 +417,9 @@ export default async function handler(req, res) {
 
         keep.push({
           title,
+          // What the picture IS, which the filename usually does not say. Shown
+          // on the card so a choice is informed, and offered as the caption.
+          caption: bestCaption(m.ObjectName?.value, m.ImageDescription?.value, title),
           // Where it came from, shown in Studio. A result from the article and a
           // result from a blind text search are not the same kind of evidence
           // and must never look the same.
