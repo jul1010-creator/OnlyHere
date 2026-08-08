@@ -2870,7 +2870,13 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       // a folder that has never existed. nightTown added, and an unknown type
       // now falls back to a real folder instead of inventing one.
       if (!isEditing && studioPhotoName) {
-        const folder = { town: "towns", festival: "events", free: "free", food: "food", foodStreet: "food", night: "nightlife", nightTown: "nightlife", booking: "craft" }[studioType] || "towns";
+        // free -> "attractions", NOT "free". public/attractions/ is where the six
+        // attraction images on disk actually live (kastellet.jpg,
+        // lindholm-hoje.jpg, the-viking-museum.jpg and the rest, put there by
+        // tools/image-finder). public/free/ has never existed, so every path
+        // this map has ever written for an attraction pointed at a folder that
+        // is not there, and six perfectly good images sat orphaned beside it.
+        const folder = { town: "towns", festival: "events", free: "attractions", food: "food", foodStreet: "food", night: "nightlife", nightTown: "nightlife", booking: "craft" }[studioType] || "towns";
         shaped.photo = `/${folder}/${studioPhotoName}`;
       }
       // Force-override with the real pre-computed values from generateArea, regardless

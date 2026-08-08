@@ -10,6 +10,7 @@ import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES } from "../utils/guideEnrichment";
 import { askClaude } from "../utils/aiClient";
 import { testTravelerLine } from "../utils/helpers";
+import { stopKind, tripScaleLine, tripCharacter, bookingActions } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
@@ -404,6 +405,24 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             you scroll the whole thing to work out. Only figures that are
             genuinely known appear: tripShape withholds a total rather than
             build one out of the legs that happened to resolve. */}
+        {/* ── WHAT KIND OF TRIP, BEFORE HOW BIG ──────────────────────
+            The numbers below answer "how big" and dodge "what shape". Both are
+            counted from the plan, never written by a model, and both stay
+            silent rather than guess. The scale line is the one a first-time
+            visitor needs most: 38 minutes means nothing until you know that in
+            Denmark it is a long way. */}
+        {(() => {
+          const character = tripCharacter(guide, shape);
+          const scale = tripScaleLine(shape);
+          if (!character && !scale) return null;
+          return (
+            <div style={{ marginBottom: 20, maxWidth: 640 }}>
+              {character && <div style={{ fontSize: 15.5, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.45 }}>{character}</div>}
+              {scale && <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginTop: 5 }}>{scale}</div>}
+            </div>
+          );
+        })()}
+
         {shape.stopCount > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 18, maxWidth: 640 }}>
             {[
@@ -440,7 +459,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
         {/* A seven day guide is a long page. Jumping is not a substitute for the
             day structure, which he asked to keep, it is a way to get back to
             Thursday without scrolling past Monday again. */}
-        {days.length >= 3 && (
+        {/* Five days, not three: on a short guide these are three buttons
+            that scroll past what they are covering. */}
+        {days.length >= 5 && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 26 }}>
             {days.map((d, i) => (
               <button key={i} onClick={() => document.getElementById(`gx-day-${d.day || i + 1}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -461,6 +482,30 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             </div>
           </div>
         )}
+
+        {/* ── DECISIONS, NOT INFORMATION ─────────────────────────────
+            The real anxiety of a first trip abroad is not what to see, it is
+            what you have to sort out before you go. Only things the guide can
+            genuinely stand up appear here: a dated event, a ferry, a bed.
+            Nothing pads it out, because a "book ahead" list that repeats itself
+            is one a traveler learns to skip. */}
+        {(() => {
+          const actions = bookingActions(guide, lookupRealPlace);
+          if (actions.length === 0) return null;
+          return (
+            <div style={{ background: `${C.accent}12`, border: `1px solid ${C.accent}44`, borderRadius: 16, padding: "16px 18px", marginBottom: 26, maxWidth: 640 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>Book before you go</div>
+              {actions.map((a, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", marginBottom: i === actions.length - 1 ? 0 : 9 }}>
+                  <span style={{ color: C.accent, fontSize: 12 }}>◆</span>
+                  <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
+                    <b style={{ color: C.text }}>{a.what}.</b> {a.why}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {guide.essentials && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 30, maxWidth: 640 }}>
@@ -715,12 +760,28 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                     )}
                   </div>
                 ) : null;
+                // ── WHAT IS THIS PLACE, IN ONE WORD ──────────────────
+                // Oliver asked whether the guide would overwhelm someone who
+                // has never been to Denmark. This is the answer I was least
+                // expecting and the cheapest to act on: to a visitor,
+                // "Vikingeskibsmuseet", "Roskilde Domkirke" and "Faxe
+                // Kalkbrud" are three long unpronounceable strings that look
+                // identical, and you have to read a paragraph before you know
+                // whether one is a museum, a church or a hole in the ground.
+                // Danish compound names already carry the answer, so this costs
+                // one small tag and no research at all.
+                const kind = stopKind(stop.name, real);
                 const titleRow = (
                   <>
                     <div style={{ fontSize: real?.photo ? 17 : 15, fontWeight: 600, color: real ? C.gold : C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.2, textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}55` : "none", textUnderlineOffset: 3 }}>{stop.name}{real ? " ↗" : ""}</div>
-                    {(stop.town || stop.suggestedStay || (!real?.photo && stop.arrivalTime)) && (
-                      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1, marginTop: 5 }}>
-                        {[!real?.photo && stop.arrivalTime, stop.town, stop.suggestedStay].filter(Boolean).join(" · ")}
+                    {(kind || stop.town || stop.suggestedStay || (!real?.photo && stop.arrivalTime)) && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 6 }}>
+                        {kind && (
+                          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: C.gold, background: `${C.gold}16`, border: `1px solid ${C.gold}33`, borderRadius: 100, padding: "2px 8px" }}>{kind}</span>
+                        )}
+                        <span style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1 }}>
+                          {[!real?.photo && stop.arrivalTime, stop.town, stop.suggestedStay].filter(Boolean).join(" · ")}
+                        </span>
                       </div>
                     )}
                     {noteBlock}

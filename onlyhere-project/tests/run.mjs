@@ -54,6 +54,7 @@ writeFileSync(entry, `
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { stopKind, tripScaleLine, tripCharacter, bookingActions } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
 `);
 const esbuild = [
@@ -799,6 +800,85 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("prose is cleaned all the way down", clean.days[0].stops[0].note, "x, y");
   is("and so are titles", [clean.title, clean.days[0].title], ["A, B", "Day, one"]);
   is("but keys starting with _ are machinery and stay verbatim", clean._convoText, "keep — this");
+}
+
+// ── reading a guide when you have never been to Denmark ────────────
+// Oliver, 7 Aug 2026: "Be honest, if you were a user, you had never been to
+// Denmark, would it be too overwhelming?" It would, and not for the reason I
+// had been fixing. To a visitor, Vikingeskibsmuseet, Roskilde Domkirke and
+// Faxe Kalkbrud are three long unpronounceable strings that look identical.
+{
+  const k = (n, real) => M.stopKind(n, real);
+  is("a compound name says what it is", k("Vikingeskibsmuseet"), "Viking ship museum");
+  is("domkirke beats kirke", k("Roskilde Domkirke"), "Cathedral");
+  is("a plain church is a church", k("Sønderho Kirke"), "Church");
+  is("a quarry is not a cliff", k("Faxe Kalkbrud"), "Chalk quarry");
+  is("slot is a castle", k("Kronborg Slot"), "Castle");
+  is("havn is a harbour", k("Dragør Havn"), "Harbour");
+  is("and Nyhavn is one too", k("Nyhavn"), "Harbour");
+  is("a ferry port outranks a plain harbour", k("Odden Færgehavn"), "Ferry port");
+  is("lufthavn is an airport, not a harbour", k("Billund Lufthavn"), "Airport");
+  is("the definite article form works", k("Storebæltsbroen"), "Bridge");
+  is("english names still resolve", k("Louisiana Museum of Modern Art"), "Museum");
+
+  // THE BOUNDARY RULE, which this project has now been bitten by twice in one
+  // day. A Danish compound glues the noun onto the END of a word, so letters
+  // before a token are normal and letters after it are not.
+  is("Broager is a town, not a bridge", k("Broager"), null);
+  is("a name that says nothing says nothing", k("Christiania"), null);
+  // When the name gives nothing away, the published entry's own category does.
+  is("a matched town falls back to Town", k("Ærøskøbing", { _src: "town" }), "Town");
+  is("a matched restaurant says Restaurant", k("Geranium", { _src: "food" }), "Restaurant");
+  is("no name and no match is honestly nothing", k("Christiania", null), null);
+
+  // ── SCALE, the thing a visitor has no way to judge ────────
+  ok("a short trip is told Denmark is small",
+    /Denmark is small/.test(M.tripScaleLine({ longest: { minutes: 38, text: "38 mins" } })));
+  ok("a long haul is called a haul, not a hop",
+    /haul/.test(M.tripScaleLine({ longest: { minutes: 95, text: "1 hour 35 mins" } })));
+  ok("and half a day is said plainly",
+    /most of a day/.test(M.tripScaleLine({ longest: { minutes: 240, text: "4 hours" } })));
+  // Silence beats a guess: the longest journey is only known when every leg was
+  // measured, and tripShape already withholds it otherwise.
+  is("nothing measured means nothing claimed", M.tripScaleLine({}), null);
+  is("and a zero is not a journey", M.tripScaleLine({ longest: { minutes: 0, text: "1 min" } }), null);
+
+  // ── WHAT SHAPE OF TRIP IS THIS ────────────────────────────
+  // Counted from where each day ENDS, because a day trip out and back is not a
+  // change of base.
+  const dayTrips = { _mode: "public transport", days: [
+    { day: 1, stops: [{ name: "Nyhavn", town: "Copenhagen" }] },
+    { day: 2, stops: [{ name: "Roskilde Domkirke", town: "Roskilde" }, { name: "Nyhavn", town: "Copenhagen" }] },
+    { day: 3, stops: [{ name: "Dragør Havn", town: "Dragør" }, { name: "Nyhavn", town: "Copenhagen" }] },
+  ] };
+  const c1 = M.tripCharacter(dayTrips, { days: 3, towns: ["Copenhagen", "Roskilde", "Dragør"] });
+  ok("out and back all three nights reads as one base", /One base/.test(c1));
+  ok("and names the transport in the traveler's words", /train and bus/.test(c1));
+
+  const moving = { _mode: "car", days: [
+    { day: 1, stops: [{ name: "A", town: "Aarhus" }] },
+    { day: 2, stops: [{ name: "B", town: "Ribe" }] },
+    { day: 3, stops: [{ name: "C", town: "Odense" }] },
+  ] };
+  ok("changing town every night reads as a moving trip", /change town 2 times/.test(M.tripCharacter(moving, { days: 3, towns: ["Aarhus", "Ribe", "Odense"] })));
+  // A ferry is the one leg that runs to a timetable you cannot argue with.
+  const ferry = { _mode: "car", days: [
+    { day: 1, stops: [{ name: "A", town: "Svendborg" }], glance: { legs: [{ how: "~1h by ferry" }] } },
+    { day: 2, stops: [{ name: "B", town: "Ærøskøbing" }] },
+  ] };
+  ok("a ferry crossing is called out on its own", /ferry crossing/.test(M.tripCharacter(ferry, { days: 2, towns: ["Svendborg", "Ærøskøbing"] })));
+  is("no plan, nothing said", M.tripCharacter(null, null), null);
+
+  // ── WHAT ACTUALLY HAS TO BE BOOKED ────────────────────────
+  // Only things the guide can stand up. A list that pads itself out is one a
+  // traveler learns to skip.
+  const lookup = (n) => n === "Roskilde Festival" ? { _src: "event", date: "2026-06-27", ticketStatus: "limited" } : null;
+  const withEvent = { days: [{ day: 1, stops: [{ name: "Roskilde Festival" }, { name: "Some field" }], glance: { stayArea: "central Roskilde" } }] };
+  const acts = M.bookingActions(withEvent, lookup);
+  is("a dated event and a bed, nothing invented", acts.length, 2);
+  ok("the limited event says so", /limited/i.test(acts[0].why));
+  is("a trip with nothing to book says nothing",
+    M.bookingActions({ days: [{ day: 1, stops: [{ name: "A walk" }] }] }, () => null).length, 0);
 }
 
 rmSync(dir, { recursive: true, force: true });
