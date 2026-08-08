@@ -304,6 +304,38 @@ const ARRIVAL_BY_KIND = {
   air:   { icon: "✈️", label: "Nearest Airport" },
 };
 
+// ── WHO GETS AN ARRIVAL POINT, AND WHY A TOWN DOES NOT ──────────────
+// Oliver, 8 Aug 2026, looking at the published Copenhagen entry:
+//   "nearestStation on a capital city is weird tbh. With major cities, that is
+//    just odd. Maybe leave out nearest station on towns."
+//
+// He is right, and the reason is worth writing down because it is not about
+// Copenhagen. For an attraction, a workshop, a restaurant or a festival, the
+// nearest stop is a real answer to a real question: that place sits at one point
+// on the map and there is one sensible way to arrive at it.
+//
+// A TOWN IS NOT A POINT. It is the destination itself, and it has as many
+// arrival points as it has edges. The stored Copenhagen row said
+//   "nearestStation": "Nørreport (9 mins walk)"
+// which is nine minutes' walk from the coordinate a geocoder happened to pick
+// for the middle of a city of 660,000 people. It is a fact about that
+// coordinate, not about Copenhagen, and it is misleading in the bargain:
+// Nørreport is a local S-train stop, while the station a traveller actually
+// plans a Copenhagen trip around is København H. The field was answering a
+// question nobody asked with a value that was never checked against the
+// question.
+//
+// What replaces it is what was already there and already true: travelTime says
+// how long it takes to get there, region and mapHint say where it is, and the
+// Reality Check paragraph says how you arrive in prose, where there is room to
+// say "by ferry, twice a day" instead of naming a quay.
+//
+// KEPT for festivals and venues, because a festival ground genuinely is one
+// point in a field somewhere and the nearest stop is the single most useful
+// logistical fact about it.
+export const ARRIVAL_TYPES = new Set(["festival", "free", "booking", "food", "foodStreet", "night", "craft", "attraction"]);
+export const hasArrivalField = (type) => ARRIVAL_TYPES.has(String(type || ""));
+
 export const arrivalRow = (value, kind) => {
   const v = String(value || "").toLowerCase();
   if (kind && ARRIVAL_BY_KIND[kind]) return { ...ARRIVAL_BY_KIND[kind], value };

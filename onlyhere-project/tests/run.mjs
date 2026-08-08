@@ -22,6 +22,7 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripNonCode, functionBody, useBeforeDeclare } from "./tdz.mjs";
 
 let passed = 0, failed = 0;
 const fails = [];
@@ -46,6 +47,7 @@ writeFileSync(entry, `
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
@@ -1293,6 +1295,103 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const mw = readFileSync(join(root, "middleware.js"), "utf8");
   ok("middleware only runs on guide urls", /matcher:\s*"\/guide\/:path\*"/.test(mw));
   ok("and falls through to the app rather than erroring", /catch\s*{\s*[\s\S]{0,400}?return next\(\);/.test(mw));
+}
+
+
+// ── NOTHING IN App.jsx READS A CONST BEFORE IT EXISTS ──────────────
+// Two crashes, three days apart, both this exact shape:
+//   6 Aug — the FRONT PAGE, dead on every render, because a useEffect
+//           dependency array named a const declared 600 lines below it. It
+//           survived review because /guide/:id is a different component and
+//           that route kept working perfectly.
+//   8 Aug — the GUIDE BUILD, dead on every run:
+//           "Guide build failed: ReferenceError: Cannot access 'qt' before
+//            initialization"
+//           because reordering the pipeline so accommodation lands before the
+//           route fetch left enrichGuideDays(parsed.days, travelMode,
+//           mixedModes) sitting above the two consts it reads.
+//
+// A temporal dead zone read is a thrown ReferenceError, not an undefined, so it
+// takes the whole call down, and neither of these was findable by eye in a
+// 774 KB file. This sweeps every function in it, in about a tenth of a second.
+// See tests/tdz.mjs for why the stripping has to be a character walk and what
+// it deliberately skips.
+{
+  const stripped = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  ok("App.jsx parses far enough to find generateGuide", !!functionBody(stripped, "const generateGuide = async"));
+  const names = new Set([...stripped.matchAll(/const ([A-Za-z_$][\w$]*) = (?:async )?\(/g)].map(m => m[1]));
+  const bad = [];
+  let swept = 0;
+  for (const nm of names) {
+    const body = functionBody(stripped, `const ${nm} = `);
+    if (!body || body.length < 1200) continue;
+    swept++;
+    useBeforeDeclare(body).forEach(f => bad.push(`${nm}(): reads ${f.name} on line ${f.useLine}, declared on line ${f.declLine}`));
+  }
+  ok(`swept ${swept} functions in App.jsx for temporal dead zones`, swept > 20);
+  is("nothing reads a const before it is declared", bad, []);
+
+  // And the scanner itself, against the two shapes it exists to catch, so a
+  // future refactor cannot quietly turn it into a function that always passes.
+  const rigged = `const f = async () => {\n  const a = one(b);\n  const b = 2;\n  return a;\n};`;
+  is("the scanner catches a real one", useBeforeDeclare(functionBody(stripNonCode(rigged), "const f = ")).map(x => x.name), ["b"]);
+  // A property KEY is not a read. Every false positive left after the parameter
+  // rule was this: setState({ running: true, fixed: 0 }) above a `const fixed`.
+  const keys = `const f = async () => {\n  setState({ fixed: 0, failed: [] });\n  const fixed = 1; const failed = [];\n  return fixed;\n};`;
+  is("a property key is not a read", useBeforeDeclare(functionBody(stripNonCode(keys), "const f = ")), []);
+  // A word inside a prompt is not a read either — the whole reason the stripper
+  // exists. This template literal mentions travelMode in prose AND interpolates
+  // a real expression, and only the real one counts.
+  const prose = "const f = async () => {\\n  const p = `plan the travelMode carefully ${name.trim()}`;\\n  const travelMode = 1;\\n  return p + travelMode;\\n};";
+  is("a word inside a prompt is not a read", useBeforeDeclare(functionBody(stripNonCode(prose), "const f = ")), []);
+}
+
+// ── A TOWN HAS NO NEAREST STOP ─────────────────────────────────────
+// Oliver, 8 Aug 2026, reading the published Copenhagen entry:
+//   "nearestStation on a capital city is weird tbh. With major cities, that is
+//    just odd. Maybe leave out nearest station on towns."
+//
+// The stored row said "Nørreport (9 mins walk)", which is nine minutes from the
+// coordinate a geocoder picked for the middle of a city of 660,000 — a fact
+// about that coordinate, not about Copenhagen, and misleading too, since the
+// station a person actually plans a Copenhagen trip around is København H.
+{
+  const { hasArrivalField, ARRIVAL_TYPES } = M;
+  is("a town has no arrival field", hasArrivalField("town"), false);
+  is("nor does a town's nightlife page", hasArrivalField("nightTown"), false);
+  // KEPT where the place genuinely IS one point on the map and the nearest stop
+  // is the single most useful logistical fact about it.
+  is("a festival does", hasArrivalField("festival"), true);
+  is("a free attraction does", hasArrivalField("free"), true);
+  is("a restaurant does", hasArrivalField("food"), true);
+  is("a workshop does", hasArrivalField("craft"), true);
+  is("and an unknown type does not", hasArrivalField("wat"), false);
+  ok("town is not in the set under any name", !ARRIVAL_TYPES.has("town") && !ARRIVAL_TYPES.has("nightTown"));
+
+  // BOTH HALVES, because 71 entries were already published with the field
+  // filled in and a prompt change cannot reach those.
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  const townPrompt = prompts.slice(prompts.indexOf("  town: `"), prompts.indexOf("  festival: `"));
+  ok("the town prompt no longer asks for a station", !/nearestStation/.test(townPrompt));
+  ok("but the festival prompt still does", /nearestStation/.test(prompts.slice(prompts.indexOf("  festival: `"), prompts.indexOf("  festival: `") + 9000)));
+
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  const townGlance = detail.slice(detail.indexOf('{kind === "town" && ('), detail.indexOf('{kind === "town" && (') + 1400);
+  ok("and the town At a Glance card does not render one", !/arrivalRow/.test(townGlance));
+  ok("while attractions still do", /arrivalRow\(item\.nearestStation\)/.test(detail));
+}
+
+// ── A PHOTO IS CREDITED WHERE IT IS SHOWN ──────────────────────────
+// Oliver, 8 Aug 2026: "remember to show credit to pictures on loading screen."
+// Not a nicety: several of the Denmark-facts photos are Wikimedia files under
+// CC BY or CC BY-SA, and those licences require attribution wherever the image
+// APPEARS. That screen shows one full size for a minute at a time and credited
+// nobody.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const card = app.slice(app.indexOf("src={fact.photo}"), app.indexOf("src={fact.photo}") + 1800);
+  ok("the loading card credits its photo", /<PhotoCredit\s+photo={fact\.photo}/.test(card));
+  ok("and PhotoCredit is actually imported", /^import \{ PhotoCredit \} from/m.test(app));
 }
 
 rmSync(dir, { recursive: true, force: true });

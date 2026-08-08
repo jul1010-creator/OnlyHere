@@ -21,7 +21,7 @@ import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
   isInDenmark, travelLabel, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
   dedupeAgainstExisting, getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
-  getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, departureParam, transitDepartureAnchor,
+  getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
   hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep} from "./utils/helpers";
 import { checkNightTransport, geocodePlace, findRealNearestStation } from "./utils/geo";
@@ -62,6 +62,7 @@ import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
 import { fetchCloudSaves, pushCloudSaves, mergeSaves } from "./utils/userSaves";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
+import { PhotoCredit } from "./components/PhotoCredit";
 
 import "leaflet/dist/leaflet.css";
 
@@ -1342,7 +1343,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             const kindWord = KIND_WORD[stopKind] || "transit stop";
             frozenGeo = { lat: coords.lat, lon: coords.lon, station, stopKind };
             frozenFactsText = `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station
-              ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here, so it is genuinely the stop that serves this place. Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it. Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
+              ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here, so it is genuinely the stop that serves this place. ${hasArrivalField(sType) ? "Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it." : "There is deliberately NO nearestStation field on this content type: a town is the destination itself and has as many arrival points as it has edges, so naming one states a fact about a coordinate rather than about the place. This is given to you so the PROSE gets the mode of arrival right, and for nothing else."} Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
               : " No arrival point could be verified nearby, so leave nearestStation EMPTY rather than naming a landmark or a stop on the other side of water. Many Danish islands have no station at all, and an empty field reads honestly as 'we do not know'."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
           }
         } catch { /* geocoding/places failed — draft proceeds without this, publishDraft's override step just won't have anything to apply */ }
@@ -1745,7 +1746,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       let code = "";
       if (sType === "town") {
         const nextId = Math.max(0, ...towns.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
+        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
       } else if (sType === "festival") {
         const isMajor = (t.scale || "").toLowerCase().startsWith("major");
         const targetArr = isMajor ? majorEvents : events;
@@ -4163,13 +4164,18 @@ If the conversation only covers a single day or a few stops with no explicit day
       // which is why a bike trip asked Google for a bike route across open
       // water. Doing it in the right order fixes the accommodation card, the
       // Booking link and every leg mode in one move.
-      setGuideBuildStage({ label: "Working out where to stay and how you get around", percent: 90 });
-      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes);
-      parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
-
-      setGuideBuildStage({ label: "Verifying exact locations and routes", percent: 95 });
-      const freshGeo = await geocodeStopsForGuide(parsed.days);
-      const gid = Date.now();
+      // ── WHICH MODE, DECIDED BEFORE ANYTHING NEEDS IT ────────────
+      // THIS BLOCK MOVED UP HERE AND MUST STAY ABOVE enrichGuideDays. It used
+      // to sit ~20 lines below, and the reorder that put the accommodation pass
+      // before the route fetch left the call to enrichGuideDays(parsed.days,
+      // travelMode, mixedModes) reading two consts declared after it. That is a
+      // temporal dead zone: not undefined, a thrown ReferenceError, and it took
+      // the whole build down —
+      //   "Guide build failed: ReferenceError: Cannot access 'qt' before
+      //    initialization"
+      // reported by Oliver on 8 Aug, the SECOND crash of exactly this shape in
+      // this project after the front page one. tests/run.mjs now scans this
+      // function for use-before-declaration so there is not a third.
       const lc = convoText.toLowerCase();
       const mentionsTransit = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(lc);
       const mentionsCar = /\b(car|driving|drive|bil|camper ?van|rv\b)\b/.test(lc);
@@ -4186,6 +4192,14 @@ If the conversation only covers a single day or a few stops with no explicit day
       // set through to the per-day prompt so it stops treating one mode as dominant.
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
+
+      setGuideBuildStage({ label: "Working out where to stay and how you get around", percent: 90 });
+      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes);
+      parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
+
+      setGuideBuildStage({ label: "Verifying exact locations and routes", percent: 95 });
+      const freshGeo = await geocodeStopsForGuide(parsed.days);
+      const gid = Date.now();
       // Oliver's map-vs-plain choice (see modeOverride above): the expensive
       // Google Directions calls only run at all if "map" was actually picked —
       // "plain" mode never needed them, GuidePage hides routes/leg times
@@ -8818,6 +8832,22 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                               fight a crop. */}
                           <img src={fact.photo} alt={fact.name} style={{ width: 210, height: 170, objectFit: "contain", objectPosition: fact.photoPos || "center", display: "block" }} />
                         </div>
+                        {/* ── CREDIT THE PHOTO WHERE IT IS SHOWN ──────────
+                            Oliver, 8 Aug 2026: "remember to show credit to
+                            pictures on loading screen." He is right and it is not
+                            a nicety: several of these are Wikimedia files under
+                            CC BY or CC BY-SA, and those licences require
+                            attribution wherever the image APPEARS, not once on a
+                            credits page somewhere else. This screen shows a photo
+                            full size for a minute at a time and was crediting
+                            nobody.
+
+                            PhotoCredit renders NOTHING when no credit is on file
+                            for that filename, so this is safe under every card
+                            including the ones shot by Oliver himself. Sits below
+                            the polaroid rather than inside its cream chin, where
+                            muted grey on #F2EBDA would be unreadable. */}
+                        <PhotoCredit photo={fact.photo} align="center" style={{ marginTop: -8, marginBottom: 14 }} />
                       </div>
                       <div style={{ fontSize: 13.5, color: isHistory ? "#BBA778" : C.light, lineHeight: 1.65, fontFamily: isHistory ? "'Fraunces', serif" : "'Inter', sans-serif" }}>
                         {fact.fact}

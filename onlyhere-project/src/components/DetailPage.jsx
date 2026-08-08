@@ -290,8 +290,14 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         )}
         {kind === "town" && (
           <>
+            {/* NO ARRIVAL ROW ON A TOWN. See ARRIVAL_TYPES in utils/helpers.js
+                for the reasoning: a town is the destination, not a point, so
+                "nearest stop" answers a question nobody asked with a value
+                measured from whatever coordinate the geocoder picked for the
+                middle of it. Suppressed at RENDER rather than only in the
+                drafting prompt, because 71 entries were already published with
+                the field filled in and a prompt change cannot reach those. */}
             <AtAGlanceCard rows={[
-              arrivalRow(item.nearestStation),
               { icon: "🛏️", label: "Recommended Stay", value: item.recommendedStayGlance },
               { icon: "☀️", label: "Best Time", value: item.bestTimeGlance },
               { icon: "🏡", label: "Accommodation", value: item.accommodationGlance },
