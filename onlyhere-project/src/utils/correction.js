@@ -292,12 +292,131 @@ export const RIGHT_HALF = /\b(should (be|say|read|actually)|shouldn'?t (be|say)|
 // verification pass because he wondered aloud.
 export const QUESTION = /^\s*(why|what|how|is|are|does|do|did|can|could|should|would|which|who|when|where|was|were|any|anything)\b|\?\s*$/i;
 
+// ── "I would like to have Claude rewriting itself" ──────────────────
+// Oliver, 7 Aug 2026: "I like that I can finally talk to an AI about the draft.
+// But I would like to have Claude rewriting itself.. instead of me changing it."
+//
+// The correction pass above is a FACT-CHECKING pipeline. It splits criticism
+// into atomic claims, checks each against a primary source, and patches only
+// what a source backed. That is exactly right for "the station is wrong, it
+// should be Aarhus H", and exactly useless for "this paragraph is too long".
+// A style claim comes back from the splitter marked checkable:"no", nothing
+// verifies it, nothing applies it, and he is left editing the JSON by hand.
+//
+// So there is a third thing a person can say to a draft, and it was missing:
+//
+//   correct  a claim about the WORLD.   "The date is wrong, it is 25 August."
+//   edit     a claim about the WRITING. "This reads like an advert."
+//   ask      a question.                "Why does it say the ferry is required?"
+//
+// An edit needs no verification, because nothing about reality is in dispute.
+// What it needs instead is the opposite guard: A REWRITE MAY NOT CHANGE A FACT.
+// That is the entire risk here. Ask for something shorter and a model will
+// happily drop the price, round the year, or smooth "1 hour 20" into "about an
+// hour", and it will read beautifully. Every number, date, price, URL and
+// proper name in the original has to survive, and no new one may appear. See
+// factsIn and factsPreserved below, which enforce it rather than request it.
+const STYLE_WORDS = /\b(too (long|short|wordy|dry|formal|casual|salesy|generic|much)|wordy|clunky|boring|bland|dull|dry|stiff|salesy|markety|corporate|repetitive|repeats?|waffl|rambl|reads? like|sounds? like|feels? like|flows?|tone|voice|style|punchier|snappier|warmer|colder|plainer|simpler|shorter|longer|tighten|trim|cut|shorten|expand|reword|rephrase|make it more|make it less|less .{0,12}(formal|salesy|generic|wordy)|more .{0,12}(human|natural|direct|specific|concrete))\b/i;
+
+// A rewrite instruction names an action on the TEXT. Kept separate from
+// CORRECT_INTENT because "fix" and "change" belong to both worlds and only the
+// company they keep tells them apart.
+const EDIT_VERBS = /\b(rewrite|reword|rephrase|redraft|shorten|tighten|trim|cut|expand|punch up|polish|clean up|tidy)\b/i;
+
+export const isEditRequest = (text) => {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  // A factual assertion is a correction even when it is phrased as a complaint
+  // about the writing, because the fact is the thing that matters. "This is
+  // wrong, it should say 25 August" is never an edit.
+  if (RIGHT_HALF.test(t)) return false;
+  return EDIT_VERBS.test(t) || STYLE_WORDS.test(t);
+};
+
+// ── A REWRITE MAY NOT CHANGE A FACT ─────────────────────────────────
+// Everything a rewrite could quietly lose or invent, pulled out of the text so
+// the two versions can be compared. Deliberately generous about what counts as
+// a fact and deliberately blind to wording: the question is never "did this get
+// rephrased", it is "did a number, a date, a price, a link or a name move".
+// UNITS ARE LISTED LONGEST FIRST. Regex alternation takes the first branch that
+// matches, so with "km|m|minutes" in that order "12 minutes" tokenises as
+// "12 m" and a rewrite that turned it into "about an hour" reported the loss of
+// something called "12 m". The verdict was right and the explanation was
+// gibberish, which is its own kind of wrong when a person has to act on it.
+const UNIT = "minutes?|mins?|hours?|hrs?|days?|weeks?|years?|kroner|dkk|kr|euros?|km|%|m";
+const TIME = /\b\d{1,2}[:.]\d{2}\b/g;                       // 10:00, and 17.30
+const NUMBER = new RegExp(`\\b\\d[\\d.,]*\\s?(?:${UNIT})?`, "gi");
+const LINK = /https?:\/\/[^\s)"']+|\b[a-z0-9-]+\.(?:dk|com|org|net|eu)\b/gi;
+const NAME = /\b[A-ZÆØÅ][\wÆØÅæøå-]+(?:\s+[A-ZÆØÅ][\wÆØÅæøå-]+)*/g;
+// A phrase starting with one of these is a sentence beginning, not a name.
+// Without this, "The Vikingeskibsmuseet is..." and "at the Vikingeskibsmuseet"
+// are two different facts, and rephrasing around an article reads as losing a
+// place. Stripped rather than rejected, so the place itself still counts.
+const LEADING = /^(?:the|a|an|and|but|so|see|open|opens|it|its|this|that|in|at|on|for|from|to|of|is|was|there|here|you|your|we)\s+/i;
+
+export const factsIn = (text) => {
+  const t = String(text || "");
+  const out = new Set();
+  const times = t.match(TIME) || [];
+  times.forEach(m => out.add(m.replace(".", ":")));
+  // Times are removed before the number pass, or 10:00 also arrives as "10"
+  // and "00" and every rephrasing looks like it moved a number.
+  const withoutTimes = t.replace(TIME, " ");
+  (withoutTimes.match(NUMBER) || [])
+    .map(m => m.replace(/\s+/g, " ").trim().replace(/[.,;:]+$/, "").toLowerCase())
+    .filter(Boolean)
+    .forEach(m => out.add(m));
+  (t.match(LINK) || []).forEach(m => out.add(m.toLowerCase().replace(/[.,;:]+$/, "")));
+  (t.match(NAME) || []).forEach(m => {
+    const stripped = m.replace(LEADING, "").trim();
+    // A single leftover word only counts as a name when it is long enough to
+    // be one. "Open" and "See" are not places.
+    const words = stripped.split(/\s+/).filter(Boolean);
+    if (!stripped) return;
+    if (words.length === 1 && stripped.length < 6) return;
+    out.add(stripped.toLowerCase());
+  });
+  return out;
+};
+
+// Returns what went missing and what appeared from nowhere. Empty on both
+// counts is the only result that lets a rewrite through.
+export const factsPreserved = (before, after) => {
+  const a = factsIn(before), b = factsIn(after);
+  const lost = [...a].filter(x => !b.has(x));
+  // A NEW number or link is as bad as a lost one: it is an invention wearing
+  // the clothes of an edit. New proper names are allowed, since a rewrite may
+  // legitimately name a street the original described.
+  const invented = [...b].filter(x => !a.has(x) && /\d|https?:|\.(dk|com|org|net|eu)\b/i.test(x));
+  return { ok: lost.length === 0 && invented.length === 0, lost, invented };
+};
+
+export const EDIT_PROMPT = (fieldName, current, instruction, voice) => `Rewrite ONE field of a Gemlyx travel entry, following the founder's instruction about how it is written.
+
+FIELD: ${fieldName}
+
+CURRENT TEXT:
+${typeof current === "string" ? current : JSON.stringify(current, null, 2)}
+
+WHAT HE ASKED FOR:
+${instruction}
+
+THE ONE RULE THAT OUTRANKS HIS INSTRUCTION: every fact stays exactly as it is. Every number, price, date, duration, opening time, place name, street, venue and web address must survive the rewrite unchanged, and you may not introduce a single one that is not already there. If following the instruction fully would mean dropping a fact, keep the fact and follow the instruction as far as it will go. This is checked automatically afterwards and a rewrite that loses a fact is thrown away, so there is nothing to gain by guessing.
+
+${voice || ""}
+
+Reply with ONLY the rewritten text for that one field. No preamble, no explanation, no quotation marks around it, no markdown fences.${Array.isArray(current) ? " The field is a list, so reply with a JSON array of the same shape and the same number of items." : ""}`;
+
 export const routeMessage = (text) => {
   const t = String(text || "").trim();
   if (!t) return "ask";
   if (AUDIT_INTENT.test(t) && !CORRECT_INTENT.test(t)) return "audit";
   // An explicit instruction wins over everything, including a question mark:
   // "why is this wrong? fix it" is an instruction with a preamble.
+  // An edit is checked BEFORE the correction intent, because "rewrite", "fix"
+  // and "change" live in both vocabularies and only the rest of the sentence
+  // separates them. isEditRequest already refuses anything that asserts a fact.
+  if (isEditRequest(t) && !WRONG_HALF.test(t)) return "edit";
   if (CORRECT_INTENT.test(t)) return "correct";
   if (QUESTION.test(t)) return "ask";
   if (WRONG_HALF.test(t) || RIGHT_HALF.test(t)) return "correct";
@@ -510,4 +629,78 @@ export const correctEntry = async ({ entry, criticism, deps }) => {
 
   const changed = Object.keys(patched).filter(k => JSON.stringify(patched[k]) !== JSON.stringify(entry?.[k]));
   return { claims: verified, confirmed, rejected, unresolved, asserted, patched, changed, reverted, allowed };
+};
+
+// ── THE REWRITE PASS ────────────────────────────────────────────────
+// Oliver: "I would like to have Claude rewriting itself.. instead of me
+// changing it."
+//
+// Deliberately NOT routed through correctEntry. That pipeline's whole shape is
+// split, verify, patch what a source backed, and a style instruction has
+// nothing for a source to say about it. Running one through it means three API
+// calls that all conclude "not checkable" and a draft that comes back
+// untouched, which is exactly what has been happening.
+//
+// This is the other half: no verification, because no fact is in dispute, and
+// in its place a hard guard that no fact MOVED. Claude does the writing, as it
+// does everywhere in this project.
+export const editEntry = async ({ entry, instruction, deps }) => {
+  const { askClaude, voice, onStage } = deps || {};
+  const stage = (label, percent) => { try { onStage?.({ label, percent }); } catch { /* UI only */ } };
+  if (!entry || typeof entry !== "object") return { error: "There is no draft open to rewrite." };
+
+  // WHICH FIELD. Named explicitly if he named it, otherwise the prose fields
+  // this entry actually has. Never a glance field by accident: "make it
+  // shorter" must not be allowed to rewrite nearestStation into something
+  // prettier, because a glance field is a value and not a sentence.
+  stage("Working out what to rewrite", 15);
+  const named = resolveField(entry, instruction);
+  const targets = named
+    ? [named]
+    : PROSE_FIELDS.filter(f => f in entry && entry[f] != null && entry[f] !== "");
+  if (targets.length === 0) return { error: "I could not tell which part you meant. Name the field, for example \"rewrite the realityCheck\"." };
+
+  const patched = { ...entry };
+  const changed = [];
+  const refused = [];
+
+  for (let i = 0; i < targets.length; i++) {
+    const field = targets[i];
+    const current = entry[field];
+    if (current == null || current === "") continue;
+    stage(`Rewriting ${field}`, 20 + Math.round((i / targets.length) * 70));
+
+    const res = await askClaude(EDIT_PROMPT(field, current, instruction, voice), 1400);
+    if (res?.error || !res?.text) { refused.push({ field, reason: "the rewrite call failed" }); continue; }
+
+    let next = res.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+    if (Array.isArray(current)) {
+      try { next = JSON.parse(next); } catch { refused.push({ field, reason: "the rewrite came back in the wrong shape for a list" }); continue; }
+      if (!Array.isArray(next)) { refused.push({ field, reason: "the rewrite came back in the wrong shape for a list" }); continue; }
+    } else {
+      next = next.replace(/^["']|["']$/g, "");
+    }
+
+    // THE GUARD. A rewrite that lost a price or invented a year is thrown away
+    // and SAID SO, rather than quietly kept because it reads better.
+    const beforeText = typeof current === "string" ? current : JSON.stringify(current);
+    const afterText = typeof next === "string" ? next : JSON.stringify(next);
+    const check = factsPreserved(beforeText, afterText);
+    if (!check.ok) {
+      refused.push({
+        field,
+        reason: check.lost.length
+          ? `the rewrite dropped ${check.lost.slice(0, 3).join(", ")}`
+          : `the rewrite invented ${check.invented.slice(0, 3).join(", ")}`,
+      });
+      continue;
+    }
+    if (afterText.trim() === beforeText.trim()) continue;   // nothing to report
+
+    patched[field] = next;
+    changed.push(field);
+  }
+
+  stage("Done", 100);
+  return { patched, changed, refused, targets };
 };

@@ -3,7 +3,8 @@ import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { askClaude, askPerplexity, parseClaudeJSON } from "../utils/aiClient";
 import { auditEntry, auditAll } from "../utils/entryAudit";
-import { correctEntry, routeMessage, offersCorrection, ASK_PROMPT, LOOKUP_PROMPT, NOT_IN_ENTRY } from "../utils/correction";
+import { correctEntry, editEntry, routeMessage, offersCorrection, ASK_PROMPT, LOOKUP_PROMPT, NOT_IN_ENTRY } from "../utils/correction";
+import { STUDIO_VOICE } from "../utils/studioContent";
 import { departureParam } from "../utils/helpers";
 
 // ── The founder's assistant, on every page ──────────────────────────
@@ -201,6 +202,53 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     setPending({ mode: onDraft ? "draft" : "row", rowId, before, after: result.patched, changed: result.changed });
   };
 
+  // ── "I would like to have Claude rewriting itself" ───────────────
+  // Oliver, 7 Aug 2026, on the Studio assistant: "I like that I can finally
+  // talk to an AI about the draft. But I would like to have Claude rewriting
+  // itself.. instead of me changing it."
+  //
+  // He could already say "the date is wrong, it is 25 August" and have that
+  // applied. What he could not do was say "this reads like an advert", because
+  // that went into the fact-checking pipeline, came back marked not checkable,
+  // and left the draft exactly as it was. This is the missing half, and it
+  // lands in the same review-then-apply place as a correction: the rewrite is
+  // shown, and nothing touches the draft until he takes it.
+  const runEdit = async (message) => {
+    const entry = onDraft ? draft : (rowId ? (await fetchRow(rowId))?.payload : null);
+    if (!entry) {
+      say("gemlyx", onDraft
+        ? "There is no draft open to rewrite."
+        : "Open an entry or draft one in Studio, then tell me how you want it written.");
+      return;
+    }
+    const result = await editEntry({
+      entry, instruction: message,
+      deps: { askClaude, voice: STUDIO_VOICE, onStage: setStage },
+    });
+    setStage(null);
+    if (result.error) { say("gemlyx", result.error); return; }
+
+    // A REFUSAL IS REPORTED, NOT SWALLOWED. A rewrite that dropped a price is
+    // thrown away, and he is told which fact it dropped, because "I could not
+    // do that" and "I did it and quietly lost your opening hours" have to look
+    // completely different from each other.
+    const refusedLines = (result.refused || []).map(r => `⚠️ ${r.field}: kept as it was, because ${r.reason}.`);
+
+    if (result.changed.length === 0) {
+      say("gemlyx", refusedLines.length
+        ? `Nothing applied.\n\n${refusedLines.join("\n")}`
+        : "That came back the same as it went in, so there is nothing to apply. Try being more specific about what you want changed.");
+      return;
+    }
+    const preview = result.changed.map(f => {
+      const v = result.patched[f];
+      const text = typeof v === "string" ? v : JSON.stringify(v);
+      return `✍️ ${f}\n${text.slice(0, 400)}${text.length > 400 ? "…" : ""}`;
+    });
+    say("gemlyx", `Rewritten ${result.changed.join(", ")}. Every number, date, price, link and place name was checked against the original and none of them moved.\n\n${preview.join("\n\n")}${refusedLines.length ? `\n\n${refusedLines.join("\n")}` : ""}`);
+    setPending({ mode: onDraft ? "draft" : "row", rowId, before: entry, after: result.patched, changed: result.changed });
+  };
+
   const runAsk = async (message) => {
     if (!target) { say("gemlyx", "Open an entry or draft one in Studio and ask me about it, or ask which entries need work."); return; }
     const audit = auditEntry({ id: rowId, type: targetKind, payload: target });
@@ -262,7 +310,8 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
       const routed = forceCorrect ? "correct" : routeMessage(message);
       // Reading a blog: answer, always. Nothing here can change a published row.
       const intent = studioMode ? routed : "ask";
-      if (intent === "correct") await runCorrection(message);
+      if (intent === "edit") await runEdit(message);
+      else if (intent === "correct") await runCorrection(message);
       else if (intent === "audit") await runAudit();
       else await runAsk(message);
     } catch (err) {
@@ -389,7 +438,7 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
           <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-end" }}>
             <textarea value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
-              placeholder={!target ? "Ask which entries need work" : studioMode ? `Paste a fact-check about ${target.name || "this draft"}, or just ask` : `Ask anything about ${target.name || "this page"}`}
+              placeholder={!target ? "Ask which entries need work" : studioMode ? `Paste a fact-check, ask for a rewrite, or just ask` : `Ask anything about ${target.name || "this page"}`}
               rows={2}
               style={{ flex: 1, resize: "vertical", minHeight: 40, maxHeight: 160, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 12.5, padding: "8px 10px", outline: "none", fontFamily: "'Inter', sans-serif" }} />
             <button onClick={() => send()} disabled={busy || !input.trim()}

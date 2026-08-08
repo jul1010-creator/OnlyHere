@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
@@ -879,6 +879,74 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the limited event says so", /limited/i.test(acts[0].why));
   is("a trip with nothing to book says nothing",
     M.bookingActions({ days: [{ day: 1, stops: [{ name: "A walk" }] }] }, () => null).length, 0);
+}
+
+// ── "I would like to have Claude rewriting itself" ─────────────────
+// Oliver, 7 Aug 2026. He could already say "the date is wrong, it is 25
+// August" and have it applied. He could not say "this reads like an advert",
+// because that went into the fact-checking pipeline, came back marked not
+// checkable, and left the draft untouched. Three things a person can say to a
+// draft, and the router has to tell them apart every time:
+//   correct  a claim about the WORLD    edit  a claim about the WRITING
+//   ask      a question
+{
+  const r = M.routeMessage;
+  is("too long is an edit", r("This paragraph is too long"), "edit");
+  is("reads like an advert is an edit", r("The reality check reads like an advert"), "edit");
+  is("make it warmer is an edit", r("Make it warmer"), "edit");
+  is("shorten is an edit", r("shorten the intro"), "edit");
+  is("tighten is an edit", r("tighten this up, it waffles"), "edit");
+
+  // A FACT ALWAYS WINS. "Rewrite" and "fix" live in both vocabularies, and the
+  // rest of the sentence is the only thing that separates them. Getting this
+  // backwards would send a real correction to a pass that never checks
+  // anything against a source, which is the worst outcome available here.
+  is("a stated correct value is never an edit", r("Rewrite it, the station should be Aarhus H"), "correct");
+  is("wrong plus a value is a correction", r("The station is wrong. It should be Aarhus H."), "correct");
+  is("a pasted fact-check is a correction", r("Google says the date is wrong, it is actually 25 August"), "correct");
+  is("a denial is a correction", r("This says the ferry is required but that is not true"), "correct");
+  is("fix the price is a correction", r("Fix the price, it should be 120 kr"), "correct");
+  is("a question is still only answered", r("why does it say the ferry is required?"), "ask");
+  is("an audit is still an audit", r("which ones need work?"), "audit");
+  ok("an assertion is never an edit request", !M.isEditRequest("rewrite it, it should be 25 August"));
+
+  // ── A REWRITE MAY NOT CHANGE A FACT ───────────────────────
+  // The entire risk of this feature. Ask for something shorter and a model
+  // will drop the price, round the year, or smooth "12 minutes" into "about an
+  // hour", and it will read beautifully.
+  const before = "Open 10:00 to 17:00, entry 120 kr. The Vikingeskibsmuseet is 12 minutes from Roskilde Domkirke. See vikingeskibsmuseet.dk";
+  const facts = M.factsIn(before);
+  ok("a price is a fact", facts.has("120 kr"));
+  ok("a duration keeps its unit", facts.has("12 minutes"));
+  ok("a clock time is one token", facts.has("10:00") && facts.has("17:00"));
+  ok("a domain is a fact", facts.has("vikingeskibsmuseet.dk"));
+  ok("a place name is a fact", facts.has("roskilde domkirke"));
+  // UNITS ARE MATCHED LONGEST FIRST. With "km|m|minutes" in that order,
+  // "12 minutes" tokenises as "12 m" and the refusal message becomes gibberish.
+  ok("no truncated unit leaks through", ![...facts].includes("12 m"));
+
+  ok("a pure rephrase is allowed", M.factsPreserved(before,
+    "Opening 10:00 to 17:00, it costs 120 kr. The Vikingeskibsmuseet sits 12 minutes from Roskilde Domkirke. See vikingeskibsmuseet.dk").ok);
+  // A LEADING ARTICLE IS NOT PART OF A NAME. Without stripping it, moving "the"
+  // reads as losing the museum, and every honest rewrite gets refused.
+  ok("restructuring around an article is allowed", M.factsPreserved(before,
+    "It opens at 10:00 and closes at 17:00, and entry is 120 kr. You reach the Vikingeskibsmuseet in 12 minutes from Roskilde Domkirke, see vikingeskibsmuseet.dk").ok);
+
+  const dropped = M.factsPreserved(before, "Open 10:00 to 17:00. The Vikingeskibsmuseet is 12 minutes from Roskilde Domkirke. See vikingeskibsmuseet.dk");
+  ok("dropping the price is refused", !dropped.ok);
+  ok("and the refusal names the price", dropped.lost.includes("120 kr"));
+
+  const swapped = M.factsPreserved(before, "Open 10:00 to 17:00, entry 120 kr, about an hour from Roskilde Domkirke at the Vikingeskibsmuseet. See vikingeskibsmuseet.dk");
+  ok("rounding 12 minutes into an hour is refused", !swapped.ok);
+  ok("and it is named in the traveler's own words", swapped.lost.includes("12 minutes"));
+
+  const invented = M.factsPreserved(before, before + " Founded in 1997.");
+  ok("inventing a year is refused", !invented.ok);
+  ok("and the invention is named", invented.invented.includes("1997"));
+  // A new proper NAME is allowed: a rewrite may name the street the original
+  // only described. A new NUMBER never is.
+  ok("naming a street the original described is allowed",
+    M.factsPreserved("A yellow town by the water.", "A yellow town along Vestergade by the water.").ok);
 }
 
 rmSync(dir, { recursive: true, force: true });
