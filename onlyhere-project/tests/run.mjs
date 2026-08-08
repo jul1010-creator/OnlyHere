@@ -41,7 +41,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -2334,7 +2334,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // Oliver, 8 Aug 2026, on being able to add his own research sources without
 // asking anyone to edit code, and then correcting the first version of it.
 {
-  const { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, CONTENT_TYPES, TYPE_LABEL } = M;
+  const { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } = M;
 
   // Whatever gets pasted. A typo here is a rule the models dutifully try to
   // honour on every draft forever, so the shape is checked rather than trusted.
@@ -2392,6 +2392,59 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("no sources means no block at all", sourceRulesBlock([], "town"), "");
   is("and neither does a list of only disabled ones", sourceRulesBlock([{ domain: "x.dk", enabled: false }], "town"), "");
 
+  // ── "VISITCOPENHAGEN IS A GOOD SOURCE BUT PROBABLY NOT FOR AARHUS" ──
+  // The type axis alone does not answer it: VisitCopenhagen IS a town source,
+  // for exactly one town. Sending it on an Aarhus draft costs money on all seven
+  // research calls and invites a Copenhagen page being read as an authority on
+  // Aarhus, which is the ferry-route-corrected-with-another-route failure again.
+  is("a part of the country is recognised as one", cleanPlace("jutland"), "Jutland");
+  is("anything else is treated as a place name", cleanPlace(" Aarhus "), "Aarhus");
+  is("and blank means everywhere", cleanPlace(""), "");
+
+  ok("no place means everywhere", placeMatches("", { name: "Aarhus" }));
+  ok("a town source matches its own town", placeMatches("Copenhagen", { name: "Copenhagen" }));
+  ok("and anywhere inside it", placeMatches("Copenhagen", { name: "Nyhavn", partOf: "Copenhagen" }));
+  // A Dragør entry with dayTripFrom Copenhagen IS a Copenhagen trip.
+  ok("and anywhere that uses it as a base", placeMatches("Copenhagen", { name: "Dragør", dayTripFrom: "Copenhagen" }));
+  ok("an event matches on its host town", placeMatches("Copenhagen", { name: "Distortion", town: "Copenhagen" }));
+  // THE ONE HE RAISED.
+  ok("but NOT another city", !placeMatches("Copenhagen", { name: "Aarhus" }));
+  ok("a part of the country matches by the derived geography", placeMatches("Jutland", { name: "Aarhus", part: "Jutland" }));
+  ok("and not by name alone", !placeMatches("Jutland", { name: "Jutland" }));
+  ok("nor a different part", !placeMatches("Jutland", { name: "Nyhavn", part: "Zealand" }));
+  // Unknown place EXCLUDES, on purpose: leaving one out costs a source, and the
+  // search still runs everywhere else. Including a wrong one costs money on
+  // every call and invites the wrong-city answer.
+  ok("nothing known about the place leaves a scoped source out", !placeMatches("Copenhagen", null));
+  ok("and a bare name is enough when it matches", placeMatches("Copenhagen", "Copenhagen"));
+
+  const placed = [
+    { id: 1, domain: "visitdenmark.dk", applies_to: "", applies_place: "", enabled: true },
+    { id: 2, domain: "visitcopenhagen.com", applies_to: "", applies_place: "Copenhagen", enabled: true },
+    { id: 3, domain: "visitaarhus.com", applies_to: "", applies_place: "Aarhus", enabled: true },
+  ];
+  is("an Aarhus draft gets the national one and Aarhus", sourcesFor(placed, "town", { name: "Aarhus" }).map(x => x.domain), ["visitaarhus.com", "visitdenmark.dk"].sort());
+  is("a Copenhagen draft gets Copenhagen, not Aarhus", sourcesFor(placed, "town", { name: "Copenhagen" }).map(x => x.domain).sort(), ["visitcopenhagen.com", "visitdenmark.dk"]);
+  is("and a draft with no place known gets only the national one", sourcesFor(placed, "town", null).map(x => x.domain), ["visitdenmark.dk"]);
+  ok("the block names the place a scoped source is for", /for Copenhagen specifically/.test(sourceRulesBlock(placed, "town", { name: "Copenhagen" })));
+  // One site, listed once. The same domain scoped two ways both match an Odense
+  // draft, and paying to tell a model about one site twice is the waste this
+  // whole axis exists to remove.
+  const twice = [
+    { id: 1, domain: "visitfyn.dk", applies_to: "", applies_place: "Odense", enabled: true },
+    { id: 2, domain: "visitfyn.dk", applies_to: "", applies_place: "Funen", enabled: true },
+  ];
+  is("a domain matching two ways is listed once", sourcesFor(twice, "town", { name: "Odense", part: "Funen" }).map(x => x.domain), ["visitfyn.dk"]);
+  is("and both still exist for the drafts they each cover", sourcesFor(twice, "town", { name: "Nyborg", part: "Funen" }).map(x => x.domain), ["visitfyn.dk"]);
+
+  // What it costs, because that was the complaint.
+  const wide = blockCost(placed, "town", null);
+  const narrow = blockCost(placed, "town", { name: "Aarhus" });
+  is("an unplaced draft carries fewer sources than a placed one", wide.sources, 1);
+  is("and scoping is what makes the difference", narrow.sources, 2);
+  ok("the cost is counted per draft, across all seven calls", wide.perDraft === wide.words * 7);
+  is("an empty list costs nothing", blockCost([], "town", null), { sources: 0, words: 0, perDraft: 0 });
+
   // ── EVERY RESEARCH PROMPT, OR THE LIST IS A LIE ──────────────────
   // Six of seven would be worse than none: the seventh would quietly research
   // differently and nothing anywhere would say so.
@@ -2401,7 +2454,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // comment that mentions it, which would have let a real call site be removed
   // while the count stayed right.
   is("and all seven go through researchRules", (app3.match(/\$\{researchRules\(/g) || []).length, 7);
-  ok("which is where the founder's list is folded in", /const researchRules = \(type\) => `\$\{RESEARCH_SOURCE_RULES\}\$\{sourceRulesBlock\(founderSources, type\)\}`/.test(app3));
+  // FIVE of the seven know where the draft is and say so. The other two are the
+  // traveller-facing guide pipeline, which covers several towns at once, so it
+  // deliberately carries only the national sources. Written as an exact count so
+  // a call site that quietly stops passing its place fails here.
+  is("five of them pass the place they know", (app3.match(/\$\{researchRules\([a-zA-Z"]+, [a-zA-Z]+\)\}/g) || []).length, 5);
+  is("and two deliberately carry only the universal ones", (app3.match(/\$\{researchRules\(\)\}/g) || []).length, 2);
+  ok("which is where the founder's list is folded in", /const researchRules = \(type, where\) => `\$\{RESEARCH_SOURCE_RULES\}\$\{sourceRulesBlock\(founderSources, type, where\)\}`/.test(app3));
   // The guide pipeline runs for visitors, where no Studio state exists, so the
   // list is loaded app-wide rather than threaded through React state.
   ok("the list is loaded on mount, not only in Studio", /ensureSourcesLoaded\(\)/.test(app3));
@@ -2473,7 +2532,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the ticket rules are carried into every research prompt", /\$\{TICKET_SOURCE_RULES\}/.test(research));
   ok("alongside the ferry and booking-platform ones", /\$\{ISLAND_FERRY_RULES\}/.test(research) && /\$\{BOOKING_PLATFORM_RULES\}/.test(research));
   // And the fact-check prompt is the one that carries the scope rules.
-  ok("the fact-check prompt carries the scope rules", /\$\{FACT_CHECK_SCOPE_RULES\}\\n\$\{researchRules\(studioType\)\}/.test(app5));
+  ok("the fact-check prompt carries the scope rules", /\$\{FACT_CHECK_SCOPE_RULES\}\\n\$\{researchRules\(studioType, studioDraft\)\}/.test(app5));
 
   // The dash ban applies to these exactly as it does to STUDIO_VOICE: a dash in
   // a rule teaches every future draft to use one.

@@ -54,7 +54,7 @@ import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { sourceRulesBlock, normaliseDomain, cleanNote, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
+import { sourceRulesBlock, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -231,14 +231,21 @@ const SOURCES_SQL = `create table if not exists gemlyx_sources (
   domain text not null,
   note text,
   applies_to text default '',
+  applies_place text default '',
   enabled boolean default true,
   created_at timestamptz default now()
 );
 alter table gemlyx_sources enable row level security;
 create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
-create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);`;
+create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);
 
-const researchRules = (type) => `${RESEARCH_SOURCE_RULES}${sourceRulesBlock(founderSources, type)}`;
+-- Safe to run again if the table already exists from an earlier version:
+alter table gemlyx_sources add column if not exists applies_place text default '';`;
+
+// `where` is whatever the caller knows about the place: usually a name, and a
+// whole entry where one exists. A source scoped to a town is left OUT when
+// nothing says where the draft is, which is the cheap direction to be wrong in.
+const researchRules = (type, where) => `${RESEARCH_SOURCE_RULES}${sourceRulesBlock(founderSources, type, where)}`;
 
 // The original component (previously the default export) is now mounted as the
 // "/" route below, with a new "/guide/:guideId" route alongside it for the
@@ -1076,7 +1083,7 @@ function GemlyxApp() {
     const namedRule = named.length
       ? `OPEN THESE SPECIFIC SOURCES FIRST, before any general search, and say what each one said: ${named.join(", ")}. If one of them answers something the draft left uncertain, that answer is what the entry should use. If a named source does not load or does not cover it, say so explicitly rather than quietly falling back to a search result.\n\n`
       : "";
-    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(studioType)}\n\nDraft: ${JSON.stringify(studioDraft)}`;
+    const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(studioType, studioDraft)}\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
     if (result.error) { setGoogleCheckError(result.error); setGoogleCheckLoading(false); return; }
     setGoogleCheckResult({ text: result.text, citations: result.citations });
@@ -1430,7 +1437,7 @@ IDENTITY CHECK, IMPORTANT: a town's real signature event has been mistaken for a
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "festival"
           ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
-          : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${researchRules(studioType)}`;
+          : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${researchRules(studioType, name)}`;
         setStudioStage({ label: "Fact-checking the research (Perplexity)", percent: 50 });
         const preCheck = await withRetry(
           () => askPerplexity(precheckPrompt),
@@ -2142,7 +2149,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       try {
         setStudioStage({ label: "Checking for invented claims", percent: 94 });
         const inventedCheck = await askPerplexity(
-          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${researchRules(studioType)}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
+          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${researchRules(studioType, t)}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
         );
         if (!inventedCheck.error && inventedCheck.text && !/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
           // AUTO-CORRECTION (Oliver: "The last fact-check was actually pointed
@@ -2160,7 +2167,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           setStudioStage({ label: "Re-researching flagged claims", percent: 97 });
           try {
             const reResearch = await askPerplexity(
-              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${researchRules(studioType)}\n\nFlagged claims:\n${inventedCheck.text}`
+              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${researchRules(studioType, name)}\n\nFlagged claims:\n${inventedCheck.text}`
             );
             if (!reResearch.error && reResearch.text) {
               const fixResult = await askClaude(
@@ -2957,6 +2964,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   const [newSourceDomain, setNewSourceDomain] = useState("");
   const [newSourceNote, setNewSourceNote] = useState("");
   const [newSourceType, setNewSourceType] = useState("");
+  const [newSourcePlace, setNewSourcePlace] = useState("");
 
   // ── THE SAME HONEST MESSAGE THE FACTS PANEL NOW HAS ─────────────
   // Tonight's gemlyx_facts confusion was an expired login reported as "run the
@@ -2993,8 +3001,8 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     const domain = normaliseDomain(newSourceDomain);
     if (!domain) { setSourceError(`"${newSourceDomain.trim()}" is not a domain I can use. Paste the address of the site, like visitdenmark.dk or a link to one of its pages.`); return; }
     // A duplicate is not an error worth a message, it is a no-op with a reason.
-    if (sourceRows.some(r => normaliseDomain(r.domain) === domain && (r.applies_to || "") === newSourceType)) {
-      setSourceError(`${domain} is already on the list for ${TYPE_LABEL[newSourceType] || newSourceType}.`);
+    if (sourceRows.some(r => normaliseDomain(r.domain) === domain && (r.applies_to || "") === newSourceType && cleanPlace(r.applies_place) === cleanPlace(newSourcePlace))) {
+      setSourceError(`${domain} is already on the list for ${TYPE_LABEL[newSourceType] || newSourceType}${newSourcePlace ? ` in ${cleanPlace(newSourcePlace)}` : ""}.`);
       return;
     }
     setSourceBusy(true); setSourceError(null);
@@ -3002,11 +3010,11 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_sources`, {
         method: "POST",
         headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
-        body: JSON.stringify({ domain, note: cleanNote(newSourceNote), applies_to: newSourceType, enabled: true }),
+        body: JSON.stringify({ domain, note: cleanNote(newSourceNote), applies_to: newSourceType, applies_place: cleanPlace(newSourcePlace), enabled: true }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) { setSourceError(sourcesErrorFor(res.status, body)); setSourceBusy(false); return; }
-      setNewSourceDomain(""); setNewSourceNote("");
+      setNewSourceDomain(""); setNewSourceNote(""); setNewSourcePlace("");
       await loadSources();
       refreshSources();
     } catch (e) { setSourceError(String(e.message || e)); }
@@ -3245,7 +3253,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       for (let i = 0; i < batch.length; i++) {
         const ev = batch[i];
         setUpdateEventsProgress(`${i + 1} / ${batch.length}`);
-        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival")}`;
+        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
         try {
           const result = await askPerplexity(prompt);
           if (result.error) continue;
@@ -6152,9 +6160,18 @@ You also have a web_search tool. Use it whenever someone asks about something th
                               <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{row.domain}</div>
                               {row.note && <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.45 }}>{row.note}</div>}
                             </div>
+                            {/* Both halves of the scope, because "Towns" alone
+                                hides the difference between a national board and
+                                one city's tourist office, and that difference is
+                                the whole point. */}
                             <span style={{ fontSize: 10, fontWeight: 700, color: row.applies_to ? C.gold : C.muted, background: row.applies_to ? `${C.gold}18` : "none", border: `1px solid ${row.applies_to ? `${C.gold}44` : C.border}`, borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
                               {TYPE_LABEL[row.applies_to || ""] || row.applies_to}
                             </span>
+                            {row.applies_place && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "#8AB4F8", background: "#8AB4F818", border: "1px solid #8AB4F844", borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
+                                📍 {row.applies_place}
+                              </span>
+                            )}
                             <button onClick={() => deleteSource(row)} disabled={sourceBusy} title="Remove"
                               style={{ background: "none", border: "none", color: C.muted, fontSize: 15, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>×</button>
                           </div>
@@ -6174,14 +6191,36 @@ You also have a web_search tool. Use it whenever someone asks about something th
                           style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", cursor: "pointer" }}>
                           {["", ...CONTENT_TYPES].map(t => <option key={t || "all"} value={t}>{TYPE_LABEL[t] || t}</option>)}
                         </select>
+                        <input value={newSourcePlace} onChange={e => setNewSourcePlace(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") addSource(); }}
+                          list="gemlyx-source-places" placeholder="only for… (a town, or Jutland)"
+                          style={{ width: 180, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                        <datalist id="gemlyx-source-places">
+                          {PARTS_OF_COUNTRY.map(x => <option key={x} value={x} />)}
+                          {towns.map(t => t.name).filter(Boolean).sort().map(n => <option key={n} value={n} />)}
+                        </datalist>
                         <button onClick={addSource} disabled={sourceBusy || !newSourceDomain.trim()}
                           style={{ background: newSourceDomain.trim() && !sourceBusy ? C.gold : C.bg, border: `1px solid ${C.border}`, color: newSourceDomain.trim() && !sourceBusy ? "#000" : C.muted, borderRadius: 100, padding: "8px 15px", fontSize: 11.5, fontWeight: 700, cursor: newSourceDomain.trim() ? "pointer" : "default", flexShrink: 0 }}>
                           {sourceBusy ? "…" : "Add"}
                         </button>
                       </div>
                       <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
-                        A note is worth writing: "the operator's own timetable" tells the model when to reach for it, which is most of the value.
+A note is worth writing: "the operator's own timetable" tells the model when to reach for it, which is most of the value.
+                        {" "}Leave "only for" blank for a national source. A city's tourist office belongs to that city: VisitCopenhagen on an Aarhus draft costs money on all seven research calls and invites a Copenhagen page being read as an authority on Aarhus.
                       </div>
+                      {(() => {
+                        // WHAT IT COSTS, because "it's a waste of money" was the
+                        // complaint and nothing was showing the running total.
+                        const wide = blockCost(sourceRows, "town", null);
+                        const narrow = blockCost(sourceRows, "town", { name: "Aarhus", part: "Jutland" });
+                        if (!sourceRows.length) return null;
+                        return (
+                          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 7, lineHeight: 1.5 }}>
+                            A town draft anywhere carries {wide.sources} of these, about {wide.words} words, roughly {wide.perDraft} words across the seven research calls one draft makes.
+                            {narrow.sources !== wide.sources && <span> An Aarhus draft carries {narrow.sources}, because the rest are scoped elsewhere.</span>}
+                          </div>
+                        );
+                      })()}
                     </>
                   )}
                 </div>

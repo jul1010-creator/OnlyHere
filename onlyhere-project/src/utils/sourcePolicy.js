@@ -66,6 +66,52 @@ export const TYPE_LABEL = {
   foodStreet: "Food streets", night: "Nightlife", nightTown: "Nightlife towns", booking: "Workshops",
 };
 
+// ── "VISITCOPENHAGEN IS A GOOD SOURCE BUT PROBABLY NOT FOR AARHUS" ──
+// Oliver, 8 Aug 2026, and the content-type axis alone does not answer it:
+// VisitCopenhagen is a town source, and it is a town source for exactly one
+// town. Sending it along on an Aarhus draft costs money on every one of the
+// seven research prompts, and it costs more than money. A model told to check
+// visitcopenhagen.com for Aarhus will find a Copenhagen page that mentions
+// Aarhus and treat it as an authority on it, which is the same failure as the
+// ferry route "corrected" with a different route's sailing time.
+//
+// So a source carries a PLACE as well as a type, and the field takes either
+// granularity, because both are genuinely useful:
+//   "Copenhagen"  a town, matched against the entry's own name, its parent, and
+//                 the base it is a day trip from
+//   "Jutland"     a part of the country, matched against the derived geography
+//   ""            everywhere, which is what a national tourist board is
+//
+// AND AN UNKNOWN PLACE EXCLUDES IT, deliberately. When nothing tells us where a
+// draft is, a place-scoped source is left out rather than included: leaving it
+// out costs one source that might have helped, and the search still runs
+// everywhere else, while including it costs money on every call and invites the
+// wrong-city answer this exists to prevent.
+export const PARTS_OF_COUNTRY = ["Jutland", "Funen", "Zealand", "Lolland-Falster", "Bornholm"];
+
+export const cleanPlace = (v) => {
+  const t = clean(v);
+  if (!t) return "";
+  const part = PARTS_OF_COUNTRY.find(p => p.toLowerCase() === t.toLowerCase());
+  return part || t;
+};
+
+const same = (a, b) => clean(a).toLowerCase() === clean(b).toLowerCase();
+
+// ctx is whatever is known where the prompt is being built. At draft time that
+// is usually just a name, which is enough for the case he raised.
+export const placeMatches = (place, ctx) => {
+  const want = cleanPlace(place);
+  if (!want) return true;                       // universal
+  if (!ctx) return false;                       // nothing to match on: leave it out
+  const c = typeof ctx === "string" ? { name: ctx } : ctx;
+  if (PARTS_OF_COUNTRY.includes(want)) return same(c.part, want);
+  // A town source applies to that town, to anywhere inside it, and to anywhere
+  // that uses it as a base: a Dragør entry with dayTripFrom Copenhagen is a
+  // Copenhagen trip, and VisitCopenhagen is the right place to look.
+  return same(c.name, want) || same(c.town, want) || same(c.partOf, want) || same(c.dayTripFrom, want);
+};
+
 export const cleanSource = (row) => {
   const domain = normaliseDomain(row?.domain);
   if (!domain) return null;
@@ -75,6 +121,7 @@ export const cleanSource = (row) => {
     domain,
     note: cleanNote(row?.note),
     appliesTo: CONTENT_TYPES.includes(appliesTo) ? appliesTo : "",
+    appliesPlace: cleanPlace(row?.applies_place ?? row?.appliesPlace),
     enabled: row?.enabled !== false,
   };
 };
@@ -82,14 +129,21 @@ export const cleanSource = (row) => {
 // The ones that apply to this draft: everything universal, plus anything scoped
 // to this type. A ferry operator matters for a town on an island and is noise on
 // a cocktail bar, which is why the per-type half exists.
-export const sourcesFor = (rows, type) => {
+export const sourcesFor = (rows, type, ctx) => {
   const seen = new Set();
   const out = [];
   for (const raw of Array.isArray(rows) ? rows : []) {
     const s = cleanSource(raw);
     if (!s || !s.enabled) continue;
     if (s.appliesTo && s.appliesTo !== type) continue;
-    const key = `${s.domain}|${s.appliesTo}`;
+    if (!placeMatches(s.appliesPlace, ctx)) continue;
+    // BY DOMAIN, and only after filtering. Keying on the scope as well let the
+    // same site be listed TWICE in one prompt: visitfyn.dk scoped to Odense and
+    // the same domain scoped to Funen both match an Odense draft, and paying to
+    // tell a model about one site twice is the waste this scoping exists to
+    // remove. Whichever row comes first wins, and since they name the same
+    // domain the only thing that differs is the scope note beside it.
+    const key = s.domain;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(s);
@@ -101,10 +155,14 @@ export const sourcesFor = (rows, type) => {
 
 // Returns "" when there is nothing to say. An empty heading in every prompt
 // teaches the model that this section is usually noise.
-export const sourceRulesBlock = (rows, type) => {
-  const list = sourcesFor(rows, type);
+export const sourceRulesBlock = (rows, type, ctx) => {
+  const list = sourcesFor(rows, type, ctx);
   if (!list.length) return "";
-  const lines = list.map(s => `- ${s.domain}${s.note ? ` — ${s.note}` : ""}${s.appliesTo ? ` (for ${TYPE_LABEL[s.appliesTo] || s.appliesTo} specifically)` : ""}`);
+  const scope = (s) => {
+    const bits = [s.appliesTo ? TYPE_LABEL[s.appliesTo] || s.appliesTo : "", s.appliesPlace].filter(Boolean);
+    return bits.length ? ` (for ${bits.join(" in ")} specifically)` : "";
+  };
+  const lines = list.map(s => `- ${s.domain}${s.note ? ` — ${s.note}` : ""}${scope(s)}`);
   return `\nSOURCES THE FOUNDER HAS FOUND AND WANTS INCLUDED, in this research and every other:
 ${lines.join("\n")}
 
@@ -115,4 +173,16 @@ THIS IS AN ADDITION, NOT A RESTRICTION. Search everything else exactly as you no
 WHERE SOURCES DISAGREE, one of these outranks an anonymous aggregator or a content farm, because somebody has actually looked at it.
 
 BUT THEY DO NOT OUTRANK A VENUE ON ITS OWN DETAILS. For anything current, a price, an opening hour, a departure time, the venue's or operator's own website is still the authority, exactly as stated above. A tourist board page beating an operator's own timetable is the specific error this rule exists to prevent.`;
+};
+
+// ── WHAT THE LIST COSTS ─────────────────────────────────────────────
+// "So it's a waste of money having it search through that." Every source rides
+// in on all seven research prompts of every draft, so the list has a running
+// cost and nothing was showing it. Rough words rather than a token count,
+// deliberately: an exact-looking estimate would be its own small lie.
+export const blockCost = (rows, type, ctx) => {
+  const block = sourceRulesBlock(rows, type, ctx);
+  if (!block) return { sources: 0, words: 0, perDraft: 0 };
+  const words = block.trim().split(/\s+/).length;
+  return { sources: sourcesFor(rows, type, ctx).length, words, perDraft: words * 7 };
 };
