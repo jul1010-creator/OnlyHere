@@ -75,6 +75,8 @@ writeFileSync(entry, `
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
+  export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
+  export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { stopKind, tripScaleLine, tripCharacter, bookingActions } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -3922,6 +3924,131 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     fetchJson: async () => ({ forecast: [{ date: D, temperature_c: 16.4, condition: "rain" }] }) });
   is("a stale deployed API still renders", legacy.temp, 16);
   is("no point, no badge", await dayWeather({ point: null, date: D, daysOut: 1, fetchJson: canned }), null);
+}
+
+
+// ── "GIVE THE SEARCHING A PRIORITY" ────────────────────────────────
+{
+  const { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, PARTS, fold } = M;
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // Real coordinates, so the parts are decided the same way the site decides
+  // them rather than by a string I chose to make the test pass.
+  const cph = { __lat: 55.6761, __lon: 12.5683 };   // Copenhagen
+  const aar = { __lat: 56.1629, __lon: 10.2039 };   // Aarhus
+  const rows = [cph, cph, cph, cph, aar].map(payload => ({ payload }));
+
+  const counts = coverageByPart(rows);
+  ok("every part is counted, including the empty ones", PARTS.every(p => p in counts));
+  ok("the heavy part is heavy", Math.max(...Object.values(counts)) === 4);
+  const summary = coverageSummary(rows);
+  is("the total is the rows placed", summary.total, 5);
+  ok("the lopsidedness is reported as a share", summary.heaviestShare > 0.5);
+  ok("and empty parts are named", summary.empty.length > 0);
+  is("no rows at all is null, not a fake summary", coverageSummary([]), null);
+
+  // THE PRIORITY IS DERIVED, NOT TYPED. A hand-written list of islands to
+  // prioritise would be one more curated field to keep true, which is the
+  // exact thing Rudkobing taught.
+  const thin = thinnestParts(rows, 3);
+  is("three parts are offered", thin.length, 3);
+  ok("the part with the most content is not one of them", !thin.includes(summary.heaviest));
+  // Stable between calls, or the framing reshuffles on every render.
+  is("ties keep a fixed order", thinnestParts(rows, 3), thinnestParts(rows, 3));
+
+  const framing = discoveryFraming(rows, { typeLabel: "towns" });
+  // ── THE DANISH INSTRUCTION IS THE WHOLE POINT ───────────────────
+  // English writing about Denmark is the tourist canon, ranked by how many
+  // people already read it, which is the opposite of what this guide is for.
+  ok("it demands Danish queries", /SEARCH IN DANISH/.test(framing));
+  ok("and says how many", /three of the five/i.test(framing));
+  // A model told merely to "use Danish" writes English sentences with Danish
+  // place names in them, which reaches the same English internet.
+  ok("it forbids the English-sentence-with-Danish-names trap", /not an English sentence with Danish place names/.test(framing));
+  ok("it gives real Danish phrasings to use", /skjulte perler/.test(framing) && /seværdigheder/.test(framing));
+  ok("and insists on the real Danish letters", /Ærø is Ærø and not Aero/.test(framing));
+
+  ok("the computed gap reaches the prompt", /COVERAGE GAP, COMPUTED/.test(framing));
+  ok("the thin parts are named in it", thin.some(p => framing.includes(p)));
+  ok("and Copenhagen is explicitly deprioritised", /Do not aim any query at Copenhagen/.test(framing));
+  // Famous is a disqualifier here, which is the brand stated as an instruction.
+  ok("fame counts against a candidate", /FAMOUS IS A DISQUALIFIER/.test(framing));
+  ok("the type is named so the framing is not generic", /towns/.test(framing));
+
+  // It has to survive a cold start, when nothing is published at all.
+  const empty = discoveryFraming([], { typeLabel: "towns" });
+  ok("an empty database still gets the Danish instruction", /SEARCH IN DANISH/.test(empty));
+
+  ok("the framing reaches the query planner", /\$\{discoverAim\}/.test(appSrc));
+  ok("computed from published rows, not a typed list", /framingForTarget\(discoverTarget, manageItems \|\| \[\]/.test(appSrc));
+
+  // Copenhagen and Kobenhavn are one place and were being offered twice.
+  // Folding gives "kobenhavn" and "copenhagen": two different strings, neither
+  // containing the other. A folded compare cannot know they are one city, and
+  // this assertion failed that way on its first run. samePlaceName knows.
+  ok("published under its Danish name is caught", isAlreadyCovered("København", ["Copenhagen"]));
+  ok("and the other way round", isAlreadyCovered("Copenhagen", ["København"]));
+  ok("a longer form of a published name is caught", isAlreadyCovered("Reffen Street Food", ["Reffen"]));
+  ok("something genuinely new is not", !isAlreadyCovered("Rudkøbing", ["Copenhagen", "Aarhus"]));
+  ok("an empty name is not covered", !isAlreadyCovered("", ["Copenhagen"]));
+}
+
+
+// ── "GIVE ME OPTIONS" ──────────────────────────────────────────────
+{
+  const { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget } = M;
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // Targeting has its OWN vocabulary. geography's five parts answer "which
+  // landmass is this coordinate on", which is right for that and far too
+  // coarse to aim a search: "Jutland" is a third of the country.
+  ok("the regions he named are all offered", ["north-jutland", "central-jutland", "south-jutland", "north-zealand", "funen", "small-islands"]
+    .every(id => DISCOVERY_TARGETS.some(t => t.id === id)));
+  ok("an unknown id falls back rather than throwing", targetById("nonsense").id === "anywhere");
+  // EVERY TARGET CARRIES ITS DANISH NAME, and that is load-bearing now the
+  // queries are Danish: a Dane does not write about "South Jutland".
+  ok("every real target has a Danish name", DISCOVERY_TARGETS.filter(t => t.id !== "anywhere").every(t => !!t.danish));
+  ok("and Sonderjylland is the one used", targetById("south-jutland").danish === "Sønderjylland");
+
+  const rows = [
+    { payload: { __lat: 57.44, __lon: 10.54 } },  // Skagen, north Jutland
+    { payload: { __lat: 55.47, __lon: 8.45 } },   // Esbjerg, south Jutland
+    { payload: { __lat: 55.86, __lon: 12.50 } },  // north Zealand
+  ];
+  const counts = coverageByTarget(rows);
+  is("north Jutland has its one", counts["north-jutland"], 1);
+  is("south Jutland has its one", counts["south-jutland"], 1);
+  is("north Zealand has its one", counts["north-zealand"], 1);
+  is("central Jutland is empty and says so", counts["central-jutland"], 0);
+  // AN ISLAND IS NOT A LATITUDE BAND. A count that is quietly false is worse
+  // than no count, so this one refuses rather than guessing.
+  is("the small islands report no count rather than a wrong one", counts["small-islands"], null);
+
+  // A chosen region replaces the computed gap and keeps every other rule.
+  const f = framingForTarget("south-jutland", rows, { typeLabel: "towns" });
+  ok("the region is named", /SEARCH THIS REGION: South Jutland/.test(f));
+  ok("with its Danish name to search under", /Sønderjylland/.test(f));
+  ok("the Danish rule survives the override", /SEARCH IN DANISH/i.test(f));
+  ok("and so does famous-is-a-disqualifier", /FAMOUS IS A DISQUALIFIER/.test(f));
+  ok("the computed gap is replaced, not stacked", !/COVERAGE GAP, COMPUTED/.test(f));
+  // The Copenhagen problem one level down: search "Jutland" and get Aarhus
+  // every time.
+  ok("the regional big city is capped too", /do not let them absorb more than one/.test(f));
+
+  // "hell, make me able to search for town-specific events perhaps"
+  const t = framingForTarget("anywhere", rows, { typeLabel: "events", town: "Ærøskøbing" });
+  ok("a named town takes over every query", /SEARCH THIS PLACE AND ONLY THIS PLACE: Ærøskøbing/.test(t));
+  ok("and is not silently swapped for a bigger neighbour", /do not substitute a better known place nearby/.test(t));
+  ok("a town beats a region when both are set", !/SEARCH THIS REGION/.test(framingForTarget("funen", rows, { town: "Odense" })));
+  ok("blank town is not a town", !/ONLY THIS PLACE/.test(framingForTarget("funen", rows, { town: "   " })));
+
+  // Anywhere leaves the computed priority in charge.
+  ok("anywhere keeps the computed gap", /COVERAGE GAP, COMPUTED/.test(framingForTarget("anywhere", rows, { typeLabel: "towns" })));
+  ok("the small islands get their own framing", /SEARCH THE SMALL DANISH ISLANDS/.test(framingForTarget("small-islands", rows, {})));
+
+  ok("the picker is wired to the search", /framingForTarget\(discoverTarget/.test(appSrc));
+  ok("and the town box reaches it", /town: discoverTown/.test(appSrc));
+  ok("picking a town clears the region chip", /setDiscoverTarget\(opt\.id\); setDiscoverTown\(""\)/.test(appSrc));
 }
 
 rmSync(dir, { recursive: true, force: true });

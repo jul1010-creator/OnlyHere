@@ -12,6 +12,7 @@ import { nightlifeTowns } from "./data/nightlifeTowns";
 import { isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
+import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById } from "./utils/discovery";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -770,6 +771,12 @@ function GemlyxApp() {
   // Every one of the 31 published towns carries a STORED placeKind, written once
   // by whatever drafted it, and until now the only way to change one was to
   // redraft the whole entry and hope the new draft guessed differently.
+  // ── "GIVE ME OPTIONS" ─────────────────────────────────────────────
+  // Oliver, 9 Aug 2026. The computed gap aims the search on its own; this is
+  // the override, for when he knows something the coverage numbers do not.
+  // A named town beats a region, because he only types one when he has a lead.
+  const [discoverTarget, setDiscoverTarget] = useState("anywhere");
+  const [discoverTown, setDiscoverTown] = useState("");
   const [placeEditId, setPlaceEditId] = useState(null);
   const [placeDraft, setPlaceDraft] = useState({ placeKind: "", partOf: "", dayTripFrom: "" });
   const [placeSaving, setPlaceSaving] = useState(false);
@@ -3097,6 +3104,15 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     try {
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
       const typeLabel = DISCOVER_TYPE_LABEL[type] || "places in Denmark";
+      // ── "GIVE THE SEARCHING A PRIORITY" ──────────────────────
+      // Oliver, 9 Aug 2026. The planner was told what to avoid and nothing
+      // about where to aim, so every search competed on the ground the
+      // existing content already covers. Two additions, both computed from
+      // his own published rows rather than typed by anyone: which parts of
+      // the country are thinnest, and the instruction to search in Danish,
+      // which is what actually reaches past the tourist canon. See
+      // utils/discovery.js.
+      const discoverAim = framingForTarget(discoverTarget, manageItems || [], { typeLabel, town: discoverTown });
 
       // BUG FIX: this was capped at 500 and, on a plain failure, threw immediately
       // with no retry — the same "Empty response from OpenAI" cause as Stage 1's
@@ -3107,7 +3123,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // in generateArea(), instead of a single try dying on one flaky response.
       const planResult = await withRetry(
         () => askOpenAI(
-          `You're helping a Danish travel guide find genuinely new candidates to research next: ${typeLabel}. Generate 5 diverse, SPECIFIC search queries (not generic categories) that would actually surface real, named candidates — vary the angle: one aimed at forum/Reddit-style discussion, one at "hidden gem" or "underrated" roundup articles, one at local/regional tourism sources, one at recent listings, one broad. ${extraFraming || ""}Respond with ONLY a JSON array of 5 search query strings, nothing else.`,
+          `You're helping a Danish travel guide find genuinely new candidates to research next: ${typeLabel}. Generate 5 diverse, SPECIFIC search queries (not generic categories) that would actually surface real, named candidates — vary the angle: one aimed at forum/Reddit-style discussion, one at "hidden gem" or "underrated" roundup articles, one at local/regional tourism sources, one at recent listings, one broad. ${extraFraming || ""}\n\n${discoverAim}\n\nRespond with ONLY a JSON array of 5 search query strings, nothing else.`,
           1400
         ),
         r => !!r.error,
@@ -7357,6 +7373,51 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         </div>
                       </div>
                     )}
+
+                    {/* ── WHERE TO AIM ─────────────────────────────
+                        Oliver, 9 Aug 2026: "Give me options.. South Jutland,
+                        North Jutland, Central Jutland, Odense, North Zealand,
+                        Islands, etc." The count on each chip is the point: the
+                        choice gets made against a real number rather than a
+                        hunch about which part feels thin. See
+                        utils/discovery.js for why targeting has its own list
+                        instead of reusing geography's five parts. */}
+                    {(() => {
+                      const counts = coverageByTarget(manageItems || []);
+                      const t = targetById(discoverTarget);
+                      return (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 7 }}>Where to look</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                            {DISCOVERY_TARGETS.map(opt => {
+                              const on = discoverTarget === opt.id && !discoverTown.trim();
+                              const n = counts[opt.id];
+                              return (
+                                <button key={opt.id} onClick={() => { setDiscoverTarget(opt.id); setDiscoverTown(""); }}
+                                  title={opt.hint}
+                                  style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                  {opt.label}
+                                  {/* null means this one cannot be counted honestly.
+                                      An island is not a latitude band, and a count
+                                      that is quietly false is worse than none. */}
+                                  {typeof n === "number" && (
+                                    <span style={{ color: on ? "#0A0F1E99" : n === 0 ? "#FFB347" : C.muted, fontWeight: 700 }}> {n}</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <input value={discoverTown} onChange={e => setDiscoverTown(e.target.value)}
+                            placeholder="Or one specific town, e.g. Odense, Ærøskøbing, Tønder"
+                            style={{ width: "100%", background: C.bg, border: `1px solid ${discoverTown.trim() ? C.gold : C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+                            {discoverTown.trim()
+                              ? `Every query will name ${discoverTown.trim()}, in Danish too. Works for events as well as places.`
+                              : t.hint}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* ── DISCOVER — Tavily + OpenAI find new candidates for whichever type is
                         selected above; a dedicated Events shortcut sits next to it since Oliver
