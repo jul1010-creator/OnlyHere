@@ -60,7 +60,9 @@ import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cle
 import { otherNameFor } from "./utils/danishNames";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
-import { supabaseFailure, studioErrorMessage, EXPIRED, MISSING } from "./utils/studioErrors";
+import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
+import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
+import { eventDateIssues, nextEditionYear } from "./utils/eventDates";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -75,7 +77,7 @@ import { getSession, getStoredSession, captureRedirectSession, signOut as authSi
 import { fetchCloudSaves, pushCloudSaves, mergeSaves } from "./utils/userSaves";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
-import { placeKindOf, kindLabel, isArea } from "./utils/placeKind";
+import { placeKindOf, kindLabel, isArea, PLACE_KINDS, KIND_LABEL } from "./utils/placeKind";
 
 import "leaflet/dist/leaflet.css";
 
@@ -250,6 +252,24 @@ WHERE A DANISH PAGE AND AN ENGLISH ONE DISAGREE about a Danish place, the Danish
 
 WRITE THE ANSWER IN ENGLISH. Reading Danish is the job here; the guide is in English. When you quote a Danish name, keep it as it is written rather than translating it into something a visitor would not find on a sign.`;
 
+// ── "IT'S FOR JUNE 2026" ───────────────────────────────────────────
+// Oliver, 9 Aug 2026, having drafted Copenhell in August and got the edition
+// that finished eight weeks ago.
+//
+// Nothing lied. In August, the most findable dates for any June festival are
+// June's: they are what the official site still shows, what the news covered,
+// and what every aggregator ranked. The research asked for "the dates", and got
+// the truest, most recent, most useless answer available.
+const NEXT_EDITION_RULES = `RECURRING EVENTS: FIND THE NEXT EDITION, NOT THE LAST ONE. This is the single most common way an event entry ends up correct and worthless. Most Danish festivals run annually, and for most of the year the edition that is easiest to find is the one that has already happened: the official site is still showing it, the news wrote about it, and the aggregators rank it. Those dates are real. They are also of no use to anybody planning a trip.
+
+Work out which edition a reader needs before you report a date. If today is after this year's edition, the reader needs NEXT year's, and that is the one to look for.
+
+IF NEXT YEAR'S DATES ARE NOT ANNOUNCED YET, SAY THAT PLAINLY. It is the normal state for most of the year and it is a real, useful answer: "the 2027 dates are not announced yet, the 2026 edition ran 17 to 20 June" tells a reader exactly what to do. Reporting the 2026 dates on their own, with no year and no note, does not, because it reads as the answer to a question about the future.
+
+NEVER carry a year forward by arithmetic. A festival that ran the third weekend of June this year has not announced next year's dates just because you can guess them, and a guessed date on a ticketed event sends somebody to a checkout that does not exist. If the operator has not published it, it is not a date.
+
+WHERE THE NEXT DATES LIVE, when the front page is still showing the last edition: the ticket shop often lists the new one first, and the festival's own newsletter signup, "next year", "kommende", or a year in the URL are all faster than the homepage.`;
+
 const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's actually like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would actually know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before 2025 should be treated as stale, not current.
 
 ${BOOKING_PLATFORM_RULES}
@@ -257,6 +277,8 @@ ${BOOKING_PLATFORM_RULES}
 ${TICKET_SOURCE_RULES}
 
 ${MEASURED_JOURNEY_RULES}
+
+${NEXT_EDITION_RULES}
 
 ${DANISH_LANGUAGE_RULES}
 
@@ -721,6 +743,47 @@ function GemlyxApp() {
   // Gemlyx editorial documents. Output is paste-ready code the founder verifies
   // before committing, keeping "never invented content" true.
   const isStudio = typeof window !== "undefined" && window.location.hash === "#studio";
+  // ── "I WANNA BE ABLE TO CHANGE THIS MANUALLY" ─────────────────────
+  // Oliver, 9 Aug 2026, on Hellerup filed as an area and Dragør as a village.
+  // Every one of the 31 published towns carries a STORED placeKind, written once
+  // by whatever drafted it, and until now the only way to change one was to
+  // redraft the whole entry and hope the new draft guessed differently.
+  const [placeEditId, setPlaceEditId] = useState(null);
+  const [placeDraft, setPlaceDraft] = useState({ placeKind: "", partOf: "", dayTripFrom: "" });
+  const [placeSaving, setPlaceSaving] = useState(false);
+  const [placeError, setPlaceError] = useState(null);
+
+  const openPlaceEdit = (row) => {
+    const pl = row.payload || {};
+    setPlaceEditId(v => v === row.id ? null : row.id);
+    setPlaceDraft({ placeKind: cleanPlaceKind(pl.placeKind), partOf: String(pl.partOf || ""), dayTripFrom: String(pl.dayTripFrom || "") });
+    setPlaceError(null);
+  };
+
+  // PATCHES THE THREE FIELDS, NOT THE PAYLOAD. Sending the whole object back
+  // would overwrite anything a background job wrote between load and save, and
+  // this panel holds a copy that is already seconds old the moment it opens.
+  const savePlaceEdit = async (row) => {
+    const patch = placePatch(row.payload || {}, placeDraft);
+    if (!Object.keys(patch).length) { setPlaceEditId(null); return; }
+    setPlaceSaving(true); setPlaceError(null);
+    try {
+      const merged = { ...(row.payload || {}), ...patch };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
+        method: "PATCH",
+        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ payload: merged }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setPlaceError(studioErrorMessage("this entry", res.status, body)); setPlaceSaving(false); return; }
+      setManageItems(prev => (prev || []).map(r => r.id === row.id ? { ...r, payload: merged } : r));
+      setPlaceEditId(null);
+      setToast(`Saved. ${merged.name} is now a ${cleanPlaceKind(merged.placeKind) || "town"}. Visitors see it on their next load.`);
+      setTimeout(() => setToast(null), 3500);
+    } catch (e) { setPlaceError(String(e.message || e)); }
+    setPlaceSaving(false);
+  };
+
   const [studioSession, setStudioSession] = useState(() => {
     try { return JSON.parse(localStorage.getItem("gemlyx_studio_session") || "null"); } catch { return null; }
   });
@@ -2636,6 +2699,41 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
   // the ONLY state allowed to print SQL, "error" is everything else naming
   // itself. Exported through the component so the test can find it by name.
   const researchStatusFor = supabaseFailure;
+
+  // ── "I HAVE LOGGED OUT AND IN" ────────────────────────────────────
+  // Oliver, 9 Aug 2026, after doing exactly what the banner told him.
+  //
+  // The banner was reporting a verdict without the evidence: my expired branch
+  // printed advice and swallowed researchMemory.detail, so the one number that
+  // would settle it, the HTTP status, was on screen nowhere. Three passes have
+  // now been spent guessing at this table from the outside.
+  //
+  // So the panel can run the actual query and print exactly what came back.
+  // Not a verdict, the raw status and the PostgREST code, which is the thing
+  // that has been missing every single time.
+  const [researchProbe, setResearchProbe] = useState(null);
+  const checkResearchTable = async () => {
+    setResearchProbe({ state: "checking" });
+    let headers;
+    try { headers = studioAuth(); }
+    catch (e) { setResearchProbe({ state: "done", line: `No Studio token at all. ${String(e.message || e)}` }); return; }
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?select=name,type,created_at&limit=3`, { headers });
+      const body = await res.json().catch(() => null);
+      const code = body && typeof body === "object" && !Array.isArray(body) ? String(body.code || "") : "";
+      const msg = body && typeof body === "object" && !Array.isArray(body) ? String(body.message || "") : "";
+      if (res.ok && Array.isArray(body)) {
+        ui(setResearchMemory, { status: "ok" });
+        setResearchProbe({ state: "done", ok: true, line: `HTTP 200. The table is readable and holds ${body.length === 3 ? "3 or more" : body.length} remembered ${body.length === 1 ? "entry" : "entries"}. Nothing to fix.` });
+        return;
+      }
+      const kind = supabaseFailure(res.status, body);
+      ui(setResearchMemory, { status: kind, detail: `HTTP ${res.status}${code ? ` ${code}` : ""}` });
+      setResearchProbe({ state: "done", line: `HTTP ${res.status}${code ? ` · ${code}` : ""}${msg ? ` · ${msg.slice(0, 140)}` : ""}` });
+    } catch (e) {
+      setResearchProbe({ state: "done", line: `The request never completed: ${String(e.message || e).slice(0, 140)}` });
+    }
+  };
 
   // All three panels classify in ONE place now (utils/studioErrors.js), so no
   // call site gets to hold its own opinion about what a 401 means. That opinion
@@ -6594,6 +6692,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     style={{ background: mediaEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                     🖼 Media
                                   </button>
+                                  {row.type === "town" && (
+                                    <button onClick={() => openPlaceEdit(row)}
+                                      style={{ background: placeEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                      📍 Kind
+                                    </button>
+                                  )}
                                   <button onClick={() => editItem(row)}
                                     style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                     ✏️ Edit
@@ -6604,6 +6708,88 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   </button>
                                 </div>
                               </div>
+                              {/* ── WHAT KIND OF PLACE IS THIS ──────────────
+                                  Three fields, because they are three separate
+                                  claims: what it IS, what it is INSIDE, and
+                                  where you would sleep. See utils/placeKind.js
+                                  for why one field could never hold all three,
+                                  and utils/placeEdit.js for what counts as a
+                                  contradiction. */}
+                              {placeEditId === row.id && (() => {
+                                const pl = row.payload || {};
+                                const preview = { name: pl.name, ...placeDraft };
+                                const issuesNow = placeIssues(pl);
+                                const issuesNext = placeIssues(preview);
+                                const dupes = duplicateNames(manageItems || []).find(list => list.some(r => r.id === row.id));
+                                const fld = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", width: "100%" };
+                                return (
+                                  <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", marginBottom: 10 }}>
+                                    {/* THE SAME PLACE PUBLISHED TWICE is worth
+                                        saying here, loudly: liveContent keeps
+                                        whichever row comes first, so editing the
+                                        other one looks exactly like editing not
+                                        working. Found in his own data: Dragør as
+                                        rows 50 and 72, Samsø as 24 and 79. */}
+                                    {dupes && dupes.length > 1 && (
+                                      <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginBottom: 10 }}>
+                                        <b>{pl.name} is published {dupes.length} times</b> (rows {dupes.map(r => r.id).join(", ")}). Visitors only ever see row {Math.min(...dupes.map(r => Number(r.id)))}, so an edit to any of the others changes nothing on the site. Delete the spares.
+                                      </div>
+                                    )}
+
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                                      <div>
+                                        <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>What it is</div>
+                                        <select value={placeDraft.placeKind} onChange={e => setPlaceDraft(d => ({ ...d, placeKind: e.target.value }))} style={{ ...fld, cursor: "pointer" }}>
+                                          <option value="">Not set (shown as a town)</option>
+                                          {PLACE_KINDS.map(k => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Inside</div>
+                                        <input value={placeDraft.partOf} onChange={e => setPlaceDraft(d => ({ ...d, partOf: e.target.value }))}
+                                          placeholder="e.g. Copenhagen" style={fld} />
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 5 }}>Sleep in</div>
+                                        <input value={placeDraft.dayTripFrom} onChange={e => setPlaceDraft(d => ({ ...d, dayTripFrom: e.target.value }))}
+                                          placeholder="e.g. Copenhagen" style={fld} />
+                                      </div>
+                                    </div>
+
+                                    <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.55 }}>
+                                      <b>Inside</b> is for somewhere that is part of a bigger place, like a district or a canal. It collapses on a route, so Copenhagen and one of its districts count as one stop. <b>Sleep in</b> is for somewhere that is genuinely its own place but has no beds, so a route counts it separately. Most towns need neither.
+                                    </div>
+
+                                    {/* The checks run on what the fields say NOW,
+                                        so a contradiction disappears as it is
+                                        fixed rather than after a save. */}
+                                    {(issuesNext.length > 0 || issuesNow.length > 0) && (
+                                      <div style={{ marginTop: 10 }}>
+                                        {issuesNext.map((msg, i) => (
+                                          <div key={i} style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.55, marginTop: 3 }}>⚠ {msg}</div>
+                                        ))}
+                                        {issuesNext.length === 0 && (
+                                          <div style={{ fontSize: 11, color: "#6ECF97", lineHeight: 1.55 }}>✓ Nothing contradicts itself now. Save to apply.</div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {placeError && <div style={{ fontSize: 11, color: "#E57373", marginTop: 8 }}>{placeError}</div>}
+
+                                    <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
+                                      <button onClick={() => savePlaceEdit(row)} disabled={placeSaving || !hasPlaceChange(pl, placeDraft)}
+                                        style={{ background: hasPlaceChange(pl, placeDraft) ? C.gold : C.surface, border: "none", color: hasPlaceChange(pl, placeDraft) ? "#0A0F1E" : C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: hasPlaceChange(pl, placeDraft) ? "pointer" : "default" }}>
+                                        {placeSaving ? "Saving…" : hasPlaceChange(pl, placeDraft) ? "Save" : "No change"}
+                                      </button>
+                                      <button onClick={() => setPlaceEditId(null)}
+                                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
                               {/* MEDIA EDITOR — see the uploadMediaFiles comment block for the
                                   why and the one-time bucket setup. Everything saves into the
                                   row's payload, so it's live for visitors on their next load. */}
@@ -7463,6 +7649,27 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5 }}>{studioIdentityWarning}</div>
                           </div>
                         )}
+                        {/* ── A DATE THAT HAS ALREADY PASSED ──────────
+                            The entry is not wrong, it is INVISIBLE: every
+                            events grid runs isUpcoming, so a past date
+                            publishes cleanly and no visitor ever sees it. That
+                            is the surprising half and the reason this is a
+                            blocking-looking warning rather than a note. */}
+                        {studioType === "festival" && (() => {
+                          const issues = eventDateIssues(studioDraft, new Date());
+                          if (!issues.length) return null;
+                          return (
+                            <div style={{ background: "#E23B4E22", border: "2px solid #E23B4E", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: "#E57373", letterSpacing: 0.5, marginBottom: 5 }}>📅 THIS DATE WILL NOT SHOW ON THE SITE</div>
+                              {issues.map((msg, i) => (
+                                <div key={i} style={{ fontSize: 12, color: C.light, lineHeight: 1.55, marginTop: i ? 5 : 0 }}>{msg}</div>
+                              ))}
+                              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginTop: 8 }}>
+                                Fix the dates in the draft below before publishing, or redraft asking for the {nextEditionYear(studioDraft?.date || studioDraft?.dateStart, new Date()) || "next"} edition. If those dates are not announced yet, that is worth saying in the entry rather than publishing the old ones.
+                              </div>
+                            </div>
+                          );
+                        })()}
                         {studioInventedWarning && (
                           <div style={{ background: "#FFB34722", border: "2px solid #FFB347", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
                             <div style={{ fontSize: 11, fontWeight: 700, color: "#FFB347", letterSpacing: 0.5, marginBottom: 4 }}>⚠️ POSSIBLY INVENTED — GEMINI COMPARED THIS DRAFT AGAINST ITS OWN RESEARCH</div>
@@ -7705,7 +7912,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           {researchMemory && researchMemory.status !== "ok" && (
                             <div style={{ background: "#FFB34714", border: "1px solid #FFB34755", borderRadius: 8, padding: "9px 11px", marginBottom: 8, fontSize: 11, color: C.light, lineHeight: 1.6 }}>
                               {researchMemory.status === EXPIRED ? (
-                                <><b style={{ color: "#FFB347" }}>Your Studio login has expired.</b> Log out and back in. Nothing is wrong with the table and there is no SQL to run.</>
+                                <><b style={{ color: "#FFB347" }}>Your Studio login has expired</b> ({researchMemory.detail}). Log out and back in. Nothing is wrong with the table and there is no SQL to run.</>
+                              ) : researchMemory.status === REFUSED ? (
+                                /* A FRESH LOGIN CANNOT FIX A 403, and telling him
+                                   to try one sends him round a loop that never
+                                   terminates. The token was accepted; a policy
+                                   said no. */
+                                <><b style={{ color: "#FFB347" }}>Logged in, but the database refused the request</b> ({researchMemory.detail}). This is a row level security policy on gemlyx_research, not your login, so logging in again will not change it. The policy the table needs is <code style={{ fontFamily: "monospace" }}>for all to authenticated</code>.</>
                               ) : researchMemory.status === MISSING ? (
                                 <>
                                   <b style={{ color: "#FFB347" }}>The gemlyx_research table does not exist yet</b> ({researchMemory.detail}). Drafts are not remembering their sources, so a redraft starts from scratch every time. Run this once in the Supabase SQL editor:
@@ -7714,6 +7927,19 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               ) : (
                                 <><b style={{ color: "#FFB347" }}>Research memory could not be read</b> ({researchMemory.detail}). Drafts still work, they just start from scratch. This is not a missing table, so there is no SQL to run.</>
                               )}
+                              {/* THE EVIDENCE, ON DEMAND. Every pass on this table
+                                  so far has been a guess made from outside it. */}
+                              <div style={{ marginTop: 9 }}>
+                                <button onClick={checkResearchTable}
+                                  style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                  {researchProbe?.state === "checking" ? "Checking…" : "Check the table now"}
+                                </button>
+                                {researchProbe?.state === "done" && (
+                                  <div style={{ fontSize: 10.5, color: researchProbe.ok ? "#6ECF97" : C.light, marginTop: 7, fontFamily: "monospace", wordBreak: "break-word" }}>
+                                    {researchProbe.line}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                           {/* Name the sources yourself when you already know

@@ -45,7 +45,9 @@ writeFileSync(entry, `
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
-  export { supabaseFailure, studioErrorMessage, EXPIRED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
+  export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
+  export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
+  export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -2337,7 +2339,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a missing relation is the only thing that offers SQL", M.studioErrorMessage("the facts", 404, { code: "PGRST205" }), "MISSING_TABLE");
   ok("a 401 never offers SQL", M.studioErrorMessage("the facts", 401, { code: "PGRST301" }) !== "MISSING_TABLE");
   ok("nor does a 403", M.studioErrorMessage("the facts", 403, null) !== "MISSING_TABLE");
-  is("401 and 403 are recognised as auth, not schema", [M.supabaseFailure(401, null), M.supabaseFailure(403, null)], [M.EXPIRED, M.EXPIRED]);
+  is("401 and 403 are both auth rather than schema, and are told apart", [M.supabaseFailure(401, null), M.supabaseFailure(403, null)], [M.EXPIRED, M.REFUSED]);
   ok("and anything else reports its own status rather than guessing",
      /Could not read the facts \(500\)/.test(M.studioErrorMessage("the facts", 500, null)));
   // THE OBLIGATION THAT REPLACES REMEMBERING. A helper nobody has to call is a
@@ -2492,6 +2494,143 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
 }
 
+// ── "IT'S FOR JUNE 2026" ────────────────────────────────────────
+// Oliver, 9 Aug 2026, having drafted Copenhell in August and got the edition
+// that finished eight weeks earlier. Nothing lied: in August, the most findable
+// dates for a June festival are June's. The entry is correct and INVISIBLE,
+// because every events grid shows upcoming events only.
+{
+  const AUG = new Date(2026, 7, 9);   // the day he asked
+
+  is("a real date parses", M.parseEventDate("2026-06-17")?.getFullYear(), 2026);
+  is("and a written one", M.parseEventDate("17 June 2026")?.getFullYear(), 2026);
+  // NULL RATHER THAN A GUESS: an unparseable date must not be treated as past
+  // OR future, because both are decisions it has no basis for.
+  ok("nonsense is null, never a guess", M.parseEventDate("summer sometime") === null);
+  ok("and an unreadable date is not called past", !M.isPastDate("summer sometime", AUG));
+
+  ok("June is past in August", M.isPastDate("2026-06-20", AUG));
+  ok("September is not", !M.isPastDate("2026-09-01", AUG));
+  // Today counts as upcoming. An event happening tonight is not over.
+  ok("today is not past", !M.isPastDate("2026-08-09", AUG));
+
+  // THE COPENHELL CASE, exactly.
+  const copenhell = { name: "Copenhell", date: "2026-06-17", dateEnd: "2026-06-20" };
+  const issues = M.eventDateIssues(copenhell, AUG);
+  ok("a finished edition is flagged", issues.some(m => /already finished/i.test(m)));
+  // The surprising half, and the reason this is worth a warning: it is not
+  // wrong, it is unreachable.
+  ok("and the reason given is that nobody can see it", issues.some(m => /INVISIBLE/.test(m)));
+  is("with the year a reader would actually want", M.nextEditionYear("2026-06-17", AUG), 2027);
+  is("nothing wrong with a future edition", M.eventDateIssues({ date: "2027-06-16", dateEnd: "2027-06-19" }, AUG), []);
+
+  // A MULTI-DAY FESTIVAL IS OVER WHEN IT ENDS, not when it starts. Reading the
+  // start date alone would call a festival running right now "finished".
+  is("a festival happening across today is not finished",
+     M.eventDateIssues({ date: "2026-08-07", dateEnd: "2026-08-11" }, AUG), []);
+  ok("no date at all is its own problem", M.eventDateIssues({}, AUG).some(m => /never appears/i.test(m)));
+  ok("an end before the start is caught", M.eventDateIssues({ date: "2026-09-10", dateEnd: "2026-09-02" }, AUG).some(m => /before the start/i.test(m)));
+
+  is("already published rows that have run out are countable",
+     M.staleEvents([
+       { payload: { date: "2026-06-17", dateEnd: "2026-06-20" } },
+       { payload: { date: "2026-09-01" } },
+       { payload: { date: "2026-08-07", dateEnd: "2026-08-11" } },
+       { payload: {} },
+     ], AUG).length, 1);
+
+  const app12 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // THE PROMPT HALF. A guard that only catches it after the draft still costs a
+  // full research pass every time.
+  ok("research is told to find the next edition", /const NEXT_EDITION_RULES = /.test(app12));
+  ok("and it carries in the standing rules", /\$\{NEXT_EDITION_RULES\}/.test(app12));
+  // The honest answer when next year is not announced, which in August is the
+  // normal case, is to say so rather than to publish last year's.
+  ok("not announced yet is a real answer", /IF NEXT YEAR'S DATES ARE NOT ANNOUNCED YET, SAY THAT PLAINLY/.test(app12));
+  // A guessed date on a ticketed event sends somebody to a checkout that does
+  // not exist.
+  ok("and a year is never carried forward by arithmetic", /NEVER carry a year forward by arithmetic/.test(app12));
+  ok("the draft panel refuses to let it pass quietly", /THIS DATE WILL NOT SHOW ON THE SITE/.test(app12));
+  ok("and only for events", /studioType === "festival" && \(\(\) => \{\n\s+const issues = eventDateIssues/.test(app12));
+}
+
+// ── "HELLERUP AN AREA? AND DRAGØR A VILLAGE?" ───────────────────
+// Oliver, 9 Aug 2026: "I wanna be able to change this manually." All 31
+// published towns carry a STORED placeKind, so these are judgements a model made
+// once at draft time that then became permanent.
+{
+  is("a real kind is kept", M.cleanPlaceKind("Village"), "village");
+  is("anything else is not invented into one", M.cleanPlaceKind("hamlet"), "");
+  is("and blank means not set", M.cleanPlaceKind(""), "");
+
+  // A RELATION FIELD HOLDS A NAME. His live data has a Dragør row storing
+  // dayTripFrom "Day trip from Copenhagen": the field IS that phrase, so the
+  // value is the half that is left.
+  is("the phrase the field already means is stripped", M.cleanRelation("Day trip from Copenhagen"), "Copenhagen");
+  is("with a hyphen too", M.cleanRelation("Day-trip from Aarhus"), "Aarhus");
+  is("and a leading preposition", M.cleanRelation("near Odense"), "Odense");
+  is("a plain name is untouched", M.cleanRelation("Copenhagen"), "Copenhagen");
+  is("a two word name survives", M.cleanRelation("Nykøbing Falster"), "Nykøbing Falster");
+  is("trailing punctuation goes", M.cleanRelation("Copenhagen."), "Copenhagen");
+  // REFUSED RATHER THAN STORED. A relation nothing can match is worse than an
+  // empty one: empty renders nothing, wrong renders a link to a town that does
+  // not exist.
+  is("a sentence is refused", M.cleanRelation("It is a short bus ride from the centre of town"), "");
+  is("and so is anything with sentence punctuation", M.cleanRelation("Copenhagen; about 12 km"), "");
+  is("nothing in, nothing out", M.cleanRelation(""), "");
+
+  // ── AN AREA IS INSIDE SOMETHING, BY DEFINITION ─────────────────
+  // The Hellerup case exactly: area, no parent, so the card prints NO PARENT
+  // SET. It is the only kind that makes a claim about a second place.
+  const hellerup = { name: "Hellerup", placeKind: "area", partOf: "", dayTripFrom: "Copenhagen" };
+  ok("an area with no parent is flagged", M.placeIssues(hellerup).some(m => /nothing says what it is inside/i.test(m)));
+  is("giving it a parent settles it", M.placeIssues({ ...hellerup, partOf: "Gentofte", dayTripFrom: "" }), []);
+  // And the fix he would actually make: it is not an area at all.
+  is("calling it a town settles it too", M.placeIssues({ name: "Hellerup", placeKind: "town", partOf: "", dayTripFrom: "Copenhagen" }), []);
+
+  ok("no kind at all is called out", M.placeIssues({ name: "X" }).some(m => /No kind set/.test(m)));
+  ok("a city inside another place is a contradiction", M.placeIssues({ name: "X", placeKind: "city", partOf: "Copenhagen" }).some(m => /not a city/.test(m)));
+  ok("inside itself is caught", M.placeIssues({ name: "Aarhus", placeKind: "area", partOf: "Aarhus" }).some(m => /inside itself/.test(m)));
+  // Across languages, because the parent may be typed in either.
+  ok("inside itself in the other language too", M.placeIssues({ name: "København", placeKind: "area", partOf: "Copenhagen" }).some(m => /inside itself/.test(m)));
+  ok("a day trip from itself is caught", M.placeIssues({ name: "Odense", placeKind: "town", dayTripFrom: "Odense" }).some(m => /from itself/.test(m)));
+  ok("both a parent and a base is noise", M.placeIssues({ name: "X", placeKind: "area", partOf: "Copenhagen", dayTripFrom: "Roskilde" }).some(m => /day-trip base is noise/.test(m)));
+  ok("a sentence in the base is named with the value", M.placeIssues({ name: "Dragør", placeKind: "town", dayTripFrom: "Day trip from Copenhagen" }).some(m => /reads as a sentence/.test(m)));
+
+  // ── THE PATCH IS THREE FIELDS, NOT THE PAYLOAD ─────────────────
+  const row = { name: "Dragør", placeKind: "village", partOf: "", dayTripFrom: "Copenhagen", desc: "keep me" };
+  is("only what changed is sent", M.placePatch(row, { placeKind: "town", partOf: "", dayTripFrom: "Copenhagen" }), { placeKind: "town" });
+  is("nothing changed means nothing sent", M.placePatch(row, { placeKind: "village", partOf: "", dayTripFrom: "Copenhagen" }), {});
+  ok("and the button knows", !M.hasPlaceChange(row, { placeKind: "village", partOf: "", dayTripFrom: "Copenhagen" }));
+  ok("but knows when there is one", M.hasPlaceChange(row, { placeKind: "town", partOf: "", dayTripFrom: "Copenhagen" }));
+  // The sentence is cleaned on the way in, so saving fixes it rather than
+  // storing it a second time.
+  is("a sentence is cleaned by the patch", M.placePatch(row, { placeKind: "village", partOf: "", dayTripFrom: "Day trip from Copenhagen" }), {});
+  is("and a real change to it is stored clean", M.placePatch(row, { placeKind: "village", partOf: "", dayTripFrom: "Day trip from Aarhus" }), { dayTripFrom: "Aarhus" });
+
+  // ── THE SAME PLACE PUBLISHED TWICE ─────────────────────────────
+  // In his live data: Dragør as rows 50 and 72, Samsø as 24 and 79. liveContent
+  // keeps whichever comes first, so an edit to the other one changes nothing and
+  // looks exactly like editing being broken.
+  const rows = [
+    { id: 24, type: "town", payload: { name: "Samsø" } },
+    { id: 50, type: "town", payload: { name: "Dragør" } },
+    { id: 72, type: "town", payload: { name: "Dragør" } },
+    { id: 79, type: "town", payload: { name: "Samsø" } },
+    { id: 80, type: "town", payload: { name: "Odense" } },
+  ];
+  is("both duplicate pairs are found", M.duplicateNames(rows).length, 2);
+  is("and a place published once is not one", M.duplicateNames(rows).flat().some(r => r.id === 80), false);
+  is("a different type with the same name is not a duplicate",
+     M.duplicateNames([{ id: 1, type: "town", payload: { name: "Skagen" } }, { id: 2, type: "festival", payload: { name: "Skagen" } }]).length, 0);
+
+  const app11 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the editor exists on town rows", /row\.type === "town" && \(/.test(app11));
+  ok("it patches the three fields rather than the whole payload", /const patch = placePatch\(row\.payload \|\| \{\}, placeDraft\);/.test(app11));
+  ok("through the one auth helper", /savePlaceEdit[\s\S]{0,900}\.\.\.studioAuth\(\)/.test(app11));
+  ok("and warns when the row is one of several", /is published \{dupes\.length\} times/.test(app11));
+}
+
 // ── "1 SOURCE... WOULD INSTANTLY MAKE PEOPLE DELETE THE APP" ─────
 // Oliver, 9 Aug 2026, on the Distortion page: a panel promising primary
 // sourceS, plural, above a header reading "1 source".
@@ -2529,7 +2668,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app10 = readFileSync(join(root, "src/App.jsx"), "utf8");
   // A 401 is a login. Only PGRST205 and a real 404 mean the relation is absent.
   is("a bad token is a login problem", M.supabaseFailure(401, { code: "PGRST301" }), M.EXPIRED);
-  is("so is a 403 from RLS", M.supabaseFailure(403, null), M.EXPIRED);
+  is("but a 403 is the database refusing an accepted token", M.supabaseFailure(403, null), M.REFUSED);
   is("the JWT code decides on its own, whatever status arrives with it",
      M.supabaseFailure(400, { code: "PGRST301" }), M.EXPIRED);
   is("and PGRST302 the same way", M.supabaseFailure(200, { code: "PGRST302" }), M.EXPIRED);
@@ -2546,7 +2685,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the research panel classifies through the shared helper", /const researchStatusFor = supabaseFailure;/.test(app10));
   // Three states, three different sentences. The SQL block renders under exactly
   // one of them.
-  ok("an expired login says so and offers no SQL", /Your Studio login has expired\.<\/b> Log out and back in\. Nothing is wrong with the table and there is no SQL to run\./.test(app10));
+  ok("an expired login says so and offers no SQL", /Your Studio login has expired<\/b> \(\{researchMemory\.detail\}\)\. Log out and back in\./.test(app10));
+  // ── "I HAVE LOGGED OUT AND IN" ───────────────────────────────────
+  // 401 and 403 were one branch, so a request the database REFUSED told him to
+  // log in again, which cannot ever fix it. A fresh login is only advice for a
+  // 401.
+  is("a 403 is not an expired login", M.supabaseFailure(403, null), M.REFUSED);
+  is("nor is a Postgres permission denial", M.supabaseFailure(400, { code: "42501" }), M.REFUSED);
+  ok("and it is never told to log in again", !/log in again/i.test(M.studioErrorMessage("the facts", 403, null)));
+  ok("it is named as a policy instead", /row level security policy/i.test(M.studioErrorMessage("the facts", 403, null)));
+  ok("the panel has its own branch for it", /researchMemory\.status === REFUSED \?/.test(app10));
+  // THE EVIDENCE, which was missing from the branch most likely to need it: the
+  // expired message printed advice and swallowed the status code entirely.
+  is("every branch prints the status it saw", (app10.match(/\(\{researchMemory\.detail\}\)/g) || []).length, 4);
+  ok("and the panel can run the query itself", /const checkResearchTable = async \(\) => \{/.test(app10));
+  ok("reporting the raw status and code, not a verdict", /HTTP \$\{res\.status\}\$\{code \? ` · \$\{code\}` : ""\}/.test(app10));
   ok("a genuinely missing table is the only branch that shows SQL", /=== MISSING \? \([\s\S]{0,600}\{RESEARCH_SQL\}/.test(app10));
   is("and the SQL appears exactly once, in that branch", (app10.match(/\{RESEARCH_SQL\}/g) || []).length, 1);
   // Re-runnable, same lesson gemlyx_sources taught this morning: Supabase runs
