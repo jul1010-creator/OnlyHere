@@ -1,6 +1,6 @@
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow } from "../utils/helpers";
-import { relationLine, kindLabel, areasInside, dayTripsFrom } from "../utils/placeKind";
+import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
 import { AtAGlanceCard } from "./AtAGlanceCard";
 import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
@@ -327,9 +327,41 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 place, so it fills itself in as content is published and shows
                 nothing at all until something does. Never a hardcoded list. */}
             {(() => {
+              // ── THE DAY TRIP LIST IS GONE, AND THE FIELD IS NOT ──
+              // Oliver, 9 Aug 2026, after Rudkobing appeared here as a day
+              // trip from Copenhagen. It is on Langeland, about two and a half
+              // hours each way, and it appeared because its stored
+              // dayTripFrom says "Copenhagen".
+              //
+              // My first answer was three checks on that field: route it at
+              // draft time, sweep the published rows, guard the render. All
+              // correct, and all of it machinery to babysit a field a human
+              // has to keep true forever. His was better: "I'm not even sure
+              // if we need to have it."
+              //
+              // A CURATED RELATIONSHIP FIELD ALWAYS DRIFTS. Somebody decides,
+              // per town, what it is a day trip from, and that is right until
+              // the day it is not. Deleting the reader-facing list deletes the
+              // whole failure mode rather than watching for it, which is the
+              // only kind of fix that cannot regress.
+              //
+              // WHAT STAYS, DELIBERATELY: dayTripFrom itself, as a PLANNER
+              // input. It encodes what coordinates cannot, which is whether a
+              // place counts as its own stop on a route and whether it has
+              // beds. Dragor being close to Copenhagen does not answer that.
+              // The field keeps feeding the planner and stops reaching readers.
+              //
+              // "Inside" survives because it is a different kind of claim.
+              // Hellerup being part of Copenhagen is containment, which does
+              // not depend on travel time and does not go stale. If the other
+              // list is ever missed, bring it back COMPUTED from lat/lon
+              // rather than curated: sorted by real distance, Rudkobing at
+              // 144 km could never appear in it.
               const inside = areasInside(item.name, towns);
-              const trips = dayTripsFrom(item.name, towns);
-              if (!inside.length && !trips.length) return null;
+              // Guard narrowed with the cut. Left as it was, a town with no
+              // areas inside it but a stale dayTripFrom would render the card
+              // border and padding around nothing.
+              if (!inside.length) return null;
               const group = (heading, list, note) => (
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>{heading}</div>
@@ -354,15 +386,7 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               );
               return (
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 18 }}>
-                  {inside.length ? group(`Inside ${item.name}`, inside, "Part of the city itself, so you are already there.") : null}
-                  {/* "Without changing hotel" was written from the ROUTE
-                      PLANNER's point of view, where the useful fact about one
-                      of these is that it costs you no overnight. A reader on a
-                      town page is not planning a route and has no hotel in
-                      mind yet, so the heading described a saving they had not
-                      been offered. Oliver's friend, 9 Aug 2026: "it makes no
-                      sense." Say the thing itself instead. */}
-                  {trips.length ? group(`Day trips from ${item.name}`, trips, `Close enough to see in a day and be back the same evening.`) : null}
+                  {group(`Inside ${item.name}`, inside, "Part of the city itself, so you are already there.")}
                 </div>
               );
             })()}

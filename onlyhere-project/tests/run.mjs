@@ -3860,8 +3860,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // "Without changing hotel" was written from the route planner's point of
   // view, for a reader who has no hotel yet. Oliver's friend: "it makes no sense."
   const detailSrc = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  ok("the day-trip heading says what it is", /Day trips from \$\{item\.name\}/.test(detailSrc));
-  ok("the planner jargon is gone", !/group\(`Without changing hotel`/.test(stripNonCode(detailSrc)));
+  // ── THE LIST IS GONE, THE FIELD IS NOT ─────────────────────────
+  // Rudkobing appeared as a day trip from Copenhagen because its stored
+  // dayTripFrom says so. The first fix was three checks around that field.
+  // Deleting the reader-facing list deletes the failure mode instead, which
+  // is the only fix that cannot regress.
+  ok("no day-trip list reaches readers", !/Day trips from/.test(stripNonCode(detailSrc)));
+  ok("and neither does the planner jargon", !/Without changing hotel/.test(stripNonCode(detailSrc)));
+  ok("the town page no longer reads the curated field", !/dayTripsFrom/.test(stripNonCode(detailSrc)));
+  // Containment is a different claim and does not go stale, so it stays.
+  ok("Inside survives", /group\(`Inside \$\{item\.name\}`/.test(detailSrc));
+  // The guard has to narrow with the cut, or a town with no areas inside it
+  // but a stale dayTripFrom renders an empty bordered card.
+  ok("the empty-card guard narrowed too", /if \(!inside\.length\) return null;/.test(detailSrc));
+  ok("the old two-sided guard is gone", !/!inside\.length && !trips\.length/.test(stripNonCode(detailSrc)));
+  // THE FIELD ITSELF SURVIVES, for the planner. Deleting it would break the
+  // thing coordinates cannot answer: does this stop collapse into the town.
+  const planSrc = readFileSync(join(root, "src/utils/placeKind.js"), "utf8");
+  ok("dayTripsFrom still exists for the planner", /export const dayTripsFrom/.test(planSrc));
 
   // ── REFRESH ON OPEN ─────────────────────────────────────────────
   ok("never fetched is stale", weatherIsStale(null));
