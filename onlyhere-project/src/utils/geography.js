@@ -1,3 +1,5 @@
+import { fold, variantsOf } from "./danishNames";
+
 // ── WHICH PART OF THE COUNTRY IS THIS ───────────────────────────────
 // Oliver, 8 Aug 2026, looking at the towns page: "the filters gotta change. We
 // need more modern filtering. This is just a long mess."
@@ -170,13 +172,18 @@ export const unplaced = (entries) =>
 // Ærøskøbing with the letters. Matches the name, the written region, the tag and
 // the one-line description, so "Himmerland" still finds its towns even though it
 // is no longer a pill.
-export const fold = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
-  .replace(/ø/g, "o").replace(/æ/g, "ae").replace(/å/g, "aa").replace(/\s+/g, " ").trim();
+// Lives in danishNames.js now, next to the rest of what this app knows about
+// Danish spelling, and re-exported here so every existing import keeps working.
+// It had a real bug: NFD ran before the å→"aa" rule and å decomposes, so "Århus"
+// and "Aarhus" folded differently and could not find each other.
+export { fold };
 
 export const matchesSearch = (entry, query) => {
   const q = fold(query);
   if (!q) return true;
-  const hay = fold([entry?.name, entry?.region, entry?.tag, entry?.desc, entry?.partOf, entry?.dayTripFrom].filter(Boolean).join(" "));
+  // Both spellings of the entry's own name go into the haystack, so typing
+  // Copenhagen finds a place filed as København and the other way round.
+  const hay = fold([...variantsOf(entry?.name), entry?.region, entry?.tag, entry?.desc, entry?.partOf, entry?.dayTripFrom].filter(Boolean).join(" "));
   // Every word must appear somewhere, so "fyn harbour" narrows rather than
   // widening the way a single OR match would.
   return q.split(" ").every(w => hay.includes(w));

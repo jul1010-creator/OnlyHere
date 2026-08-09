@@ -59,8 +59,12 @@ export const HowWeKnow = ({ item }) => {
   // claims entries are checked against primary sourceS and then produced one
   // link. Every page the pipeline opened for this place now travels on the
   // entry as __sources, minus aggregators and minus the official site, which
-  // has its own line. Absent on everything published before 8 Aug, so this
-  // renders nothing rather than an empty heading.
+  // has its own line.
+  //
+  // CORRECTED 9 Aug: this comment used to say "absent on everything published
+  // before 8 Aug". Checked against the live table, it was absent on ALL 79
+  // rows, because shapeForLive is an allow-list and __sources was not on it, so
+  // publish threw the list away every time. Fixed in utils/studioContent.js.
   const officialHost = official ? hostOf(official) : null;
   const sources = (Array.isArray(item.__sources) ? item.__sources : [])
     .filter(u => isLink(u) && hostOf(u) !== officialHost);
@@ -72,13 +76,31 @@ export const HowWeKnow = ({ item }) => {
   // specific, so it wins when both exist.
   const lastCheck = dateLabel(corrections.length ? corrections[corrections.length - 1].at : null) || (typeof item.verified === "string" ? item.verified : null);
 
-  const sourceCount = new Set([
+  // ── "1 SOURCE" IS THE WORST THING THIS PANEL CAN SAY ─────────────
+  // Oliver, 9 Aug 2026: "the picture with '1 source' makes me look like we got
+  // it all from one source... this would instantly make people delete the app."
+  //
+  // He is right, and a bare count was the wrong shape for the number one. The
+  // paragraph under it promises primary sourceS and rigour, and then the header
+  // quietly reports the opposite. A reader does not think "the source list was
+  // not recorded", they think "these people read one page and wrote an essay".
+  //
+  // So the count is never printed as a count of one. One known page is named
+  // for what it is, the official site, which is a true and unembarrassing thing
+  // to have checked. Several are counted, because then the number is the point.
+  //
+  // The underlying gap is real and being fixed separately: shapeForLive was
+  // dropping __sources at publish, so zero of 79 rows carried the list the
+  // research pipeline had already built. Entries drafted from now on carry it.
+  const sourceHosts = new Set([
     ...(official ? [hostOf(official)] : []),
+    ...sources.map(u => hostOf(u)),
     ...corrections.filter(c => isLink(c.source)).map(c => hostOf(c.source)),
-  ].filter(Boolean)).size;
+  ].filter(Boolean));
+  const sourceCount = sourceHosts.size;
 
   const summary = [
-    sourceCount ? `${sourceCount} source${sourceCount === 1 ? "" : "s"}` : null,
+    sourceCount > 1 ? `${sourceCount} sources` : sourceCount === 1 ? "Official site" : null,
     corrections.length ? `${corrections.length} correction${corrections.length === 1 ? "" : "s"}` : null,
     uncertainties.length ? `${uncertainties.length} open question${uncertainties.length === 1 ? "" : "s"}` : null,
   ].filter(Boolean).join(" · ");
@@ -104,10 +126,21 @@ export const HowWeKnow = ({ item }) => {
 
       {open && (
         <div style={{ padding: "0 15px 15px", borderTop: `1px solid ${C.border}` }}>
+          {/* The paragraph has to match what is under it. Claiming "primary
+              sources" over a single link is the exact thing that reads as a
+              lie, so the sentence changes with the evidence rather than
+              standing there as a fixed boast. */}
           <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.65, margin: "12px 0 16px" }}>
-            Gemlyx entries are researched and fact-checked against primary sources, then re-checked when
-            something looks wrong. We do not claim to have been anywhere in person, and anything we could
-            not stand up is listed below rather than quietly smoothed over.
+            {sourceCount > 1 ? (
+              <>Gemlyx entries are researched and fact-checked against primary sources, then re-checked when
+              something looks wrong. We do not claim to have been anywhere in person, and anything we could
+              not stand up is listed below rather than quietly smoothed over.</>
+            ) : (
+              <>Gemlyx entries are researched against primary sources and re-checked when something looks
+              wrong. This one was written before we started saving the full list of pages the research
+              opened, so only the official site is shown below. We do not claim to have been anywhere in
+              person, and anything we could not stand up is listed rather than quietly smoothed over.</>
+            )}
           </div>
 
           {official && (

@@ -42,10 +42,17 @@ const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
   export { journeyParts, journeyBlock, vehicleWord } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
-  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
+  export { supabaseFailure, studioErrorMessage, EXPIRED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
+  export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
+  export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
+  export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { mergeSaves } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
@@ -2323,12 +2330,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("no facts call interpolates the token by hand any more",
      (app.match(/gemlyx_facts[\s\S]{0,220}Bearer \$\{studioSession\?\.access_token\}/g) || []).length, 0);
   is("and all three go through studioAuth", (app.match(/studioAuth\(\)/g) || []).length >= 3, true);
-  ok("a missing token names the login, not the database", /Your Studio login has expired\. Log out and back in\. \(The table is fine\.\)/.test(app));
+  ok("a missing token names the login, not the database",
+     /Your Studio login has expired\. Log out and back in\./.test(M.studioErrorMessage("the facts", 401, { code: "PGRST301" })));
   // The SQL is suggested for exactly one thing: the relation genuinely not
-  // existing. Not for a 401, which is what it was doing.
-  ok("the SQL is only suggested for a missing relation", /PGRST205[\s\S]{0,160}does not exist yet\. Run the SQL/.test(app));
-  ok("401 and 403 are recognised as auth, not schema", /status === 401 \|\| status === 403 \|\| \/\^PGRST30\[12\]\$\/\.test\(code\)/.test(app));
-  ok("and anything else reports its own status rather than guessing", /Could not read the facts \(\$\{status\}/.test(app));
+  // existing. Not for a 401, which is what it was doing on three tables.
+  is("a missing relation is the only thing that offers SQL", M.studioErrorMessage("the facts", 404, { code: "PGRST205" }), "MISSING_TABLE");
+  ok("a 401 never offers SQL", M.studioErrorMessage("the facts", 401, { code: "PGRST301" }) !== "MISSING_TABLE");
+  ok("nor does a 403", M.studioErrorMessage("the facts", 403, null) !== "MISSING_TABLE");
+  is("401 and 403 are recognised as auth, not schema", [M.supabaseFailure(401, null), M.supabaseFailure(403, null)], [M.EXPIRED, M.EXPIRED]);
+  ok("and anything else reports its own status rather than guessing",
+     /Could not read the facts \(500\)/.test(M.studioErrorMessage("the facts", 500, null)));
+  // THE OBLIGATION THAT REPLACES REMEMBERING. A helper nobody has to call is a
+  // suggestion, and this exact bug has now shipped four times: PASS 57 on
+  // gemlyx_content, then gemlyx_facts, then gemlyx_sources, then
+  // gemlyx_research. Twelve call sites were still interpolating the token by
+  // hand twelve lines below the helper written to stop it.
+  is("no Studio request builds its own Authorization header",
+     (app.match(/Bearer \$\{studioSession/g) || []).length, 0);
+  ok("they all go through the one helper that throws on a missing token",
+     /const tok = studioSession\?\.access_token;\n    if \(!tok\) throw new Error/.test(app));
 }
 
 // ── "I'M NOT SAYING ONLY.. I'M SAYING INCLUDE" ─────────────────────
@@ -2461,15 +2481,525 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // a call site that quietly stops passing its place fails here.
   is("five of them pass the place they know", (app3.match(/\$\{researchRules\([a-zA-Z"]+, [a-zA-Z]+\)\}/g) || []).length, 5);
   is("and two deliberately carry only the universal ones", (app3.match(/\$\{researchRules\(\)\}/g) || []).length, 2);
-  ok("which is where the founder's list is folded in", /const researchRules = \(type, where\) => `\$\{RESEARCH_SOURCE_RULES\}\$\{sourceRulesBlock\(founderSources, type, where\)\}`/.test(app3));
+  ok("which is where the founder's list is folded in", /return `\$\{RESEARCH_SOURCE_RULES\}\$\{both\}\$\{sourceRulesBlock\(founderSources, type, where\)\}`;/.test(app3));
   // The guide pipeline runs for visitors, where no Studio state exists, so the
   // list is loaded app-wide rather than threaded through React state.
   ok("the list is loaded on mount, not only in Studio", /ensureSourcesLoaded\(\)/.test(app3));
   // And the panel tells an expired login apart from a missing table, from day
   // one, rather than learning tonight's lesson a second time.
-  ok("a missing table is named as missing", /if \(status === 404 \|\| code === "PGRST205"/.test(app3));
-  ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\. \(Nothing is wrong with the table\.\)/.test(app3));
+  ok("a missing table is named as missing", M.supabaseFailure(404, { code: "PGRST205" }) === M.MISSING);
+  ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\./.test(M.studioErrorMessage("the source list", 401, { code: "PGRST301" })));
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
+}
+
+// ── "1 SOURCE... WOULD INSTANTLY MAKE PEOPLE DELETE THE APP" ─────
+// Oliver, 9 Aug 2026, on the Distortion page: a panel promising primary
+// sourceS, plural, above a header reading "1 source".
+{
+  const sc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  const hwk = readFileSync(join(root, "src/components/HowWeKnow.jsx"), "utf8");
+
+  // THE CAUSE. shapeForLive is an allow-list and __sources was not on it, so
+  // publish threw away the source list the research had already built. Zero of
+  // 79 live rows carried it, which is why every entry said one.
+  ok("publish carries the source list through", /return sources\.length \? \{ \.\.\.shaped, __sources: sources \} : shaped;/.test(sc));
+  ok("the allow-list is still an allow-list, with one named exception", /shapeForLiveFields/.test(sc));
+  ok("only real http links survive", /\/\^https\?:\\\/\\\/\/i\.test\(u\)/.test(sc));
+  // Absent rather than empty, so the panel never draws a heading over no links.
+  ok("nothing to show means the field is absent, not empty", /: shaped;/.test(sc));
+
+  // THE WORDING. One known page is named for what it is. A count is only a
+  // count when the number is worth printing.
+  ok("a single source is never rendered as the number one", /sourceCount > 1 \? `\$\{sourceCount\} sources` : sourceCount === 1 \? "Official site" : null/.test(hwk));
+  // And the paragraph has to agree with what is under it, or it reads as a
+  // boast the page immediately contradicts.
+  ok("the claim of plural sources is conditional", /\{sourceCount > 1 \? \(/.test(hwk));
+  ok("and the single-source case says why", /before we started saving the full list of pages the research/.test(hwk));
+  // The pages the research opened count too, not just the official site and
+  // the corrections. They were being left out of the total entirely.
+  ok("the total counts the pages the research opened", /\.\.\.sources\.map\(u => hostOf\(u\)\)/.test(hwk));
+}
+
+// ── "IS STILL SAYS THIS!!!!!!!" ──────────────────────────────────
+// Oliver, 9 Aug 2026, pasting the gemlyx_research setup SQL back for the second
+// time, having already run it. He was right both times. The panel was reading a
+// 401 and mapping it straight to "missing", so it printed a create-table script
+// at a founder whose table exists. Fourth time for this bug class.
+{
+  const app10 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // A 401 is a login. Only PGRST205 and a real 404 mean the relation is absent.
+  is("a bad token is a login problem", M.supabaseFailure(401, { code: "PGRST301" }), M.EXPIRED);
+  is("so is a 403 from RLS", M.supabaseFailure(403, null), M.EXPIRED);
+  is("the JWT code decides on its own, whatever status arrives with it",
+     M.supabaseFailure(400, { code: "PGRST301" }), M.EXPIRED);
+  is("and PGRST302 the same way", M.supabaseFailure(200, { code: "PGRST302" }), M.EXPIRED);
+  is("a missing relation is a missing relation", M.supabaseFailure(404, { code: "PGRST205" }), M.MISSING);
+  is("named in the message rather than the code", M.supabaseFailure(400, { message: "relation does not exist" }), M.MISSING);
+  is("and everything else stays honest about not knowing", M.supabaseFailure(500, null), M.OTHER);
+  is("a null body never throws", M.supabaseFailure(500, null), M.OTHER);
+  is("nor a string one", M.supabaseFailure(500, "boom"), M.OTHER);
+
+  // THE LINE HE SAW. It mapped 401 to "missing" and there is now a test that
+  // fails if anything writes it again.
+  ok("no panel decides for itself that a 401 is a missing table",
+     !/status === 401 \|\| \w+\.status === 404 \? "missing"/.test(app10));
+  ok("the research panel classifies through the shared helper", /const researchStatusFor = supabaseFailure;/.test(app10));
+  // Three states, three different sentences. The SQL block renders under exactly
+  // one of them.
+  ok("an expired login says so and offers no SQL", /Your Studio login has expired\.<\/b> Log out and back in\. Nothing is wrong with the table and there is no SQL to run\./.test(app10));
+  ok("a genuinely missing table is the only branch that shows SQL", /=== MISSING \? \([\s\S]{0,600}\{RESEARCH_SQL\}/.test(app10));
+  is("and the SQL appears exactly once, in that branch", (app10.match(/\{RESEARCH_SQL\}/g) || []).length, 1);
+  // Re-runnable, same lesson gemlyx_sources taught this morning: Supabase runs
+  // the editor as one transaction, so "policy already exists" rolls back the lot.
+  ok("the research SQL can be run twice", /drop policy if exists "auth all gemlyx_research"/.test(app10));
+}
+
+// ── "EVENTS HAVE TWO 'MUSICS'" ───────────────────────────────────
+// Oliver, 9 Aug 2026, pasting the row back exactly as it rendered:
+// "CultureFestivalMusicMusic / Festival / CultureMusic Festival". Six pills for
+// four ideas, built by de-duplicating a free-text field. Region pills again.
+{
+  // THE REAL STORED VALUES, counted from the live table on 9 Aug.
+  const LIVE = [
+    ...Array.from({ length: 12 }, (_, i) => ({ id: i, type: "Music" })),
+    ...Array.from({ length: 6 }, (_, i) => ({ id: 100 + i, type: "Festival" })),
+    { id: 200, type: "Culture" }, { id: 201, type: "Culture" },
+    { id: 202, type: "Music Festival" }, { id: 203, type: "Music Festival" },
+    { id: 204, type: "Music / Festival" },
+    { id: 205, type: "Music / Festival / Culture" },
+    { id: 206, type: "Viking Market" },
+    { id: 207, type: "Viking Festival" },
+  ];
+
+  is("the eight spellings collapse to four real types",
+     M.eventTypesPresent(LIVE), ["music", "viking", "market", "culture"]);
+  // The exact defect he pasted: two pills starting with Music.
+  is("only one of them is Music", M.eventTypesPresent(LIVE).filter(t => t === "music").length, 1);
+  ok("and no pill is a sentence", M.eventTypesPresent(LIVE).every(t => !/[/]/.test(t)));
+
+  // MULTI-VALUED, because the data already is. Forcing one bucket per event is
+  // what produced the combined pills.
+  is("one event can make two claims", M.eventTypesOf({ type: "Music / Festival / Culture" }), ["music", "culture"]);
+  is("a phrase is read whole, not split on spaces", M.eventTypesOf({ type: "Music Festival" }), ["music"]);
+  is("Viking Market is both", M.eventTypesOf({ type: "Viking Market" }), ["viking", "market"]);
+
+  // "FESTIVAL" IS THE NOUN, NOT A TYPE. Every row on that page is a festival,
+  // so a Festival pill selects everything and says nothing. It was one of six.
+  is("the word that carries no information maps to nothing", M.eventTypesOf({ type: "Festival" }), []);
+  is("and neither does an empty type", M.eventTypesOf({ type: "" }), []);
+  is("nor a missing one", M.eventTypesOf({}), []);
+  ok("the uninformative words are written down, not silently unmatched", M.UNINFORMATIVE.test("festival"));
+  // THE GUARD AS AN INVARIANT. Mutation testing showed the branch itself could
+  // not fire, because no rule matches "Festival" today. This is what it is
+  // really protecting: add a `festival` rule, or loosen `culture` to catch
+  // "Kulturfest", and the pill that selects everything comes straight back.
+  ok("no type in the vocabulary is itself an uninformative word", M.EVENT_TYPES.every(t => !M.UNINFORMATIVE.test(t)));
+  is("six of the live rows have no filable type", M.untypedEvents(LIVE).length, 6);
+  // Those six are still reachable. A filter that hides rows it cannot classify
+  // is worse than one that admits it does not know.
+  is("but every event is still under All", LIVE.length, 26);
+
+  // ── "SOME OF THEM ARE THE COMPLETE SAME" ─────────────────────────
+  // Oliver, 9 Aug 2026: "Festival and Music is the same as music." Exactly, and
+  // this is the assertion that says so: three different stored spellings, one
+  // pill. It fails the moment anything reintroduces a per-spelling bucket.
+  is("Music, Music Festival and Music / Festival are one pill",
+     [...new Set([
+       JSON.stringify(M.eventTypesOf({ type: "Music" })),
+       JSON.stringify(M.eventTypesOf({ type: "Music Festival" })),
+       JSON.stringify(M.eventTypesOf({ type: "Music / Festival" })),
+     ])].length, 1);
+
+  // ── EVERY BOUNDARY IS A DECISION, AND THE FIRST SET WAS WRONG ────
+  // `/\bmusic|rock|...|metal|dj\b/i` reads as though it anchors both ends and
+  // does not: in an alternation \b binds only to the branch it touches. So
+  // everything between music and dj was an unanchored substring, and checking
+  // against real strings classified "Metalworking workshop" as MUSIC and
+  // "Remarked" as a MARKET.
+  is("a metalworking event is not music", M.eventTypesOf({ type: "Metalworking workshop" }), []);
+  is("and remarked is not a market", M.eventTypesOf({ type: "Remarked" }), []);
+  is("nor is a fairground a fair", M.eventTypesOf({ type: "Fairground ride" }), []);
+  is("an artisan market is a market, not art", M.eventTypesOf({ type: "Artisan market" }), ["market"]);
+  // DANISH COMPOUNDS GLUE THE WORDS TOGETHER, so the category is a suffix with
+  // no boundary in front of it. Anchoring both ends would miss every one.
+  is("a Danish market compound still matches", M.eventTypesOf({ type: "Julemarked" }), ["market"]);
+  is("and one that is two categories at once", M.eventTypesOf({ type: "Vikingemarked" }), ["viking", "market"]);
+  is("Rockfestival is music", M.eventTypesOf({ type: "Rockfestival" }), ["music"]);
+  is("Kunstfestival is art", M.eventTypesOf({ type: "Kunstfestival" }), ["art"]);
+  is("Kulturnat is culture", M.eventTypesOf({ type: "Kulturnat" }), ["culture"]);
+
+  ok("an event matches its own type", M.hasEventType({ type: "Music" }, "music"));
+  ok("and not another", !M.hasEventType({ type: "Music" }, "viking"));
+  ok("no type selected matches everything", M.hasEventType({ type: "Festival" }, null));
+
+  const counts = M.eventTypeCounts(LIVE, M.eventTypesPresent(LIVE));
+  is("music counts every spelling of it", counts.music, 16);
+  is("viking counts both of its events", counts.viking, 2);
+  is("culture counts the plain ones and the combined one", counts.culture, 3);
+
+  const app8 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the events row is built from the vocabulary", /eventTypesPresent\(upcomingInTab\)/.test(app8));
+  ok("and never again from a Set over free text", !/^\s*\.\.\.\[\.\.\.new Set\(upcomingInTab/m.test(app8));
+  is("the predicate and the count helper agree about matching a type",
+     (app8.match(/\(!eventType \|\| hasEventType\(e, eventType\)/g) || []).length, 2);
+
+  // ── "REMOVE THE VIKING SECTION AND MAKE IT A FILTER INSTEAD" ─────
+  // It was worse than redundant. data/events.js says in its own comment that
+  // nothing publishes into vikingEvents, and the array is empty, so the tab
+  // rendered an empty grid while the two real Viking events sat under Local.
+  const evData = readFileSync(join(root, "src/data/events.js"), "utf8");
+  ok("the array it read is genuinely empty", /export const vikingEvents = \[\];/.test(evData));
+  ok("the tab is gone", !/id: "viking", label: "Viking"/.test(app8));
+  ok("and the tab source no longer reads the dead array", !/eventTab === "viking" \? vikingEvents/.test(app8));
+  ok("Viking survives as a type", M.EVENT_TYPES.includes("viking"));
+
+  // ── COUNTS ON EVERY PILL ─────────────────────────────────────────
+  ok("the month pills carry their count", /label=\{`\$\{m\} \$\{n\}`\}/.test(app8));
+  ok("the type pills carry theirs", /label=\{`\$\{eventTypeLabelFor\(f\)\} \$\{n\}`\}/.test(app8));
+
+  // "Soonest is so awkward English." It is, and it did not even rhyme with its
+  // own pair: a superlative next to an adjective. Both say what it is ordered BY.
+  ok("the sort says what it orders by", /label="By date"/.test(app8) && /label="By name"/.test(app8));
+  ok("and the awkward one is gone", !/label="Soonest"/.test(app8));
+}
+
+// ── "WHY IS THAT 'OFF THE USUAL ROUTE' AND 'CAN'T MISS OUT'?" ────
+// Oliver, 9 Aug 2026: "Shouldn't it be 'trendy' and 'off the usual route'
+// then?" Right, and the heading was lying about the field.
+{
+  const app9 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // The stored field is a RECOMMENDATION STRENGTH, top to bottom. There is no
+  // fame field: popularityTag is undefined on all 31 published towns.
+  is("the tier vocabulary is a recommendation ladder", M.TIERS.map(t => t.id), ["must", "high", "worth", "nearby"]);
+  is("read off the entry", M.tierOf({ tier: "Can't Miss Out" }).id, "must");
+  is("loosely, because 71 rows spell it differently", M.tierOf({ tier: "cant miss out" }).id, "must");
+  is("and an unknown tier is null, never a guess", M.tierOf({ tier: "Quite Good" }), null);
+
+  ok("the heading no longer claims to be about fame", !/<Row title="How well known">/.test(app9));
+  ok("it says what the field means", /<Row title="Worth the trip">/.test(app9));
+  // THE OLD PILL WAS NOT READING ANYTHING. "Off the usual route" was implemented
+  // as the negation of can't-miss, which selected 29 towns out of 31. A pill
+  // that keeps 94% of the list is a label pretending to be a filter.
+  ok("the invented fame pill is gone", !/label: "◆ Off the usual route"/.test(app9));
+  ok("and the row offers the four real tiers", /TIERS\.map\(x => \(\{ id: x\.id/.test(app9));
+  ok("filtering asks the entry's own tier", /tierOf\(t\)\?\.id === townKind/.test(app9));
+
+  // "Why are they the only ones that have no numbers." Because this helper did
+  // not exist. Themes and sizes had one; the tier row did not.
+  ok("the tier row has a count helper now", /const nWithKind = \(k\) =>/.test(app9));
+  ok("counted with the other filters and never with itself",
+     /const nWithKind = \(k\) => towns\.filter\(t => base\(t\) && townSizeOk\(t\) && townThemeOk\(t\)/.test(app9));
+  ok("and the pills print it", /label=\{`\$\{k\.label\} \$\{nWithKind\(k\.id\)\}`\}/.test(app9));
+}
+
+// ── "I AM NOT SATISFIED WITH THE FILTERS" ────────────────────────
+// Oliver, 9 Aug 2026: "This will become an issue down the line. Especially on
+// phone." Six labelled groups and twenty-five pills, permanently expanded, for a
+// nine-item list. The fix is not a nicer panel, it is a page that grows into its
+// controls instead of wearing them early.
+{
+  const items = [
+    { name: "Assistens", city: "Copenhagen", kind: "free" },
+    { name: "Superkilen", city: "Copenhagen", kind: "free" },
+    { name: "Smedje", city: "Aarhus", kind: "craft" },
+    { name: "Ærøskøbing Væveri", city: "Ærøskøbing", kind: "craft" },
+  ];
+  const FACETS = [
+    { key: "city", label: "City", options: [{ value: "All", label: "All" }, { value: "Copenhagen", label: "Copenhagen" }, { value: "Aarhus", label: "Aarhus" }], test: (i, v) => i.city === v },
+    { key: "kind", label: "Type", options: [{ value: "All", label: "All" }, { value: "free", label: "Free" }, { value: "craft", label: "Bookable" }], test: (i, v) => i.kind === v },
+  ];
+
+  // ── THE THRESHOLD READS THE UNFILTERED TOTAL ─────────────────────
+  // The obvious implementation reads the visible count, and then narrowing a
+  // long list past the threshold HIDES THE CONTROLS THAT NARROWED IT, stranding
+  // the user in a short list they cannot widen and cannot explain.
+  ok("a long list gets filters", M.showFilters(40));
+  ok("a short one does not", !M.showFilters(9));
+  ok("the boundary is exclusive", !M.showFilters(M.FILTER_THRESHOLD));
+  ok("one past it turns them on", M.showFilters(M.FILTER_THRESHOLD + 1));
+
+  is("no filter set means everything", M.applyFacets(items, FACETS, {}).length, 4);
+  is("All is not a filter", M.applyFacets(items, FACETS, { city: "All" }).length, 4);
+  is("nor is an empty string", M.applyFacets(items, FACETS, { city: "" }).length, 4);
+  is("one facet narrows", M.applyFacets(items, FACETS, { city: "Copenhagen" }).length, 2);
+  is("two facets narrow together", M.applyFacets(items, FACETS, { city: "Copenhagen", kind: "craft" }).length, 0);
+
+  // ── COUNTS EXCLUDE THEIR OWN FACET ───────────────────────────────
+  // Counting City with City applied gives every unselected city a zero, which
+  // reads as "nothing in Aarhus" when it means "you picked Copenhagen".
+  const cityCounts = M.facetCounts(items, FACETS, { city: "Copenhagen" }, "city");
+  is("the selected city still counts its own", cityCounts.Copenhagen, 2);
+  is("and the others are counted as if it were not selected", cityCounts.Aarhus, 1);
+  is("All counts the whole remaining pool", cityCounts.All, 4);
+  // The other facet DOES constrain, which is the half that makes counts useful.
+  const kindCounts = M.facetCounts(items, FACETS, { city: "Copenhagen" }, "kind");
+  is("a type with nothing in the chosen city counts zero", kindCounts.craft, 0);
+  is("and one with something counts it", kindCounts.free, 2);
+  is("an unknown facet key returns nothing", M.facetCounts(items, FACETS, {}, "nope"), {});
+
+  // ── THE CHIPS, WHICH 66% OF MOBILE SITES DO NOT HAVE ─────────────
+  is("nothing applied means no chips", M.appliedChips(FACETS, {}), []);
+  is("All is not an applied filter", M.appliedChips(FACETS, { city: "All" }), []);
+  is("an applied facet becomes one chip", M.appliedChips(FACETS, { city: "Aarhus" }).map(c => c.label), ["Aarhus"]);
+  is("carrying the key that clears it", M.appliedChips(FACETS, { city: "Aarhus" })[0].key, "city");
+  is("and which facet it came from", M.appliedChips(FACETS, { city: "Aarhus" })[0].facet, "City");
+  is("two applied means two chips", M.activeFacetCount(FACETS, { city: "Aarhus", kind: "craft" }), 2);
+
+  is("clearing one leaves the other", M.clearFacet({ city: "Aarhus", kind: "craft" }, "city"), { kind: "craft" });
+  // SORT IS NOT A FILTER. It changes the order, never the contents, so a
+  // "clear all" that resets it is quietly doing two different things.
+  is("clear all clears the facets and leaves the sort", M.clearAllFacets(FACETS, { city: "Aarhus", kind: "craft", sort: "near" }), { sort: "near" });
+
+  // Search, which is what a short list actually needs instead of a panel.
+  ok("an empty query matches everything", M.matchesQuery(items[0], "", []));
+  ok("folding means the letters are optional", M.matchesQuery(items[3], "aeroskobing", []));
+  ok("and a place found under its other name", M.matchesQuery({ name: "København" }, "copenhagen", []));
+  ok("every word must appear, so a second word narrows", !M.matchesQuery(items[0], "assistens aarhus", ["city"]));
+  ok("and both matching still matches", M.matchesQuery(items[0], "assistens copenhagen", ["city"]));
+
+  const app7 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the attractions page asks before drawing controls", /showFilters\(/.test(app7));
+  ok("and it is handed the unfiltered total", /showFilters\(combined\.length\)/.test(app7));
+  ok("applied filters come back as removable chips", /appliedChips\(/.test(app7));
+  ok("with counts that exclude their own facet", /facetCounts\(/.test(app7));
+}
+
+// ── "WHY IS MY NIGHTLIFE TOWN NOT PUBLISHED IN NIGHTLIFE?" ────────
+// Oliver, 8 Aug 2026: "I just published Copenhagen." The tab's town list was
+// built from VENUES only, and a published town entry was read solely by a
+// .find() that decorated a row a BAR had already put on the page.
+//
+// EXTRACTED FROM THE JSX ON PURPOSE. A regex assertion would have passed
+// against the broken version too: `townList` and `nightlifeTowns.find` both
+// existed in it. The only test that catches this is one that can be handed
+// spots and towns and asked what comes back.
+{
+  const bars = [
+    { id: 1, name: "Kind of Blue", location: "Ravnsborggade, Copenhagen", type: "Local" },
+    { id: 2, name: "Bee Haven", location: "Copenhagen city centre", type: "International" },
+    { id: 3, name: "Herr Bartels", location: "Aarhus", type: "Local" },
+  ];
+  const pages = [{ name: "Copenhagen", desc: "Scene guide" }];
+
+  // THE BUG, in one assertion. Aalborg has a published scene guide and no bars.
+  is("a town with only a scene guide still reaches the page",
+     M.nightlifeTownList([], [{ name: "Aalborg" }]), ["Aalborg"]);
+  is("a town with only venues still does", M.nightlifeTownList(bars, []).sort(), ["Aarhus", "Copenhagen"]);
+  is("and a town with both is listed once", M.nightlifeTownList(bars, pages).sort(), ["Aarhus", "Copenhagen"]);
+  is("nothing published is genuinely nothing", M.nightlifeTownList([], []), []);
+
+  // ONE TOWN, NOT TWO. He types Copenhagen in Studio; a venue's location may
+  // carry the Danish spelling, and two rows for one city is its own bug.
+  is("the two spellings of the capital are one row",
+     M.nightlifeTownList([{ id: 1, location: "Københavns Nordvest", type: "Local" }], [{ name: "Copenhagen" }]).length, 1);
+  is("a Danish-spelled venue groups with the English city",
+     M.townOfLocation("Københavns Nordvest"), "Copenhagen");
+  is("and the old spelling of Aarhus too", M.townOfLocation("Århus C"), "Aarhus");
+  is("a location with no known city falls back to the last comma part",
+     M.townOfLocation("Havnegade, Svendborg"), "Svendborg");
+  is("a bare location is used as it stands", M.townOfLocation("Svendborg"), "Svendborg");
+  is("and an empty location groups nowhere", M.townOfLocation(""), "");
+
+  const groups = M.groupSpotsByTown(bars);
+  is("venues group under their city", groups.Copenhagen.map(b => b.id).sort(), [1, 2]);
+  // THE CRASH ONE CLICK LATER. The old code indexed the map directly and called
+  // .filter on the result, so opening a town with a scene guide and no bars
+  // threw and took the page down.
+  is("a town with no venues returns an empty list, never undefined", M.spotsForTown(groups, "Aalborg"), []);
+  is("and so does a missing group object", M.spotsForTown(null, "Aalborg"), []);
+  is("a town looked up in the other language still finds its venues",
+     M.spotsForTown(groups, "København").map(b => b.id).sort(), [1, 2]);
+  is("the scene guide is found across spellings too", M.townPageFor(pages, "København")?.name, "Copenhagen");
+  is("and a town with no guide has none", M.townPageFor(pages, "Aarhus"), undefined);
+
+  const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the tab builds its list from both kinds of entry", /nightlifeTownList\(nightlifeSpots, nightlifeTowns\)/.test(app6));
+  ok("and never indexes the group map raw again", !/townGroups\[nightlifeTownView\]/.test(app6));
+  // The empty state named only spots, which reads as "nothing is published" to
+  // somebody who has just published a town.
+  ok("the empty state no longer says only spots", !/No nightlife spots published yet\. They appear here/.test(app6));
+  ok("it names towns and venues both", /Towns and venues both appear as soon as they go live/.test(app6));
+  ok("a town with a guide and no bars says what IS there", /Scene guide, no venues published yet/.test(app6));
+}
+
+// ── "IT'S SUCH A NERD WORD TO BE USING SO MUCH" ───────────────────
+// Oliver, 8 Aug 2026, on "actually". Not a cliché to ban outright, a crutch to
+// count: it is a real word when it corrects an expectation the reader holds.
+{
+  is("one use is not a tic", M.fillerWordCounts("The door is actually round the back."), {});
+  is("two is", M.fillerWordCounts("It is actually free, and actually open late."), { actually: 2 });
+  // WORD BOUNDARIES, not substrings. AI_TELL_PHRASES can use indexOf because
+  // its entries are multi-word; a bare word inside another word cannot.
+  is("a word inside another word is not a hit", M.fillerWordCounts("factually factually factually"), {});
+  is("case does not matter", M.fillerWordCounts("Actually. actually."), { actually: 2 });
+  is("nothing in, nothing out", M.fillerWordCounts(""), {});
+  ok("the word he named is on the list", M.FILLER_WORDS.includes("actually"));
+  // KEPT OFF the outright-ban list on purpose: everything there is never right,
+  // and this one sometimes is. Merging them would make two uses of "actually"
+  // count toward the threshold that marks an entry as a high-severity problem.
+  ok("and deliberately NOT on the outright-ban list", !M.AI_TELL_PHRASES.includes("actually"));
+
+  const tic = M.auditEntry({ id: 9, type: "town", payload: {
+    name: "Somewhere", desc: "It is actually free. The bakery is actually good. Actually worth the trip.",
+    region: "Funen", __lat: 55.4, __lon: 10.4,
+  } });
+  const voice = tic.findings.filter(f => f.field === "voice");
+  ok("an entry leaning on it is flagged", voice.some(f => /filler words/i.test(f.detail || f.why || JSON.stringify(f))));
+  ok("but only as a style note, never as a hard problem", voice.every(f => f.severity !== "critical"));
+
+  // The writer is told, which is the half that stops it happening again. A ban
+  // list only catches what has already been written.
+  const voiceRules = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("the voice rules name it outright", /FILLER WORDS THAT SOUND LIKE THINKING OUT LOUD/.test(voiceRules));
+  ok("with the test for when it is real", /the entrance looks closed, it is actually round the back/.test(voiceRules));
+  // THE MECHANISM UNDERNEATH: a model mirrors the register of its instructions,
+  // and these instructions argue with sources for a living, so they use the
+  // word legitimately and often. Saying so is what stops it being copied.
+  ok("and it says why the instructions themselves use it", /Instructions argue, entries state/.test(voiceRules));
+}
+
+// ── "COPENHAGEN ON DANISH IS KØBENHAVN" ───────────────────────────
+// Oliver, 8 Aug 2026: "remember languages can be different. I type copenhagen,
+// but Copenhagen on Danish is København. So it has to go over those sources too.
+// Not sure if it already translates." It did not, in either half: not in the
+// matcher that decides which of his sources apply, and not in the queries.
+{
+  // THE FOLD WAS BROKEN, and this is the assertion that says so. NFD ran before
+  // the Danish letter rules, and å decomposes while ø and æ do not, so the
+  // å→"aa" line never fired: "Århus" folded to "arhus" and "Aarhus" to
+  // "aarhus". Both spellings are in live use on real Danish sites.
+  is("the two live spellings of Aarhus fold together", M.fold("Århus"), M.fold("Aarhus"));
+  is("and of Aalborg", M.fold("Ålborg"), M.fold("Aalborg"));
+  is("å folds to aa, not to a", M.fold("Ålborg"), "aalborg");
+  // The letters that do NOT decompose still have to keep working.
+  is("ø and æ still fold", M.fold("Ærøskøbing"), "aeroskobing");
+
+  is("a place with one name is just itself", M.variantsOf("Odense"), ["Odense"]);
+  is("a place with two carries both, given spelling first", M.variantsOf("Copenhagen"), ["Copenhagen", "København"]);
+  is("in either direction", M.variantsOf("København"), ["København", "Copenhagen"]);
+  is("nothing in, nothing out", M.variantsOf(""), []);
+  is("the other name, when there is one", M.otherNameFor("Copenhagen"), "København");
+  is("and empty when there is not", M.otherNameFor("Odense"), "");
+
+  ok("the two names of the capital are the same place", M.samePlaceName("Copenhagen", "København"));
+  ok("both ways round", M.samePlaceName("København", "Copenhagen"));
+  ok("spelling variants too", M.samePlaceName("Aarhus", "Århus"));
+  ok("and parts of the country", M.samePlaceName("Jutland", "Jylland"));
+  ok("a name matches itself", M.samePlaceName("Odense", "Odense"));
+  // THE GUARD THAT MAKES IT SAFE. This matcher decides whether a source scoped
+  // to one city gets sent along on a draft about another, so widening it is
+  // exactly the failure the scoping exists to prevent.
+  ok("but two different cities never do", !M.samePlaceName("Copenhagen", "Aarhus"));
+  ok("nor two different parts", !M.samePlaceName("Jutland", "Funen"));
+  ok("and nothing matches nothing", !M.samePlaceName("", ""));
+
+  // SIGHTS ARE A SEPARATE LIST ON PURPOSE, and this is why: a source scoped to
+  // Copenhagen must not start applying to every draft that mentions Tivoli.
+  ok("a sight's two names are NOT treated as the same place", !M.samePlaceName("The Little Mermaid", "Den Lille Havfrue"));
+  // They are still worth searching under both names, which is the other half.
+  ok("but searching uses both", /Den Lille Havfrue/.test(M.searchNames("The Little Mermaid")));
+  ok("searching a town uses both too", /København/.test(M.searchNames("Copenhagen")));
+  is("and a name with no second form is not padded", M.searchNames("Odense"), "Odense");
+
+  // ── THE CASE HE RAISED, END TO END ───────────────────────────────
+  // He types the scope in English because that is how the entry is filed. A
+  // Danish-named entry, parent or day-trip base then failed to match, and a
+  // source scoped to Copenhagen was silently LEFT OUT of a København draft,
+  // which looks exactly like the scoping working correctly.
+  ok("a source scoped in English matches a Danish-named draft", M.placeMatches("Copenhagen", { name: "København" }));
+  ok("and scoped in Danish matches an English-named draft", M.placeMatches("København", { name: "Copenhagen" }));
+  ok("a part of the country matches across languages", M.placeMatches("Jutland", { name: "Aarhus", part: "Jylland" }));
+  ok("it still refuses another city", !M.placeMatches("Copenhagen", { name: "Aarhus" }));
+  ok("and still refuses an unknown place", !M.placeMatches("Copenhagen", null));
+  is("a part typed in Danish is stored as the app spells it", M.cleanPlace("Jylland"), "Jutland");
+
+  const bothWays = [{ id: 1, domain: "visitcopenhagen.com", applies_to: "", applies_place: "Copenhagen", enabled: true }];
+  is("so the source actually reaches the Danish-named draft",
+     M.sourcesFor(bothWays, "town", { name: "København" }).map(x => x.domain), ["visitcopenhagen.com"]);
+
+  // The search bar, same problem: typing one spelling could not find the other.
+  ok("the search bar finds a Danish-named place by its English name", M.matchesSearch({ name: "København" }, "copenhagen"));
+  ok("and the other way round", M.matchesSearch({ name: "Copenhagen" }, "københavn"));
+  ok("without matching an unrelated town", !M.matchesSearch({ name: "Odense" }, "copenhagen"));
+}
+
+// ── "YOU'RE 100% SURE THAT IT INCLUDES THE SOURCES I PUT IN?" ──────
+// Oliver, 8 Aug 2026, holding a finished Copenhagen draft's eight-URL source
+// list against the two domains he had added. He was not sure, and he was right:
+// the list reached the PROMPTS, so Perplexity and Gemini were told about it, but
+// Tavily builds its own queries and had never seen it. Being named in a prompt
+// is not being searched.
+{
+  const rows = [
+    { id: 1, domain: "visitdenmark.dk", applies_to: "", applies_place: "", enabled: true },
+    { id: 2, domain: "visitcopenhagen.com", applies_to: "", applies_place: "Copenhagen", enabled: true },
+    { id: 3, domain: "visitaarhus.com", applies_to: "", applies_place: "Aarhus", enabled: true },
+  ];
+  const cph = M.directSourceSearches(rows, "town", { name: "Copenhagen" });
+  is("one real search per source that applies", cph.map(x => x.domain).sort(), ["visitcopenhagen.com", "visitdenmark.dk"]);
+  ok("each restricted to its own domain", cph.every(x => x.domain && !x.domain.includes("/")));
+  // BOTH SPELLINGS IN THE QUERY, because a Danish tourist board files the
+  // capital under København and an English-only query cannot reach that page.
+  ok("the query carries both names of the place", cph.every(x => /Copenhagen/.test(x.query) && /København/.test(x.query)));
+  ok("and asks in Danish as well as English", cph.every(x => /åbningstider/.test(x.query)));
+  is("a name with one spelling is not doubled up",
+     (M.directSourceSearches(rows, "town", { name: "Odense" })[0].query.match(/Odense/g) || []).length, 1);
+  // The scoping still holds: this is a second consumer of sourcesFor, not a
+  // bypass of it. An Aarhus draft must not search visitcopenhagen.
+  is("scoping applies to the searches too", M.directSourceSearches(rows, "town", { name: "Aarhus" }).map(x => x.domain).sort(),
+     ["visitaarhus.com", "visitdenmark.dk"]);
+  // No name means no query worth spending, same direction of caution as
+  // placeMatches: when we do not know where the draft is, do less.
+  is("no place known means no paid searches", M.directSourceSearches(rows, "town", null), []);
+  is("and an empty list means none either", M.directSourceSearches([], "town", { name: "Copenhagen" }), []);
+
+  // CAPPED, because it is his money and the list is meant to grow. An uncapped
+  // version turns a twelve-site list into twelve extra searches per draft.
+  const many = Array.from({ length: 12 }, (_, i) => ({ id: i, domain: `site${i}.dk`, applies_to: "", applies_place: "", enabled: true }));
+  is("the number of paid searches is capped", M.directSourceSearches(many, "town", { name: "Copenhagen" }).length, M.MAX_DIRECT_SEARCHES);
+  ok("and the cap is a small number", M.MAX_DIRECT_SEARCHES > 0 && M.MAX_DIRECT_SEARCHES <= 6);
+
+  const app5 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // The wiring, asserted on the file, because the whole defect was a function
+  // that existed and was never called from the half that matters.
+  ok("the draft pipeline actually runs them", /directSourceSearches\(founderSources, sType, \{ name \}\)/.test(app5));
+  ok("through the endpoint's domain restriction", /\/api\/search\?q=\$\{encodeURIComponent\(query\)\}&domains=\$\{encodeURIComponent\(domain\)\}/.test(app5));
+  // /api/search has accepted this parameter the whole time and nothing used it.
+  const api = readFileSync(join(root, "api/search.js"), "utf8");
+  ok("which the endpoint has always supported", /include_domains/.test(api));
+  // WHAT THEY FOUND TRAVELS WITH THE DRAFT, first, so the next time he asks this
+  // question the draft itself answers it.
+  ok("and what they found rides in the draft's source list", /\[\.\.\.new Set\(\[\.\.\.founderUrls, \.\.\.candidateUrls\]\)\]/.test(app5));
+  ok("with the result shown per domain, zeroes included", /\(nothing there\)/.test(app5));
+  // Kept OUT of candidateUrls before the official-site pick on purpose: a
+  // tourist board is not a venue's own website, and candidateUrls feeds that.
+  ok("a vouched source is not promoted into the official-site pick",
+     !/candidateUrls\.unshift\(\.\.\.founderUrls\)/.test(app5));
+
+  // ── AND THE RESEARCH ASKS IN DANISH ──────────────────────────────
+  ok("a standing rule tells every research pass to search Danish", /const DANISH_LANGUAGE_RULES = /.test(app5));
+  ok("and it is folded into the rules every prompt carries", /\$\{DANISH_LANGUAGE_RULES\}/.test(app5));
+  // The general rule is advice. The other name of the actual place is a search
+  // term, and it goes into all seven prompts.
+  ok("every research prompt names the place's other spelling", /THIS PLACE HAS TWO NAMES/.test(app5));
+  ok("and one Tavily query is asked in Danish", /const daName = otherNameFor\(name, \{ includeSights: true \}\)/.test(app5));
+  ok("only when there is a Danish name to ask under", /\.\.\.\(daName \? \[`\$\{daName\} \$\{daWords\}`\] : \[\]\)/.test(app5));
+  // The dash ban applies to prompt text exactly as it does to STUDIO_VOICE: a
+  // dash in a rule teaches every future draft to use one.
+  const dan = app5.slice(app5.indexOf("const DANISH_LANGUAGE_RULES = "), app5.indexOf("const RESEARCH_SOURCE_RULES = "));
+  is("the Danish rules carry no em or en dashes", (dan.match(/[—–]/g) || []).length, 0);
+
+  // ── A DOMAIN WITH A TYPO IN IT DOES NOTHING, FOREVER, SILENTLY ───
+  // He typed visitcopenhagen.dk. The real site is visitcopenhagen.com, and
+  // normaliseDomain accepts both because both are shaped like domains. Checked
+  // once, when he adds it, rather than discovered never.
+  ok("a new source is checked against the search index", /probeSource\(domain\);/.test(app5));
+  ok("with the same domain restriction the drafts use", /const probeSource = async \(domain\) => \{/.test(app5));
+  // ADDED EITHER WAY. A thin index is not proof a site is fake, and a real
+  // parish page with two pages on it is exactly what he should be able to add.
+  is("the check reports rather than refuses, in BOTH outcomes", (app5.match(/It is added either way/g) || []).length, 2);
+  ok("and an empty result says what is usually wrong", /the Danish site may be the \.dk and the English one the \.com/.test(app5));
+  ok("the row is saved before the check runs", app5.indexOf("await loadSources();") < app5.indexOf("probeSource(domain);"));
 }
 
 // ── AN EVENT'S ARRIVAL POINT IS NOT ALWAYS A STATION ───────────────

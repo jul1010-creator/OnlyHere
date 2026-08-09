@@ -18,7 +18,7 @@
 // Every finding names WHAT is wrong and WHERE, so the answer is never just
 // "this one looks bad".
 
-import { scanForAITells } from "./helpers";
+import { scanForAITells, fillerWordCounts } from "./helpers";
 
 // The coordinate that was printed in the town prompt's own JSON schema as an
 // example, which drafts copied verbatim (PASS 45). Any entry still carrying it
@@ -274,6 +274,17 @@ export const auditEntry = (row) => {
   if (tells.length > 0) {
     add(tells.length >= 3 ? "high" : "low", "voice", `Uses banned AI-writing phrases: ${[...new Set(tells.map(t => t.phrase || t))].slice(0, 5).join(", ")}.`);
   }
+  // ── low: a word used as a verbal tic ──────────────────────────
+  // Separate finding from the phrase tells above, and LOW on purpose: this is
+  // a style note about repetition, not a claim that any single sentence is
+  // wrong, and rolling it into the tells count would push entries to "high"
+  // for saying "actually" twice.
+  const filler = fillerWordCounts(all);
+  const fillerWords = Object.keys(filler);
+  if (fillerWords.length > 0) {
+    add("low", "voice", `Leans on filler words: ${fillerWords.map(w => `"${w}" ${filler[w]} times`).join(", ")}. Each one is only worth keeping where deleting it would change the meaning.`);
+  }
+
   const lazyFields = Object.entries(p).filter(([k, v]) => typeof v === "string" && LAZY.test(v.trim())).map(([k]) => k);
   if (lazyFields.length > 0) {
     add(lazyFields.length >= 3 ? "high" : "low", "research", `${lazyFields.length} field${lazyFields.length === 1 ? "" : "s"} left as a placeholder instead of a real answer: ${lazyFields.slice(0, 4).join(", ")}.`);

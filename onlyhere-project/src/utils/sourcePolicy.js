@@ -34,6 +34,8 @@
 // timetable, which is the single error class this project has spent the most
 // time on. The block below says so out loud, every time.
 
+import { samePlaceName, otherNameFor } from "./danishNames";
+
 const clean = (v) => String(v == null ? "" : v).trim();
 
 // Accepts whatever gets pasted: a full URL, a bare host, a host with www, a
@@ -89,14 +91,27 @@ export const TYPE_LABEL = {
 // wrong-city answer this exists to prevent.
 export const PARTS_OF_COUNTRY = ["Jutland", "Funen", "Zealand", "Lolland-Falster", "Bornholm"];
 
+// Canonicalises a part of the country to the spelling the rest of the app uses,
+// across languages: typing "Jylland" stores "Jutland", so it lands in the
+// PARTS_OF_COUNTRY branch of placeMatches instead of being treated as a town
+// nobody has an entry for. A town name is stored exactly as typed, because it is
+// shown back to him in the panel and matched across variants anyway.
 export const cleanPlace = (v) => {
   const t = clean(v);
   if (!t) return "";
-  const part = PARTS_OF_COUNTRY.find(p => p.toLowerCase() === t.toLowerCase());
+  const part = PARTS_OF_COUNTRY.find(p => samePlaceName(p, t));
   return part || t;
 };
 
-const same = (a, b) => clean(a).toLowerCase() === clean(b).toLowerCase();
+// ── "I TYPE COPENHAGEN, BUT IN DANISH IT IS KØBENHAVN" ──────────────
+// Oliver, 8 Aug 2026. Straight string equality made the scoping quietly wrong in
+// the one case he was most likely to hit: he types the scope in English because
+// that is how the entry is filed, and any Danish source, entry, or parent name
+// carrying the Danish spelling then failed to match. A source scoped to
+// Copenhagen would have been LEFT OUT of a København draft, silently, which
+// looks exactly like the scoping working. Both directions now match, along with
+// Jutland/Jylland, Funen/Fyn, Aarhus/Århus and the rest.
+const same = (a, b) => samePlaceName(a, b);
 
 // ctx is whatever is known where the prompt is being built. At draft time that
 // is usually just a name, which is enough for the case he raised.
@@ -173,6 +188,54 @@ THIS IS AN ADDITION, NOT A RESTRICTION. Search everything else exactly as you no
 WHERE SOURCES DISAGREE, one of these outranks an anonymous aggregator or a content farm, because somebody has actually looked at it.
 
 BUT THEY DO NOT OUTRANK A VENUE ON ITS OWN DETAILS. For anything current, a price, an opening hour, a departure time, the venue's or operator's own website is still the authority, exactly as stated above. A tourist board page beating an operator's own timetable is the specific error this rule exists to prevent.`;
+};
+
+// ── BEING NAMED IN A PROMPT IS NOT BEING SEARCHED ───────────────────
+// Oliver, 8 Aug 2026, reading a finished Copenhagen draft's source list, which
+// held eight URLs and not one of his: "you're 100% sure that it includes the
+// sources I put in? I put in visitDenmark.dk and visitcopenhagen.dk".
+//
+// He was right and the block above was only half the feature. sourceRulesBlock
+// reaches the PROMPTS, so Perplexity and Gemini were told to include his
+// domains. Tavily, which is the half of the pipeline that actually fetches
+// pages, builds its queries from a fixed template and never saw the list. The
+// draft's __sources records what Tavily returned, so it was an accurate report
+// that the sources had not been opened.
+//
+// This turns each vouched domain into a real search, restricted to that domain.
+// /api/search has accepted include_domains this whole time and nothing used it.
+//
+// CAPPED, because the cost is per draft and it is his money: the list is meant
+// to grow as he finds pages, and an uncapped version quietly turns a twelve-site
+// list into twelve extra searches on every draft. The first few are the ones the
+// ordering in sourcesFor already puts first.
+export const MAX_DIRECT_SEARCHES = 4;
+
+// Both languages in one query, because a Danish tourist board files the capital
+// under København and an English-only query cannot reach that page. Most Danish
+// towns are spelled the same either way and cost nothing extra for this.
+const QUERY_WORDS = {
+  town: "praktisk information seværdigheder åbningstider what to see opening hours",
+  festival: "billetter datoer program tickets dates programme",
+  free: "åbningstider gratis adgang opening hours free entry",
+  food: "menukort priser åbningstider menu prices opening hours",
+  foodStreet: "boder madmarked åbningstider stalls market opening hours",
+  night: "åbningstider entré opening hours entry",
+  nightTown: "natteliv barer nightlife bars",
+  booking: "værksted booking priser workshop booking prices",
+};
+
+export const directSourceSearches = (rows, type, ctx) => {
+  const name = clean(typeof ctx === "string" ? ctx : ctx?.name);
+  // No name means no query worth spending. This is the same direction of caution
+  // placeMatches takes: when we do not know where the draft is, do less.
+  if (!name) return [];
+  const words = QUERY_WORDS[type] || "praktisk information åbningstider opening hours";
+  const other = otherNameFor(name, { includeSights: true });
+  const names = other ? `${name} ${other}` : name;
+  return sourcesFor(rows, type, ctx)
+    .slice(0, MAX_DIRECT_SEARCHES)
+    .map(s => ({ domain: s.domain, query: `${names} ${words}` }));
 };
 
 // ── WHAT THE LIST COSTS ─────────────────────────────────────────────

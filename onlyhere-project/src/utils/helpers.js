@@ -205,6 +205,35 @@ export const AI_TELL_PHRASES = [
   "comprehensive", "enhance", "delicately", "lively energy", "to perfection",
 ];
 
+// ── "IT'S SUCH A NERD WORD TO BE USING SO MUCH" ─────────────────────
+// Oliver, 8 Aug 2026, on "actually".
+//
+// KEPT OUT OF AI_TELL_PHRASES ON PURPOSE, and the distinction matters. Every
+// word in that list is never right: nothing is improved by "nestled". These are
+// different. "actually" is a real word when it corrects an expectation the
+// reader already holds, and the entrance that looks closed but is round the
+// back is exactly the kind of thing this site exists to say. What makes it a
+// tell is not the word, it is the FREQUENCY, so frequency is what gets counted.
+//
+// Substring matching would be wrong here too, so this uses word boundaries.
+// AI_TELL_PHRASES can use indexOf because its entries are multi-word or
+// distinctive enough not to collide; a bare word cannot.
+export const FILLER_WORDS = ["actually", "truly", "genuinely", "simply"];
+
+// Twice in one entry is the signal. Once can be doing real work, and flagging a
+// considered use is how a review tool teaches its owner to ignore it.
+export const FILLER_REPEAT = 2;
+
+export const fillerWordCounts = (text, words = FILLER_WORDS) => {
+  const out = {};
+  if (!text) return out;
+  for (const w of words) {
+    const n = (String(text).match(new RegExp(`\\b${w}\\b`, "gi")) || []).length;
+    if (n >= FILLER_REPEAT) out[w] = n;
+  }
+  return out;
+};
+
 export const scanForAITells = (text, extraPhrases = []) => {
   if (!text) return [];
   const found = [];

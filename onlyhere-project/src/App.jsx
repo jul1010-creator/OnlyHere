@@ -56,14 +56,19 @@ import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock } from "./utils/journey";
 import { correctEntry } from "./utils/correction";
-import { sourceRulesBlock, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
+import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
+import { otherNameFor } from "./utils/danishNames";
+import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
+import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
+import { supabaseFailure, studioErrorMessage, EXPIRED, MISSING } from "./utils/studioErrors";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { partOfCountry, partsPresent, matchesSearch } from "./utils/geography";
-import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel } from "./utils/placeThemes";
+import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, TIERS, tierOf } from "./utils/placeThemes";
+import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
@@ -217,6 +222,34 @@ A PRICE IS ONLY A FACT IF YOU SAY WHICH TICKET IT IS. Danish festival tickets ar
 A SOLD-OUT EARLY TIER IS NOT THE PRICE. It is a price nobody can pay any more, and quoting it sends a reader to a checkout that will charge them more.
 A SINGLE FIGURE FOR A MULTI-DAY FESTIVAL is usually a full-festival or partout ticket rather than a day ticket. Say which it is, or leave it out.`;
 
+// ── "COPENHAGEN ON DANISH IS KØBENHAVN" ────────────────────────────
+// Oliver, 8 Aug 2026: "remember languages can be different. I type copenhagen,
+// but Copenhagen on Danish is København. So it has to go over those sources too.
+// Not sure if it already translates."
+//
+// It did not, anywhere. Every research query this app builds is `${name} Denmark
+// ...` in English, and every research prompt names the place exactly as it was
+// typed into Studio. So the research asked English questions and got English
+// answers, which is precisely why a Copenhagen draft came back sourced to
+// cntraveler and bontraveler while the Danish pages that actually carry the
+// opening hours went unread.
+//
+// The known name pairs are handled in code (utils/danishNames.js) because a
+// matcher must be checkable. The open-ended half belongs here, because the
+// models can actually read Danish and I cannot generate it safely: a guessed
+// translation is not a harmless miss, it is a query spent asking about a place
+// that does not exist under that name, and a search will always return
+// something.
+const DANISH_LANGUAGE_RULES = `SEARCH IN DANISH AS WELL AS ENGLISH, EVERY TIME. This is Denmark. The page that actually carries an opening hour, a ticket price, a ferry departure or a closure notice is very often written only in Danish, and it does not rank for an English query. An English-only search quietly returns the English-language layer of the internet, which for Denmark means international travel magazines and blog round-ups rather than the museum, the municipality or the operator.
+
+So for anything you look up, also run the Danish form of the question. Useful Danish words for this work: åbningstider (opening hours), priser (prices), billetter (tickets), entré (admission), praktisk information, sådan kommer du hertil (getting here), afgange (departures), færge (ferry), lukket (closed), helligdage (public holidays), seværdigheder (sights), arrangementer (events).
+
+USE THE DANISH NAME OF THE PLACE. Many Danish places have a different name in each language and the Danish page is filed under the Danish one: København not Copenhagen, Helsingør not Elsinore, Sjælland not Zealand, Jylland not Jutland, Fyn not Funen, Den Lille Havfrue not The Little Mermaid, Rundetårn not The Round Tower, and any castle or palace is Slot. Both older and newer Danish spellings are in live use and both find real pages: Aarhus and Århus, Aalborg and Ålborg.
+
+WHERE A DANISH PAGE AND AN ENGLISH ONE DISAGREE about a Danish place, the Danish page is normally the more current of the two. The English version of a Danish site is frequently a stale translation of a page that has since been updated, so a price or an opening hour found only in the English version is worth re-checking against the Danish one before you report it.
+
+WRITE THE ANSWER IN ENGLISH. Reading Danish is the job here; the guide is in English. When you quote a Danish name, keep it as it is written rather than translating it into something a visitor would not find on a sign.`;
+
 const RESEARCH_SOURCE_RULES = `SOURCES, EVERY TIME: always check Wikipedia and the place's own official website — Wikipedia for background/history, the official site for anything current (prices, hours, booking). Britannica and Denmark.dk are also good general/background sources when relevant. Use Reddit, Quora and Facebook specifically for real visitor opinions and reviews (what it's actually like), never as the source of a hard fact like a date, price, or opening hour — those need the official site or a source that would actually know. If the official site and Wikipedia disagree on something current (a price, a status), the official site wins. Anything priced or timed from before 2025 should be treated as stale, not current.
 
 ${BOOKING_PLATFORM_RULES}
@@ -224,6 +257,8 @@ ${BOOKING_PLATFORM_RULES}
 ${TICKET_SOURCE_RULES}
 
 ${MEASURED_JOURNEY_RULES}
+
+${DANISH_LANGUAGE_RULES}
 
 ${ISLAND_FERRY_RULES}`;
 
@@ -244,6 +279,20 @@ ${ISLAND_FERRY_RULES}`;
 // reads founderSources, which liveSources.js fills in place.
 // The one statement this feature needs. Shown in the panel, copyable, and only
 // ever offered when PostgREST actually says the relation is missing.
+// Re-runnable, like SOURCES_SQL: Supabase runs the editor as one transaction,
+// so a "policy already exists" error rolls the whole script back.
+const RESEARCH_SQL = `create table if not exists gemlyx_research (
+  name text not null,
+  type text not null,
+  notes text,
+  urls jsonb,
+  created_at timestamptz default now(),
+  primary key (name, type)
+);
+alter table gemlyx_research enable row level security;
+drop policy if exists "auth all gemlyx_research" on gemlyx_research;
+create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);`;
+
 const SOURCES_SQL = `create table if not exists gemlyx_sources (
   id bigserial primary key,
   domain text not null,
@@ -254,16 +303,31 @@ const SOURCES_SQL = `create table if not exists gemlyx_sources (
   created_at timestamptz default now()
 );
 alter table gemlyx_sources enable row level security;
-create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
-create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);
+alter table gemlyx_sources add column if not exists applies_place text default '';
 
--- Safe to run again if the table already exists from an earlier version:
-alter table gemlyx_sources add column if not exists applies_place text default '';`;
+-- Dropped first so the whole script is safe to run again. Supabase runs the
+-- editor as one transaction, so a "policy already exists" error rolls back
+-- everything, including the column add above.
+drop policy if exists "read gemlyx_sources" on gemlyx_sources;
+create policy "read gemlyx_sources" on gemlyx_sources for select to anon using (true);
+drop policy if exists "auth all gemlyx_sources" on gemlyx_sources;
+create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticated using (true) with check (true);`;
 
 // `where` is whatever the caller knows about the place: usually a name, and a
 // whole entry where one exists. A source scoped to a town is left OUT when
 // nothing says where the draft is, which is the cheap direction to be wrong in.
-const researchRules = (type, where) => `${RESEARCH_SOURCE_RULES}${sourceRulesBlock(founderSources, type, where)}`;
+const researchRules = (type, where) => {
+  // The general Danish rule lives in RESEARCH_SOURCE_RULES. This adds the one
+  // thing a general rule cannot: the actual other name of the actual place, in
+  // every one of the seven research prompts a draft makes. "Search in Danish
+  // too" is advice; "this place is also called Helsingør" is a search term.
+  const nm = typeof where === "string" ? where : where?.name;
+  const other = nm ? otherNameFor(nm, { includeSights: true }) : "";
+  const both = other
+    ? `\n\nTHIS PLACE HAS TWO NAMES: "${nm}" and "${other}". Search under BOTH. Danish pages about it are filed under the Danish one and are usually the more current of the two, and a source that has nothing under one name very often has a full page under the other.`
+    : "";
+  return `${RESEARCH_SOURCE_RULES}${both}${sourceRulesBlock(founderSources, type, where)}`;
+};
 
 // The original component (previously the default export) is now mounted as the
 // "/" route below, with a new "/guide/:guideId" route alongside it for the
@@ -357,8 +421,19 @@ function GemlyxApp() {
   // pill that offers it can never drift apart, which they previously could:
   // the town list was inline inside filteredEvents and nowhere else.
   const NORTH_ZEALAND_TOWNS = ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"];
-  const [bookableOnly, setBookableOnly] = useState(false);
   const [craftSort, setCraftSort] = useState("recommended"); // "recommended" | "near" | "az"
+  // ── ONE OBJECT, NOT FIVE BOOLEANS ─────────────────────────────────
+  // The old page kept craftKind, attractionCity, priceFilter, hiddenGemOnly and
+  // bookableOnly as five separate pieces of state, which is why "clear all" did
+  // not exist and an applied-filters summary was never going to get written.
+  // One object means the chips, the counts and the clear are all derivable.
+  const [attractionFacets, setAttractionFacets] = useState({});
+  const [attractionQuery, setAttractionQuery] = useState("");
+  const [attractionSheet, setAttractionSheet] = useState(false);
+  // "🍬 Handmade" used to be a pill in the CITY row, which is why the panel
+  // changed shape when you tapped it: it is not a city and not a filter, it
+  // swaps the page for a different view entirely. It gets to say so now.
+  const [attractionView, setAttractionView] = useState("all");
   const [eventSort, setEventSort] = useState("soonest");     // "soonest" | "az"
   // FOOD had no location filter at all, which on a national guide means the only
   // way to find somewhere to eat in the town you are actually standing in was to
@@ -372,15 +447,34 @@ function GemlyxApp() {
   const [eventMonth, setEventMonth] = useState(null);
   const [eventType, setEventType] = useState(null);
   const [eventTab, setEventTab] = useState("local");
-  // null | "hidden" | "must". Read off the entry's own tier so the filter agrees
-  // with what the page says about each town, rather than being a second opinion.
+  // null, or one of the TIERS ids: must | high | worth | nearby. Read off the
+  // entry's own tier so the filter agrees with what the card says about each
+  // town, rather than being a second opinion. See the note below the state.
   const [townKind, setTownKind] = useState(null);
-  const townKindOk = (t) => {
-    if (!townKind) return true;
-    const tier = String(t?.tier || "").toLowerCase();
-    if (townKind === "must") return tier.includes("can't miss") || tier.includes("cant miss");
-    return !(tier.includes("can't miss") || tier.includes("cant miss"));
-  };
+  // ── "WHY IS THAT 'OFF THE USUAL ROUTE' AND 'CAN'T MISS OUT'?" ──
+  // Oliver, 9 Aug 2026: "Shouldn't it be 'trendy' and 'off the usual route'
+  // then?" He is right, and the answer is that the heading was lying about the
+  // field. The row said "How well known" and offered two options from two
+  // different vocabularies: one about fame, one about how strongly we recommend
+  // it. Under that heading, "Can't miss out" is not an answer to the question.
+  //
+  // The stored field is `tier`, and across the 31 published towns it holds:
+  //   Worth Considering              16
+  //   Highly Recommended             10
+  //   Best If You're Already Nearby   3
+  //   Can't Miss Out                  2
+  // which is a RECOMMENDATION STRENGTH, top to bottom. There is no fame field at
+  // all: popularityTag is undefined on every one of the 31.
+  //
+  // So "Off the usual route" was not reading anything. It was implemented as the
+  // NEGATION of can't-miss, which selected 29 towns out of 31. A pill that keeps
+  // 94% of the list is not a filter, it is a label pretending to be one.
+  //
+  // Renamed to what the field is, and given the four real values instead of a
+  // binary invented out of one of them. If a genuine fame axis is wanted later
+  // it needs its own field on the entry, researched and stored, not derived by
+  // turning a recommendation upside down.
+  const townKindOk = (t) => !townKind || tierOf(t)?.id === townKind;
   // ── SIZE OF PLACE, A SEPARATE AXIS FROM HOW WELL KNOWN IT IS ──
   // Oliver, 8 Aug 2026: "Nyhavn is 'technically' a town, but it is within
   // Copenhagen... What do we do?" and then "There are also villages in the
@@ -467,14 +561,10 @@ function GemlyxApp() {
   useEffect(() => { ensureSourcesLoaded(); }, []);
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
-  const [craftKind, setCraftKind] = useState(null);
   const [foodTab, setFoodTab] = useState("All");
   const [foodKind, setFoodKind] = useState("All"); // "All" | "Restaurants" | "Food Streets"
   const [nightlifeTab, setNightlifeTab] = useState("Local");
   const [nightlifeTownView, setNightlifeTownView] = useState(null); // null = showing towns; a town name = showing that town's venues
-  const [attractionCity, setAttractionCity] = useState("All");
-  const [priceFilter, setPriceFilter] = useState("all"); // "all" | "free" | "paid"
-  const [hiddenGemOnly, setHiddenGemOnly] = useState(false);
   const [craftModal, setCraftModal] = useState(null);
   const [expandedPlan, setExpandedPlan] = useState(null);
   const [liveInfo, setLiveInfo] = useState({});
@@ -634,6 +724,21 @@ function GemlyxApp() {
   const [studioSession, setStudioSession] = useState(() => {
     try { return JSON.parse(localStorage.getItem("gemlyx_studio_session") || "null"); } catch { return null; }
   });
+  // ── THE ONLY PLACE A STUDIO REQUEST GETS ITS HEADERS ──────────────
+  // Declared here, next to the session it reads, because twelve call sites
+  // spread over 2,800 lines used to interpolate the token by hand and every one
+  // of them could produce the literal string "Bearer undefined".
+  //
+  // Throwing rather than returning a broken header is the whole point: a call
+  // that cannot be authenticated must fail as a LOGIN problem, loudly, at the
+  // point of the call. The alternative is what this project has now shipped four
+  // separate times, where PostgREST answers 401 and the code in front of it
+  // reports a missing table.
+  const studioAuth = () => {
+    const tok = studioSession?.access_token;
+    if (!tok) throw new Error("Your Studio login has expired. Log out and back in.");
+    return { apikey: SUPABASE_KEY, Authorization: `Bearer ${tok}` };
+  };
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState(null);
@@ -668,7 +773,7 @@ function GemlyxApp() {
     setManageLoading(true);
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published&order=id.desc`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
+        headers: studioAuth(),
       });
       const rows = await res.json();
       setManageItems(Array.isArray(rows) ? rows : []);
@@ -711,7 +816,7 @@ function GemlyxApp() {
   const patchContentPayload = async (row, newPayload) => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
       method: "PATCH",
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
       body: JSON.stringify({ payload: newPayload }),
     });
     if (!res.ok) throw new Error(`Save failed (${res.status}) — check the update RLS policy on gemlyx_content`);
@@ -848,7 +953,7 @@ function GemlyxApp() {
         const path = `${row.type}/${slugBase}-${Date.now()}-${i}.${ext}`;
         const up = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
           method: "POST",
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": f.type || "image/jpeg", "x-upsert": "true" },
+          headers: { ...studioAuth(), "Content-Type": f.type || "image/jpeg", "x-upsert": "true" },
           body: f,
         });
         if (!up.ok) {
@@ -903,7 +1008,7 @@ function GemlyxApp() {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${id}`, {
         method: "DELETE",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
+        headers: studioAuth(),
       });
       if (res.ok) {
         setToast("🗑 Deleted — refreshing");
@@ -1057,6 +1162,10 @@ function GemlyxApp() {
   // silent failure that looks like a working feature is the single thing that
   // has cost the most time on this project.
   const [researchMemory, setResearchMemory] = useState(null); // null | {status, detail}
+  // Which vouched domains were searched directly for this draft, and how many
+  // pages each returned. Shown in Studio because "are my sources actually being
+  // used" was a question the app could not answer.
+  const [sourceSearch, setSourceSearch] = useState(null);
 
   const [googleCheckResult, setGoogleCheckResult] = useState(null); // { text, citations: [{title,url}] }
   const [googleCheckError, setGoogleCheckError] = useState(null);
@@ -1331,7 +1440,28 @@ function GemlyxApp() {
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[sType];
-      const allQueries = [...cfg.queries, ...plannedQueries];
+      // ── ONE QUERY IN DANISH, WHERE THE NAME DIFFERS ─────────────
+      // Every query above is English and templated on the name as typed. When
+      // the place has a genuinely different Danish name, none of them can reach
+      // the Danish page: "Copenhagen Denmark travel guide" and the municipality's
+      // own "København praktisk information" do not share a single word.
+      //
+      // Only fires when there IS another name, so most of Denmark, whose towns
+      // are spelled the same in both languages, pays nothing for this. The words
+      // are Danish on purpose: an English query with a Danish place name in it
+      // still ranks English pages.
+      const daName = otherNameFor(name, { includeSights: true });
+      const daWords = {
+        town: "seværdigheder praktisk information hvad kan man lave åbningstider",
+        festival: "billetter datoer program praktisk information",
+        free: "åbningstider gratis adgang praktisk information",
+        food: "menukort priser åbningstider anmeldelse",
+        foodStreet: "boder madmarked åbningstider",
+        night: "åbningstider entré natteliv anmeldelse",
+        nightTown: "natteliv barer udeliv studerende",
+        booking: "værksted booking priser åbningstider",
+      }[sType] || "praktisk information åbningstider";
+      const allQueries = [...cfg.queries, ...plannedQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
       let context = "";
       let candidateUrls = [];
       // RESEARCH MEMORY (Oliver: "make the AI learn... if some very important
@@ -1350,10 +1480,25 @@ function GemlyxApp() {
       //   create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);
       try {
         const memRes = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?name=eq.${encodeURIComponent(name)}&type=eq.${encodeURIComponent(sType)}&select=*`, {
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
+          headers: studioAuth(),
         });
         if (!memRes.ok) {
-          ui(setResearchMemory, { status: memRes.status === 401 || memRes.status === 404 ? "missing" : "error", detail: `HTTP ${memRes.status}` });
+          // ── "IS STILL SAYS THIS!!!!!!!" ──────────────────────────
+          // Oliver, 9 Aug 2026, pasting the SQL banner back at me for the second
+          // time, having already run it.
+          //
+          // He had. The table exists. What the panel was reading was a 401, and
+          // this line mapped 401 straight to "missing" and printed a create-table
+          // script at him. It is the gemlyx_facts bug for the fourth time, and
+          // this one is mine: I wrote a twenty-five line comment above
+          // studioAuth() saying "writing the helper is not the same as using
+          // it", fixed the three facts call sites, and left twelve others
+          // interpolating the token by hand, including both of these.
+          //
+          // A 401 means the LOGIN. Only PGRST205 and a genuine 404 mean the
+          // relation is not there, and only those two are allowed to show SQL.
+          const body = await memRes.json().catch(() => null);
+          ui(setResearchMemory, { status: researchStatusFor(memRes.status, body), detail: `HTTP ${memRes.status}` });
         } else {
           ui(setResearchMemory, { status: "ok" });
           const memRows = await memRes.json();
@@ -1464,6 +1609,54 @@ function GemlyxApp() {
         } catch { /* the general research still stands on its own */ }
       }
 
+
+      // ── THE FOUNDER'S SOURCES, ACTUALLY SEARCHED ────────────────
+      // Oliver, 8 Aug 2026, holding a finished draft's source list up against
+      // the two domains he had added: "you're 100% sure that it includes the
+      // sources I put in? I put in visitDenmark.dk and visitcopenhagen.dk".
+      //
+      // No, and he was right to ask. The list reached the PROMPTS, through
+      // researchRules, so Perplexity and Gemini were told to include those
+      // domains. Tavily was not, and Tavily is the half of this pipeline that
+      // actually fetches pages: its queries are built from the fixed template
+      // above plus whatever OpenAI planned, and neither has ever seen the list.
+      // So __sources, which records the URLs Tavily returned, was an accurate
+      // report that his sources had not been opened.
+      //
+      // Being named in a prompt is not the same as being searched. /api/search
+      // has accepted an include_domains parameter this whole time and nothing
+      // used it. One query per vouched domain, restricted to that domain, both
+      // language spellings of the name in the query so a Danish page can match.
+      //
+      // A domain returning nothing is ORDINARY and must stay cheap to be wrong
+      // about, which is his own "include, not restrict" rule: a village with no
+      // page on visitdenmark.dk is the normal case, the general search above
+      // already ran, and nothing here changes what the writer is allowed to say.
+      const founderUrls = [];
+      const sourceHits = [];
+      {
+        const searches = directSourceSearches(founderSources, sType, { name });
+        for (const { domain, query } of searches) {
+          try {
+            const fRes = await fetch(`/api/search?q=${encodeURIComponent(query)}&domains=${encodeURIComponent(domain)}`);
+            const fData = await fRes.json();
+            const urls = fRes.ok && !fData.error ? (fData.results || []).map(r => r.url).filter(Boolean) : [];
+            const snips = fRes.ok && !fData.error
+              ? (fData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 3).join(" ")
+              : "";
+            founderUrls.push(...urls);
+            sourceHits.push({ domain, count: urls.length, ok: fRes.ok && !fData.error });
+            if (fData.answer || snips) {
+              context += ` SOURCE THE FOUNDER VOUCHES FOR (${domain}), searched directly for this place: ${fData.answer || ""} ${snips}`;
+            }
+          } catch {
+            // One vouched domain failing is not a reason to lose a draft that
+            // already has a full general search behind it.
+            sourceHits.push({ domain, count: 0, ok: false });
+          }
+        }
+        if (searches.length) ui(setSourceSearch, sourceHits);
+      }
 
       // Automatic Perplexity pre-check, BEFORE anything is written. A second,
       // independent search pass (different index, different model than Tavily) that
@@ -2103,7 +2296,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // it already has its own line above the list.
       const AGG = /tripadvisor|booking\.com|expedia|getyourguide|viator|tiqets|headout|klook|musement|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|yelp/i;
       const seenHost = new Set();
-      t.__sources = [...new Set(candidateUrls)].filter(u => {
+      // Founder-vouched pages FIRST, and not merged into candidateUrls before
+      // this point on purpose: candidateUrls also feeds the official-site pick
+      // and the deep-scan ranking, and a tourist board is not a venue's own
+      // site. Here they belong, because this list answers "what did the
+      // research actually open", and it is the only place he can check.
+      t.__sources = [...new Set([...founderUrls, ...candidateUrls])].filter(u => {
         try {
           const h = new URL(u).hostname.replace(/^www\./, "");
           if (AGG.test(h) || seenHost.has(h)) return false;
@@ -2262,12 +2460,15 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         if (freshOnly.trim()) {
           const saved = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?on_conflict=name,type`, {
             method: "POST",
-            headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+            headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
             body: JSON.stringify({ name, type: sType, notes: freshOnly.slice(0, 6000), urls: [...new Set(candidateUrls)].slice(0, 8), created_at: new Date().toISOString() }),
           });
           // Still never blocks a finished draft. It just stops pretending it
           // worked.
-          if (!saved.ok) ui(setResearchMemory, { status: saved.status === 401 || saved.status === 404 ? "missing" : "error", detail: `HTTP ${saved.status} on save` });
+          if (!saved.ok) {
+            const sBody = await saved.json().catch(() => null);
+            ui(setResearchMemory, { status: researchStatusFor(saved.status, sBody), detail: `HTTP ${saved.status} on save` });
+          }
         }
       } catch (e) { ui(setResearchMemory, { status: "error", detail: String(e?.message || e).slice(0, 80) }); }
       // frozenGeo is the whole point of this change: publishDraft force-overrides
@@ -2407,12 +2608,6 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
   // key instead. Supabase then refused with "new row violates row-level security
   // policy", which reads like a broken SQL policy rather than a missing login.
   // Both Oliver's 403 on storage and his 42501 on gemlyx_facts were this one typo.
-  const studioAuth = () => {
-    const tok = studioSession?.access_token;
-    if (!tok) throw new Error("Your Studio login has expired. Log out and back in.");
-    return { apikey: SUPABASE_KEY, Authorization: `Bearer ${tok}` };
-  };
-
   // ── THE MESSAGE THAT BLAMED HIS SQL FOR AN EXPIRED LOGIN ────────
   // Oliver, 8 Aug 2026: "The gemlyx_facts table is not readable yet. Run the SQL
   // from CHANGES_THIS_PASS.md in Supabase.. it worked before. And facts are in
@@ -2436,15 +2631,18 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
   // Now: no token means the login is named. A real error names ITSELF, and the
   // SQL is only suggested for the one PostgREST code that genuinely means the
   // relation does not exist.
+  // Same three-way split as factsErrorFor, for the research memory banner:
+  // "expired" is a login, "missing" is a table that genuinely is not there and is
+  // the ONLY state allowed to print SQL, "error" is everything else naming
+  // itself. Exported through the component so the test can find it by name.
+  const researchStatusFor = supabaseFailure;
+
+  // All three panels classify in ONE place now (utils/studioErrors.js), so no
+  // call site gets to hold its own opinion about what a 401 means. That opinion
+  // is what has cost four passes.
   const factsErrorFor = (status, body) => {
-    const code = body && typeof body === "object" ? String(body.code || "") : "";
-    if (status === 401 || status === 403 || /^PGRST30[12]$/.test(code)) {
-      return "Your Studio login has expired. Log out and back in. (The table is fine.)";
-    }
-    if (status === 404 || code === "PGRST205" || /does not exist/i.test(String(body?.message || ""))) {
-      return "The gemlyx_facts table does not exist yet. Run the SQL from CHANGES_THIS_PASS.md in Supabase.";
-    }
-    return `Could not read the facts (${status}${code ? ` ${code}` : ""}). ${String(body?.message || "").slice(0, 160)}`.trim();
+    const m = studioErrorMessage("the facts", status, body);
+    return m === "MISSING_TABLE" ? "The gemlyx_facts table does not exist yet. Run the SQL from CHANGES_THIS_PASS.md in Supabase." : m;
   };
 
   const loadSavedFacts = async () => {
@@ -2579,7 +2777,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       const path = `facts/${key}.${ext}`;
       const res = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": file.type || "image/jpeg", "x-upsert": "true" },
+        headers: { ...studioAuth(), "Content-Type": file.type || "image/jpeg", "x-upsert": "true" },
         body: file,
       });
       if (!res.ok) {
@@ -2901,7 +3099,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     setPhotoFixState({ running: true, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: [] });
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
+        headers: studioAuth(),
       });
       const rows = await res.json();
       if (!Array.isArray(rows)) { setPhotoFixState({ running: false, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: ["Could not read the published rows."] }); return; }
@@ -2935,7 +3133,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
             const block = { type: "image", src, credit: { ...hit.credit }, ...(useCommonsCaption && hit.caption ? { caption: hit.caption } : {}) };
             const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
               method: "PATCH",
-              headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+              headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
               body: JSON.stringify({ payload: { ...p, photo: src, __photoCredit: { ...hit.credit }, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block] } }),
             });
             if (patch.ok) fixed++; else failed.push(`${p.name}: save failed (${patch.status})`);
@@ -2960,7 +3158,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     setGeoFixState({ running: true, done: 0, total: 0, fixed: 0, failed: [] });
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
+        headers: studioAuth(),
       });
       const rows = await res.json();
       if (!Array.isArray(rows)) { setGeoFixState({ running: false, done: 0, total: 0, fixed: 0, failed: ["Could not read the published rows."] }); return; }
@@ -2977,7 +3175,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
         if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lon)) {
           const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
             method: "PATCH",
-            headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({ payload: { ...row.payload, __lat: coords.lat, __lon: coords.lon } }),
           });
           if (patch.ok) fixed++; else failed.push(`${row.payload.name}: save failed (${patch.status})`);
@@ -3030,16 +3228,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   // This panel is new and its table genuinely may not exist yet, so it has to
   // tell those two apart from the first day rather than learning the lesson
   // twice.
-  const sourcesErrorFor = (status, body) => {
-    const code = body && typeof body === "object" ? String(body.code || "") : "";
-    if (status === 401 || status === 403 || /^PGRST30[12]$/.test(code)) {
-      return "Your Studio login has expired. Log out and back in. (Nothing is wrong with the table.)";
-    }
-    if (status === 404 || code === "PGRST205" || /does not exist/i.test(String(body?.message || ""))) {
-      return "MISSING_TABLE";
-    }
-    return `Could not read the source list (${status}${code ? ` ${code}` : ""}). ${String(body?.message || "").slice(0, 160)}`.trim();
-  };
+  const sourcesErrorFor = (status, body) => studioErrorMessage("the source list", status, body);
 
   // Removes one uncertainty from the draft, through studioDraftText, which is
   // what Publish actually reads. Editing studioDraft alone would clear it on
@@ -3070,6 +3259,19 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     } catch (e) { setSourceError(String(e.message || e)); }
   };
 
+  // null | { domain, state: "checking" | "found" | "empty" | "failed", count }
+  const [sourceProbe, setSourceProbe] = useState(null);
+  const probeSource = async (domain) => {
+    setSourceProbe({ domain, state: "checking", count: 0 });
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(`${domain} Denmark`)}&domains=${encodeURIComponent(domain)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) { setSourceProbe({ domain, state: "failed", count: 0 }); return; }
+      const n = (data.results || []).length;
+      setSourceProbe({ domain, state: n > 0 ? "found" : "empty", count: n });
+    } catch { setSourceProbe({ domain, state: "failed", count: 0 }); }
+  };
+
   const addSource = async () => {
     const domain = normaliseDomain(newSourceDomain);
     if (!domain) { setSourceError(`"${newSourceDomain.trim()}" is not a domain I can use. Paste the address of the site, like visitdenmark.dk or a link to one of its pages.`); return; }
@@ -3090,6 +3292,20 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       setNewSourceDomain(""); setNewSourceNote(""); setNewSourcePlace("");
       await loadSources();
       refreshSources();
+      // ── DOES THIS DOMAIN EXIST AT ALL ───────────────────────────
+      // He typed "visitcopenhagen.dk" on 8 Aug. The real site is
+      // visitcopenhagen.com. normaliseDomain accepts both, because both are
+      // shaped like domains, and a domain that does not exist returns nothing
+      // from every search forever without ever once saying so. That is the
+      // worst failure this feature can have: a source he believes is working,
+      // silently doing nothing, on every draft.
+      //
+      // One search, once, at the moment he adds it. Not a verdict, a report:
+      // "nothing came back" can also mean a site the index is thin on, so it
+      // asks rather than refusing. Refusing would be worse, since a real Danish
+      // parish site with two pages is exactly the kind of source he should be
+      // allowed to add.
+      probeSource(domain);
     } catch (e) { setSourceError(String(e.message || e)); }
     setSourceBusy(false);
   };
@@ -3129,7 +3345,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   const sweepRestoreRef = useRef(null);
   const sweepCancelRef = useRef(false);
 
-  const sweepHeaders = () => ({ apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` });
+  const sweepHeaders = () => studioAuth();
   const sweepBusy = sweepState?.phase === "reading" || sweepState?.phase === "proposing";
 
   const proposeSweepRun = async (idOverride) => {
@@ -6065,21 +6281,40 @@ You also have a web_search tool. Use it whenever someone asks about something th
   // Derived from the same array filteredEvents runs on, so a pill exists exactly
   // when something is behind it, and months stay in calendar order rather than
   // alphabetical (a January that sorts before August is worse than useless).
-  const eventTabSource = eventTab === "local" ? events : eventTab === "viking" ? vikingEvents : majorEvents;
+  // ── "REMOVE THE VIKING SECTION AND MAKE IT A FILTER INSTEAD" ──
+  // Oliver, 9 Aug 2026, and the tab was worse than redundant, it was dead.
+  // data/events.js says so in its own comment: "No Studio type publishes into
+  // vikingEvents yet", and the array is `[]` with nothing that can ever fill it.
+  // Meanwhile the two real Viking events are sitting in the festival rows with
+  // type "Viking Market" and "Viking Festival", showing up under Local, while a
+  // whole tab labelled Viking rendered an empty grid next to them.
+  //
+  // Third dead render path found today, after the nightlife town that no line
+  // could put on the page and the source list that reached no search. Viking is
+  // a kind of event, so it is a type, and the type row already exists.
+  const eventTabSource = eventTab === "local" ? events : majorEvents;
   const upcomingInTab = eventTabSource.filter(e => isUpcoming(e.date));
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const eventMonthOptions = MONTHS.filter(m => upcomingInTab.some(e => new Date(e.date).toLocaleString("en", { month: "short" }) === m));
+  // ── SIX PILLS FOR FOUR IDEAS, TWO STARTING WITH "MUSIC" ──────
+  // This row read `[...new Set(upcomingInTab.map(e => e.type))]` off a free-text
+  // field, so the live table's eight different spellings became eight pills:
+  // Culture, Festival, Music, Music / Festival, Music / Festival / Culture,
+  // Music Festival, Viking Market, Viking Festival. Closed vocabulary now, in
+  // utils/eventTypes.js, and multi-valued because "Music / Festival / Culture"
+  // is one event making two real claims.
   const eventTypeOptions = [
-    ...[...new Set(upcomingInTab.map(e => e.type).filter(Boolean))].sort(daCompare),
+    ...eventTypesPresent(upcomingInTab),
     // North Zealand is not a type on any record, it is a group of towns. It stays
     // hand-added because there is nothing in the data to derive it from.
     ...(eventTab === "local" && upcomingInTab.some(e => NORTH_ZEALAND_TOWNS.includes(e.town)) ? ["North Zealand"] : []),
   ];
+  const eventTypeLabelFor = (t) => EVENT_TYPE_LABEL[t] || t;
 
   const filteredEvents = upcomingInTab
     .filter(e => {
       const em = new Date(e.date).toLocaleString("en", { month: "short" });
-      return (!eventMonth || em === eventMonth) && (!eventType || e.type === eventType || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)));
+      return (!eventMonth || em === eventMonth) && (!eventType || hasEventType(e, eventType) || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)));
     })
     // Soonest first stays the default, because for an event the date IS the
     // point. A to Z is there for when you know the name and want to find it.
@@ -6221,6 +6456,21 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   ) : (
                     <>
                       {sourceError && <div style={{ fontSize: 11.5, color: "#FFB347", marginBottom: 9, lineHeight: 1.5 }}>{sourceError}</div>}
+
+                      {/* The add-time probe. Not a verdict on the source, a
+                          report on whether the search engine can see it: a
+                          domain with a typo in it does nothing on every draft
+                          forever and never says so. */}
+                      {sourceProbe && (
+                        <div style={{ fontSize: 11.5, marginBottom: 9, lineHeight: 1.5, color: sourceProbe.state === "empty" ? "#FFB347" : C.muted }}>
+                          {sourceProbe.state === "checking" && `Checking that ${sourceProbe.domain} is a site the search can actually reach...`}
+                          {sourceProbe.state === "found" && `${sourceProbe.domain} checks out, the search reached it.`}
+                          {sourceProbe.state === "failed" && `Could not check ${sourceProbe.domain} just now. It is added either way.`}
+                          {sourceProbe.state === "empty" && (
+                            <>A search restricted to <b>{sourceProbe.domain}</b> came back with nothing at all. That usually means the address is not quite right: Danish tourism sites often split by language, so the Danish site may be the .dk and the English one the .com, or the other way round. Worth opening it in a tab to check. It is added either way, and every draft will tell you what it found.</>
+                          )}
+                        </div>
+                      )}
 
                       {sourceRows.length === 0 && <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 10 }}>Nothing added yet. The built-in rules (Wikipedia, the venue's own site, the ferry operator) still apply on their own.</div>}
 
@@ -7223,6 +7473,26 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ fontSize: 9.5, color: googlePrecheckRan ? "#8AB4F8" : C.muted, marginBottom: 8 }}>
                           {googlePrecheckRan ? "✦ Written with a Perplexity cross-check folded in before drafting" : "Perplexity pre-check didn't run (no key set, or the call failed) — Tavily research only"}
                         </div>
+                        {/* ── "YOU'RE 100% SURE THAT IT INCLUDES THE SOURCES
+                               I PUT IN?" ─────────────────────────────────
+                            He asked because he could not tell, and he was right
+                            not to trust it: his domains were in the prompts and
+                            had never been searched. So the answer is printed on
+                            the draft, per domain, including the zeroes. A source
+                            with nothing about this place is the ordinary case
+                            and saying so out loud is the point: it is the
+                            difference between "not searched" and "searched,
+                            nothing there", which is exactly what he could not
+                            see before. */}
+                        {Array.isArray(sourceSearch) && sourceSearch.length > 0 && (
+                          <div style={{ fontSize: 9.5, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
+                            🔎 Your own sources, searched directly: {sourceSearch.map((h, i) => (
+                              <span key={h.domain} style={{ color: h.ok && h.count > 0 ? "#8AB4F8" : C.muted }}>
+                                {i > 0 ? ", " : ""}{h.domain} {!h.ok ? "(search failed)" : h.count > 0 ? `(${h.count} ${h.count === 1 ? "page" : "pages"})` : "(nothing there)"}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         {/* ── THE AI, WHERE THE DRAFT IS ─────────────────
                             Oliver, 7 Aug: "Is it possible you can install an AI
                             in the studio draft? That I can talk to.. like if
@@ -7434,10 +7704,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               code comment. Shown here, once, with the SQL. */}
                           {researchMemory && researchMemory.status !== "ok" && (
                             <div style={{ background: "#FFB34714", border: "1px solid #FFB34755", borderRadius: 8, padding: "9px 11px", marginBottom: 8, fontSize: 11, color: C.light, lineHeight: 1.6 }}>
-                              <b style={{ color: "#FFB347" }}>Research memory is not switched on</b> ({researchMemory.detail}). Drafts are not remembering their sources, so a redraft starts from scratch every time. Run this once in the Supabase SQL editor:
-                              <div style={{ fontFamily: "monospace", fontSize: 10, color: C.text, background: C.bg, borderRadius: 6, padding: "7px 8px", marginTop: 6, whiteSpace: "pre-wrap", userSelect: "all" }}>{`create table if not exists gemlyx_research (name text not null, type text not null, notes text, urls jsonb, created_at timestamptz default now(), primary key (name, type));
-alter table gemlyx_research enable row level security;
-create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);`}</div>
+                              {researchMemory.status === EXPIRED ? (
+                                <><b style={{ color: "#FFB347" }}>Your Studio login has expired.</b> Log out and back in. Nothing is wrong with the table and there is no SQL to run.</>
+                              ) : researchMemory.status === MISSING ? (
+                                <>
+                                  <b style={{ color: "#FFB347" }}>The gemlyx_research table does not exist yet</b> ({researchMemory.detail}). Drafts are not remembering their sources, so a redraft starts from scratch every time. Run this once in the Supabase SQL editor:
+                                  <div style={{ fontFamily: "monospace", fontSize: 10, color: C.text, background: C.bg, borderRadius: 6, padding: "7px 8px", marginTop: 6, whiteSpace: "pre-wrap", userSelect: "all" }}>{RESEARCH_SQL}</div>
+                                </>
+                              ) : (
+                                <><b style={{ color: "#FFB347" }}>Research memory could not be read</b> ({researchMemory.detail}). Drafts still work, they just start from scratch. This is not a missing table, so there is no SQL to run.</>
+                              )}
                             </div>
                           )}
                           {/* Name the sources yourself when you already know
@@ -7914,18 +8190,48 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
               ...freeEntrance.map(a => ({ ...a, _kind: "free", _price: "Free", _city: cityOf(a) })),
               ...craftItems.map(c => ({ ...c, _kind: "craft", _price: c.price || "See website", _city: cityOf(c) })),
             ];
-            const cityOptions = ["All", ...KNOWN_CITIES.filter(c => combined.some(i => i._city === c))];
             const kindKeys = { Blacksmithing: ["blacksmith"], Ceramics: ["ceramic", "pottery"], Jewellery: ["jewellery"], Leather: ["leather"], Textiles: ["textile", "dyeing", "felting"], Woodwork: ["wood"], Candy: ["candy"] };
 
-            const filtered = combined.filter(item => {
-              if (attractionCity !== "All" && attractionCity !== "🍬 Handmade" && item._city !== attractionCity) return false;
-              if (priceFilter === "free" && item._kind !== "free") return false;
-              if (priceFilter === "paid" && item._kind !== "craft") return false;
-              if (craftKind && item._kind === "craft" && !(item.what || []).some(w => (kindKeys[craftKind] || []).some(k => w.toLowerCase().includes(k)))) return false;
-              if (bookableOnly && item._kind === "craft" && item.bookingType !== "online") return false;
-              if (hiddenGemOnly && item.popularityTag !== "Hidden Gem") return false;
-              return true;
-            }).sort((a, b) => craftSort === "az"
+            // ── DECLARED ONCE, READ BY EVERYTHING ───────────────────
+            // The chips, the per-option counts, the clear-all and the filtering
+            // itself all come off this list, so they cannot disagree with each
+            // other. The old page had the filter logic in one place and the
+            // controls in another, which is how it ended up with two filters
+            // that only filtered half the list (see below).
+            const ATTRACTION_FACETS = [
+              { key: "city", label: "City",
+                options: [{ value: "All", label: "All" }, ...KNOWN_CITIES.filter(c => combined.some(i => i._city === c)).map(c => ({ value: c, label: c }))],
+                test: (i, v) => i._city === v },
+              { key: "kind", label: "Type",
+                options: [{ value: "All", label: "All" }, { value: "free", label: "🆓 Free" }, { value: "craft", label: "🎟 Bookable" }],
+                test: (i, v) => i._kind === v },
+              // ── A FILTER THAT FILTERED HALF THE LIST ──────────────
+              // The old test was `if (craftKind && item._kind === "craft" && !match)`,
+              // so picking Ceramics removed the wrong workshops and left every
+              // free attraction in place. Same shape on bookableOnly. A filter
+              // that quietly does not apply to half the results is worse than no
+              // filter, because the list looks like an answer.
+              { key: "craft", label: "Craft",
+                options: [{ value: "All", label: "All" }, ...Object.keys(kindKeys).map(k => ({ value: k, label: k }))],
+                test: (i, v) => i._kind === "craft" && (i.what || []).some(w => (kindKeys[v] || []).some(k => w.toLowerCase().includes(k))) },
+              { key: "gem", label: "Popularity",
+                options: [{ value: "All", label: "All" }, { value: "gem", label: "◆ Hidden Gem" }],
+                test: (i) => i.popularityTag === "Hidden Gem" },
+              { key: "booking", label: "Booking",
+                options: [{ value: "All", label: "All" }, { value: "online", label: "⚡ Bookable online" }],
+                test: (i) => i.bookingType === "online" },
+            ];
+
+            // Search runs BEFORE the facets, so the counts beside each option
+            // describe the list you are actually looking at rather than the
+            // whole catalogue.
+            const searched = combined.filter(i => matchesQuery(i, attractionQuery, ["_city", "tag", "desc"]));
+            const attractionChips = appliedChips(ATTRACTION_FACETS, attractionFacets);
+            // THE UNFILTERED TOTAL decides, never the visible count: reading the
+            // filtered number would hide the controls the moment they worked,
+            // leaving a short list nobody can widen again.
+            const useAttractionFilters = showFilters(combined.length);
+            const filtered = applyFacets(searched, ATTRACTION_FACETS, attractionFacets).sort((a, b) => craftSort === "az"
               ? byName(a, b)
               : (craftSort === "near" && isInDenmark(userCoords))
               ? (townKmFromUser(a._kind === "craft" ? a.location : a.city) ?? 9999) - (townKmFromUser(b._kind === "craft" ? b.location : b.city) ?? 9999)
@@ -7941,65 +8247,130 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal — genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
               </div>
 
-              {/* Filters */}
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 16px 14px", marginBottom: 18 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>City</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
-                  {[...cityOptions, "🍬 Handmade"].map(c => (
-                    <Pill key={c} label={c} active={attractionCity === c} onClick={() => setAttractionCity(c)} color={c === "🍬 Handmade" ? "#E91E63" : undefined} />
-                  ))}
+              {/* ── SEARCH AND SORT, ALWAYS. FILTERS, ONLY WHEN THE
+                     LIST IS LONG ENOUGH TO NEED THEM ────────────────
+                  Oliver, 9 Aug 2026: "I am not satisfied with the filters. This
+                  will become an issue down the line. Especially on phone."
+                  What was here: six labelled groups, twenty-five pills,
+                  permanently open, about 430px of controls before a single card,
+                  for nine places. A filter can only REMOVE things, so on a list
+                  you can read in one screen every control is pure cost. */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input value={attractionQuery} onChange={e => setAttractionQuery(e.target.value)}
+                    placeholder="Search attractions"
+                    style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "11px 16px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                  {/* Not a city. Its own control, so the panel stops changing
+                      shape when you tap it. */}
+                  <Pill label="🍬 Handmade" active={attractionView === "handmade"} color="#E91E63"
+                    onClick={() => setAttractionView(v => v === "handmade" ? "all" : "handmade")} />
                 </div>
 
-                {attractionCity !== "🍬 Handmade" && (
+                {attractionView !== "handmade" && (
                   <>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Price</div>
-                    <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
-                      {[["all", "All"], ["free", "🆓 Free"], ["paid", "🎟 Bookable"]].map(([k, label]) => (
-                        <Pill key={k} label={label} active={priceFilter === k} onClick={() => setPriceFilter(k)} />
-                      ))}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                      {useAttractionFilters && (
+                        <button onClick={() => setAttractionSheet(true)}
+                          style={{ display: "flex", alignItems: "center", gap: 7, background: attractionChips.length ? `${C.gold}18` : C.surface, border: `1px solid ${attractionChips.length ? C.gold : C.border}`, color: attractionChips.length ? C.gold : C.text, borderRadius: 100, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Filter{attractionChips.length > 0 ? ` · ${attractionChips.length}` : ""}
+                        </button>
+                      )}
+                      {/* Sort is not a filter. It changes the order, never the
+                          contents, so it stays out of the sheet and out of
+                          "clear all". */}
+                      <select value={craftSort}
+                        onChange={e => { setCraftSort(e.target.value); if (e.target.value === "near" && !isInDenmark(userCoords)) requestLocation(); }}
+                        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "9px 14px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", outline: "none", fontFamily: "'Inter', sans-serif" }}>
+                        <option value="recommended">★ Recommended</option>
+                        <option value="az">Alphabetical</option>
+                        <option value="near">📍 Closest</option>
+                      </select>
                     </div>
 
-                    {priceFilter !== "free" && (
-                      <>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
-                        <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
-                          {["All", "Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"].map(k => (
-                            <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
-                          ))}
-                        </div>
-                      </>
+                    {/* ── APPLIED FILTERS, WHICH 66% OF MOBILE SITES DO
+                           NOT SHOW (Baymard) ────────────────────────
+                        Without this, somebody who has scrolled past the controls
+                        cannot tell why the list is short. They reopen the panel
+                        just to look, or decide the site has nothing. */}
+                    {attractionChips.length > 0 && (
+                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+                        {attractionChips.map(chip => (
+                          <button key={chip.key} onClick={() => setAttractionFacets(f => clearFacet(f, chip.key))}
+                            style={{ display: "flex", alignItems: "center", gap: 6, background: `${C.gold}18`, border: `1px solid ${C.gold}44`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            {chip.label} <span style={{ fontSize: 13, opacity: 0.8 }}>✕</span>
+                          </button>
+                        ))}
+                        <button onClick={() => setAttractionFacets(f => clearAllFacets(ATTRACTION_FACETS, f))}
+                          style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>
+                          Clear all
+                        </button>
+                      </div>
                     )}
 
-                    <div style={{ height: 1, background: C.border, margin: "2px 0 14px" }} />
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
-                      <div>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Popularity</div>
-                        <Pill label="◆ Hidden Gem" active={hiddenGemOnly} onClick={() => setHiddenGemOnly(v => !v)} color={C.gold} />
-                      </div>
-                      {priceFilter !== "free" && (
-                        <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Speed</div>
-                          <Pill label="⚡ Bookable online" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
-                        </div>
-                      )}
-                      <div>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Sort</div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
-                          <Pill label="Alphabetical" active={craftSort === "az"} onClick={() => setCraftSort("az")} />
-                          <Pill label="📍 Closest" active={craftSort === "near"} color={C.gold}
-                            onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
-                        </div>
-                      </div>
-                    </div>
                     {craftSort === "near" && !isInDenmark(userCoords) && (
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you're in Denmark with location enabled — showing recommended order for now.</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you are in Denmark with location on. Showing recommended order for now.</div>
                     )}
                   </>
                 )}
               </div>
 
-              {attractionCity === "🍬 Handmade" ? (
+              {/* ── THE SHEET ──────────────────────────────────────── */}
+              {attractionSheet && (
+                <div onClick={() => setAttractionSheet(false)}
+                  style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 900, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+                  <div onClick={e => e.stopPropagation()}
+                    style={{ background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}` }}>
+                      <button onClick={() => setAttractionSheet(false)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Filter</div>
+                      <button onClick={() => setAttractionFacets(f => clearAllFacets(ATTRACTION_FACETS, f))}
+                        style={{ background: "none", border: "none", color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Clear</button>
+                    </div>
+
+                    <div style={{ overflowY: "auto", padding: "4px 18px 12px", flex: 1 }}>
+                      {ATTRACTION_FACETS.map(facet => {
+                        const counts = facetCounts(searched, ATTRACTION_FACETS, attractionFacets, facet.key);
+                        return (
+                          <div key={facet.key} style={{ padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
+                            <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 9 }}>{facet.label}</div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              {facet.options.map(opt => {
+                                const n = counts[opt.value] ?? 0;
+                                // ── ZERO IS DISABLED, NOT HIDDEN ────
+                                // A count of zero here is a true statement,
+                                // because counts exclude their own facet:
+                                // picking this WOULD empty the list. Hiding
+                                // those options instead would make the sheet
+                                // jump under a thumb as it reflows.
+                                const dead = n === 0 && opt.value !== "All";
+                                const on = (attractionFacets[facet.key] || "All") === opt.value;
+                                return (
+                                  <button key={opt.value} disabled={dead}
+                                    onClick={() => setAttractionFacets(f => opt.value === "All" ? clearFacet(f, facet.key) : { ...f, [facet.key]: opt.value })}
+                                    style={{ background: on ? C.gold : C.surface, border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : dead ? C.muted : C.text, opacity: dead ? 0.4 : 1, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: dead ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                    {opt.label} <span style={{ opacity: 0.65, fontWeight: 600 }}>{n}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* The count lives on the button you are about to press, so
+                        nobody applies a filter to find out it emptied the page. */}
+                    <div style={{ padding: "12px 18px 18px", borderTop: `1px solid ${C.border}` }}>
+                      <button onClick={() => setAttractionSheet(false)}
+                        style={{ width: "100%", background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "14px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        Show {filtered.length} place{filtered.length !== 1 ? "s" : ""}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {attractionView === "handmade" ? (
                 <>
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Watch it made, buy it warm — no ticket, no booking, just walk in.</div>
                   {/* Supabase-only content (Aug 5): handmade craft shops have no Studio
@@ -8113,7 +8484,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
               </div>
 
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
-                {[{ id: "local", label: "Local", ico: "town" }, { id: "major", label: "Major", ico: "ticket" }, { id: "viking", label: "Viking", ico: "ferry" }].map(t => (
+                {[{ id: "local", label: "Local", ico: "town" }, { id: "major", label: "Major", ico: "ticket" }].map(t => (
                   <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                     <Ico name={t.ico} size={14} /> {t.label}
@@ -8123,20 +8494,31 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
-                  {["All", ...eventMonthOptions].map(m => (
-                    <Pill key={m} label={m} active={(m === "All" && !eventMonth) || eventMonth === m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))} />
-                  ))}
+                  {["All", ...eventMonthOptions].map(m => {
+                    // Counted against the TYPE filter only, never against the
+                    // month filter itself: counting a facet with itself applied
+                    // gives every other month a zero, which reads as "nothing in
+                    // August" when it means "you picked July".
+                    const n = m === "All" ? upcomingInTab.length : upcomingInTab.filter(e =>
+                      new Date(e.date).toLocaleString("en", { month: "short" }) === m
+                      && (!eventType || hasEventType(e, eventType) || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)))).length;
+                    return <Pill key={m} label={`${m} ${n}`} active={(m === "All" && !eventMonth) || eventMonth === m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))} />;
+                  })}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
-                  {["All", ...eventTypeOptions].map(f => (
-                    <Pill key={f} label={f} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />
-                  ))}
+                  {["All", ...eventTypeOptions].map(f => {
+                    const inMonth = upcomingInTab.filter(e => !eventMonth || new Date(e.date).toLocaleString("en", { month: "short" }) === eventMonth);
+                    const n = f === "All" ? inMonth.length
+                      : f === "North Zealand" ? inMonth.filter(e => NORTH_ZEALAND_TOWNS.includes(e.town)).length
+                      : inMonth.filter(e => hasEventType(e, f)).length;
+                    return <Pill key={f} label={`${eventTypeLabelFor(f)} ${n}`} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />;
+                  })}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Order</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                  <Pill label="Soonest" active={eventSort === "soonest"} onClick={() => setEventSort("soonest")} />
-                  <Pill label="Alphabetical" active={eventSort === "az"} onClick={() => setEventSort("az")} />
+                  <Pill label="By date" active={eventSort === "soonest"} onClick={() => setEventSort("soonest")} />
+                  <Pill label="By name" active={eventSort === "az"} onClick={() => setEventSort("az")} />
                 </div>
               </div>
               {filteredEvents.length === 0 ? (
@@ -8223,14 +8605,31 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
             // part after the last comma) or just a city name/phrase; match against the
             // known nightlife cities first since a plain substring match is more reliable
             // than trusting comma placement alone (e.g. "Copenhagen city centre" has no comma).
-            const KNOWN_NIGHTLIFE_CITIES = ["Copenhagen", "Aarhus", "Aalborg", "Odense", "Esbjerg", "Randers", "Kolding", "Horsens", "Vejle", "Roskilde"];
-            const townOf = (loc) => KNOWN_NIGHTLIFE_CITIES.find(c => loc.includes(c)) || (loc.includes(",") ? loc.split(",").pop().trim() : loc);
-            const townGroups = {};
-            nightlifeSpots.forEach(s => {
-              const t = townOf(s.location);
-              (townGroups[t] = townGroups[t] || []).push(s);
-            });
-            const townList = Object.keys(townGroups).sort(daCompare);
+            const townGroups = groupSpotsByTown(nightlifeSpots);
+
+            // ── A TOWN PAGE IS CONTENT, NOT DECORATION ───────────
+            // Oliver, 8 Aug 2026: "Why is my nightlife town not published in
+            // nightlife? I just published Copenhagen."
+            //
+            // Because this list was built from VENUES only. townGroups comes
+            // entirely from nightlifeSpots, and a published nightTown entry was
+            // only ever read by a .find() that decorated a row already put on
+            // the page by a bar. So the "Nightlife (Town)" content type had a
+            // Studio form, a shape, a publish path, a merge into
+            // nightlifeTowns and a photo lookup, and not one line anywhere that
+            // could put it on the page by itself. Publish a town with no bars
+            // published under it and the Studio says done while the page says
+            // "No nightlife spots published yet".
+            //
+            // That is this project's recurring failure exactly: a whole feature
+            // that looks finished from every angle except the one that matters.
+            //
+            // The list is now the UNION of towns that have venues and towns
+            // that have a published scene guide, matched across spellings so
+            // København and Copenhagen are one town rather than two rows.
+            const spotsFor = (t) => spotsForTown(townGroups, t);
+            const townContentFor = (t) => townPageFor(nightlifeTowns, t);
+            const townList = nightlifeTownList(nightlifeSpots, nightlifeTowns).sort(daCompare);
 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
@@ -8239,24 +8638,24 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                 <>
                   <div style={{ marginBottom: 18, paddingTop: 8 }}>
                     <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
-                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers — but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
+                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers, and pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll meet Danes.</div>
                   </div>
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
 
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Pick a town</div>
-                  {/* Supabase-only content (Aug 5): no nightlife spots are published in
-                      gemlyx_content yet, so this list can genuinely be empty — say so
-                      honestly instead of rendering a blank page. */}
+                  {/* Genuinely empty is a real state and worth saying out loud.
+                      The old wording named only spots, which read as "nothing is
+                      published" to somebody who had just published a town. */}
                   {townList.length === 0 && (
                     <div style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                      No nightlife spots published yet. They appear here as soon as they're published through the Studio.
+                      Nothing published here yet. Towns and venues both appear as soon as they go live through the Studio.
                     </div>
                   )}
                   {townList.map(t => {
-                    const spots = townGroups[t];
+                    const spots = spotsFor(t);
                     const localCount = spots.filter(s => s.type === "Local").length;
                     const internationalCount = spots.filter(s => s.type === "International").length;
-                    const townContent = nightlifeTowns.find(nt => nt.name === t);
+                    const townContent = townContentFor(t);
                     return (
                       <div key={t} onClick={() => setNightlifeTownView(t)} style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${C.border}`, padding: "16px 0", cursor: "pointer" }}>
                         <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, overflow: "hidden" }}>
@@ -8267,7 +8666,12 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{t}</div>
                           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                            {spots.length} spot{spots.length !== 1 ? "s" : ""}{localCount > 0 && internationalCount > 0 ? ` · ${localCount} local, ${internationalCount} international` : ""}
+                            {/* A town with a scene guide and no bars yet is a
+                                real, publishable state. "0 spots" reads like a
+                                broken row; saying what IS there does not. */}
+                            {spots.length === 0
+                              ? "Scene guide, no venues published yet"
+                              : `${spots.length} spot${spots.length !== 1 ? "s" : ""}${localCount > 0 && internationalCount > 0 ? ` · ${localCount} local, ${internationalCount} international` : ""}`}
                           </div>
                         </div>
                         <span style={{ fontSize: 18, color: C.muted }}>›</span>
@@ -8284,7 +8688,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                   </button>
 
                   {(() => {
-                    const townContent = nightlifeTowns.find(nt => nt.name === nightlifeTownView);
+                    const townContent = townContentFor(nightlifeTownView);
                     if (townContent) {
                       return (
                         <div style={{ marginBottom: 18 }}>
@@ -8310,6 +8714,16 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                     );
                   })()}
 
+                  {/* GUARDED, because townGroups[town] is undefined for a town
+                      that has a scene guide and no venues, and .filter on it
+                      threw. Opening the town he had just published would have
+                      taken the whole page down. */}
+                  {spotsFor(nightlifeTownView).length === 0 ? (
+                    <div style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+                      No individual bars or clubs published for {nightlifeTownView} yet. The scene guide above is the whole entry for now.
+                    </div>
+                  ) : (
+                  <>
                   <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 14 }}>Bars &amp; clubs in {nightlifeTownView}</div>
 
                   <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
@@ -8321,10 +8735,10 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                     ))}
                   </div>
 
-                  {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).length === 0 && (
-                    <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet — try the other tab.</div>
+                  {spotsFor(nightlifeTownView).filter(f => f.type === nightlifeTab).length === 0 && (
+                    <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet, try the other tab.</div>
                   )}
-                  {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).slice().sort(byName).map(spot => (
+                  {spotsFor(nightlifeTownView).filter(f => f.type === nightlifeTab).slice().sort(byName).map(spot => (
                     <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                         <span style={{ fontSize: 22 }}>{spot.emoji}</span>
@@ -8342,6 +8756,8 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                       </div>
                     </div>
                   ))}
+                  </>
+                  )}
                 </>
               )}
             </div>
@@ -8444,6 +8860,13 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                 // real number of matches with that ONE axis swapped, so it already
                 // accounts for everything else currently selected.
                 const base = (t) => townPartOk(t) && townSearchOk(t);
+                // ── "WHY ARE THEY THE ONLY ONES THAT HAVE NO NUMBERS" ──
+                // Because this helper did not exist. Themes and sizes had one,
+                // the tier row did not, so it was the one row on the page that
+                // could send you to an empty grid without warning. Counted with
+                // every OTHER filter applied and never with itself, same rule as
+                // the other two.
+                const nWithKind = (k) => towns.filter(t => base(t) && townSizeOk(t) && townThemeOk(t) && (!k || tierOf(t)?.id === k)).length;
                 const nWithTheme = (th) => towns.filter(t => base(t) && townKindOk(t) && townSizeOk(t) && hasTheme(t, th)).length;
                 const nWithSize = (z) => towns.filter(t => base(t) && townKindOk(t) && townThemeOk(t) && (!z || placeKindOf(t) === z)).length;
                 const kinds = ["city", "town", "village", "area"].filter(k => towns.some(t => placeKindOf(t) === k));
@@ -8463,9 +8886,9 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                         ))}
                       </Row>
                     )}
-                    <Row title="How well known">
-                      {[{ id: null, label: "All" }, { id: "hidden", label: "◆ Off the usual route" }, { id: "must", label: "★ Can't miss out" }].map(k => (
-                        <Pill key={k.label} label={k.label} active={townKind === k.id} onClick={() => setTownKind(townKind === k.id ? null : k.id)} />
+                    <Row title="Worth the trip">
+                      {[{ id: null, label: "All" }, ...TIERS.map(x => ({ id: x.id, label: `${x.mark ? `${x.mark} ` : ""}${x.label}` }))].map(k => (
+                        <Pill key={k.label} label={`${k.label} ${nWithKind(k.id)}`} active={townKind === k.id} onClick={() => setTownKind(townKind === k.id ? null : k.id)} />
                       ))}
                     </Row>
                     {/* "area" BELONGS IN THIS LIST. Without it no chip could select
@@ -8993,7 +9416,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Find a local, if you can</div>
                   </div>
                   <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65 }}>
-                    Danes are famously reserved with strangers — but genuinely warm once you're in. Copenhagen's real culture, especially pub life, is something you mostly experience *with* Danes, not just around them. If you get the chance to join a local for a beer or a bar crawl, take it — it opens up a side of Denmark most tourists never see. Hostels with common bar areas, run clubs, and language exchange meetups (search "language cafe Copenhagen" on Facebook) are the easiest low-pressure ways in.
+                    Danes are famously reserved with strangers, and warm once you're in. Copenhagen's real culture, especially pub life, is something you mostly experience *with* Danes, not just around them. If you get the chance to join a local for a beer or a bar crawl, take it. It opens up a side of Denmark most tourists never see. Hostels with common bar areas, run clubs, and language exchange meetups (search "language cafe Copenhagen" on Facebook) are the easiest low-pressure ways in.
                   </div>
                 </div>
               </div>
