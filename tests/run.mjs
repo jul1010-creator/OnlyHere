@@ -46,6 +46,8 @@ writeFileSync(entry, `
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
+  export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
+  export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -2474,6 +2476,144 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a missing table is named as missing", /if \(status === 404 \|\| code === "PGRST205"/.test(app3));
   ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\. \(Nothing is wrong with the table\.\)/.test(app3));
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
+}
+
+// ── "EVENTS HAVE TWO 'MUSICS'" ───────────────────────────────────
+// Oliver, 9 Aug 2026, pasting the row back exactly as it rendered:
+// "CultureFestivalMusicMusic / Festival / CultureMusic Festival". Six pills for
+// four ideas, built by de-duplicating a free-text field. Region pills again.
+{
+  // THE REAL STORED VALUES, counted from the live table on 9 Aug.
+  const LIVE = [
+    ...Array.from({ length: 12 }, (_, i) => ({ id: i, type: "Music" })),
+    ...Array.from({ length: 6 }, (_, i) => ({ id: 100 + i, type: "Festival" })),
+    { id: 200, type: "Culture" }, { id: 201, type: "Culture" },
+    { id: 202, type: "Music Festival" }, { id: 203, type: "Music Festival" },
+    { id: 204, type: "Music / Festival" },
+    { id: 205, type: "Music / Festival / Culture" },
+    { id: 206, type: "Viking Market" },
+    { id: 207, type: "Viking Festival" },
+  ];
+
+  is("the eight spellings collapse to four real types",
+     M.eventTypesPresent(LIVE), ["music", "viking", "market", "culture"]);
+  // The exact defect he pasted: two pills starting with Music.
+  is("only one of them is Music", M.eventTypesPresent(LIVE).filter(t => t === "music").length, 1);
+  ok("and no pill is a sentence", M.eventTypesPresent(LIVE).every(t => !/[/]/.test(t)));
+
+  // MULTI-VALUED, because the data already is. Forcing one bucket per event is
+  // what produced the combined pills.
+  is("one event can make two claims", M.eventTypesOf({ type: "Music / Festival / Culture" }), ["music", "culture"]);
+  is("a phrase is read whole, not split on spaces", M.eventTypesOf({ type: "Music Festival" }), ["music"]);
+  is("Viking Market is both", M.eventTypesOf({ type: "Viking Market" }), ["viking", "market"]);
+
+  // "FESTIVAL" IS THE NOUN, NOT A TYPE. Every row on that page is a festival,
+  // so a Festival pill selects everything and says nothing. It was one of six.
+  is("the word that carries no information maps to nothing", M.eventTypesOf({ type: "Festival" }), []);
+  is("and neither does an empty type", M.eventTypesOf({ type: "" }), []);
+  is("nor a missing one", M.eventTypesOf({}), []);
+  ok("the uninformative words are written down, not silently unmatched", M.UNINFORMATIVE.test("festival"));
+  // THE GUARD AS AN INVARIANT. Mutation testing showed the branch itself could
+  // not fire, because no rule matches "Festival" today. This is what it is
+  // really protecting: add a `festival` rule, or loosen `culture` to catch
+  // "Kulturfest", and the pill that selects everything comes straight back.
+  ok("no type in the vocabulary is itself an uninformative word", M.EVENT_TYPES.every(t => !M.UNINFORMATIVE.test(t)));
+  is("six of the live rows have no filable type", M.untypedEvents(LIVE).length, 6);
+  // Those six are still reachable. A filter that hides rows it cannot classify
+  // is worse than one that admits it does not know.
+  is("but every event is still under All", LIVE.length, 26);
+
+  // ── "SOME OF THEM ARE THE COMPLETE SAME" ─────────────────────────
+  // Oliver, 9 Aug 2026: "Festival and Music is the same as music." Exactly, and
+  // this is the assertion that says so: three different stored spellings, one
+  // pill. It fails the moment anything reintroduces a per-spelling bucket.
+  is("Music, Music Festival and Music / Festival are one pill",
+     [...new Set([
+       JSON.stringify(M.eventTypesOf({ type: "Music" })),
+       JSON.stringify(M.eventTypesOf({ type: "Music Festival" })),
+       JSON.stringify(M.eventTypesOf({ type: "Music / Festival" })),
+     ])].length, 1);
+
+  // ── EVERY BOUNDARY IS A DECISION, AND THE FIRST SET WAS WRONG ────
+  // `/\bmusic|rock|...|metal|dj\b/i` reads as though it anchors both ends and
+  // does not: in an alternation \b binds only to the branch it touches. So
+  // everything between music and dj was an unanchored substring, and checking
+  // against real strings classified "Metalworking workshop" as MUSIC and
+  // "Remarked" as a MARKET.
+  is("a metalworking event is not music", M.eventTypesOf({ type: "Metalworking workshop" }), []);
+  is("and remarked is not a market", M.eventTypesOf({ type: "Remarked" }), []);
+  is("nor is a fairground a fair", M.eventTypesOf({ type: "Fairground ride" }), []);
+  is("an artisan market is a market, not art", M.eventTypesOf({ type: "Artisan market" }), ["market"]);
+  // DANISH COMPOUNDS GLUE THE WORDS TOGETHER, so the category is a suffix with
+  // no boundary in front of it. Anchoring both ends would miss every one.
+  is("a Danish market compound still matches", M.eventTypesOf({ type: "Julemarked" }), ["market"]);
+  is("and one that is two categories at once", M.eventTypesOf({ type: "Vikingemarked" }), ["viking", "market"]);
+  is("Rockfestival is music", M.eventTypesOf({ type: "Rockfestival" }), ["music"]);
+  is("Kunstfestival is art", M.eventTypesOf({ type: "Kunstfestival" }), ["art"]);
+  is("Kulturnat is culture", M.eventTypesOf({ type: "Kulturnat" }), ["culture"]);
+
+  ok("an event matches its own type", M.hasEventType({ type: "Music" }, "music"));
+  ok("and not another", !M.hasEventType({ type: "Music" }, "viking"));
+  ok("no type selected matches everything", M.hasEventType({ type: "Festival" }, null));
+
+  const counts = M.eventTypeCounts(LIVE, M.eventTypesPresent(LIVE));
+  is("music counts every spelling of it", counts.music, 16);
+  is("viking counts both of its events", counts.viking, 2);
+  is("culture counts the plain ones and the combined one", counts.culture, 3);
+
+  const app8 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the events row is built from the vocabulary", /eventTypesPresent\(upcomingInTab\)/.test(app8));
+  ok("and never again from a Set over free text", !/^\s*\.\.\.\[\.\.\.new Set\(upcomingInTab/m.test(app8));
+  is("the predicate and the count helper agree about matching a type",
+     (app8.match(/\(!eventType \|\| hasEventType\(e, eventType\)/g) || []).length, 2);
+
+  // ── "REMOVE THE VIKING SECTION AND MAKE IT A FILTER INSTEAD" ─────
+  // It was worse than redundant. data/events.js says in its own comment that
+  // nothing publishes into vikingEvents, and the array is empty, so the tab
+  // rendered an empty grid while the two real Viking events sat under Local.
+  const evData = readFileSync(join(root, "src/data/events.js"), "utf8");
+  ok("the array it read is genuinely empty", /export const vikingEvents = \[\];/.test(evData));
+  ok("the tab is gone", !/id: "viking", label: "Viking"/.test(app8));
+  ok("and the tab source no longer reads the dead array", !/eventTab === "viking" \? vikingEvents/.test(app8));
+  ok("Viking survives as a type", M.EVENT_TYPES.includes("viking"));
+
+  // ── COUNTS ON EVERY PILL ─────────────────────────────────────────
+  ok("the month pills carry their count", /label=\{`\$\{m\} \$\{n\}`\}/.test(app8));
+  ok("the type pills carry theirs", /label=\{`\$\{eventTypeLabelFor\(f\)\} \$\{n\}`\}/.test(app8));
+
+  // "Soonest is so awkward English." It is, and it did not even rhyme with its
+  // own pair: a superlative next to an adjective. Both say what it is ordered BY.
+  ok("the sort says what it orders by", /label="By date"/.test(app8) && /label="By name"/.test(app8));
+  ok("and the awkward one is gone", !/label="Soonest"/.test(app8));
+}
+
+// ── "WHY IS THAT 'OFF THE USUAL ROUTE' AND 'CAN'T MISS OUT'?" ────
+// Oliver, 9 Aug 2026: "Shouldn't it be 'trendy' and 'off the usual route'
+// then?" Right, and the heading was lying about the field.
+{
+  const app9 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // The stored field is a RECOMMENDATION STRENGTH, top to bottom. There is no
+  // fame field: popularityTag is undefined on all 31 published towns.
+  is("the tier vocabulary is a recommendation ladder", M.TIERS.map(t => t.id), ["must", "high", "worth", "nearby"]);
+  is("read off the entry", M.tierOf({ tier: "Can't Miss Out" }).id, "must");
+  is("loosely, because 71 rows spell it differently", M.tierOf({ tier: "cant miss out" }).id, "must");
+  is("and an unknown tier is null, never a guess", M.tierOf({ tier: "Quite Good" }), null);
+
+  ok("the heading no longer claims to be about fame", !/<Row title="How well known">/.test(app9));
+  ok("it says what the field means", /<Row title="Worth the trip">/.test(app9));
+  // THE OLD PILL WAS NOT READING ANYTHING. "Off the usual route" was implemented
+  // as the negation of can't-miss, which selected 29 towns out of 31. A pill
+  // that keeps 94% of the list is a label pretending to be a filter.
+  ok("the invented fame pill is gone", !/label: "◆ Off the usual route"/.test(app9));
+  ok("and the row offers the four real tiers", /TIERS\.map\(x => \(\{ id: x\.id/.test(app9));
+  ok("filtering asks the entry's own tier", /tierOf\(t\)\?\.id === townKind/.test(app9));
+
+  // "Why are they the only ones that have no numbers." Because this helper did
+  // not exist. Themes and sizes had one; the tier row did not.
+  ok("the tier row has a count helper now", /const nWithKind = \(k\) =>/.test(app9));
+  ok("counted with the other filters and never with itself",
+     /const nWithKind = \(k\) => towns\.filter\(t => base\(t\) && townSizeOk\(t\) && townThemeOk\(t\)/.test(app9));
+  ok("and the pills print it", /label=\{`\$\{k\.label\} \$\{nWithKind\(k\.id\)\}`\}/.test(app9));
 }
 
 // ── "I AM NOT SATISFIED WITH THE FILTERS" ────────────────────────

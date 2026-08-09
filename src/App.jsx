@@ -66,7 +66,8 @@ import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { partOfCountry, partsPresent, matchesSearch } from "./utils/geography";
-import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel } from "./utils/placeThemes";
+import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, TIERS, tierOf } from "./utils/placeThemes";
+import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
@@ -431,15 +432,34 @@ function GemlyxApp() {
   const [eventMonth, setEventMonth] = useState(null);
   const [eventType, setEventType] = useState(null);
   const [eventTab, setEventTab] = useState("local");
-  // null | "hidden" | "must". Read off the entry's own tier so the filter agrees
-  // with what the page says about each town, rather than being a second opinion.
+  // null, or one of the TIERS ids: must | high | worth | nearby. Read off the
+  // entry's own tier so the filter agrees with what the card says about each
+  // town, rather than being a second opinion. See the note below the state.
   const [townKind, setTownKind] = useState(null);
-  const townKindOk = (t) => {
-    if (!townKind) return true;
-    const tier = String(t?.tier || "").toLowerCase();
-    if (townKind === "must") return tier.includes("can't miss") || tier.includes("cant miss");
-    return !(tier.includes("can't miss") || tier.includes("cant miss"));
-  };
+  // ── "WHY IS THAT 'OFF THE USUAL ROUTE' AND 'CAN'T MISS OUT'?" ──
+  // Oliver, 9 Aug 2026: "Shouldn't it be 'trendy' and 'off the usual route'
+  // then?" He is right, and the answer is that the heading was lying about the
+  // field. The row said "How well known" and offered two options from two
+  // different vocabularies: one about fame, one about how strongly we recommend
+  // it. Under that heading, "Can't miss out" is not an answer to the question.
+  //
+  // The stored field is `tier`, and across the 31 published towns it holds:
+  //   Worth Considering              16
+  //   Highly Recommended             10
+  //   Best If You're Already Nearby   3
+  //   Can't Miss Out                  2
+  // which is a RECOMMENDATION STRENGTH, top to bottom. There is no fame field at
+  // all: popularityTag is undefined on every one of the 31.
+  //
+  // So "Off the usual route" was not reading anything. It was implemented as the
+  // NEGATION of can't-miss, which selected 29 towns out of 31. A pill that keeps
+  // 94% of the list is not a filter, it is a label pretending to be one.
+  //
+  // Renamed to what the field is, and given the four real values instead of a
+  // binary invented out of one of them. If a genuine fame axis is wanted later
+  // it needs its own field on the entry, researched and stored, not derived by
+  // turning a recommendation upside down.
+  const townKindOk = (t) => !townKind || tierOf(t)?.id === townKind;
   // ── SIZE OF PLACE, A SEPARATE AXIS FROM HOW WELL KNOWN IT IS ──
   // Oliver, 8 Aug 2026: "Nyhavn is 'technically' a town, but it is within
   // Copenhagen... What do we do?" and then "There are also villages in the
@@ -6225,21 +6245,40 @@ You also have a web_search tool. Use it whenever someone asks about something th
   // Derived from the same array filteredEvents runs on, so a pill exists exactly
   // when something is behind it, and months stay in calendar order rather than
   // alphabetical (a January that sorts before August is worse than useless).
-  const eventTabSource = eventTab === "local" ? events : eventTab === "viking" ? vikingEvents : majorEvents;
+  // ── "REMOVE THE VIKING SECTION AND MAKE IT A FILTER INSTEAD" ──
+  // Oliver, 9 Aug 2026, and the tab was worse than redundant, it was dead.
+  // data/events.js says so in its own comment: "No Studio type publishes into
+  // vikingEvents yet", and the array is `[]` with nothing that can ever fill it.
+  // Meanwhile the two real Viking events are sitting in the festival rows with
+  // type "Viking Market" and "Viking Festival", showing up under Local, while a
+  // whole tab labelled Viking rendered an empty grid next to them.
+  //
+  // Third dead render path found today, after the nightlife town that no line
+  // could put on the page and the source list that reached no search. Viking is
+  // a kind of event, so it is a type, and the type row already exists.
+  const eventTabSource = eventTab === "local" ? events : majorEvents;
   const upcomingInTab = eventTabSource.filter(e => isUpcoming(e.date));
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const eventMonthOptions = MONTHS.filter(m => upcomingInTab.some(e => new Date(e.date).toLocaleString("en", { month: "short" }) === m));
+  // ── SIX PILLS FOR FOUR IDEAS, TWO STARTING WITH "MUSIC" ──────
+  // This row read `[...new Set(upcomingInTab.map(e => e.type))]` off a free-text
+  // field, so the live table's eight different spellings became eight pills:
+  // Culture, Festival, Music, Music / Festival, Music / Festival / Culture,
+  // Music Festival, Viking Market, Viking Festival. Closed vocabulary now, in
+  // utils/eventTypes.js, and multi-valued because "Music / Festival / Culture"
+  // is one event making two real claims.
   const eventTypeOptions = [
-    ...[...new Set(upcomingInTab.map(e => e.type).filter(Boolean))].sort(daCompare),
+    ...eventTypesPresent(upcomingInTab),
     // North Zealand is not a type on any record, it is a group of towns. It stays
     // hand-added because there is nothing in the data to derive it from.
     ...(eventTab === "local" && upcomingInTab.some(e => NORTH_ZEALAND_TOWNS.includes(e.town)) ? ["North Zealand"] : []),
   ];
+  const eventTypeLabelFor = (t) => EVENT_TYPE_LABEL[t] || t;
 
   const filteredEvents = upcomingInTab
     .filter(e => {
       const em = new Date(e.date).toLocaleString("en", { month: "short" });
-      return (!eventMonth || em === eventMonth) && (!eventType || e.type === eventType || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)));
+      return (!eventMonth || em === eventMonth) && (!eventType || hasEventType(e, eventType) || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)));
     })
     // Soonest first stays the default, because for an event the date IS the
     // point. A to Z is there for when you know the name and want to find it.
@@ -8403,7 +8442,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
               </div>
 
               <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}` }}>
-                {[{ id: "local", label: "Local", ico: "town" }, { id: "major", label: "Major", ico: "ticket" }, { id: "viking", label: "Viking", ico: "ferry" }].map(t => (
+                {[{ id: "local", label: "Local", ico: "town" }, { id: "major", label: "Major", ico: "ticket" }].map(t => (
                   <button key={t.id} onClick={() => { setEventTab(t.id); setEventMonth(null); setEventType(null); }}
                     style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "none", border: "none", borderBottom: `2px solid ${eventTab === t.id ? C.accent : "transparent"}`, color: eventTab === t.id ? C.text : C.muted, padding: "12px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                     <Ico name={t.ico} size={14} /> {t.label}
@@ -8413,20 +8452,31 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
-                  {["All", ...eventMonthOptions].map(m => (
-                    <Pill key={m} label={m} active={(m === "All" && !eventMonth) || eventMonth === m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))} />
-                  ))}
+                  {["All", ...eventMonthOptions].map(m => {
+                    // Counted against the TYPE filter only, never against the
+                    // month filter itself: counting a facet with itself applied
+                    // gives every other month a zero, which reads as "nothing in
+                    // August" when it means "you picked July".
+                    const n = m === "All" ? upcomingInTab.length : upcomingInTab.filter(e =>
+                      new Date(e.date).toLocaleString("en", { month: "short" }) === m
+                      && (!eventType || hasEventType(e, eventType) || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)))).length;
+                    return <Pill key={m} label={`${m} ${n}`} active={(m === "All" && !eventMonth) || eventMonth === m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))} />;
+                  })}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
-                  {["All", ...eventTypeOptions].map(f => (
-                    <Pill key={f} label={f} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />
-                  ))}
+                  {["All", ...eventTypeOptions].map(f => {
+                    const inMonth = upcomingInTab.filter(e => !eventMonth || new Date(e.date).toLocaleString("en", { month: "short" }) === eventMonth);
+                    const n = f === "All" ? inMonth.length
+                      : f === "North Zealand" ? inMonth.filter(e => NORTH_ZEALAND_TOWNS.includes(e.town)).length
+                      : inMonth.filter(e => hasEventType(e, f)).length;
+                    return <Pill key={f} label={`${eventTypeLabelFor(f)} ${n}`} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />;
+                  })}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Order</div>
                 <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                  <Pill label="Soonest" active={eventSort === "soonest"} onClick={() => setEventSort("soonest")} />
-                  <Pill label="Alphabetical" active={eventSort === "az"} onClick={() => setEventSort("az")} />
+                  <Pill label="By date" active={eventSort === "soonest"} onClick={() => setEventSort("soonest")} />
+                  <Pill label="By name" active={eventSort === "az"} onClick={() => setEventSort("az")} />
                 </div>
               </div>
               {filteredEvents.length === 0 ? (
@@ -8768,6 +8818,13 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                 // real number of matches with that ONE axis swapped, so it already
                 // accounts for everything else currently selected.
                 const base = (t) => townPartOk(t) && townSearchOk(t);
+                // ── "WHY ARE THEY THE ONLY ONES THAT HAVE NO NUMBERS" ──
+                // Because this helper did not exist. Themes and sizes had one,
+                // the tier row did not, so it was the one row on the page that
+                // could send you to an empty grid without warning. Counted with
+                // every OTHER filter applied and never with itself, same rule as
+                // the other two.
+                const nWithKind = (k) => towns.filter(t => base(t) && townSizeOk(t) && townThemeOk(t) && (!k || tierOf(t)?.id === k)).length;
                 const nWithTheme = (th) => towns.filter(t => base(t) && townKindOk(t) && townSizeOk(t) && hasTheme(t, th)).length;
                 const nWithSize = (z) => towns.filter(t => base(t) && townKindOk(t) && townThemeOk(t) && (!z || placeKindOf(t) === z)).length;
                 const kinds = ["city", "town", "village", "area"].filter(k => towns.some(t => placeKindOf(t) === k));
@@ -8787,9 +8844,9 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                         ))}
                       </Row>
                     )}
-                    <Row title="How well known">
-                      {[{ id: null, label: "All" }, { id: "hidden", label: "◆ Off the usual route" }, { id: "must", label: "★ Can't miss out" }].map(k => (
-                        <Pill key={k.label} label={k.label} active={townKind === k.id} onClick={() => setTownKind(townKind === k.id ? null : k.id)} />
+                    <Row title="Worth the trip">
+                      {[{ id: null, label: "All" }, ...TIERS.map(x => ({ id: x.id, label: `${x.mark ? `${x.mark} ` : ""}${x.label}` }))].map(k => (
+                        <Pill key={k.label} label={`${k.label} ${nWithKind(k.id)}`} active={townKind === k.id} onClick={() => setTownKind(townKind === k.id ? null : k.id)} />
                       ))}
                     </Row>
                     {/* "area" BELONGS IN THIS LIST. Without it no chip could select
