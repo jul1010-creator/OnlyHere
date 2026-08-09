@@ -57,18 +57,36 @@
 //
 // Every source is optional. A missing key is not an error, it is one fewer
 // opinion, and the merge downstream is built to work with one, two or three.
-const OWM_KEY = process.env.OPENWEATHER_API_KEY || process.env.OPENWEATHERMAP_API_KEY || "";
-const WAPI_KEY = process.env.WEATHERAPI_KEY || process.env.WEATHER_API_KEY || "";
+// ── THE NAMES HAVE TO MATCH WHAT IS ACTUALLY SET ────────────────────
+// Both keys were in Vercel since 29 July and both came back null anyway,
+// because I guessed at the variable names instead of looking. His are
+// OPENWEATHERMAP and WEATHER_API_KEY. I read OPENWEATHER_API_KEY and
+// OPENWEATHERMAP_API_KEY, so the OpenWeatherMap one could never match.
+// Every spelling either of us would plausibly use is accepted now, since the
+// cost of an extra name in this list is nothing and the cost of a miss is a
+// feature that silently does not exist.
+const OWM_KEY = process.env.OPENWEATHERMAP || process.env.OPENWEATHER_API_KEY
+  || process.env.OPENWEATHERMAP_API_KEY || process.env.OPENWEATHER_KEY || "";
+const WAPI_KEY = process.env.WEATHER_API_KEY || process.env.WEATHERAPI_KEY
+  || process.env.WEATHERAPI || process.env.WEATHERAPI_COM_KEY || "";
+
+// ── AND A FAILURE HAS TO SAY WHY ────────────────────────────────────
+// Both sources returned null and the response could not tell me whether that
+// meant no key, a rejected key, or a plan limit. `catch { return null }` is
+// the same silent-failure shape this project keeps finding, and I wrote a
+// fresh one. Each source now records its own reason, which is reported in the
+// response. The key itself never appears here.
+const sourceErrors = {};
 
 // One shape for every source, so the client merge never branches on provider:
 // { date: "2026-09-14", temp_c, wet } where wet means 1mm or more that day.
 const dayKey = (t) => String(t).slice(0, 10);
 
 async function openWeatherSeries(lat, lon) {
-  if (!OWM_KEY) return null;
+  if (!OWM_KEY) { sourceErrors.openweathermap = "no key set"; return null; }
   try {
     const r = await fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${OWM_KEY}`);
-    if (!r.ok) return null;
+    if (!r.ok) { sourceErrors.openweathermap = `HTTP ${r.status}`; return null; }
     const j = await r.json();
     // 3-hourly. Collapse to a day by taking the slot nearest midday, which is
     // what somebody planning a day out is asking about, and summing the rain
@@ -87,15 +105,22 @@ async function openWeatherSeries(lat, lon) {
       }
     }
     return Object.values(byDay).map(d => ({ date: d.date, temp_c: d.temp_c, wet: d.rain >= 1 }));
-  } catch { return null; }
+  } catch (e) { sourceErrors.openweathermap = String(e.message || e).slice(0, 80); return null; }
 }
 
 async function weatherApiSeries(lat, lon) {
-  if (!WAPI_KEY) return null;
+  if (!WAPI_KEY) { sourceErrors.weatherapi = "no key set"; return null; }
+  // PLAN LIMIT, RETRIED RATHER THAN SWALLOWED. WeatherAPI's free tier serves 3
+  // days and rejects a request for 14 outright, so asking for the maximum and
+  // giving up on the error means a perfectly good key looks like a missing one.
+  // Ask for the most, fall back to the least.
+  const call = async (days) => {
+    const r = await fetch(`https://api.weatherapi.com/v1/forecast.json?key=${WAPI_KEY}&q=${lat},${lon}&days=${days}&aqi=no&alerts=no`);
+    return r.ok ? r.json() : null;
+  };
   try {
-    const r = await fetch(`https://api.weatherapi.com/v1/forecast.json?key=${WAPI_KEY}&q=${lat},${lon}&days=14&aqi=no&alerts=no`);
-    if (!r.ok) return null;
-    const j = await r.json();
+    const j = (await call(14)) || (await call(3));
+    if (!j) { sourceErrors.weatherapi = "rejected at 14 and 3 days, check the key"; return null; }
     return (j.forecast?.forecastday || []).map(d => ({
       date: d.date,
       // avgtemp is the honest single number for a whole day here; maxtemp
@@ -105,7 +130,7 @@ async function weatherApiSeries(lat, lon) {
       temp_c: d.day?.avgtemp_c ?? null,
       wet: (d.day?.totalprecip_mm ?? 0) >= 1,
     }));
-  } catch { return null; }
+  } catch (e) { sourceErrors.weatherapi = String(e.message || e).slice(0, 80); return null; }
 }
 
 const NORMALS_YEARS = 10;
@@ -260,6 +285,9 @@ export default async function handler(req, res) {
         openweathermap: owm,
         weatherapi: wapi,
       },
+      // Why a source is absent, so a missing forecast is diagnosable from the
+      // response instead of by reading the code. Never contains a key.
+      source_errors: sourceErrors,
       updated_at: now.time,
       fetched_at: new Date().toISOString(),
     });

@@ -3842,7 +3842,26 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a lone source's own wet call is kept", one.wet);
   is("no source at all is null, not zero", mergeForecasts({ met: [] }, D), null);
   is("a day nobody covers is null", mergeForecasts(three, "2030-01-01"), null);
-  ok("both keys are optional in the API", /OWM_KEY\) return null/.test(apiSrc) && /WAPI_KEY\) return null/.test(apiSrc));
+  // A missing key is one fewer opinion, not an error, AND it now says which.
+  // Both keys sat in Vercel from 29 July returning null the whole time, because
+  // I guessed the variable names rather than looking at them. His are
+  // OPENWEATHERMAP and WEATHER_API_KEY.
+  ok("both keys are optional in the API", /!OWM_KEY\)/.test(apiSrc) && /!WAPI_KEY\)/.test(apiSrc));
+  ok("the name he actually used is read", /process\.env\.OPENWEATHERMAP\b/.test(apiSrc));
+  ok("and so is the other one", /process\.env\.WEATHER_API_KEY\b/.test(apiSrc));
+  // A silent null could not tell no-key from bad-key from plan-limit.
+  ok("a missing source says why", /sourceErrors\.openweathermap = "no key set"/.test(apiSrc));
+  ok("and that reaches the response", /source_errors: sourceErrors/.test(apiSrc));
+  ok("but never the key itself", !/sourceErrors\.\w+ = .{0,20}KEY/.test(apiSrc));
+  // WeatherAPI's free tier serves 3 days and rejects 14 outright, so asking
+  // for the maximum and giving up made a good key look like a missing one.
+  ok("a plan limit is retried, not swallowed", /await call\(14\)\) \|\| \(await call\(3\)\)/.test(apiSrc));
+
+  // "Without changing hotel" was written from the route planner's point of
+  // view, for a reader who has no hotel yet. Oliver's friend: "it makes no sense."
+  const detailSrc = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the day-trip heading says what it is", /Day trips from \$\{item\.name\}/.test(detailSrc));
+  ok("the planner jargon is gone", !/group\(`Without changing hotel`/.test(stripNonCode(detailSrc)));
 
   // ── REFRESH ON OPEN ─────────────────────────────────────────────
   ok("never fetched is stale", weatherIsStale(null));

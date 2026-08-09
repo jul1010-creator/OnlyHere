@@ -355,7 +355,14 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               return (
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 18 }}>
                   {inside.length ? group(`Inside ${item.name}`, inside, "Part of the city itself, so you are already there.") : null}
-                  {trips.length ? group(`Without changing hotel`, trips, `Its own place, reached from ${item.name} and back in a day.`) : null}
+                  {/* "Without changing hotel" was written from the ROUTE
+                      PLANNER's point of view, where the useful fact about one
+                      of these is that it costs you no overnight. A reader on a
+                      town page is not planning a route and has no hotel in
+                      mind yet, so the heading described a saving they had not
+                      been offered. Oliver's friend, 9 Aug 2026: "it makes no
+                      sense." Say the thing itself instead. */}
+                  {trips.length ? group(`Day trips from ${item.name}`, trips, `Close enough to see in a day and be back the same evening.`) : null}
                 </div>
               );
             })()}
