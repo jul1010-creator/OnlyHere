@@ -45,6 +45,7 @@ writeFileSync(entry, `
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
+  export { supabaseFailure, studioErrorMessage, EXPIRED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -2329,12 +2330,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("no facts call interpolates the token by hand any more",
      (app.match(/gemlyx_facts[\s\S]{0,220}Bearer \$\{studioSession\?\.access_token\}/g) || []).length, 0);
   is("and all three go through studioAuth", (app.match(/studioAuth\(\)/g) || []).length >= 3, true);
-  ok("a missing token names the login, not the database", /Your Studio login has expired\. Log out and back in\. \(The table is fine\.\)/.test(app));
+  ok("a missing token names the login, not the database",
+     /Your Studio login has expired\. Log out and back in\./.test(M.studioErrorMessage("the facts", 401, { code: "PGRST301" })));
   // The SQL is suggested for exactly one thing: the relation genuinely not
-  // existing. Not for a 401, which is what it was doing.
-  ok("the SQL is only suggested for a missing relation", /PGRST205[\s\S]{0,160}does not exist yet\. Run the SQL/.test(app));
-  ok("401 and 403 are recognised as auth, not schema", /status === 401 \|\| status === 403 \|\| \/\^PGRST30\[12\]\$\/\.test\(code\)/.test(app));
-  ok("and anything else reports its own status rather than guessing", /Could not read the facts \(\$\{status\}/.test(app));
+  // existing. Not for a 401, which is what it was doing on three tables.
+  is("a missing relation is the only thing that offers SQL", M.studioErrorMessage("the facts", 404, { code: "PGRST205" }), "MISSING_TABLE");
+  ok("a 401 never offers SQL", M.studioErrorMessage("the facts", 401, { code: "PGRST301" }) !== "MISSING_TABLE");
+  ok("nor does a 403", M.studioErrorMessage("the facts", 403, null) !== "MISSING_TABLE");
+  is("401 and 403 are recognised as auth, not schema", [M.supabaseFailure(401, null), M.supabaseFailure(403, null)], [M.EXPIRED, M.EXPIRED]);
+  ok("and anything else reports its own status rather than guessing",
+     /Could not read the facts \(500\)/.test(M.studioErrorMessage("the facts", 500, null)));
+  // THE OBLIGATION THAT REPLACES REMEMBERING. A helper nobody has to call is a
+  // suggestion, and this exact bug has now shipped four times: PASS 57 on
+  // gemlyx_content, then gemlyx_facts, then gemlyx_sources, then
+  // gemlyx_research. Twelve call sites were still interpolating the token by
+  // hand twelve lines below the helper written to stop it.
+  is("no Studio request builds its own Authorization header",
+     (app.match(/Bearer \$\{studioSession/g) || []).length, 0);
+  ok("they all go through the one helper that throws on a missing token",
+     /const tok = studioSession\?\.access_token;\n    if \(!tok\) throw new Error/.test(app));
 }
 
 // ── "I'M NOT SAYING ONLY.. I'M SAYING INCLUDE" ─────────────────────
@@ -2473,9 +2487,43 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the list is loaded on mount, not only in Studio", /ensureSourcesLoaded\(\)/.test(app3));
   // And the panel tells an expired login apart from a missing table, from day
   // one, rather than learning tonight's lesson a second time.
-  ok("a missing table is named as missing", /if \(status === 404 \|\| code === "PGRST205"/.test(app3));
-  ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\. \(Nothing is wrong with the table\.\)/.test(app3));
+  ok("a missing table is named as missing", M.supabaseFailure(404, { code: "PGRST205" }) === M.MISSING);
+  ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\./.test(M.studioErrorMessage("the source list", 401, { code: "PGRST301" })));
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
+}
+
+// ── "IS STILL SAYS THIS!!!!!!!" ──────────────────────────────────
+// Oliver, 9 Aug 2026, pasting the gemlyx_research setup SQL back for the second
+// time, having already run it. He was right both times. The panel was reading a
+// 401 and mapping it straight to "missing", so it printed a create-table script
+// at a founder whose table exists. Fourth time for this bug class.
+{
+  const app10 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // A 401 is a login. Only PGRST205 and a real 404 mean the relation is absent.
+  is("a bad token is a login problem", M.supabaseFailure(401, { code: "PGRST301" }), M.EXPIRED);
+  is("so is a 403 from RLS", M.supabaseFailure(403, null), M.EXPIRED);
+  is("the JWT code decides on its own, whatever status arrives with it",
+     M.supabaseFailure(400, { code: "PGRST301" }), M.EXPIRED);
+  is("and PGRST302 the same way", M.supabaseFailure(200, { code: "PGRST302" }), M.EXPIRED);
+  is("a missing relation is a missing relation", M.supabaseFailure(404, { code: "PGRST205" }), M.MISSING);
+  is("named in the message rather than the code", M.supabaseFailure(400, { message: "relation does not exist" }), M.MISSING);
+  is("and everything else stays honest about not knowing", M.supabaseFailure(500, null), M.OTHER);
+  is("a null body never throws", M.supabaseFailure(500, null), M.OTHER);
+  is("nor a string one", M.supabaseFailure(500, "boom"), M.OTHER);
+
+  // THE LINE HE SAW. It mapped 401 to "missing" and there is now a test that
+  // fails if anything writes it again.
+  ok("no panel decides for itself that a 401 is a missing table",
+     !/status === 401 \|\| \w+\.status === 404 \? "missing"/.test(app10));
+  ok("the research panel classifies through the shared helper", /const researchStatusFor = supabaseFailure;/.test(app10));
+  // Three states, three different sentences. The SQL block renders under exactly
+  // one of them.
+  ok("an expired login says so and offers no SQL", /Your Studio login has expired\.<\/b> Log out and back in\. Nothing is wrong with the table and there is no SQL to run\./.test(app10));
+  ok("a genuinely missing table is the only branch that shows SQL", /=== MISSING \? \([\s\S]{0,600}\{RESEARCH_SQL\}/.test(app10));
+  is("and the SQL appears exactly once, in that branch", (app10.match(/\{RESEARCH_SQL\}/g) || []).length, 1);
+  // Re-runnable, same lesson gemlyx_sources taught this morning: Supabase runs
+  // the editor as one transaction, so "policy already exists" rolls back the lot.
+  ok("the research SQL can be run twice", /drop policy if exists "auth all gemlyx_research"/.test(app10));
 }
 
 // ── "EVENTS HAVE TWO 'MUSICS'" ───────────────────────────────────

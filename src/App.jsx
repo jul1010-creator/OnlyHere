@@ -60,6 +60,7 @@ import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cle
 import { otherNameFor } from "./utils/danishNames";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
+import { supabaseFailure, studioErrorMessage, EXPIRED, MISSING } from "./utils/studioErrors";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -278,6 +279,20 @@ ${ISLAND_FERRY_RULES}`;
 // reads founderSources, which liveSources.js fills in place.
 // The one statement this feature needs. Shown in the panel, copyable, and only
 // ever offered when PostgREST actually says the relation is missing.
+// Re-runnable, like SOURCES_SQL: Supabase runs the editor as one transaction,
+// so a "policy already exists" error rolls the whole script back.
+const RESEARCH_SQL = `create table if not exists gemlyx_research (
+  name text not null,
+  type text not null,
+  notes text,
+  urls jsonb,
+  created_at timestamptz default now(),
+  primary key (name, type)
+);
+alter table gemlyx_research enable row level security;
+drop policy if exists "auth all gemlyx_research" on gemlyx_research;
+create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);`;
+
 const SOURCES_SQL = `create table if not exists gemlyx_sources (
   id bigserial primary key,
   domain text not null,
@@ -709,6 +724,21 @@ function GemlyxApp() {
   const [studioSession, setStudioSession] = useState(() => {
     try { return JSON.parse(localStorage.getItem("gemlyx_studio_session") || "null"); } catch { return null; }
   });
+  // ── THE ONLY PLACE A STUDIO REQUEST GETS ITS HEADERS ──────────────
+  // Declared here, next to the session it reads, because twelve call sites
+  // spread over 2,800 lines used to interpolate the token by hand and every one
+  // of them could produce the literal string "Bearer undefined".
+  //
+  // Throwing rather than returning a broken header is the whole point: a call
+  // that cannot be authenticated must fail as a LOGIN problem, loudly, at the
+  // point of the call. The alternative is what this project has now shipped four
+  // separate times, where PostgREST answers 401 and the code in front of it
+  // reports a missing table.
+  const studioAuth = () => {
+    const tok = studioSession?.access_token;
+    if (!tok) throw new Error("Your Studio login has expired. Log out and back in.");
+    return { apikey: SUPABASE_KEY, Authorization: `Bearer ${tok}` };
+  };
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState(null);
@@ -743,7 +773,7 @@ function GemlyxApp() {
     setManageLoading(true);
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload,published&order=id.desc`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
+        headers: studioAuth(),
       });
       const rows = await res.json();
       setManageItems(Array.isArray(rows) ? rows : []);
@@ -786,7 +816,7 @@ function GemlyxApp() {
   const patchContentPayload = async (row, newPayload) => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
       method: "PATCH",
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
       body: JSON.stringify({ payload: newPayload }),
     });
     if (!res.ok) throw new Error(`Save failed (${res.status}) — check the update RLS policy on gemlyx_content`);
@@ -923,7 +953,7 @@ function GemlyxApp() {
         const path = `${row.type}/${slugBase}-${Date.now()}-${i}.${ext}`;
         const up = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
           method: "POST",
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": f.type || "image/jpeg", "x-upsert": "true" },
+          headers: { ...studioAuth(), "Content-Type": f.type || "image/jpeg", "x-upsert": "true" },
           body: f,
         });
         if (!up.ok) {
@@ -978,7 +1008,7 @@ function GemlyxApp() {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${id}`, {
         method: "DELETE",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
+        headers: studioAuth(),
       });
       if (res.ok) {
         setToast("🗑 Deleted — refreshing");
@@ -1450,10 +1480,25 @@ function GemlyxApp() {
       //   create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);
       try {
         const memRes = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?name=eq.${encodeURIComponent(name)}&type=eq.${encodeURIComponent(sType)}&select=*`, {
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}` },
+          headers: studioAuth(),
         });
         if (!memRes.ok) {
-          ui(setResearchMemory, { status: memRes.status === 401 || memRes.status === 404 ? "missing" : "error", detail: `HTTP ${memRes.status}` });
+          // ── "IS STILL SAYS THIS!!!!!!!" ──────────────────────────
+          // Oliver, 9 Aug 2026, pasting the SQL banner back at me for the second
+          // time, having already run it.
+          //
+          // He had. The table exists. What the panel was reading was a 401, and
+          // this line mapped 401 straight to "missing" and printed a create-table
+          // script at him. It is the gemlyx_facts bug for the fourth time, and
+          // this one is mine: I wrote a twenty-five line comment above
+          // studioAuth() saying "writing the helper is not the same as using
+          // it", fixed the three facts call sites, and left twelve others
+          // interpolating the token by hand, including both of these.
+          //
+          // A 401 means the LOGIN. Only PGRST205 and a genuine 404 mean the
+          // relation is not there, and only those two are allowed to show SQL.
+          const body = await memRes.json().catch(() => null);
+          ui(setResearchMemory, { status: researchStatusFor(memRes.status, body), detail: `HTTP ${memRes.status}` });
         } else {
           ui(setResearchMemory, { status: "ok" });
           const memRows = await memRes.json();
@@ -2415,12 +2460,15 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         if (freshOnly.trim()) {
           const saved = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_research?on_conflict=name,type`, {
             method: "POST",
-            headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession.access_token}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+            headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
             body: JSON.stringify({ name, type: sType, notes: freshOnly.slice(0, 6000), urls: [...new Set(candidateUrls)].slice(0, 8), created_at: new Date().toISOString() }),
           });
           // Still never blocks a finished draft. It just stops pretending it
           // worked.
-          if (!saved.ok) ui(setResearchMemory, { status: saved.status === 401 || saved.status === 404 ? "missing" : "error", detail: `HTTP ${saved.status} on save` });
+          if (!saved.ok) {
+            const sBody = await saved.json().catch(() => null);
+            ui(setResearchMemory, { status: researchStatusFor(saved.status, sBody), detail: `HTTP ${saved.status} on save` });
+          }
         }
       } catch (e) { ui(setResearchMemory, { status: "error", detail: String(e?.message || e).slice(0, 80) }); }
       // frozenGeo is the whole point of this change: publishDraft force-overrides
@@ -2560,12 +2608,6 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
   // key instead. Supabase then refused with "new row violates row-level security
   // policy", which reads like a broken SQL policy rather than a missing login.
   // Both Oliver's 403 on storage and his 42501 on gemlyx_facts were this one typo.
-  const studioAuth = () => {
-    const tok = studioSession?.access_token;
-    if (!tok) throw new Error("Your Studio login has expired. Log out and back in.");
-    return { apikey: SUPABASE_KEY, Authorization: `Bearer ${tok}` };
-  };
-
   // ── THE MESSAGE THAT BLAMED HIS SQL FOR AN EXPIRED LOGIN ────────
   // Oliver, 8 Aug 2026: "The gemlyx_facts table is not readable yet. Run the SQL
   // from CHANGES_THIS_PASS.md in Supabase.. it worked before. And facts are in
@@ -2589,15 +2631,18 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
   // Now: no token means the login is named. A real error names ITSELF, and the
   // SQL is only suggested for the one PostgREST code that genuinely means the
   // relation does not exist.
+  // Same three-way split as factsErrorFor, for the research memory banner:
+  // "expired" is a login, "missing" is a table that genuinely is not there and is
+  // the ONLY state allowed to print SQL, "error" is everything else naming
+  // itself. Exported through the component so the test can find it by name.
+  const researchStatusFor = supabaseFailure;
+
+  // All three panels classify in ONE place now (utils/studioErrors.js), so no
+  // call site gets to hold its own opinion about what a 401 means. That opinion
+  // is what has cost four passes.
   const factsErrorFor = (status, body) => {
-    const code = body && typeof body === "object" ? String(body.code || "") : "";
-    if (status === 401 || status === 403 || /^PGRST30[12]$/.test(code)) {
-      return "Your Studio login has expired. Log out and back in. (The table is fine.)";
-    }
-    if (status === 404 || code === "PGRST205" || /does not exist/i.test(String(body?.message || ""))) {
-      return "The gemlyx_facts table does not exist yet. Run the SQL from CHANGES_THIS_PASS.md in Supabase.";
-    }
-    return `Could not read the facts (${status}${code ? ` ${code}` : ""}). ${String(body?.message || "").slice(0, 160)}`.trim();
+    const m = studioErrorMessage("the facts", status, body);
+    return m === "MISSING_TABLE" ? "The gemlyx_facts table does not exist yet. Run the SQL from CHANGES_THIS_PASS.md in Supabase." : m;
   };
 
   const loadSavedFacts = async () => {
@@ -2732,7 +2777,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       const path = `facts/${key}.${ext}`;
       const res = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
         method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": file.type || "image/jpeg", "x-upsert": "true" },
+        headers: { ...studioAuth(), "Content-Type": file.type || "image/jpeg", "x-upsert": "true" },
         body: file,
       });
       if (!res.ok) {
@@ -3054,7 +3099,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     setPhotoFixState({ running: true, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: [] });
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
+        headers: studioAuth(),
       });
       const rows = await res.json();
       if (!Array.isArray(rows)) { setPhotoFixState({ running: false, done: 0, total: 0, fixed: 0, skipped: 0, notFound: [], failed: ["Could not read the published rows."] }); return; }
@@ -3088,7 +3133,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
             const block = { type: "image", src, credit: { ...hit.credit }, ...(useCommonsCaption && hit.caption ? { caption: hit.caption } : {}) };
             const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
               method: "PATCH",
-              headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+              headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
               body: JSON.stringify({ payload: { ...p, photo: src, __photoCredit: { ...hit.credit }, blogBody: [...(Array.isArray(p.blogBody) ? p.blogBody : []), block] } }),
             });
             if (patch.ok) fixed++; else failed.push(`${p.name}: save failed (${patch.status})`);
@@ -3113,7 +3158,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
     setGeoFixState({ running: true, done: 0, total: 0, fixed: 0, failed: [] });
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=id,type,payload&published=eq.true`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` },
+        headers: studioAuth(),
       });
       const rows = await res.json();
       if (!Array.isArray(rows)) { setGeoFixState({ running: false, done: 0, total: 0, fixed: 0, failed: ["Could not read the published rows."] }); return; }
@@ -3130,7 +3175,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
         if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lon)) {
           const patch = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
             method: "PATCH",
-            headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({ payload: { ...row.payload, __lat: coords.lat, __lon: coords.lon } }),
           });
           if (patch.ok) fixed++; else failed.push(`${row.payload.name}: save failed (${patch.status})`);
@@ -3183,16 +3228,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   // This panel is new and its table genuinely may not exist yet, so it has to
   // tell those two apart from the first day rather than learning the lesson
   // twice.
-  const sourcesErrorFor = (status, body) => {
-    const code = body && typeof body === "object" ? String(body.code || "") : "";
-    if (status === 401 || status === 403 || /^PGRST30[12]$/.test(code)) {
-      return "Your Studio login has expired. Log out and back in. (Nothing is wrong with the table.)";
-    }
-    if (status === 404 || code === "PGRST205" || /does not exist/i.test(String(body?.message || ""))) {
-      return "MISSING_TABLE";
-    }
-    return `Could not read the source list (${status}${code ? ` ${code}` : ""}). ${String(body?.message || "").slice(0, 160)}`.trim();
-  };
+  const sourcesErrorFor = (status, body) => studioErrorMessage("the source list", status, body);
 
   // Removes one uncertainty from the draft, through studioDraftText, which is
   // what Publish actually reads. Editing studioDraft alone would clear it on
@@ -3309,7 +3345,7 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
   const sweepRestoreRef = useRef(null);
   const sweepCancelRef = useRef(false);
 
-  const sweepHeaders = () => ({ apikey: SUPABASE_KEY, Authorization: `Bearer ${studioSession?.access_token}` });
+  const sweepHeaders = () => studioAuth();
   const sweepBusy = sweepState?.phase === "reading" || sweepState?.phase === "proposing";
 
   const proposeSweepRun = async (idOverride) => {
@@ -7668,10 +7704,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               code comment. Shown here, once, with the SQL. */}
                           {researchMemory && researchMemory.status !== "ok" && (
                             <div style={{ background: "#FFB34714", border: "1px solid #FFB34755", borderRadius: 8, padding: "9px 11px", marginBottom: 8, fontSize: 11, color: C.light, lineHeight: 1.6 }}>
-                              <b style={{ color: "#FFB347" }}>Research memory is not switched on</b> ({researchMemory.detail}). Drafts are not remembering their sources, so a redraft starts from scratch every time. Run this once in the Supabase SQL editor:
-                              <div style={{ fontFamily: "monospace", fontSize: 10, color: C.text, background: C.bg, borderRadius: 6, padding: "7px 8px", marginTop: 6, whiteSpace: "pre-wrap", userSelect: "all" }}>{`create table if not exists gemlyx_research (name text not null, type text not null, notes text, urls jsonb, created_at timestamptz default now(), primary key (name, type));
-alter table gemlyx_research enable row level security;
-create policy "auth all gemlyx_research" on gemlyx_research for all to authenticated using (true) with check (true);`}</div>
+                              {researchMemory.status === EXPIRED ? (
+                                <><b style={{ color: "#FFB347" }}>Your Studio login has expired.</b> Log out and back in. Nothing is wrong with the table and there is no SQL to run.</>
+                              ) : researchMemory.status === MISSING ? (
+                                <>
+                                  <b style={{ color: "#FFB347" }}>The gemlyx_research table does not exist yet</b> ({researchMemory.detail}). Drafts are not remembering their sources, so a redraft starts from scratch every time. Run this once in the Supabase SQL editor:
+                                  <div style={{ fontFamily: "monospace", fontSize: 10, color: C.text, background: C.bg, borderRadius: 6, padding: "7px 8px", marginTop: 6, whiteSpace: "pre-wrap", userSelect: "all" }}>{RESEARCH_SQL}</div>
+                                </>
+                              ) : (
+                                <><b style={{ color: "#FFB347" }}>Research memory could not be read</b> ({researchMemory.detail}). Drafts still work, they just start from scratch. This is not a missing table, so there is no SQL to run.</>
+                              )}
                             </div>
                           )}
                           {/* Name the sources yourself when you already know
