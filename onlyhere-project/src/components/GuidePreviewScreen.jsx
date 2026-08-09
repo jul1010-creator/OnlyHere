@@ -1,5 +1,6 @@
 import { C } from "../utils/theme";
 import { testTravelerLine } from "../utils/helpers";
+import { fold, variantsOf, samePlaceName } from "../utils/danishNames";
 
 // ── "Here's what's coming up" preview screen ────────────────────────
 // PASS 27 EXTRACTION (App.jsx file-split, per Oliver: "you gotta start
@@ -87,7 +88,38 @@ export const GuidePreviewScreen = ({
   generateGuide,
 }) => {
   const convoText = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
-  const norm = convoText.toLowerCase();
+  // ── "WHY DOES IT ONLY SHOW COPENHAGEN" ────────────────────────────
+  // Oliver, 9 Aug 2026, looking at a preview with one city on it.
+  //
+  // The matcher was `convoText.toLowerCase().includes(place.name.toLowerCase())`,
+  // and it has two holes that both hit Denmark specifically.
+  //
+  // 1. IT IS A RAW SUBSTRING TEST, SO SPELLING IS THE MATCH. He raised this
+  //    himself a few hours earlier about a different screen: "I type
+  //    copenhagen, but Copenhagen on Danish is Kobenhavn." Same problem here,
+  //    and worse, because the Danish letters break it even when the traveler is
+  //    writing the Danish name correctly: "Aeroskobing" never matches
+  //    "Ærøskøbing", "Odense" is fine but "Møn" is three characters and was
+  //    being skipped by the length guard anyway.
+  //
+  //    utils/danishNames.js exists for exactly this and was not being used
+  //    here. That is the same failure as the last several: a helper that
+  //    exists, and a site that matters where it was never called.
+  //
+  // 2. IT ONLY EVER SHOWS PLACES HE TYPED. Somebody who writes "four days in
+  //    Copenhagen" has named one place, so this screen showed one card, and
+  //    the screen's whole job is to prove Gemlyx knows the ground. Gemlyx knows
+  //    dozens of things IN Copenhagen. Those are not a guess, they are rows
+  //    with a `city`/`town` field pointing at a town he did name.
+  const norm = fold(convoText);
+  const mentions = (name) => {
+    const hay = ` ${norm} `;
+    return variantsOf(name, { includeSights: true }).some(v => {
+      const f = fold(v);
+      return f.length >= 3 && hay.includes(f);
+    });
+  };
+  const parentOf = (p) => String(p.city || p.town || "").trim();
   const pools = [
     ...towns.map(p => ({ ...p, _src: "town" })),
     ...freeEntrance.map(p => ({ ...p, _src: "free" })),
@@ -99,14 +131,35 @@ export const GuidePreviewScreen = ({
   ];
   const seen = new Set();
   const matched = [];
+  // The length guard is now on the FOLDED variant inside mentions(), not on the
+  // raw name, because it was throwing away real Danish towns: "Mon" and "Aro"
+  // are three characters and are places, while the thing the guard was actually
+  // protecting against is a two-letter fragment matching inside a longer word.
   pools.forEach(p => {
-    // Skip anything shorter than 4 characters — too generic a string to
-    // trust as a real substring match (would false-positive constantly).
-    if (!p.name || p.name.length < 4) return;
-    const key = p.name.toLowerCase();
-    if (seen.has(key)) return;
-    if (norm.includes(key)) { seen.add(key); matched.push(p); }
+    if (!p.name) return;
+    const key = fold(p.name);
+    if (!key || seen.has(key)) return;
+    if (mentions(p.name)) { seen.add(key); matched.push(p); }
   });
+  // ── AND WHAT IS INSIDE THE PLACES HE DID NAME ─────────────────────
+  // Second pass, and deliberately second: anything whose own city/town field
+  // points at a town already matched above. Not a guess and not a search, just
+  // the rows that say where they are. This is the difference between "you said
+  // Copenhagen" and "here is what we hold on Copenhagen", which is the only
+  // reason this screen exists.
+  const matchedTowns = new Set(matched.filter(p => p._src === "town").map(p => fold(p.name)));
+  if (matchedTowns.size) {
+    pools.forEach(p => {
+      if (!p.name || p._src === "town") return;
+      const key = fold(p.name);
+      if (!key || seen.has(key)) return;
+      const parent = parentOf(p);
+      if (!parent) return;
+      // samePlaceName, not equality: a row can store "Kobenhavn" while the town
+      // row is called "Copenhagen", and they are one place.
+      if ([...matchedTowns].some(t => samePlaceName(parent, t))) { seen.add(key); matched.push(p); }
+    });
+  }
   // Group into the fixed category order above, each capped independently.
   // Two sections ("Major Cities"/"Towns") now share src:"town" and are
   // told apart by their own `match` predicate — apply it on top of the

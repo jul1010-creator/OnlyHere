@@ -210,10 +210,71 @@ export const isSameTownWalk = (mode, originTown, destTown, how) =>
 // Maps then shows for the real door-to-door journey. 35 km/h straight-line is
 // a much better real-world average for Danish regional transit door to door.
 const AVG_SPEED_KMH = { walking: 4.5, bicycling: 14, driving: 70, transit: 35 };
-export const estimateDurationText = (km, mode) => {
+
+// ── "MAPS STILL SEEM TO GET THINGS WRONG" ───────────────────────────
+// Oliver, 9 Aug 2026, with two legs off one guide and Google Maps open beside
+// them. Both were measured rather than argued about:
+//
+//   Christiania → Reffen      guide "~24 min on foot"   Google 3.2 km, 44 min
+//   Odense → H.C. Andersens Hus  guide "11 mins on foot"  Google 1.3 km, 18 min
+//
+// Two different labels, and the difference between them is the whole diagnosis.
+// The one WITH a tilde came from here. The one WITHOUT came from the Directions
+// API. So only the first is this function's fault, and it is a big fault.
+//
+// ── A STRAIGHT LINE IS NOT A WALK ───────────────────────────────────
+// Every number this file produces starts as kmBetween: great-circle distance,
+// the length of a line drawn through buildings, across the harbour, and over
+// the fjord. Nobody walks that line. Christiania to Reffen is 2.12 km as the
+// crow flies and 3.2 km on the pavement, because Copenhagen's harbour is in the
+// way and you go around it. Dividing the crow-flies figure by a walking speed
+// answers a question no traveler asked.
+//
+// The ratio has a name in transport geography, circuity, and a well-worn
+// planning default of about 1.3 for a normal street grid. Denmark is worse than
+// a normal street grid: Copenhagen has a harbour through the middle of it,
+// Aalborg has a fjord, and half the interesting places are on islands. The one
+// leg here that was measured against a real route came out at 1.51.
+//
+// 1.35 is chosen as a default, not derived — one measurement is not a study.
+// The direction of the error is the part that is deliberate: this now
+// OVERSTATES a short flat walk by a couple of minutes and understates a
+// harbour detour, and those two mistakes are not equal. A traveler given four
+// minutes too many arrives early. A traveler given twenty too few is standing
+// on the wrong side of a body of water watching a booking time pass.
+export const ROUTE_FACTOR = { walking: 1.35, bicycling: 1.35, driving: 1.25, transit: 1 };
+
+// Transit keeps a factor of 1 on purpose and is NOT missing one: its 35 km/h is
+// already a door-to-door figure covering the walk to the stop, the wait, and
+// the transfers, tuned against real Maps answers the last time this was wrong.
+// Multiplying a detour into it as well would double-count the same slack.
+export const estimateMinutes = (km, mode) => {
   if (km == null) return null;
   const speed = AVG_SPEED_KMH[mode] || AVG_SPEED_KMH.driving;
-  const totalMinutes = Math.max(1, Math.round((km / speed) * 60));
+  const factor = ROUTE_FACTOR[mode] || 1;
+  return Math.max(1, Math.round(((km * factor) / speed) * 60));
+};
+
+// ── AND THE CAP HAS TO APPLY TO THE GUESS TOO ───────────────────────
+// WALK_MAX_MINUTES was enforced in exactly two places, both of which need a
+// Google answer to fire: the re-route in fetchExactDurations, and the
+// plausibility check on a stored result in legChip. The fallback estimate, the
+// branch that runs precisely WHEN there is no Google answer, had no cap at all.
+//
+// That is how "~24 min on foot" reached a page under a rule that says 20. The
+// cap was guarding the path that already had real data and leaving the guessing
+// path alone, which is backwards: a guess deserves MORE suspicion than a
+// measurement, not less. With the detour factor above the same leg estimates at
+// 38 minutes, so it now fails this check loudly instead of rendering as a
+// stroll.
+export const walkEstimateTooFar = (km) => {
+  const mins = estimateMinutes(km, "walking");
+  return mins != null && mins > WALK_MAX_MINUTES;
+};
+
+export const estimateDurationText = (km, mode) => {
+  if (km == null) return null;
+  const totalMinutes = estimateMinutes(km, mode);
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
   if (hours === 0) return `~${mins} min`;

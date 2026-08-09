@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate } from "react-router-dom";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
 import { denmarkFacts } from "./data/denmarkFacts";
+import { shuffledOrder, identityOrder, advancePos, factAt } from "./utils/factRotation";
 import { events, majorEvents, vikingEvents } from "./data/events";
 import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
@@ -10,6 +11,8 @@ import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
 import { isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
+import { stayProblems } from "./utils/accommodation";
+import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
 import { roadTrips, seasonalItineraries } from "./data/roadtrips";
@@ -684,7 +687,18 @@ function GemlyxApp() {
   // spinner"). Picks a random start each time a build begins, then advances
   // on a timer; purely decorative, the status line below it is still driven
   // by the real guideBuildStage.
-  const [factCardIdx, setFactCardIdx] = useState(0);
+  // ── DECIDED BEFORE THE PAINT, NOT AFTER ──────────────────────────
+  // Oliver, 9 Aug 2026: "it shouldn't start with a instant swap from H.C.
+  // Andersen. It should start on the first fact." An effect runs after the
+  // browser has painted, so choosing the card in one guaranteed a visible
+  // flicker on every single build. The order now exists BEFORE the loading
+  // screen renders (identity for the first build of a session, reshuffled as
+  // each build closes, ready for the next one), and factPos starts at 0, so
+  // the first card painted is the first card of the sequence and nothing is
+  // queued to replace it. See utils/factRotation.js for the repeat half.
+  const [factOrder, setFactOrder] = useState(() => identityOrder(denmarkFacts.length));
+  const [factPos, setFactPos] = useState(0);
+  const factCardIdx = factAt(factOrder, factPos, denmarkFacts.length);
   useEffect(() => {
     if (guideModal !== "loading") return;
     // SYNC FIX (Oliver: "Text and Picture is not always 100% in sync. Picture
@@ -694,7 +708,6 @@ function GemlyxApp() {
     // loading screen appears — by the time any card is shown, its image is
     // already in the browser cache and swaps in the same frame as the text.
     denmarkFacts.forEach(f => { if (f.photo) { const img = new Image(); img.src = f.photo; } });
-    setFactCardIdx(Math.floor(Math.random() * denmarkFacts.length));
     // Per Oliver: (1) 10s wasn't enough to actually read a card, bumped to
     // 15s; (2) always advancing +1 in the same fixed order meant every
     // build eventually showed the exact same sequence just rotated to a
@@ -702,15 +715,18 @@ function GemlyxApp() {
     // same") — now picks a genuinely random NEXT card each tick (excluding
     // the current one, so it never visibly repeats back-to-back) instead of
     // just incrementing.
-    const t = setInterval(() => {
-      setFactCardIdx(i => {
-        if (denmarkFacts.length <= 1) return i;
-        let next = Math.floor(Math.random() * denmarkFacts.length);
-        while (next === i) next = Math.floor(Math.random() * denmarkFacts.length);
-        return next;
-      });
-    }, 15000);
-    return () => clearInterval(t);
+    // Sequence, not a die roll. Walking a permutation means nothing can come
+    // back until everything has been shown, which is the difference between
+    // "unlikely to repeat" and "cannot repeat" — and he watched it repeat.
+    const t = setInterval(() => setFactPos(p => advancePos(p, denmarkFacts.length)), 15000);
+    return () => {
+      clearInterval(t);
+      // Chosen HERE, on the way out, so the next build already has its order
+      // and its first card the moment it opens. Doing this on the way in is
+      // the flicker.
+      setFactOrder(shuffledOrder(denmarkFacts.length));
+      setFactPos(0);
+    };
   }, [guideModal]);
   useEffect(() => {
     // Mirror any real (non-loading, non-null) guide into the cache as it updates —
@@ -4091,9 +4107,15 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     const results = new Array(days.length).fill(null);
     const note = await Promise.allSettled(days.map(async (day, idx) => {
       const forecastIdx = startOffset + idx;
-      // Yr.no's forecast only reliably covers about 9 days out — showing something
-      // for day 12 of a trip booked months ahead would just be wrong, not helpful.
-      if (forecastIdx > 8) return;
+      // ── PAST THE HORIZON IS A DIFFERENT QUESTION, NOT SILENCE ──
+      // This used to be `if (forecastIdx > 8) return`, a bare bail. That was
+      // right when arrivalDate was almost always null and every trip was
+      // treated as starting today, so the guard practically never fired.
+      // Arrival dates are now real and two to twenty six weeks out, which
+      // turns that one line into "no guide ever shows weather again".
+      // Beyond the forecast, ten years of recorded observations for that place
+      // and that week, labelled as what it is. See utils/weather.js.
+      const source = weatherSourceFor(forecastIdx);
       const point = day.stops.map(s => {
         const real = lookupRealPlace(s.name);
         if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
@@ -4101,15 +4123,24 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
       }).find(Boolean);
       if (!point) return;
-      const res = await fetch(`/api/weather?lat=${point.lat}&lon=${point.lon}`);
-      const data = await res.json();
-      const slot = data?.forecast?.[forecastIdx];
-      if (!slot) return;
-      const cond = (slot.condition || "").toLowerCase();
-      const risk = /rain|sleet|thunder|snow/.test(cond) ? "high" : /cloudy|fog/.test(cond) ? "low" : "none";
-      results[idx] = { icon: weatherIcon(slot.condition), temp: Math.round(slot.temperature_c), risk };
+      // The day this stop is actually on. ONE implementation, shared with the
+      // refresh-on-open path in GuidePage, so the two can never drift into
+      // disagreeing about the same day the way the walking estimates did.
+      const on = new Date(arrivalDate ? new Date(arrivalDate) : new Date());
+      on.setDate(on.getDate() + idx);
+      results[idx] = await dayWeather({
+        point, date: on, daysOut: forecastIdx,
+        fetchJson: (url) => fetch(url).then(r => r.json()).catch(() => null),
+      });
     })).then(() => {
-      const rainyDayNums = results.map((w, i) => (w?.risk === "high" ? i + 1 : null)).filter(Boolean);
+      // Two notes, because the two sources are two different claims and one
+      // sentence covering both would have to fudge which one it is making.
+      const forecastDays = results.filter(w => w && w.source === FORECAST);
+      if (!forecastDays.length) {
+        const when = arrivalDate ? new Date(arrivalDate).toLocaleString("en", { month: "long" }) : "";
+        return normalsNote(results, when);
+      }
+      const rainyDayNums = results.map((w, i) => (w?.source === FORECAST && w?.risk === "high" ? i + 1 : null)).filter(Boolean);
       if (rainyDayNums.length === 0) return null; // nothing genuinely worth flagging, rather than a generic "check the forecast" filler line
       const dayList = rainyDayNums.length === 1 ? `Day ${rainyDayNums[0]}` : `Days ${rainyDayNums.slice(0, -1).join(", ")} and ${rainyDayNums[rainyDayNums.length - 1]}`;
       return `Real forecast currently shows rain likely on ${dayList}, worth packing a light rain layer.`;
@@ -4151,7 +4182,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           context = ((sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ")).trim();
         } catch { /* search down, Claude will fall back to safe wording */ }
         const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
-{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with genuinely leaving for a new town (a departure/travel leg to somewhere the traveler will actually be based from for the following day(s)), the accommodation for THIS day must reflect where they'll ACTUALLY be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
+{"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with genuinely leaving for a new town (a departure/travel leg to somewhere the traveler will actually be based from for the following day(s)), the accommodation for THIS day must reflect where they'll ACTUALLY be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type. ONE TRIP, ONE KIND OF TRAVELER — and if a day genuinely departs from that, the sentence has to say why IN THE SENTENCE. Oliver, 9 Aug 2026, on a real guide: \"It suggests hostels, but then gives a specific hotel??? Odd.\" Day 1 said book a hostel near Norreport, Day 3 said a comfortable hotel base in Odense, and on one budget BOTH were correct, because Copenhagen costs far more per night than Odense does. The reader could not know that, because neither sentence said it. Each day is written by its own separate call that cannot see the others, so YOU are the only place this can be caught: if the type you are about to write differs from what the same budget would buy in the capital, name the reason in the same breath (\"your nightly budget goes much further here than in Copenhagen, so a real hotel in the centre is comfortably in range\"). An unexplained jump between hostel and hotel does not read as good local knowledge, it reads as the guide contradicting itself. And the type in this sentence MUST match recommendedStay below: never write hostel here and return a hotel there.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
 Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
         // RETRIED (Oliver, again: "no accommodation recommendations (Booking)"):
         // this single call is the only source of the Where to stay card and the
@@ -5204,6 +5235,14 @@ If the conversation only covers a single day or a few stops with no explicit day
       setGuideBuildStage({ label: "Checking the forecast", percent: 98 });
       const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate);
       parsed.days = parsed.days.map((d, i) => (weatherByDay[i] ? { ...d, weather: weatherByDay[i] } : d));
+      // ── "IT SUGGESTS HOSTELS, BUT THEN GIVES A SPECIFIC HOTEL???" ──
+      // Runs HERE and not with the other plan checks, because it needs
+      // something the plan gate never sees: enrichGuideDays writes glance
+      // (accommodation, recommendedStay) onto the days AFTER the skeleton has
+      // already been checked and accepted. The beds are decided by a different
+      // stage from the route, one call per day, in parallel, and until now
+      // nothing read all of those answers together. See utils/accommodation.js.
+      planProblems = [...planProblems, ...stayProblems(parsed.days)];
       const finalEssentials = stripDashesDeep(weatherNote
         ? { ...(parsed.essentials || {}), weatherNote }
         : (parsed.essentials || null));
@@ -5246,7 +5285,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // planner's raw skeleton ONLY when this conversation is genuinely the
       // test brief (see randomTestProfileRef's comment for the guard's why).
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       setGuideModal(null);
       // ERROR-MESSAGE GAP FIX (flagged PASS 27, round 3): this catch-all used to
@@ -5332,7 +5371,30 @@ If the conversation only covers a single day or a few stops with no explicit day
     // choose which published rows get named: nothing is named at all.
     const interestPool = ["history", "local food", "quiet walks", "craft and workshops", "coastal views", "architecture", "markets", "nightlife", "festivals and live events", "castles", "islands", "modern design", "beaches", "museums", "cycling"];
     const interests = some(interestPool, 1 + Math.floor(Math.random() * 3));
-    const month = pick(["", "", " We are coming in June", " We are coming in October", " We are travelling in February", " This is in late August"]);
+    // ── "WHY NO DATE PUT UP?" ──────────────────────────────────
+    // Oliver, 9 Aug 2026: "I will never get examples with events if it's no
+    // dates. These examples are made as if they are arriving tomorrow."
+    //
+    // Exactly right, and here is the line that did it. This used to pick from
+    // a list of bare MONTH NAMES, two of which were empty strings, and one of
+    // which was "We are coming in June" being fed to a test run in August.
+    //
+    // generateGuide parses the arrival date out of the brief with a regex that
+    // needs a DAY and a month ("13 August" or "August 13"). "in June" has no
+    // day, so it never matched, so arrivalDate was null on every single test
+    // guide ever run. Null arrival means the weather call, the event window and
+    // every "is this on while they are here" check are all working from today,
+    // which is why his examples read as though the traveler lands tomorrow.
+    //
+    // A real date, in the future, in the form the parser reads. Two to twenty
+    // six weeks out covers both "next month" and "next season", which are the
+    // two cases where an event either is or is not on, and that difference is
+    // the entire thing this test exists to exercise.
+    const arriveOn = new Date();
+    arriveOn.setDate(arriveOn.getDate() + 14 + Math.floor(Math.random() * 168));
+    const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const arrivalPhrase = `${arriveOn.getDate()} ${MONTHS_LONG[arriveOn.getMonth()]}`;
+    const month = ` We arrive on ${arrivalPhrase}`;
     // Sometimes a region, sometimes nothing at all. "Surprise us" is the most
     // valuable case to test and the old brief could never produce it.
     const steer = pick([
@@ -5343,7 +5405,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       " Somewhere away from the obvious tourist places would be ideal",
       " We do not know Denmark at all, so surprise us",
     ]);
-    const testProfile = { days, who: who.text, arrival, transport, moving, interests, budget: budget || "unstated" };
+    const testProfile = { days, who: who.text, arrival, transport, moving, interests, budget: budget || "unstated", arrivingOn: arrivalPhrase };
     const brief = `I'm planning ${days} days in Denmark. It is ${who.text}. ${arrival}. ${transport}. ${moving}. We like ${interests.join(" and ")}.${budget ? ` ${budget}.` : ""}${month}${steer}`;
     // ROOT CAUSE of Oliver's "wtf happened to maps? Both leaflet and Google
     // Maps???" report: this used to randomly alternate mode, 50/50, so any

@@ -69,6 +69,12 @@ writeFileSync(entry, `
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
+  export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
+  export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
+  export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
+  export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { stopKind, tripScaleLine, tripCharacter, bookingActions } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -3499,6 +3505,388 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and are simply absent when none are given", !/undefined/.test(VERIFY_PROMPT("Odense", { says: "x" })));
   // A verifier that cannot find a source must say so rather than reasoning.
   ok("could not confirm stays a correct answer", /"Could not confirm" is a correct and useful answer here/.test(vp));
+}
+
+
+// ── "MAPS STILL SEEM TO GET THINGS WRONG" ──────────────────────────
+// Oliver, 9 Aug 2026, with Google Maps open beside two legs of one guide.
+// Both counterexamples are in here as real numbers, because a rule about
+// walking speed that is never checked against a real walk is a comment.
+{
+  const { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES } = M;
+
+  // THE DIAGNOSIS, as a test. Christiania to Reffen measures 2.12 km in a
+  // straight line and 3.2 km on the pavement, because Copenhagen's harbour is
+  // in the way. The old code divided the straight line by a walking speed and
+  // printed 28 minutes for a 44 minute walk.
+  is("a straight line is not a walk: the detour is applied", estimateMinutes(2.12, "walking"), 38);
+  ok("and that lands nearer Google's 44 than the old 28 did", Math.abs(38 - 44) < Math.abs(28 - 44));
+  // MUTATION GUARD: delete the factor and this dies.
+  ok("walking carries a detour factor above 1", ROUTE_FACTOR.walking > 1);
+  // Transit deliberately does NOT, because its 35 km/h is already a
+  // door-to-door figure. Multiplying a detour in as well double-counts.
+  is("transit keeps a factor of 1, its speed already covers the slack", ROUTE_FACTOR.transit, 1);
+  is("so a transit estimate is unchanged by this work", estimateMinutes(35, "transit"), 60);
+
+  // THE CAP HAS TO APPLY TO THE GUESS. This is the bug: WALK_MAX_MINUTES was
+  // enforced only where a real Google answer existed, so the branch that runs
+  // when nothing is known was the one allowed to print any walk it liked.
+  ok("the Christiania leg is refused as a walk", walkEstimateTooFar(2.12));
+  ok("a real short stroll is still a walk", !walkEstimateTooFar(0.8));
+  // The boundary, stated: 20 minutes at 4.5 km/h with the 1.35 detour is
+  // about 1.11 km of straight line.
+  ok("just inside the cap passes", !walkEstimateTooFar(1.1));
+  ok("just outside the cap fails", walkEstimateTooFar(1.2));
+  ok("nothing known is not a refusal", !walkEstimateTooFar(null));
+
+  is("the text still reads as an estimate", estimateDurationText(2.12, "walking"), "~38 min");
+  is("null in, null out", estimateDurationText(null, "walking"), null);
+  is("hours still format", estimateDurationText(40, "bicycling"), "~3 hours 51 min");
+}
+
+// ── "SHOULDN'T SHOW THE SAME FACT TWICE" ───────────────────────────
+{
+  const { shuffledOrder, identityOrder, advancePos, factAt } = M;
+  // A shuffle is only testable against a fixed sequence. Math.random can only
+  // ever prove "did not throw".
+  const seq = [0.9, 0.1, 0.5, 0.3, 0.7, 0.2];
+  let i = 0;
+  const rand = () => seq[i++ % seq.length];
+  const order = shuffledOrder(8, rand);
+  is("every card appears exactly once", [...order].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7]);
+  is("and it is genuinely reordered", order.length === 8 && order.join(",") !== "0,1,2,3,4,5,6,7", true);
+  is("an empty list does not throw", shuffledOrder(0), []);
+
+  // The repeat he reported: walking a permutation cannot show a card twice
+  // until every card has been shown.
+  const seen = [];
+  let pos = 0;
+  for (let n = 0; n < 8; n++) { seen.push(factAt(order, pos, 8)); pos = advancePos(pos, 8); }
+  is("eight ticks show eight different facts", new Set(seen).size, 8);
+  is("the ninth wraps to the first, which is not the bug", factAt(order, pos, 8), seen[0]);
+
+  // The instant swap: the first card painted is the first card of the order.
+  is("a session opens on the first fact, exactly as asked", factAt(identityOrder(8), 0, 8), 0);
+
+  // A stale order is shorter than the list, because Studio publishes new facts
+  // into the same array between builds. It must not paint undefined.
+  const stale = identityOrder(3);
+  ok("a stale order still lands on a real card", [0, 1, 2].includes(factAt(stale, 7, 9)));
+  is("an order holding an index past the end falls back", factAt([99], 0, 4), 0);
+  is("no facts at all is index zero, not a crash", factAt([], 0, 0), 0);
+}
+
+// ── "IT SUGGESTS HOSTELS, BUT THEN GIVES A SPECIFIC HOTEL??? ODD" ──
+{
+  const { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } = M;
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("a hostel sentence is a hostel", stayTier("Book a hostel near Norreport, from EUR 30"), "hostel");
+  is("a hotel sentence is a hotel", stayTier("Stay in central Odense for a comfortable hotel base"), "hotel");
+  // Danhostel is spelled shut, and is THE hostel chain in Denmark. \bhostel\b
+  // could never see it. Found by writing a real name into a test.
+  is("Danhostel is a hostel", stayTier("Danhostel Copenhagen City"), "hostel");
+  is("an area sentence names no tier", stayTier("Stay in central Odense near the cathedral"), null);
+  is("Danish words count", stayTier("et vandrerhjem i byen"), "hostel");
+
+  // HIS ACTUAL GUIDE. Both sentences were correct, and together they read as
+  // the guide contradicting itself, because neither says Copenhagen costs more.
+  const contradicting = [
+    { glance: { accommodation: "Book a hostel near Norreport" } },
+    { glance: { accommodation: "Stay in central Odense, a comfortable hotel base" } },
+  ];
+  is("the tiers are both seen", stayTiers(contradicting), ["hostel", "hotel"]);
+  ok("an unexplained jump is flagged", stayProblems(contradicting).some(p => /contradicting itself/.test(p)));
+  // The fix is not one tier for a whole trip, which would be worse advice.
+  const explained = [
+    { glance: { accommodation: "Book a hostel near Norreport" } },
+    { glance: { accommodation: "Your budget goes much further here than in Copenhagen, so a real hotel in central Odense is in range" } },
+  ];
+  is("a stated reason is not a problem", stayProblems(explained), []);
+
+  // ONE CALL RETURNING BOTH FIELDS, DISAGREEING WITH ITSELF.
+  ok("sentence and named property must match", stayTierMismatch("book a hostel near Norreport", "Hotel Odeon"));
+  ok("agreeing is fine", !stayTierMismatch("book a hostel near Norreport", "Danhostel Copenhagen City"));
+  ok("an empty recommendation is the normal case, not a mismatch", !stayTierMismatch("book a hostel near Norreport", ""));
+  ok("the mismatch is reported with both halves named",
+    stayProblems([{ glance: { accommodation: "Book a hostel near Norreport", recommendedStay: "Hotel Odeon" } }])
+      .some(p => /Hotel Odeon/.test(p) && /hostel/.test(p)));
+
+  // The sentence naming its own property, bypassing the field that has a
+  // grounding rule attached to it.
+  is("a named hotel in the prose is found", namedProperty("Stay at Hotel Odeon in central Odense"), "Odeon");
+  is("an area is not a property", namedProperty("Stay in central Odense near the cathedral"), null);
+  // MUTATION GUARD for the case bug I shipped first time round: the lodging
+  // word is capitalised in real sentences, and the flags argument was "".
+  ok("a capitalised lodging word still matches", !!namedProperty("Stay at Hotel Odeon"));
+  ok("but the proper noun stays case sensitive", !namedProperty("stay at a hotel somewhere central"));
+
+  // ── THE PROMPT HAS TO CARRY THE HALF CODE CANNOT ────────────────
+  ok("the prompt tells one call not to contradict itself", /ONE TRIP, ONE KIND OF TRAVELER/.test(app));
+  ok("and names the real example", /It suggests hostels, but then gives a specific hotel/.test(app));
+  ok("and requires the sentence to match recommendedStay", /never write hostel here and return a hotel there/.test(app));
+  ok("the check runs after enrichment, where glance exists", app.indexOf("enrichGuideDays") < app.indexOf("stayProblems(parsed.days)"));
+}
+
+
+// ── "REFER THEM TO FLIXBUS OR DSB. OR THE FERRY" ───────────────────
+{
+  const { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } = M;
+  const ids = (o) => o.map(x => x.id);
+
+  // HIS TWO EXAMPLES, as real distances.
+  is("Copenhagen to Odense gets ticket sellers", ids(operatorsForLeg({ km: 135, mode: "transit" })), ["dsb", "flixbus", "rejseplanen"]);
+  is("Copenhagen to Randers too", ids(operatorsForLeg({ km: 220, mode: "transit" })), ["dsb", "flixbus", "rejseplanen"]);
+  // A regional hop is a tap-in, not a booking. Offering a national rail site
+  // for 30 km is noise on the page.
+  is("a short transit leg stays quiet", operatorsForLeg({ km: 30, mode: "transit" }), []);
+  // Nobody sells a seat in your own car, or on your own legs.
+  is("driving needs no operator", operatorsForLeg({ km: 200, mode: "driving" }), []);
+  is("cycling needs no operator", operatorsForLeg({ km: 200, mode: "bicycling" }), []);
+  // Unknown distance is not long. A null km means the stops never resolved,
+  // and guessing "long" there would offer a rail booking for a walk.
+  is("unknown distance stays quiet", operatorsForLeg({ km: null, mode: "transit" }), []);
+
+  // ── A FERRY GETS NO COMPANY NAME, ON PURPOSE ────────────────────
+  // Checked while writing this: Samso alone is served by TWO operators on TWO
+  // routes from opposite sides of the country. Naming one as "the" ferry could
+  // send somebody across the Great Belt the wrong way.
+  is("a crossing gets the planner, not a company", ids(operatorsForLeg({ km: 20, mode: "ferry" })), ["rejseplanen"]);
+  is("and it is detected from the leg text too", ids(operatorsForLeg({ km: 12, mode: "transit", how: "~1h15 by ferry" })), ["rejseplanen"]);
+  is("Danish spelling counts", ids(operatorsForLeg({ km: 12, mode: "transit", how: "med færge" })), ["rejseplanen"]);
+  // MUTATION GUARD: if anyone ever adds a ferry company to OPERATORS and wires
+  // it in, this dies. That is the point.
+  ok("no ferry company is ever named", !Object.values(OPERATORS).some(o => /molslinjen|samso|færge|faergen|ferry/i.test(o.name)));
+  ok("a crossing says why the route matters more than the brand", /more than one port/.test(operatorNote({ mode: "ferry" })));
+  ok("and says to book the crossing, not just the bed", /Book the crossing/.test(operatorNote({ mode: "ferry" })));
+  is("a train leg gets no ferry warning", operatorNote({ mode: "transit" }), "");
+
+  // Both operators point at a real booking site, not a Maps link. The whole
+  // reason this exists is that Maps can show a journey and cannot sell a seat.
+  ok("DSB links to DSB", /dsb\.dk/.test(OPERATORS.dsb.url));
+  ok("FlixBus links to FlixBus", /flixbus\.com/.test(OPERATORS.flixbus.url));
+  ok("Rejseplanen links to Rejseplanen", /rejseplanen\.dk/.test(OPERATORS.rejseplanen.url));
+  ok("none of them is a maps link", !Object.values(OPERATORS).some(o => /google\.com\/maps/.test(o.url)));
+
+  is("the threshold is where it says it is", isLongLeg(LONG_LEG_KM), true);
+  ok("and one metre under is not long", !isLongLeg(LONG_LEG_KM - 0.001));
+  // A leg cannot be both walkable and long enough to need a rail booking.
+  ok("the walking cap and the long-leg threshold stay ordered", THRESHOLDS_ARE_ORDERED);
+}
+
+// ── "ODENSE IS NOT ON THE MAP AT ALL" ──────────────────────────────
+{
+  const mapSrc = readFileSync(join(root, "src/components/GuideRouteMap.jsx"), "utf8");
+  const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  // The either/or was the bug: fitting to the drawn route INSTEAD of the
+  // markers drops any stop the geometry does not happen to cover.
+  ok("the fit is a union, not a choice", /const extent = \[\.\.\.latlngs, \.\.\.drawn\]/.test(mapSrc));
+  ok("the old either/or is gone", !/drawn\.length > 1 \? drawn : latlngs/.test(stripNonCode(mapSrc)));
+  // Leaflet sizes a fitBounds from a CACHED container size.
+  ok("the container is re-measured before fitting", mapSrc.indexOf("invalidateSize") < mapSrc.indexOf("fitBounds"));
+  // A stop with no coordinate used to vanish with nothing to show it had.
+  ok("unplaced stops are counted", /const tripUnplaced =/.test(guideSrc));
+  ok("and named on the page", /are not on this map/.test(guideSrc));
+  ok("the bare filter(Boolean) that hid them is gone", !/\}\)\.filter\(Boolean\);\n  \/\/ Consecutive duplicates/.test(guideSrc));
+  // clip, not hidden: hidden on an ancestor kills sticky children, and this
+  // page's header and save bar are both sticky.
+  ok("the page cannot scroll sideways", /overflowX: "clip"/.test(guideSrc));
+  ok("and not with hidden, which would break the sticky header", !/overflowX: "hidden"/.test(guideSrc));
+}
+
+// ── "WHY NO DATE PUT UP?" ──────────────────────────────────────────
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // The brief used to offer bare month names, two of them empty strings, to a
+  // parser that needs a day number. So arrivalDate was null on every test run.
+  // stripNonCode: the comment explaining this fix QUOTES the line it removed,
+  // so scanning raw source finds the bug report and calls it the bug. Both of
+  // these assertions failed that way on their first run, which is the suite
+  // working: a source scan that reads comments cannot tell a fix from a
+  // description of what was fixed.
+  ok("the bare month list is gone", !/We are coming in June/.test(stripNonCode(appSrc)));
+  ok("the brief carries a real arrival date", /We arrive on \$\{arrivalPhrase\}/.test(appSrc));
+  ok("and it is in the future", /getDate\(\) \+ 14 \+ Math\.floor/.test(appSrc));
+  ok("the profile carries it so the card can show it", /arrivingOn: arrivalPhrase/.test(appSrc));
+
+  // THE REAL CHECK: the phrase this builds must parse with the SAME regex
+  // generateGuide uses. A date the parser cannot read is the bug, restated.
+  const MONTHS_LONG = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const monthPattern = MONTHS_LONG.map(m => m.toLowerCase()).join("|");
+  const dateRe = new RegExp(`\\b(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${monthPattern})|(${monthPattern})\\s+(\\d{1,2})(?:st|nd|rd|th)?)\\b`, "i");
+  ok("the new phrase parses", dateRe.test("We arrive on 14 September"));
+  ok("every month spells out and parses", MONTHS_LONG.every((m, i) => dateRe.test(`We arrive on ${i + 1} ${m}`)));
+  // And the old one provably did not, which is the whole report.
+  ok("the old phrase never parsed, which is why dates were missing", !dateRe.test("We are coming in June"));
+
+  const { testTravelerLine } = M;
+  ok("the card shows the date", /arriving 14 September/.test(testTravelerLine({ days: 4, arrivingOn: "14 September", who: "two of us" })));
+  ok("a profile without one is not broken by it", !/arriving/.test(testTravelerLine({ days: 4, who: "two of us" })));
+}
+
+
+// ── "WE ARE ABLE TO PREDICT HOW THE WEATHER IS GONNA BE" ───────────
+{
+  const { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords,
+          normalsIcon, normalsLine, weatherBadge, normalsNote } = M;
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const apiSrc = readFileSync(join(root, "api/weather.js"), "utf8");
+  const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+
+  // ── THE HOLE TWO CORRECT CHANGES MADE BETWEEN THEM ──────────────
+  // Arrival dates are now 2 to 26 weeks out, and the old code bailed past day
+  // 8, so the weather badge would have vanished from nearly every guide.
+  is("day one is a forecast", weatherSourceFor(0), FORECAST);
+  is("the last forecast day is a forecast", weatherSourceFor(FORECAST_HORIZON_DAYS), FORECAST);
+  is("one day past it is not", weatherSourceFor(FORECAST_HORIZON_DAYS + 1), NORMALS);
+  // The case the date fix created: a trip fourteen weeks out.
+  is("a trip months out still says something", weatherSourceFor(98), NORMALS);
+  ok("and it is never silence", [0, 9, 98, 400].every(d => !!weatherSourceFor(d)));
+  ok("the bare bail is gone from the app", !/if \(forecastIdx > 8\) return;/.test(stripNonCode(appSrc)));
+
+  // ── A FORECAST AND A NORMAL MUST NEVER LOOK ALIKE ───────────────
+  const fc = weatherBadge({ source: FORECAST, forecast: { icon: "🌧️", temp: 14, risk: "high" } });
+  is("a forecast is labelled a forecast", fc.label, "forecast");
+  const nm = weatherBadge({ source: NORMALS, normals: { available: true, high_c: 13, low_c: 8, wet_day_share: 0.4, years: 10 } });
+  is("a normal is labelled typical, not forecast", nm.label, "typical");
+  ok("and never uses the word forecast anywhere on it", !/forecast/i.test(JSON.stringify(nm)));
+  is("the badge temperature is the midpoint of the range", nm.temp, 11);
+  ok("the sentence says normally, not expect", /^Normally 8° to 13°/.test(nm.detail));
+  ok("the page states which of the two it is showing", /Not a forecast\./.test(guideSrc));
+
+  // Not enough archive coverage is a real answer, not an error to paper over.
+  is("an unavailable normal shows nothing", weatherBadge({ source: NORMALS, normals: { available: false } }), null);
+  is("half a normal shows nothing rather than half a sentence", normalsLine({ available: true, low_c: 8 }), null);
+  is("no data at all is null", normalsLine(null), null);
+  ok("the API refuses to average too few years", /good\.length < 5/.test(apiSrc));
+  ok("and answers 200 with available false rather than an error", /kind: "normals", available: false/.test(apiSrc));
+
+  // ── RAIN, IN WORDS SOMEBODY PACKS BY ────────────────────────────
+  is("four days in ten", wetDayWords(0.38), "about 4 days in ten see rain");
+  is("one is singular", wetDayWords(0.1), "about one day in ten sees rain");
+  is("rare is said plainly", wetDayWords(0.02), "rain is rare then");
+  is("and so is constant", wetDayWords(0.92), "it rains most days then");
+  // Number(null) is 0, and 0 is a finite share meaning "it never rains here".
+  // This assertion failed on its first run for exactly that reason: an unknown
+  // share was confidently reporting "rain is rare then".
+  is("an unknown share says nothing", wetDayWords(null), "");
+  is("undefined too", wetDayWords(undefined), "");
+  is("and an empty string, which Number also calls zero", wetDayWords(""), "");
+  is("but a real zero is still a real answer", wetDayWords(0), "rain is rare then");
+  is("out of range says nothing", wetDayWords(1.4), "");
+  // A trace of drizzle is not what somebody packing a coat is asking about.
+  ok("a wet day is 1mm or more, not any trace", /v >= 1/.test(apiSrc));
+
+  // The icon is coarse on purpose: a ten year average contains no weather.
+  is("cold and wet is snow", normalsIcon({ high_c: 1, wet_day_share: 0.6 }), "🌨️");
+  is("mild and wet is rain", normalsIcon({ high_c: 12, wet_day_share: 0.6 }), "🌧️");
+  is("warm and dry is sun", normalsIcon({ high_c: 24, wet_day_share: 0.1 }), "☀️");
+
+  // ── THE TRIP NOTE SAYS WHAT IT IS ───────────────────────────────
+  const note = normalsNote([nm, nm], "November");
+  ok("it says plainly that no forecast exists yet", /too far out for a real forecast/.test(note));
+  ok("it names the source as averages", /ten year averages rather than a prediction/.test(note));
+  ok("and tells them when a real one will exist", /Check again a week before you fly/.test(note));
+  is("no normals means no note", normalsNote([fc], "November"), null);
+
+  // ── "ICONS NEED TO BE MORE PROMINENT" ───────────────────────────
+  ok("the icon is no longer body-text sized", /fontSize: 22, lineHeight: 1 \}\}>/.test(guideSrc));
+  // The old tooltip stopped being true the moment arrival dates became real.
+  ok("the trip-starts-today tooltip is gone", !/Forecast assumes the trip starts today/.test(guideSrc));
+
+  // ── ONE FILE, TWO MODES, BECAUSE OF THE FUNCTION CAP ────────────
+  const apiFiles = readdirSync(join(root, "api")).filter(f => f.endsWith(".js"));
+  ok("api/ is still within Vercel Hobby's 12 function cap", apiFiles.length <= 12);
+  ok("normals live inside the existing weather function", /mode === "normals"/.test(apiSrc));
+}
+
+
+// ── "BOTH SHOULD BE ABLE TO SERVE A PURPOSE" ───────────────────────
+{
+  const { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale,
+          weatherChanges, WEATHER_STALE_HOURS, dayWeather, NORMALS } = M;
+  const apiSrc = readFileSync(join(root, "api/weather.js"), "utf8");
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  const D = "2026-09-14";
+  const three = {
+    met: [{ date: D, temp_c: 14, wet: false }],
+    openweathermap: [{ date: D, temp_c: 15, wet: false }],
+    weatherapi: [{ date: D, temp_c: 13.5, wet: true }],
+  };
+  const m3 = mergeForecasts(three, D);
+  is("three sources give the median", m3.temp_c, 14);
+  is("and the spread is reported, not hidden", m3.spread_c, 1.5);
+  is("all three counted", m3.sourceCount, 3);
+  ok("a tight spread reads as agreement", m3.agree);
+  is("agreement is stated on the badge", agreementNote(m3), "3 forecasts agree");
+  // ONE VOTE FOR RAIN IS NOT A FORECAST OF RAIN. Marking the day wet on a
+  // single dissenting source is how a dry week grows umbrellas.
+  ok("one wet vote out of three is not a wet day", !m3.wet);
+
+  const wide = mergeForecasts({ met: [{ date: D, temp_c: 10 }], weatherapi: [{ date: D, temp_c: 18 }] }, D);
+  ok("a wide spread is not called agreement", !wide.agree);
+  ok("and it says so plainly rather than picking one", /disagree by 8°/.test(agreementNote(wide)));
+  ok("the disagreement threshold is a real number", SPREAD_DISAGREES_C > 0);
+
+  // MEDIAN not mean: one provider having a bad day must not drag the answer.
+  const outlier = mergeForecasts({
+    met: [{ date: D, temp_c: 14 }], openweathermap: [{ date: D, temp_c: 15 }], weatherapi: [{ date: D, temp_c: 40 }],
+  }, D);
+  is("an outlier cannot move the median", outlier.temp_c, 15);
+
+  // A missing key is one fewer opinion, not an error.
+  const one = mergeForecasts({ met: [{ date: D, temp_c: 12, wet: true }], openweathermap: null, weatherapi: null }, D);
+  is("one source still answers", one.temp_c, 12);
+  is("with no agreement claim to make", one.agree, null);
+  is("and no note, because '1 source' on every badge is noise", agreementNote(one), "");
+  ok("a lone source's own wet call is kept", one.wet);
+  is("no source at all is null, not zero", mergeForecasts({ met: [] }, D), null);
+  is("a day nobody covers is null", mergeForecasts(three, "2030-01-01"), null);
+  ok("both keys are optional in the API", /OWM_KEY\) return null/.test(apiSrc) && /WAPI_KEY\) return null/.test(apiSrc));
+
+  // ── REFRESH ON OPEN ─────────────────────────────────────────────
+  ok("never fetched is stale", weatherIsStale(null));
+  ok("garbage is stale", weatherIsStale("not a date"));
+  ok("just fetched is not stale", !weatherIsStale(new Date().toISOString()));
+  const old = new Date(Date.now() - (WEATHER_STALE_HOURS + 1) * 3600000).toISOString();
+  ok("yesterday's answer is stale", weatherIsStale(old));
+  ok("the guide records when it looked", /_weatherFetchedAt: new Date\(\)\.toISOString\(\)/.test(appSrc));
+
+  // Only changes worth interrupting somebody for.
+  const before = [{ source: "forecast", risk: "none", temp: 18 }, { source: "forecast", risk: "high", temp: 14 }, { source: "forecast", risk: "none", temp: 17 }];
+  const after = [{ source: "forecast", risk: "high", temp: 17 }, { source: "forecast", risk: "none", temp: 14 }, { source: "forecast", risk: "none", temp: 16 }];
+  const moved = weatherChanges(before, after);
+  ok("a dry day turning wet is news", moved.some(x => /Day 1 now looks wet/.test(x)));
+  ok("a wet day drying up is news", moved.some(x => /Day 2 has dried up/.test(x)));
+  ok("one degree of drift is not news", !moved.some(x => /Day 3/.test(x)));
+  is("nothing moving says nothing", weatherChanges(before, before), []);
+  // Crossing from normals into a real forecast is the trip getting close, not
+  // the weather changing, and reporting it as a change would be wrong.
+  is("gaining a forecast is not a forecast change",
+    weatherChanges([{ source: "normals", risk: "none", temp: 12 }], [{ source: "forecast", risk: "high", temp: 12 }]), []);
+
+  // ── ONE IMPLEMENTATION, BOTH CALL SITES ─────────────────────────
+  const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the build path uses the shared helper", /dayWeather\(\{/.test(appSrc));
+  ok("and so does the refresh path", /dayWeather\(\{/.test(guideSrc));
+
+  // Injected fetcher, so this runs with no network at all.
+  const canned = async (url) => {
+    if (/mode=normals/.test(url)) return { available: true, high_c: 13, low_c: 8, wet_day_share: 0.4, years: 10 };
+    return { sources: three, forecast: [] };
+  };
+  const near = await dayWeather({ point: { lat: 55, lon: 12 }, date: D, daysOut: 2, fetchJson: canned });
+  is("a near day merges every source", near.temp, 14);
+  is("and is labelled a forecast", near.label, "forecast");
+  ok("with the agreement on it", /3 forecasts agree/.test(near.detail));
+  const far = await dayWeather({ point: { lat: 55, lon: 12 }, date: D, daysOut: 120, fetchJson: canned });
+  is("a far day is a normal", far.label, "typical");
+  ok("and never says forecast", !/forecast/i.test(JSON.stringify(far)));
+  // An older deployed API with no `sources` must not blank the badge.
+  const legacy = await dayWeather({ point: { lat: 55, lon: 12 }, date: D, daysOut: 2,
+    fetchJson: async () => ({ forecast: [{ date: D, temperature_c: 16.4, condition: "rain" }] }) });
+  is("a stale deployed API still renders", legacy.temp, 16);
+  is("no point, no badge", await dayWeather({ point: null, date: D, daysOut: 1, fetchJson: canned }), null);
 }
 
 rmSync(dir, { recursive: true, force: true });

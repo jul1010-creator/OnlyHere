@@ -178,7 +178,25 @@ export const GuideRouteMap = ({ points, legs }) => {
     // can swing well outside the box its two endpoints make (a ferry crossing,
     // a motorway going the long way round a fjord), and fitting to the markers
     // alone would crop exactly the part that explains the journey.
-    const extent = drawn.length > 1 ? drawn : latlngs;
+    // ── "ODENSE IS NOT ON THE MAP AT ALL" ────────────────────
+    // Oliver, 9 Aug 2026, on a route reading Copenhagen to Borre to Odense:
+    // "the map looks so akward at start.. everything just messed into a small
+    // area". The screenshot is worse than awkward. There is a stacked cluster
+    // over Kobenhavn, one pin half off the left edge, and Odense, which is
+    // 135 km west and named in the route line directly above the map, is not
+    // in frame.
+    //
+    // This line was `drawn.length > 1 ? drawn : latlngs`, an EITHER/OR. The
+    // intent was right and is worth keeping: a real route can swing well
+    // outside the box its two endpoints make, so fitting to the markers alone
+    // crops the part that explains the journey. But choosing `drawn` INSTEAD
+    // of the markers means any stop the drawn geometry does not happen to
+    // cover falls outside the fit, and a fit that leaves out a stop is a map
+    // that has quietly lost one.
+    //
+    // The union is what was meant. Every marker is guaranteed in frame, and
+    // the route's real detours still widen the box.
+    const extent = [...latlngs, ...drawn];
     const lats = extent.map(p => p[0]), lons = extent.map(p => p[1]);
     const spreadKm = Math.max(
       (Math.max(...lats) - Math.min(...lats)) * 111.32,
@@ -193,6 +211,13 @@ export const GuideRouteMap = ({ points, legs }) => {
     // swoop across Denmark nobody asked for.
     const firstFit = !didFitRef.current;
     didFitRef.current = true;
+    // Leaflet works out a fitBounds zoom from the container size it has
+    // CACHED, and it caches that at construction. This map is built inside a
+    // card that is still settling (web fonts, the hero image above it), so the
+    // very first fit could be computed against a size the container no longer
+    // has, which lands as a view zoomed too far in and centred wrong. One call
+    // costs nothing and removes the whole class.
+    map.invalidateSize(false);
     if (spreadKm < 0.6) {
       const c = [lats.reduce((a, b) => a + b, 0) / lats.length, lons.reduce((a, b) => a + b, 0) / lons.length];
       if (firstFit) map.setView(c, 12);

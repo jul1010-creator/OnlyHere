@@ -660,6 +660,10 @@ export const testTravelerLine = (p) => {
   if (!p) return "";
   return [
     typeof p.days === "number" ? `${p.days} day${p.days !== 1 ? "s" : ""}` : null,
+    // The arrival DATE, which the brief now always carries. Without it on the
+    // card there is no way to tell a dateless test run from a dated one, and a
+    // dateless run is the bug this was added to make impossible.
+    p.arrivingOn ? `arriving ${p.arrivingOn}` : null,
     p.who,
     p.arrival,
     p.transport,

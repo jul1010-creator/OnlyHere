@@ -7,7 +7,9 @@ import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES } from "../utils/guideEnrichment";
+import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
+import { operatorsForLeg, operatorNote } from "../utils/operators";
+import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { askClaude } from "../utils/aiClient";
 import { testTravelerLine } from "../utils/helpers";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions } from "../utils/guideReading";
@@ -454,6 +456,44 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   //
   // The per-day leg chips stay exactly where they are. He asked to keep the
   // transport visible and it is the thing first-time visitors need most.
+  // ── "IT SHOULD BE TRACKING EVERYDAY FOR THEM" ──────────────────
+  // A saved guide's weather is frozen at the moment it was built, so a trip
+  // saved in August still shows August's answer when it is opened in October.
+  // Re-checking on open fixes that with no cron and no subscriber list, and it
+  // makes the forecast ARRIVE on its own: a guide saved fourteen weeks out
+  // shows ten year averages, and the same guide opened the week before flying
+  // has crossed into the forecast window and shows a real forecast, with
+  // nobody having done anything. See utils/weather.js for what this honestly
+  // does not do, which is tell somebody who never opens the app.
+  const [freshWeather, setFreshWeather] = useState(null);
+  const [weatherMoved, setWeatherMoved] = useState([]);
+  useEffect(() => {
+    if (!guide || !Array.isArray(days) || !days.length) return;
+    if (!weatherIsStale(guide._weatherFetchedAt)) return;
+    let cancelled = false;
+    const arrival = guide._arrivalDate ? new Date(guide._arrivalDate) : null;
+    const startOffset = arrival
+      ? Math.max(0, Math.round((new Date(arrival).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000))
+      : 0;
+    (async () => {
+      const next = await Promise.all(days.map(async (d, i) => {
+        const st = (d.stops || []).map(x => resolveStopCoords(x.name, guide._geo || {})).find(Boolean);
+        if (!st) return d.weather || null;
+        const on = new Date(arrival || new Date());
+        on.setDate(on.getDate() + i);
+        return await dayWeather({
+          point: st, date: on, daysOut: startOffset + i,
+          fetchJson: (url) => fetch(url).then(r => r.json()).catch(() => null),
+        }) || d.weather || null;
+      }));
+      if (cancelled) return;
+      setFreshWeather(next);
+      setWeatherMoved(weatherChanges(days.map(d => d.weather), next));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guide?._gid, guide?._weatherFetchedAt, days.length]);
+
   const tripGeo = guide._geo || {};
   const allStops = days.flatMap((d, di) => (d.stops || []).map(st => ({ ...st, _day: d.day || di + 1 })));
   const tripPoints = allStops.map(st => {
@@ -461,16 +501,35 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
     // Labelled with the day so one pin in a fourteen stop route still says
     // WHEN as well as where.
     return c ? { name: `Day ${st._day} · ${st.name}`, ...c } : null;
-  }).filter(Boolean);
+  });
+  // ── A STOP WITH NO COORDINATES IS DROPPED, SILENTLY ────────────
+  // The other half of the missing-Odense report, and the more important half.
+  // resolveStopCoords returns null for anything it cannot place, and this list
+  // was filtered with a bare .filter(Boolean), so a stop that failed to
+  // geocode simply stopped existing on the map. No warning, no gap, just a
+  // shorter route that looks complete. That is the exact shape this project
+  // keeps finding: a silent failure that looks like a working feature.
+  //
+  // Counted rather than hidden, and printed under the map, because "3 towns"
+  // above a map showing two is the thing that makes a founder distrust the
+  // whole page.
+  const tripUnplaced = allStops.filter((st, i) => !tripPoints[i]).map(st => st.name);
+  const tripPlaced = tripPoints.filter(Boolean);
   // Consecutive duplicates are the same place twice (an overnight stop that is
   // also the next morning's start). One pin, not two stacked on each other.
-  const tripRoute = tripPoints.filter((p, i) => i === 0 || Math.abs(p.lat - tripPoints[i - 1].lat) > 1e-6 || Math.abs(p.lon - tripPoints[i - 1].lon) > 1e-6);
+  const tripRoute = tripPlaced.filter((p, i) => i === 0 || Math.abs(p.lat - tripPlaced[i - 1].lat) > 1e-6 || Math.abs(p.lon - tripPlaced[i - 1].lon) > 1e-6);
   const tripLegs = tripRoute.slice(0, -1).map((p, i) => ({
     mode: resolveLegMode(null, guide._mode, p.name, tripRoute[i + 1].name, guide._onlyWalking, tripGeo),
   }));
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 60 }}>
+    // overflowX clip, not hidden: `hidden` on an ancestor turns every sticky
+    // child into a non-sticky one, and this page's header and save bar are
+    // both sticky. `clip` stops the sideways scroll without that side effect.
+    // Oliver's screenshot has the header clipped to "ack" at the left edge,
+    // which only happens when the document itself is scrolled sideways, and
+    // that also drags the corner launcher out past the window.
+    <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 60, overflowX: "clip", maxWidth: "100%" }}>
       {/* BUG FIX: .towns-grid was only ever defined in App.jsx's own <style>
           tag, which only exists while GemlyxApp (the "/" route) is mounted.
           A guide reached via a direct/shared link never mounts GemlyxApp at
@@ -666,6 +725,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             <div style={{ fontSize: 11, color: C.muted, marginTop: 7 }}>
               The whole route. Every stop below is numbered here in order.
             </div>
+            {/* Said out loud rather than left as a shorter map. A stop with no
+                coordinate used to vanish from here with nothing to show it
+                had, which is how a route naming three towns drew two. */}
+            {tripUnplaced.length > 0 && (
+              <div style={{ fontSize: 11, color: "#FFB347", marginTop: 5, lineHeight: 1.55 }}>
+                {tripUnplaced.length === 1 ? "One stop is not on this map" : `${tripUnplaced.length} stops are not on this map`}, because we could not place {tripUnplaced.length === 1 ? "it" : "them"} on a coordinate: {tripUnplaced.join(", ")}. {tripUnplaced.length === 1 ? "It is" : "They are"} still in the day-by-day below.
+              </div>
+            )}
           </div>
         )}
 
@@ -754,6 +821,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           );
         })()}
 
+        {/* Only what is worth interrupting somebody for. A degree of drift is
+            not news; a dry day turning wet is, because it decides whether they
+            take the walking day or the museum day. */}
+        {weatherMoved.length > 0 && (
+          <div style={{ background: C.surface, border: "1px solid #FFB34766", borderRadius: 12, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+            <b style={{ color: "#FFB347" }}>The forecast moved since you saved this.</b> {weatherMoved.join(". ")}.
+          </div>
+        )}
         {days.map((day, dayIdx) => {
           // Real coordinates for this guide (from geocodeStopsForGuide, baked onto
           // the guide object as _geo when the build handed off to this page — see
@@ -870,15 +945,64 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             // as exact is what made "says 19, Maps says 27" feel like a bug
             // rather than schedule variance.
             const exactLabel = exact ? `${usedMode === "transit" ? "~" : ""}${exact.durationText} ${modeLabel}` : null;
-            return (
-              <a href={routeUrl(originName, destName, usedMode)} target="_blank" rel="noreferrer"
+            // ── THE CAP HAS TO APPLY TO THE GUESS TOO ────────────
+            // Oliver, 9 Aug 2026: "maps still seem to get things wrong",
+            // holding "~24 min on foot" for Christiania → Reffen next to
+            // Google's 3.2 km and 44 minutes. WALK_MAX_MINUTES was checked
+            // on `exact` above and nowhere else, so the branch that runs
+            // when there is NO real answer was the one branch allowed to
+            // print any walk it liked. With the detour factor now in
+            // estimateMinutes the same leg comes out at 38, so it fails
+            // here rather than rendering as a stroll. A traveler told 24
+            // and handed 44 is not slightly inconvenienced, they have
+            // missed something.
+            const estIsImpossibleWalk = !exact && usedMode === "walking" && walkEstimateTooFar(km);
+            // Nothing verified this leg: no Directions answer, and the two
+            // stops never resolved to coordinates we would divide. What is
+            // left is the model's own sentence, and the prompt asks it to
+            // write "~18 min by bike" whether or not it knows. Shown,
+            // because it is usually right and always better than a blank,
+            // but never dressed as a measurement.
+            const unverified = !exactLabel && !estIsImpossibleWalk && km === null;
+            const estLabel = estIsImpossibleWalk
+              ? `Too far to walk, check the route`
+              : km !== null ? `${estimateDurationText(km, usedMode)} ${modeLabel}` : (how || "Check route");
+            // ── "PERHAPS REFER THEM TO FLIXBUS OR DSB" ─────────
+            // Oliver, 9 Aug 2026. A chip saying "~1h30 by train/bus" states a
+            // fact and leaves the reader to work out who sells that seat, and
+            // the Maps link cannot help with that: Google will show them the
+            // journey and cannot put them on it. See utils/operators.js for
+            // why a ferry gets the national planner and never a company name.
+            const ferryLeg = /ferry|færge|boat/i.test(how || "") || usedMode === "ferry";
+            const ops = operatorsForLeg({ km, mode: ferryLeg ? "ferry" : usedMode, how });
+            const opsNote = operatorNote({ mode: ferryLeg ? "ferry" : usedMode, how });
+            const chip = (
+              <a href={routeUrl(originName, destName, estIsImpossibleWalk ? (guide._mode === "bike" ? "bicycling" : guide._mode === "car" ? "driving" : "transit") : usedMode)} target="_blank" rel="noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
-                <span style={{ fontSize: 12 }}>{icon}</span>
+                <span style={{ fontSize: 12 }}>{estIsImpossibleWalk ? "🗺" : icon}</span>
                 <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>
-                  {exactLabel || (km !== null ? `${estimateDurationText(km, usedMode)} ${modeLabel}` : how || "Check route")}
+                  {exactLabel || estLabel}
                 </span>
-                <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>· Maps ↗</span>
+                <span style={{ fontSize: 9.5, color: unverified ? C.muted : C.light, fontWeight: 700 }}>{unverified ? "· Check Maps ↗" : "· Maps ↗"}</span>
               </a>
+            );
+            if (!ops.length) return chip;
+            return (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                {chip}
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6 }}>
+                  {ops.map(op => (
+                    <a key={op.id} href={op.url} target="_blank" rel="noreferrer"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none", background: "none", border: `1px solid ${C.border}`, borderRadius: 100, padding: "4px 10px" }}>
+                      <span style={{ fontSize: 10.5, color: C.light, fontWeight: 700 }}>{op.name}</span>
+                      <span style={{ fontSize: 9.5, color: C.muted }}>{op.what}</span>
+                    </a>
+                  ))}
+                </div>
+                {opsNote && (
+                  <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, maxWidth: 340, textAlign: "center" }}>{opsNote}</div>
+                )}
+              </div>
             );
           };
           return (
@@ -891,11 +1015,33 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.6, textTransform: "uppercase", flexShrink: 0 }}>Day {day.day || dayIdx + 1}</span>
                 {day.title && <span style={{ fontSize: 22, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.2 }}>{day.title}</span>}
               </div>
-              {day.weather && (
-                <div title="Forecast assumes the trip starts today" style={{ display: "flex", alignItems: "center", gap: 5, background: C.surface, border: `1px solid ${day.weather.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 100, padding: "4px 10px", fontSize: 11 }}>
-                  <span>{day.weather.icon}</span>
-                  <span style={{ color: C.text, fontWeight: 700 }}>{day.weather.temp}°</span>
-                  {day.weather.risk === "high" && <span style={{ color: "#FFB347", fontWeight: 700 }}>· rain likely</span>}
+              {/* ── "WEATHER ICONS NEED TO BE MORE PROMINENT" ────
+                  Oliver, 9 Aug 2026. It was an 11px chip with a 5px gap, the
+                  same visual weight as everything else on the row, so the one
+                  thing that changes what you pack read as a tag. The icon is
+                  now 22px and the temperature 15px.
+                  The label under it is the more important change: this badge
+                  can now be a real forecast OR a ten year average, and those
+                  are different promises. It says which. See utils/weather.js.
+                  The old title attribute said "Forecast assumes the trip
+                  starts today", which stopped being true the moment arrival
+                  dates became real. */}
+              {(freshWeather?.[dayIdx] || day.weather) && (
+                <div title={(freshWeather?.[dayIdx] || day.weather).source === "normals"
+                  ? `Ten year average for this place and this week${(freshWeather?.[dayIdx] || day.weather).years ? `, from ${day.weather.years} years of records` : ""}. Not a forecast.`
+                  : "Real forecast for this date"}
+                  style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${(freshWeather?.[dayIdx] || day.weather).risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 14, padding: "7px 13px", fontSize: 11 }}>
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{(freshWeather?.[dayIdx] || day.weather).icon}</span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <span style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+                      <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{(freshWeather?.[dayIdx] || day.weather).temp}°</span>
+                      <span style={{ color: C.muted, fontWeight: 700, fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase" }}>{(freshWeather?.[dayIdx] || day.weather).label || "forecast"}</span>
+                    </span>
+                    {(freshWeather?.[dayIdx] || day.weather).source === "normals" && (freshWeather?.[dayIdx] || day.weather).detail && (
+                      <span style={{ color: C.muted, fontSize: 10, lineHeight: 1.35 }}>{(freshWeather?.[dayIdx] || day.weather).detail}</span>
+                    )}
+                  </span>
+                  {(freshWeather?.[dayIdx] || day.weather).source !== "normals" && (freshWeather?.[dayIdx] || day.weather).risk === "high" && <span style={{ color: "#FFB347", fontWeight: 700 }}>· rain likely</span>}
                 </div>
               )}
             </div>
