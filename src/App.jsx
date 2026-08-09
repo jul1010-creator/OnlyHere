@@ -58,6 +58,7 @@ import { journeyParts, journeyBlock } from "./utils/journey";
 import { correctEntry } from "./utils/correction";
 import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { otherNameFor } from "./utils/danishNames";
+import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -8409,14 +8410,31 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
             // part after the last comma) or just a city name/phrase; match against the
             // known nightlife cities first since a plain substring match is more reliable
             // than trusting comma placement alone (e.g. "Copenhagen city centre" has no comma).
-            const KNOWN_NIGHTLIFE_CITIES = ["Copenhagen", "Aarhus", "Aalborg", "Odense", "Esbjerg", "Randers", "Kolding", "Horsens", "Vejle", "Roskilde"];
-            const townOf = (loc) => KNOWN_NIGHTLIFE_CITIES.find(c => loc.includes(c)) || (loc.includes(",") ? loc.split(",").pop().trim() : loc);
-            const townGroups = {};
-            nightlifeSpots.forEach(s => {
-              const t = townOf(s.location);
-              (townGroups[t] = townGroups[t] || []).push(s);
-            });
-            const townList = Object.keys(townGroups).sort(daCompare);
+            const townGroups = groupSpotsByTown(nightlifeSpots);
+
+            // ── A TOWN PAGE IS CONTENT, NOT DECORATION ───────────
+            // Oliver, 8 Aug 2026: "Why is my nightlife town not published in
+            // nightlife? I just published Copenhagen."
+            //
+            // Because this list was built from VENUES only. townGroups comes
+            // entirely from nightlifeSpots, and a published nightTown entry was
+            // only ever read by a .find() that decorated a row already put on
+            // the page by a bar. So the "Nightlife (Town)" content type had a
+            // Studio form, a shape, a publish path, a merge into
+            // nightlifeTowns and a photo lookup, and not one line anywhere that
+            // could put it on the page by itself. Publish a town with no bars
+            // published under it and the Studio says done while the page says
+            // "No nightlife spots published yet".
+            //
+            // That is this project's recurring failure exactly: a whole feature
+            // that looks finished from every angle except the one that matters.
+            //
+            // The list is now the UNION of towns that have venues and towns
+            // that have a published scene guide, matched across spellings so
+            // København and Copenhagen are one town rather than two rows.
+            const spotsFor = (t) => spotsForTown(townGroups, t);
+            const townContentFor = (t) => townPageFor(nightlifeTowns, t);
+            const townList = nightlifeTownList(nightlifeSpots, nightlifeTowns).sort(daCompare);
 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
@@ -8430,19 +8448,19 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
 
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12 }}>Pick a town</div>
-                  {/* Supabase-only content (Aug 5): no nightlife spots are published in
-                      gemlyx_content yet, so this list can genuinely be empty — say so
-                      honestly instead of rendering a blank page. */}
+                  {/* Genuinely empty is a real state and worth saying out loud.
+                      The old wording named only spots, which read as "nothing is
+                      published" to somebody who had just published a town. */}
                   {townList.length === 0 && (
                     <div style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                      No nightlife spots published yet. They appear here as soon as they're published through the Studio.
+                      Nothing published here yet. Towns and venues both appear as soon as they go live through the Studio.
                     </div>
                   )}
                   {townList.map(t => {
-                    const spots = townGroups[t];
+                    const spots = spotsFor(t);
                     const localCount = spots.filter(s => s.type === "Local").length;
                     const internationalCount = spots.filter(s => s.type === "International").length;
-                    const townContent = nightlifeTowns.find(nt => nt.name === t);
+                    const townContent = townContentFor(t);
                     return (
                       <div key={t} onClick={() => setNightlifeTownView(t)} style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${C.border}`, padding: "16px 0", cursor: "pointer" }}>
                         <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, overflow: "hidden" }}>
@@ -8453,7 +8471,12 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{t}</div>
                           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                            {spots.length} spot{spots.length !== 1 ? "s" : ""}{localCount > 0 && internationalCount > 0 ? ` · ${localCount} local, ${internationalCount} international` : ""}
+                            {/* A town with a scene guide and no bars yet is a
+                                real, publishable state. "0 spots" reads like a
+                                broken row; saying what IS there does not. */}
+                            {spots.length === 0
+                              ? "Scene guide, no venues published yet"
+                              : `${spots.length} spot${spots.length !== 1 ? "s" : ""}${localCount > 0 && internationalCount > 0 ? ` · ${localCount} local, ${internationalCount} international` : ""}`}
                           </div>
                         </div>
                         <span style={{ fontSize: 18, color: C.muted }}>›</span>
@@ -8470,7 +8493,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                   </button>
 
                   {(() => {
-                    const townContent = nightlifeTowns.find(nt => nt.name === nightlifeTownView);
+                    const townContent = townContentFor(nightlifeTownView);
                     if (townContent) {
                       return (
                         <div style={{ marginBottom: 18 }}>
@@ -8496,6 +8519,16 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                     );
                   })()}
 
+                  {/* GUARDED, because townGroups[town] is undefined for a town
+                      that has a scene guide and no venues, and .filter on it
+                      threw. Opening the town he had just published would have
+                      taken the whole page down. */}
+                  {spotsFor(nightlifeTownView).length === 0 ? (
+                    <div style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+                      No individual bars or clubs published for {nightlifeTownView} yet. The scene guide above is the whole entry for now.
+                    </div>
+                  ) : (
+                  <>
                   <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 14 }}>Bars &amp; clubs in {nightlifeTownView}</div>
 
                   <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
@@ -8507,10 +8540,10 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                     ))}
                   </div>
 
-                  {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).length === 0 && (
-                    <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet — try the other tab.</div>
+                  {spotsFor(nightlifeTownView).filter(f => f.type === nightlifeTab).length === 0 && (
+                    <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet, try the other tab.</div>
                   )}
-                  {townGroups[nightlifeTownView].filter(f => f.type === nightlifeTab).slice().sort(byName).map(spot => (
+                  {spotsFor(nightlifeTownView).filter(f => f.type === nightlifeTab).slice().sort(byName).map(spot => (
                     <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                         <span style={{ fontSize: 22 }}>{spot.emoji}</span>
@@ -8528,6 +8561,8 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                       </div>
                     </div>
                   ))}
+                  </>
+                  )}
                 </>
               )}
             </div>

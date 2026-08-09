@@ -44,6 +44,7 @@ writeFileSync(entry, `
   export { journeyParts, journeyBlock, vehicleWord } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -2472,6 +2473,64 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a missing table is named as missing", /if \(status === 404 \|\| code === "PGRST205"/.test(app3));
   ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\. \(Nothing is wrong with the table\.\)/.test(app3));
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
+}
+
+// ── "WHY IS MY NIGHTLIFE TOWN NOT PUBLISHED IN NIGHTLIFE?" ────────
+// Oliver, 8 Aug 2026: "I just published Copenhagen." The tab's town list was
+// built from VENUES only, and a published town entry was read solely by a
+// .find() that decorated a row a BAR had already put on the page.
+//
+// EXTRACTED FROM THE JSX ON PURPOSE. A regex assertion would have passed
+// against the broken version too: `townList` and `nightlifeTowns.find` both
+// existed in it. The only test that catches this is one that can be handed
+// spots and towns and asked what comes back.
+{
+  const bars = [
+    { id: 1, name: "Kind of Blue", location: "Ravnsborggade, Copenhagen", type: "Local" },
+    { id: 2, name: "Bee Haven", location: "Copenhagen city centre", type: "International" },
+    { id: 3, name: "Herr Bartels", location: "Aarhus", type: "Local" },
+  ];
+  const pages = [{ name: "Copenhagen", desc: "Scene guide" }];
+
+  // THE BUG, in one assertion. Aalborg has a published scene guide and no bars.
+  is("a town with only a scene guide still reaches the page",
+     M.nightlifeTownList([], [{ name: "Aalborg" }]), ["Aalborg"]);
+  is("a town with only venues still does", M.nightlifeTownList(bars, []).sort(), ["Aarhus", "Copenhagen"]);
+  is("and a town with both is listed once", M.nightlifeTownList(bars, pages).sort(), ["Aarhus", "Copenhagen"]);
+  is("nothing published is genuinely nothing", M.nightlifeTownList([], []), []);
+
+  // ONE TOWN, NOT TWO. He types Copenhagen in Studio; a venue's location may
+  // carry the Danish spelling, and two rows for one city is its own bug.
+  is("the two spellings of the capital are one row",
+     M.nightlifeTownList([{ id: 1, location: "Københavns Nordvest", type: "Local" }], [{ name: "Copenhagen" }]).length, 1);
+  is("a Danish-spelled venue groups with the English city",
+     M.townOfLocation("Københavns Nordvest"), "Copenhagen");
+  is("and the old spelling of Aarhus too", M.townOfLocation("Århus C"), "Aarhus");
+  is("a location with no known city falls back to the last comma part",
+     M.townOfLocation("Havnegade, Svendborg"), "Svendborg");
+  is("a bare location is used as it stands", M.townOfLocation("Svendborg"), "Svendborg");
+  is("and an empty location groups nowhere", M.townOfLocation(""), "");
+
+  const groups = M.groupSpotsByTown(bars);
+  is("venues group under their city", groups.Copenhagen.map(b => b.id).sort(), [1, 2]);
+  // THE CRASH ONE CLICK LATER. The old code indexed the map directly and called
+  // .filter on the result, so opening a town with a scene guide and no bars
+  // threw and took the page down.
+  is("a town with no venues returns an empty list, never undefined", M.spotsForTown(groups, "Aalborg"), []);
+  is("and so does a missing group object", M.spotsForTown(null, "Aalborg"), []);
+  is("a town looked up in the other language still finds its venues",
+     M.spotsForTown(groups, "København").map(b => b.id).sort(), [1, 2]);
+  is("the scene guide is found across spellings too", M.townPageFor(pages, "København")?.name, "Copenhagen");
+  is("and a town with no guide has none", M.townPageFor(pages, "Aarhus"), undefined);
+
+  const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the tab builds its list from both kinds of entry", /nightlifeTownList\(nightlifeSpots, nightlifeTowns\)/.test(app6));
+  ok("and never indexes the group map raw again", !/townGroups\[nightlifeTownView\]/.test(app6));
+  // The empty state named only spots, which reads as "nothing is published" to
+  // somebody who has just published a town.
+  ok("the empty state no longer says only spots", !/No nightlife spots published yet\. They appear here/.test(app6));
+  ok("it names towns and venues both", /Towns and venues both appear as soon as they go live/.test(app6));
+  ok("a town with a guide and no bars says what IS there", /Scene guide, no venues published yet/.test(app6));
 }
 
 // ── "IT'S SUCH A NERD WORD TO BE USING SO MUCH" ───────────────────
