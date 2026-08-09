@@ -34,7 +34,7 @@
 // timetable, which is the single error class this project has spent the most
 // time on. The block below says so out loud, every time.
 
-import { samePlaceName, otherNameFor } from "./danishNames";
+import { samePlaceName, otherNameFor, variantsOf, fold } from "./danishNames";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 
@@ -225,6 +225,67 @@ const QUERY_WORDS = {
   booking: "værksted booking priser workshop booking prices",
 };
 
+// ── "I WANNA PUT TIVOLI.DK INTO EVENTS FOR COPENHAGEN.. THIS WILL
+//     PROBABLY HAPPEN WITH MORE AREAS" ──────────────────────────────
+// Oliver, 9 Aug 2026, and doing exactly that would have produced a source that
+// never fired once, silently, forever.
+//
+// placeMatches is strict on purpose: an unknown place EXCLUDES a place-scoped
+// source, because including a Copenhagen source on an Aarhus draft is how you
+// get a Copenhagen page read as an authority on Aarhus. That rule is right.
+//
+// But for an EVENT draft, the only thing the pipeline knows when the searches
+// are built is the event's own name. "Copenhell" is not "Copenhagen", so a
+// Copenhagen-scoped source matches nothing and is dropped. He would have added
+// Tivoli, seen nothing happen, and had no way to tell why.
+//
+// ── DECIDING WHERE TO LOOK IS NOT DECIDING WHAT TO BELIEVE ──────────
+// That is the distinction the strict rule was missing, and it is why one rule
+// cannot serve both jobs.
+//
+// When the question is "should this source's words go into a PROMPT", a wrong
+// answer means a model treating a Copenhagen page as evidence about Aarhus.
+// Strict is correct: exclude unless something says where we are.
+//
+// When the question is "should we run one search against this domain", a wrong
+// answer costs one query that returns nothing. Nothing enters the draft either
+// way, because a search of tivoli.dk for an event that is not at Tivoli comes
+// back empty. So this can afford to be generous, and being generous is what
+// makes a venue or city source usable at all.
+//
+// So the loose test also reads the RESEARCH TEXT. By the time the direct
+// searches run, the general web pass has already pulled snippets about this
+// place, and a Copenhell snippet says Copenhagen in the first line. The strict
+// test is untouched and still governs every prompt.
+export const placeMightMatch = (place, ctx) => {
+  const want = cleanPlace(place);
+  if (!want) return true;
+  if (placeMatches(want, ctx)) return true;
+  const text = ctx && typeof ctx === "object" ? String(ctx.text || "") : "";
+  if (!text) return false;
+  const hay = fold(text);
+  // Either spelling, because the research text is as likely to say København.
+  return variantsOf(want).some(v => v && hay.includes(fold(v)));
+};
+
+// Same shape as sourcesFor, with the loose place test. Kept as its own function
+// rather than a flag, so no future call site can pick the generous rule for a
+// prompt by passing the wrong argument.
+export const sourcesToSearch = (rows, type, ctx) => {
+  const seen = new Set();
+  const out = [];
+  for (const raw of Array.isArray(rows) ? rows : []) {
+    const s = cleanSource(raw);
+    if (!s || !s.enabled) continue;
+    if (s.appliesTo && s.appliesTo !== type) continue;
+    if (!placeMightMatch(s.appliesPlace, ctx)) continue;
+    if (seen.has(s.domain)) continue;
+    seen.add(s.domain);
+    out.push(s);
+  }
+  return out.sort((a, b) => (a.appliesTo === b.appliesTo ? a.domain.localeCompare(b.domain) : a.appliesTo ? 1 : -1));
+};
+
 // ── "IF I PUT IN TICKETMASTER.DK, DOES IT GO THROUGH ALL OF
 //     TICKETMASTER?" ────────────────────────────────────────────────
 // Oliver, 9 Aug 2026. The whole site, yes. But the honest answer needed a check,
@@ -260,7 +321,7 @@ export const directSourceSearches = (rows, type, ctx) => {
   const words = QUERY_WORDS[type] || "praktisk information åbningstider opening hours";
   const other = otherNameFor(name, { includeSights: true });
   const names = other ? `${name} ${other}` : name;
-  return sourcesFor(rows, type, ctx)
+  return sourcesToSearch(rows, type, ctx)
     .slice(0, MAX_DIRECT_SEARCHES)
     // `domain` stays the bare host, because it is what the panel reports back to
     // him and what he typed. `domains` is what the search is actually given.

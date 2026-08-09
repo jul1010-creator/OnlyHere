@@ -222,7 +222,13 @@ The shop is normally one of: a subdomain of the same site (billet., billetter., 
 
 A PRICE IS ONLY A FACT IF YOU SAY WHICH TICKET IT IS. Danish festival tickets are tiered and dated, and the tiers sell out one after another, so at any moment several different real prices exist at once. A real example: one festival's Friday ticket shows 635 DKK marked SOLD OUT beside 800 DKK on sale, with a child ticket at 340, and Saturday priced differently again. "The ticket costs X" is not checkable against that. Name the day, the ticket type, and whether that tier is still buyable, or give no figure.
 A SOLD-OUT EARLY TIER IS NOT THE PRICE. It is a price nobody can pay any more, and quoting it sends a reader to a checkout that will charge them more.
-A SINGLE FIGURE FOR A MULTI-DAY FESTIVAL is usually a full-festival or partout ticket rather than a day ticket. Say which it is, or leave it out.`;
+A SINGLE FIGURE FOR A MULTI-DAY FESTIVAL is usually a full-festival or partout ticket rather than a day ticket. Say which it is, or leave it out.
+
+AGE IS A SECOND AXIS, SEPARATE FROM THE DAY AND THE TIER, and Danish ticketing uses it constantly. The same Saturday, at the same moment, has an adult price and a child price and often a youth or student one, so "the ticket costs X" can be true and still be the wrong number for the person reading it. A family of four planning a day out needs the child price more than the adult one.
+
+So when the shop lists age bands, report them: give the adult price and every concession beside it, and say where the age cutoff falls, because it moves between venues. The Danish words on the page are barn or børn (child), ung or ungdom (youth), studerende (student), pensionist or senior, and voksen (adult). Free entry for the youngest is common and is worth stating outright, since it changes whether a family goes at all: gratis or fri entré under a stated age.
+
+DO NOT INVENT A CONCESSION and do not assume one exists because it usually does. If the shop lists one price and nothing else, that is the answer, and saying so plainly is better than implying a discount that is not there.`;
 
 // ── "COPENHAGEN ON DANISH IS KØBENHAVN" ────────────────────────────
 // Oliver, 8 Aug 2026: "remember languages can be different. I type copenhagen,
@@ -1699,7 +1705,12 @@ function GemlyxApp() {
       const founderUrls = [];
       const sourceHits = [];
       {
-        const searches = directSourceSearches(founderSources, sType, { name });
+        // `text` is the research gathered so far. A place-scoped source cannot
+        // match an EVENT by name alone (Copenhell is not Copenhagen), and the
+        // snippets from the general pass say where it is. See placeMightMatch:
+        // deciding where to LOOK is a different question from deciding what to
+        // believe, and only the first one can afford to be generous.
+        const searches = directSourceSearches(founderSources, sType, { name, text: context });
         for (const { domain, domains, query } of searches) {
           try {
             // The domain AND its ticket-shop subdomains, in one query: a Danish
@@ -1995,7 +2006,26 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // as a fallback, this just adds a stronger source when it's available.
       let realOpeningHoursText = "";
       let placesWebsite = "";   // Google's registered URL for this business, when there is one
-      if (["free", "booking", "food", "foodStreet", "night"].includes(sType)) {
+      let realAddressText = "";  // Google's formatted address, which is the transport fact
+      // ── "TAVILY/PERPLEXITY DOES A POOR JOB FINDING THE EVENTS/
+      //     ATTRACTIONS WEBSITE. IF IT DID, TRANSPORT WOULD BE
+      //     SOLVED" ───────────────────────────────────────────────
+      // Oliver, 9 Aug 2026, and the diagnosis is right down to the mechanism.
+      // Finding a venue's own site by web search is guesswork: you get pages
+      // that MENTION the place and have to pick. Google's business listing is
+      // not a guess, it is the URL the owner registered, and it arrives with the
+      // formatted address beside it.
+      //
+      // The cause was this line. It listed five types and left out FESTIVAL,
+      // which is the type he has spent today on. So for every event draft, the
+      // one source that answers "which site is theirs" was never asked, and the
+      // address that would settle transport was never fetched. nightTown was
+      // missing for the same reason.
+      //
+      // A festival is not a permanent business, so Google will not have all of
+      // them. It has plenty: the big ones, and anything at a fixed venue. When
+      // it has nothing the call returns nothing and costs one lookup.
+      if (["free", "booking", "food", "foodStreet", "night", "festival", "nightTown"].includes(sType)) {
         try {
           const hoursRes = await fetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`);
           const hoursData = await hoursRes.json();
@@ -2008,6 +2038,29 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // (Chickie's at spisechick.dk, say) was being thrown away, which is exactly
           // the case this lookup exists to rescue. It bypasses the matcher entirely.
           if (hoursData.website) { placesWebsite = hoursData.website; candidateUrls.unshift(hoursData.website); }
+          // ── THE ADDRESS WAS BEING THROWN AWAY ───────────────
+          // /api/places-hours has returned `address` all along and nothing has
+          // ever read it. It is the single most transport-relevant fact there
+          // is: it is what you type into a journey planner, and it is what makes
+          // the nearest stop correct rather than nearby.
+          //
+          // So the coordinates get RE-DERIVED from it. The first geocode above
+          // ran on the name, and "Copenhell" geocodes to whatever Google thinks
+          // that word means; "Refshalevej 167, 1432 København K" geocodes to the
+          // gate. findRealNearestStation is only as good as the point it is
+          // given, which is why a wrong stop has usually been a vague point
+          // rather than a bad station list.
+          if (hoursData.address) {
+            realAddressText = `VERIFIED ADDRESS (from Google's own business listing, not a web page reading): ${hoursData.address}. Use this as the address if the schema asks for one.`;
+            try {
+              const exact = await geocodePlace(hoursData.address);
+              if (exact && frozenGeo) {
+                const st2 = await findRealNearestStation(exact.lat, exact.lon);
+                frozenGeo = { lat: exact.lat, lon: exact.lon, station: st2?.name || frozenGeo.station, stopKind: st2?.kind || frozenGeo.stopKind };
+                ui(setStudioFrozenGeo, frozenGeo);
+              }
+            } catch { /* the name-based geocode above still stands */ }
+          }
           if (hoursData.openingHours?.length) {
             realOpeningHoursText = `VERIFIED OPENING HOURS (from Google's real business listing, not a guess or a web page reading): ${hoursData.openingHours.join("; ")}.${hoursData.businessStatus && hoursData.businessStatus !== "OPERATIONAL" ? ` NOTE: Google currently lists this place's status as "${hoursData.businessStatus}" — flag this in uncertainties if it suggests the place may be closed/permanently closed.` : ""} Use these as the real hours if the schema asks for them — don't override with a different guess from other research.`;
           }
@@ -2079,7 +2132,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
 
       const rawResearch = (hint && (hint.town || hint.dates)
         ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[hint.town && `town/city = ${hint.town}`, hint.dates && `dates = ${hint.dates}`].filter(Boolean).join(", ")}\n\n`
-        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below; if it conflicts, prefer whichever is more specific/recent):\n${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
+        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}${realAddressText ? `\n${realAddressText}` : ""}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below; if it conflicts, prefer whichever is more specific/recent):\n${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
 
       // STAGE 4 — OpenAI structures the raw research into organized notes per
       // schema field, BEFORE Claude ever writes a word. This is the actual

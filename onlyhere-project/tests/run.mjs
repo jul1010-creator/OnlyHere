@@ -42,7 +42,7 @@ const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
   export { journeyParts, journeyBlock, vehicleWord } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
-  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
@@ -2494,6 +2494,36 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
 }
 
+// ── "TAVILY/PERPLEXITY DOES A POOR JOB FINDING THE WEBSITE. IF IT
+//     DID, TRANSPORT WOULD BE SOLVED" ──────────────────────────────
+// Oliver, 9 Aug 2026, and the diagnosis was right down to the mechanism.
+{
+  const app14 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const papi = readFileSync(join(root, "api/places-hours.js"), "utf8");
+
+  // Finding a venue's site by web search is guesswork: you get pages that
+  // MENTION it and have to pick. Google's listing is the URL the owner
+  // registered. That lookup listed five types and left out the one he has spent
+  // the day on.
+  ok("Google is asked about events now", /\["free", "booking", "food", "foodStreet", "night", "festival", "nightTown"\]\.includes\(sType\)/.test(app14));
+  ok("and about nightlife towns", /"festival", "nightTown"\]\.includes\(sType\)/.test(app14));
+
+  // THE ADDRESS WAS BEING THROWN AWAY. The endpoint has returned it all along.
+  ok("the endpoint has always returned an address", /address: place\.formattedAddress \|\| "",/.test(papi));
+  ok("and the draft finally reads it", /if \(hoursData\.address\) \{/.test(app14));
+  ok("handing it to the writer as a verified fact", /VERIFIED ADDRESS \(from Google's own business listing/.test(app14));
+
+  // THE TRANSPORT HALF. The first geocode runs on the NAME, and "Copenhell"
+  // geocodes to whatever Google thinks that word means. The address geocodes to
+  // the gate, and findRealNearestStation is only as good as the point it gets.
+  ok("the coordinates are re-derived from the address", /const exact = await geocodePlace\(hoursData\.address\);/.test(app14));
+  ok("and the nearest stop is recomputed from the better point", /const st2 = await findRealNearestStation\(exact\.lat, exact\.lon\);/.test(app14));
+  // Never worse than before: a failed second geocode leaves the name-based one
+  // standing rather than blanking the entry's location.
+  ok("a failed refinement keeps the original", /catch \{ \/\* the name-based geocode above still stands \*\//.test(app14));
+  ok("and it only refines when there was something to refine", /if \(exact && frozenGeo\) \{/.test(app14));
+}
+
 // ── "UNCONFIRMED EVENTS IN 'COMING EVENTS', WHICH IS RIDICULOUS" ─
 // Oliver, 9 Aug 2026, reporting in almost the same words what he reported on
 // 7 Aug: "Don't have it showing it in 'coming events' then."
@@ -3144,6 +3174,38 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const cph = M.directSourceSearches(rows, "town", { name: "Copenhagen" });
   is("one real search per source that applies", cph.map(x => x.domain).sort(), ["visitcopenhagen.com", "visitdenmark.dk"]);
   ok("each restricted to its own domain", cph.every(x => x.domain && !x.domain.includes("/")));
+  // ── "TIVOLI.DK INTO EVENTS FOR COPENHAGEN.. THIS WILL PROBABLY
+  //     HAPPEN WITH MORE AREAS" ────────────────────────────────────
+  // Doing exactly that would have produced a source that never fired once,
+  // silently: an event draft knows only the event's own name, and "Copenhell"
+  // is not "Copenhagen", so the strict place test drops it.
+  const tivoli = [{ id: 9, domain: "tivoli.dk", applies_to: "festival", applies_place: "Copenhagen", enabled: true }];
+  is("scoped to a city, an event draft finds nothing by name alone",
+     M.directSourceSearches(tivoli, "festival", { name: "Copenhell" }), []);
+  // THE RESEARCH TEXT KNOWS. By the time the searches are built, the general
+  // web pass has pulled snippets, and a Copenhell snippet says Copenhagen.
+  is("but the research text unlocks it",
+     M.directSourceSearches(tivoli, "festival", { name: "Copenhell", text: "Copenhell is a metal festival held at Refshaleøen in Copenhagen each June." }).map(x => x.domain),
+     ["tivoli.dk"]);
+  ok("in either spelling", M.placeMightMatch("Copenhagen", { name: "Copenhell", text: "afholdes i København hvert år" }));
+  // STILL NOT A FREE-FOR-ALL: research about a different city does not unlock it.
+  ok("research about somewhere else does not", !M.placeMightMatch("Copenhagen", { name: "Aarhus Festuge", text: "a week-long festival across Aarhus" }));
+  ok("and no text at all still excludes", !M.placeMightMatch("Copenhagen", { name: "Copenhell" }));
+  ok("a universal source needs no text", M.placeMightMatch("", { name: "Copenhell" }));
+  is("a switched-off source is never searched either",
+     M.sourcesToSearch([{ id: 1, domain: "tivoli.dk", applies_to: "", applies_place: "", enabled: false }], "festival", { name: "Copenhell" }), []);
+  is("and the wrong type is still skipped",
+     M.sourcesToSearch([{ id: 1, domain: "tivoli.dk", applies_to: "festival", applies_place: "", enabled: true }], "town", { name: "Aarhus" }), []);
+
+  // ── THE STRICT RULE IS UNTOUCHED ────────────────────────────────
+  // Deciding where to LOOK is not deciding what to BELIEVE. A wrong search
+  // costs one empty query; a wrong source in a PROMPT is a Copenhagen page read
+  // as evidence about Aarhus. Only the first can afford to be generous.
+  ok("the prompt block still refuses without a real place match",
+     !/tivoli\.dk/.test(M.sourceRulesBlock(tivoli, "festival", { name: "Copenhell", text: "held in Copenhagen" })));
+  ok("and still includes it when the place is genuinely known",
+     /tivoli\.dk/.test(M.sourceRulesBlock(tivoli, "festival", { name: "Copenhell", town: "Copenhagen" })));
+
   // ── "DOES IT GO THROUGH ALL OF TICKETMASTER?" ────────────────────
   // The whole site. And the check for that answer found a hole: Tavily's docs
   // say include_domains is "a list of domains to specifically include" and say
@@ -3182,7 +3244,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app5 = readFileSync(join(root, "src/App.jsx"), "utf8");
   // The wiring, asserted on the file, because the whole defect was a function
   // that existed and was never called from the half that matters.
-  ok("the draft pipeline actually runs them", /directSourceSearches\(founderSources, sType, \{ name \}\)/.test(app5));
+  ok("the draft pipeline actually runs them", /directSourceSearches\(founderSources, sType, \{ name, text: context \}\)/.test(app5));
   ok("through the endpoint's domain restriction", /&domains=\$\{encodeURIComponent\(\(domains \|\| \[domain\]\)\.join\(","\)\)\}/.test(app5));
   // /api/search has accepted this parameter the whole time and nothing used it.
   const api = readFileSync(join(root, "api/search.js"), "utf8");
@@ -3297,6 +3359,18 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The dash ban applies to these exactly as it does to STUDIO_VOICE: a dash in
   // a rule teaches every future draft to use one.
   is("the ticket rules carry no em or en dashes", (ticket.match(/[—–]/g) || []).length, 0);
+  // ── "SOMETIMES THERE IS A DIFFERENCE DEPENDING ON AGE" ───────────
+  // Oliver, 9 Aug 2026. The rules already covered the day and the sold-out
+  // tier. Age is a THIRD axis: the same Saturday at the same moment has an
+  // adult price and a child price, so one figure can be true and still be the
+  // wrong number for the person reading it.
+  ok("age is named as its own axis", /AGE IS A SECOND AXIS, SEPARATE FROM THE DAY AND THE TIER/.test(ticket));
+  // The words that are actually printed on a Danish ticket page.
+  ok("with the Danish words the shop uses", /barn or børn \(child\)/.test(ticket) && /pensionist or senior/.test(ticket));
+  // Free entry for the youngest changes whether a family goes at all.
+  ok("and free entry for the youngest is worth stating", /gratis or fri entré under a stated age/.test(ticket));
+  // NEVER INVENTED. A discount that is not there is worse than no discount.
+  ok("but a concession is never assumed", /DO NOT INVENT A CONCESSION/.test(ticket));
   is("and neither do the scope rules", (scope.match(/[—–]/g) || []).length, 0);
 }
 
