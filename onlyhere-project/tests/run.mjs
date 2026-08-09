@@ -42,12 +42,12 @@ const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
   export { journeyParts, journeyBlock, vehicleWord } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
-  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
-  export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -2494,6 +2494,59 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
 }
 
+// ── "UNCONFIRMED EVENTS IN 'COMING EVENTS', WHICH IS RIDICULOUS" ─
+// Oliver, 9 Aug 2026, reporting in almost the same words what he reported on
+// 7 Aug: "Don't have it showing it in 'coming events' then."
+{
+  const strip = readFileSync(join(root, "src/components/LiveEventsHeaderStrip.jsx"), "utf8");
+  const helpers = readFileSync(join(root, "src/utils/helpers.js"), "utf8");
+  // isUpcoming counts an event with NO DATE as upcoming, on purpose, so the
+  // browse page can still list a festival whose dates are unannounced.
+  ok("isUpcoming still lets an undated event through", /export const isUpcoming = \(d\) => !d \|\|/.test(helpers));
+  // isConfirmedUpcoming was written for this on 7 Aug and applied everywhere
+  // except the component that renders the words COMING EVENTS.
+  ok("the strip uses the strict test", /isConfirmedUpcoming\(e\) && !isCurrentlyLive/.test(strip));
+  ok("and never the loose one again", !/isUpcoming\(e\.date\)/.test(strip));
+
+  // ── "REMOVE ANYTHING 2026" ───────────────────────────────────────
+  // Two of five Discover candidates had finished in June. The date is in prose
+  // inside the hook, because the candidate list has no date field.
+  const AUG9 = new Date(2026, 7, 9);
+  is("a range gives its LAST day", M.lastDateInText("Held 27-28 June 2026").getDate(), 28);
+  is("a single day is that day", M.lastDateInText("on 8 June 2026").getDate(), 8);
+  is("a bare month runs to the end of it", M.lastDateInText("June 2026").getDate(), 30);
+  ok("nothing parseable is null", M.lastDateInText("a lovely summer event") === null);
+  ok("a month with no year is null too, not a guessed year", M.lastDateInText("held in June") === null);
+
+  ok("June is finished by 9 August", M.looksFinished("Held 27-28 June 2026", AUG9));
+  // A FESTIVAL IS OVER WHEN IT ENDS. Pride ran 8 to 16 August and was live that
+  // day; dropping it would have hidden a real, upcoming candidate.
+  ok("but a range spanning today is not", !M.looksFinished("The 2026 Pride programme spans 8-16 August 2026", AUG9));
+  ok("nor one starting tomorrow", !M.looksFinished("Scheduled for 8-10 August 2026", AUG9));
+  // DROPS ONLY ON CONFIDENCE: a wrongly dropped candidate is a real event he
+  // never hears about, a wrongly kept one is a line on a screen.
+  ok("an unparseable hook is kept, never dropped", !M.looksFinished("a great little market somewhere on Funen", AUG9));
+
+  const split = M.splitFinishedCandidates([
+    { name: "Fødevaremarkedet i Svendborg", hook: "Held 27-28 June 2026, the Nordic region's largest food market." },
+    { name: "Folkemødet", hook: "Fills Allinge with dialogue from 11-13 June 2026." },
+    { name: "Copenhagen Pride Week", hook: "The 2026 Pride programme spans 8-16 August 2026." },
+    { name: "Kalundborg Rocker", hook: "Scheduled for 8-10 August 2026, attendance 21,000." },
+    { name: "Fyn rundt", hook: "Preserved wooden ships on a circuit around Funen." },
+  ], AUG9);
+  is("his own five split two away", split.dropped.length, 2);
+  is("and the three still ahead survive", split.kept.map(c => c.name), ["Copenhagen Pride Week", "Kalundborg Rocker", "Fyn rundt"]);
+
+  const app13 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("discovery drops them in code, not only in a prompt", /splitFinishedCandidates\(fresh, new Date\(\)\)/.test(app13));
+  // A rule the model can forget is not a filter, but the paid call should stop
+  // returning them either.
+  ok("and the extractor is told as well", /SKIP ANY EVENT WHOSE EDITION HAS ALREADY FINISHED/.test(app13));
+  ok("with today's date, since the rule refers to it", /TODAY'S DATE: \$\{new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\}/.test(app13));
+  // NEVER A SILENTLY SHORTER LIST.
+  ok("the panel says how many it removed", /left out because that edition has already finished/.test(app13));
+}
+
 // ── "IT'S FOR JUNE 2026" ────────────────────────────────────────
 // Oliver, 9 Aug 2026, having drafted Copenhell in August and got the edition
 // that finished eight weeks earlier. Nothing lied: in August, the most findable
@@ -3091,6 +3144,20 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const cph = M.directSourceSearches(rows, "town", { name: "Copenhagen" });
   is("one real search per source that applies", cph.map(x => x.domain).sort(), ["visitcopenhagen.com", "visitdenmark.dk"]);
   ok("each restricted to its own domain", cph.every(x => x.domain && !x.domain.includes("/")));
+  // ── "DOES IT GO THROUGH ALL OF TICKETMASTER?" ────────────────────
+  // The whole site. And the check for that answer found a hole: Tavily's docs
+  // say include_domains is "a list of domains to specifically include" and say
+  // nothing about subdomains. Rock Under Broen's prices were on
+  // billet.unitedtickets.dk, one subdomain from the site anybody would type, and
+  // a check that stopped at the front page reported them unverified.
+  ok("the bare host is asked for first", M.domainVariants("unitedtickets.dk")[0] === "unitedtickets.dk");
+  ok("www too, since that is where most results live", M.domainVariants("unitedtickets.dk").includes("www.unitedtickets.dk"));
+  ok("and the subdomain that actually held the prices", M.domainVariants("unitedtickets.dk").includes("billet.unitedtickets.dk"));
+  ok("along with the other names a Danish ticket shop uses", M.domainVariants("x.dk").includes("billetter.x.dk") && M.domainVariants("x.dk").includes("tickets.x.dk"));
+  is("nothing in, nothing out", M.domainVariants("not a domain"), []);
+  // One query either way: include_domains takes a list, so a subdomain that does
+  // not exist costs nothing.
+  ok("every search carries the whole list", cph.every(x => Array.isArray(x.domains) && x.domains.length > 5));
   // BOTH SPELLINGS IN THE QUERY, because a Danish tourist board files the
   // capital under København and an English-only query cannot reach that page.
   ok("the query carries both names of the place", cph.every(x => /Copenhagen/.test(x.query) && /København/.test(x.query)));
@@ -3116,10 +3183,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The wiring, asserted on the file, because the whole defect was a function
   // that existed and was never called from the half that matters.
   ok("the draft pipeline actually runs them", /directSourceSearches\(founderSources, sType, \{ name \}\)/.test(app5));
-  ok("through the endpoint's domain restriction", /\/api\/search\?q=\$\{encodeURIComponent\(query\)\}&domains=\$\{encodeURIComponent\(domain\)\}/.test(app5));
+  ok("through the endpoint's domain restriction", /&domains=\$\{encodeURIComponent\(\(domains \|\| \[domain\]\)\.join\(","\)\)\}/.test(app5));
   // /api/search has accepted this parameter the whole time and nothing used it.
   const api = readFileSync(join(root, "api/search.js"), "utf8");
   ok("which the endpoint has always supported", /include_domains/.test(api));
+  // ── "DOES IT GO THROUGH ALL OF TICKETMASTER, OR ONLY THE FRONT
+  //     PAGE?" ─────────────────────────────────────────────────────
+  // The whole site. include_domains restricts the RESULTS to that domain and
+  // Tavily searches its index of every page it holds. The real limit was the
+  // result cap: four is plenty for an open search and thin for one pinned to a
+  // single site, where four is all of it you will ever see.
+  ok("a domain-restricted search gets more results than an open one",
+     /max_results: Math\.min\(Math\.max\(Number\(n\) \|\| \(domains \? 8 : 4\), 1\), 20\)/.test(api));
+  ok("and it is capped, so a caller cannot ask for the world", /, 20\)/.test(api));
   // WHAT THEY FOUND TRAVELS WITH THE DRAFT, first, so the next time he asks this
   // question the draft itself answers it.
   ok("and what they found rides in the draft's source list", /\[\.\.\.new Set\(\[\.\.\.founderUrls, \.\.\.candidateUrls\]\)\]/.test(app5));

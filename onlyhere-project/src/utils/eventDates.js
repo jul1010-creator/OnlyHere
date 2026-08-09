@@ -94,3 +94,56 @@ export const staleEvents = (rows, today) =>
     const last = clean(p?.dateEnd) || clean(p?.date);
     return !!last && isPastDate(last, today);
   });
+
+// ── "REMOVE ANYTHING 2026.. IT'S SILLY I CAN SEARCH FOR THAT" ───────
+// Oliver, 9 Aug 2026, looking at five Discover candidates, two of which finished
+// in June. He is right that offering them is silly, and the reason they are
+// there is the same as the Copenhell one: in August, the search results about an
+// annual festival are about the edition that just ended.
+//
+// The candidate list has no date field. It has a one-sentence hook written by
+// the extractor, and the date is sitting inside it in prose: "Held 27-28 June
+// 2026", "from 11-13 June 2026", "spans 8-16 August".
+//
+// DROPS ONLY ON CONFIDENCE, and the asymmetry is deliberate. A candidate wrongly
+// dropped is a real event he never hears about. A candidate wrongly kept is one
+// line on a screen he is already reading. So an unparseable hook is KEPT, and
+// nothing is dropped without a month and a year.
+const MONTHS = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+const MONTH_RE = MONTHS.map((m, i) => [new RegExp(`\\b${m.slice(0, 3)}[a-z]*\\b`, "i"), i]);
+
+// The LAST day the text mentions for that month, because a festival is over when
+// it ends. "8-16 August 2026" is not finished on the 9th.
+export const lastDateInText = (text) => {
+  const t = String(text || "");
+  const monthHit = MONTH_RE.find(([re]) => re.test(t));
+  if (!monthHit) return null;
+  const [re, monthIndex] = monthHit;
+  const at = t.search(re);
+  const year = (t.slice(at).match(/\b(20\d{2})\b/) || t.match(/\b(20\d{2})\b/) || [])[1];
+  if (!year) return null;
+  // Any day numbers immediately before the month name, which is how both
+  // "27-28 June" and "8 June" are written.
+  const before = t.slice(Math.max(0, at - 14), at);
+  const days = (before.match(/\d{1,2}/g) || []).map(Number).filter(d => d >= 1 && d <= 31);
+  // No day at all means the whole month, which is only finished once it is over.
+  if (!days.length) return new Date(Number(year), monthIndex + 1, 0);
+  return new Date(Number(year), monthIndex, Math.max(...days));
+};
+
+export const looksFinished = (text, today) => {
+  const d = lastDateInText(text);
+  if (!d || !today) return false;
+  return d.getTime() < new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+};
+
+// Candidates whose stated edition has already run. Returns both halves, because
+// the panel has to say how many it removed and why rather than quietly showing
+// a shorter list.
+export const splitFinishedCandidates = (candidates, today) => {
+  const kept = [], dropped = [];
+  for (const c of Array.isArray(candidates) ? candidates : []) {
+    (looksFinished(`${c?.hook || ""} ${c?.name || ""}`, today) ? dropped : kept).push(c);
+  }
+  return { kept, dropped };
+};

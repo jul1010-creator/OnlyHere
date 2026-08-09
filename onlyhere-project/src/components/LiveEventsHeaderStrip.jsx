@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { Ico } from "./Icon";
-import { getEventDate, isUpcoming, isCurrentlyLive, isInDenmark } from "../utils/helpers";
+import { getEventDate, isConfirmedUpcoming, isCurrentlyLive, isInDenmark } from "../utils/helpers";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { TOWN_COORDS } from "../data/towns";
 import { townKeyFor } from "../utils/guideEnrichment";
@@ -19,7 +19,21 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
     const dLon = (tLon - userCoords.lon) * 62.06;
     return Math.sqrt(dLat * dLat + dLon * dLon);
   };
-  const comingSoon = allTracked.filter(e => isUpcoming(e.date) && !isCurrentlyLive(e.date, e.dateEnd))
+  // ── "UNCONFIRMED EVENTS IN COMING EVENTS, WHICH IS RIDICULOUS" ──
+  // Oliver, 9 Aug 2026. He reported this on 7 Aug too, in almost the same words:
+  // "Don't have it showing it in 'coming events' then."
+  //
+  // isConfirmedUpcoming was written that day FOR THIS, and its own comment says
+  // so. It was then applied to the nearby-events matcher in App.jsx and never to
+  // the strip that actually renders the words COMING EVENTS, which went on using
+  // isUpcoming. And isUpcoming counts an event with NO DATE as upcoming, on
+  // purpose, so the browse page can still list a festival whose dates are not
+  // announced. Correct there. Absurd under a heading whose entire claim is when
+  // something is happening.
+  //
+  // Fifth time today that a helper existed, one call site used it, and the one
+  // that mattered did not.
+  const comingSoon = allTracked.filter(e => isConfirmedUpcoming(e) && !isCurrentlyLive(e.date, e.dateEnd))
     .sort((a, b) => {
       if (isInDenmark(userCoords)) {
         const kmA = kmFromUserToTown(a.town) ?? 9999, kmB = kmFromUserToTown(b.town) ?? 9999;

@@ -12,7 +12,7 @@
 // fetch('/api/search?q=Den Gamle By opening hours 2026')
 
 export default async function handler(req, res) {
-  const { q, domains } = req.query;
+  const { q, domains, n } = req.query;
 
   if (!q) {
     return res.status(400).json({ error: "Missing 'q' query param" });
@@ -30,7 +30,20 @@ export default async function handler(req, res) {
         api_key: process.env.TAVILY_API_KEY,
         query: q,
         search_depth: "basic",
-        max_results: 4,
+        // ── "IF I PUT IN TICKETMASTER.DK, DOES IT GO THROUGH ALL OF
+        //     TICKETMASTER? OR ONLY THE FRONT PAGE?" ────────────────
+        // Oliver, 9 Aug 2026. The whole site: include_domains restricts the
+        // RESULTS to that domain and Tavily searches its index of every page it
+        // has, so a deep event page can and does come back. It is not a fetch of
+        // the front page.
+        //
+        // The real limit is here, not there. Four results is plenty for an open
+        // web search, where the job is to find the best few pages anywhere. It is
+        // tight for a search pinned to ONE site, where four is all you will ever
+        // see of it, and a ticketing site's four best pages for "Copenhagen" are
+        // unlikely to include the one event you wanted. So a caller that has
+        // narrowed to a domain can ask for more.
+        max_results: Math.min(Math.max(Number(n) || (domains ? 8 : 4), 1), 20),
         include_answer: true, // Tavily gives a short synthesized answer, cheap to use directly
         // Optional: restrict this specific call to a fixed set of domains (e.g. Wikipedia).
         // Backward compatible — omitted entirely when the caller doesn't pass ?domains=.

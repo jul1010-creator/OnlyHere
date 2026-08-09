@@ -62,7 +62,7 @@ import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
-import { eventDateIssues, nextEditionYear } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates } from "./utils/eventDates";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -1142,6 +1142,7 @@ function GemlyxApp() {
   // into the normal draft pipeline above) ──────────────────────────────
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null); // [{name, region, hook}] — null = not run yet, [] = ran, nothing new
+  const [discoverDropped, setDiscoverDropped] = useState(0);
   const [discoverError, setDiscoverError] = useState(null);
   const [discoverPicked, setDiscoverPicked] = useState([]); // names ticked in the pick-list
   // Which content type the current pick-list was discovered FOR. Without this,
@@ -1699,9 +1700,12 @@ function GemlyxApp() {
       const sourceHits = [];
       {
         const searches = directSourceSearches(founderSources, sType, { name });
-        for (const { domain, query } of searches) {
+        for (const { domain, domains, query } of searches) {
           try {
-            const fRes = await fetch(`/api/search?q=${encodeURIComponent(query)}&domains=${encodeURIComponent(domain)}`);
+            // The domain AND its ticket-shop subdomains, in one query: a Danish
+            // festival's prices live on billet.<site> far more often than on the
+            // site itself. See domainVariants in utils/sourcePolicy.js.
+            const fRes = await fetch(`/api/search?q=${encodeURIComponent(query)}&domains=${encodeURIComponent((domains || [domain]).join(","))}`);
             const fData = await fRes.json();
             const urls = fRes.ok && !fData.error ? (fData.results || []).map(r => r.url).filter(Boolean) : [];
             const snips = fRes.ok && !fData.error
@@ -3020,7 +3024,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (discoverLoading) return;
     const type = typeOverride || studioType;
     setDiscoverForType(type);
-    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]);
+    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0);
     try {
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
       const typeLabel = DISCOVER_TYPE_LABEL[type] || "places in Denmark";
@@ -3069,11 +3073,13 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
 
 DO NOT include anything already on this existing list (match loosely — different spelling/capitalization of the same real place still counts as already covered): ${existingList}
 
+SKIP ANY EVENT WHOSE EDITION HAS ALREADY FINISHED. Today's date is in the prompt context and most search results about an annual festival describe the edition that just ended, which is of no use to somebody planning a trip. If the only dates you can find for something have already passed, leave it out rather than offering it.
+
 For each real candidate found, give its exact name, the town/region it's in (empty string if genuinely unclear), and a one-sentence hook — a specific, concrete reason from the search results this is worth including (not a generic reason like "popular" or "worth visiting"). Aim for 8-15 if the results genuinely support that many; return fewer if that's honestly all that's there — never pad the list with weak or vague entries just to hit a number.
 
 Respond with ONLY a JSON array: [{"name": "...", "region": "...", "hook": "..."}]
 
-Raw search results:\n${combinedText.slice(0, 14000)}`,
+TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n${combinedText.slice(0, 14000)}`,
           2200
         ),
         r => !!r.error,
@@ -3084,7 +3090,15 @@ Raw search results:\n${combinedText.slice(0, 14000)}`,
       try { candidates = JSON.parse(synthResult.text.replace(/^```json\s*|\s*```$/g, "").trim()); } catch { throw new Error("Couldn't parse the candidate list — try again"); }
       if (!Array.isArray(candidates)) throw new Error("Unexpected response shape — try again");
 
-      setDiscoverResults(dedupeAgainstExisting(candidates, existing));
+      // ── "REMOVE ANYTHING 2026.. IT'S SILLY I CAN SEARCH FOR THAT" ──
+      // Two of the five candidates he was shown had finished in June. Dropped
+      // here rather than in the prompt alone, because a rule the model can
+      // forget is not a filter. The count is reported so the list getting
+      // shorter is never silent.
+      const fresh = dedupeAgainstExisting(candidates, existing);
+      const { kept, dropped } = splitFinishedCandidates(fresh, new Date());
+      setDiscoverDropped(dropped.length);
+      setDiscoverResults(kept);
     } catch (err) {
       setDiscoverError(err?.message || "Discovery failed — try again.");
     }
@@ -7254,7 +7268,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <div style={{ fontSize: 12, color: C.muted }}>Nothing new turned up that isn't already in Gemlyx — try again later, or try the dedicated events search if you're after upcoming dates.</div>
                         ) : (
                           <>
-                            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>{discoverResults.length} new candidates — tick what's worth drafting</div>
+                            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: discoverDropped ? 5 : 10 }}>{discoverResults.length} new candidates, tick what's worth drafting</div>
+                            {/* Never a silently shorter list. */}
+                            {discoverDropped > 0 && (
+                              <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
+                                {discoverDropped} more {discoverDropped === 1 ? "was" : "were"} left out because that edition has already finished. In August the search results about an annual festival are mostly about the one that just ended.
+                              </div>
+                            )}
                             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
                               {discoverResults.map((c, i) => {
                                 const picked = discoverPicked.includes(c.name);

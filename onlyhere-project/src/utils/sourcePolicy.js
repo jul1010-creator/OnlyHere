@@ -225,6 +225,33 @@ const QUERY_WORDS = {
   booking: "værksted booking priser workshop booking prices",
 };
 
+// ── "IF I PUT IN TICKETMASTER.DK, DOES IT GO THROUGH ALL OF
+//     TICKETMASTER?" ────────────────────────────────────────────────
+// Oliver, 9 Aug 2026. The whole site, yes. But the honest answer needed a check,
+// and the check found a hole: Tavily's docs describe include_domains as "a list
+// of domains to specifically include" and say NOTHING about subdomains. They do
+// say the list may hold up to 300.
+//
+// That silence matters here more than anywhere else, because of the failure this
+// feature was built around. Rock Under Broen's ticket prices were not on
+// unitedtickets.dk at all. They were on billet.unitedtickets.dk, one subdomain
+// away, and a fact-check that stopped at the front page reported the price as
+// unverified. Adding "unitedtickets.dk" and having it silently exclude the exact
+// page holding the answer would reproduce that bug through the feature meant to
+// fix it.
+//
+// So the search asks for the domain AND the places a Danish ticket shop actually
+// lives. It is one query either way, because include_domains takes a list, so a
+// subdomain that does not exist costs nothing and returns nothing.
+const SHOP_SUBDOMAINS = ["billet", "billetter", "billetsalg", "tickets", "ticket", "shop", "booking", "kalender", "events"];
+
+export const domainVariants = (domain) => {
+  const d = normaliseDomain(domain);
+  if (!d) return [];
+  // The bare host first: it is the one he typed and the one most results carry.
+  return [d, `www.${d}`, ...SHOP_SUBDOMAINS.map(sub => `${sub}.${d}`)];
+};
+
 export const directSourceSearches = (rows, type, ctx) => {
   const name = clean(typeof ctx === "string" ? ctx : ctx?.name);
   // No name means no query worth spending. This is the same direction of caution
@@ -235,7 +262,9 @@ export const directSourceSearches = (rows, type, ctx) => {
   const names = other ? `${name} ${other}` : name;
   return sourcesFor(rows, type, ctx)
     .slice(0, MAX_DIRECT_SEARCHES)
-    .map(s => ({ domain: s.domain, query: `${names} ${words}` }));
+    // `domain` stays the bare host, because it is what the panel reports back to
+    // him and what he typed. `domains` is what the search is actually given.
+    .map(s => ({ domain: s.domain, domains: domainVariants(s.domain), query: `${names} ${words}` }));
 };
 
 // ── WHAT THE LIST COSTS ─────────────────────────────────────────────
