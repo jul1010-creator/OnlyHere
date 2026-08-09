@@ -8443,7 +8443,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                 <>
                   <div style={{ marginBottom: 18, paddingTop: 8 }}>
                     <div style={{ fontSize: 34, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.05, marginBottom: 10 }}>Nightlife</div>
-                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers — but pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll actually meet Danes.</div>
+                    <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Danes are famously reserved with strangers, and pub culture is where that changes. Below is the honest split: where you'll mostly meet other travelers, and where you'll meet Danes.</div>
                   </div>
                   <PageHero src="/tuborg.jpg" emoji="🍺" color="#E23B4E" />
 
@@ -9214,7 +9214,7 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Find a local, if you can</div>
                   </div>
                   <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65 }}>
-                    Danes are famously reserved with strangers — but genuinely warm once you're in. Copenhagen's real culture, especially pub life, is something you mostly experience *with* Danes, not just around them. If you get the chance to join a local for a beer or a bar crawl, take it — it opens up a side of Denmark most tourists never see. Hostels with common bar areas, run clubs, and language exchange meetups (search "language cafe Copenhagen" on Facebook) are the easiest low-pressure ways in.
+                    Danes are famously reserved with strangers, and warm once you're in. Copenhagen's real culture, especially pub life, is something you mostly experience *with* Danes, not just around them. If you get the chance to join a local for a beer or a bar crawl, take it. It opens up a side of Denmark most tourists never see. Hostels with common bar areas, run clubs, and language exchange meetups (search "language cafe Copenhagen" on Facebook) are the easiest low-pressure ways in.
                   </div>
                 </div>
               </div>
