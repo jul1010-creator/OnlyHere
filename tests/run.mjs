@@ -45,6 +45,7 @@ writeFileSync(entry, `
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
+  export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -2473,6 +2474,78 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a missing table is named as missing", /if \(status === 404 \|\| code === "PGRST205"/.test(app3));
   ok("an expired login is named as a login", /Your Studio login has expired\. Log out and back in\. \(Nothing is wrong with the table\.\)/.test(app3));
   ok("and the SQL is offered only for a genuinely missing table", /sourceError === "MISSING_TABLE" \?/.test(app3));
+}
+
+// ── "I AM NOT SATISFIED WITH THE FILTERS" ────────────────────────
+// Oliver, 9 Aug 2026: "This will become an issue down the line. Especially on
+// phone." Six labelled groups and twenty-five pills, permanently expanded, for a
+// nine-item list. The fix is not a nicer panel, it is a page that grows into its
+// controls instead of wearing them early.
+{
+  const items = [
+    { name: "Assistens", city: "Copenhagen", kind: "free" },
+    { name: "Superkilen", city: "Copenhagen", kind: "free" },
+    { name: "Smedje", city: "Aarhus", kind: "craft" },
+    { name: "Ærøskøbing Væveri", city: "Ærøskøbing", kind: "craft" },
+  ];
+  const FACETS = [
+    { key: "city", label: "City", options: [{ value: "All", label: "All" }, { value: "Copenhagen", label: "Copenhagen" }, { value: "Aarhus", label: "Aarhus" }], test: (i, v) => i.city === v },
+    { key: "kind", label: "Type", options: [{ value: "All", label: "All" }, { value: "free", label: "Free" }, { value: "craft", label: "Bookable" }], test: (i, v) => i.kind === v },
+  ];
+
+  // ── THE THRESHOLD READS THE UNFILTERED TOTAL ─────────────────────
+  // The obvious implementation reads the visible count, and then narrowing a
+  // long list past the threshold HIDES THE CONTROLS THAT NARROWED IT, stranding
+  // the user in a short list they cannot widen and cannot explain.
+  ok("a long list gets filters", M.showFilters(40));
+  ok("a short one does not", !M.showFilters(9));
+  ok("the boundary is exclusive", !M.showFilters(M.FILTER_THRESHOLD));
+  ok("one past it turns them on", M.showFilters(M.FILTER_THRESHOLD + 1));
+
+  is("no filter set means everything", M.applyFacets(items, FACETS, {}).length, 4);
+  is("All is not a filter", M.applyFacets(items, FACETS, { city: "All" }).length, 4);
+  is("nor is an empty string", M.applyFacets(items, FACETS, { city: "" }).length, 4);
+  is("one facet narrows", M.applyFacets(items, FACETS, { city: "Copenhagen" }).length, 2);
+  is("two facets narrow together", M.applyFacets(items, FACETS, { city: "Copenhagen", kind: "craft" }).length, 0);
+
+  // ── COUNTS EXCLUDE THEIR OWN FACET ───────────────────────────────
+  // Counting City with City applied gives every unselected city a zero, which
+  // reads as "nothing in Aarhus" when it means "you picked Copenhagen".
+  const cityCounts = M.facetCounts(items, FACETS, { city: "Copenhagen" }, "city");
+  is("the selected city still counts its own", cityCounts.Copenhagen, 2);
+  is("and the others are counted as if it were not selected", cityCounts.Aarhus, 1);
+  is("All counts the whole remaining pool", cityCounts.All, 4);
+  // The other facet DOES constrain, which is the half that makes counts useful.
+  const kindCounts = M.facetCounts(items, FACETS, { city: "Copenhagen" }, "kind");
+  is("a type with nothing in the chosen city counts zero", kindCounts.craft, 0);
+  is("and one with something counts it", kindCounts.free, 2);
+  is("an unknown facet key returns nothing", M.facetCounts(items, FACETS, {}, "nope"), {});
+
+  // ── THE CHIPS, WHICH 66% OF MOBILE SITES DO NOT HAVE ─────────────
+  is("nothing applied means no chips", M.appliedChips(FACETS, {}), []);
+  is("All is not an applied filter", M.appliedChips(FACETS, { city: "All" }), []);
+  is("an applied facet becomes one chip", M.appliedChips(FACETS, { city: "Aarhus" }).map(c => c.label), ["Aarhus"]);
+  is("carrying the key that clears it", M.appliedChips(FACETS, { city: "Aarhus" })[0].key, "city");
+  is("and which facet it came from", M.appliedChips(FACETS, { city: "Aarhus" })[0].facet, "City");
+  is("two applied means two chips", M.activeFacetCount(FACETS, { city: "Aarhus", kind: "craft" }), 2);
+
+  is("clearing one leaves the other", M.clearFacet({ city: "Aarhus", kind: "craft" }, "city"), { kind: "craft" });
+  // SORT IS NOT A FILTER. It changes the order, never the contents, so a
+  // "clear all" that resets it is quietly doing two different things.
+  is("clear all clears the facets and leaves the sort", M.clearAllFacets(FACETS, { city: "Aarhus", kind: "craft", sort: "near" }), { sort: "near" });
+
+  // Search, which is what a short list actually needs instead of a panel.
+  ok("an empty query matches everything", M.matchesQuery(items[0], "", []));
+  ok("folding means the letters are optional", M.matchesQuery(items[3], "aeroskobing", []));
+  ok("and a place found under its other name", M.matchesQuery({ name: "København" }, "copenhagen", []));
+  ok("every word must appear, so a second word narrows", !M.matchesQuery(items[0], "assistens aarhus", ["city"]));
+  ok("and both matching still matches", M.matchesQuery(items[0], "assistens copenhagen", ["city"]));
+
+  const app7 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the attractions page asks before drawing controls", /showFilters\(/.test(app7));
+  ok("and it is handed the unfiltered total", /showFilters\(combined\.length\)/.test(app7));
+  ok("applied filters come back as removable chips", /appliedChips\(/.test(app7));
+  ok("with counts that exclude their own facet", /facetCounts\(/.test(app7));
 }
 
 // ── "WHY IS MY NIGHTLIFE TOWN NOT PUBLISHED IN NIGHTLIFE?" ────────

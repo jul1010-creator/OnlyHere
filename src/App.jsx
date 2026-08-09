@@ -59,6 +59,7 @@ import { correctEntry } from "./utils/correction";
 import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { otherNameFor } from "./utils/danishNames";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
+import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -404,8 +405,19 @@ function GemlyxApp() {
   // pill that offers it can never drift apart, which they previously could:
   // the town list was inline inside filteredEvents and nowhere else.
   const NORTH_ZEALAND_TOWNS = ["Gilleleje", "Tisvildeleje", "Hundested", "Frederiksværk", "Liseleje"];
-  const [bookableOnly, setBookableOnly] = useState(false);
   const [craftSort, setCraftSort] = useState("recommended"); // "recommended" | "near" | "az"
+  // ── ONE OBJECT, NOT FIVE BOOLEANS ─────────────────────────────────
+  // The old page kept craftKind, attractionCity, priceFilter, hiddenGemOnly and
+  // bookableOnly as five separate pieces of state, which is why "clear all" did
+  // not exist and an applied-filters summary was never going to get written.
+  // One object means the chips, the counts and the clear are all derivable.
+  const [attractionFacets, setAttractionFacets] = useState({});
+  const [attractionQuery, setAttractionQuery] = useState("");
+  const [attractionSheet, setAttractionSheet] = useState(false);
+  // "🍬 Handmade" used to be a pill in the CITY row, which is why the panel
+  // changed shape when you tapped it: it is not a city and not a filter, it
+  // swaps the page for a different view entirely. It gets to say so now.
+  const [attractionView, setAttractionView] = useState("all");
   const [eventSort, setEventSort] = useState("soonest");     // "soonest" | "az"
   // FOOD had no location filter at all, which on a national guide means the only
   // way to find somewhere to eat in the town you are actually standing in was to
@@ -514,14 +526,10 @@ function GemlyxApp() {
   useEffect(() => { ensureSourcesLoaded(); }, []);
   const [craftItems, setCraftItems] = useState(craftItemsFallback);
   const [craftLoading, setCraftLoading] = useState(true);
-  const [craftKind, setCraftKind] = useState(null);
   const [foodTab, setFoodTab] = useState("All");
   const [foodKind, setFoodKind] = useState("All"); // "All" | "Restaurants" | "Food Streets"
   const [nightlifeTab, setNightlifeTab] = useState("Local");
   const [nightlifeTownView, setNightlifeTownView] = useState(null); // null = showing towns; a town name = showing that town's venues
-  const [attractionCity, setAttractionCity] = useState("All");
-  const [priceFilter, setPriceFilter] = useState("all"); // "all" | "free" | "paid"
-  const [hiddenGemOnly, setHiddenGemOnly] = useState(false);
   const [craftModal, setCraftModal] = useState(null);
   const [expandedPlan, setExpandedPlan] = useState(null);
   const [liveInfo, setLiveInfo] = useState({});
@@ -8101,18 +8109,48 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
               ...freeEntrance.map(a => ({ ...a, _kind: "free", _price: "Free", _city: cityOf(a) })),
               ...craftItems.map(c => ({ ...c, _kind: "craft", _price: c.price || "See website", _city: cityOf(c) })),
             ];
-            const cityOptions = ["All", ...KNOWN_CITIES.filter(c => combined.some(i => i._city === c))];
             const kindKeys = { Blacksmithing: ["blacksmith"], Ceramics: ["ceramic", "pottery"], Jewellery: ["jewellery"], Leather: ["leather"], Textiles: ["textile", "dyeing", "felting"], Woodwork: ["wood"], Candy: ["candy"] };
 
-            const filtered = combined.filter(item => {
-              if (attractionCity !== "All" && attractionCity !== "🍬 Handmade" && item._city !== attractionCity) return false;
-              if (priceFilter === "free" && item._kind !== "free") return false;
-              if (priceFilter === "paid" && item._kind !== "craft") return false;
-              if (craftKind && item._kind === "craft" && !(item.what || []).some(w => (kindKeys[craftKind] || []).some(k => w.toLowerCase().includes(k)))) return false;
-              if (bookableOnly && item._kind === "craft" && item.bookingType !== "online") return false;
-              if (hiddenGemOnly && item.popularityTag !== "Hidden Gem") return false;
-              return true;
-            }).sort((a, b) => craftSort === "az"
+            // ── DECLARED ONCE, READ BY EVERYTHING ───────────────────
+            // The chips, the per-option counts, the clear-all and the filtering
+            // itself all come off this list, so they cannot disagree with each
+            // other. The old page had the filter logic in one place and the
+            // controls in another, which is how it ended up with two filters
+            // that only filtered half the list (see below).
+            const ATTRACTION_FACETS = [
+              { key: "city", label: "City",
+                options: [{ value: "All", label: "All" }, ...KNOWN_CITIES.filter(c => combined.some(i => i._city === c)).map(c => ({ value: c, label: c }))],
+                test: (i, v) => i._city === v },
+              { key: "kind", label: "Type",
+                options: [{ value: "All", label: "All" }, { value: "free", label: "🆓 Free" }, { value: "craft", label: "🎟 Bookable" }],
+                test: (i, v) => i._kind === v },
+              // ── A FILTER THAT FILTERED HALF THE LIST ──────────────
+              // The old test was `if (craftKind && item._kind === "craft" && !match)`,
+              // so picking Ceramics removed the wrong workshops and left every
+              // free attraction in place. Same shape on bookableOnly. A filter
+              // that quietly does not apply to half the results is worse than no
+              // filter, because the list looks like an answer.
+              { key: "craft", label: "Craft",
+                options: [{ value: "All", label: "All" }, ...Object.keys(kindKeys).map(k => ({ value: k, label: k }))],
+                test: (i, v) => i._kind === "craft" && (i.what || []).some(w => (kindKeys[v] || []).some(k => w.toLowerCase().includes(k))) },
+              { key: "gem", label: "Popularity",
+                options: [{ value: "All", label: "All" }, { value: "gem", label: "◆ Hidden Gem" }],
+                test: (i) => i.popularityTag === "Hidden Gem" },
+              { key: "booking", label: "Booking",
+                options: [{ value: "All", label: "All" }, { value: "online", label: "⚡ Bookable online" }],
+                test: (i) => i.bookingType === "online" },
+            ];
+
+            // Search runs BEFORE the facets, so the counts beside each option
+            // describe the list you are actually looking at rather than the
+            // whole catalogue.
+            const searched = combined.filter(i => matchesQuery(i, attractionQuery, ["_city", "tag", "desc"]));
+            const attractionChips = appliedChips(ATTRACTION_FACETS, attractionFacets);
+            // THE UNFILTERED TOTAL decides, never the visible count: reading the
+            // filtered number would hide the controls the moment they worked,
+            // leaving a short list nobody can widen again.
+            const useAttractionFilters = showFilters(combined.length);
+            const filtered = applyFacets(searched, ATTRACTION_FACETS, attractionFacets).sort((a, b) => craftSort === "az"
               ? byName(a, b)
               : (craftSort === "near" && isInDenmark(userCoords))
               ? (townKmFromUser(a._kind === "craft" ? a.location : a.city) ?? 9999) - (townKmFromUser(b._kind === "craft" ? b.location : b.city) ?? 9999)
@@ -8128,65 +8166,130 @@ create policy "auth all gemlyx_research" on gemlyx_research for all to authentic
                 <div style={{ fontSize: 14, color: C.light, lineHeight: 1.7, maxWidth: 560 }}>Everything worth doing that isn't a town, a bar, or a meal — genuinely free places and things worth booking ahead, side by side so you can actually compare them.</div>
               </div>
 
-              {/* Filters */}
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "16px 16px 14px", marginBottom: 18 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>City</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
-                  {[...cityOptions, "🍬 Handmade"].map(c => (
-                    <Pill key={c} label={c} active={attractionCity === c} onClick={() => setAttractionCity(c)} color={c === "🍬 Handmade" ? "#E91E63" : undefined} />
-                  ))}
+              {/* ── SEARCH AND SORT, ALWAYS. FILTERS, ONLY WHEN THE
+                     LIST IS LONG ENOUGH TO NEED THEM ────────────────
+                  Oliver, 9 Aug 2026: "I am not satisfied with the filters. This
+                  will become an issue down the line. Especially on phone."
+                  What was here: six labelled groups, twenty-five pills,
+                  permanently open, about 430px of controls before a single card,
+                  for nine places. A filter can only REMOVE things, so on a list
+                  you can read in one screen every control is pure cost. */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input value={attractionQuery} onChange={e => setAttractionQuery(e.target.value)}
+                    placeholder="Search attractions"
+                    style={{ flex: "1 1 200px", minWidth: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "11px 16px", fontSize: 14, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                  {/* Not a city. Its own control, so the panel stops changing
+                      shape when you tap it. */}
+                  <Pill label="🍬 Handmade" active={attractionView === "handmade"} color="#E91E63"
+                    onClick={() => setAttractionView(v => v === "handmade" ? "all" : "handmade")} />
                 </div>
 
-                {attractionCity !== "🍬 Handmade" && (
+                {attractionView !== "handmade" && (
                   <>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Price</div>
-                    <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
-                      {[["all", "All"], ["free", "🆓 Free"], ["paid", "🎟 Bookable"]].map(([k, label]) => (
-                        <Pill key={k} label={label} active={priceFilter === k} onClick={() => setPriceFilter(k)} />
-                      ))}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                      {useAttractionFilters && (
+                        <button onClick={() => setAttractionSheet(true)}
+                          style={{ display: "flex", alignItems: "center", gap: 7, background: attractionChips.length ? `${C.gold}18` : C.surface, border: `1px solid ${attractionChips.length ? C.gold : C.border}`, color: attractionChips.length ? C.gold : C.text, borderRadius: 100, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Filter{attractionChips.length > 0 ? ` · ${attractionChips.length}` : ""}
+                        </button>
+                      )}
+                      {/* Sort is not a filter. It changes the order, never the
+                          contents, so it stays out of the sheet and out of
+                          "clear all". */}
+                      <select value={craftSort}
+                        onChange={e => { setCraftSort(e.target.value); if (e.target.value === "near" && !isInDenmark(userCoords)) requestLocation(); }}
+                        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "9px 14px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", outline: "none", fontFamily: "'Inter', sans-serif" }}>
+                        <option value="recommended">★ Recommended</option>
+                        <option value="az">Alphabetical</option>
+                        <option value="near">📍 Closest</option>
+                      </select>
                     </div>
 
-                    {priceFilter !== "free" && (
-                      <>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Craft</div>
-                        <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 14, WebkitOverflowScrolling: "touch" }}>
-                          {["All", "Blacksmithing", "Ceramics", "Jewellery", "Leather", "Textiles", "Woodwork", "Candy"].map(k => (
-                            <Pill key={k} label={k} active={(k === "All" && !craftKind) || craftKind === k} onClick={() => setCraftKind(k === "All" ? null : (craftKind === k ? null : k))} />
-                          ))}
-                        </div>
-                      </>
+                    {/* ── APPLIED FILTERS, WHICH 66% OF MOBILE SITES DO
+                           NOT SHOW (Baymard) ────────────────────────
+                        Without this, somebody who has scrolled past the controls
+                        cannot tell why the list is short. They reopen the panel
+                        just to look, or decide the site has nothing. */}
+                    {attractionChips.length > 0 && (
+                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+                        {attractionChips.map(chip => (
+                          <button key={chip.key} onClick={() => setAttractionFacets(f => clearFacet(f, chip.key))}
+                            style={{ display: "flex", alignItems: "center", gap: 6, background: `${C.gold}18`, border: `1px solid ${C.gold}44`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                            {chip.label} <span style={{ fontSize: 13, opacity: 0.8 }}>✕</span>
+                          </button>
+                        ))}
+                        <button onClick={() => setAttractionFacets(f => clearAllFacets(ATTRACTION_FACETS, f))}
+                          style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>
+                          Clear all
+                        </button>
+                      </div>
                     )}
 
-                    <div style={{ height: 1, background: C.border, margin: "2px 0 14px" }} />
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
-                      <div>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Popularity</div>
-                        <Pill label="◆ Hidden Gem" active={hiddenGemOnly} onClick={() => setHiddenGemOnly(v => !v)} color={C.gold} />
-                      </div>
-                      {priceFilter !== "free" && (
-                        <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: "#4CAF50", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Speed</div>
-                          <Pill label="⚡ Bookable online" active={bookableOnly} onClick={() => setBookableOnly(v => !v)} color="#4CAF50" />
-                        </div>
-                      )}
-                      <div>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Sort</div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <Pill label="★ Recommended" active={craftSort === "recommended"} onClick={() => setCraftSort("recommended")} />
-                          <Pill label="Alphabetical" active={craftSort === "az"} onClick={() => setCraftSort("az")} />
-                          <Pill label="📍 Closest" active={craftSort === "near"} color={C.gold}
-                            onClick={() => { setCraftSort("near"); if (!isInDenmark(userCoords)) requestLocation(); }} />
-                        </div>
-                      </div>
-                    </div>
                     {craftSort === "near" && !isInDenmark(userCoords) && (
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you're in Denmark with location enabled — showing recommended order for now.</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you are in Denmark with location on. Showing recommended order for now.</div>
                     )}
                   </>
                 )}
               </div>
 
-              {attractionCity === "🍬 Handmade" ? (
+              {/* ── THE SHEET ──────────────────────────────────────── */}
+              {attractionSheet && (
+                <div onClick={() => setAttractionSheet(false)}
+                  style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 900, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+                  <div onClick={e => e.stopPropagation()}
+                    style={{ background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}` }}>
+                      <button onClick={() => setAttractionSheet(false)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Filter</div>
+                      <button onClick={() => setAttractionFacets(f => clearAllFacets(ATTRACTION_FACETS, f))}
+                        style={{ background: "none", border: "none", color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Clear</button>
+                    </div>
+
+                    <div style={{ overflowY: "auto", padding: "4px 18px 12px", flex: 1 }}>
+                      {ATTRACTION_FACETS.map(facet => {
+                        const counts = facetCounts(searched, ATTRACTION_FACETS, attractionFacets, facet.key);
+                        return (
+                          <div key={facet.key} style={{ padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
+                            <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 9 }}>{facet.label}</div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              {facet.options.map(opt => {
+                                const n = counts[opt.value] ?? 0;
+                                // ── ZERO IS DISABLED, NOT HIDDEN ────
+                                // A count of zero here is a true statement,
+                                // because counts exclude their own facet:
+                                // picking this WOULD empty the list. Hiding
+                                // those options instead would make the sheet
+                                // jump under a thumb as it reflows.
+                                const dead = n === 0 && opt.value !== "All";
+                                const on = (attractionFacets[facet.key] || "All") === opt.value;
+                                return (
+                                  <button key={opt.value} disabled={dead}
+                                    onClick={() => setAttractionFacets(f => opt.value === "All" ? clearFacet(f, facet.key) : { ...f, [facet.key]: opt.value })}
+                                    style={{ background: on ? C.gold : C.surface, border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : dead ? C.muted : C.text, opacity: dead ? 0.4 : 1, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: dead ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                    {opt.label} <span style={{ opacity: 0.65, fontWeight: 600 }}>{n}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* The count lives on the button you are about to press, so
+                        nobody applies a filter to find out it emptied the page. */}
+                    <div style={{ padding: "12px 18px 18px", borderTop: `1px solid ${C.border}` }}>
+                      <button onClick={() => setAttractionSheet(false)}
+                        style={{ width: "100%", background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "14px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        Show {filtered.length} place{filtered.length !== 1 ? "s" : ""}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {attractionView === "handmade" ? (
                 <>
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Watch it made, buy it warm — no ticket, no booking, just walk in.</div>
                   {/* Supabase-only content (Aug 5): handmade craft shops have no Studio
