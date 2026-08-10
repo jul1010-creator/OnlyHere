@@ -9,6 +9,8 @@ import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
+import { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
+import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
 import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
@@ -943,6 +945,38 @@ function GemlyxApp() {
     });
     if (!res.ok) throw new Error(`Save failed (${res.status}) — check the update RLS policy on gemlyx_content`);
     setManageItems(items => (items || []).map(r => r.id === row.id ? { ...r, payload: newPayload } : r));
+  };
+
+  // ── REPAIRING A ROW THAT WAS PUBLISHED BEFORE A FIX ─────────────────
+  // Oliver, 10 Aug, on a live Københavns Museum page: "Why the fk is it put to
+  // the old ChatGPT structure? ... I'm tired of wasting time and money on
+  // redrafting these things."
+  //
+  // The headings on that page are DATA. DetailPage renders blogBody verbatim,
+  // and blogBody was frozen into the row the day it was published. Fixing
+  // shapeForLive on 10 Aug could never have reached a row written before it,
+  // and nothing in this app rewrites a stored body at read time. So the site
+  // will keep showing the old structure forever unless something goes and
+  // changes the rows, and there was no such thing.
+  //
+  // This is that thing, and it is deliberately a RENAME rather than a redraft:
+  // the paragraphs under those old headings are already correct, so paying for
+  // a full pipeline run would spend real money to replace prose that is fine.
+  // See utils/publishedRepair.js for why each rename is safe.
+  const [repairBusy, setRepairBusy] = useState(null);
+  const [repairNote, setRepairNote] = useState(null);
+  const repairRowHeadings = async (row) => {
+    setRepairBusy(row.id); setRepairNote(null);
+    try {
+      const { body, renamed, changed } = repairBody(row.payload?.blogBody);
+      if (!changed) { setRepairNote(`${row.payload?.name || "That entry"} already uses the current headings.`); return; }
+      await patchContentPayload(row, { ...(row.payload || {}), blogBody: body });
+      // Named, not counted, and it says plainly what a rename could not do.
+      const stillNoVerdict = !headingsOf(body).some(h => /reality check/i.test(h));
+      setRepairNote(`${row.payload?.name}: renamed ${renamed.map(r => `"${r.from}" to "${r.to}"`).join(", ")}.${stillNoVerdict ? " It still has no Reality Check, which a rename cannot write." : ""}`);
+    } catch (e) {
+      setRepairNote(`Could not repair ${row.payload?.name || "that entry"}: ${e.message}`);
+    } finally { setRepairBusy(null); }
   };
   // ── CREDIT AN UPLOADED IMAGE (Oliver, Aug 5: "I need to be able to put
   // credits when I input media") ──────────────────────────────────
@@ -4139,6 +4173,37 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           shaped.__lon = studioFrozenGeo.lon;
         }
       }
+      // ── THE COORDINATE GATE ─────────────────────────────────────
+      // Oliver, 10 Aug: "The most important is getting maps sorted. Because if
+      // we get maps wrong, then the Gemlyx guide will become ruined."
+      //
+      // Placed HERE deliberately: after the frozen-geo override, so a real
+      // geocode has already had its chance to replace the model's guess, and
+      // before the insert, so nothing that fails can reach the database. What
+      // survives to this line is what the site would store.
+      //
+      // auditEntry has carried coordinate checks since 6 Aug and gated NOTHING:
+      // it is called only from StudioAssistant to build prompt text and
+      // clipboard content, which means every check in it ran after publication,
+      // in a chat panel, where a person had to go and look. This is the first
+      // thing in the app that can actually stop a bad coordinate being stored.
+      //
+      // A FRESH DRAFT IS BLOCKED, AN EDIT IS NOT. Creating a bad coordinate and
+      // being stuck with an old one are different situations, and refusing to
+      // save a typo fix on a row whose pin has been wrong for weeks would make
+      // the gate the problem. The message names the fields to change, and the
+      // draft JSON is editable in this same panel, so blocking is never a dead
+      // end.
+      const coordBlockers = blockingCoordProblems(shaped, studioType);
+      if (coordBlockers.length > 0) {
+        const why = coordBlockers.map(p => p.detail).join(" ");
+        if (!isEditing) {
+          setPublishStatus(null);
+          setDraftEditError(`Not published, because the map pin would be wrong. ${why} Fix "lat" and "lon" in the draft above and publish again, or clear them both to let the site fall back to the town centre honestly.`);
+          return;
+        }
+        console.warn("Publishing an edit with a coordinate that fails the map check:", why);
+      }
       // Same enforcement for stay duration — never let the model's guess survive
       // when a reliable category-based real duration exists. Free-entrance items
       // never get a shaped.category field (shapeForLive puts their category text
@@ -7210,8 +7275,47 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Loading…</div>
                         ) : !manageItems || manageItems.length === 0 ? (
                           <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Nothing published yet.</div>
-                        ) : (
-                          manageItems.map(row => (
+                        ) : (<>
+                          {/* ── HOW BIG IS THIS, BEFORE HE FINDS OUT ONE PAGE
+                              AT A TIME ─────────────────────────────────
+                              This was found by browsing his own live site. The
+                              count is stated up front so the rest are not found
+                              the same way, and the two costs are kept apart
+                              because only one of them spends money. */}
+                          {(() => {
+                            const a = auditPublished(manageItems);
+                            if (!a.total) return null;
+                            return (
+                              <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.6, padding: "8px 0 10px", borderBottom: `1px solid ${C.border}` }}>
+                                {describeAudit(a)}
+                                {a.renameable.length > 0 ? " Renaming changes no text and calls no model." : ""}
+                              </div>
+                            );
+                          })()}
+                          {/* ── THE MAP, WHICH IS THE ONE HE CARES ABOUT ──
+                              The gate stops NEW bad coordinates. It cannot
+                              reach a row already stored, and a wrong TOWN
+                              coordinate is worse than a wrong pin: liveContent
+                              writes a published town's __lat into TOWN_COORDS
+                              on every load, so it becomes the reference frame
+                              every other entry in that town is measured
+                              against. Named, not counted. */}
+                          {(() => {
+                            const ca = coordAudit(manageItems);
+                            if (!ca.total && !ca.shared.length) return null;
+                            return (
+                              <div style={{ fontSize: 11, color: ca.critical.length ? "#E57373" : "#FFB347", lineHeight: 1.6, padding: "8px 0 10px", borderBottom: `1px solid ${C.border}` }}>
+                                {describeCoordAudit(ca)}
+                                {ca.shared.map((list, i) => (
+                                  <div key={i} style={{ color: C.muted, marginTop: 4 }}>Same point: {list.map(r => r.name).join(", ")}.</div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                          {repairNote && (
+                            <div style={{ fontSize: 11, color: C.light, lineHeight: 1.6, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>{repairNote}</div>
+                          )}
+                          {manageItems.map(row => (
                             <div key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 0" }}>
                                 <div style={{ minWidth: 0 }}>
@@ -7221,8 +7325,35 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   <div style={{ fontSize: 10, color: C.muted }}>
                                     {row.type}{!row.published ? " · not published" : ""}{row.payload?.photo ? "" : " · no photo"}
                                   </div>
+                                  {/* Says which problem this row has, in the
+                                      row, because a count at the top does not
+                                      tell him which page to open. */}
+                                  {bodyProblems(row.payload).map((p, i) => (
+                                    <div key={i} style={{ fontSize: 10, color: p.kind === "legacy-heading" ? "#FFB347" : "#E57373", lineHeight: 1.5 }}>
+                                      {p.kind === "legacy-heading" ? `old headings: ${p.headings.join(", ")}`
+                                        : p.kind === "no-reality-check" ? "no Reality Check"
+                                        : `unrecognised heading: ${p.headings.join(", ")}`}
+                                    </div>
+                                  ))}
+                                  {coordProblems(row.payload, row.type).map((p, i) => (
+                                    <div key={`c${i}`} style={{ fontSize: 10, color: p.severity === "critical" ? "#E57373" : "#FFB347", lineHeight: 1.5 }}>
+                                      📍 {p.kind === "outside-denmark" ? "coordinate is outside Denmark"
+                                        : p.kind === "schema-example" ? "carries the copied example coordinate"
+                                        : p.kind === "far-from-town" ? `${Math.round(p.km)} km from ${p.town}`
+                                        : "no coordinate stored"}
+                                    </div>
+                                  ))}
                                 </div>
                                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                  {/* Only offered where it would do something,
+                                      and labelled with the fact that matters
+                                      most to him: it is free. */}
+                                  {repairBody(row.payload?.blogBody).changed && (
+                                    <button onClick={() => repairRowHeadings(row)} disabled={repairBusy === row.id}
+                                      style={{ background: "#FFB34722", border: "1px solid #FFB34766", color: "#FFB347", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                      {repairBusy === row.id ? "…" : "🏷 Fix headings (free)"}
+                                    </button>
+                                  )}
                                   <button onClick={() => { setMediaEditId(v => v === row.id ? null : row.id); setMediaError(null); setMediaReelInput(""); }}
                                     style={{ background: mediaEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                     🖼 Media
@@ -7497,8 +7628,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 );
                               })()}
                             </div>
-                          ))
-                        )}
+                          ))}
+                        </>)}
                       </div>
                     )}
                     <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>Drafts a complete entry, card plus full detail page, following the Gemlyx editorial docs. Tavily and Perplexity research it, OpenAI plans the queries and sorts the findings into notes, and Claude writes every word of the actual entry. Output is paste-ready code, so verify every fact before committing. Not visible to users.</div>

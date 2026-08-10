@@ -20,12 +20,11 @@
 
 import { scanForAITells, fillerWordCounts } from "./helpers";
 import { claimConflicts, implausibleWalks } from "./claimCheck";
-
-// The coordinate that was printed in the town prompt's own JSON schema as an
-// example, which drafts copied verbatim (PASS 45). Any entry still carrying it
-// has a map pin in a field near Ringkøbing Fjord instead of the actual town.
-const SCHEMA_EXAMPLE_LAT = 56.09;
-const SCHEMA_EXAMPLE_LON = 8.24;
+// Every coordinate rule, including the schema-example pair that used to be
+// declared here as two loose constants. One file owns them now, because the
+// publish gate and this audit have to agree about what counts as wrong, and two
+// copies of a threshold is the failure this codebase repeats most.
+import { coordProblems } from "./coordCheck";
 
 // Claims that a place has no public transport. Same pattern as the live
 // pipeline guard, kept in sync deliberately: an entry published before that
@@ -273,12 +272,14 @@ export const auditEntry = (row) => {
   if (NO_TRANSPORT.test(all)) {
     add("critical", "getting there", "Claims no public transport route exists. This has been wrong every time it was checked, and it tells travelers without a car to skip the place entirely.");
   }
-  if (Number(p.__lat) === SCHEMA_EXAMPLE_LAT && Number(p.__lon) === SCHEMA_EXAMPLE_LON) {
-    add("critical", "coordinates", "Still carries the coordinate that was printed as an example in the old draft prompt, so the map pin is roughly 130km from the real place.");
-  }
-  if (type === "town" && (p.__lat == null || p.__lon == null)) {
-    add("high", "coordinates", "No coordinates stored, so no map and no distance maths can use this entry.");
-  }
+  // ── IS THE COORDINATE ABOUT THIS PLACE ──────────────────────────
+  // Was: the schema-example pair and a town-only null check, both written here
+  // by hand. isInDenmark existed the whole time and was never once applied to a
+  // coordinate that reaches a reader, and nothing compared a coordinate with the
+  // town its own entry names. See utils/coordCheck.js, which the publish gate
+  // uses too, so a row cannot be blocked on a rule this audit does not report or
+  // reported on a rule the gate ignores.
+  coordProblems(p, type).forEach(c => add(c.severity, "coordinates", c.detail));
 
   // ── high: a fact that is wrong, missing, or unusable ──────────
   const dashes = (all.match(/[—–]/g) || []).length;

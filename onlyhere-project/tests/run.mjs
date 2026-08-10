@@ -20,7 +20,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripNonCode, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration } from "./tdz.mjs";
 
@@ -71,6 +71,9 @@ writeFileSync(entry, `
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { lookupRealPlace, placeCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
+  export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
+  export { TOWN_COORDS } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
@@ -5679,6 +5682,344 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // whole fix would read as unnecessary.
   const dir = readFileSync(join(root, "api/directions.js"), "utf8");
   ok("a coordinate pair still gets no country hint", /isCoordPair\(origin\) \? origin : `\$\{origin\}, Denmark`/.test(dir));
+}
+
+
+// ── FIXING THE WRITER DOES NOT FIX WHAT IT ALREADY WROTE ────────────
+// Oliver, 10 Aug, on a LIVE page for Københavns Museum: "Why the fk is it put
+// to the old ChatGPT structure? 'Why people love it' and no reality check...
+// tripple check now.. because I'm tired of wasting time and money on redrafting
+// these things."
+//
+// Three separate faults, and only the first one was in the code.
+//
+// ONE. blogBody is DATA. DetailPage renders it verbatim and nothing rewrites a
+// stored body at read time, so the row froze its headings on publication day.
+// The 8 Aug entry-voice pass and the 10 Aug shapeForLive pass both did what they
+// claimed and neither could ever have reached a row written before them. There
+// was no repair path at all, so the site would have shown the old structure
+// forever. That is the bug this block guards.
+//
+// TWO. The prompt's own structure line still said "Why People Love It -> Perfect
+// For" for free and booking, and named no Reality Check for any of the four
+// types that gained the field on 8 Aug. The JSON schema underneath asked for
+// realityCheck; the sentence above it, written in "follow this EXACT structure"
+// language, did not. The model was being told two different things by the same
+// prompt, and the old heading test could not see it because it read heading
+// ARRAYS in code and never the prose the writer actually reads.
+//
+// THREE. src/data/studioTypes.js was a whole second copy of the prompt table,
+// imported by nothing, still carrying the old headings. Deleted.
+{
+  const { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } = M;
+
+  // ── HIS ACTUAL PAGE ───────────────────────────────────────────────
+  const oldRow = { type: "free", payload: { name: "Københavns Museum", blogBody: [
+    { type: "heading", content: "Why People Love It" },
+    { type: "paragraph", content: "Walk in from Stormgade and the restored Overformynderiet building does a lot of the talking." },
+    { type: "heading", content: "Perfect For" },
+    { type: "paragraph", content: "This suits anyone curious about Copenhagen's backstory." },
+    { type: "bullets", items: ["Free for under-18s"] },
+  ] } };
+
+  const fixed = repairBody(oldRow.payload.blogBody);
+  is("the two old headings are renamed", headingsOf(fixed.body), ["Being There", "Who It's For"]);
+  is("and it reports both, so he can see what changed", fixed.renamed.length, 2);
+  // THE POINT OF THE WHOLE FILE: not one character of his prose moves. A
+  // redraft would have paid a full pipeline run to replace paragraphs that are
+  // already correct.
+  is("no body text is touched",
+     fixed.body.filter(b => b.type === "paragraph").map(b => b.content),
+     oldRow.payload.blogBody.filter(b => b.type === "paragraph").map(b => b.content));
+  is("and nothing else in the body is disturbed", fixed.body.filter(b => b.type === "bullets"), [{ type: "bullets", items: ["Free for under-18s"] }]);
+  is("the block count is unchanged", fixed.body.length, oldRow.payload.blogBody.length);
+
+  // Idempotent, which is what lets the button be offered without anyone having
+  // to track which rows were already done.
+  const twice = repairBody(fixed.body);
+  ok("running it again changes nothing", twice.changed === false);
+  is("and reports nothing", twice.renamed, []);
+  // A body that was already right is left exactly alone.
+  ok("a current row is not 'repaired'", repairBody([{ type: "heading", content: "Being There" }]).changed === false);
+  // Degenerate input must not throw inside a render.
+  ok("a missing body is not a crash", repairBody(undefined).changed === false);
+  is("and headingsOf survives it too", headingsOf(null), []);
+
+  // ── AND WHAT A RENAME HONESTLY CANNOT DO ──────────────────────────
+  // Reported separately and never folded into one flag, because one of these
+  // costs nothing and the other costs a model call. Merging them would be the
+  // same dishonesty as reporting an estimate as a measurement.
+  const probs = bodyProblems(oldRow.payload);
+  is("the old headings are flagged as free to fix", probs.filter(p => p.kind === "legacy-heading").length, 1);
+  is("and free is what it says", probs.find(p => p.kind === "legacy-heading").cost, "free");
+  is("the missing verdict is flagged separately", probs.filter(p => p.kind === "no-reality-check").length, 1);
+  // After the rename it STILL has no Reality Check, and saying otherwise would
+  // be telling him a job is finished when it is not.
+  ok("renaming does not silence the missing verdict",
+     bodyProblems({ blogBody: fixed.body }).some(p => p.kind === "no-reality-check"));
+  // A current, complete row reports nothing at all, or the panel cries wolf.
+  is("a good row has no problems", bodyProblems({ blogBody: [
+    { type: "heading", content: "Being There" }, { type: "heading", content: "Who It's For" },
+    { type: "heading", content: "The Reality Check" }] }), []);
+  // A town's heading carries the town name and can never be a fixed string.
+  is("a town heading is recognised", bodyProblems({ blogBody: [
+    { type: "heading", content: "What to Do in Ribe" }, { type: "heading", content: "The Reality Check" }] }), []);
+  ok("and the dynamic rule is what recognises it", DYNAMIC_HEADING.test("What to Do in Ribe"));
+  // An entry with no long-form body is not broken, it just has no body.
+  is("a card-only row is not reported", bodyProblems({ blogBody: [] }), []);
+
+  // Anything neither current nor known-old is REPORTED rather than silently
+  // passed, because these rows cannot be read from here and guessing that I
+  // know every heading his database contains would be the overconfident answer.
+  const odd = bodyProblems({ blogBody: [{ type: "heading", content: "What Makes It Unmissable" }, { type: "heading", content: "The Reality Check" }] });
+  is("an unrecognised heading is surfaced", odd.filter(p => p.kind === "unknown-heading").length, 1);
+
+  // ── HOW BIG IS THE JOB ────────────────────────────────────────────
+  const audit = auditPublished([oldRow, { id: 2, payload: { name: "Ribe", blogBody: [
+    { type: "heading", content: "What to Do in Ribe" }, { type: "heading", content: "The Reality Check" }] } }]);
+  is("only the broken row is listed", audit.total, 1);
+  is("and it is named", audit.rows[0].name, "Københavns Museum");
+  is("the free half is counted on its own", audit.renameable.length, 1);
+  ok("and the sentence keeps the two costs apart", /fixable for free/.test(describeAudit(audit)) && /needs real text/.test(describeAudit(audit)));
+  is("a clean database says so plainly", describeAudit(auditPublished([])), "Every published entry uses the current structure.");
+
+  // ── ONE VOCABULARY, CHECKED AGAINST THE GENERATOR ─────────────────
+  // CURRENT_HEADINGS is a list of heading names, which in this codebase is the
+  // exact shape of thing that drifts: resolveLegMode, lookupRealPlace and the
+  // heading arrays themselves have each been duplicated and gone out of sync.
+  // So it is not trusted, it is checked against what shapeForLive really emits.
+  const shapeSrc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  const emitted = [...new Set([...shapeSrc.matchAll(/bbData\(\s*(?:isClub \? )?\[\[([\s\S]{0,400}?)\]\]/g)]
+    .flatMap(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2])))];
+  const uncovered = emitted.filter(h => !CURRENT_HEADINGS.includes(h) && !DYNAMIC_HEADING.test(h));
+  is("every heading the publish path writes is a heading the repair knows", uncovered, []);
+  // And the reverse would be just as bad: a rename target nothing emits means
+  // the repair renames a row into a heading no generator produces.
+  const orphanTargets = [...new Set(Object.values(LEGACY_HEADINGS))].filter(h => !CURRENT_HEADINGS.includes(h));
+  is("every rename lands on a real current heading", orphanTargets, []);
+  // A rename must not be a no-op, and must not map onto itself.
+  ok("no rename maps a heading to itself", Object.entries(LEGACY_HEADINGS).every(([from, to]) => from !== to));
+  // A legacy heading must not also be a current one, or the repair would
+  // rename live content out from under the generator.
+  is("nothing is both current and legacy", Object.keys(LEGACY_HEADINGS).filter(h => CURRENT_HEADINGS.includes(h)), []);
+
+  // ── AND THE PROMPT THE WRITER ACTUALLY READS ──────────────────────
+  // The gap that let this ship. The old ban read heading ARRAYS in App.jsx and
+  // studioContent.js. The prompt's structure sentence is a third statement of
+  // the same thing, in the file the model is handed, and it still said "Why
+  // People Love It -> Perfect For" for two types and named no Reality Check for
+  // four. "Follow this EXACT structure" is not a comment. It is the instruction.
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  const structureLines = [...prompts.matchAll(/following (?:this EXACT structure|the same Attraction structure)[\s\S]{0,900}?\(EXACTLY 3 short bullets\)/g)].map(m => m[0]);
+  ok("every type that declares a structure was found", structureLines.length >= 4);
+  is("no structure line still names a heading that presupposes the verdict",
+     structureLines.filter(l => /Why People Love It|Perfect For/.test(l)), []);
+  is("and every one of them names the Reality Check",
+     structureLines.filter(l => !/Reality Check/.test(l)), []);
+  // The word budget is part of the instruction: a section left out of the count
+  // is a section the model is being told not to spend words on.
+  const budgets = [...prompts.matchAll(/Total word count across ([A-Za-z+()\s]+?) should land/g)].map(m => m[1]);
+  ok("every word budget was found", budgets.length >= 4);
+  is("no budget still counts the old sections", budgets.filter(b => /WhyPeopleLoveIt|PerfectFor/.test(b)), []);
+  // Every prompt that asks for a realityCheck FIELD must also budget words for
+  // it, which is the specific mismatch that survived 8 Aug.
+  is("a budget that omits the Reality Check is a section asked for and not paid for",
+     budgets.filter(b => !/RealityCheck/.test(b)), []);
+
+  // ── AND ONE COPY OF THE PROMPT TABLE ──────────────────────────────
+  // src/data/studioTypes.js was a byte-level fossil of these same prompts,
+  // imported by nothing, still carrying the old headings. Fourth duplicated
+  // thing found in one day.
+  // Asserted as "the prompts live in one file", not "that filename is absent",
+  // because this session can write files to his disk but cannot delete them.
+  // A test demanding a deletion he has to perform by hand goes red on his
+  // machine through no fault of the code, and a red suite he did not cause is
+  // how a suite stops being believed. This passes the moment the duplicate
+  // stops holding prompts, and its failure names the file to remove.
+  const promptFiles = [];
+  (function walkSrc(d) {
+    readdirSync(d, { withFileTypes: true }).forEach(e => {
+      const full = join(d, e.name);
+      if (e.isDirectory()) return walkSrc(full);
+      if (!/\.jsx?$/.test(e.name)) return;
+      if (readFileSync(full, "utf8").includes("Draft a complete Gemlyx town entry for")) {
+        promptFiles.push(full.slice(root.length).split(sep).join("/"));
+      }
+    });
+  })(join(root, "src"));
+  is("the draft prompts are declared in exactly one file", promptFiles, ["src/utils/studioPrompts.js"]);
+
+  // ── WIRED, OR IT IS JUST A FILE ───────────────────────────────────
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("App.jsx imports the repair", /import \{[^}]*\brepairBody\b[^}]*\} from "\.\/utils\/publishedRepair"/.test(appSrc));
+  ok("the Studio can run it on a row", /const repairRowHeadings = async \(row\) => \{/.test(stripNonCode(appSrc)));
+  ok("and it writes the repaired body back", /patchContentPayload\(row, \{ \.\.\.\(row\.payload \|\| \{\}\), blogBody: body \}\)/.test(stripNonCode(appSrc)));
+  ok("the Manage panel counts the stale rows", /const a = auditPublished\(manageItems\);/.test(appSrc));
+  ok("and names the problem on each row", /\{bodyProblems\(row\.payload\)\.map\(\(p, i\) =>/.test(appSrc));
+  // The button appears only where it would do something.
+  ok("the button is offered only on a row it can fix", /\{repairBody\(row\.payload\?\.blogBody\)\.changed && \(/.test(appSrc));
+  ok("and it says the repair is free", /Fix headings \(free\)/.test(appSrc));
+  // The one sentence that must survive: renaming is not finishing.
+  ok("a renamed row still admits it has no verdict", /still has no Reality Check, which a rename cannot write/.test(appSrc));
+}
+
+
+// ── IS THE COORDINATE ABOUT THIS PLACE ──────────────────────────────
+// Oliver, 10 Aug: "The most important is getting maps sorted. Because if we get
+// maps wrong, then the Gemlyx guide will become ruined."
+//
+// He is describing a real mechanism, not a worry. A stored __lat comes straight
+// out of the model's draft JSON: shapeForLive writes `Number(t.lat) || null`
+// with no range check, no country check and no comparison against the town the
+// entry itself names. publishDraft overrides it with a real geocode when there
+// is one, and when there is not, the model's number stands.
+//
+// Then liveContent.js line 87 writes a published TOWN's coordinate into
+// TOWN_COORDS on every page load. TOWN_COORDS is what townKeyFor resolves
+// against and what every unplaced stop in that town falls back to. So one
+// invented town coordinate does not misplace one pin: it replaces the reference
+// frame every other entry in that town is measured against, silently, forever.
+//
+// AND THIS MORNING'S FIX MADE IT WORSE, WHICH IS THE PART WORTH WRITING DOWN.
+// Until today the tier reading __lat was dead code, so a bad stored coordinate
+// did nothing at all. Fixing it made __lat the TOP of the chain: it now beats
+// the geocode, is marked precise: true, draws as a solid pin, is trusted by
+// legDistanceKm, skips Nominatim via hasPreciseCoords, and goes to Google
+// Directions as a bare pair instead of the place's name. Promoting an
+// unvalidated number to the top of a chain is half a fix.
+{
+  const { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE, TOWN_COORDS } = M;
+
+  // Real values from src/data/towns.js, so these are the comparisons production
+  // actually makes.
+  const RIBE = { lat: 55.328, lon: 8.765 };
+  const AARHUS = { lat: 56.157, lon: 10.210 };
+
+  // ── THE CHECK THAT NEVER EXISTED ──────────────────────────────────
+  // isInDenmark has been in helpers since the beginning and was applied ONLY to
+  // the browser's own location. Not once to a coordinate that reaches a reader.
+  const abroad = coordProblems({ name: "Ribe", __lat: 52.52, __lon: 13.405 }, "town");
+  is("a coordinate in Berlin is caught", abroad.filter(p => p.kind === "outside-denmark").length, 1);
+  is("and it is critical, because it cannot be right", abroad[0].severity, "critical");
+  ok("the finding quotes the number so it can be checked", /52\.520, 13\.405/.test(abroad[0].detail));
+  // A model that does not know a place answers with a plausible number rather
+  // than nothing, and 0,0 is the classic one.
+  is("null island is caught", coordProblems({ name: "Ribe", __lat: 0, __lon: 0 }, "town").filter(p => p.kind === "outside-denmark").length, 1);
+  // Swapped lat/lon is the other classic, and lands in the sea off Africa.
+  is("swapped lat and lon is caught", coordProblems({ name: "Ribe", __lat: 8.765, __lon: 55.328 }, "town").filter(p => p.kind === "outside-denmark").length, 1);
+
+  // ── AND THE ONE THAT MATTERS MOST: IS IT NEAR WHAT IT CLAIMS ──────
+  // The documented failure was 130 km, a pin in a field near Ringkøbing Fjord.
+  const farRow = { name: "Ribe VikingeCenter", city: "Ribe", __lat: AARHUS.lat, __lon: AARHUS.lon };
+  const far = coordProblems(farRow, "free");
+  is("an entry in Ribe sitting on Aarhus is caught", far.filter(p => p.kind === "far-from-town").length, 1);
+  // Asserted through the BLOCKING list, not the kind. Killing the critical
+  // branch let the softer one fire with the same kind and the same count, so a
+  // kind-only assertion passed against a gate that had stopped gating.
+  is("and it blocks the publish", blockingCoordProblems(farRow, "free").filter(p => p.kind === "far-from-town").length, 1);
+  is("as critical", (far.find(p => p.kind === "far-from-town") || {}).severity, "critical");
+  ok("and it names the town and the distance", /from Ribe/.test(far[0].detail) && /\d+ km/.test(far[0].detail));
+
+  // ── THE HALF THAT DECIDES WHETHER HE KEEPS IT ON ──────────────────
+  // A gate that argues with a correct entry gets switched off, and this one can
+  // block a publish, so every case below is one it must leave alone.
+  is("a correct town coordinate is left alone", coordProblems({ name: "Ribe", __lat: RIBE.lat, __lon: RIBE.lon }, "town"), []);
+  is("an attraction a few km outside its town is fine",
+     coordProblems({ name: "Ribe VikingeCenter", city: "Ribe", __lat: 55.303, __lon: 8.775 }, "free"), []);
+  // Nyhavn is inside Copenhagen and has its own coordinate. townKeyFor prefers
+  // the longest match, so this resolves to Nyhavn, and either answer passes.
+  is("a district inside a city is fine", coordProblems({ name: "Nyhavn", city: "Copenhagen", __lat: 55.680, __lon: 12.590 }, "town"), []);
+  // The silence that keeps it honest: no reference means no opinion. Guessing
+  // that an unknown town is near a known one would invent findings.
+  is("a town we have no coordinate for produces no finding",
+     coordProblems({ name: "Hvidovre Kulturhus", city: "Hvidovre", __lat: 55.657, __lon: 12.475 }, "free"), []);
+  is("and claimedTown says so plainly", claimedTown({ city: "Hvidovre" }), null);
+  // A card-only entry with no coordinate is not an error for most types.
+  is("a missing coordinate on a bar is not a finding", coordProblems({ name: "Toga Vinstue", location: "Indre By, Copenhagen" }, "night"), []);
+  // But a town without one has no map at all.
+  is("a town with no coordinate is flagged", coordProblems({ name: "Ribe" }, "town").filter(p => p.kind === "missing").length, 1);
+  ok("and that is not critical, because it blocks nothing that is wrong",
+     coordProblems({ name: "Ribe" }, "town")[0].severity !== "critical");
+
+  // The middle band exists so a genuinely-outside-town place is mentioned
+  // without being accused. It must never block.
+  const odd = coordProblems({ name: "Somewhere", city: "Ribe", __lat: 55.55, __lon: 8.90 }, "free");
+  ok("a 25km gap is mentioned", odd.some(p => p.kind === "far-from-town"));
+  is("but never blocks", blockingCoordProblems({ name: "Somewhere", city: "Ribe", __lat: 55.55, __lon: 8.90 }, "free"), []);
+  ok("the two thresholds are the right way round", ODD_TOWN_KM < MAX_TOWN_KM);
+  // A threshold that lets the documented failure through would be decoration.
+  ok("the documented 130km failure is past the blocking line", MAX_TOWN_KM < 130);
+
+  // ── THE COPIED EXAMPLE, NOW OWNED BY ONE FILE ─────────────────────
+  // entryAudit declared this pair as two loose constants and coordCheck would
+  // have been a second copy. It imports instead.
+  const copied = coordProblems({ name: "Ribe", __lat: SCHEMA_EXAMPLE.lat, __lon: SCHEMA_EXAMPLE.lon }, "town");
+  is("the copied schema coordinate is still caught", copied.filter(p => p.kind === "schema-example").length, 1);
+  const auditSrc = readFileSync(join(root, "src/utils/entryAudit.js"), "utf8");
+  ok("entryAudit no longer declares its own copy", !/SCHEMA_EXAMPLE_LAT = /.test(auditSrc));
+  ok("it uses the shared rules", /import \{ coordProblems \} from "\.\/coordCheck"/.test(auditSrc));
+
+  // ── PARSING, AND THE Number(x) || null TRAP ───────────────────────
+  is("a stored pair is read", storedCoord({ __lat: 55.7, __lon: 9.5 }), { lat: 55.7, lon: 9.5 });
+  is("a missing pair is null", storedCoord({ name: "X" }), null);
+  is("a non-numeric coordinate is null, not NaN", storedCoord({ __lat: "abc", __lon: 5 }), null);
+  is("and a null payload does not throw", storedCoord(null), null);
+
+  // ── TWO PLACES CANNOT BE ON ONE POINT ─────────────────────────────
+  // Never a coincidence: it means one was copied, or both fell back to the same
+  // town centre and that fallback was stored as though it had been measured.
+  const rows = [
+    { id: 1, type: "free", payload: { name: "A", city: "Ribe", __lat: RIBE.lat, __lon: RIBE.lon } },
+    { id: 2, type: "free", payload: { name: "B", city: "Ribe", __lat: RIBE.lat, __lon: RIBE.lon } },
+    { id: 3, type: "town", payload: { name: "Aarhus", __lat: AARHUS.lat, __lon: AARHUS.lon } },
+  ];
+  is("two entries on one point are found", sharedCoords(rows).length, 1);
+  is("and both are named", (sharedCoords(rows)[0] || []).map(r => r.name), ["A", "B"]);
+  is("a single entry on its own point is not reported", sharedCoords([rows[2]]), []);
+  is("rows with no coordinate are not all 'the same point'",
+     sharedCoords([{ id: 1, payload: { name: "A" } }, { id: 2, payload: { name: "B" } }]), []);
+
+  // ── THE WHOLE PICTURE, SO HE IS NOT BROWSING HIS OWN SITE ─────────
+  const audit = coordAudit([...rows, { id: 4, type: "town", payload: { name: "Ribe", __lat: 52.52, __lon: 13.405 } }]);
+  is("the broken row is listed", audit.critical.length, 1);
+  is("and named", audit.critical[0].name, "Ribe");
+  ok("the sentence separates cannot-be-right from worth-a-look", /cannot be right/.test(describeCoordAudit(audit)));
+  is("a clean set says so", describeCoordAudit(coordAudit([rows[2]])), "Every stored coordinate is inside Denmark and near the town its entry names.");
+
+  // ── AND IT ACTUALLY STOPS A PUBLISH, WHICH NOTHING DID BEFORE ─────
+  // auditEntry has carried coordinate checks since 6 Aug and gated NOTHING: it
+  // is called only from StudioAssistant to build prompt text and clipboard
+  // content, so every check ran after publication, in a chat panel, where a
+  // person had to go and look. This is the first thing that can refuse.
+  is("a Berlin coordinate blocks", blockingCoordProblems({ name: "Ribe", __lat: 52.52, __lon: 13.405 }, "town").length, 1);
+  is("a correct one does not", blockingCoordProblems({ name: "Ribe", __lat: RIBE.lat, __lon: RIBE.lon }, "town"), []);
+  is("and a missing coordinate does not block a publish", blockingCoordProblems({ name: "Ribe" }, "town"), []);
+
+  const appSrc2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code2 = stripNonCode(appSrc2);
+  ok("publishDraft runs the gate", /const coordBlockers = blockingCoordProblems\(shaped, studioType\);/.test(code2));
+  ok("and refuses rather than warning", /if \(coordBlockers\.length > 0\) \{/.test(code2));
+  ok("with a return, so nothing reaches the insert", /setDraftEditError\(`Not published, because the map pin would be wrong\./.test(appSrc2));
+  // ORDER IS THE WHOLE POINT. Gating before the frozen-geo override would judge
+  // the model's guess when a real geocode was about to replace it, and gating
+  // after the insert would be a log line.
+  ok("the gate runs after the real geocode has had its chance",
+     code2.indexOf("shaped.__lat = studioFrozenGeo.lat") < code2.indexOf("const coordBlockers"));
+  // And before the row is written. The insert URL inside publishDraft is the
+  // anchor, not the word "gemlyx_content", which appears all over this file.
+  const insertAt = appSrc2.indexOf("const url = isEditing ? `${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${editingId}`");
+  ok("the insert was found", insertAt > 0);
+  ok("and the gate runs before it", appSrc2.indexOf("const coordBlockers") < insertAt);
+  // An edit is warned about, not blocked: refusing to save a typo fix on a row
+  // whose pin has been wrong for weeks would make the gate the problem.
+  ok("an edit is not blocked", /if \(!isEditing\) \{/.test(code2.slice(code2.indexOf("const coordBlockers"), code2.indexOf("const coordBlockers") + 900)));
+  ok("but it is still said out loud", /Publishing an edit with a coordinate that fails the map check:/.test(appSrc2));
+
+  // Wired to the panel too, because the gate cannot reach a row already stored,
+  // and those are the ones on the live site right now.
+  ok("the Manage panel audits coordinates", /const ca = coordAudit\(manageItems\);/.test(appSrc2));
+  ok("and names the problem on the row", /\{coordProblems\(row\.payload, row\.type\)\.map\(\(p, i\) =>/.test(appSrc2));
+  ok("including which town it is far from", /km from \$\{p\.town\}/.test(appSrc2));
 }
 
 rmSync(dir, { recursive: true, force: true });
