@@ -6022,6 +6022,93 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("including which town it is far from", /km from \$\{p\.town\}/.test(appSrc2));
 }
 
+
+// ── THE ACCOUNT, AND THE GUIDE IT MUST NOT LOSE ─────────────────────
+// Oliver, 10 Aug: "You can get the guide as a non-user. But you won't be able
+// to save it without it. If you want to save it, you need to create an account.
+// And that's why logging in with google should be easy. So if someone clicks
+// 'save this guide' then they need an account. But getting an account will only
+// give you it. It won't keep you updated on future events that can be good for
+// the trip or get help along the way. That's for paying users."
+//
+// THE FAILURE THIS BLOCK EXISTS TO PREVENT. startGoogleSignIn is a FULL PAGE
+// REDIRECT: `window.location.href = ...`. The browser leaves gemlyxtravel.com
+// and comes back on a cold load, so guideModal and every other piece of React
+// state holding that trip is gone. A naive "open the sheet, save on success"
+// therefore asks somebody to sign in to keep a guide and then destroys the
+// guide in the act of signing in, and it does it ONLY on the Google path, which
+// is the path he specifically asked to be the easy one.
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(appSrc);
+  const sheet = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
+  const sheetCode = stripNonCode(sheet);
+
+  // ── THE GATE IS ON SAVING, NOT ON THE GUIDE ───────────────────────
+  // Raw, not stripNonCode: every anchor below is a string literal or sits
+  // beside one, and stripNonCode blanks string CONTENTS. The comments inside
+  // saveCurrentGuide were paraphrased so none of them contains these shapes.
+  const saveFn = appSrc.slice(appSrc.indexOf("const saveCurrentGuide = () =>"), appSrc.indexOf("const deleteSavedGuide"));
+  ok("the save function was found", saveFn.length > 100);
+  ok("saving without an account opens the sheet instead", /if \(!userSession\) \{/.test(saveFn));
+  ok("and says why it opened", /setAuthReason\("guide"\);/.test(saveFn));
+  ok("a signed-in save still just saves", /commitGuideSave\(newGuide\);/.test(saveFn));
+
+  // ── WRITTEN DOWN BEFORE THE BROWSER LEAVES ────────────────────────
+  ok("the trip is stored before the sheet opens",
+     saveFn.indexOf("PENDING_SAVE_KEY") >= 0 &&
+     saveFn.indexOf("PENDING_SAVE_KEY") < saveFn.indexOf("setAuthOpen(true)"));
+  ok("and it is the real guide, not a flag", /localStorage\.setItem\(PENDING_SAVE_KEY, JSON\.stringify\(newGuide\)\)/.test(code));
+  // A full-page redirect is why the success path CANNOT be a callback.
+  ok("Google sign-in really does leave the page", /window\.location\.href = /.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
+
+  // ── AND CLAIMED ON THE WAY BACK IN ────────────────────────────────
+  // Keyed on userSession, not called from handleSignedIn, because
+  // handleSignedIn is never reached at all on the Google path: the session is
+  // restored by captureRedirectSession on a cold load.
+  ok("the claim runs on arriving at a session", /if \(!userSession\) return;[\s\S]{0,500}gemlyx_pending_guide_save/.test(appSrc));
+  ok("a cold load really can restore a session", /captureRedirectSession/.test(appSrc));
+  // Functional update, because the cloud merge lands at the same moment on a
+  // cold load and a stale-closure write would drop whichever arrived second.
+  ok("the claim cannot drop a concurrent cloud merge", /setSavedGuides\(prev => \{/.test(appSrc));
+  ok("it is removed once claimed, so it cannot be added twice", /removeItem\("gemlyx_pending_guide_save"\)/.test(appSrc));
+  ok("and a duplicate is refused even so", /prev\.some\(g => g\.title === pending\.title && g\.savedAt === pending\.savedAt\)/.test(appSrc));
+  // Unparseable or half-written localStorage must not throw on a cold load,
+  // which is the render that decides whether the site works at all.
+  ok("a corrupt pending save is ignored, not thrown", /if \(!pending\?\.title \|\| !Array\.isArray\(pending\.days\)\) return;/.test(appSrc));
+  // Declining is not deferring. Leaving it behind would silently attach the
+  // trip to their account the next time they signed in for anything else.
+  ok("closing the sheet drops the pending guide",
+     /setAuthOpen\(false\); setAuthReason\(null\);[\s\S]{0,220}removeItem\("gemlyx_pending_guide_save"\)/.test(appSrc));
+
+  // ── WHAT THE SHEET PROMISES ───────────────────────────────────────
+  // The old copy said an account "is optional" and "does one thing: keeps your
+  // saved places", which is a different product from the one he described.
+  ok("it no longer calls the account optional", !/An account is optional/.test(sheet));
+  ok("it says the guide itself is free", /free and yours to read right now/.test(sheet));
+  // And the half that is easy to leave out: what a FREE account does not buy.
+  // The same rule his entries follow, turned on his own product.
+  ok("it names what free does not include", /A free account saves your guide and nothing more/.test(sheet));
+  ok("and does not pretend the paid side exists yet", /it is not switched on yet/.test(sheet));
+  ok("the reason reaches the sheet", /reason=\{authReason\}/.test(appSrc));
+  ok("and changes the heading", /"Keep this guide"/.test(sheet));
+
+  // ── AND THE THINGS HE POINTED AT ──────────────────────────────────
+  ok("a new visitor lands on Create, not Sign in", /const \[mode, setMode\] = useState\("up"\)/.test(sheet));
+  // The bottom sheet buried the hero on desktop. One breakpoint, both shapes.
+  ok("desktop centres the dialog", /alignItems: wide \? "center" : "flex-end"/.test(sheet));
+  ok("and rounds all four corners there", /borderRadius: wide \? 20 :/.test(sheet));
+  ok("the breakpoint follows a resize", /window\.addEventListener\("resize", onResize\)/.test(sheet));
+  ok("and removes its listener", /window\.removeEventListener\("resize", onResize\)/.test(sheet));
+  // A hook after an early return is a crash on the render where open flips.
+  ok("the resize hook is declared before the early return",
+     sheet.indexOf('addEventListener("resize"') < sheet.indexOf("if (!open) return null;"));
+  ok("it carries the Gemlyx wordmark now", /GEMLYX/.test(sheet));
+  // Google stays the biggest control: "logging in with google should be easy"
+  // is a requirement about how long the interruption lasts.
+  ok("Google is still offered first", sheet.indexOf("startGoogleSignIn") < sheet.indexOf('type="email"'));
+}
+
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

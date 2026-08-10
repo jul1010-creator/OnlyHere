@@ -4515,6 +4515,9 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // store for signed-out people; an account is a sync layer on top of it.
   const [userSession, setUserSession] = useState(() => getStoredSession());
   const [authOpen, setAuthOpen] = useState(false);
+  // Why the sheet opened, so it can say what THIS person is about to get
+  // instead of describing accounts in the abstract. "guide" is the save gate.
+  const [authReason, setAuthReason] = useState(null);
   const [accountBusy, setAccountBusy] = useState(false);
   const syncedOnceRef = useRef(false);
 
@@ -4577,6 +4580,37 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     setUserSession(session);
     setAuthOpen(false);
   };
+
+  // ── CLAIM THE TRIP THEY SIGNED IN TO KEEP ───────────────────────────
+  // Runs on every arrival at a session, which covers both routes in: the email
+  // form, which never leaves the page, and Google, which does a full redirect
+  // and comes back on a cold load where captureRedirectSession restores the
+  // session before this ever runs. One handler for both, because the difference
+  // between them is exactly the thing that would get forgotten.
+  //
+  // Deliberately keyed on userSession rather than called from handleSignedIn:
+  // handleSignedIn is never reached on the Google path at all.
+  useEffect(() => {
+    if (!userSession) return;
+    let pending = null;
+    try {
+      const raw = localStorage.getItem("gemlyx_pending_guide_save");
+      if (raw) pending = JSON.parse(raw);
+    } catch { /* unparseable is the same as absent */ }
+    if (!pending?.title || !Array.isArray(pending.days)) return;
+    try { localStorage.removeItem("gemlyx_pending_guide_save"); } catch { /* ignore */ }
+    // Not commitGuideSave: that reads savedGuides from this closure, and on the
+    // Google path the cloud merge is landing at the same moment. The functional
+    // update is the only form that cannot drop whichever arrives second.
+    setSavedGuides(prev => {
+      if (prev.some(g => g.title === pending.title && g.savedAt === pending.savedAt)) return prev;
+      const updated = [pending, ...prev].slice(0, 20);
+      try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+    setToast("📖 Saved to your account");
+    setTimeout(() => setToast(null), 2600);
+  }, [userSession]);
 
   const handleSignOut = async () => {
     await authSignOut();
@@ -5758,6 +5792,41 @@ If the conversation only covers a single day or a few stops with no explicit day
     setGuideModal("preview");
   };
 
+  // ── SAVING IS THE MOMENT THE ACCOUNT IS FOR ─────────────────────────
+  // Oliver's model, 10 Aug, stated exactly: "You can get the guide as a
+  // non-user. But you won't be able to save it without it. If you want to save
+  // it, you need to create an account. And that's why logging in with google
+  // should be easy. So if someone clicks 'save this guide' then they need an
+  // account. But getting an account will only give you it. It won't keep you
+  // updated on future events that can be good for the trip or get help along
+  // the way. That's for paying users."
+  //
+  // So the guide itself is free and ungated, and the ask happens once, at the
+  // one moment the person has something they want to keep.
+  //
+  // THE GUIDE IS WRITTEN DOWN BEFORE THE SHEET OPENS, and that is the whole
+  // reason this is more than three lines. Google sign-in is a FULL PAGE
+  // REDIRECT (see startGoogleSignIn in utils/auth.js): the browser leaves
+  // gemlyxtravel.com entirely and comes back on a fresh load, so guideModal,
+  // and every other piece of React state holding this trip, is gone. Asking
+  // someone to sign in to save a guide and then losing that guide in the act of
+  // signing in is the worst possible version of this feature, and it is exactly
+  // what a naive "open the sheet, save on success" would do.
+  //
+  // Instead the trip goes into localStorage as a pending save FIRST, survives
+  // the round trip, and is claimed on the way back in.
+  const PENDING_SAVE_KEY = "gemlyx_pending_guide_save";
+  const guideToSave = () => ({
+    id: Date.now(), title: guideModal.title, days: guideModal.days,
+    savedAt: new Date().toISOString(), arrivalDate: guideModal._arrivalDate || null,
+  });
+  const commitGuideSave = (newGuide) => {
+    const updated = [newGuide, ...savedGuides].slice(0, 20);
+    setSavedGuides(updated);
+    try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
+    setToast("📖 Guide saved — weather included for each day");
+    setTimeout(() => setToast(null), 2200);
+  };
   const saveCurrentGuide = () => {
     if (!guideModal || guideModal === "loading") return;
     const weatherMissing = guideModal.days.some(d => !d.weather);
@@ -5766,12 +5835,14 @@ If the conversation only covers a single day or a few stops with no explicit day
       setTimeout(() => setToast(null), 2600);
       return;
     }
-    const newGuide = { id: Date.now(), title: guideModal.title, days: guideModal.days, savedAt: new Date().toISOString(), arrivalDate: guideModal._arrivalDate || null };
-    const updated = [newGuide, ...savedGuides].slice(0, 20);
-    setSavedGuides(updated);
-    try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
-    setToast("📖 Guide saved — weather included for each day");
-    setTimeout(() => setToast(null), 2200);
+    const newGuide = guideToSave();
+    if (!userSession) {
+      try { localStorage.setItem(PENDING_SAVE_KEY, JSON.stringify(newGuide)); } catch { /* private mode: the sheet still works, the claim just will not fire */ }
+      setAuthReason("guide");
+      setAuthOpen(true);
+      return;
+    }
+    commitGuideSave(newGuide);
   };
 
   const deleteSavedGuide = (id) => {
@@ -11556,7 +11627,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       {/* Sign in / sign up. An account is optional and buys one thing: saves that
           follow you between devices. When already signed in, this same entry
           becomes the account view instead. */}
-      <AuthSheet open={authOpen && !userSession} onClose={() => setAuthOpen(false)} onSignedIn={handleSignedIn}
+      {/* Closing the sheet clears the reason too, or the next opening from
+          somewhere else still says "Keep this guide". And the pending guide is
+          dropped, because a save that was declined is not a save that is
+          waiting: leaving it in localStorage would silently add the trip to
+          their account the next time they signed in for any other reason. */}
+      <AuthSheet open={authOpen && !userSession} onSignedIn={handleSignedIn}
+        onClose={() => {
+          setAuthOpen(false); setAuthReason(null);
+          try { localStorage.removeItem("gemlyx_pending_guide_save"); } catch { /* ignore */ }
+        }}
+        reason={authReason}
         localSaveCount={savedPlaces.length + savedGuides.length} />
 
       {authOpen && userSession && (
