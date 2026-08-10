@@ -9,7 +9,7 @@ import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
-import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
+import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
@@ -4623,12 +4623,16 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // render then falls back to a real distance estimate, or to "Check route",
     // rather than printing "1 min" over a 13 minute ride. Nothing that reaches
     // a traveler should be able to say a journey takes no time.
-    const usable = (data, a, b) => {
+    const usable = (data, a, b, sentAsCoords) => {
       if (!data || data.error) return false;
       if (!(data.durationMinutes >= 1)) return false;
       // And two stops that both collapsed onto one town centre were never
-      // routed, whatever the API said about it.
-      if (a && b && !a.precise && !b.precise && haversineKm(a, b) < 0.05) return false;
+      // routed, whatever the API said about it — but only when that collapsed
+      // pair is what we sent. See collapsedRoute in utils/guideEnrichment.js:
+      // once the endpoints go out as names, Google geocoded the venues itself
+      // and the answer is about them, so discarding it would throw away the
+      // one measurement in this leg that was ever about the right places.
+      if (collapsedRoute(a, b, sentAsCoords)) return false;
       return true;
     };
     await Promise.all(legs.map(async ([origin, dest, how]) => {
@@ -4647,13 +4651,23 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // a same-named place anywhere, including a different branch of a restaurant
       // chain 50km away. Coordinates are unambiguous; include town + ", Denmark"
       // as the next-best disambiguator only when we truly don't have coordinates yet.
+      //
+      // "TRULY DON'T HAVE COORDINATES YET" is what the line below used to get
+      // wrong: it tested the coordinate for truthiness, and a town-centre
+      // fallback is a perfectly truthy object that means exactly "we do not
+      // have this stop's coordinates". directionsEndpoint reads the `precise`
+      // flag the resolver has always returned, so an unplaced stop now goes to
+      // Google as its own name and gets Google's geocoder rather than the
+      // middle of its town.
       const originCoord = resolveFresh(origin), destCoord = resolveFresh(dest);
-      const originParam = originCoord ? `${originCoord.lat},${originCoord.lon}` : `${origin}${townByName[origin] ? `, ${townByName[origin]}` : ""}, Denmark`;
-      const destParam = destCoord ? `${destCoord.lat},${destCoord.lon}` : `${dest}${townByName[dest] ? `, ${townByName[dest]}` : ""}, Denmark`;
+      const originEnd = directionsEndpoint(origin, originCoord, townByName[origin]);
+      const destEnd = directionsEndpoint(dest, destCoord, townByName[dest]);
+      const originParam = originEnd.param, destParam = destEnd.param;
+      const sentAsCoords = originEnd.fromCoords && destEnd.fromCoords;
       try {
         const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode)}`);
         const data = await res.json();
-        if (usable(data, originCoord, destCoord)) {
+        if (usable(data, originCoord, destCoord, sentAsCoords)) {
           // ABSURD-WALK GUARD (Oliver's screenshots: a leg shipped as "1 hour
           // 15 min on foot", another as "27 mins on foot", against his rule
           // "no walking more than 15-20 minutes"). Our own coordinates can be
@@ -4673,9 +4687,9 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
                 console.warn(`Leg ${origin} → ${dest}: Google says ${data.durationMinutes} min on foot, over the ${WALK_MAX_MINUTES} min walking cap — re-routed as ${upgrade}.`);
                 found[`${origin}|${dest}|${upgrade}`] = { ...udata, modeUsed: upgrade };
                 found[key] = { ...udata, modeUsed: upgrade }; // also under the walking key, so an already-built guide's render still finds it
-              } else if (usable(data, originCoord, destCoord)) found[key] = data;
-            } catch { if (usable(data, originCoord, destCoord)) found[key] = data; }
-          } else if (usable(data, originCoord, destCoord)) found[key] = data;
+              } else if (usable(data, originCoord, destCoord, sentAsCoords)) found[key] = data;
+            } catch { if (usable(data, originCoord, destCoord, sentAsCoords)) found[key] = data; }
+          } else if (usable(data, originCoord, destCoord, sentAsCoords)) found[key] = data;
         }
         else {
           // WALKING RETRY before declaring "no route" (Oliver's Ærøskøbing →

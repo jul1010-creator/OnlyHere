@@ -7,7 +7,7 @@ import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { lookupRealPlace, placeCoords, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
+import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { askClaude } from "../utils/aiClient";
@@ -496,11 +496,40 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
 
   const tripGeo = guide._geo || {};
   const allStops = days.flatMap((d, di) => (d.stops || []).map(st => ({ ...st, _day: d.day || di + 1 })));
+  // ── A PIN THAT IS A TOWN CENTRE MUST NOT LOOK LIKE A VENUE ──────
+  // Oliver, 10 Aug 2026: "coordination is off", and "if we screw
+  // coordinations, it might hurt our guide too". He is right, and this is the
+  // sharpest version of it.
+  //
+  // resolveStopCoordsDetailed has always returned a `precise` flag saying
+  // whether a coordinate is the real place or the crude town-centre fallback.
+  // Two things in this codebase read it, both distance checks. Every PIN on
+  // every map used resolveStopCoords, which computes that flag and throws it
+  // away, so a stop that Nominatim could not find was plotted at the middle of
+  // its town and labelled "Day 3 · Samsø Island Distillery".
+  //
+  // That is not a small inaccuracy, it is the map asserting something nobody
+  // checked, in the one place a reader trusts completely. A pin is a claim
+  // about where a thing is.
+  //
+  // Now it is kept, and an approximate pin says so: drawn differently, named
+  // for the town it was approximated to, and counted under the map beside the
+  // stops that could not be placed at all. Same rule as that line, which this
+  // file already got right: never a silently shorter or a silently vaguer map.
   const tripPoints = allStops.map(st => {
-    const c = resolveStopCoords(st.name, tripGeo);
+    const c = resolveStopCoordsDetailed(st.name, tripGeo);
+    if (!c) return null;
     // Labelled with the day so one pin in a fourteen stop route still says
     // WHEN as well as where.
-    return c ? { name: `Day ${st._day} · ${st.name}`, ...c } : null;
+    const town = c.precise ? null : townKeyFor(st.name);
+    return {
+      name: `Day ${st._day} · ${st.name}${c.precise ? "" : town ? ` (somewhere in ${town})` : " (approximate)"}`,
+      stopName: st.name,
+      approx: !c.precise,
+      town,
+      lat: c.lat,
+      lon: c.lon,
+    };
   });
   // ── A STOP WITH NO COORDINATES IS DROPPED, SILENTLY ────────────
   // The other half of the missing-Odense report, and the more important half.
@@ -514,6 +543,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   // above a map showing two is the thing that makes a founder distrust the
   // whole page.
   const tripUnplaced = allStops.filter((st, i) => !tripPoints[i]).map(st => st.name);
+  // Placed, but only to the middle of a town. Named rather than counted, since
+  // "one stop is approximate" without saying which one is not actionable.
+  const tripApprox = tripPoints.filter(Boolean).filter(p => p.approx).map(p => p.stopName);
   const tripPlaced = tripPoints.filter(Boolean);
   // Consecutive duplicates are the same place twice (an overnight stop that is
   // also the next morning's start). One pin, not two stacked on each other.
@@ -731,6 +763,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             {tripUnplaced.length > 0 && (
               <div style={{ fontSize: 11, color: "#FFB347", marginTop: 5, lineHeight: 1.55 }}>
                 {tripUnplaced.length === 1 ? "One stop is not on this map" : `${tripUnplaced.length} stops are not on this map`}, because we could not place {tripUnplaced.length === 1 ? "it" : "them"} on a coordinate: {tripUnplaced.join(", ")}. {tripUnplaced.length === 1 ? "It is" : "They are"} still in the day-by-day below.
+              </div>
+            )}
+            {tripApprox.length > 0 && (
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+                {tripApprox.length === 1 ? "One pin is approximate" : `${tripApprox.length} pins are approximate`}: {tripApprox.join(", ")}. We could not place {tripApprox.length === 1 ? "it" : "them"} exactly, so {tripApprox.length === 1 ? "it sits" : "they sit"} at the middle of the town rather than at the door. The dashed outline on the map marks {tripApprox.length === 1 ? "it" : "them"}.
               </div>
             )}
           </div>

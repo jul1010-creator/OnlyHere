@@ -153,11 +153,20 @@ export const GuideRouteMap = ({ points, legs }) => {
       const isFirst = i === 0, isLast = i === points.length - 1;
       const size = isFirst || isLast ? 26 : 22;
       const bg = isFirst ? "#4CAF50" : isLast ? C.accent : C.gold;
+      // ── AN APPROXIMATE PIN LOOKS APPROXIMATE ────────────────────
+      // A stop that could not be geocoded is plotted at the middle of its
+      // town. Drawn identically to a real one, that pin is the map asserting
+      // something nobody checked, in the place a reader trusts most. A dashed
+      // ring and a hollow centre say "near here" at a glance, without needing
+      // the note under the map to have been read. See tripPoints in
+      // pages/GuidePage.jsx for where the flag comes from.
+      const approx = !!p.approx;
       const icon = L.divIcon({
         className: "gemlyx-stop-pin",
-        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};color:#0A0F1E;`
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;`
+            + `background:${approx ? "rgba(10,15,30,.72)" : bg};color:${approx ? bg : "#0A0F1E"};`
             + `font:700 ${isFirst || isLast ? 12 : 11}px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;`
-            + `border:2px solid #0A0F1E;box-shadow:0 2px 6px rgba(0,0,0,.55);">${i + 1}</div>`,
+            + `border:2px ${approx ? "dashed" : "solid"} ${approx ? bg : "#0A0F1E"};box-shadow:0 2px 6px rgba(0,0,0,.55);">${i + 1}</div>`,
         iconSize: [size, size],
         iconAnchor: [size / 2, size / 2],
       });

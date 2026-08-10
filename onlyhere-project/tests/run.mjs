@@ -70,6 +70,7 @@ writeFileSync(entry, `
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { lookupRealPlace, placeCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
@@ -5557,6 +5558,127 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   towns.length = towns.findIndex(t => t.id === 9001);
   freeEntrance.length = freeEntrance.findIndex(t => t.id === 9004);
+}
+
+
+// ── A PIN IS A CLAIM ABOUT WHERE A THING IS ─────────────────────────
+// resolveStopCoordsDetailed has always returned a `precise` flag saying whether
+// a coordinate is the real place or the crude town-centre fallback. Exactly two
+// things in the codebase read it, both distance checks. Every PIN on every map
+// used resolveStopCoords, which computes that flag and discards it.
+//
+// So a stop Nominatim could not find was plotted at the middle of its town and
+// labelled "Day 3 · Samsø Island Distillery", drawn identically to a real one.
+// That is the map asserting something nobody checked, in the one place a reader
+// trusts completely, and it is the "coordination is off" report.
+{
+  const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const map = readFileSync(join(root, "src/components/GuideRouteMap.jsx"), "utf8");
+  const code = stripNonCode(gp);
+
+  ok("pins are built from the precision-aware resolver", /resolveStopCoordsDetailed\(st\.name, tripGeo\)/.test(code));
+  ok("and the flag survives onto the point", /approx: !c\.precise/.test(code));
+  ok("an approximate pin names the town it was approximated to", /townKeyFor\(st\.name\)/.test(code));
+  ok("and says so in its own label", /somewhere in \$\{town\}/.test(gp));
+
+  // Named, not counted. "One stop is approximate" without saying which one is
+  // not something a person can act on.
+  ok("the approximate stops are collected", /const tripApprox = tripPoints\.filter\(Boolean\)\.filter\(p => p\.approx\)\.map\(p => p\.stopName\)/.test(code));
+  ok("and named under the map", /\{tripApprox\.join\(", "\)\}/.test(gp));
+  ok("beside the stops that could not be placed at all", gp.indexOf("tripUnplaced.length > 0") < gp.indexOf("tripApprox.length > 0"));
+
+  // Visible without reading the note, because most people will not read it.
+  ok("the map draws an approximate pin differently", /const approx = !!p\.approx;/.test(stripNonCode(map)));
+  ok("with a dashed ring", /approx \? "dashed" : "solid"/.test(map));
+  ok("and a hollow centre", /background:\$\{approx \? "rgba\(10,15,30,\.72\)" : bg\}/.test(map));
+
+  // The honest line that was already right stays right.
+  ok("unplaced stops are still named", /could not place/.test(gp));
+}
+
+
+// ── THE COORDINATE WE PAY GOOGLE TO ROUTE FROM ──────────────────────
+// Third pass on Oliver's "coordination is off", and the one that reaches the
+// guide, which is the half he was worried about: "if we screw coordinations, it
+// might hurt our guide too."
+//
+// fetchExactDurations picked the Directions endpoint with `originCoord ? pair :
+// name`. A town-centre fallback is a perfectly truthy object whose whole
+// meaning is "we do NOT have this stop's coordinates" — resolveStopCoordsPrecise
+// says so in `precise`, and the ternary never looked. So an unplaced stop was
+// sent to Google as the middle of its town.
+//
+// And it compounds, because api/directions.js deliberately does NOT append
+// ", Denmark" to a coordinate pair (appending it used to corrupt real pairs
+// into fuzzy text). So the one thing that could still have rescued the leg —
+// Google's own geocoder, which knows Danish venue names far better than our
+// substring matcher — never saw the name. The leg came back measured,
+// confident, and about the wrong point, while the "Open in Maps" link beside it
+// is built from NAMES and therefore answers differently. That is the chip
+// disagreeing with the link.
+{
+  const { directionsEndpoint, collapsedRoute } = M;
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(appSrc);
+
+  // ── WHICH INPUT GOOGLE GETS ───────────────────────────────────────
+  const precise = { lat: 55.303, lon: 8.775, precise: true };
+  const townCentre = { lat: 55.330, lon: 8.766, precise: false };
+
+  is("a real coordinate goes as a coordinate", directionsEndpoint("Ribe VikingeCenter", precise, "Ribe").param, "55.303,8.775");
+  ok("and is marked as one, because the collapse rule depends on it", directionsEndpoint("Ribe VikingeCenter", precise, "Ribe").fromCoords === true);
+
+  // THE ONE THAT WAS WRONG. Truthiness said yes; the flag says no.
+  is("a town centre goes as the stop's own name", directionsEndpoint("Ribe VikingeCenter", townCentre, "Ribe").param, "Ribe VikingeCenter, Ribe, Denmark");
+  ok("and says it is not a coordinate", directionsEndpoint("Ribe VikingeCenter", townCentre, "Ribe").fromCoords === false);
+  // Which is the same answer as having no coordinate at all, and must be,
+  // because it means the same thing.
+  is("no coordinate is the same case", directionsEndpoint("Ribe VikingeCenter", null, "Ribe").param, "Ribe VikingeCenter, Ribe, Denmark");
+  is("and an unknown town just leaves the country hint", directionsEndpoint("Ribe VikingeCenter", null, "").param, "Ribe VikingeCenter, Denmark");
+  // A `precise: true` carrying a broken number is not a coordinate either.
+  // Number(undefined) is NaN and "NaN,NaN" is a string Google will happily
+  // fail on, one leg at a time, with no error we would ever see.
+  is("a precise flag over a missing number is not sent as a pair", directionsEndpoint("X", { precise: true }, "Ribe").param, "X, Ribe, Denmark");
+
+  // ── AND THE HALF THAT MAKES IT A FIX RATHER THAN HALF OF ONE ──────
+  // The collapse guard threw away any answer whose two ends both landed on one
+  // town centre. Right while those collapsed coordinates were what we sent.
+  // Wrong the moment we send names, because then Google geocoded two DISTINCT
+  // venues and its answer is about them — so the old guard would discard the
+  // only measurement in the leg that was ever about the right places.
+  const a = { lat: 55.25, lon: 11.94, precise: false };
+  const b = { lat: 55.25, lon: 11.94, precise: false };
+  ok("two collapsed coordinates, sent as coordinates, were never routed", collapsedRoute(a, b, true));
+  ok("the same pair sent as names is a real answer about real venues", !collapsedRoute(a, b, false));
+  ok("one precise end is not a collapse", !collapsedRoute({ ...a, precise: true }, b, true));
+  ok("and two town centres far apart are not a collapse", !collapsedRoute(a, { lat: 56.15, lon: 10.20, precise: false }, true));
+  ok("a missing end is not a collapse", !collapsedRoute(a, null, true));
+
+  // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ─────────────────
+  // Written-and-never-called is the signature bug here, so assert the call
+  // sites rather than only the functions.
+  ok("the fetch builds its endpoints through it", /const originEnd = directionsEndpoint\(origin, originCoord, townByName\[origin\]\);/.test(code));
+  ok("both ends", /const destEnd = directionsEndpoint\(dest, destCoord, townByName\[dest\]\);/.test(code));
+  ok("nothing still tests the coordinate for truthiness", !/originCoord \? `\$\{originCoord\.lat\}/.test(appSrc));
+  ok("only a pair of coordinates counts as having sent coordinates", /const sentAsCoords = originEnd\.fromCoords && destEnd\.fromCoords;/.test(code));
+  ok("the collapse rule is the shared one", /if \(collapsedRoute\(a, b, sentAsCoords\)\) return false;/.test(code));
+  ok("and no second copy of it survives in App.jsx", !/!a\.precise && !b\.precise && haversineKm\(a, b\) < 0\.05/.test(code));
+  // Four call sites, and a fourth argument is exactly the kind of thing that
+  // gets threaded through three of them.
+  is("every usable() call passes what was sent", (code.match(/usable\(data, originCoord, destCoord, sentAsCoords\)/g) || []).length,
+     (code.match(/usable\(data, originCoord, destCoord/g) || []).length);
+  ok("and there are four of them", (code.match(/usable\(data, originCoord, destCoord, sentAsCoords\)/g) || []).length === 4);
+
+  // The retry and the walking rescue must reuse the same params, or a leg
+  // measured one way is retried about a different place.
+  ok("the walk-cap retry reuses the same endpoints", (appSrc.match(/origin=\$\{encodeURIComponent\(originParam\)\}&destination=\$\{encodeURIComponent\(destParam\)\}/g) || []).length === 3);
+
+  // api/directions.js is the reason the name matters: it refuses, correctly, to
+  // hand a coordinate pair the country hint. If that ever changed, sending the
+  // town centre would stop being silent and start being merely wrong, and this
+  // whole fix would read as unnecessary.
+  const dir = readFileSync(join(root, "api/directions.js"), "utf8");
+  ok("a coordinate pair still gets no country hint", /isCoordPair\(origin\) \? origin : `\$\{origin\}, Denmark`/.test(dir));
 }
 
 rmSync(dir, { recursive: true, force: true });

@@ -198,6 +198,42 @@ export const legDistanceKm = (originName, destName, geo = {}) => {
   return km;
 };
 
+// ── WHAT GOOGLE SHOULD BE ASKED ABOUT ───────────────────────────────
+// Third reader of the `precise` flag, and the one that costs money.
+//
+// A coordinate is only worth sending as a coordinate when it is ABOUT THIS
+// STOP. resolveStopCoordsDetailed answers with a town centre when nothing
+// placed the stop, and says so in `precise` — but the Directions fetch tested
+// the coordinate for truthiness, so "somewhere in Samsø" was shipped to Google
+// as a bare "55.87,10.60". api/directions.js then correctly refuses to append
+// ", Denmark" to a coordinate pair (a real fix: the country hint used to
+// corrupt genuine pairs), so the venue name never reached Google at all. The
+// leg came back measured, confident and about the wrong point, and disagreed
+// with the "Open in Maps" link on the same page, which is deliberately built
+// from names.
+//
+// The name is the better input in that case, not a worse one. Google's
+// geocoder is far better at Danish venue names than our substring matcher, so
+// either it finds the venue and the leg is genuinely measured, or it finds
+// nothing and the leg falls back to an estimate that is labelled as one. A
+// town centre guarantees a confident wrong answer instead of an honest miss.
+export const directionsEndpoint = (name, coord, town = "") => {
+  if (coord && coord.precise && Number.isFinite(Number(coord.lat)) && Number.isFinite(Number(coord.lon))) {
+    return { param: `${coord.lat},${coord.lon}`, fromCoords: true };
+  }
+  const t = String(town || "").trim();
+  return { param: `${name}${t ? `, ${t}` : ""}, Denmark`, fromCoords: false };
+};
+
+// The companion rule, and the half that makes the above a fix rather than
+// half of one. The Directions fetch threw away any answer whose two ends had
+// both collapsed onto the same town centre — correct while those collapsed
+// coordinates were what we sent, and wrong the moment we started sending
+// names, because then Google geocoded two distinct venues and the answer is
+// about them, not about our collapse. So the rule has to know what was sent.
+export const collapsedRoute = (a, b, sentAsCoords) =>
+  !!sentAsCoords && !!a && !!b && !a.precise && !b.precise && kmBetween(a, b) < 0.05;
+
 // Oliver's explicit rule: "No walking more than 15-20 minutes." At a real
 // 4.5 km/h walking pace 20 minutes is about 1.5 km, so that is the hard cap
 // on any leg planned, routed, or displayed as a walk.
