@@ -12,7 +12,17 @@ export const APP_VERSION = "v2.87 — AI plans become saveable guides with real 
 // So it is written down ONCE, here, and tests/run.mjs asserts that index.html's
 // own og:image agrees with it. Change the domain and the test fails loudly
 // rather than the cards failing quietly.
-export const SITE_ORIGIN = "https://only-here-three.vercel.app";
+// UPDATED 10 Aug 2026 to the real domain. It had stayed on the vercel.app
+// address after gemlyxtravel.com went live, and that is not cosmetic:
+//
+//   1. Every share card, on every guide, showed only-here-three.vercel.app as
+//      the site it came from. The brand was on the page and nowhere near the
+//      link somebody actually saw in WhatsApp.
+//   2. index.html's canonical tag pointed there too, which tells Google the
+//      vercel.app copy is the real one and the new domain is a duplicate of it.
+//      That is the single most effective way to stop a new domain ranking, and
+//      it is silent: nothing breaks, the site simply does not appear.
+export const SITE_ORIGIN = "https://www.gemlyxtravel.com";
 
 // Booking.com affiliate ID (the "aid" number from the Booking.com Partner
 // Programme). EMPTY until Oliver's affiliate account is approved — the moment

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, useNavigate, useParams } from "react-router-dom";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
 import { denmarkFacts } from "./data/denmarkFacts";
@@ -14,6 +14,8 @@ import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGat
 import { stayProblems } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
+import { placeSlug, townPath, findBySlug, COUNTRY } from "./utils/placeUrl";
+import { startRun, endRun, summarise, averageFor, describe, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -62,7 +64,7 @@ import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liv
 import { journeyParts, journeyBlock } from "./utils/journey";
 import { correctEntry } from "./utils/correction";
 import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
-import { otherNameFor } from "./utils/danishNames";
+import { otherNameFor, variantsOf, containsName, samePlaceName } from "./utils/danishNames";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
@@ -368,6 +370,9 @@ const researchRules = (type, where) => {
 // piece that needed main.jsx to actually finish (adding <BrowserRouter> there).
 function GemlyxApp() {
   const navigate = useNavigate();
+  // Set when this render came from /denmark/<town>. Read by the effect near the
+  // hash deep-link handler further down, which owns opening it.
+  const { townSlug } = useParams();
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
   // Belt-and-suspenders for hero video autoplay — React's `muted` JSX prop doesn't
   // always set the real DOM `.muted` property before the browser's autoplay-eligibility
@@ -1369,8 +1374,37 @@ function GemlyxApp() {
     // Sites he named, if any. Put FIRST in the prompt, because a source
     // instruction buried after four rules gets weighted like a suggestion.
     const named = checkSites.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+    // ── FIRST, NOT ONLY ─────────────────────────────────────────────
+    // Oliver, 10 Aug 2026: "When I write a source in for Perplexity to go
+    // through, it shouldn't only go through that.. it should also go through
+    // others."
+    //
+    // He is describing the behaviour, and the old wording produced it. It told
+    // the model to open the named sites ahead of anything else, and then closed
+    // by telling it not to quietly substitute a search result when a named
+    // source came up empty. The intent of that last clause was "do not
+    // substitute SILENTLY". What a model reads is: do not substitute. So naming
+    // one site turned a fact-check into a single-site lookup, which is the
+    // opposite of what naming a good source is for.
+    //
+    // (Deliberately paraphrased rather than quoted. A comment repeating the old
+    // sentence would sit in this file forever, defeating the assertion that
+    // checks the sentence is gone, and that assertion is the only thing
+    // stopping it being written back.)
+    //
+    // sourceRulesBlock in utils/sourcePolicy.js had already got this right for
+    // the drafting side, in almost these words: "THIS IS AN ADDITION, NOT A
+    // RESTRICTION. Search everything else exactly as you normally would." Two
+    // instructions about the same thing, and only one of them was correct. This
+    // is now the same rule, said the same way.
     const namedRule = named.length
-      ? `OPEN THESE SPECIFIC SOURCES FIRST, before any general search, and say what each one said: ${named.join(", ")}. If one of them answers something the draft left uncertain, that answer is what the entry should use. If a named source does not load or does not cover it, say so explicitly rather than quietly falling back to a search result.\n\n`
+      ? `OPEN THESE SPECIFIC SOURCES FIRST, and say what each one said: ${named.join(", ")}. These are pages the founder has read and vouches for, so start there.
+
+THIS IS AN ADDITION, NOT A RESTRICTION. After reading them, search everything else exactly as you normally would, and use whatever genuinely answers the question. A named source is a good place to start looking, never the only place you are allowed to look.
+
+If one of them answers something the draft left uncertain, that answer is what the entry should use. If a named source does not load, or does not cover this place at all, that is ordinary: say so, then keep looking elsewhere and answer from what you find. Never report that something could not be confirmed just because the named sources did not have it.
+
+Say which answer came from which source, so a fact from a vouched page and a fact from a general search result can be told apart.\n\n`
       : "";
     const prompt = `${namedRule}Fact-check this draft travel listing for a Danish travel guide. Using real, current web search, verify: (1) the dates are correct and not already past, (2) any prices are real and in the right currency (DKK for Denmark), (3) any named venue, stage, or room actually exists under that exact name, (4) any historical or founding claim is accurate — specifically, check whether the draft conflates two different historical events or dates (e.g. an earlier institution, building, or monastery being founded at a place is NOT the same fact as the town/place itself later gaining an official status such as market-town/købstad rights, and a draft that blends these into one date is wrong even if each individual date is real). ONLY report things that are actually WRONG, unverifiable, or missing — do not restate or confirm anything that's already correct, that just adds noise. If everything checks out, say so in one short sentence and nothing else. For each real problem found, give the correct real fact where you have it. Be concise — bullet points, not an essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(studioType, studioDraft)}\n\nDraft: ${JSON.stringify(studioDraft)}`;
     const result = await askPerplexity(prompt);
@@ -1508,6 +1542,11 @@ function GemlyxApp() {
     // A background item reading it would inject another entry's town and dates
     // into its own research.
     const hint = queued ? null : scanHint;
+    // A Studio draft is the other thing worth pricing, and it is the one that
+    // scales with HIS work rather than with visitors. Both are measured, so the
+    // two can be compared instead of guessed at.
+    installFetchMeter();
+    startRun("draft");
     setStudioLoading(true); studioLoadingRef.current = true; ui(setStudioResult, null); ui(setStudioError, null); ui(setStudioIdentityWarning, null); ui(setStudioInventedWarning, null);
     ui(setVerifyResults, null); ui(setVerifyError, null); ui(setGoogleCheckResult, null); ui(setGoogleCheckError, null); ui(setGooglePrecheckRan, false);
     ui(setStudioInstagramUrl, ""); ui(setStudioFrozenGeo, null);
@@ -1588,6 +1627,8 @@ function GemlyxApp() {
       const allQueries = [...cfg.queries, ...plannedQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
       let context = "";
       let candidateUrls = [];
+      // url -> the title and snippet it arrived with. See the note where it is filled.
+      const urlSaidWhat = new Map();
       // RESEARCH MEMORY (Oliver: "make the AI learn... if some very important
       // articles are found, then the AI will use those for later research"):
       // every finished draft saves its research (top source URLs + raw notes)
@@ -1667,6 +1708,29 @@ function GemlyxApp() {
         if (!sData.__ok || sData.error) throw new Error(`Web research failed (Tavily): ${sData.error || `request failed (${sData.__status})`}`);
         context = (context + " " + (sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 6).join(" ")).trim();
         candidateUrls.push(...(sData.results || []).map(r => r.url).filter(Boolean));
+        // ── AND WHAT EACH URL SAID IT WAS ABOUT ─────────────────────
+        // Oliver, 10 Aug 2026, looking at a draft for Skovgårde Bysmedie, a
+        // village smithy, whose recorded sources were Spøttrup Borg, Danmarks
+        // Borgcenter, Frederiksborg Castle, the Copenhagen Card, the National
+        // Museum and a three week rail itinerary: "it keeps going through these
+        // sources."
+        //
+        // None of them mention the smithy. They are what a search engine
+        // returns when a place is too small to have been written about: the
+        // nearest famous things and some general Denmark pages. Recording them
+        // as this entry's sources is a claim that the research read them and
+        // they said something, and nothing about that is true.
+        //
+        // It also compounds, which is the part that costs money. These are
+        // stored in gemlyx_research, reused on the next redraft, AND pre-fill
+        // the "sites to open first" box, so a wrong source is not a one-off
+        // wrong line, it is a permanent instruction to keep going back to a
+        // castle for facts about a smithy.
+        //
+        // The title and snippet already come back with every result and were
+        // being thrown away here. Kept now, so the filter below can ask the
+        // only question that matters: does this page mention the place at all.
+        (sData.results || []).forEach(r => { if (r?.url) urlSaidWhat.set(r.url, `${r.title || ""} ${r.snippet || ""}`); });
       }
 
       // ── ONE QUERY WHOSE ONLY JOB IS THE JOURNEY ─────────────────
@@ -1764,7 +1828,41 @@ function GemlyxApp() {
         // snippets from the general pass say where it is. See placeMightMatch:
         // deciding where to LOOK is a different question from deciding what to
         // believe, and only the first one can afford to be generous.
-        const searches = directSourceSearches(founderSources, sType, { name, text: context });
+        // ── WHAT THIS DRAFT KNOWS ABOUT WHERE IT IS ─────────────────
+        // Oliver, 10 Aug 2026: "So now VisitCopenhagen.dk won't talk about
+        // Aarhus?" Correct, and that is the fix. But the same rule cut
+        // something real on the way past, and this is that.
+        //
+        // A source scoped to Copenhagen applies to Copenhagen, to anywhere
+        // INSIDE it, and to anywhere that uses it as a base: Dragør is twelve
+        // km out with dayTripFrom Copenhagen, and VisitCopenhagen genuinely
+        // covers it. placeMatches has always known that rule. It just never got
+        // the fields to apply it, because a draft was handed nothing but a name
+        // and the research text, and the text was doing the job badly: it
+        // unlocked Copenhagen for Dragør, which is right, AND for Aarhus, which
+        // is not, because both texts say the word Copenhagen.
+        //
+        // A REDRAFT ALREADY KNOWS. The published row is sitting in manageItems
+        // with its own town, partOf, dayTripFrom and region on it. Handing
+        // those over makes the scoping precise rather than merely safe: Dragør
+        // gets VisitCopenhagen back because it genuinely is a Copenhagen trip,
+        // and Aarhus still does not, because it is not.
+        //
+        // A brand new town, drafted from nothing, still has only its name, and
+        // that is honest: nothing knows its relationships yet. It gets the
+        // general web search like everything else, and today's source filter
+        // will still record a VisitCopenhagen page as a source if that page
+        // names the place.
+        const existingRow = (manageItems || []).find(r => r?.type === sType && samePlaceName(r?.payload?.name, name));
+        const known = existingRow?.payload || null;
+        const searches = directSourceSearches(founderSources, sType, {
+          name,
+          text: context,
+          town: known?.town || known?.city || known?.location || "",
+          partOf: known?.partOf || "",
+          dayTripFrom: known?.dayTripFrom || "",
+          part: known ? partOfCountry(known) : "",
+        });
         for (const { domain, domains, query } of searches) {
           try {
             // The domain AND its ticket-shop subdomains, in one query: a Danish
@@ -2478,14 +2576,35 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // and the deep-scan ranking, and a tourist board is not a venue's own
       // site. Here they belong, because this list answers "what did the
       // research actually open", and it is the only place he can check.
+      // ── A SOURCE IS A PAGE THAT MENTIONS THE PLACE ────────────────
+      // Founder-vouched pages and the entry's own official site are kept
+      // whatever their snippet says: he chose those domains, and an official
+      // site is about the place by definition. Everything else has to have
+      // named the place in its title or snippet to be called a source for it.
+      //
+      // containsName, not a substring test, for the same reason as everywhere
+      // else: a source scoped to Als must not match "also". See danishNames.js.
+      const mentionsThisPlace = (u) => {
+        if (founderUrls.includes(u) || (placesWebsite && u === placesWebsite)) return true;
+        const said = urlSaidWhat.get(u);
+        // No snippet at all means we never saw what the page says, and we do not
+        // conclude a fact from a failed lookup. It is not a source.
+        if (!said) return false;
+        return variantsOf(name, { includeSights: true }).some(v => containsName(said, v));
+      };
       t.__sources = [...new Set([...founderUrls, ...candidateUrls])].filter(u => {
         try {
           const h = new URL(u).hostname.replace(/^www\./, "");
           if (AGG.test(h) || seenHost.has(h)) return false;
+          if (!mentionsThisPlace(u)) return false;
           seenHost.add(h);
           return true;
         } catch { return false; }
       }).slice(0, 8);
+      // AND AN EMPTY LIST IS ALLOWED. A place too small to have been written
+      // about should show no sources rather than eight about somewhere else.
+      // HowWeKnow renders this under a heading promising how we know, so a
+      // wrong list there is worse than no list.
 
       if (typeof t.website !== "undefined" && !String(t.website || "").trim()) {
         const forced = placesWebsite || officialSiteFromCandidates(candidateUrls, name);
@@ -2663,6 +2782,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       draftOutcome = { ok: false, error: detail || "Couldn't draft that" };
     }
     setStudioStage(null);
+    endRun();
     setStudioLoading(false);
     studioLoadingRef.current = false;
     return draftOutcome;
@@ -4772,6 +4892,15 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // of step with what is on screen. If the entry was opened cold from a shared
   // link there is nothing to go back to, so it just closes and tidies the URL.
   const closeEntry = () => {
+    // Closing a town somebody landed on from a search result must put them
+    // INSIDE the app, not back out to whatever they were looking at before it.
+    // history.back() from a cold arrival leaves the site entirely, which turns
+    // every organic visitor into a bounce.
+    if (typeof window !== "undefined" && window.location.pathname.startsWith(`/${COUNTRY}/`)) {
+      closeAllEntries();
+      navigate("/");
+      return;
+    }
     if (typeof window !== "undefined" && window.history.state?.gxEntry) { window.history.back(); return; }
     closeAllEntries();
     if (typeof window !== "undefined" && window.location.hash.startsWith("#/")) {
@@ -4811,6 +4940,24 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // It was never needed: this effect only WRITES entered, it never reads it,
     // and deepLinkDone already guards against running twice.
   }, [liveContentVersion]);
+
+  // ── ARRIVING ON A TOWN PAGE FROM SEARCH ─────────────────────────────
+  // Same shape as the hash handler above and for the same reason: the towns
+  // array is filled from Supabase AFTER first paint, so a cold visit to
+  // /denmark/aeroe finds nothing on the first pass. Re-running on
+  // liveContentVersion is what makes a shared or indexed link work rather than
+  // silently showing the front page, which is the failure this app keeps
+  // producing and is especially bad here, where the visitor came from a search
+  // result and has no idea what they were promised.
+  const townRouteDone = useRef(false);
+  useEffect(() => {
+    if (!townSlug || townRouteDone.current) return;
+    const found = findBySlug(towns, townSlug);
+    if (!found) return;              // still loading, try again on the next version
+    townRouteDone.current = true;
+    setEntered(true);                // straight to the place, not the front door
+    setTownDetail(found);
+  }, [townSlug, liveContentVersion]);
 
   // Looks up a stop name against everything real Gemlyx already knows, so the guide
   // shows real price/hours/type instead of just repeating the AI's own prose.
@@ -4869,6 +5016,14 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       return;
     }
     setGuideModal("loading");
+    // ── WHAT THIS BUILD COSTS ───────────────────────────────────────
+    // Oliver, 10 Aug 2026: "it also costs me ALOT of money if I just have 3
+    // users." He has a meeting with a CEO whose entire discipline is cost per
+    // order, and the first question will be what one guide costs. This is a
+    // guide build, so it is a run. See utils/apiCost.js for why the total it
+    // reports is allowed to say "at least".
+    installFetchMeter();
+    startRun("guide");
     // A new build always starts with the wait in front of the traveler and no
     // stale "ready" banner from the previous one still on screen.
     setGuideMinimized(false);
@@ -5331,8 +5486,13 @@ If the conversation only covers a single day or a few stops with no explicit day
       // planner's raw skeleton ONLY when this conversation is genuinely the
       // test brief (see randomTestProfileRef's comment for the guard's why).
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
+      endRun();
       setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
+      // A build that failed halfway still spent everything it spent up to that
+      // point, and a meter that only counts successes reports a cost per guide
+      // lower than the cost per attempt, which is the number that matters.
+      endRun();
       setGuideModal(null);
       // A failure has to reach a traveler who minimized the wait too. Clearing
       // this is what lets the error line below be the thing they see, rather
@@ -7350,6 +7510,46 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       )}
                     </div>
 
+                    {/* ── WHAT IT COSTS ─────────────────────────────────────
+                        Oliver, 10 Aug 2026: "it also costs me ALOT of money if
+                        I just have 3 users." This is the number, measured off
+                        the real API responses rather than estimated. It says
+                        "at least" whenever any call in the run has no price
+                        set, because a floor presented as a total is exactly the
+                        wrong kind of confident. Fill in the rates at the top of
+                        utils/apiCost.js from his own provider dashboards and
+                        the word disappears on its own. */}
+                    {(() => {
+                      const runs = recentRuns();
+                      if (!runs.length) return null;
+                      const g = averageFor("guide"), d = averageFor("draft");
+                      const row = (label, a) => a && (
+                        <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11, color: C.light, marginTop: 3 }}>
+                          <span style={{ color: C.muted }}>{label} <span style={{ opacity: 0.65 }}>({a.runs} run{a.runs === 1 ? "" : "s"})</span></span>
+                          <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                            {a.complete ? "" : "at least "}${a.avgMeasured.toFixed(4)}
+                            <span style={{ color: C.muted, fontWeight: 400 }}> · {Math.round(a.avgCalls)} calls · {Math.round(a.avgTokens).toLocaleString()} tok</span>
+                          </span>
+                        </div>
+                      );
+                      const anyIncomplete = (g && !g.complete) || (d && !d.complete);
+                      return (
+                        <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 11px", marginBottom: 10 }}>
+                          <div style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase" }}>Cost per run, this session</div>
+                          {row("A guide build", g)}
+                          {row("A Studio draft", d)}
+                          {anyIncomplete && (
+                            <div style={{ fontSize: 10, color: C.muted, marginTop: 6, lineHeight: 1.45 }}>
+                              Some calls have no price set, so these are floors and not totals. Put your real rates in <span style={{ color: C.light }}>src/utils/apiCost.js</span> and they become exact.
+                            </div>
+                          )}
+                          <div style={{ fontSize: 10, color: C.muted, marginTop: 6, lineHeight: 1.45 }}>
+                            {describe(summarise(runs[0]))} on the last one.
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                       {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
@@ -8357,11 +8557,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               before, so a re-check goes back to the same pages
                               rather than starting from a fresh search. */}
                           <input value={checkSites} onChange={e => setCheckSites(e.target.value)}
-                            placeholder="Sites to open first, e.g. oldirishpub.dk tripadvisor.com"
+                            placeholder="Sites to open first (it still searches everything else too)"
                             style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 11, color: C.text, outline: "none", fontFamily: "monospace", marginBottom: 6, boxSizing: "border-box" }} />
                           <button onClick={googleAICheck} disabled={googleCheckLoading}
                             style={{ width: "100%", background: "none", border: "1px solid #4285F466", color: "#8AB4F8", borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                            {googleCheckLoading ? "Asking Perplexity…" : `◆ Ask Perplexity to fact-check this${checkSites.trim() ? " (using your sources)" : ""}`}
+                            {googleCheckLoading ? "Asking Perplexity…" : `◆ Ask Perplexity to fact-check this${checkSites.trim() ? " (your sources first)" : ""}`}
                           </button>
                         </div>
 
@@ -11690,6 +11890,18 @@ export default function Gemlyx() {
   return (
     <Routes>
       <Route path="/" element={<GemlyxApp />} />
+      {/* ── A REAL ADDRESS FOR EVERY TOWN ────────────────────────────
+          Seventy-odd researched entries rendered at no URL at all, so none of
+          them could be found, linked or shared as itself. The country segment
+          is on the PAGES and not on the root: that is where the many URLs are,
+          so that is where a later migration would hurt, while the root is one
+          URL and keeps the authority a homepage gets for free.
+
+          Same GemlyxApp component, not a parallel page. The town opens over the
+          app the way it always has, so somebody arriving from a search result
+          can close it and be inside the real thing rather than at a dead end. */}
+      <Route path={`/${COUNTRY}`} element={<GemlyxApp />} />
+      <Route path={`/${COUNTRY}/:townSlug`} element={<GemlyxApp />} />
       <Route path="/guide/new" element={<GuidePage />} />
       <Route path="/guide/:guideId" element={<GuidePage />} />
     </Routes>

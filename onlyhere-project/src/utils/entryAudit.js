@@ -19,6 +19,7 @@
 // "this one looks bad".
 
 import { scanForAITells, fillerWordCounts } from "./helpers";
+import { claimConflicts, implausibleWalks } from "./claimCheck";
 
 // The coordinate that was printed in the town prompt's own JSON schema as an
 // example, which drafts copied verbatim (PASS 45). Any entry still carrying it
@@ -246,6 +247,20 @@ export const costContradictions = (payload) => {
 // Severity is about what a traveler LOSES, not about how untidy the entry is.
 // "critical" means someone could waste a day or money on it. "high" means a
 // visibly wrong or missing fact. "low" means it reads badly but misleads nobody.
+// ── DOES THE ENTRY AGREE WITH ITSELF ABOUT DISTANCE AND TIME ────────
+// Added 10 Aug 2026 after Oliver passed on a pipeline review built around an
+// entry claiming a 42 minute walk where the real walk is about six.
+//
+// The app has checked spatial claims since the guide pipeline was built. It
+// checks them on LEGS, structured pairs of stops with coordinates. This one was
+// in a sentence, and every check in this file scanned prose for dashes, filler,
+// unqualified rankings, bare years and crossed costs, and for no claim about
+// time or distance at all. The one number in the paragraph that arithmetic
+// could settle was the one number nothing looked at.
+//
+// See utils/claimCheck.js. It needs no API and no coordinates: when a sentence
+// states both a distance and a duration for the same journey, those two numbers
+// are a claim about speed, and speed is arithmetic.
 export const auditEntry = (row) => {
   const p = row?.payload || {};
   const type = row?.type || "";
@@ -326,6 +341,19 @@ export const auditEntry = (row) => {
   // ── medium: thin or unfinished ────────────────────────────────
   const body = Array.isArray(p.blogBody) ? p.blogBody : [];
   const words = all.split(/\s+/).filter(Boolean).length;
+  // Same family as the crossed-costs check above: the entry disagreeing with
+  // itself, where nobody has to look anything up to know one side is wrong.
+  claimConflicts(all).forEach(c => {
+    add("critical", "distance and time",
+      `"${c.sentence.slice(0, 120)}" ${c.direction}: ${Math.round(c.statedKm * 1000)} m ${c.mode === "walking" ? "on foot" : `by ${c.mode}`} is about ${c.expectedMinutes} minutes, not ${Math.round(c.statedMinutes)}. One of the two numbers is wrong and a reader cannot tell which.`);
+  });
+  // One number, no distance beside it, and past any figure a Dane would call a
+  // walk. Not proof of an error, which is why it is not critical.
+  implausibleWalks(all).forEach(w => {
+    add("medium", "distance and time",
+      `Calls ${Math.round(w.minutes)} minutes a walk: "${w.sentence.slice(0, 120)}". Past about twenty minutes people name a bus instead, so this is worth checking against a map.`);
+  });
+
   if (body.length === 0) add("medium", "body", "No long-form body at all, so the page is just a card with no article behind it.");
   else if (words < 180) add("medium", "body", `Only about ${words} words in total, which is thin for a full entry.`);
   if (!p.photo) add("medium", "photo", "No hero photo, so it shows as a monogram plate in every list.");

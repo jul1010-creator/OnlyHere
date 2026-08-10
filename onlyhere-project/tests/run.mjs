@@ -71,6 +71,10 @@ writeFileSync(entry, `
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
+  export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
+  export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
+  export { towns as TOWNS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/towns.js"))};
+  export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
@@ -1357,7 +1361,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("one rewrite, the SPA catch-all", vercel.rewrites.map(r => r.source), ["/(.*)"]);
 
   const mw = readFileSync(join(root, "middleware.js"), "utf8");
-  ok("middleware only runs on guide urls", /matcher:\s*"\/guide\/:path\*"/.test(mw));
+  // The matcher is a LIST now: guides, town pages and the sitemap. Everything
+  // else on the site still never pays for this to run, which is the point the
+  // original single-entry assertion was making.
+  ok("middleware runs on guide urls", /"\/guide\/:path\*"/.test(mw));
+  ok("and on town pages", /`\/\$\{COUNTRY\}\/:path\*`/.test(mw));
+  ok("and on the sitemap", /"\/sitemap\.xml"/.test(mw));
+  // A bare catch-all here would put an edge invocation in front of every asset
+  // on the site, which is the cost this matcher exists to avoid.
+  ok("but not on everything", !/matcher:\s*"\/\(\.\*\)"/.test(mw));
   ok("and falls through to the app rather than erroring", /catch\s*{\s*[\s\S]{0,400}?return next\(\);/.test(mw));
 }
 
@@ -3277,7 +3289,43 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app5 = readFileSync(join(root, "src/App.jsx"), "utf8");
   // The wiring, asserted on the file, because the whole defect was a function
   // that existed and was never called from the half that matters.
-  ok("the draft pipeline actually runs them", /directSourceSearches\(founderSources, sType, \{ name, text: context \}\)/.test(app5));
+  ok("the draft pipeline actually runs them", /directSourceSearches\(founderSources, sType, \{\s*\n\s*name,\s*\n\s*text: context,/.test(app5));
+  // ── AND HANDS OVER WHAT THE DRAFT KNOWS ABOUT WHERE IT IS ─────────
+  // "So now VisitCopenhagen.dk won't talk about Aarhus?" Correct, and that is
+  // the fix. The same rule also cut Dragør off from VisitCopenhagen, and Dragør
+  // is a Copenhagen day trip: placeMatches has always applied a town source to
+  // anywhere using that town as a base, it just never received the fields to do
+  // it with. A redraft has them sitting on the published row.
+  ok("a redraft looks up the row it is redrafting", /const existingRow = \(manageItems \|\| \[\]\)\.find/.test(app5));
+  ok("matched by real place name, not a string compare", /samePlaceName\(r\?\.payload\?\.name, name\)/.test(app5));
+  ok("and passes the base-town relationship", /dayTripFrom: known\?\.dayTripFrom \|\| ""/.test(app5));
+  ok("and containment", /partOf: known\?\.partOf \|\| ""/.test(app5));
+  ok("and the part of the country, computed not typed", /part: known \? partOfCountry\(known\) : ""/.test(app5));
+
+  // The behaviour, on the three cases that matter.
+  const scoped = [
+    { id: 1, domain: "visitdenmark.dk", applies_to: "", applies_place: "", enabled: true },
+    { id: 2, domain: "visitcopenhagen.com", applies_to: "", applies_place: "Copenhagen", enabled: true },
+    { id: 3, domain: "visitaarhus.com", applies_to: "", applies_place: "Aarhus", enabled: true },
+  ];
+  const searched = (ctx) => M.directSourceSearches(scoped, "town", ctx).map(x => x.domain).sort();
+  is("an Aarhus draft does not pay to ask VisitCopenhagen about Aarhus",
+     searched({ name: "Aarhus", text: "Aarhus is three hours from Copenhagen by train." }),
+     ["visitaarhus.com", "visitdenmark.dk"]);
+  is("a Copenhagen draft still gets its own source",
+     searched({ name: "Copenhagen", text: "" }), ["visitcopenhagen.com", "visitdenmark.dk"]);
+  is("and a Copenhagen day trip gets it back, because it genuinely is one",
+     searched({ name: "Dragør", dayTripFrom: "Copenhagen", text: "" }),
+     ["visitcopenhagen.com", "visitdenmark.dk"]);
+  is("as does somewhere inside Copenhagen",
+     searched({ name: "Nyhavn", partOf: "Copenhagen", text: "" }),
+     ["visitcopenhagen.com", "visitdenmark.dk"]);
+  // A brand new town knows nothing about itself yet, and that is honest: it
+  // gets the general search, and today's source filter still records a
+  // VisitCopenhagen page if that page names the place.
+  is("a town drafted from nothing claims no relationship it does not have",
+     searched({ name: "Dragør", text: "Dragør is a fishing town 12 km from Copenhagen." }),
+     ["visitdenmark.dk"]);
   ok("through the endpoint's domain restriction", /&domains=\$\{encodeURIComponent\(\(domains \|\| \[domain\]\)\.join\(","\)\)\}/.test(app5));
   // /api/search has accepted this parameter the whole time and nothing used it.
   const api = readFileSync(join(root, "api/search.js"), "utf8");
@@ -4448,9 +4496,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // below tests a comment about a different bug entirely. This is the trap the
   // handoff names, met in the wild.
   ok("the failure path was found", appSrc.includes('console.warn("Guide build failed:'));
-  const build = appSrc.slice(appSrc.indexOf('setGuideModal("loading");'));
-  ok("a new build clears the minimized flag", /setGuideMinimized\(false\);/.test(build.slice(0, 400)));
-  ok("and clears any old ready banner", /setGuideReady\(false\);/.test(build.slice(0, 400)));
+  // Bounded by the NEXT REAL STATEMENT rather than by a byte count. The first
+  // version sliced 400 characters and broke the moment a comment was inserted
+  // between the anchors, which is a test failing for a reason that has nothing
+  // to do with what it guards.
+  const buildStart = appSrc.indexOf('setGuideModal("loading");');
+  const buildEnd = appSrc.indexOf("setGuideBuildStage({", buildStart);
+  ok("the build setup block has an end", buildEnd > buildStart);
+  const build = appSrc.slice(buildStart, buildEnd);
+  ok("a new build clears the minimized flag", /setGuideMinimized\(false\);/.test(build));
+  ok("and clears any old ready banner", /setGuideReady\(false\);/.test(build));
   // A failure has to reach someone who stepped away, or the bar just stops.
   const failAt = appSrc.indexOf('console.warn("Guide build failed:');
   // From the catch that owns it, not a fixed byte window: the comment between
@@ -4886,6 +4941,506 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // already by being written by hand in two places.
   ok("the essentials entry no longer implies a rule about who may use it", /it is the checking out that catches people/.test(ess));
   ok("and says plainly that the app is open to visitors", /The Rejsekort app itself is open to visitors/.test(ess));
+}
+
+
+// ── THE COST METER ──────────────────────────────────────────────────
+// Oliver, 10 Aug 2026: "it also costs me ALOT of money if I just have 3 users."
+// He is meeting a CEO who runs pick and pack, so the first question will be
+// what one guide costs, and "a lot" does not get useful advice back.
+//
+// The danger this whole file is built against is that a cost meter is the
+// easiest possible place to break the project's first rule. Add up the calls
+// that happen to report usage, call the result the cost, quietly omit the rest,
+// and you produce a number that is too low, looks precise, and is the one he
+// says out loud in a meeting.
+{
+  const { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, recentRuns, __reset } = M;
+  __reset();
+
+  // ── NOTHING IS COUNTED OUTSIDE A RUN ──────────────────────────────
+  recordModelCall("claude", "claude-sonnet-5", { input_tokens: 100, output_tokens: 100 });
+  is("a call with no run open is not counted anywhere", recentRuns().length, 0);
+
+  // ── THE Number(null) TRAP, IN THE FILE WHERE IT WOULD HURT MOST ───
+  // Number(null) is 0 and 0 is a perfectly finite token count, so a response
+  // with no usage block would record as a real, free call and pull the average
+  // DOWN. Named in the handoff, and this is where it would cost him a wrong
+  // number in front of his CEO.
+  startRun("guide");
+  recordModelCall("claude", "claude-sonnet-5", undefined);
+  recordModelCall("claude", "claude-sonnet-5", {});
+  recordModelCall("claude", "claude-sonnet-5", null);
+  let s1 = summarise(endRun());
+  is("three calls with no usage are three calls", s1.calls, 3);
+  is("and none of them is free", s1.unpriced, 3);
+  is("no tokens are invented for them", s1.tokensIn + s1.tokensOut, 0);
+  ok("so the run cannot claim to be complete", !s1.complete);
+  is("and it reports nothing it cannot stand behind", s1.measured, 0);
+
+  // ── THE ASSERTION WITH THE TEETH ──────────────────────────────────
+  // Everything above passes just as happily against `?? 0`, because a model
+  // with no RATE is unpriced either way, so the trap hides behind the missing
+  // price. Verified by mutation: swapping NaN for 0 left the block green.
+  //
+  // The case that separates them is a model that IS priced, answering with no
+  // usage block. Correct: we do not know what it cost, so the run is a floor.
+  // With `?? 0`: zero tokens is a finite number, the call costs exactly nothing,
+  // the run reports COMPLETE, and the average per guide silently falls every
+  // time a response comes back without usage. That is the number he reads out
+  // in the meeting.
+  __reset();
+  const rateBefore = { ...PRICES.models["claude-sonnet-5"] };
+  PRICES.models["claude-sonnet-5"] = { in: 3, out: 15 };
+  startRun("guide");
+  recordModelCall("claude", "claude-sonnet-5", { input_tokens: 1e6, output_tokens: 0 });  // real
+  recordModelCall("claude", "claude-sonnet-5", undefined);                                 // no usage
+  const mixed = summarise(endRun());
+  is("the call that reported usage is costed", Number(mixed.measured.toFixed(6)), 3);
+  is("the one that did not is unpriced, not free", mixed.unpriced, 1);
+  ok("so the run is a floor, not a total", !mixed.complete);
+  is("and no phantom tokens were added for it", mixed.tokensIn, 1e6);
+  PRICES.models["claude-sonnet-5"] = rateBefore;
+
+  // ── AN UNPRICED MODEL IS NOT A FREE MODEL ─────────────────────────
+  // Real usage, no rate set. The tokens are a fact and the money is not, so
+  // the tokens are kept and the run stays incomplete.
+  __reset();
+  startRun("guide");
+  recordModelCall("claude", "claude-sonnet-5", { input_tokens: 5000, output_tokens: 900 });
+  let s2 = summarise(endRun());
+  is("real token counts are kept", [s2.tokensIn, s2.tokensOut], [5000, 900]);
+  is("with no price set, nothing is claimed", s2.measured, 0);
+  ok("and the run says so", !s2.complete);
+
+  // ── WITH A RATE, IT IS ARITHMETIC ─────────────────────────────────
+  __reset();
+  const restore = { ...PRICES.models["claude-sonnet-5"] };
+  PRICES.models["claude-sonnet-5"] = { in: 3, out: 15 };
+  startRun("guide");
+  recordModelCall("claude", "claude-sonnet-5", { input_tokens: 1e6, output_tokens: 1e6 });
+  let s3 = summarise(endRun());
+  is("a million in and a million out costs in plus out", Number(s3.measured.toFixed(6)), 18);
+  ok("and now the run is complete", s3.complete);
+  // Both usage shapes are real. OpenAI's chat endpoint returns prompt_tokens
+  // and completion_tokens, Anthropic returns input_tokens and output_tokens.
+  __reset();
+  startRun("guide");
+  recordModelCall("openai", "claude-sonnet-5", { prompt_tokens: 1e6, completion_tokens: 0 });
+  is("the other usage shape is read too", Number(summarise(endRun()).measured.toFixed(6)), 3);
+  PRICES.models["claude-sonnet-5"] = restore;
+
+  // ── A PER-REQUEST SERVICE IS COUNTED, NOT GUESSED ─────────────────
+  __reset();
+  startRun("guide");
+  recordRequestCall("geocode");       // known free
+  recordRequestCall("geocode");
+  recordRequestCall("directions");    // no rate set
+  let s4 = summarise(endRun());
+  is("free calls are still calls", s4.calls, 3);
+  is("a known-free service costs nothing and says so", s4.byService.geocode.unpriced, 0);
+  is("an unpriced service is not treated as free", s4.byService.directions.unpriced, 1);
+  ok("so the run is incomplete", !s4.complete);
+  // A service nobody has ever priced must not default to zero.
+  __reset();
+  startRun("guide");
+  recordRequestCall("somethingNobodyHasPriced");
+  ok("an unknown service is unpriced, not free", !summarise(endRun()).complete);
+
+  // ── THE SENTENCE HE WILL READ ─────────────────────────────────────
+  // This is the one that reaches a human, so it is the one that must never
+  // round the doubt away.
+  __reset();
+  startRun("guide");
+  recordRequestCall("geocode");
+  recordRequestCall("directions");
+  const partial = summarise(endRun());
+  ok("a partial total says at least", /^at least /.test(describe(partial)));
+  ok("and says how many calls are unpriced", /1 of them have no price set/.test(describe(partial)));
+  ok("and that the real figure is higher", /the real figure is higher/.test(describe(partial)));
+  __reset();
+  startRun("guide");
+  recordRequestCall("geocode");
+  const whole = summarise(endRun());
+  ok("a complete total does not hedge", !/at least/.test(describe(whole)));
+
+  // ── AN AVERAGE NEVER MIXES A FLOOR WITH A TOTAL ───────────────────
+  // The figure most likely to be said out loud in the meeting.
+  __reset();
+  startRun("guide"); recordRequestCall("geocode"); endRun();              // complete
+  startRun("guide"); recordRequestCall("directions"); endRun();           // not
+  const avg = averageFor("guide");
+  is("both runs are in the average", avg.runs, 2);
+  is("and it knows only one of them was complete", avg.completeRuns, 1);
+  ok("so the average is not presented as complete", !avg.complete);
+  is("a label with no runs averages to nothing", averageFor("draft"), null);
+
+  // ── A BUILD THAT THREW STILL SPENT THE MONEY ──────────────────────
+  // Cost per successful guide is not the number that matters. Cost per attempt
+  // is, because a failed attempt is charged in full.
+  __reset();
+  startRun("guide");
+  recordRequestCall("geocode");
+  startRun("guide");                    // a second start with one still open
+  is("an abandoned run is kept, not discarded", recentRuns().length, 1);
+  is("and the abandoned one kept its calls", summarise(recentRuns()[0]).calls, 1);
+  endRun();
+
+  // ── AND IT IS WIRED TO THE REAL PIPELINE ──────────────────────────
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const ai = readFileSync(join(root, "src/utils/aiClient.js"), "utf8");
+  const cost = readFileSync(join(root, "src/utils/apiCost.js"), "utf8");
+
+  ok("a guide build is a run", /startRun\("guide"\)/.test(app));
+  ok("a Studio draft is a run", /startRun\("draft"\)/.test(app));
+  // Ended on BOTH paths, or a failed build leaves the meter open and its calls
+  // land in whatever runs next.
+  ok("and both the success and failure paths close it", (app.match(/endRun\(\)/g) || []).length >= 3);
+  ok("every model call is recorded with its real usage", (ai.match(/recordModelCall\(/g) || []).length === 3);
+  ok("including the one that failed, since it was still charged", /recordModelCall\("claude", model, data\?\.usage\);\n      if \(!res\.ok\)/.test(ai));
+
+  // The interceptor is the reason this cannot rot. Recording twenty call sites
+  // by hand is the same shape as the content-type registration problem, and a
+  // missed one is invisible because its only symptom is a total that is low.
+  ok("per-request calls are metered in one place", /window\.fetch = \(input, init\) =>/.test(cost));
+  ok("and the model endpoints are skipped there to avoid double counting", /MODEL_ENDPOINTS\.has\(m\[1\]\)/.test(cost));
+  ok("metering can never break a request", /catch \{ \/\* metering must never be able to break a request \*\//.test(cost));
+  ok("the readout says at least when it must", /a\.complete \? "" : "at least "/.test(app));
+  __reset();
+}
+
+
+// ── THE SITE KNOWS ITS OWN ADDRESS ──────────────────────────────────
+// gemlyxtravel.com went live and SITE_ORIGIN stayed on the vercel.app address.
+// Nothing broke, which is the problem: every share card named the wrong site,
+// and index.html's canonical tag told Google the vercel.app copy was the real
+// one and the new domain a duplicate of it. That is the most effective way
+// there is to stop a new domain ranking, and it is completely silent.
+{
+  const html = readFileSync(join(root, "index.html"), "utf8");
+  const { SITE_ORIGIN } = M;
+  ok("the origin is the real domain", /^https:\/\/(www\.)?gemlyxtravel\.com$/.test(SITE_ORIGIN));
+  ok("it is https, since a registration form on http is a dead end", SITE_ORIGIN.startsWith("https://"));
+  ok("and carries no trailing slash, which would double up every built URL", !SITE_ORIGIN.endsWith("/"));
+  // The old address must be gone from the shell entirely. One left behind in
+  // the canonical tag is enough to do the whole damage on its own.
+  ok("no preview URL is left anywhere in the shell", !/only-here-three/.test(html));
+  const canonical = (html.match(/<link rel="canonical" href="([^"]+)"/) || [])[1];
+  ok("the canonical tag was found", !!canonical);
+  ok("and points at the real site", !!canonical && canonical.startsWith(SITE_ORIGIN));
+  const ogUrl = (html.match(/<meta property="og:url" content="([^"]+)"/) || [])[1];
+  ok("og:url was found", !!ogUrl);
+  ok("and agrees with it", !!ogUrl && ogUrl.startsWith(SITE_ORIGIN));
+}
+
+
+// ── A REAL ADDRESS FOR EVERY TOWN ───────────────────────────────────
+// Oliver, 10 Aug 2026, once gemlyxtravel.com went live: town pages for search.
+//
+// Seventy-odd researched, fact-checked entries rendered at no URL at all. Not
+// findable, not linkable, not shareable as themselves. With paid acquisition
+// off the table until the cost per guide works, search is the only channel
+// available, and this was the part that did not exist.
+{
+  const { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY } = M;
+
+  // Danish letters fold the way they fold everywhere else in this codebase.
+  is("ae for the ligature", placeSlug("Ærø"), "aero");
+  is("o for the slashed o", placeSlug("Møn"), "mon");
+  is("aa for the ring", placeSlug("Ålborg"), "aalborg");
+  is("and the other spelling lands the same way", placeSlug("Aalborg"), "aalborg");
+
+  // THE REASON THIS IS NOT studioContent's slugify. That one strips every
+  // non-alphanumeric, so a two-word town becomes one long word. It is correct
+  // for naming photo FILES, and those files exist under those names, so it
+  // cannot change. A URL wants the words kept apart.
+  is("words stay apart in a url", placeSlug("Nykøbing Falster"), "nykobing-falster");
+  is("punctuation becomes one separator, not several", placeSlug("Nørresundby (Aalborg)"), "norresundby-aalborg");
+  is("no leading or trailing separator", placeSlug("  Ribe  "), "ribe");
+  is("nothing in, nothing out", placeSlug(""), "");
+  is("and null does not become the string null", placeSlug(null), "");
+
+  is("the path carries the country", townPath("Ærø"), `/${COUNTRY}/aero`);
+
+  // ── LOOKUP IS BY COMPARING, NEVER BY REVERSING ────────────────────
+  // Folding loses information: an o in a slug could have been o or ø, so there
+  // is no single name to turn a slug back into. A guess is a 404 on a link
+  // somebody already shared.
+  const towns = [{ name: "Ærø" }, { name: "Ribe" }, { name: "Nykøbing Falster" }];
+  is("a folded slug finds the real name", findBySlug(towns, "aero").name, "Ærø");
+  is("and so does the name itself", findBySlug(towns, "Ærø").name, "Ærø");
+  is("casing from a copy-paste still resolves", findBySlug(towns, "AERO").name, "Ærø");
+  is("a two-word town resolves", findBySlug(towns, "nykobing-falster").name, "Nykøbing Falster");
+  is("something that is not there is null, not the first row", findBySlug(towns, "sverige"), null);
+  is("an empty slug matches nothing", findBySlug(towns, ""), null);
+
+  // ── TWO PLACES CANNOT SHARE AN ADDRESS ────────────────────────────
+  // A collision does not throw. It does something quieter and worse: findBySlug
+  // returns whichever row comes first, so one real place is permanently
+  // unreachable and its URL shows a different town. In a sitemap that is a
+  // duplicate-content problem on top.
+  is("a clean list collides with nothing", slugCollisions(towns), []);
+  const clash = slugCollisions([{ name: "Nykøbing" }, { name: "Nykobing" }, { name: "Ribe" }]);
+  is("but two spellings of one slug are caught", clash.map(c => c.slug), ["nykobing"]);
+  is("and it says which names clashed", clash[0].names, ["Nykøbing", "Nykobing"]);
+
+  // AND THE HONEST LIMIT OF THIS CHECK. Every town moved to Supabase on 5 Aug
+  // ("remove all your own examples of places. So we only keep the ones from
+  // Supabase"), so the hardcoded array is empty and there is no real list to
+  // walk at build time. This suite cannot answer whether the 71 PUBLISHED
+  // towns collide, and pretending otherwise with a green tick over an empty
+  // array is exactly the toothless shape this project keeps finding.
+  //
+  // So it asserts the emptiness it is actually looking at, and the live check
+  // belongs in Studio beside duplicateNames in utils/placeEdit.js, where the
+  // published rows are in memory. Denmark has several Nykøbings, so this will
+  // matter one day.
+  is("the hardcoded list is empty, so it cannot collide", slugCollisions(M.TOWNS_FOR_TEST || []), []);
+  is("and an empty list is handled rather than thrown on", slugCollisions([]), []);
+  is("as is a list of nameless rows", slugCollisions([{}, { name: "" }]), []);
+
+  // ── THE SITEMAP ───────────────────────────────────────────────────
+  // Without this, town pages achieve nothing: the Towns page renders each place
+  // as a <button onClick>, so there is no href anywhere for a crawler to
+  // follow. The URLs existing is not the same as the URLs being findable.
+  const xml = sitemapXml("https://www.gemlyxtravel.com", ["Ærø", "Ribe", "Ærø"]);
+  ok("it is a sitemap", /^<\?xml version="1\.0" encoding="UTF-8"\?>/.test(xml));
+  ok("with the right namespace, or nothing reads it", xml.includes('xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'));
+  ok("the country page is in it", xml.includes(`<loc>https://www.gemlyxtravel.com/${COUNTRY}</loc>`));
+  ok("and each town", xml.includes(`<loc>https://www.gemlyxtravel.com/${COUNTRY}/aero</loc>`));
+  is("a name listed twice appears once", (xml.match(/\/aero</g) || []).length, 1);
+  is("and an empty name adds no empty url", (sitemapXml("https://x.dk", ["", null]).match(/<loc>/g) || []).length, 1);
+  // Deliberately no lastmod. A sitemap claiming every page changed today, every
+  // day, is a claim nothing checked, and search engines discount a feed for it.
+  ok("nothing claims a modification date it cannot support", !/lastmod/.test(xml));
+
+  // ── AND IT IS ALL WIRED ───────────────────────────────────────────
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const mw = readFileSync(join(root, "middleware.js"), "utf8");
+
+  ok("there is a route for a town page", /path=\{`\/\$\{COUNTRY\}\/:townSlug`\}/.test(app));
+  ok("and one for the country page", /path=\{`\/\$\{COUNTRY\}`\}/.test(app));
+  // The root stays the root. Redirecting it would move the homepage authority
+  // to a subpath to solve a second-country problem that does not exist yet.
+  ok("the root still serves the app", /<Route path="\/" element=\{<GemlyxApp \/>\} \/>/.test(app));
+  ok("and is not redirected away", !/<Navigate to="\/denmark"/.test(app));
+
+  // THE RETRY IS THE WHOLE THING. towns is filled from Supabase after first
+  // paint, so a cold visit from a search result finds nothing on the first pass
+  // and would silently show the front page instead of what was promised.
+  ok("a cold arrival retries as live content lands", /\}, \[townSlug, liveContentVersion\]\)/.test(app));
+  ok("closing a town page puts them inside the app", /window\.location\.pathname\.startsWith\(`\/\$\{COUNTRY\}\/`\)/.test(app));
+
+  ok("the middleware gives a town page its own card", /const townMatch = new RegExp/.test(mw));
+  ok("built from the entry's own words", /town\.desc \|\| town\.highlight/.test(mw));
+  ok("with an absolute image, since a crawler fetches it", /\$\{SITE_ORIGIN\}\$\{town\.photo \|\| "\/og-default\.jpg"\}/.test(mw));
+  ok("a town it cannot find falls through to the site card", /if \(!town\) return next\(\);/.test(mw));
+  // The sitemap must be served BEFORE the crawler gate, or a user-agent
+  // allowlist hides it from every bot not on the list, which is most of them.
+  ok("the sitemap is served ahead of the crawler gate",
+     mw.indexOf('url.pathname === "/sitemap.xml"') < mw.indexOf('if (!isCrawler(request.headers.get("user-agent"))) return next();'));
+  ok("and lists the published towns, not only the hardcoded ones", /type=eq\.town&published=eq\.true/.test(mw));
+  // api/ is at the Hobby plan's twelve-function limit, which is why this lives
+  // in edge middleware at all.
+  is("api/ is still within its limit", readdirSync(join(root, "api")).filter(f => f.endsWith(".js")).length <= 12, true);
+}
+
+
+// ── A SOURCE IS A PAGE THAT MENTIONS THE PLACE ──────────────────────
+// Oliver, 10 Aug 2026, looking at the draft for Skovgårde Bysmedie, a village
+// smithy, whose recorded sources were Spøttrup Borg, Danmarks Borgcenter,
+// Frederiksborg Castle, the Copenhagen Card, the National Museum, VisitNordic's
+// Denmark page and a three week rail itinerary: "it keeps going through these
+// sources."
+//
+// Not one of them mentions the smithy. They are what a search engine returns
+// when a place is too small to have been written about: the nearest famous
+// things, and some general Denmark pages. __sources took every URL Tavily
+// returned, so all of them were recorded as sources for the entry, which claims
+// the research read them and that they said something about it.
+//
+// It compounds, and that is the part that costs money. These are stored in
+// gemlyx_research, reused on the next redraft, and they PRE-FILL the "sites to
+// open first" box, so a wrong source is not one wrong line. It is a standing
+// instruction to keep going back to a castle for facts about a smithy.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(app);
+  const { containsName, variantsOf } = M;
+
+  // The title and snippet come back with every result and were being dropped.
+  ok("what each url said about itself is kept", /urlSaidWhat\.set\(r\.url/.test(code));
+  ok("and it is a real map, not a comment", /const urlSaidWhat = new Map\(\);/.test(code));
+  ok("sources are filtered by whether the page names the place", /if \(!mentionsThisPlace\(u\)\) return false;/.test(code));
+  ok("using the shared word-boundary check", /containsName\(said, v\)/.test(code));
+  ok("across the place's real name variants", /variantsOf\(name, \{ includeSights: true \}\)/.test(code));
+  // A page we never saw the text of is not a source. Never conclude a fact from
+  // a failed lookup, which is this project's own standing rule.
+  ok("a url with no snippet is not a source", /if \(!said\) return false;/.test(code));
+  // The two exemptions, both principled: he chose those domains, and an
+  // official site is about the place by definition.
+  ok("founder-vouched domains are exempt", /founderUrls\.includes\(u\)/.test(code));
+  ok("and so is the official site", /placesWebsite && u === placesWebsite/.test(code));
+
+  // ── THE BEHAVIOUR, ON HIS ACTUAL CASE ─────────────────────────────
+  // Reproducing the filter's rule against the real snippets from his screenshot.
+  const name = "Skovgårde Bysmedie";
+  const mentions = (said) => variantsOf(name, { includeSights: true }).some(v => containsName(said, v));
+  ok("a castle page is not a source for a smithy", !mentions("Spøttrup Borg is a medieval castle in West Jutland"));
+  ok("nor is a museum exhibition", !mentions("Kings, War and Christ, an exhibition at the National Museum"));
+  ok("nor a general Denmark page", !mentions("Denmark travel guide, the best of Nordic travel"));
+  ok("nor a three week rail itinerary", !mentions("A three week Denmark itinerary by train"));
+  // And the page that IS about it survives, which is the half that proves the
+  // filter is not simply throwing everything away.
+  ok("a page that names the place is a source", mentions("Skovgårde Bysmedie, the old village smithy, opening hours"));
+  ok("in either spelling of the Danish letters", mentions("Skovgaarde Bysmedie holder aabent om sommeren"));
+  ok("and a name inside a longer title still counts", mentions("Visit Skovgårde Bysmedie | Djursland"));
+  // The boundary still holds, so a short name cannot match a bigger word.
+  ok("but letters appearing by accident do not", !containsName("there is also a beach nearby", "Als"));
+}
+
+
+// ── A NAMED SOURCE IS WHERE TO START, NOT WHERE TO STOP ─────────────
+// Oliver, 10 Aug 2026: "When I write a source in for Perplexity to go through,
+// it shouldn't only go through that.. it should also go through others."
+//
+// He was describing real behaviour. The fact-check prompt told the model to
+// open the named sites "before any general search" and then closed with "say so
+// explicitly rather than quietly falling back to a search result". The clause
+// meant "do not silently substitute". What a model reads is: do not fall back
+// to a search result. So naming one good source turned a fact-check into a
+// single-site lookup, which is the opposite of why anybody names a good source.
+//
+// The drafting side already had this right. sourceRulesBlock says "THIS IS AN
+// ADDITION, NOT A RESTRICTION. Search everything else exactly as you normally
+// would." Two instructions about one thing, and only one of them correct, which
+// is the shape this codebase keeps producing.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const { sourceRulesBlock } = M;
+
+  // The sentence that caused it is gone.
+  ok("nothing tells it to avoid a search result", !/rather than quietly falling back to a search result/.test(app));
+  ok("and the named sites are no longer framed as coming before ANY search", !/before any general search/.test(app));
+
+  // And the correct rule is stated, in the same words as the drafting side.
+  ok("the fact-check says it is an addition", /THIS IS AN ADDITION, NOT A RESTRICTION\. After reading them, search everything else/.test(app));
+  ok("and says a named source is never the only place to look", /never the only place you are allowed to look/.test(app));
+  // The failure mode this must prevent: a named source with nothing on a small
+  // village producing "could not confirm" instead of an answer found elsewhere.
+  ok("a silent source does not become a dead end", /Never report that something could not be confirmed just because the named sources did not have it/.test(app));
+  ok("and provenance is still asked for, so the two can be told apart", /Say which answer came from which source/.test(app));
+
+  // ONE RULE, SAID THE SAME WAY IN BOTH PLACES. The drafting block is where the
+  // wording came from, so if that ever softens, this assertion says so.
+  const block = sourceRulesBlock(
+    [{ id: 1, domain: "visitdenmark.dk", applies_to: "", applies_place: "", enabled: true }],
+    "town", { name: "Ribe" });
+  ok("the drafting side still says it too", /THIS IS AN ADDITION, NOT A RESTRICTION/.test(block));
+  ok("and still expects a miss to be ordinary", /keep looking elsewhere rather than reporting that nothing was found/.test(block));
+
+  // The label a person reads should not promise the old behaviour either.
+  ok("the box says the rest of the web is still searched", /it still searches everything else too/.test(app));
+  ok("and the button no longer implies only his sources are used", !/\(using your sources\)/.test(app));
+}
+
+
+// ── DOES THE ENTRY AGREE WITH ITSELF ABOUT DISTANCE AND TIME ────────
+// Oliver, 10 Aug 2026, passing on a pipeline review built around an entry
+// claiming a 42 minute walk where the real walk is about six.
+//
+// The advice was to check stated times against a routing API. The app already
+// does exactly that, and has since the guide pipeline was built. It just does
+// it on LEGS: structured pairs of stops with coordinates. The 42 minutes was in
+// a SENTENCE, and entryAudit scanned prose for dashes, filler, unqualified
+// rankings, bare years and crossed costs, and for no claim about time or
+// distance at all. The one number in the paragraph that arithmetic could settle
+// was the one number nothing looked at.
+//
+// This needs no API and no coordinates, which is why it can run on every
+// published entry for nothing: two numbers in one sentence are a claim about
+// speed, and speed is arithmetic.
+{
+  const { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, auditEntry } = M;
+
+  // ── HIS ACTUAL CASE ───────────────────────────────────────────────
+  const bad = "The village sits about 500 metres from the ferry terminal, a 42 minute walk with luggage.";
+  const f = claimConflicts(bad);
+  is("the 42 minute walk is caught", f.length, 1);
+  is("and it says which way round it is wrong", f[0].direction, "time looks too long for the distance");
+  is("the distance is read as metres, not kilometres", f[0].statedKm, 0.5);
+  ok("and the expected time is a real walk of that length", f[0].expectedMinutes >= 6 && f[0].expectedMinutes <= 12);
+
+  // ── AND THE HALF THAT MATTERS MORE: WHAT IT LEAVES ALONE ──────────
+  // A check like this gets switched off the first time it argues with a
+  // correct sentence, so every one of these is a case it must not touch.
+  is("a correct sentence is left alone", claimConflicts("The village sits about 500 metres from the ferry terminal, a 7 minute walk."), []);
+  is("an honest range is left alone", claimConflicts("It is roughly 1 km from the harbour, a 10 to 15 minute walk."), []);
+  is("a short hop is left alone", claimConflicts("The church is 300 m away, about 5 minutes on foot."), []);
+  is("a real drive is left alone", claimConflicts("Aarhus is 90 km away, about a 90 minute drive."), []);
+  // Two distances and one time is a comparison, and guessing which distance the
+  // time belongs to would invent findings out of correct sentences.
+  is("a comparison is not a contradiction", claimConflicts("It is 400 m from the harbour and 2 km from the church, a 6 minute walk."), []);
+  // No mode named means no speed to check against. Silence, not a guess.
+  is("a sentence naming no mode is not checked", claimConflicts("It is 500 metres away and takes 42 minutes."), []);
+  // Two sentences are two journeys. Splitting on paragraph would pair a
+  // distance in one line with a duration in the next.
+  is("numbers in different sentences are different journeys",
+     claimConflicts("The harbour is 12 km away. The bakery is a 3 minute walk."), []);
+
+  // A wrong drive is caught too, so this is not a walking-only check.
+  is("a 90 minute drive over 2 km is caught", claimConflicts("Aarhus is 2 km away, a 90 minute drive.").length, 1);
+
+  // ── THE PARSER, ON ITS OWN ────────────────────────────────────────
+  is("hours become minutes", durationsIn("about 2 hours away")[0].minutes, 120);
+  is("a range is its midpoint, not its floor", durationsIn("10 to 15 minutes")[0].minutes, 12.5);
+  is("a decimal comma is a decimal", distancesIn("1,5 km from the centre")[0].km, 1.5);
+  is("a bare m is metres", distancesIn("800 m away")[0].km, 0.8);
+  is("and a bare km is kilometres", distancesIn("800 km away")[0].km, 800);
+  // A /g/ regex is stateful, and reusing one across calls would skip matches on
+  // the second string it ever saw. This is the standing rule in this codebase.
+  is("the same text parses the same way twice",
+     ["5 minutes", "5 minutes"].map(t => durationsIn(t).length), [1, 1]);
+
+  // ── AND SAYING WHEN THERE WAS NOTHING TO CHECK ────────────────────
+  // Zero findings from an entry that stated no numbers is not a clean bill of
+  // health, and an audit reporting both the same way tells a person something
+  // it does not know.
+  ok("an entry with a checkable claim says so", checkable(bad));
+  ok("an entry with no numbers does not", !checkable("A quiet village on the coast."));
+  ok("and neither does one with numbers but no mode", !checkable("It is 500 metres away and takes 42 minutes."));
+
+  // ── A WALK NOBODY WOULD CALL A WALK ───────────────────────────────
+  // One number, no distance beside it, past any figure a Dane would walk.
+  is("a 90 minute walk is flagged", implausibleWalks("A 90 minute walk from the station.").length, 1);
+  is("a 15 minute walk is not", implausibleWalks("A 15 minute walk from the station.").length, 0);
+  is("and neither is a 90 minute drive", implausibleWalks("A 90 minute drive from the station.").length, 0);
+
+  // ── IT REACHES THE AUDIT, WHICH IS WHERE HE WOULD SEE IT ──────────
+  // Written and not wired is this codebase's signature failure, so the check is
+  // run through auditEntry rather than only through its own function.
+  const audit = auditEntry({ type: "town", payload: { name: "Agersø", desc: bad, blogBody: [] } });
+  const found = audit.findings.filter(x => x.field === "distance and time");
+  is("the audit reports it", found.length, 1);
+  // Degraded rather than indexed into. Unwiring the check makes found empty,
+  // and found[0].severity then CRASHES the runner instead of failing it, which
+  // hides every assertion after this point including the one that says why.
+  const hit = found[0] || {};
+  is("as critical, like the crossed-costs check it belongs beside", hit.severity, "critical");
+  ok("and quotes the sentence so it can be found", /42 minute walk/.test(hit.detail || ""));
+  ok("with the arithmetic spelled out", /is about \d+ minutes, not 42/.test(hit.detail || ""));
+  // A clean entry produces none of this, or the audit cries wolf on everything.
+  const clean = auditEntry({ type: "town", payload: { name: "Ribe", desc: "The church is 300 m away, about 5 minutes on foot.", blogBody: [] } });
+  is("a correct entry gets no distance finding", clean.findings.filter(x => x.field === "distance and time"), []);
+
+  // ── ONE SET OF SPEEDS, NOT TWO ────────────────────────────────────
+  // The estimator, the circuity factor and the walk ceiling all come from
+  // guideEnrichment. A second copy here would drift, and then the guide page
+  // and the audit would disagree about the same journey.
+  const src = readFileSync(join(root, "src/utils/claimCheck.js"), "utf8");
+  ok("the speeds are imported, not restated", /import \{ estimateMinutes, WALK_MAX_MINUTES \} from "\.\/guideEnrichment"/.test(src));
+  ok("no second speed table lives here", !/AVG_SPEED|4\.5|ROUTE_FACTOR *=/.test(stripNonCode(src)));
+  ok("the tolerance is generous enough not to argue about ten versus twelve", TOLERANCE >= 2);
 }
 
 rmSync(dir, { recursive: true, force: true });
