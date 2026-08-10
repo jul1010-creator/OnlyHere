@@ -21,13 +21,65 @@ import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { foodSpots } from "../data/food";
 import { detectLegMode, haversineKm } from "./helpers";
+import { containsName } from "./danishNames";
 
 // Looks up a stop name against everything real Gemlyx already knows, so a
 // guide can show real price/hours/type instead of just repeating the AI's
 // own prose, and so a stop can link into that place's real Gemlyx page.
+// ── THE COORDINATE A PUBLISHED ROW ACTUALLY CARRIES ─────────────────
+// Published payloads store __lat and __lon (see shapeForLive in
+// utils/studioContent.js and the TOWN_COORDS assignment in liveContent.js).
+// Nothing stores a bare `lat`. Every other reader in the app already knows
+// this: correction.js reads `entry?.__lat ?? entry?.lat`, geography.js,
+// DetailPage and entryAudit all read __lat.
+//
+// This file read `real.lat`, so it was always undefined, and the ENTIRE
+// "we have a real coordinate on file" tier of the resolution chain has never
+// once fired in production. Every stop in every guide fell through to Nominatim
+// or to the crude town-centre fallback, which is why fixes in this area kept
+// half-working: the good branch was never the branch being taken.
+export const placeCoords = (row) => {
+  const lat = Number(row?.__lat ?? row?.lat);
+  const lon = Number(row?.__lon ?? row?.lon);
+  // Number.isFinite, not truthiness. A row with no coordinate gives NaN, and
+  // `0` is a real number that happens not to occur in Denmark; conflating the
+  // two is how a missing coordinate becomes a point in the Gulf of Guinea.
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+};
+
+// ── MATCHING A STOP NAME TO A PUBLISHED PLACE ───────────────────────
+// This was a bare, bidirectional, unbounded substring test, and it sits at the
+// HEAD of the resolution chain, outranking both the geocode and the town
+// fallback. Every failure mode this codebase has fixed elsewhere was live here:
+//
+//   "Vejlebrovej viewpoint" contained "Vejle"        -> the wrong town
+//   "Marselisborg" contained "Als"                    -> the wrong island
+//   the stop "Møn" was contained by "Møns Klint"      -> a cliff, not an island
+//   the stop "Ribe" was contained by "Ribe VikingeCenter" -> 3 km out of town
+//
+// The comment forty lines below describes exactly this bug and fixes it in
+// townInName, which guards the LOW-precedence fallback. The high-precedence
+// path kept the broken test. containsName has existed and been tested since
+// this morning and is used in four other files; it was never used here.
+//
+// Boundaries in both directions, and then THREE TIERS, because the two
+// directions of containment mean opposite things and ranking them together
+// picks the wrong entry either way round.
+//
+//   exact      the stop names the place. Nothing beats this.
+//   narrowing  the STOP contains the entry's name, so the stop is the more
+//              specific of the two: "Ribe VikingeCenter" contains "Ribe".
+//              Longest wins, because the longest entry name is the closest
+//              thing to what the stop actually says.
+//   widening   the ENTRY contains the stop's name, so the entry is more
+//              specific than the stop was: the stop "Kronborg" against an
+//              entry "Kronborg Slot". Shortest wins here, and this tier is
+//              last, because answering a broad stop with a narrow entry is
+//              over-reaching. It is the tier that turned the stop "Ribe",
+//              which means the town, into Ribe VikingeCenter three km outside
+//              it, taking its coordinate with it.
 export const lookupRealPlace = (name) => {
   if (!name) return null;
-  const norm = name.toLowerCase();
   const pools = [
     ...freeEntrance.map(p => ({ ...p, _src: "free" })),
     ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
@@ -35,8 +87,16 @@ export const lookupRealPlace = (name) => {
     ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
     ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event" })),
     ...towns.map(p => ({ ...p, _src: "town" })),
-  ];
-  return pools.find(p => p.name && (norm.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(norm))) || null;
+  ].filter(p => p?.name);
+  // Mutual containment is equality once both sides are folded and spaced, so
+  // this is a Danish-letter-aware exact match without a second comparison rule.
+  const narrowing = pools.filter(p => containsName(name, p.name));
+  const exact = narrowing.filter(p => containsName(p.name, name));
+  if (exact.length) return exact.sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  if (narrowing.length) return narrowing.sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  const widening = pools.filter(p => containsName(p.name, name));
+  if (widening.length) return widening.sort((a, b) => String(a.name).length - String(b.name).length)[0];
+  return null;
 };
 
 // BUG FIX (the "2-3 hour transit leg that's really a 5 minute walk" report):
@@ -84,8 +144,8 @@ export const townKeyFor = (name) =>
     .sort((a, b) => b.length - a.length)[0] || null;
 
 export const resolveStopCoords = (name, geo = {}) => {
-  const real = lookupRealPlace(name);
-  if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+  const real = placeCoords(lookupRealPlace(name));
+  if (real) return { lat: real.lat, lon: real.lon };
   if (geo[name]) return geo[name];
   const key = townKeyFor(name);
   if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
@@ -118,8 +178,8 @@ export const kmBetween = (a, b) => {
 // and every caller already handles null by showing the AI's own leg text or
 // "Check route" instead of a fabricated figure.
 export const resolveStopCoordsDetailed = (name, geo = {}) => {
-  const real = lookupRealPlace(name);
-  if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon, precise: true };
+  const real = placeCoords(lookupRealPlace(name));
+  if (real) return { lat: real.lat, lon: real.lon, precise: true };
   if (geo[name]) return { ...geo[name], precise: true };
   const key = townKeyFor(name);
   if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1], precise: false };

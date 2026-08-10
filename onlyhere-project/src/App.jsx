@@ -9,7 +9,7 @@ import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
-import { isSameTownWalk, legDistanceKm, resolveLegMode, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
+import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
@@ -4296,7 +4296,8 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       const source = weatherSourceFor(forecastIdx);
       const point = day.stops.map(s => {
         const real = lookupRealPlace(s.name);
-        if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+        const rc = placeCoords(real);
+        if (rc) return rc;
         const key = townKeyFor(s.name);
         return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
       }).find(Boolean);
@@ -4751,7 +4752,8 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // rules below must be kept identical to utils/guideEnrichment.js by hand.
   const resolveStopCoordsPrecise = (name, extraGeo = null) => {
     const real = lookupRealPlace(name);
-    if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon, precise: true };
+    const rc = placeCoords(real);
+    if (rc) return { lat: rc.lat, lon: rc.lon, precise: true };
     if (extraGeo && extraGeo[name]) return { ...extraGeo[name], precise: true };
     if (geocodedCoords[name]) return { ...geocodedCoords[name], precise: true };
     const key = townKeyFor(name);
@@ -4805,7 +4807,11 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // actual geocode of the specific venue) — otherwise the crude fallback
     // permanently blocks ever fetching the real, precise location. Only a
     // precise `real.lat/lon` on file now counts as already resolved here.
-    const hasPreciseCoords = (n) => { const real = lookupRealPlace(n); return !!(real?.lat && real?.lon); };
+    // Reads the field that exists. This decides which stops get geocoded at
+    // all, and while it read a field that is always undefined it answered
+    // false for everything, so every stop in every guide was sent to
+    // Nominatim whether or not a real coordinate was already on file.
+    const hasPreciseCoords = (n) => !!placeCoords(lookupRealPlace(n));
     const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !hasPreciseCoords(n));
     const found = {};
     for (const name of names) {
@@ -4961,19 +4967,19 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
 
   // Looks up a stop name against everything real Gemlyx already knows, so the guide
   // shows real price/hours/type instead of just repeating the AI's own prose.
-  const lookupRealPlace = (name) => {
-    if (!name) return null;
-    const norm = name.toLowerCase();
-    const pools = [
-      ...freeEntrance.map(p => ({ ...p, _src: "free" })),
-      ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
-      ...foodSpots.map(p => ({ ...p, _src: "food" })),
-      ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
-      ...[...events, ...majorEvents, ...vikingEvents].map(p => ({ ...p, _src: "event" })),
-      ...towns.map(p => ({ ...p, _src: "town" })),
-    ];
-    return pools.find(p => p.name && (norm.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(norm))) || null;
-  };
+  // ── THERE WAS A SECOND lookupRealPlace HERE ─────────────────────────
+  // Byte-identical to the one in utils/guideEnrichment.js, which this file did
+  // not import. Third duplicated function found in this codebase today, after
+  // resolveLegMode and the two heading lists, and the same cost every time: the
+  // shared copy gets fixed and the local one silently keeps the old behaviour.
+  //
+  // It mattered more here than the others. This function sits at the HEAD of
+  // the coordinate resolution chain and outranks both the geocode and the town
+  // fallback, and a hit also steers the Nominatim query through mapHint. A
+  // wrong match does not merely mislabel something, it geocodes the wrong place
+  // and marks the result precise, where no downstream guard can catch it.
+  //
+  // Imported at the top of this file now. One copy.
 
   // Lets a guide stop that matches something already in Gemlyx's own content
   // (a real free-entrance spot, restaurant, nightlife venue, town, or event)
@@ -5115,7 +5121,8 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
             skeleton.days.forEach(d => (d.stops || []).forEach(st => {
               if (!st?.name || gateCoords[st.name]) return;
               const real = lookupRealPlace(st.name);
-              if (real?.lat && real?.lon) { gateCoords[st.name] = { lat: real.lat, lon: real.lon }; return; }
+              const rc = placeCoords(real);
+              if (rc) { gateCoords[st.name] = rc; return; }
               const key = townKeyFor(st.town || "") || townKeyFor(st.name);
               if (key) gateCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
             }));
@@ -5143,7 +5150,8 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
                     fixed.days.forEach(d => (d.stops || []).forEach(st => {
                       if (!st?.name || fixedCoords[st.name]) return;
                       const real = lookupRealPlace(st.name);
-                      if (real?.lat && real?.lon) { fixedCoords[st.name] = { lat: real.lat, lon: real.lon }; return; }
+                      const rc = placeCoords(real);
+                      if (rc) { fixedCoords[st.name] = rc; return; }
                       const key = townKeyFor(st.town || "") || townKeyFor(st.name);
                       if (key) fixedCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
                     }));
@@ -6222,7 +6230,8 @@ If the conversation only covers a single day or a few stops with no explicit day
           if (forecastIdx > 8 || !day.weather) continue;
           const point = day.stops.map(s => {
             const real = lookupRealPlace(s.name);
-            if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+            const rc = placeCoords(real);
+        if (rc) return rc;
             const key = townKeyFor(s.name);
             return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
           }).find(Boolean);

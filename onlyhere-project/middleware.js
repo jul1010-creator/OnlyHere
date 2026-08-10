@@ -47,7 +47,21 @@ import { towns as hardcodedTowns } from "./src/data/towns.js";
 // serverless functions and api/ already holds exactly twelve, which is why the
 // preview injection lives in middleware at all. Edge middleware is counted
 // separately, so the sitemap costs no slot.
-export const config = { matcher: ["/guide/:path*", `/${COUNTRY}/:path*`, "/sitemap.xml"] };
+// ── LITERAL STRINGS ONLY, AND THIS IS NOT A STYLE CHOICE ────────────
+// This was `/${COUNTRY}/:path*`, which failed the Vercel build outright:
+//
+//   Error: Unhandled type: "TemplateExpression" `/${COUNTRY}/:path*`
+//
+// Vercel reads this config by PARSING the file, never by running it, so it has
+// no way to know what COUNTRY holds. Every entry has to be a plain literal.
+//
+// That is a real constraint and it costs the thing the constant was for: the
+// country now appears here AND in utils/placeUrl.js, and two copies drift. The
+// guard moves to where it can still run, so tests/run.mjs asserts this matcher
+// contains exactly the COUNTRY placeUrl exports. Change the country and the
+// suite names this line rather than the site quietly serving nothing at the new
+// paths.
+export const config = { matcher: ["/guide/:path*", "/denmark/:path*", "/sitemap.xml"] };
 
 // Every published town. The hardcoded array is empty since 5 Aug, when all
 // content moved to Supabase, so in practice this is entirely the live list and

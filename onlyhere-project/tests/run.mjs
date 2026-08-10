@@ -69,6 +69,8 @@ writeFileSync(entry, `
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { lookupRealPlace, placeCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
@@ -1365,7 +1367,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // else on the site still never pays for this to run, which is the point the
   // original single-entry assertion was making.
   ok("middleware runs on guide urls", /"\/guide\/:path\*"/.test(mw));
-  ok("and on town pages", /`\/\$\{COUNTRY\}\/:path\*`/.test(mw));
+  // ── THE MATCHER CANNOT USE THE CONSTANT, SO THE TEST DOES ─────────
+  // This was `/${COUNTRY}/:path*` and it failed the Vercel build outright:
+  //   Error: Unhandled type: "TemplateExpression"
+  // Vercel PARSES this config rather than running it, so every entry has to be
+  // a plain literal. That reintroduces exactly what the constant existed to
+  // prevent, two copies of the country that can drift, so the check moves here
+  // where it can still run. Derived from COUNTRY, never typed twice.
+  ok("and on town pages", mw.includes(`"/${M.COUNTRY}/:path*"`));
+  ok("with no template expression, which the build cannot parse", !/matcher: \[[^\]]*`/.test(mw));
+  // The failure this prevents is silent in the worst way: the build stops, the
+  // old deployment keeps serving, and the site looks fine while none of the new
+  // paths exist.
+  ok("every matcher entry is a plain string", (mw.match(/matcher: \[([^\]]*)\]/) || ["", ""])[1].split(",").every(x => /^\s*"[^"]*"\s*$/.test(x)));
   ok("and on the sitemap", /"\/sitemap\.xml"/.test(mw));
   // A bare catch-all here would put an edge invocation in front of every asset
   // on the site, which is the cost this matcher exists to avoid.
@@ -5441,6 +5455,108 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the speeds are imported, not restated", /import \{ estimateMinutes, WALK_MAX_MINUTES \} from "\.\/guideEnrichment"/.test(src));
   ok("no second speed table lives here", !/AVG_SPEED|4\.5|ROUTE_FACTOR *=/.test(stripNonCode(src)));
   ok("the tolerance is generous enough not to argue about ten versus twelve", TOLERANCE >= 2);
+}
+
+
+// ── THE COORDINATE SYSTEM ───────────────────────────────────────────
+// Oliver, 10 Aug 2026: "My main objective right now is fixing the coordination
+// system. That is our main problem it seems. The history is constantly true
+// now. Which is great. But coordination is off." And then, correctly: "if we
+// screw coordinations, it might hurt our guide too."
+//
+// A full trace of the geo path found two faults at the head of the chain, and
+// they were multiplying each other.
+{
+  // towns is exported as TOWNS_FOR_TEST because another block already uses
+  // that name. Same live array either way: liveContent pushes published rows
+  // onto it at runtime, which is exactly what is being simulated below.
+  const { lookupRealPlace, placeCoords, resolveStopCoordsDetailed, freeEntrance } = M;
+  const towns = M.TOWNS_FOR_TEST;
+  const guideSrc = readFileSync(join(root, "src/utils/guideEnrichment.js"), "utf8");
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── FAULT ONE: THE "REAL COORDINATE ON FILE" TIER WAS DEAD ────────
+  // resolveStopCoordsDetailed read `real.lat`. Every published payload stores
+  // `__lat` (shapeForLive in studioContent.js, and liveContent.js reads __lat
+  // to fill TOWN_COORDS). So the highest-quality source in the chain has never
+  // fired in production, and every stop in every guide fell through to
+  // Nominatim or to the crude town-centre fallback. That is why fixes in this
+  // area kept half-working: the good branch was never the branch being taken.
+  is("a published payload's coordinate is found", placeCoords({ __lat: 55.7, __lon: 9.5 }), { lat: 55.7, lon: 9.5 });
+  is("a bare lat still works, since correction.js reads both", placeCoords({ lat: 55.7, lon: 9.5 }), { lat: 55.7, lon: 9.5 });
+  is("__lat wins when both are present", placeCoords({ __lat: 1, __lon: 2, lat: 9, lon: 9 }), { lat: 1, lon: 2 });
+  is("no coordinate is null, not a point", placeCoords({ name: "X" }), null);
+  is("and a null row is null", placeCoords(null), null);
+  // Number.isFinite, not truthiness: 0 is a real number and NaN is not, and
+  // conflating them puts a missing coordinate in the Gulf of Guinea.
+  is("a zero coordinate is a number, not a miss", placeCoords({ __lat: 0, __lon: 0 }), { lat: 0, lon: 0 });
+  is("a non-numeric coordinate is a miss", placeCoords({ __lat: "abc", __lon: 5 }), null);
+  ok("nothing reads the field that does not exist", !/real\?\.lat && real\?\.lon/.test(guideSrc + appSrc));
+
+  // ── FAULT TWO: AN UNBOUNDED SUBSTRING MATCH AT THE HEAD OF THE CHAIN
+  // lookupRealPlace outranks the geocode AND the town fallback, returns
+  // precise: true, and a hit also steers the Nominatim query through mapHint.
+  // So a wrong match here does not merely mislabel a stop: it geocodes a
+  // different place and marks the answer precise, where nothing downstream can
+  // catch it. It was a bare bidirectional .includes().
+  //
+  // Published rows are pushed onto these arrays at runtime by liveContent, so
+  // this is what production actually looks like.
+  towns.push({ id: 9001, name: "Vejle", __lat: 55.709, __lon: 9.535 });
+  towns.push({ id: 9002, name: "Ribe", __lat: 55.330, __lon: 8.766 });
+  towns.push({ id: 9003, name: "Møn", __lat: 54.976, __lon: 12.303 });
+  freeEntrance.push({ id: 9004, name: "Ribe VikingeCenter", __lat: 55.303, __lon: 8.775 });
+  freeEntrance.push({ id: 9005, name: "Møns Klint", __lat: 54.969, __lon: 12.545 });
+  const hit = (stop) => lookupRealPlace(stop)?.name || null;
+
+  // THE ONES THAT WERE WRONG.
+  is("a street is not the town its name starts with", hit("Vejlebrovej coast viewpoint"), null);
+  is("and nothing else swallows it either", hit("Marselisborg Slot"), null);
+  // The reverse direction was the worse of the two, because the needle was the
+  // stop name: a stop saying Møn was being answered by Møns Klint, a cliff.
+  is("an island is not the cliff on it", hit("Møn"), "Møn");
+  // And the tier that turned the town of Ribe into a viking centre 3 km out of
+  // it, taking that coordinate with it.
+  is("a town is the town, not an attraction near it", hit("Ribe"), "Ribe");
+
+  // THE ONES THAT MUST STILL WORK, which is the half that decides whether this
+  // is a fix or just a stricter thing that finds nothing.
+  is("a specific stop finds its own entry", hit("Ribe VikingeCenter"), "Ribe VikingeCenter");
+  is("and so does the cliff", hit("Møns Klint"), "Møns Klint");
+  is("a stop with trailing context still resolves", hit("Ribe VikingeCenter, Ribe"), "Ribe VikingeCenter");
+  // Widening: the stop is broader than the entry and there is no exact row.
+  // Allowed, ranked last, and shortest wins so it reaches for the least.
+  freeEntrance.push({ id: 9006, name: "Kronborg Slot", __lat: 56.039, __lon: 12.622 });
+  is("a broad stop can still find one specific entry", hit("Kronborg"), "Kronborg Slot");
+
+  // AND THE TWO FAULTS TOGETHER, which is the point: a correct match now
+  // carries a real coordinate, marked precise, instead of falling through.
+  const d = resolveStopCoordsDetailed("Ribe VikingeCenter", {});
+  ok("a matched stop resolves", !!d);
+  is("to its own coordinate", [Number(d.lat.toFixed(3)), Number(d.lon.toFixed(3))], [55.303, 8.775]);
+  ok("and is marked precise, because it is", d.precise === true);
+  // A stop nothing knows resolves to nothing rather than to a nearby town.
+  is("an unknown stop is unresolved, not approximated", resolveStopCoordsDetailed("Vejlebrovej coast viewpoint", {}), null);
+
+  // ── AND ONE COPY OF IT, NOT TWO ───────────────────────────────────
+  // App.jsx carried a byte-identical lookupRealPlace and did not import the
+  // shared one. Third duplicated function found today, after resolveLegMode and
+  // the two heading lists, and the same cost every time.
+  ok("App.jsx no longer declares its own", !/const lookupRealPlace = \(name\) => \{/.test(stripNonCode(appSrc)));
+  ok("it imports the shared one", /import \{[^}]*\blookupRealPlace\b[^}]*\} from "\.\/utils\/guideEnrichment"/.test(appSrc));
+  const defs = ["src/utils/guideEnrichment.js", "src/App.jsx", "src/pages/GuidePage.jsx"]
+    .filter(f => /(?:const|function)\s+lookupRealPlace\s*[=(]/.test(stripNonCode(readFileSync(join(root, f), "utf8"))));
+  is("lookupRealPlace is defined in exactly one file", defs, ["src/utils/guideEnrichment.js"]);
+
+  // ── AND THE GEOCODE BUDGET, WHICH WAS A COST BUG TOO ──────────────
+  // hasPreciseCoords decides which stops get sent to Nominatim. While it read
+  // the field that is always undefined it answered false for everything, so
+  // every stop in every guide was geocoded whether or not a real coordinate
+  // was already on file.
+  ok("the geocode skip reads the real field", /const hasPreciseCoords = \(n\) => !!placeCoords\(lookupRealPlace\(n\)\);/.test(stripNonCode(appSrc)));
+
+  towns.length = towns.findIndex(t => t.id === 9001);
+  freeEntrance.length = freeEntrance.findIndex(t => t.id === 9004);
 }
 
 rmSync(dir, { recursive: true, force: true });

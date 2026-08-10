@@ -7,7 +7,7 @@ import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { lookupRealPlace, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
+import { lookupRealPlace, placeCoords, resolveStopCoords, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { askClaude } from "../utils/aiClient";
@@ -851,7 +851,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           // chip's number came from.
           const preciseCoord = (name) => {
             const real = lookupRealPlace(name);
-            if (real?.lat && real?.lon) return { lat: real.lat, lon: real.lon };
+            const rc = placeCoords(real);
+        if (rc) return rc;
             return geo[name] || null;
           };
           const stopTownOf = (name) => (day.stops || []).find(s => s.name === name)?.town || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
