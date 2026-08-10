@@ -142,7 +142,13 @@ export const legDistanceKm = (originName, destName, geo = {}) => {
 // 4.5 km/h walking pace 20 minutes is about 1.5 km, so that is the hard cap
 // on any leg planned, routed, or displayed as a walk.
 export const WALK_MAX_MINUTES = 20;
-export const WALK_MAX_KM = 1.5;
+// DERIVED, not typed. This was a hardcoded 1.5, documented as "20 minutes at
+// 4.5 km/h", and adding ROUTE_FACTOR silently broke that: with a 1.35 detour a
+// 1.5 km straight line is 27 minutes, so resolveLegMode kept calling legs
+// walkable that walkEstimateTooFar then rejected as "Too far to walk". A
+// 1.2 km stroll rendered as a routing failure. Two constants describing one
+// rule will always drift, so there is now only one.
+export const WALK_MAX_KM = (WALK_MAX_MINUTES / 60) * 4.5 / 1.35;
 
 // SINGLE SOURCE OF TRUTH for leg transport mode — used by the exact-duration
 // fetch AND every render site that shows a route icon/label, so the fetch and

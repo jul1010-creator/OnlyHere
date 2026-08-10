@@ -69,7 +69,7 @@ writeFileSync(entry, `
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
-  export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
@@ -3673,6 +3673,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and one metre under is not long", !isLongLeg(LONG_LEG_KM - 0.001));
   // A leg cannot be both walkable and long enough to need a rail booking.
   ok("the walking cap and the long-leg threshold stay ordered", THRESHOLDS_ARE_ORDERED);
+  // ROUTE_FACTOR silently desynced these: WALK_MAX_KM was a hardcoded 1.5
+  // documented as "20 minutes", but with the detour factor 1.5 km is 27
+  // minutes, so resolveLegMode kept calling legs walkable that the render then
+  // rejected as "Too far to walk". Derived from one rule now, so a change to
+  // the factor moves both.
+  const { WALK_MAX_KM, estimateMinutes: em, WALK_MAX_MINUTES: cap } = M;
+  is("the distance cap is exactly the minute cap", em(WALK_MAX_KM, "walking"), cap);
+  ok("so a leg at the cap is not refused as a walk", !M.walkEstimateTooFar(WALK_MAX_KM));
+  ok("and just past it is", M.walkEstimateTooFar(WALK_MAX_KM * 1.05));
 }
 
 // ── "ODENSE IS NOT ON THE MAP AT ALL" ──────────────────────────────
@@ -3737,6 +3746,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // ── THE HOLE TWO CORRECT CHANGES MADE BETWEEN THEM ──────────────
   // Arrival dates are now 2 to 26 weeks out, and the old code bailed past day
   // 8, so the weather badge would have vanished from nearly every guide.
+  // ── THE ASSERTION THAT WAS MISSING ──────────────────────────────
+  // Every horizon test below is written RELATIVE to the constant, so all of
+  // them passed happily while the constant said 8 and the API emitted 7
+  // buckets. Days 7 and 8 were claimed as forecastable, no bucket existed,
+  // and the badge silently vanished. A test that moves with the thing it is
+  // testing cannot catch a disagreement with something else. This one ties
+  // the constant to the API's actual slice, so changing either alone goes red.
+  const wapiSrc = readFileSync(join(root, "api/weather.js"), "utf8");
+  const sliceHit = wapiSrc.match(/Object\.entries\(byDay\)\.slice\(0, (\d+)\)/);
+  ok("the API's bucket count is findable", !!sliceHit);
+  is("the horizon matches the last bucket the API emits",
+    FORECAST_HORIZON_DAYS, Number(sliceHit[1]) - 1);
+
   is("day one is a forecast", weatherSourceFor(0), FORECAST);
   is("the last forecast day is a forecast", weatherSourceFor(FORECAST_HORIZON_DAYS), FORECAST);
   is("one day past it is not", weatherSourceFor(FORECAST_HORIZON_DAYS + 1), NORMALS);
@@ -3760,6 +3782,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("half a normal shows nothing rather than half a sentence", normalsLine({ available: true, low_c: 8 }), null);
   is("no data at all is null", normalsLine(null), null);
   ok("the API refuses to average too few years", /good\.length < 5/.test(apiSrc));
+  // Module-scope state on a warm serverless container outlived the handler:
+  // one rate-limited request poisoned every later response on that container,
+  // and under concurrency reported A's failure inside B's answer.
+  ok("the diagnostic object is per request", /const sourceErrors = \{\};\n    const \[owm, wapi\]/.test(apiSrc));
+  ok("and is passed in rather than reached for", /openWeatherSeries\(lat, lon, sourceErrors\)/.test(apiSrc));
   ok("and answers 200 with available false rather than an error", /kind: "normals", available: false/.test(apiSrc));
 
   // ── RAIN, IN WORDS SOMEBODY PACKS BY ────────────────────────────
@@ -3784,6 +3811,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("warm and dry is sun", normalsIcon({ high_c: 24, wet_day_share: 0.1 }), "☀️");
 
   // ── THE TRIP NOTE SAYS WHAT IT IS ───────────────────────────────
+  // b.temp is the MIDPOINT of a normal range. Using it as the range printed
+  // "expect 6° to 7°" under badges whose own line said "Normally 3° to 8°".
+  is("the badge carries the real range, not just the midpoint", [nm.lowC, nm.highC], [8, 13]);
+  const twoDays = normalsNote([
+    { source: NORMALS, temp: 6, lowC: 3, highC: 8 },
+    { source: NORMALS, temp: 7, lowC: 4, highC: 9 },
+  ], "November");
+  ok("the note states the real spread, not the midpoints", /3° to 9°/.test(twoDays));
+  ok("and never the narrowed midpoint range", !/6° to 7°/.test(twoDays));
+
   const note = normalsNote([nm, nm], "November");
   ok("it says plainly that no forecast exists yet", /too far out for a real forecast/.test(note));
   ok("it names the source as averages", /ten year averages rather than a prediction/.test(note));

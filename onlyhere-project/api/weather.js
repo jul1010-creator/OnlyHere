@@ -76,13 +76,18 @@ const WAPI_KEY = process.env.WEATHER_API_KEY || process.env.WEATHERAPI_KEY
 // the same silent-failure shape this project keeps finding, and I wrote a
 // fresh one. Each source now records its own reason, which is reported in the
 // response. The key itself never appears here.
-const sourceErrors = {};
+// PER REQUEST, not module scope. As a module-level object on a warm Vercel
+// container this outlived the handler: one rate-limited request left
+// {openweathermap: "HTTP 429"} in every later response on that container, even
+// while that source was returning good data, and under concurrency it reported
+// request A's failure inside request B's answer for a different coordinate. A
+// diagnostic field that lies is worse than no diagnostic field.
 
 // One shape for every source, so the client merge never branches on provider:
 // { date: "2026-09-14", temp_c, wet } where wet means 1mm or more that day.
 const dayKey = (t) => String(t).slice(0, 10);
 
-async function openWeatherSeries(lat, lon) {
+async function openWeatherSeries(lat, lon, sourceErrors) {
   if (!OWM_KEY) { sourceErrors.openweathermap = "no key set"; return null; }
   try {
     const r = await fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${OWM_KEY}`);
@@ -108,7 +113,7 @@ async function openWeatherSeries(lat, lon) {
   } catch (e) { sourceErrors.openweathermap = String(e.message || e).slice(0, 80); return null; }
 }
 
-async function weatherApiSeries(lat, lon) {
+async function weatherApiSeries(lat, lon, sourceErrors) {
   if (!WAPI_KEY) { sourceErrors.weatherapi = "no key set"; return null; }
   // PLAN LIMIT, RETRIED RATHER THAN SWALLOWED. WeatherAPI's free tier serves 3
   // days and rejects a request for 14 outright, so asking for the maximum and
@@ -269,7 +274,8 @@ export default async function handler(req, res) {
     // resolve to null without a key or on any failure, and the merge treats a
     // null as one fewer source rather than an error, so this endpoint degrades
     // to exactly the single-source behaviour it had before.
-    const [owm, wapi] = await Promise.all([openWeatherSeries(lat, lon), weatherApiSeries(lat, lon)]);
+    const sourceErrors = {};
+    const [owm, wapi] = await Promise.all([openWeatherSeries(lat, lon, sourceErrors), weatherApiSeries(lat, lon, sourceErrors)]);
 
     res.status(200).json({
       temperature_c: details.air_temperature,

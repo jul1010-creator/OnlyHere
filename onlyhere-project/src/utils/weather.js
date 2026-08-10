@@ -38,9 +38,14 @@
 // The label is not decoration. It is the difference between a promise this app
 // can keep and one it cannot.
 
-// MET Norway's own useful range. Nine days exists in the response; the last one
-// is thin, so eight is where this stops trusting it.
-export const FORECAST_HORIZON_DAYS = 8;
+// 6, NOT 8, AND THE NUMBER IS NOT ARBITRARY. api/weather.js builds its daily
+// buckets with `Object.entries(byDay).slice(0, 7)`, so it emits seven days:
+// offsets 0 through 6. This constant said 8, which meant days 7 and 8 were
+// claimed as forecastable, no bucket existed for them, and dayWeather returned
+// null. A guide arriving exactly a week out showed NO weather at all, and a
+// short trip in that window reported "too far out for a real forecast" about
+// something seven days away. Found by review, not by looking at the API.
+export const FORECAST_HORIZON_DAYS = 6;
 
 export const FORECAST = "forecast";
 export const NORMALS = "normals";
@@ -128,6 +133,10 @@ export const weatherBadge = ({ source, forecast, normals, agreement } = {}) => {
       risk: Number(normals.wet_day_share) >= 0.5 ? "high" : "none",
       label: "typical",
       detail: line,
+      // The real range, kept alongside the midpoint, so the trip note can
+      // state what the badge states rather than re-deriving it wrongly.
+      lowC: lo,
+      highC: hi,
       years: normals.years,
     };
   }
@@ -142,9 +151,13 @@ export const weatherBadge = ({ source, forecast, normals, agreement } = {}) => {
 export const normalsNote = (badges, whenWords) => {
   const real = (Array.isArray(badges) ? badges : []).filter(b => b && b.source === NORMALS);
   if (!real.length) return null;
-  const highs = real.map(b => Number(b.temp)).filter(Number.isFinite);
-  if (!highs.length) return null;
-  const lo = Math.min(...highs), hi = Math.max(...highs);
+  // b.temp is the MIDPOINT of the normal range, not its high. Using it as the
+  // range printed "expect 6° to 7°" directly under badges whose own line said
+  // "Normally 3° to 8°": narrower and colder than the same data one line above.
+  const lows = real.map(b => Number(b.lowC)).filter(Number.isFinite);
+  const his = real.map(b => Number(b.highC)).filter(Number.isFinite);
+  if (!lows.length || !his.length) return null;
+  const lo = Math.min(...lows), hi = Math.max(...his);
   const wetDays = real.filter(b => b.risk === "high").length;
   const range = lo === hi ? `around ${lo}°` : `${lo}° to ${hi}°`;
   return `This trip is too far out for a real forecast, so these are ten year averages rather than a prediction. ${whenWords ? `In ${whenWords} you` : "You"} can expect ${range} on the days planned${wetDays ? `, and ${wetDays === real.length ? "every one of them is" : `${wetDays} of them are`} in a stretch that is wet more often than not` : ""}. Check again a week before you fly, when a real forecast exists.`;
