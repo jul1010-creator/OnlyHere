@@ -43,16 +43,27 @@ import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleS
 // Google stays the biggest control on purpose, because this sheet interrupts
 // somebody who wanted a guide, not an account. "Logging in with google should
 // be easy" is a requirement about how long the interruption lasts.
-export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason }) => {
+export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, initialMode }) => {
   // Defaults to CREATE, not sign in. There are no returning users yet, and the
   // person hitting this has just been told they need an account.
-  const [mode, setMode] = useState("up");          // "up" | "in" | "reset"
+  const [mode, setMode] = useState(initialMode || "up");   // "up" | "in" | "reset"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 720);
+
+  // The sheet is hidden with an early return rather than unmounted, so its
+  // state SURVIVES a close. Without this, somebody who opened it once, switched
+  // to Sign in and closed it would be handed the Sign in screen the next time
+  // they pressed Sign up, and the Save gate would greet a brand new visitor
+  // with a login form. Reset on every opening, from whichever door was used.
+  useEffect(() => {
+    if (!open) return;
+    setMode(initialMode || "up");
+    setError(null); setNotice(null);
+  }, [open, initialMode]);
 
   // Declared BEFORE the early return, because a hook that only sometimes runs
   // is a hooks-order crash on the render where `open` flips. Cleaned up on

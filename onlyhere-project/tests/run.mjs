@@ -6094,7 +6094,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and changes the heading", /"Keep this guide"/.test(sheet));
 
   // ── AND THE THINGS HE POINTED AT ──────────────────────────────────
-  ok("a new visitor lands on Create, not Sign in", /const \[mode, setMode\] = useState\("up"\)/.test(sheet));
+  ok("a new visitor lands on Create, not Sign in", /const \[mode, setMode\] = useState\(initialMode \|\| "up"\)/.test(sheet));
   // The bottom sheet buried the hero on desktop. One breakpoint, both shapes.
   ok("desktop centres the dialog", /alignItems: wide \? "center" : "flex-end"/.test(sheet));
   ok("and rounds all four corners there", /borderRadius: wide \? 20 :/.test(sheet));
@@ -6107,6 +6107,31 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Google stays the biggest control: "logging in with google should be easy"
   // is a requirement about how long the interruption lasts.
   ok("Google is still offered first", sheet.indexOf("startGoogleSignIn") < sheet.indexOf('type="email"'));
+
+  // ── THE FRONT PAGE SAID ACCOUNTS DID NOT EXIST ────────────────────
+  // Found live on 10 Aug by clicking Sign up on the landing painting and
+  // watching nothing happen. Both buttons only set a note reading "Accounts are
+  // coming soon — you don't need one to explore." They predate the account
+  // system and nobody came back to them, so the two most prominent account
+  // controls on the site actively denied that accounts were possible. This is
+  // the literal thing he meant by "the create log in should be at the front
+  // page with all the magic".
+  ok("the landing no longer claims accounts are coming soon", !/Accounts are coming soon/.test(appSrc));
+  ok("Log in opens the real sheet", /setAuthReason\(null\); setAuthMode\("in"\); setAuthOpen\(true\);/.test(appSrc));
+  ok("and Sign up opens it on Create", /setAuthReason\(null\); setAuthMode\("up"\); setAuthOpen\(true\);/.test(appSrc));
+  ok("the chosen tab reaches the sheet", /initialMode=\{authMode\}/.test(appSrc));
+  // The landing is a conditional block, not an early return, and AuthSheet sits
+  // below it in the same tree. If either stops being true the buttons go dead
+  // again with no error anywhere.
+  ok("the landing is rendered inline, not returned early", /\{!entered && \(/.test(appSrc));
+  ok("and the sheet renders after it", appSrc.indexOf("{!entered && (") < appSrc.indexOf("<AuthSheet open="));
+
+  // The sheet is hidden by an early return rather than unmounted, so its state
+  // survives a close: without a reset, pressing Sign up after once choosing
+  // Sign in hands back the login form, and the Save gate greets a brand new
+  // visitor with it too.
+  ok("the mode is reset every time it opens", /setMode\(initialMode \|\| "up"\);/.test(sheet));
+  ok("and stale errors are cleared with it", /if \(!open\) return;[\s\S]{0,160}setError\(null\); setNotice\(null\);/.test(sheet));
 }
 
 rmSync(dir, { recursive: true, force: true });

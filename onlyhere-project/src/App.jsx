@@ -4518,6 +4518,10 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // Why the sheet opened, so it can say what THIS person is about to get
   // instead of describing accounts in the abstract. "guide" is the save gate.
   const [authReason, setAuthReason] = useState(null);
+  // Which tab the sheet opens on. "Log in" and "Sign up" are two different
+  // promises to the person clicking them, and landing both on the same screen
+  // is the kind of small dishonesty that makes a product feel careless.
+  const [authMode, setAuthMode] = useState("up");
   const [accountBusy, setAccountBusy] = useState(false);
   const syncedOnceRef = useRef(false);
 
@@ -10996,11 +11000,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           <div className="gxa-topbar" style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "calc(14px + env(safe-area-inset-top)) 18px 0", pointerEvents: "none", opacity: introFlightDone ? 1 : 0 }}>
             <span ref={cornerMarkRef} className={`gxa-brand${introFlightDone ? " gxa-lit" : ""}`} style={{ pointerEvents: "auto", filter: "drop-shadow(0 1px 8px rgba(8,8,4,0.7))" }}><GemlyxLogo size={19} color="#F0EFE6" /></span>
             <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
-              <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
+              {/* ── THESE TWO SAID ACCOUNTS DID NOT EXIST ────────────
+                  Both buttons used to do nothing but show "Accounts are coming
+                  soon — you don't need one to explore." They are older than the
+                  account system and nobody came back to them, so the front page
+                  he calls "the front page with all the magic" carried the only
+                  two account controls on the site and both of them denied that
+                  accounts were possible. Found live on 10 Aug by clicking Sign
+                  up and watching nothing happen.
+                  The landing renders inside {!entered && ...} rather than an
+                  early return, and AuthSheet sits below it in the same tree, so
+                  the sheet opens straight over the painting. */}
+              <button onClick={() => { setAuthReason(null); setAuthMode("in"); setAuthOpen(true); }}
                 style={{ background: "rgba(12,11,7,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(240,239,230,0.28)", color: "#F0EFE6", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                 Log in
               </button>
-              <button onClick={() => { setLandingNote("Accounts are coming soon — you don't need one to explore."); }}
+              <button onClick={() => { setAuthReason(null); setAuthMode("up"); setAuthOpen(true); }}
                 style={{ background: `linear-gradient(135deg, ${C.accent}, #C22A3C)`, border: "none", color: "#fff", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 14px rgba(0,0,0,0.35)" }}>
                 Sign up
               </button>
@@ -11637,7 +11652,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           setAuthOpen(false); setAuthReason(null);
           try { localStorage.removeItem("gemlyx_pending_guide_save"); } catch { /* ignore */ }
         }}
-        reason={authReason}
+        reason={authReason} initialMode={authMode}
         localSaveCount={savedPlaces.length + savedGuides.length} />
 
       {authOpen && userSession && (
