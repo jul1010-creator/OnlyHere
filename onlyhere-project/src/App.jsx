@@ -11,6 +11,7 @@ import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
 import { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
+import { fetchProfile, profileForPrompt, isBlank as profileIsBlank } from "./utils/profile";
 import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
@@ -74,6 +75,7 @@ import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange,
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates } from "./utils/eventDates";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
+import { ProfileSheet } from "./components/ProfileSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
@@ -4522,6 +4524,17 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // promises to the person clicking them, and landing both on the same screen
   // is the kind of small dishonesty that makes a product feel careless.
   const [authMode, setAuthMode] = useState("up");
+  // ── WHAT GEMLYX KNOWS ABOUT THE PERSON ───────────────────────────
+  // Asked for AFTER the account exists, never during signup: his friend's
+  // whole complaint was being asked things before being given anything, and
+  // this sheet often lands on the way back from the Google redirect, at the
+  // same moment a guide is being claimed. See components/ProfileSheet.jsx.
+  const [userProfile, setUserProfile] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileSetupSql, setProfileSetupSql] = useState(null);
+  // Asked once per session at most. Somebody who skipped should not be asked
+  // again every time a token refresh produces a new session object.
+  const profileAskedRef = useRef(false);
   const [accountBusy, setAccountBusy] = useState(false);
   const syncedOnceRef = useRef(false);
 
@@ -4614,6 +4627,31 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     });
     setToast("📖 Saved to your account");
     setTimeout(() => setToast(null), 2600);
+  }, [userSession]);
+
+  // ── ASK ONCE, AFTER THE ACCOUNT EXISTS ──────────────────────────────
+  // Keyed on userSession for the same reason the pending-save claim is: on the
+  // Google path handleSignedIn never runs at all, because the session is
+  // restored by captureRedirectSession on a cold load.
+  //
+  // A person who already has a profile is never asked, and a person who skipped
+  // is not asked again in this session. Both matter because a refreshed token
+  // produces a new session object, and an "optional" step that reappears on
+  // every refresh is not optional, it is nagging.
+  useEffect(() => {
+    if (!userSession || profileAskedRef.current) return;
+    profileAskedRef.current = true;
+    (async () => {
+      const res = await fetchProfile(userSession);
+      // A missing column is reported, not swallowed. gemlyx_research shipped
+      // weeks ago and did nothing because both calls sat in catch blocks and
+      // the only symptom was a console line nobody read.
+      if (res?.missingColumn) { setProfileSetupSql("alter table gemlyx_user_data add column if not exists profile jsonb;"); return; }
+      if (!res) return;                       // network failure: ask another day
+      if (res.profile && !profileIsBlank(res.profile)) { setUserProfile(res.profile); return; }
+      setProfileOpen(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userSession]);
 
   const handleSignOut = async () => {
@@ -6720,7 +6758,9 @@ ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS
 
 If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range genuinely overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing genuinely overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. Gemlyx's core mission: most tourists only see Copenhagen for 3-4 days and never explore the rest of Denmark, especially Jutland and North Zealand. When someone is staying more than 2 days, actively suggest at least one destination outside Copenhagen — don't just default to city recommendations. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
 
-You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.`;
+You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.
+
+${profileForPrompt(userProfile)}`;
 
       const claudeTools = [{
         name: "web_search",
@@ -11654,6 +11694,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         }}
         reason={authReason} initialMode={authMode}
         localSaveCount={savedPlaces.length + savedGuides.length} />
+      <ProfileSheet open={profileOpen && !!userSession} session={userSession} initial={userProfile}
+        onDone={(saved) => { setProfileOpen(false); if (saved) setUserProfile(saved); }}
+        onNeedsSetup={(sql) => { setProfileOpen(false); setProfileSetupSql(sql); }} />
 
       {authOpen && userSession && (
         <div onClick={() => setAuthOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 980, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -11666,6 +11709,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 18 }}>
               {savedPlaces.length} saved {savedPlaces.length === 1 ? "place" : "places"} and {savedGuides.length} saved {savedGuides.length === 1 ? "guide" : "guides"}, synced to this account.
             </div>
+            {/* Loud, not a console line. gemlyx_research shipped weeks ago and
+                did nothing at all because its table never existed and both
+                calls sat in catch blocks. */}
+            {profileSetupSql && (
+              <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.6, marginBottom: 14, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
+                Gemlyx cannot store what you tell it about yourself yet: the database has no profile column. Run this once in the Supabase SQL editor.
+                <code style={{ display: "block", marginTop: 7, color: C.light, fontSize: 10.5, wordBreak: "break-all" }}>{profileSetupSql}</code>
+              </div>
+            )}
+            {/* A way back in. Without this the profile is a one-shot question
+                asked once at signup and never editable, which is exactly the
+                kind of thing somebody notices six months later when what they
+                typed is out of date and there is nowhere to change it. */}
+            <button onClick={() => { setAuthOpen(false); setProfileOpen(true); }}
+              style={{ width: "100%", background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
+              {userProfile && !profileIsBlank(userProfile) ? "Edit what Gemlyx knows about you" : "Tell Gemlyx about you"}
+            </button>
             <button onClick={() => { setAuthOpen(false); handleSignOut(); }}
               style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 10 }}>
               Sign out
@@ -11680,7 +11740,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               {accountBusy ? "Deleting…" : "Delete my saved data"}
             </button>
             <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-              This deletes everything we hold for you: your saved places and guides. To also remove the sign-in record itself, email hello@gemlyx.com and it will be done.
+              This deletes everything we hold for you: your saved places, your guides, and anything you told Gemlyx about yourself. To also remove the sign-in record itself, email hello@gemlyx.com and it will be done.
             </div>
           </div>
         </div>

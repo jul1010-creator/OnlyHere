@@ -34,6 +34,11 @@ import { signInWithPassword, signUpWithPassword, sendPasswordReset, startGoogleS
 //    only give you it. It won't keep you updated on future events that can be
 //    good for the trip or get help along the way. That's for paying users."
 //
+// AND THE PRIVACY LINE HAD TO MOVE WITH THE PRODUCT. It used to promise "no
+// profile", which stopped being true the moment the optional self-description
+// was added. A privacy promise that quietly goes stale is worse than one that
+// was never made, so it now says what is actually stored.
+//
 // So: the guide is free and ungated, the account is what keeps it, and the
 // living part of the product is paid. All three are said plainly below,
 // INCLUDING the third. Naming what a free account does not include, at the
@@ -207,7 +212,7 @@ export const AuthSheet = ({ open, onClose, onSignedIn, localSaveCount, reason, i
         </div>
 
         <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.55, marginTop: 12 }}>
-          We store your email and your saved list, nothing else. No profile, no tracking, no marketing email. You can delete your account and everything in it from this menu at any time.
+          We store your email and your saved list. Afterwards you can add a few optional details about yourself, which only ever shape what Gemlyx suggests to you. No tracking, no marketing email, nothing sold. You can delete your account and everything in it from this menu at any time.
         </div>
       </div>
     </div>
