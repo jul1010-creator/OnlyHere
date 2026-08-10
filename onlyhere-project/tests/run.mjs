@@ -71,6 +71,7 @@ writeFileSync(entry, `
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
+  export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -515,9 +516,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // interpolating the wrong thing, still LOOKS fine and produces worse drafts for
 // weeks before anyone notices.
 {
-  const TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightTown", "booking"];
+  // CONTENT_TYPES, not a literal copy of it. Two hand-maintained lists of the
+  // same thing is what this codebase keeps getting caught by, and a test that
+  // owns its own copy of the list cannot notice the list changing.
+  const TYPES = M.CONTENT_TYPES;
   const p = M.studioPrompts("Aarhus Festuge");
-  is("all eight draft types still have a prompt", Object.keys(p).sort(), TYPES.slice().sort());
+  is("every registered type has a draft prompt", Object.keys(p).sort(), TYPES.slice().sort());
   TYPES.forEach(t => {
     ok(`${t} still carries the voice rules`, p[t].includes("NEVER USE THE EM DASH"));
     ok(`${t} still demands strict JSON`, /Respond with ONLY strict JSON/.test(p[t]));
@@ -994,12 +998,33 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // never disobeying: the schema was asking for praise and got it.
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  // Each published type builds its page from one bb([...]) call listing its
-  // section headings. Pulling them out of the source is the only way to check
-  // the thing that actually ships.
-  const headingSets = [...app.matchAll(/bb\(\s*(?:isClub \? )?\[\[([\s\S]{0,400}?)\]\]/g)]
-    .map(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2]));
-  ok("every published type still builds a page", headingSets.length >= 7);
+  // ── TWO LISTS OF THE SAME THING, SO BOTH GET READ ─────────────────
+  // Each published type declares its section headings twice: App.jsx's
+  // paste-ready codegen calls bb([...]), and studioContent.js's shapeForLive
+  // calls bbData([...]). This block used to read only the first.
+  //
+  // That blind spot cost the whole entry-voice pass of 8 Aug. App.jsx was
+  // cleaned to Being There / Who It's For / The Reality Check and this suite
+  // went green, while shapeForLive, the ONLY insert path into the database,
+  // still wrote "Why People Love It" and "Perfect For" and dropped realityCheck
+  // entirely for free, night, nightTown and booking. Everything published
+  // through the button carried the old headings and no verdict, and every
+  // assertion below passed the entire time.
+  const shape = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  const headingsIn = (src, fn) =>
+    [...src.matchAll(new RegExp(`${fn}\\(\\s*(?:isClub \\? )?\\[\\[([\\s\\S]{0,400}?)\\]\\]`, "g"))]
+      .map(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2]));
+  const codegenSets = headingsIn(app, "bb");
+  const publishSets = headingsIn(shape, "bbData");
+  const headingSets = [...codegenSets, ...publishSets];
+  ok("every published type still builds a page", codegenSets.length >= 7);
+  ok("and the publish path declares its headings too", publishSets.length >= 7);
+  // The publish path is the one that reaches a reader, so it is checked by name
+  // rather than only folded into the combined list.
+  ok("the publish path carries a verdict for every type",
+     publishSets.every(set => set.some(h => /reality check/i.test(h))));
+  ok("and none of its headings presuppose one",
+     publishSets.flat().every(h => !/why people love|perfect for/i.test(h)));
 
   // 1. NOTHING MAY PRESUPPOSE THE VERDICT. A heading is an instruction to the
   // writer before it is a label for the reader.
@@ -1018,7 +1043,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // 4. The schema has to carry the field, or the heading renders empty forever.
   const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
-  const TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightTown", "booking"];
+  const TYPES = M.CONTENT_TYPES;
   const p = M.studioPrompts("Amalienborg Slot");
   TYPES.forEach(t => {
     ok(`${t} asks for a verdict field`, /realityCheck|gettingThereReality/.test(p[t]));
@@ -4508,6 +4533,359 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // And the word boundary, which here spends money rather than showing a card.
   ok("a source scoped to Als is not unlocked by the word also",
      !placeMightMatch("Als", { name: "Copenhell", text: "there is also a camping area on site" }, "festival"));
+}
+
+// ── SWIPING BETWEEN PAGES ───────────────────────────────────────────
+// Oliver, 10 Aug 2026: "my friend complained about the little things at the
+// bottom that tells you that you can swipe to the side. I would appreciate if
+// you can make the person able to swipe. WITHOUT MAKING THE PAGE ALL BOUNCY TO
+// THE SIDES!!!! It needs to be like when you swipe on iphone or tinder."
+//
+// setStrip has accepted a drag offset since it was written and NOTHING EVER
+// PASSED IT ONE. There were no touch listeners on the pager at all. The dots at
+// the bottom were advertising a gesture the app did not implement, which is why
+// they read as decoration nobody understood.
+{
+  const { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, EDGE_DRAG } = M;
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(appSrc);
+  const W = 390;             // a phone, so the numbers below are real gestures
+  const COUNT = 8;           // TAB_ORDER.length
+
+  // ── A TAP IS NOT A SWIPE ──────────────────────────────────────────
+  is("a still finger decides nothing", swipeAxis(0, 0), null);
+  is("and neither does a shaky tap", swipeAxis(5, 4), null);
+  ok("the slop is big enough to survive a thumb", SLOP_PX >= 8);
+
+  // ── THE AXIS LOCK, WHICH IS THE WHOLE FEEL ────────────────────────
+  // Every page scrolls vertically, so a scroll that drifts off true must stay a
+  // scroll. This is the assertion that would have caught a naive |dx| > |dy|.
+  is("a flat drag turns the page", swipeAxis(60, 4), "x");
+  is("a plain scroll is left alone", swipeAxis(4, 60), "y");
+  is("a scroll drifting 20 degrees is still a scroll", swipeAxis(22, 60), "y");
+  is("a swipe drifting 20 degrees is still a swipe", swipeAxis(60, 22), "x");
+  is("a perfect diagonal belongs to the scroll", swipeAxis(50, 50), "y");
+  // ── THE ASSERTION WITH THE TEETH ──────────────────────────────────
+  // Everything above this line passes just as happily against a naive
+  // |dx| > |dy|, which is the version almost everybody writes. Verified by
+  // mutation: swapping the bias out left the whole block green.
+  //
+  // This is the gesture that separates them. A thumb scrolling a long page
+  // drifts: 60px across while travelling 50px down is a SCROLL that wandered,
+  // and the naive test calls it a page turn, so the page lurches sideways while
+  // somebody is reading. Nothing about AXIS_BIAS being 1.4 can be asserted by
+  // reading the constant, because a constant cannot disagree with itself.
+  is("a scroll with a drifting thumb is still a scroll", swipeAxis(60, 50), "y");
+  is("and one drifting the other way too", swipeAxis(-60, 50), "y");
+  // While a deliberate sideways move, at the same vertical drift, still turns.
+  is("a deliberate swipe at the same drift still turns the page", swipeAxis(90, 50), "x");
+  ok("the bias favours the page's own scrolling", AXIS_BIAS > 1);
+
+  // ── THE ENDS ARE A WALL, NOT A RUBBER BAND ────────────────────────
+  is("dragging back from the first page barely moves", dragOffset(100, 0, COUNT), 100 * EDGE_DRAG);
+  is("and dragging past the last page barely moves", dragOffset(-100, COUNT - 1, COUNT), -100 * EDGE_DRAG);
+  ok("which is a small fraction of the finger", EDGE_DRAG > 0 && EDGE_DRAG <= 0.34);
+  is("but the first page still moves freely inwards", dragOffset(-100, 0, COUNT), -100);
+  is("and the last page freely the other way", dragOffset(100, COUNT - 1, COUNT), 100);
+  is("a middle page tracks the finger exactly", dragOffset(-140, 3, COUNT), -140);
+
+  // ── DISTANCE OR SPEED, NEVER BOTH ─────────────────────────────────
+  // Requiring both is how a real flick snaps back and feels broken.
+  ok("a slow deliberate drag past the threshold commits", swipeCommits(-120, 900, W));
+  ok("a fast short flick commits on speed alone", swipeCommits(-40, 60, W));
+  ok("a short slow nudge does not", !swipeCommits(-20, 800, W));
+  ok("and a half-hearted change of mind does not", !swipeCommits(-55, 1200, W));
+  is("no width means no verdict", swipeCommits(-200, 100, 0), false);
+
+  // ── WHERE IT LANDS ────────────────────────────────────────────────
+  is("swiping left goes forward", swipeTarget(-120, 300, W, 3, COUNT), 4);
+  is("swiping right goes back", swipeTarget(120, 300, W, 3, COUNT), 2);
+  is("an uncommitted swipe stays put", swipeTarget(-20, 900, W, 3, COUNT), 3);
+  // THE ONE THAT STOPS THE BOUNCE BECOMING A BUG: there is no page 8, and no
+  // page below zero, so the gesture resolves to standing still.
+  is("there is nothing past the last page", swipeTarget(-200, 200, W, COUNT - 1, COUNT), COUNT - 1);
+  is("and nothing before the first", swipeTarget(200, 200, W, 0, COUNT), 0);
+
+  // ── AND THAT IT IS WIRED TO A REAL GESTURE ────────────────────────
+  ok("the pager has touch listeners at all", /addEventListener\("touchstart", onStart, \{ passive: true \}\)/.test(appSrc));
+  // Non-passive is not a detail. A passive listener cannot preventDefault, and
+  // preventDefault is the only thing stopping Chrome turning the drag into a
+  // back-navigation and rubber-banding the page on the way.
+  ok("touchmove is non-passive so the bounce can be stopped", /addEventListener\("touchmove", onMove, \{ passive: false \}\)/.test(appSrc));
+  ok("and it actually prevents the default", /if \(e\.cancelable\) e\.preventDefault\(\)/.test(code));
+  ok("the gesture is cancelled as well as ended", /addEventListener\("touchcancel", onEnd/.test(appSrc));
+  // Scoped to the pager's own root, because an unrelated document-level
+  // touchstart listener elsewhere in the file would otherwise pad the count and
+  // let a genuinely missing removal pass.
+  ok("and every listener is removed again", (appSrc.match(/root\.removeEventListener\("touch/g) || []).length === 4);
+  ok("the scroll chaining that causes the bounce is contained", /overscrollBehaviorX: "contain"/.test(appSrc));
+
+  // A horizontal row inside a page keeps its own gesture, or the events strip
+  // and the hidden-gems rows stop scrolling the moment swiping works.
+  // CALLED, not merely present. Verified by mutation: deleting the call and
+  // leaving the function defined kept the whole block green, which is the
+  // written-and-never-wired shape this codebase has hit seven times.
+  ok("the guard actually runs at the start of every gesture", /if \(ownedByAScroller\(e\.target\)\) return;/.test(code));
+  ok("and it runs before any drag state is recorded", code.indexOf("if (ownedByAScroller(e.target)) return;") < code.indexOf("dragRef.current = { x0:"));
+  ok("a sideways scroller inside a page is left alone", /const ownedByAScroller = \(target\) =>/.test(code));
+  ok("and that is decided by real overflow, not a guess", /el\.scrollWidth - el\.clientWidth > 4/.test(code));
+  ok("reading the computed overflow, not the inline style", /getComputedStyle\(el\)\.overflowX/.test(code));
+  // touch-action would be the tidy way to stop the browser and CANNOT be used:
+  // it intersects down the ancestor chain, so pan-y here would kill sideways
+  // scrolling in every row inside the pager. That is the bug this prevents.
+  ok("the strip does not set touch-action, which would break those rows", !/touchAction: "pan-y"/.test(appSrc));
+
+  // Listeners attach once, so anything read from a render closure is frozen at
+  // page zero. Every drag after the first would then compute from the wrong base.
+  ok("the live page index is read through a ref", /tabIdxRef\.current \* \(100\/TAB_ORDER\.length\)/.test(code));
+  ok("and so is the page change", /goTabRef\.current\(TAB_ORDER\[next\]\)/.test(code));
+
+  // ── THE DOTS SAY WHERE YOU ARE ────────────────────────────────────
+  // Eight identical dots tell you there are eight of something. His friend's
+  // complaint was reasonable and the fix is a name, not fewer dots.
+  ok("the page indicator names the page", /NAV_ITEMS\.find\(n => n\.id === active\)\?\.label/.test(appSrc));
+  ok("and the active dot is a bar, so position reads at a glance", /width: i === tabIdx \? 16 : 6/.test(appSrc));
+}
+
+// ── THE EMPTY BOX BEFORE THE WRITING ────────────────────────────────
+// "that box getting big before writing is annoying.. and perhaps write a little
+// faster." Every word was rendered up front at opacity 0 so the bubble took its
+// full height immediately, which is a real fix for layout jumping and also
+// paints a tall empty box and dribbles text into the top of it.
+{
+  const tw = readFileSync(join(root, "src/components/TypewriterText.jsx"), "utf8");
+  // Raw source throughout this block. stripNonCode blanks string CONTENTS and
+  // JSX, not only comments, so every pattern below that mentions a string
+  // literal would be tested against blank space and pass having proved nothing.
+  const code = stripNonCode(tw);
+
+  ok("unwritten words are not rendered at all", /if \(w >= shownWords\) break;/.test(code));
+  ok("so the bubble grows with the text", !/opacity: visible \? 1 : 0/.test(code));
+  ok("and trailing whitespace goes with them", /while \(out\.length && typeof out\[out\.length - 1\] === "string"/.test(tw));
+  // A transition needs a previous value and a freshly mounted node has none, so
+  // the fade has to be an animation or the words would snap in at full opacity.
+  ok("words fade in on mount", /animation: "gxWordIn 0\.34s ease both"/.test(tw));
+  ok("and the keyframes exist", /@keyframes gxWordIn/.test(tw));
+  ok("injected once, not per instance", /if \(fadeInjected \|\| typeof document === "undefined"\) return;/.test(tw));
+
+  // Faster, and still visibly written. He has twice insisted it must not dump
+  // the whole reply in at once, so this is bounded at both ends.
+  const num = (name) => Number((tw.match(new RegExp(`const ${name} = (\\d+)`)) || [])[1]);
+  ok(`the anchors for the pacing constants exist`, [num("MS_PER_WORD"), num("MAX_TOTAL_MS"), num("TICK_MS")].every(Number.isFinite));
+  ok("it writes faster than before", num("MS_PER_WORD") < 105);
+  ok("but is still word by word, not a dump", num("MS_PER_WORD") >= 30);
+  ok("a long reply finishes sooner", num("MAX_TOTAL_MS") < 9000);
+  ok("and the growth is smooth rather than stepped", num("TICK_MS") <= 64);
+}
+
+// ── THE EXPLORE PAGE ON A DESKTOP ───────────────────────────────────
+// "the explore page has to be filled out on PC." Every row dealt exactly three
+// cards on every screen, which is a full row on a phone and a third of one on a
+// laptop.
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(appSrc);
+
+  ok("the hard-coded three is gone", !/dealt\(ranked, 3,/.test(code));
+  ok("the row count is measured from the viewport", /dealt\(ranked, rowCards,/.test(code));
+  ok("and recomputed when the window changes", /window\.addEventListener\("resize", on\)/.test(appSrc));
+  ok("and cleaned up", /window\.removeEventListener\("resize", on\)/.test(appSrc));
+
+  // The same seed at a bigger count must deal a SUPERSET, not a new hand, or
+  // resizing a window silently reshuffles what somebody was looking at.
+  const rand = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  const dealt = (pool, n, seed) => {
+    const r = rand(seed); const a = pool.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a.slice(0, n);
+  };
+  const pool = Array.from({ length: 30 }, (_, i) => `p${i}`);
+  is("a wider screen shows more of the same hand, not a different one",
+     dealt(pool, 6, 12345).slice(0, 3), dealt(pool, 3, 12345));
+  ok("and genuinely shows more", dealt(pool, 6, 12345).length === 6);
+}
+
+// ── A TYPE IS REGISTERED EVERYWHERE, OR IT IS NOT REGISTERED ────────
+// Adding a content type means hand-registering it in about a dozen places, and
+// NOTHING checked that the dozen agreed. The cost of that was not theoretical:
+//
+//   - `booking` was missing from the Studio type picker. It was registered in
+//     the prompts, the publish shape, the live merge, the discover label, the
+//     placeholder and the photo folder, and there was no button to choose it.
+//     Reachable only by editing a row that already existed.
+//   - the live merge chain had no else, so a published row of an unregistered
+//     type was fetched, deduped, marked merged and then dropped. In the
+//     database, rendering nowhere, silently.
+//
+// Both are the same missing test, and this is it. Every list below is walked
+// from CONTENT_TYPES rather than from a copy of it, so the next type either
+// appears in all of them or the suite names the one it is missing from.
+{
+  const TYPES = M.CONTENT_TYPES;
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const live = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  const prompts = M.studioPrompts("Test Name");
+
+  ok("there is more than one type to check", TYPES.length >= 8);
+
+  // A named region, asserted to exist before anything is read out of it. A
+  // missed anchor gives "" and every "is it in there" test on "" reads as a
+  // clean absence, which is how a real guard becomes a passing one.
+  const region = (src, from, to, label) => {
+    const a = src.indexOf(from);
+    ok(`the ${label} was found`, a >= 0);
+    const b = to ? src.indexOf(to, a) : src.length;
+    ok(`the ${label} has an end`, b > a);
+    return a >= 0 && b > a ? src.slice(a, b) : " ";
+  };
+  const missing = (label, hay, fmt) => {
+    const gone = TYPES.filter(t => !hay.includes(fmt(t)));
+    is(`every type is in the ${label}`, gone, []);
+  };
+
+  missing("type label map", JSON.stringify(Object.keys(M.TYPE_LABEL)), t => `"${t}"`);
+  missing("draft prompt table", JSON.stringify(Object.keys(prompts)), t => `"${t}"`);
+
+  // THE PUBLISH SHAPE, exercised rather than read. shapeForLive is the only
+  // insert path into the database and has silently eaten a feature twice.
+  const unshaped = TYPES.filter(t => !M.shapeForLive(t, { name: "X", desc: "d", vibeLocation: "v", characterAndFit: "c", howTo: "h" }));
+  is("every type can actually be published", unshaped, []);
+
+  missing("live content merge chain", region(live, "rows.forEach(row =>", "if (dupeNames.length", "merge chain"), t => `row.type === "${t}"`);
+  missing("Studio type picker", region(app, '{[["town", "🏘 Town"]', "].map(([k, label]) =>", "type picker"), t => `["${t}", "`);
+  missing("research query table", region(app, "const cfg = {", "}[sType];", "research query table"), t => `${t}: { queries:`);
+  // Both halves of discovery. The label is what the model is told to find, the
+  // pool is what results are deduplicated against. A type in one and not the
+  // other either offers candidates it already has, or none at all.
+  missing("discover label map", region(app, "const DISCOVER_TYPE_LABEL = {", "};", "discover label map"), t => `${t}:`);
+  missing("discover source pools", region(app, "const discoverSourceArrays = () => ({", "});", "discover pools"), t => `${t}:`);
+
+  // AND THE ONE THAT CANNOT BE A LIST CHECK. The paste-ready codegen ends in a
+  // bare else that writes NIGHTLIFE code, so an unregistered type does not fail
+  // loudly, it silently produces paste code for a different content type.
+  const codegen = region(app, 'let code = "";', "ui(setStudioResult, code);", "paste-ready codegen");
+  const unbranched = TYPES.filter(t => t !== "night" && !codegen.includes(`"${t}"`));
+  is("every type has its own codegen branch, since the fallback is nightlife", unbranched, []);
+}
+
+// ── THE ESSENTIALS TYPE ─────────────────────────────────────────────
+// Oliver, 10 Aug 2026: "my friend gave me an advice on some 'essentials' which
+// is a rejsekort for visitors.. is it possible install into the studio about
+// essentials? So I can get perplexity and tavily to deeper research it?"
+//
+// It was not. Essentials were thirteen objects hardcoded in a data file: the
+// most perishable content in the app, and the only content that never went near
+// the research pipeline. A town entry gets two research passes and a
+// fact-check; the page telling somebody which ticket to buy got whatever was
+// true on the day it was typed.
+{
+  const { shapeForLive, studioPrompts, CONTENT_TYPES, TYPE_LABEL } = M;
+  const p = studioPrompts("Rejsebillet")["essential"];
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  ok("essential is a real content type", CONTENT_TYPES.includes("essential"));
+  is("and has a label", TYPE_LABEL.essential, "Essentials");
+
+  // THE RULE THAT MATTERS MOST FOR THIS TYPE. A system needing a Danish CPR
+  // number or bank account is the wrong answer for somebody here five days,
+  // which is exactly the shape of the Rejsekort advice his friend passed on.
+  ok("the prompt writes for a visitor, not a resident", /WRITE FOR A VISITOR, NOT A RESIDENT/.test(p));
+  ok("and says so plainly when something is resident-only", /resident-only, SAY SO PLAINLY and name what a visitor should use instead/.test(p));
+  ok("the schema carries that as its own field", /"visitorNote"/.test(p));
+  ok("being current is stated as the product", /BEING CURRENT IS THE PRODUCT HERE/.test(p));
+  ok("and a replaced system leads the entry", /replaced, discontinued or renamed, lead with that/.test(p));
+  ok("an unconfirmable fact goes to uncertainties, not to the page", /put the rest in uncertainties rather than repeating what used to be true/.test(p));
+  ok("a price is a figure, never a feeling", /PRICES ARE A FACT, NOT A FEELING/.test(p));
+  ok("it carries the shared voice rules", p.includes("NEVER USE THE EM DASH"));
+  ok("and the reality check rule", /THE REALITY CHECK IS THE MOST IMPORTANT FIELD/.test(p));
+
+  // ── IT SURVIVES PUBLISH ───────────────────────────────────────────
+  const shaped = shapeForLive("essential", {
+    name: "Rejsebillet", category: "Transport", emoji: "🎫", desc: "Buy a ticket from your phone.",
+    howTo: "Download it, pick your zones, pay with any card.", price: "From 24 DKK", link: "https://example.dk",
+    tip: "Buy before you board.", realityCheck: "Skip the physical card entirely for a short trip.",
+    visitorNote: "The Rejsekort app is for residents, use this instead.",
+    __sources: ["https://dinoffentligetransport.dk/en"],
+  });
+  // Guarded, because shapeForLive returns null for an unregistered type and an
+  // unguarded property read crashes the runner instead of failing it, which
+  // hides every assertion after this point including the ones that would say
+  // why. A test must fail, not explode.
+  // Degraded to {} rather than thrown on, because shapeForLive returns null for
+  // an unregistered type and an unguarded property read CRASHES the runner
+  // instead of failing it, hiding every assertion after this point including
+  // the ones that say why. A test must fail, not explode.
+  ok("the draft shapes at all", !!shaped);
+  const sh = shaped || {};
+  is("the category survives", sh.category, "Transport");
+  is("the steps survive", sh.howTo, "Download it, pick your zones, pay with any card.");
+  is("the price survives", sh.price, "From 24 DKK");
+  is("the visitor note survives, which is the field that matters most", sh.visitorNote, "The Rejsekort app is for residents, use this instead.");
+  ok("and the sources come with it", Array.isArray(sh.__sources) && sh.__sources.length === 1);
+  ok("the reality check reaches the body", JSON.stringify(sh.blogBody || null).includes("Skip the physical card entirely"));
+  ok("under the heading everything else uses", JSON.stringify(sh.blogBody || null).includes("The Reality Check"));
+  // An essential is not a place and must not pretend to be one.
+  ok("it claims no photo", !!shaped && !("photo" in sh));
+  ok("and no coordinates", !!shaped && !("__lat" in sh));
+  // The Essentials page renders by category, so a category-less draft would
+  // land in no section at all rather than merely looking wrong.
+  is("a category-less draft still lands somewhere", (shapeForLive("essential", { name: "X" }) || {}).category, "Transport");
+
+  // ── AND IT IS REACHABLE ───────────────────────────────────────────
+  ok("there is a button for it in Studio", /\["essential", "🧭 Essential"\]/.test(app));
+  ok("the discovery pool is the essentials array", /essential: essentials,/.test(app));
+  ok("its research asks whether the thing still exists", /discontinued replaced changed 2026 what to use instead/.test(app));
+  ok("and asks in Danish too", /Danmark priser regler gældende 2026 turist/.test(app));
+  // A name and a description with no steps is not a usable essential, so it
+  // fails the draft rather than publishing half an answer.
+  ok("a draft with no steps is rejected", /sType === "essential" \? \(!t\.desc \|\| !t\.howTo\)/.test(app));
+}
+
+
+// ── A FROZEN FACT IS STILL A CLAIM ──────────────────────────────────
+// Oliver, 10 Aug 2026: "But isn't there a 'rejsekort app' for tourists?"
+//
+// There is, and the prompt was telling the model the opposite. Two places in
+// App.jsx carried a FROZEN TRANSPORT FACT stamped "verified Aug 2026" asserting
+// the Rejsekort app "is for residents" and that it must NEVER be recommended to
+// an international visitor. rejsekort.dk's own app terms ask for an email, a
+// name, a birthdate, a phone number and a payment card, and reserve MitID and
+// CPR for pensioner and disabled fare types. No residency rule anywhere.
+//
+// So the app was banning a valid option on an invented eligibility rule, inside
+// the one mechanism built specifically to stop the model inventing things. A
+// frozen fact is not exempt from the rule that nothing unverified gets stated;
+// it is the place where breaking that rule is hardest to notice, because it
+// reads as settled and nothing re-checks it.
+//
+// The steer to a fixed ticket was right and survives. Only the reason changed,
+// from a made-up restriction to the real one: check-in and check-out, and
+// forgetting to check out being the most common tourist fine.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const ess = readFileSync(join(root, "src/data/essentials.js"), "utf8");
+
+  ok("the claim that the app is resident-only is gone", !/Rejsekort app is for residents/.test(app));
+  ok("and so is the version in the second copy", !/the app is built for residents/.test(app));
+  ok("nothing tells the model to never recommend it", !/NEVER recommend either to international visitors/.test(app));
+  // The physical card really is discontinued, so that half stays.
+  ok("the physical card is still ruled out", /physical Rejsekort card is discontinued/.test(app));
+  // The real reason is stated, so the recommendation survives on true grounds.
+  ok("the fine is given as the reason", /forgetting to check OUT is the single most common tourist fine/.test(app));
+  ok("and Rejsebillet is still the simpler default", /Recommend the Rejsebillet app, the DOT or DSB apps, or the Copenhagen Card/.test(app));
+  // WHAT IS NOT KNOWN IS SAID TO BE NOT KNOWN. rejsekort.dk does not state
+  // whether a foreign number and a foreign card work in practice, and the
+  // pipeline never checked, so the prompt must not answer it either way.
+  ok("the unconfirmed part is named as unconfirmed", /not confirmed is whether a foreign phone number and a foreign card work in the Rejsekort app in practice/.test(app));
+  ok("and the model is told not to guess it", /never assert either way/.test(app));
+  // Both stamps say when they were checked rather than claiming verification.
+  is("no frozen fact still claims it was verified in a month", (app.match(/FROZEN TRANSPORT FACT \(verified/g) || []).length, 0);
+  ok("both carry a real check date instead", (app.match(/FROZEN TRANSPORT FACT \(checked 10 Aug 2026/g) || []).length === 2);
+
+  // And the reader-facing copy agrees with the prompt, since these drifted once
+  // already by being written by hand in two places.
+  ok("the essentials entry no longer implies a rule about who may use it", /it is the checking out that catches people/.test(ess));
+  ok("and says plainly that the app is open to visitors", /The Rejsekort app itself is open to visitors/.test(ess));
 }
 
 rmSync(dir, { recursive: true, force: true });

@@ -13,6 +13,7 @@ import { isSameTownWalk, legDistanceKm, resolveLegMode, WALK_MAX_MINUTES, WALK_M
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
+import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -1559,6 +1560,7 @@ function GemlyxApp() {
         foodStreet: { queries: [`${name} Denmark food street market vendors stalls what's there`, `${name} Denmark food market opening hours best time to visit how to get there`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
         night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
+        essential: { queries: [`${name} Denmark 2026 how it works price official`, `${name} Danmark priser regler gældende 2026 turist`, `${name} Denmark discontinued replaced changed 2026 what to use instead`, `${name} Denmark reddit r/Denmark tourist visitor does it work without CPR`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
       }[sType];
       // ── ONE QUERY IN DANISH, WHERE THE NAME DIFFERS ─────────────
@@ -1577,6 +1579,7 @@ function GemlyxApp() {
         festival: "billetter datoer program praktisk information",
         free: "åbningstider gratis adgang praktisk information",
         food: "menukort priser åbningstider anmeldelse",
+        essential: "priser regler gældende hvordan virker det turist",
         foodStreet: "boder madmarked åbningstider",
         night: "åbningstider entré natteliv anmeldelse",
         nightTown: "natteliv barer udeliv studerende",
@@ -2248,7 +2251,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       );
       if (draftResult.error) throw new Error(draftResult.error);
       let t = await parseClaudeJSON(draftResult.text, 8192);
-      const noContentField = (sType === "food" || sType === "foodStreet") ? !t.vibeLocation : sType === "town" ? !t.characterAndFit : !t.desc;
+      const noContentField = (sType === "food" || sType === "foodStreet") ? !t.vibeLocation : sType === "town" ? !t.characterAndFit : sType === "essential" ? (!t.desc || !t.howTo) : !t.desc;
       if (!t.name || noContentField) throw new Error("empty");
       // Verify the route to the AI's own highlighted attraction specifically —
       // this is the actual bug behind the Gentofte/Ordrupgaard case: the frozen-
@@ -2378,6 +2381,9 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // one shared list, not a separate array — see the "Food Streets" tab on /food.
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
+      } else if (sType === "essential") {
+        const nextId = Math.max(0, ...essentials.map(x => x.id)) + 1;
+        code = `// 1) Ctrl+F for \`export const essentials = [\` in src/data/essentials.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, category: ${J(t.category || "Transport")}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, howTo: ${J(t.howTo)}, price: ${J(t.price)}, link: ${t.link ? J(t.link) : "null"}${t.linkAndroid ? `, linkAndroid: ${J(t.linkAndroid)}` : ""}, tip: ${J(t.tip)}${t.visitorNote ? `, visitorNote: ${J(t.visitorNote)}` : ""}, verified: ${J(stamp)} },\n\n// 2) VERIFY the price and that the system still works this way before committing. This is the type that goes stale fastest.`;
       } else {
         const nextId = Math.max(0, ...nightlifeSpots.map(x => x.id)) + 1;
         const isClub = !!t.isClub;
@@ -3118,10 +3124,11 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     night: "bars or nightlife venues in Denmark",
     nightTown: "Danish towns with a real, distinct nightlife scene",
     booking: "bookable craft workshops or hands-on experiences in Denmark",
+    essential: "practical things a visitor to Denmark has to do or decide, such as ticket systems, payment, SIM cards, adapters and rules worth a fine. Not places",
   };
   const discoverSourceArrays = () => ({
     town: towns, festival: [...events, ...majorEvents, ...vikingEvents], free: freeEntrance,
-    food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns,
+    food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
   });
 
   const runDiscovery = async (typeOverride, extraFraming) => {
@@ -5051,7 +5058,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       }
       setGuideBuildStage({ label: "Structuring your itinerary", percent: 50 });
       const guideSystemPrompt = `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
-{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — but name only ones that genuinely serve THIS route. FROZEN COACH-LINE FACT (verified Aug 2026, do not generalise past it): Kombardo Expressen and Flixbus are LONG-DISTANCE coach lines. They run the big crossings and city-to-city corridors — Copenhagen to Aarhus, Aalborg, Odense and the rest of Jutland and Funen, over the Great Belt. They do NOT run internal short-haul commuter routes inside a single island or region: for anything like Faxe, Roskilde, Koge or Helsingor to Copenhagen, the real answer is a regional DSB train or the S-train, never a coach line. So: if the plan contains a genuine long-distance crossing between regions, name Kombardo Expressen or Flixbus (exact spelling, Kombardo EXPRESSEN, never 'Expresbus') as the real budget alternative to a full-fare train on THAT leg. If the whole trip stays within one region or island, do not mention them at all — recommend DSB Orange billetter (discount advance-purchase train tickets) for expensive train legs instead, which applies everywhere. If you are not confident a coach line actually serves a specific route, leave it out and point at kombardoexpressen.dk or flixbus.dk to check rather than asserting it. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the official Rejsebillet app or the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. FROZEN TRANSPORT FACT (verified Aug 2026): the physical Rejsekort card is discontinued and the Rejsekort app is for residents — NEVER recommend either to international visitors; the visitor-friendly options are the Rejsebillet app, the DOT/DSB apps, and the Copenhagen Card. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies. IF ANY REAL PORTION OF THE TRIP IS SPENT INSIDE COPENHAGEN ITSELF: lean against a rental car for that portion specifically — parking is scarce and genuinely expensive there, and the Metro/S-train/bus network plus biking already cover the city well, so say so plainly rather than defaulting to 'rent a car.' A car becomes genuinely worth it once the trip actually leaves the capital for other regions — frame it that way rather than as a blanket anti-car statement.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
+{"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — but name only ones that genuinely serve THIS route. FROZEN COACH-LINE FACT (verified Aug 2026, do not generalise past it): Kombardo Expressen and Flixbus are LONG-DISTANCE coach lines. They run the big crossings and city-to-city corridors — Copenhagen to Aarhus, Aalborg, Odense and the rest of Jutland and Funen, over the Great Belt. They do NOT run internal short-haul commuter routes inside a single island or region: for anything like Faxe, Roskilde, Koge or Helsingor to Copenhagen, the real answer is a regional DSB train or the S-train, never a coach line. So: if the plan contains a genuine long-distance crossing between regions, name Kombardo Expressen or Flixbus (exact spelling, Kombardo EXPRESSEN, never 'Expresbus') as the real budget alternative to a full-fare train on THAT leg. If the whole trip stays within one region or island, do not mention them at all — recommend DSB Orange billetter (discount advance-purchase train tickets) for expensive train legs instead, which applies everywhere. If you are not confident a coach line actually serves a specific route, leave it out and point at kombardoexpressen.dk or flixbus.dk to check rather than asserting it. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the official Rejsebillet app or the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. FROZEN TRANSPORT FACT (checked 10 Aug 2026 against rejsekort.dk): the physical Rejsekort card is discontinued, so never send a visitor to buy one. The Rejsekort APP is a different thing and is NOT resident-only: signing up needs an email, a name, a birthdate, a phone number and a payment card, and rejsekort.dk requires MitID or a CPR number only for pensioner and disabled fare types. So do not tell anyone they cannot use it. The reason to steer a short visit elsewhere is check-in and check-out: forgetting to check OUT is the single most common tourist fine, and a fixed ticket has nothing to forget. Recommend the Rejsebillet app, the DOT or DSB apps, or the Copenhagen Card as the simpler default, and give THAT as the reason. What is not confirmed is whether a foreign phone number and a foreign card work in the Rejsekort app in practice, so never assert either way. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies. IF ANY REAL PORTION OF THE TRIP IS SPENT INSIDE COPENHAGEN ITSELF: lean against a rental car for that portion specifically — parking is scarce and genuinely expensive there, and the Metro/S-train/bus network plus biking already cover the city well, so say so plainly rather than defaulting to 'rent a car.' A car becomes genuinely worth it once the trip actually leaves the capital for other regions — frame it that way rather than as a blanket anti-car statement.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
 CRITICAL: every stop's "name" must be a real place findable on Google Maps — an official attraction, venue, street or town name (e.g. "Ebeltoft Old Town", "Den Gamle By", "Faaborg Havn"). NEVER invent a poetic label like "Crooked House Village" or "Ebeltoft Bars" — if the plan described an area loosely, use the town or street name instead.
 CRITICAL: NEVER state a single bare ticket price in a stop's note (e.g. "tickets cost 230 DKK") — most attractions have tiered pricing (adult/child/student/senior) and one number without that context is misleading. Instead, if a real price range is known, state the range AND explain its practical financial reality (e.g. "150-250 DKK per plate, and a full meal usually needs two or three plates, so budget for a real lunch spend" — not just the number alone, and not a vague qualitative dodge like "a bit of a splurge" either). If no real range is known, say "check current prices online."
@@ -5643,6 +5650,32 @@ If the conversation only covers a single day or a few stops with no explicit day
 
   // Which category the front page picks are showing. "all" mixes everything.
   const [pickCategory, setPickCategory] = useState("all");
+  // ── HOW MANY CARDS A ROW CAN HOLD ───────────────────────────────────
+  // Oliver, 10 Aug 2026: "the explore page has to be filled out on PC."
+  //
+  // Every front-page row dealt exactly three cards, on every screen. Three
+  // 236px cards is a full, scrollable row on a phone and about a third of a row
+  // on a laptop, so the desktop Explore page read as half built: a heading,
+  // three cards, and a large amount of nothing to their right. That number was
+  // never a decision about density, it was a phone number left everywhere.
+  //
+  // Counted from the real viewport rather than guessed. Card plus gap is 246px
+  // and the row sits inside 32px of padding, with one extra card dealt on
+  // purpose so the row still runs off the right edge and reads as scrollable.
+  // Capped at 8 so a very wide monitor does not empty the pool into one row and
+  // leave next week's deal with nothing new in it.
+  const [rowCards, setRowCards] = useState(3);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const on = () => {
+      const usable = Math.min(window.innerWidth, 1120) - 32;
+      setRowCards(Math.max(3, Math.min(8, Math.floor(usable / 246) + 1)));
+    };
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+
   const [landingPortrait, setLandingPortrait] = useState(() =>
     typeof window !== "undefined" && window.matchMedia
       ? window.matchMedia("(orientation: portrait) and (max-width: 900px)").matches : false);
@@ -6100,13 +6133,131 @@ If the conversation only covers a single day or a few stops with no explicit day
   const stripRef = useRef(null);
   const tabIdx = TAB_ORDER.indexOf(active);
 
+  // The live page index, readable from the swipe listeners below. Those are
+  // attached once, so anything they read out of a render closure would be
+  // frozen at the first page and every drag after the first would compute its
+  // offset from tab zero.
+  const tabIdxRef = useRef(tabIdx);
+  tabIdxRef.current = tabIdx;
+
   const setStrip = (dx, animate) => {
     const el = stripRef.current; if (!el) return;
     el.style.transition = animate ? "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)" : "none";
-    el.style.transform = `translateX(calc(${-tabIdx * (100/TAB_ORDER.length)}% + ${dx}px))`;
+    el.style.transform = `translateX(calc(${-tabIdxRef.current * (100/TAB_ORDER.length)}% + ${dx}px))`;
   };
 
   useEffect(() => { setStrip(0, true); }, [active]);
+
+  // Same reason: goTab closes over `active`, so the listeners need the current
+  // one rather than the one that existed when they were attached.
+  const goTabRef = useRef(goTab);
+  goTabRef.current = goTab;
+  const setStripRef = useRef(setStrip);
+  setStripRef.current = setStrip;
+
+  // ── SWIPING BETWEEN PAGES ───────────────────────────────────────────
+  // Oliver, 10 Aug 2026, relaying his friend: the page dots at the bottom
+  // announce that you can swipe sideways, and swiping did nothing. setStrip has
+  // taken a drag offset this whole time and nothing ever passed it one. The
+  // dots were advertising a gesture the app did not implement.
+  //
+  // "It needs to be like when you swipe on iphone or tinder" and, in capitals,
+  // "WITHOUT MAKING THE PAGE ALL BOUNCY TO THE SIDES". Those are the same
+  // requirement seen from two ends, and four things decide whether it lands.
+  //
+  // 1. THE AXIS IS LOCKED ONCE, EARLY, AND IS BIASED TOWARDS VERTICAL. Every
+  //    page here scrolls up and down, so a gesture that is even slightly more
+  //    vertical than horizontal belongs to the page. A drag must beat vertical
+  //    by a clear margin before it is treated as a page turn, and once the
+  //    gesture is judged vertical it is abandoned for good rather than
+  //    re-tested on the next frame, which is what causes the sideways twitch
+  //    while scrolling.
+  //
+  // 2. A HORIZONTAL SCROLLER INSIDE A PAGE KEEPS ITS OWN GESTURE. The front
+  //    page has the events strip and the hidden-gems rows. Dragging one of
+  //    those must scroll that row, not turn the page, so a touch starting
+  //    inside anything that genuinely scrolls sideways is left alone entirely.
+  //
+  // 3. THE BOUNCE. Chrome treats a horizontal drag as back/forward navigation
+  //    and rubber-bands the whole page doing it. touch-action would be the tidy
+  //    fix and cannot be used here: it is intersected down the ancestor chain,
+  //    so pan-y on this strip would kill horizontal scrolling in every row
+  //    inside it, which is point 2 undone. So the listener is attached
+  //    non-passively and calls preventDefault only once the gesture is
+  //    committed to the horizontal axis. overscroll-behavior-x on the wrapper
+  //    stops the scroll chaining as well.
+  //
+  // 4. THE ENDS ARE A WALL, NOT A RUBBER BAND. On the first and last page the
+  //    drag still tracks the finger, at a fifth of the distance, so it reads as
+  //    "there is nothing that way" rather than as the page having come loose.
+  const pagerRef = useRef(null);
+  const dragRef = useRef(null);
+
+  useEffect(() => {
+    const root = pagerRef.current;
+    if (!root) return;
+
+    // Does this touch belong to a sideways scroller inside the page?
+    const ownedByAScroller = (target) => {
+      let el = target;
+      while (el && el !== root) {
+        if (el.scrollWidth - el.clientWidth > 4) {
+          const ox = getComputedStyle(el).overflowX;
+          if (ox === "auto" || ox === "scroll") return true;
+        }
+        el = el.parentElement;
+      }
+      return false;
+    };
+
+    const onStart = (e) => {
+      dragRef.current = null;
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (ownedByAScroller(e.target)) return;
+      dragRef.current = { x0: t.clientX, y0: t.clientY, dx: 0, axis: null, t0: e.timeStamp, w: root.clientWidth || 1 };
+    };
+
+    const onMove = (e) => {
+      const d = dragRef.current;
+      if (!d || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - d.x0, dy = t.clientY - d.y0;
+      if (!d.axis) {
+        d.axis = swipeAxis(dx, dy);
+        if (!d.axis) return;                                   // still a tap
+        if (d.axis === "y") { dragRef.current = null; return; } // the page's own scroll
+      }
+      // Committed. This is the line that stops the browser turning the gesture
+      // into a back-navigation and bouncing the page while it does.
+      if (e.cancelable) e.preventDefault();
+      d.dx = dragOffset(dx, tabIdxRef.current, TAB_ORDER.length);
+      setStripRef.current(d.dx, false);
+    };
+
+    const onEnd = (e) => {
+      const d = dragRef.current;
+      dragRef.current = null;
+      if (!d || d.axis !== "x") return;
+      const i = tabIdxRef.current;
+      // Either a decisive distance or a flick, never both. See utils/swipe.js.
+      const next = swipeTarget(d.dx, e.timeStamp - d.t0, d.w, i, TAB_ORDER.length);
+      if (next !== i) goTabRef.current(TAB_ORDER[next]);
+      else setStripRef.current(0, true);
+    };
+
+    root.addEventListener("touchstart", onStart, { passive: true });
+    root.addEventListener("touchmove", onMove, { passive: false });
+    root.addEventListener("touchend", onEnd, { passive: true });
+    root.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      root.removeEventListener("touchstart", onStart);
+      root.removeEventListener("touchmove", onMove);
+      root.removeEventListener("touchend", onEnd);
+      root.removeEventListener("touchcancel", onEnd);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleSave = (id) => setSavedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const savedProducts = allProducts.filter(p => savedItems.includes(p.id));
@@ -6244,7 +6395,7 @@ HIDDEN GEM TOWNS (this is Gemlyx's actual core differentiator — real, lesser-k
 
 ACTIVELY USE THE HIDDEN GEM TOWNS LIST, DON'T JUST DEFAULT TO FAMOUS ATTRACTIONS: when building a multi-day plan, deliberately pull at least one real town from the list above rather than filling every day with only the most famous, most obvious sights — genuinely working a hidden gem into the plan (not just mentioning it exists) is exactly what makes a Gemlyx-built trip different from a generic one. If someone's request sounds like they'd actually prefer a lighter, town-hopping style trip (cycling or driving around and seeing real places, not a packed sightseeing schedule), lean into that — don't force a dense day of attractions onto someone who'd rather just wander through a few real towns.
 
-If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range genuinely overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing genuinely overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. Gemlyx's core mission: most tourists only see Copenhagen for 3-4 days and never explore the rest of Denmark, especially Jutland and North Zealand. When someone is staying more than 2 days, actively suggest at least one destination outside Copenhagen — don't just default to city recommendations. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (verified Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a physical Rejsekort or the Rejsekort app to international visitors — the physical card is gone and the app is built for residents. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
+If asked for a plan or itinerary, structure it day by day using only the above, and factor in the current season. ACTIVELY CROSS-REFERENCE EVENTS AGAINST THE TRAVELER'S DATES: if they've told you when they're visiting (or roughly when — "next week", "in August"), check the UPCOMING EVENTS lists above for anything whose real date range genuinely overlaps with their trip, and proactively mention it as part of the plan rather than waiting to be asked — a real festival happening during someone's actual visit is exactly the kind of specific, useful detail worth surfacing unprompted. Don't force an event in in if nothing genuinely overlaps; a fabricated sense of good timing is worse than no mention at all. If you do suggest an event, ALWAYS pass along its real ticket situation from the [tickets: ...] note next to it — if it says SOLD OUT, say so plainly and don't suggest attending (mention it as a "happening nearby" fact instead, not a plan to join); if it says tickets are limited or sell out fast, tell them to book now, before the trip, not "when they arrive" — that's the single most common way someone misses something they specifically traveled for. Gemlyx's core mission: most tourists only see Copenhagen for 3-4 days and never explore the rest of Denmark, especially Jutland and North Zealand. When someone is staying more than 2 days, actively suggest at least one destination outside Copenhagen — don't just default to city recommendations. If asked about transport, always mention that the physical Rejsekort card was discontinued (28 May 2026) and the current fine for an invalid ticket is 750 DKK — the most common tourist mistakes are forgetting to check out, and assuming an installed app means a purchased ticket. FROZEN TRANSPORT FACT (checked 10 Aug 2026, rejsekort.dk + rejsebillet.dk): never recommend a PHYSICAL Rejsekort, because the card is discontinued. Do NOT claim the Rejsekort app is unavailable to visitors: its own terms ask only for an email, a name, a birthdate, a phone number and a payment card, and reserve MitID and CPR for pensioner and disabled fare types. Steer a short trip to a fixed ticket for the real reason instead, which is that the app is check-in and check-out and forgetting to check out is the most common tourist fine. Visitors buy tickets in the official Rejsebillet app (single tickets and passes for all of Denmark, from Rejsekort & Rejseplan A/S, paid in advance) or the DOT/DSB apps; the Copenhagen Card works as before (activate once, show on request). If unsure about any ticket mechanic, name the official app and point at it rather than describing mechanics.
 
 You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.`;
 
@@ -7200,7 +7351,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </div>
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           {label}
@@ -7209,7 +7360,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market/street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightTown: "Town name, e.g. Aarhus" }[studioType]}
+                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market/street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                       <button onClick={() => generateArea()} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
@@ -7481,7 +7632,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
                       <button onClick={() => runDiscovery()} disabled={discoverLoading}
                         style={{ flex: 1, minWidth: 160, background: "none", border: `1px solid ${C.gold}66`, borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        {discoverLoading ? "Searching the web…" : `🔍 Discover new ${{ town: "towns", festival: "events", free: "attractions", food: "food spots", foodStreet: "food streets", night: "nightlife", nightTown: "nightlife towns", booking: "craft experiences" }[studioType] || "candidates"}`}
+                        {discoverLoading ? "Searching the web…" : `🔍 Discover new ${{ town: "towns", festival: "events", free: "attractions", food: "food spots", foodStreet: "food streets", night: "nightlife", nightTown: "nightlife towns", booking: "craft experiences", essential: "essentials" }[studioType] || "candidates"}`}
                       </button>
                       {studioType !== "festival" && (
                         <button onClick={discoverNewEvents} disabled={discoverLoading}
@@ -7853,7 +8004,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       const typedNorm = norm(typed);
                       const sourceArrays = {
                         town: towns, festival: [...events, ...majorEvents], free: freeEntrance,
-                        food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns,
+                        food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
                       };
                       const arr = sourceArrays[studioType] || [];
                       const cityWords = ["copenhagen", "aarhus", "aalborg", "odense", "esbjerg", "randers", "kolding", "horsens", "vejle", "roskilde"];
@@ -8445,7 +8596,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   are not places, so there is nothing to pick from, and they
                   already live in the menu. */}
               <div style={{ padding: "4px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", paddingBottom: 4 }}>
                   {[
                     { id: "all", label: "Everything", ico: "compass" },
                     { id: "town", label: "Towns", ico: "town" },
@@ -8536,7 +8687,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   const rest = matched.filter(x => seasonFit(x, month).fit !== "good");
                   const order = (arr) => [...arr.filter(withPhoto), ...arr.filter(x => !withPhoto(x))];
                   const ranked = [...order(good), ...order(rest)];
-                  return { ...lens, items: dealt(ranked, 3, week * 31 + li) };
+                  // rowCards, not 3: the row fills the screen it is on. The
+                  // seed is unchanged, so a wider screen deals the SAME hand
+                  // with more of it visible rather than a different one, and
+                  // resizing the window never reshuffles what is on show.
+                  return { ...lens, items: dealt(ranked, rowCards, week * 31 + li) };
                 }).filter(r => r.items.length > 0);
                 // A category with nothing to show says so, rather than the whole
                 // section vanishing and leaving the chips looking broken.
@@ -8555,7 +8710,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div key={row.key} style={{ marginBottom: 22 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase" }}>{row.title}</div>
                         <div style={{ fontSize: 12, color: C.muted, margin: "3px 0 12px" }}>{row.sub}</div>
-                        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+                        <div style={{ display: "flex", gap: 10, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", paddingBottom: 6 }}>
                           {row.items.map(x => (
                             <button key={`${x._src}-${x.id}`} onClick={() => openStopDetail(x)}
                               style={{ flexShrink: 0, width: 236, textAlign: "left", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 0, overflow: "hidden", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -8586,7 +8741,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ padding: "20px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 3 }}>Near you right now</div>
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Straight-line distance from where you are</div>
-                  <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6 }}>
+                  <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", paddingBottom: 6 }}>
                     {(nearYou.towns || []).slice(0, 8).map(t => {
                       const real = towns.find(x => x.name === t.name);
                       if (!real) return null;
@@ -8977,7 +9132,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               </div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", marginBottom: 12 }}>
                   {["All", ...eventMonthOptions].map(m => {
                     // Counted against the TYPE filter only, never against the
                     // month filter itself: counting a facet with itself applied
@@ -8990,7 +9145,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   })}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12 }}>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", marginBottom: 12 }}>
                   {["All", ...eventTypeOptions].map(f => {
                     const inMonth = upcomingInTab.filter(e => !eventMonth || new Date(e.date).toLocaleString("en", { month: "short" }) === eventMonth);
                     const n = f === "All" ? inMonth.length
@@ -9000,7 +9155,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   })}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Order</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch" }}>
                   <Pill label="By date" active={eventSort === "soonest"} onClick={() => setEventSort("soonest")} />
                   <Pill label="By name" active={eventSort === "az"} onClick={() => setEventSort("az")} />
                 </div>
@@ -9039,7 +9194,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 const cities = [...new Set(foodSpots.map(f => f.location || f.city).filter(Boolean))].sort(daCompare);
                 if (cities.length < 2) return null;
                 return (
-                  <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch" }}>
                     {["All", ...cities].map(c => (
                       <Pill key={c} label={c} active={foodCity === c} onClick={() => setFoodCity(foodCity === c ? "All" : c)} />
                     ))}
@@ -9955,7 +10110,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             <div className={pageAnim} style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 73px)" }}>
               <div style={{ padding: "12px 16px 8px", flexShrink: 0 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Select a city</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch" }}>
                   {cities.map(city => (
                     <Pill key={city.id} label={`🇩🇰 ${city.name}`} active={mapCity?.id === city.id} onClick={() => { setMapCity(city); setSelectedPin(null); }} color={city.color} />
                   ))}
@@ -10621,21 +10776,40 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       )}
 
       {/* ── PAGER ──────────────────────────────────────────── */}
-      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
+      {/* overscrollBehaviorX stops a horizontal drag chaining out to the
+          document and taking the browser's back gesture with it, which is the
+          bounce. touchAction is deliberately NOT set here: it intersects down
+          the ancestor chain, so pan-y would disable sideways scrolling in every
+          row inside these pages. See the swipe listeners near setStrip. */}
+      <div ref={pagerRef} style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative", overscrollBehaviorX: "contain" }}>
         <div ref={stripRef}
           style={{ display: "flex", height: "100%", width: `${TAB_ORDER.length * 100}%`, transform: `translateX(${-tabIdx * (100/TAB_ORDER.length)}%)`, transition: "transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1)" }}>
           {TAB_ORDER.map((tabId, i) => (
-            <div key={tabId} style={{ width: `${100/TAB_ORDER.length}%`, height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 20 }}>
+            <div key={tabId} style={{ width: `${100/TAB_ORDER.length}%`, height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain", paddingBottom: 20 }}>
               {Math.abs(i - tabIdx) <= 1 && renderTab(tabId)}
             </div>
           ))}
         </div>
-        {/* Page dots */}
-        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, zIndex: 60, background: "rgba(10,15,30,0.55)", padding: "7px 12px", borderRadius: 100, backdropFilter: "blur(8px)" }}>
-          {TAB_ORDER.map((t, i) => (
-            <div key={t} onClick={() => goTab(t)}
-              style={{ width: i === tabIdx ? 8 : 6, height: i === tabIdx ? 8 : 6, borderRadius: "50%", background: i === tabIdx ? "#fff" : "rgba(255,255,255,0.35)", cursor: "pointer", transition: "all 0.2s", alignSelf: "center" }} />
-          ))}
+        {/* ── WHERE AM I ─────────────────────────────────────────────
+            Oliver's friend complained about "the little things at the bottom".
+            Fair: eight identical dots tell you there are eight of something and
+            nothing at all about what. They were also the only thing on screen
+            advertising a sideways swipe, which until now did not exist, so they
+            were promising twice and delivering neither. The name of the page
+            you are on now sits in the same pill, which answers the question the
+            dots were raising, and the active dot is a bar rather than a circle
+            so position is readable at a glance. */}
+        <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 9, zIndex: 60, background: "rgba(10,15,30,0.62)", padding: "6px 12px 6px 14px", borderRadius: 100, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.08)", maxWidth: "calc(100vw - 32px)" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", letterSpacing: 0.2 }}>
+            {(NAV_ITEMS.find(n => n.id === active)?.label || "").replace("✦ ", "")}
+          </span>
+          <span style={{ width: 1, height: 12, background: "rgba(255,255,255,0.18)", flexShrink: 0 }} />
+          <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+            {TAB_ORDER.map((t, i) => (
+              <div key={t} onClick={() => goTab(t)} title={NAV_ITEMS.find(n => n.id === t)?.label}
+                style={{ width: i === tabIdx ? 16 : 6, height: 6, borderRadius: 100, background: i === tabIdx ? "#fff" : "rgba(255,255,255,0.35)", cursor: "pointer", transition: "width 0.25s ease, background 0.2s", flexShrink: 0 }} />
+            ))}
+          </div>
         </div>
       </div>
 

@@ -62,10 +62,20 @@ export const cleanNote = (v) => clean(v).replace(/\s+/g, " ").slice(0, 160);
 
 // "" means every content type. Anything else must be a type the Studio actually
 // drafts, or the rule is dead and nobody can tell.
-export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightTown", "booking"];
+// "essential" is not a place. It is the practical layer: tickets, cards, apps,
+// plugs, fines. Oliver, 10 Aug 2026, on a friend's tip about visitor ticketing
+// and then, immediately after, the real question: "the whole essentials gotta
+// be kept updated at all time. How do we manage that?"
+//
+// Until now these were thirteen objects hardcoded in src/data/essentials.js.
+// The most perishable content in the app, prices and apps and card systems, was
+// the ONLY content that never went near the research pipeline, while a town
+// entry gets two research passes and a fact-check. Making it a real type is how
+// it gets sources, a verdict, and a way to be re-checked rather than remembered.
+export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightTown", "booking", "essential"];
 export const TYPE_LABEL = {
   "": "Everything", town: "Towns", festival: "Events", free: "Attractions", food: "Food",
-  foodStreet: "Food streets", night: "Nightlife", nightTown: "Nightlife towns", booking: "Workshops",
+  foodStreet: "Food streets", night: "Nightlife", nightTown: "Nightlife towns", booking: "Workshops", essential: "Essentials",
 };
 
 // ── "VISITCOPENHAGEN IS A GOOD SOURCE BUT PROBABLY NOT FOR AARHUS" ──
@@ -215,6 +225,9 @@ export const MAX_DIRECT_SEARCHES = 4;
 // under København and an English-only query cannot reach that page. Most Danish
 // towns are spelled the same either way and cost nothing extra for this.
 const QUERY_WORDS = {
+  // Danish first, because the authority on a Danish ticket system is a Danish
+  // page. "gældende" and "priser" are what a rules or price page calls itself.
+  essential: "priser regler gældende 2026 turist besøgende practical information visitors price rules",
   town: "praktisk information seværdigheder åbningstider what to see opening hours",
   festival: "billetter datoer program tickets dates programme",
   free: "åbningstider gratis adgang opening hours free entry",

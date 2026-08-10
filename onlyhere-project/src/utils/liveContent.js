@@ -49,6 +49,7 @@ import { nightlifeSpots } from "../data/nightlife";
 import { nightlifeTowns } from "../data/nightlifeTowns";
 import { foodSpots } from "../data/food";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
+import { essentials } from "../data/essentials";
 
 const mergedIds = new Set();      // Supabase row ids already folded in
 const mergedKeys = new Set();     // type + normalised name, second net (see below)
@@ -90,6 +91,16 @@ const doLoad = async () => {
       else if (row.type === "night") nightlifeSpots.push({ id, ...item });
       else if (row.type === "nightTown") nightlifeTowns.push({ id, ...item });
       else if (row.type === "booking") bookingRowsCache.push({ id, ...item });
+      // Published essentials sit alongside the hardcoded ones rather than
+      // replacing the file. Day one, nothing disappears; each hardcoded entry
+      // can then be retired one at a time as a researched version replaces it.
+      else if (row.type === "essential") essentials.push({ id, ...item });
+      // AND NOTHING FALLS OFF THE END SILENTLY. Every branch above is a hand
+      // registration, and a published row whose type nobody registered used to
+      // be fetched, deduped, marked merged, and then dropped with no warning:
+      // the row exists in the database and renders nowhere, which is this
+      // project's signature bug shape. It says so now.
+      else console.warn(`gemlyx_content: published row ${row.id} has type "${row.type}", which nothing in liveContent.js merges. It is in the database and will render nowhere.`);
     });
     if (dupeNames.length > 0) {
       console.warn(`gemlyx_content: skipped ${dupeNames.length} duplicate published row(s), delete them in Studio: ${dupeNames.join(", ")}`);

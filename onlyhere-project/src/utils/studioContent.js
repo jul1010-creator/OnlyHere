@@ -28,6 +28,29 @@ export const bulletsBlock = (heading, raw) => {
 // Shapes a Studio draft into the exact object shape each hardcoded array expects —
 // same fields the paste-ready codegen builds, but as a real JS object for direct use,
 // not template-string code. `id` and TOWN_COORDS are set by the caller after insert.
+// ── THIS IS THE SECOND TIME shapeForLive HAS EATEN A FEATURE ────────
+// The first was 8 Aug: placeKind, partOf and dayTripFrom were added to the
+// drafting prompt, the paste-ready codegen, the towns page and the detail page,
+// and to this allow-list on none of them, so Publish threw all three away and
+// every taxonomy render site was dead on the only supported path.
+//
+// 10 Aug, found while mapping the type system: the SAME function had done it
+// again, to the entry-voice work of 8 Aug. Four types (free, night, nightTown,
+// booking) gained a realityCheck field in their prompts, got it rendered by the
+// paste-ready codegen in App.jsx, and it was never named here. So the model
+// wrote the honest verdict, Publish dropped it, and every attraction, workshop,
+// bar and nightlife town published through the button has no Reality Check.
+// Those same four still carried "Why People Love It" and "Perfect For" here,
+// the two headings App.jsx was explicitly cleaned of, and which the test suite
+// bans by name.
+//
+// The test could not catch it because it read the headings out of App.jsx's
+// bb([...]) calls only, and this file's bbData([...]) calls are a second list of
+// the same thing. One list read twice; it is read in both places now.
+//
+// THE RULE, restated because it keeps costing: a field missing from this
+// allow-list does not reach the database. Adding a field to a prompt is not
+// shipping it. This function is the only insert path into gemlyx_content.
 const shapeForLiveFields = (type, t) => {
   if (type === "town") return { name: t.name, photo: `/towns/${slugify(t.name)}.jpg`, region: t.region || "", emoji: t.emoji || "📍", tag: t.tag || "", desc: t.characterAndFit, highlight: t.highlight || "", travelTime: t.travelTime || "", mapHint: t.mapHint || `${t.name}, Denmark`, nomiPotential: t.nomiPotential || "Medium", tier: t.tier || "Worth Considering", __lat: Number(t.lat) || null, __lon: Number(t.lon) || null,
     // THIS IS AN ALLOW-LIST, and a field missing from it does not reach the
@@ -50,13 +73,13 @@ const shapeForLiveFields = (type, t) => {
     ] };
   if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", camping: t.camping || "", accommodationTip: t.accommodationTip || "", budgetLevel: t.budgetLevel || "", travelTime: t.travelTime || "", ticketStatus: t.ticketStatus || "on_sale", town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", website: t.website || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
-      ...bbData([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["Reality Check", t.realityCheck]]),
+      ...bbData([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]]),
     ] };
   if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "Hidden Gem", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32",
     ticketsGlance: t.ticketsGlance || "", timeNeeded: t.timeNeeded || "", extraCosts: t.extraCosts || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
-      ...bbData([["Why People Love It", t.special], ["Perfect For", t.whoFor]]),
-      ...bulletsBlock("Good to Know", t.thingsToKnow),
+      ...bbData([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]]),
+      ...bulletsBlock("Things to Know", t.thingsToKnow),
     ] };
   if (type === "food" || type === "foodStreet") return { name: t.name, isFoodStreet: type === "foodStreet", budgetLevel: t.budgetLevel || "", emoji: t.emoji || (type === "foodStreet" ? "🍜" : "🍽"), category: t.category || (type === "foodStreet" ? "Food market" : ""), location: t.location || "", price: t.price || "See website", timeNeeded: t.timeNeeded || "", photo: `/food/${slugify(t.name)}.jpg`, desc: t.vibeLocation, mapHint: t.mapHint || "", color: t.color || "#D9A441", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
@@ -64,20 +87,32 @@ const shapeForLiveFields = (type, t) => {
     ] };
   if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", location: t.location || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
-      ...bbData(isClub ? [["Who Is It For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter]]
-                        : [["Who Is It For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark]]),
+      ...bbData(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]]
+                        : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]]),
       ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
     ] }; }
   if (type === "nightTown") return { name: t.name, emoji: t.emoji || "🌃", photo: `/nightlife-towns/${slugify(t.name)}.jpg`, desc: t.desc, color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
-      ...bbData([["Who Is It Perfect For", t.whoFor], ["After Dark", t.afterDark]]),
+      ...bbData([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]]),
       ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
     ] };
   if (type === "booking") return { name: t.name, type: t.type || "Local", what: Array.isArray(t.what) ? t.what : [t.what].filter(Boolean), rating: t.rating ? Number(t.rating) : null, location: t.location || "", price: t.price || "See website", priceNote: t.priceNote || "", travelTime: t.travelTime || "", bookingType: t.bookingType || "contact", popularityTag: t.popularityTag || "", transportWarning: !!t.transportWarning, emoji: t.emoji || "🔨", photo: `/craft/${slugify(t.name)}.jpg`, color: t.color || "#8E6B1F", desc: t.desc,
     timeNeeded: t.timeNeeded || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
-      ...bbData([["Why People Love It", t.special], ["Perfect For", t.whoFor]]),
-      ...bulletsBlock("Good to Know", t.thingsToKnow),
+      ...bbData([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]]),
+      ...bulletsBlock("Things to Know", t.thingsToKnow),
+    ] };
+  // An essential has no photo, no coordinates and no map. Its fields are the
+  // ones data/essentials.js already renders, so a published row drops straight
+  // into the Essentials page beside the hardcoded ones with nothing to convert.
+  // visitorNote is carried because for this type it is often the whole point:
+  // a system that needs a Danish CPR number is the wrong answer for a visitor,
+  // and that sentence is worth more than the rest of the entry.
+  if (type === "essential") return { name: t.name, category: t.category || "Transport", emoji: t.emoji || "✨",
+    desc: t.desc || "", howTo: t.howTo || "", price: t.price || "", link: t.link || null, linkAndroid: t.linkAndroid || "", tip: t.tip || "",
+    visitorNote: t.visitorNote || "",
+    blogBody: [
+      ...bbData([["How It Works", t.howTo], ["The Reality Check", t.realityCheck]]),
     ] };
   return null;
 };

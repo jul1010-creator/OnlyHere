@@ -12,22 +12,56 @@ import { useState, useEffect, useMemo, useRef } from "react";
 //
 // This version does what he actually described: WORDS fading in, one after
 // another, each with its own short opacity fade, at a pace that reads as
-// someone writing. The whole reply is rendered invisibly up front (every word
-// at opacity 0), so the bubble takes its final size immediately — no layout
-// jumping while words appear — and each word then fades in in place.
+// someone writing.
 //
-// Pacing: ~105ms per word (≈9-10 words/second — a flowing writing pace, not a
-// wall of text and not one-finger typing), with a floor so short replies still
-// feel written and a much higher ceiling than before (9s, was 3.2s) so long
-// replies genuinely stay slow instead of secretly speeding up to meet a cap.
+// ── THE EMPTY BOX, AND WHY IT WAS THERE ─────────────────────────────
+// Oliver, 10 Aug 2026: "that box getting big before writing is annoying.. and
+// perhaps write a little faster."
+//
+// The box was deliberate and the reasoning was sound: every word was rendered
+// up front at opacity 0, so the bubble took its final size immediately and
+// nothing below it moved while the words appeared. The cost is what he saw. A
+// hidden word still occupies its space, so a long reply painted a tall empty
+// bordered box first and then dribbled text into the top of it. On a six line
+// answer that is a lot of nothing to look at, and it reads as broken rather
+// than as thinking.
+//
+// A word that has not been written yet is not invisible, it does not exist. So
+// unrevealed tokens are no longer rendered at all and the bubble grows line by
+// line, the way every chat a person has ever used behaves. That is not the
+// layout jumping the old comment worried about: growing downward from a fixed
+// top edge is the one direction that does not move anything already read.
+//
+// ── AND FASTER ──────────────────────────────────────────────────────
+// He has asked twice before for this to be SLOW ("MAKE SURE THAT AI GEMLYX
+// NEVER THROWS ALL THE WORDS IN"), so this speeds it up rather than removing
+// it: ~62ms per word, about 16 words a second, which still reads as written
+// rather than pasted. The ceiling drops from 9s to 5s, so a long reply is done
+// in five seconds instead of nine, and the tick is finer so the growth is
+// smooth rather than stepped.
 //
 // Shared between the main Detour/planning chat (App.jsx), the preview screen's
 // corner chat (App.jsx, PREVIEW CHAT), and the persistent post-build guide
 // chat (pages/GuidePage.jsx) — one place to tune the pacing for all three.
-const TICK_MS = 64;
-const MS_PER_WORD = 105;
-const MIN_TOTAL_MS = 1400;
-const MAX_TOTAL_MS = 9000;
+const TICK_MS = 40;
+const MS_PER_WORD = 62;
+const MIN_TOTAL_MS = 700;
+const MAX_TOTAL_MS = 5000;
+
+// One stylesheet for every instance, inserted once. A per-word opacity
+// transition cannot work now that words mount as they appear: a transition
+// needs a previous value and a freshly mounted element has none, so it would
+// snap in at full opacity. An animation runs on mount, which is what this is.
+const FADE_CSS = "@keyframes gxWordIn { from { opacity: 0 } to { opacity: 1 } }";
+let fadeInjected = false;
+const injectFade = () => {
+  if (fadeInjected || typeof document === "undefined") return;
+  fadeInjected = true;
+  const el = document.createElement("style");
+  el.setAttribute("data-gemlyx", "typewriter");
+  el.textContent = FADE_CSS;
+  document.head.appendChild(el);
+};
 
 export const TypewriterText = ({ text, active, onDone }) => {
   // Split into word + whitespace tokens (whitespace kept as its own tokens so
@@ -86,14 +120,22 @@ export const TypewriterText = ({ text, active, onDone }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, active]);
 
+  injectFade();
+  // Render only as far as the reveal has reached. Anything past it is left out
+  // of the DOM entirely, so it takes no space and the bubble is exactly as tall
+  // as the words written so far. Trailing whitespace is dropped with it, or a
+  // pre-wrap bubble would carry a run of blank space on the last line.
+  const out = [];
   let w = 0;
-  return tokens.map((t, i) => {
-    if (!/\S/.test(t)) return t;
-    const visible = w++ < shownWords;
-    return (
-      <span key={i} style={{ opacity: visible ? 1 : 0, transition: active ? "opacity 0.45s ease" : "none" }}>
-        {t}
-      </span>
-    );
-  });
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (!/\S/.test(t)) { out.push(t); continue; }
+    if (w >= shownWords) break;
+    w++;
+    out.push(active
+      ? <span key={i} style={{ animation: "gxWordIn 0.34s ease both" }}>{t}</span>
+      : t);
+  }
+  while (out.length && typeof out[out.length - 1] === "string" && !/\S/.test(out[out.length - 1])) out.pop();
+  return out;
 };
