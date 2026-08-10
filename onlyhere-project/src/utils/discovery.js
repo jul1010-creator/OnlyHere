@@ -39,7 +39,7 @@
 // every published row's coordinates and which part of the country each falls
 // in. Ask the data where it is thin and aim there.
 import { PARTS, partOfCountry } from "./geography";
-import { samePlaceName, fold } from "./danishNames";
+import { samePlaceName, fold, containsName } from "./danishNames";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 
@@ -116,16 +116,38 @@ FAMOUS IS A DISQUALIFIER, NOT A RECOMMENDATION. If a candidate appears in every 
 export const isAlreadyCovered = (name, existingNames) => {
   const want = clean(name);
   if (!want) return false;
-  const wantFolded = fold(want);
   return (Array.isArray(existingNames) ? existingNames : []).some(n => {
     const have = clean(n);
     if (!have) return false;
     if (samePlaceName(have, want)) return true;
     // And a containment fallback for the everyday case a name list produces:
     // "Reffen" published, "Reffen Street Food" offered.
-    const haveFolded = fold(have);
-    return haveFolded === wantFolded || haveFolded.includes(wantFolded) || wantFolded.includes(haveFolded);
+    //
+    // containsName, not `.includes` on the folded strings. The plain version
+    // read "Falster" as covered because "Als" is published, and "Furesø" as
+    // covered because "Fur" is. Two real islands binned for sharing letters
+    // with a shorter one. See the note on containsName in danishNames.js.
+    return containsName(have, want) || containsName(want, have);
   });
+};
+
+// ── AND THE LIST VERSION, WHICH IS THE ONE THAT GETS CALLED ─────────
+// isAlreadyCovered was written, tested, and then imported by nothing, while the
+// discovery run kept calling a separate helper in helpers.js that folded Danish
+// letters away entirely (normName deleted æ, ø and å outright, so "Ærø" became
+// the single letter "r" and every candidate containing an r was thrown out).
+// Two answers to one question, and the wrong one was wired up.
+//
+// So there is one now, and it returns the drops rather than swallowing them.
+// The screen above this says "Never a silently shorter list" and it was only
+// half true: the finished-edition drops were counted and these were not.
+export const splitAlreadyCovered = (candidates, existingNames) => {
+  const kept = [], dropped = [];
+  (Array.isArray(candidates) ? candidates : []).forEach(c => {
+    if (!c?.name) return;
+    (isAlreadyCovered(c.name, existingNames) ? dropped : kept).push(c);
+  });
+  return { kept, dropped };
 };
 
 // ── "GIVE ME OPTIONS" ───────────────────────────────────────────────

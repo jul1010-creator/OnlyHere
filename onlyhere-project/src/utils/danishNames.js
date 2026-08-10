@@ -45,6 +45,31 @@ export const fold = (s) => String(s ?? "").toLowerCase()
   .normalize("NFD").replace(/[̀-ͯ]/g, "")
   .replace(/\s+/g, " ").trim();
 
+// ── A NAME INSIDE A LONGER STRING, WITHOUT THE ACCIDENTS ────────────
+// `fold(hay).includes(fold(name))` was written in two separate places and is
+// wrong in both, for the same reason: Danish place names are short, and a short
+// string is inside a great many longer ones.
+//
+//   "Als"  is inside "also" and inside "Falster"
+//   "Møn"  folds to "mon" and is inside "money", "month", "Monday", "common"
+//   "Fur"  is inside "Furesø"
+//   "Ærø"  folds to "aero" and is inside "Ærøskøbing"
+//
+// On the preview screen that meant a card for an island the traveller never
+// mentioned. On the discovery side it meant a real candidate silently binned as
+// "already covered". Both are the same missing rule: a name matches when it is
+// there as a WHOLE WORD, not when its letters happen to appear.
+//
+// Punctuation is a gap rather than a letter, so "Reffen, Copenhagen" still
+// contains "Reffen" and "Nørresundby (Aalborg)" still contains "Aalborg".
+// Padding both sides is what makes the first and last word reachable.
+const spaced = (s) => ` ${fold(s).replace(/[^a-z0-9]+/g, " ").trim()} `;
+export const containsName = (haystack, name) => {
+  const needle = spaced(name);
+  if (needle === "  ") return false;
+  return spaced(haystack).includes(needle);
+};
+
 // ── PLACES ──────────────────────────────────────────────────────────
 // Names that a matcher may treat as the same place. Kept to real one-to-one
 // pairs: a town, an island, a region, the country. Anything ambiguous stays out,

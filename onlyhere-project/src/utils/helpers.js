@@ -267,17 +267,22 @@ export const stripMarkdown = (text) => {
 
 export const daysUntil = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
 
-// Pure helpers moved out of App.jsx — none of these close over component state,
-// they only ever read their own parameters.
-export const normName = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, "").trim();
-export const dedupeAgainstExisting = (candidates, existingNames) => {
-  const existingNorm = existingNames.map(normName);
-  return (candidates || []).filter(c => {
-    if (!c?.name) return false;
-    const cn = normName(c.name);
-    return !existingNorm.some(e => e === cn || e.includes(cn) || cn.includes(e));
-  });
-};
+// ── normName and dedupeAgainstExisting USED TO LIVE HERE ────────────
+// They are gone, and the deletion is the fix, not a tidy-up.
+//
+// normName ran NFD and then stripped everything outside [a-z0-9 ]. NFD does not
+// decompose æ, ø or å, so those letters survived the normalise and were then
+// deleted as punctuation: "Ærø" came out as "r", "Møn" as "mn", "Læsø" as "ls".
+// dedupeAgainstExisting dropped any candidate whose normalised name contained an
+// existing one, so with Ærø published it discarded every discovery result with
+// the letter r in it. Four of five, on a realistic list, and counted nowhere.
+// Worst precisely for the small-island content discovery targeting exists to find.
+//
+// utils/danishNames.js has held a correct fold the whole time, and
+// utils/discovery.js had isAlreadyCovered built on top of it: written, tested,
+// and imported by nothing. The single answer now lives there as
+// splitAlreadyCovered. Two functions answering one question is how they came to
+// disagree, so one of them had to go rather than be repaired in parallel.
 
 export const getEnclosingJSONStringBounds = (text, index) => {
   let start = index;

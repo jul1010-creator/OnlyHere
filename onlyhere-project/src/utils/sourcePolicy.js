@@ -34,7 +34,7 @@
 // timetable, which is the single error class this project has spent the most
 // time on. The block below says so out loud, every time.
 
-import { samePlaceName, otherNameFor, variantsOf, fold } from "./danishNames";
+import { samePlaceName, otherNameFor, variantsOf, fold, containsName } from "./danishNames";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 
@@ -257,15 +257,57 @@ const QUERY_WORDS = {
 // searches run, the general web pass has already pulled snippets about this
 // place, and a Copenhell snippet says Copenhagen in the first line. The strict
 // test is untouched and still governs every prompt.
-export const placeMightMatch = (place, ctx) => {
+// ── A DRAFT THAT KNOWS WHERE IT IS DOES NOT NEED THE TEXT TO GUESS ──
+// Oliver, 10 Aug 2026: "the AI blogger is searching through sources for
+// Copenhagen, even if I am trying to find sources about Odense... Thankfully
+// they don't use the Copenhagen ones. But it's a waste."
+//
+// He is right, and the waste is only the visible half.
+//
+// The text fallback below exists for a real case and stays: an EVENT draft
+// knows the event's name and nothing else, "Copenhell" is not "Copenhagen",
+// and the research snippets are what say where it is held. That is a draft
+// that cannot place itself.
+//
+// A TOWN draft is not that. Its name IS the place. And a realistic Odense
+// research text says something like "about 1 hour 15 from Copenhagen by
+// train", which is a fact ABOUT Odense, not evidence that this is a Copenhagen
+// draft. Every place named anywhere in the snippets was unlocking its own
+// scoped source, so an Odense draft paid to ask visitcopenhagen.com about
+// Odense.
+//
+// AND THE CAP MAKES IT WORSE THAN WASTE. MAX_DIRECT_SEARCHES is 4 and the sort
+// is alphabetical, so visitaarhus.com and visitcopenhagen.com both come before
+// visitodense.com. Four sources in, the Odense draft loses its own Odense
+// source off the end of the list. The irrelevant searches do not only cost
+// money, they crowd out the right one, and the symptom of THAT is a draft that
+// quietly found less than it should have, with nothing on screen to say so.
+//
+// So the text only speaks when the draft is genuinely silent about its place.
+const knowsItsOwnPlace = (ctx, type) => {
+  if (!ctx || typeof ctx !== "object") return false;
+  // For a town, the draft's own name is the answer to "where is this".
+  if (type === "town" || type === "nightTown") return !!clean(ctx.name);
+  // For everything else only a real place field counts, because a festival's
+  // name does not locate it, which is the whole reason the fallback exists.
+  return !!(clean(ctx.town) || clean(ctx.partOf) || clean(ctx.dayTripFrom) || clean(ctx.part));
+};
+
+export const placeMightMatch = (place, ctx, type) => {
   const want = cleanPlace(place);
   if (!want) return true;
   if (placeMatches(want, ctx)) return true;
+  if (knowsItsOwnPlace(ctx, type)) return false;
   const text = ctx && typeof ctx === "object" ? String(ctx.text || "") : "";
   if (!text) return false;
-  const hay = fold(text);
   // Either spelling, because the research text is as likely to say København.
-  return variantsOf(want).some(v => v && hay.includes(fold(v)));
+  //
+  // containsName, not a raw substring on the folded text. The old version read
+  // any occurrence of the letters, so a source scoped to Als matched research
+  // containing "also", and one scoped to Fur matched "furniture". Same missing
+  // word boundary as the discovery deduplication and the preview screen, and
+  // here it spends money rather than only showing a wrong card.
+  return variantsOf(want).some(v => v && containsName(text, v));
 };
 
 // Same shape as sourcesFor, with the loose place test. Kept as its own function
@@ -278,7 +320,7 @@ export const sourcesToSearch = (rows, type, ctx) => {
     const s = cleanSource(raw);
     if (!s || !s.enabled) continue;
     if (s.appliesTo && s.appliesTo !== type) continue;
-    if (!placeMightMatch(s.appliesPlace, ctx)) continue;
+    if (!placeMightMatch(s.appliesPlace, ctx, type)) continue;
     if (seen.has(s.domain)) continue;
     seen.add(s.domain);
     out.push(s);

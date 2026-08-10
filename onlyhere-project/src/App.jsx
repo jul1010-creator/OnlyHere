@@ -9,10 +9,10 @@ import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
-import { isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
+import { isSameTownWalk, legDistanceKm, resolveLegMode, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
-import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById } from "./utils/discovery";
+import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -24,7 +24,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
   isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
-  dedupeAgainstExisting, getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
+  getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
   hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep} from "./utils/helpers";
@@ -683,6 +683,24 @@ function GemlyxApp() {
   const [guideModal, setGuideModal] = useState(null); // null | "choosing" | "loading" | { title, days } — "choosing"/"loading" are the only cases that still render a modal (see below); a real object exists purely to carry live enrichment updates through to GuidePage, it is never shown as a popup.
   const [guideBuildStage, setGuideBuildStage] = useState(null); // { label, percent } shown during "loading" — real progress, not a static message
   const [lastBuiltGuide, setLastBuiltGuide] = useState(null); // { convoText, guide } — lets reopening the guide after closing it skip the whole rebuild
+  // ── PUT THE WAIT DOWN WITHOUT PUTTING THE BUILD DOWN ────────────────
+  // Oliver, 10 Aug 2026: "maybe we should be able to minimize the loading
+  // screen.. and then when it's done, it will show as a notification at the
+  // top."
+  //
+  // Half of this already worked and read as the opposite. The overlay closed on
+  // the ✕ or a backdrop tap, and the build carried on regardless, because it is
+  // an async function that nothing was cancelling. But nothing on screen said
+  // so, so dismissing it looked exactly like cancelling, and then the finished
+  // guide navigated the traveler to /guide/new from wherever they had gone,
+  // which reads as a bug rather than a result.
+  //
+  // Minimizing is a request to be TOLD, not to be interrupted. So dismissing
+  // now keeps guideModal on "loading" (the build state stays true), hides the
+  // overlay, leaves a live progress bar in place, and suppresses the automatic
+  // navigation in favour of a banner the traveler taps when they are ready.
+  const [guideMinimized, setGuideMinimized] = useState(false);
+  const [guideReady, setGuideReady] = useState(false);
   // Denmark-facts card shown during "loading" (see denmarkFacts.js) — restored
   // per Oliver ("real photos and real facts should pop up, not a bare
   // spinner"). Picks a random start each time a build begins, then advances
@@ -753,10 +771,16 @@ function GemlyxApp() {
   const navigatedGuideGidRef = useRef(null);
   useEffect(() => {
     if (guideModal && typeof guideModal === "object" && guideModal._gid && navigatedGuideGidRef.current !== guideModal._gid) {
+      // The ref is claimed either way, so a later enrichment patch to the same
+      // guide cannot re-trigger this.
       navigatedGuideGidRef.current = guideModal._gid;
+      // A traveler who minimized the wait went and did something else. Throwing
+      // them onto the guide page mid-tap is the interruption minimizing exists
+      // to avoid, so the finished guide waits behind a banner instead.
+      if (guideMinimized) { setGuideReady(true); return; }
       navigate("/guide/new", { state: { guide: guideModal } });
     }
-  }, [guideModal]);
+  }, [guideModal, guideMinimized]);
   const [glancePending, setGlancePending] = useState(0);
   const [weatherPending, setWeatherPending] = useState(0);
 
@@ -1172,6 +1196,10 @@ function GemlyxApp() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null); // [{name, region, hook}] — null = not run yet, [] = ran, nothing new
   const [discoverDropped, setDiscoverDropped] = useState(0);
+  // Separate from discoverDropped on purpose: "already in Gemlyx" and "that
+  // edition has finished" are two different reasons a list came back shorter,
+  // and one number covering both would tell him neither.
+  const [discoverCovered, setDiscoverCovered] = useState(0);
   const [discoverError, setDiscoverError] = useState(null);
   const [discoverPicked, setDiscoverPicked] = useState([]); // names ticked in the pick-list
   // Which content type the current pick-list was discovered FOR. Without this,
@@ -3100,7 +3128,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (discoverLoading) return;
     const type = typeOverride || studioType;
     setDiscoverForType(type);
-    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0);
+    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0);
     try {
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
       const typeLabel = DISCOVER_TYPE_LABEL[type] || "places in Denmark";
@@ -3180,8 +3208,15 @@ TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n$
       // here rather than in the prompt alone, because a rule the model can
       // forget is not a filter. The count is reported so the list getting
       // shorter is never silent.
-      const fresh = dedupeAgainstExisting(candidates, existing);
+      // splitAlreadyCovered, not the old dedupeAgainstExisting: that one folded
+      // Danish letters out of existence before comparing, so "Ærø" became "r"
+      // and every candidate containing an r was thrown away. See the note left
+      // where it used to live in utils/helpers.js. This one also HANDS BACK what
+      // it dropped, because the line below already promises a list is never
+      // silently shorter and that promise only covered the finished editions.
+      const { kept: fresh, dropped: covered } = splitAlreadyCovered(candidates, existing);
       const { kept, dropped } = splitFinishedCandidates(fresh, new Date());
+      setDiscoverCovered(covered.length);
       setDiscoverDropped(dropped.length);
       setDiscoverResults(kept);
     } catch (err) {
@@ -4598,48 +4633,32 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   };
   const resolveStopCoords = (name, extraGeo = null) => resolveStopCoordsPrecise(name, extraGeo);
 
-  // Two stops that both collapsed onto the same town centre are not close
-  // together, they are UNPLACED. Saying so returns null, the same rule
-  // legDistanceKm already applies on the render side. Without it, every
-  // distance check below sees zero and waves a 4 km leg through as a stroll.
-  const legKmOrNull = (originName, destName, extraGeo = null) => {
-    const a = resolveStopCoordsPrecise(originName, extraGeo);
-    const b = resolveStopCoordsPrecise(destName, extraGeo);
-    if (!a || !b) return null;
-    const km = haversineKm(a, b);
-    if (!a.precise && !b.precise && km < 0.05) return null;
-    return km;
-  };
-  // SINGLE SOURCE OF TRUTH for leg transport mode — used by fetchExactDurations
-  // (the background fetch) AND both render sites. Previously each computed mode
-  // independently: the fetch could correctly override "walking" to "transit" for
-  // a genuinely far pair, store the result under the "transit" cache key, while
-  // the render recalculated mode fresh with no distance check, still said
-  // "walking", and looked for a "walking" cache entry that was never created —
-  // silently falling through to a real Directions API result fetched separately
-  // for mode=walking between two names Google's OWN geocoder may have resolved
-  // completely differently than our Nominatim-based distance check did.
-  const resolveLegMode = (how, primaryMode, originName, destName, onlyWalking = false, extraGeo = {}) => {
-    let mode = detectLegMode(how, primaryMode);
-    // Was raw haversineKm over an `||` chain that let the town-centre fallback
-    // win, so this saw 0 km for any two stops in one town and left real legs
-    // marked as walks. Same guarded distance the render side uses now.
-    const distKm = legKmOrNull(originName, destName, extraGeo);
-    if (distKm != null) {
-      // WALK_MAX_KM, not a hand-typed 2.5. The shared copy in guideEnrichment
-      // moved to Oliver's stated 15 to 20 minute ceiling and this one did not,
-      // so a 2.4 km leg was a walk here and a bike ride there, and the two
-      // wrote different cache keys for the same journey.
-      const walkCapKm = onlyWalking ? Infinity : WALK_MAX_KM;
-      if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
-      else if (mode === "bicycling" && distKm > 60) mode = "transit";
-      // Same short-transit-leg-is-a-walk rule as utils/guideEnrichment.js's
-      // shared copy (see the Ærøskøbing→Ærøskøbing havn comment there) — the
-      // two copies MUST stay in sync or fetch and render disagree on cache keys.
-      else if (mode === "transit" && distKm <= 1.5 && !/ferry|boat|færge/i.test(how || "")) mode = "walking";
-    }
-    return mode;
-  };
+  // ── THERE WAS A SECOND resolveLegMode HERE, AND A legKmOrNull ───────
+  // Both are deleted. resolveLegMode is imported from utils/guideEnrichment at
+  // the top of this file now, which is what the comment at the fetch call site
+  // already claimed was happening.
+  //
+  // The local copy carried a comment reading "SINGLE SOURCE OF TRUTH for leg
+  // transport mode", word for word, above a function that disagreed with the
+  // other single source of truth. It had been left behind on the older rule:
+  //
+  //     local:  if (mode === "walking" && distKm > walkCapKm) mode = distKm > 60 ? "transit" : "bicycling";
+  //     shared: ... mode = primaryMode === "bike" ? "bicycling" : primaryMode === "car" ? "driving" : "transit";
+  //
+  // So on a public-transport trip, a leg between 1.5 and 60 km whose text says
+  // "walk" was bicycling here and transit in GuidePage. fetchExactDurations
+  // stored the measured Google result under `A|B|bicycling`; the render looked
+  // up `A|B|transit`, missed, and printed a straight-line estimate instead. The
+  // real answer was fetched, paid for, and sitting in the object unread.
+  //
+  // legKmOrNull went with it: same job as legDistanceKm, computed with
+  // haversineKm rather than kmBetween, and reaching into the geocodedCoords
+  // state that the render side has no access to. A distance the two sides
+  // compute differently is the same bug one level down.
+  //
+  // If a future change needs the fetch to see coordinates the render cannot,
+  // that is a reason to widen what goes into guide._geo, not to grow a second
+  // copy of this function.
   // Free geocoding for specific landmarks (museums, attractions) that only towns have
   // coordinates for otherwise — no API key, no billing, unlike Google's Geocoding API.
   // Runs once per guide, before it's shown, so every downstream render (maps, legs)
@@ -4843,6 +4862,10 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       return;
     }
     setGuideModal("loading");
+    // A new build always starts with the wait in front of the traveler and no
+    // stale "ready" banner from the previous one still on screen.
+    setGuideMinimized(false);
+    setGuideReady(false);
     setGuideBuildStage({ label: "Gathering real places and facts", percent: 15 });
     setGuideError(null);
     try {
@@ -5304,6 +5327,11 @@ If the conversation only covers a single day or a few stops with no explicit day
       setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       setGuideModal(null);
+      // A failure has to reach a traveler who minimized the wait too. Clearing
+      // this is what lets the error line below be the thing they see, rather
+      // than a progress bar that stops moving and never explains itself.
+      setGuideMinimized(false);
+      setGuideReady(false);
       // ERROR-MESSAGE GAP FIX (flagged PASS 27, round 3): this catch-all used to
       // show the same "try asking for a fuller plan" message for EVERY failure,
       // including genuine API billing/credit exhaustion (a real incident: Oliver
@@ -6179,16 +6207,16 @@ If the conversation only covers a single day or a few stops with no explicit day
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
 Transport matters: if the person hasn't said how they're getting around, ask — car, bike, walking, public transport, camper van, or a mix of these — before proposing a route, since it changes everything. A mixed answer (e.g. "mostly bike but train for the long stretches" or "bike around Zealand, ferry to Bornholm") is completely normal — plan for it directly rather than picking just one of the mentioned modes and ignoring the rest. Tailor plans to the answer: public transport → chain towns along direct train and bus lines and suggest checking Rejseplanen for times, and where relevant recommend real Danish operators by name — Flixbus and Kombardo Expressen for longer intercity routes (often cheaper than DSB trains), DSB's Orange billetter (discount advance-purchase train tickets) for cross-country train trips, and a specific ferry route if the plan crosses open water where no bridge exists (e.g. to Bornholm, or between islands like Ærø or Samsø) — name the actual ferry operator/route if you know it, otherwise say "check ferry crossings for this route"; bike → keep daily distances realistic (under ~50 km) and favor flat or coastal stretches; car → flexible road trips across regions are fine, but if the route crosses open water with no bridge, mention the ferry crossing needed for the car itself. LEAN AGAINST A RENTAL CAR SPECIFICALLY INSIDE COPENHAGEN: parking is scarce and genuinely expensive, congestion pricing and pedestrianized streets make driving there more hassle than it's worth, and the Metro/S-train/bus network plus biking already cover the city well — if someone's plan is mostly or entirely within Copenhagen, say so plainly and steer them toward public transport/biking instead, rather than defaulting to a rental. A car becomes genuinely useful the moment the trip actually leaves the capital for other regions; camper van → treat like a car for routing, but accommodation advice should point toward real campsites/overnight parking (Denmark allows camping only at designated campsites or with landowner permission — not roadside/wild camping) rather than hotels; tent → same real-campsite guidance, and flag if a day's plan is realistically walkable/bikeable between campsites rather than assuming a car is available. IMPORTANT — a trip's primary mode doesn't have to apply to every leg: someone cycling around Zealand who wants to visit Bornholm needs a ferry for that crossing regardless of biking the rest, someone on public transport might still walk between two nearby stops, someone driving may still need a car ferry for an island. Genuinely vary the mode leg by leg based on real distance and geography — don't force one mode onto a leg where it plainly doesn't work, and don't silently drop a mode the person explicitly asked to mix in.
 
-ASK BEFORE YOU PLAN — ONLY WHEN THEY'VE ACTUALLY ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary — not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately — never redirect a simple question into an intake questionnaire. Only when they're asking you to actually build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together — for example: "Happy to help! Where are you starting from — flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — real hidden gems, the well-known popular spots, or a mix?" A genuinely minimal request like "I wanna go to Denmark, plan me something" gives you ZERO of those things — this is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for actually knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip actually begins — a guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. Once you know enough to build, your LAST question before actually building should always be: "Want a simple plan you can glance at, or a full hour-by-hour schedule?" — build the actual plan once you have that answer, either from what they've said or because they already told you everything in their first message.
+ASK BEFORE YOU PLAN — ONLY WHEN THEY'VE ACTUALLY ASKED FOR ONE. This applies specifically when someone asks for a plan, route, or itinerary — not to casual questions about Denmark ("what's Copenhagen like", "is X worth visiting", "what's the food scene like"). Casual questions get a real, substantive answer immediately — never redirect a simple question into an intake questionnaire. Only when they're asking you to actually build a route or plan, and you don't yet know their STARTING POINT, budget, how much time they have, and roughly what they enjoy, ask ONE short, warm question that covers those things together — for example: "Happy to help! Where are you starting from — flying into Copenhagen/Kastrup, Billund, or somewhere else? Roughly how many days do you have, what's your budget looking like, and what do you enjoy most — real hidden gems, the well-known popular spots, or a mix?" A genuinely minimal request like "I wanna go to Denmark, plan me something" gives you ZERO of those things — this is exactly the case that must trigger the question, not skip straight to a plan; don't treat "plan me something" as license to just start somewhere (Copenhagen by default is not a substitute for actually knowing what they want). STARTING POINT SPECIFICALLY IS NON-NEGOTIABLE: never build a real day-by-day plan without knowing where the trip actually begins — a guess here breaks the whole route, not just one detail. Keep it to one message, not a wall of separate questions, and don't re-ask anything they've already told you. ONCE YOU KNOW ENOUGH TO BUILD, BUILD. Do not ask one last confirming question first, and in particular never ask how detailed or how simple they want it. The interface puts that choice on its own screen right after they tap the button, and that screen is the only place the answer is ever read, so asking here buys a whole extra round trip and changes nothing about the guide that gets built.
 NEVER SEND A "WORKING ON IT" STALLING REPLY — THIS IS ABSOLUTE. You cannot do background work after sending a message — there is no "one moment, let me dive in" that leads anywhere; once your reply is sent, nothing further happens until the traveler does something next. So every single reply must be complete and immediately actionable on its own — either (1) the one clarifying question above, or (2) the FULL actual plan itself, written out completely, right now, in this message. Never write something like "Let me put together a detailed itinerary for you, one moment!" or "I'll get started on that now" — that promises work that will never happen and leaves the person stuck looking at a dead end. If you have enough information to build, build the real thing immediately in this same reply — don't announce it, don't preview it, just do it.
 IF SOMEONE NAMES A SPECIFIC PLACE, IT MUST BE IN THE PLAN: if the traveler explicitly says they want to visit somewhere specific (e.g. "I really want to see King's Garden"), that place is not optional — work it into the itinerary for real, don't quietly drop it in favor of your own picks.
-IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence) — this came from someone ticking boxes on the intake form, not typing. THIS RULE IS ABSOLUTE, NO EXCEPTIONS: your very next reply after this message must NEVER contain a plan, itinerary, or day-by-day breakdown — not even a partial one, not even if literally every single field was filled in and there is genuinely nothing left to ask. This is true 100% of the time, regardless of how complete the tick-boxes look. Instead, that reply is always exactly two things, nothing more: (1) a short, warm "Applied: ..." line naturally restating what they picked (not robotic form-confirmation), and (2) a genuinely curious, specific question — not a generic catch-all. BE CURIOUS, NOT A FORM: never default to a stock closer like "Anything else you want me to know, or should I just plan you something?" repeated the same way every time — that's exactly the robotic pattern to avoid. Instead, actually engage with what's interesting or still unclear about THIS specific trip: ask about something genuinely relevant that hasn't been covered yet, or that would meaningfully shape the plan if you knew it — phrased differently each time, the way a real person curious about someone's trip would ask. Only fall back to a plain "want me to just plan it?" offer if you truly have nothing specific left worth asking. PROBE INFORMATION THAT ACTUALLY MATTERS, DON'T JUST ACKNOWLEDGE IT: if something the traveler mentions could genuinely reshape the plan — a friend joining a few days late, kids in the group, a mobility limitation, a special occasion — and your reply doesn't yet reflect a real decision about how that changes things, ask ONE focused follow-up about its actual implication (e.g. "Want the itinerary split for those first two days before your friend arrives, or keep it light until everyone's together?") rather than just noting it and moving on as if it doesn't affect anything. Cap this at one extra round beyond the initial question, though — don't turn this into an endless interview; if the traveler's follow-up reply doesn't add another must-ask detail, that's your signal everything's covered and you can offer to build. TRIP LENGTH is always exact — "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified — assume Copenhagen Airport", genuinely build the plan starting from Copenhagen Airport (Kastrup) — do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan — e.g. suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or simply mentioning buying a ticket via the DOT/DSB app before boarding — never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
+IF A MESSAGE LOOKS LIKE STRUCTURED PREFERENCES (arrival/departure timestamps, starting point, budget, interests, travel style, preference, transport listed together, not written as a natural sentence) — this came from someone ticking boxes on the intake form, not typing. NEVER ANSWER IT WITH A DAY-BY-DAY BREAKDOWN, because that belongs to the guide and not to this chat. Open with a short, warm "Applied: ..." line naturally restating what they picked (not robotic form-confirmation). WHAT COMES AFTER THAT LINE DEPENDS ENTIRELY ON WHETHER ANYTHING IS STILL MISSING. If a detail is genuinely absent or genuinely ambiguous AND knowing it would change the plan, ask ONE specific question about that detail and stop there. If nothing is missing, do NOT manufacture a question to fill the slot: go straight to the ready-to-build handoff in this same reply. Somebody who filled in every box has already told you what they want, and asking anyway is the single fastest way to make a planner feel like a form. The rule here used to force a question 100% of the time no matter how complete the boxes were, which meant the traveler who did the most work to be clear got the most friction, and that is backwards. A missing field is not the same as an ambiguous one: leaving budget blank is a real answer (no strong constraint), and "Starting point: not specified" is covered by the Copenhagen Airport default below, so neither of those on its own is a reason to ask anything. BE CURIOUS, NOT A FORM: never default to a stock closer like "Anything else you want me to know, or should I just plan you something?" repeated the same way every time — that's exactly the robotic pattern to avoid. Instead, actually engage with what's interesting or still unclear about THIS specific trip: ask about something genuinely relevant that hasn't been covered yet, or that would meaningfully shape the plan if you knew it — phrased differently each time, the way a real person curious about someone's trip would ask. Only fall back to a plain "want me to just plan it?" offer if you truly have nothing specific left worth asking. PROBE INFORMATION THAT ACTUALLY MATTERS, DON'T JUST ACKNOWLEDGE IT: if something the traveler mentions could genuinely reshape the plan — a friend joining a few days late, kids in the group, a mobility limitation, a special occasion — and your reply doesn't yet reflect a real decision about how that changes things, ask ONE focused follow-up about its actual implication (e.g. "Want the itinerary split for those first two days before your friend arrives, or keep it light until everyone's together?") rather than just noting it and moving on as if it doesn't affect anything. Cap this at one extra round beyond the initial question, though — don't turn this into an endless interview; if the traveler's follow-up reply doesn't add another must-ask detail, that's your signal everything's covered and you can offer to build. TRIP LENGTH is always exact — "Exact trip length" is computed directly from real arrival and departure timestamps, so never treat it as vague and never ask for a day count separately; just use the precise figure you're given. STARTING POINT: if a real one was given, use it. If the message says "Starting point: not specified — assume Copenhagen Airport", genuinely build the plan starting from Copenhagen Airport (Kastrup) — do NOT ask the traveler where they're starting from in this case, since leaving it blank was itself a deliberate choice covered by that default; this default only applies to the structured tick-box flow, not to a freeform typed message with zero starting-point info (that case still needs a real question). WHENEVER THE STARTING POINT IS COPENHAGEN AIRPORT (whether given explicitly or assumed by default), always weave in one practical, positively-framed transport tip early in the plan — e.g. suggesting a Copenhagen Card for easy unlimited transport plus free museum entry, or simply mentioning buying a ticket via the DOT/DSB app before boarding — never a scary "you'll get fined" warning; frame it as a helpful insider tip, not a threat.
 
 TRAVEL STYLE AND PREFERENCE ARE TWO SEPARATE AXES, DON'T CONFLATE THEM. "Travel style" (Bucket-list classics / Relaxed / Wander yourself) is purely about PACING — how tightly scheduled the days are: bucket-list classics means a full, efficiently-packed day-by-day schedule hitting the major sights; relaxed means fewer things per day with real breathing room; wander yourself means a loose, open-ended town-to-town structure with minimal fixed planning. "Preference" (Mostly hidden gems / A mix of both / Mostly popular attractions) is purely about WHAT KIND OF PLACES get chosen, independent of pacing — someone can absolutely want a tightly-scheduled bucket-list trip that's built almost entirely from hidden gems, or a loose wander-yourself trip through famous spots; don't assume one implies the other. If either is ticked, don't ask about it again — just apply it directly. If either is missing, fold asking for it into the combined question.
 
 HIDDEN GEMS ARE A BASELINE, NOT A NICHE PICK: regardless of what "Preference" says, every plan should include real hidden-gem towns from the list — "Mostly popular attractions" still means working in at least one genuine hidden gem, "Mostly hidden gems" means the large majority of stops are from that list, "a mix of both" is a genuine 50/50 balance. GENUINE VARIETY MATTERS — Gemlyx's whole differentiator is routes that feel personally discovered, not a script everyone gets handed identically, so actively avoid defaulting to the same one or two "signature" hidden-gem towns every single time preference allows it; treat the hidden-gem list as a real pool to pick meaningfully from (not just whichever appears first), and let genuinely different combinations emerge across different plans rather than converging on one repeated favorite.
 
-If the message includes "Also include these saved places: ...", those are specific real places the traveler has already favorited elsewhere in the app — treat them as genuine must-include stops in the plan, worked into whichever day(s) makes geographic sense given everything else, not just name-dropped in passing. Once you've sent that Applied+question reply, the traveler's very next message — whatever it says, even just "yes" or "go ahead" — is your green light to build the actual plan (still following the existing map/route/guide-building system exactly as before), using everything known: all tick-boxes, plus any extra detail they added in that reply. Don't ask a third round of questions first — default to a full, clear day-by-day plan unless they've specifically asked for something lighter or simpler. Any detail folded into a skip-style reply (e.g. "just build it, I'm also staying in Aarhus a couple days") counts as real signal for the plan, exactly like anything else they've told you.
+If the message includes "Also include these saved places: ...", those are specific real places the traveler has already favorited elsewhere in the app — treat them as genuine must-include stops in the plan, worked into whichever day(s) makes geographic sense given everything else, not just name-dropped in passing. If you DID ask a question after the Applied line, the traveler's very next message, whatever it says, even just "yes" or "go ahead", is your green light to build the actual plan (still following the existing map/route/guide-building system exactly as before), using everything known: all tick-boxes, plus any extra detail they added in that reply. Don't ask a third round of questions first — default to a full, clear day-by-day plan unless they've specifically asked for something lighter or simpler. Any detail folded into a skip-style reply (e.g. "just build it, I'm also staying in Aarhus a couple days") counts as real signal for the plan, exactly like anything else they've told you.
 
 WHAT "BUILDING THE PLAN" ACTUALLY MEANS IN THIS CHAT REPLY — THIS IS A HARD FORMAT RULE: when you're ready to build (whether from the tick-box flow above or the freeform flow below), your reply in THIS CONVERSATION is NEVER a day-by-day breakdown — no "Day 1: ... Day 2: ..." listing of stops, times, or activities here. That level of detail belongs to the real guide (with actual verified routes, maps, and times) that gets built separately once the traveler taps "Turn this into a guide" — writing it out again in plain chat text is pure duplication and is exactly the "wall of text" feeling that makes this feel like a generic chatbot instead of a real planner handing off a finished itinerary. Instead, your ready-to-build reply is short — a genuine local planner's handoff, not a list: 2-4 sentences describing the KIND of trip you've put together (the vibe, the balance — e.g. "This leans into real local nightlife and food, mixing well-known spots with a couple of places most tourists never find, at a relaxed pace so nothing feels rushed") plus the essentials worth knowing before they see it — budget reality, the one most important practical thing, and a transport tip if relevant — the same essentials system the guide itself uses, just spoken aloud here first. Never itemize individual stops or times in this reply. THE MARKER IS A PROMISE, NOT A CASUAL SIGN-OFF — GET THIS RIGHT: only include it when you have genuinely enough concrete specifics on the table to actually construct a real multi-day itinerary from RIGHT NOW — a real starting point, a real trip length, and real direction on interests/style. A reply that's still discussing budget, still weighing options, still mid-conversation, or that could just as easily be followed by more back-and-forth is NOT ready — do not attach the marker to those, even if it sounds like a natural-feeling wrap-up sentence ("Looking forward to turning this into a guide!" is exactly the kind of line that sounds final but isn't — never a substitute for actually having enough to build). If you're at all unsure whether there's enough to build a real itinerary from, that uncertainty itself means: no marker, ask instead. End this exact reply, and ONLY a genuinely ready-to-build reply meeting that bar, with this exact string on its own line so the interface knows to show the "Turn this into a guide" button — it's invisible to the traveler, never explain what it is, never mention it exists, just include it silently: [[GEMLYX_READY_TO_BUILD]]
 
@@ -6599,17 +6627,45 @@ You also have a web_search tool. Use it whenever someone asks about something th
                   </div>
                 )}
 
+                {/* ── THE BUTTON MUST NOT BE ABLE TO GO MISSING ──────────────
+                    Oliver, 10 Aug 2026, on a friend finding this annoying:
+                    "perhaps it wasn't visible to him that he could click 'turn
+                    this into a guide'."
+
+                    It could have been invisible in the strongest sense: not
+                    there at all. The gate was the [[GEMLYX_READY_TO_BUILD]]
+                    marker alone, and the prompt tells the model to withhold it
+                    on any doubt ("If you're at all unsure whether there's
+                    enough to build a real itinerary from, that uncertainty
+                    itself means: no marker"). A model that writes out a full
+                    plan and then hesitates over the marker leaves a traveler
+                    reading an itinerary with no way to turn it into one.
+
+                    isFullPlanText was written for exactly this and was imported
+                    into this file and called NOWHERE. Seventh helper in this
+                    codebase written, tested and left unwired. It reads the
+                    text: two or more "Day N:" headers, or one plus real length.
+                    If the reply looks like a plan, the button is offered,
+                    marker or not. A button shown one turn early costs a tap. A
+                    button never shown costs the whole product. */}
                 {(() => {
                   const lastAssistantMsg = [...aiMessages].reverse().find(m => m.role === "assistant");
-                  const readyToBuild = lastAssistantMsg && isReadyToBuild(lastAssistantMsg.text);
-                  return readyToBuild && !aiLoading;
+                  if (!lastAssistantMsg || aiLoading) return false;
+                  return isReadyToBuild(lastAssistantMsg.text) || isFullPlanText(lastAssistantMsg.text);
                 })() && (
                   <>
                     <button onClick={() => setGuideModal("preview")}
-                      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}22)`, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 4 }}>
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: `linear-gradient(135deg, ${C.gold}33, ${C.accent}33)`, border: `1.5px solid ${C.gold}`, borderRadius: 12, padding: "15px 12px", fontSize: 14.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 4, boxShadow: `0 2px 14px ${C.gold}22` }}>
                       📖 Turn this into a guide
                     </button>
-                    <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>Takes a few seconds — checking real places and routes</div>
+                    {/* THIS LINE USED TO PROMISE SECONDS. The screen it opens
+                        says "can take a few minutes", which is the true one: the
+                        pipeline runs a planner, two research passes, the writer,
+                        a rewrite pass and a fact-check. Promising seconds and
+                        then showing minutes is the one place in this app that
+                        states a figure nothing stood up, on the screen where a
+                        traveler decides whether to wait. */}
+                    <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginBottom: 12 }}>Takes a few minutes. Real places, real routes, checked.</div>
                   </>
                 )}
                 {guideError && (
@@ -7444,8 +7500,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <div style={{ fontSize: 12, color: C.muted }}>Nothing new turned up that isn't already in Gemlyx — try again later, or try the dedicated events search if you're after upcoming dates.</div>
                         ) : (
                           <>
-                            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: discoverDropped ? 5 : 10 }}>{discoverResults.length} new candidates, tick what's worth drafting</div>
-                            {/* Never a silently shorter list. */}
+                            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: (discoverDropped || discoverCovered) ? 5 : 10 }}>{discoverResults.length} new candidates, tick what's worth drafting</div>
+                            {/* Never a silently shorter list. Both reasons, separately, because
+                                "already published" and "that edition is over" are different news. */}
+                            {discoverCovered > 0 && (
+                              <div style={{ fontSize: 10.5, color: C.muted, marginBottom: discoverDropped ? 5 : 10, lineHeight: 1.5 }}>
+                                {discoverCovered} more {discoverCovered === 1 ? "was" : "were"} left out as already in Gemlyx.
+                              </div>
+                            )}
                             {discoverDropped > 0 && (
                               <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
                                 {discoverDropped} more {discoverDropped === 1 ? "was" : "were"} left out because that edition has already finished. In August the search results about an annual festival are mostly about the one that just ended.
@@ -9609,8 +9671,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       with a verb label and a chevron. */}
                   <button onClick={() => setIntakeMoreOpen(o => !o)}
                     style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: intakeMoreOpen ? `${C.gold}14` : C.bg, border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "12px 14px", marginTop: 4, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left" }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Tap to fine-tune the plan</span>
-                    <span style={{ fontSize: 11, color: C.muted }}>budget · interests · who's going</span>
+                    {/* SAY THAT IT IS OPTIONAL, IN THE LABEL (Oliver, 10 Aug:
+                        "maybe we should make it clear that giving more
+                        information is optional"). A gold bordered panel headed
+                        "fine-tune the plan" reads as a step, and a step reads as
+                        required. The word Optional is doing the work here; the
+                        second line says what it buys, so skipping it is an
+                        informed choice rather than a guess. */}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>✦ Optional: fine-tune the plan</span>
+                    <span style={{ fontSize: 11, color: C.muted }}>skip it and Gemlyx still plans</span>
                     <span style={{ marginLeft: "auto", fontSize: 12, color: C.gold, transform: intakeMoreOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s ease", display: "inline-block" }}>▾</span>
                   </button>
 
@@ -9652,7 +9721,22 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Getting around <span style={{ textTransform: "none", fontWeight: 400, color: C.muted }}>(pick as many as apply)</span></div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-                  {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car", "🚐 Camper van", "⛺ Tent"].map(tr => (
+                  {/* ⛺ TENT IS GONE FROM THIS ROW. It was answering a different
+                      question: "Getting around" asks how you MOVE, and a tent is
+                      where you SLEEP, which this form never asks about. That
+                      mismatch is what made it read as awkward, not camping
+                      itself. Camper van stays, because it is a vehicle and a
+                      real answer here, and one that genuinely changes routing:
+                      it needs a car ferry for an island crossing and campsite
+                      overnight parking rather than hotels.
+
+                      NOTHING WAS REMOVED FROM THE PIPELINE. The system prompt
+                      still carries the full tent rule (real campsites only,
+                      Denmark allows no roadside camping, and flag when a day is
+                      walkable or bikeable between campsites), so a traveler who
+                      types "we're tenting it" still gets all of that. This
+                      deletes a tick box, not a capability. */}
+                  {["🚲 Bike", "🚶 Walking", "🚆 Public transport", "🚗 Car", "🚐 Camper van"].map(tr => (
                     <Pill key={tr} label={tr} active={intakeTransport.includes(tr)} onClick={() => setIntakeTransport(intakeTransport.includes(tr) ? intakeTransport.filter(x => x !== tr) : [...intakeTransport, tr])} />
                   ))}
                 </div>
@@ -10755,10 +10839,56 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           </div>
         </div>
       )}
-      {guideModal === "loading" && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideModal(null)}>
-          <button onClick={() => setGuideModal(null)} aria-label="Close"
-            style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", color: C.light, width: 40, height: 40, borderRadius: "50%", fontSize: 16, cursor: "pointer", zIndex: 951 }}>✕</button>
+      {/* ── THE MINIMIZED BAR ────────────────────────────────────────────
+          What tells the traveler the build is still running after they put the
+          wait down. Same guideBuildStage the overlay reads, so there is one
+          source of progress and the bar cannot claim a different stage from the
+          screen it came from. Tapping it brings the full wait back. */}
+      {guideModal === "loading" && guideMinimized && (
+        <div onClick={() => setGuideMinimized(false)}
+          style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 940, background: C.surface, borderTop: `1px solid ${C.gold}44`, padding: "10px 16px 12px", cursor: "pointer", boxShadow: "0 -4px 20px rgba(0,0,0,0.35)" }}>
+          <div style={{ maxWidth: 460, margin: "0 auto", display: "flex", alignItems: "center", gap: 10 }}>
+            <GemlyxLoader size={18} tone="gold" ring={false} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {guideBuildStage?.label || "Building your guide"}
+              </div>
+              <div style={{ height: 3, background: C.border, borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
+                <div style={{ width: `${guideBuildStage?.percent || 5}%`, height: "100%", background: C.gold, transition: "width 0.8s ease" }} />
+              </div>
+            </div>
+            <span style={{ fontSize: 11, color: C.gold, fontWeight: 700, flexShrink: 0 }}>View</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── THE NOTIFICATION AT THE TOP ──────────────────────────────────
+          Only ever reached via the minimized path: a traveler watching the wait
+          still goes straight to the guide, unchanged. This is the "tell me,
+          don't drag me" half of what minimizing promises. */}
+      {guideReady && (
+        <div onClick={() => { setGuideReady(false); setGuideMinimized(false); if (guideModal && typeof guideModal === "object") navigate("/guide/new", { state: { guide: guideModal } }); }}
+          style={{ position: "fixed", top: 12, left: 12, right: 12, zIndex: 960, background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, color: "#0A0F1E", borderRadius: 12, padding: "12px 14px", cursor: "pointer", boxShadow: "0 6px 24px rgba(0,0,0,0.45)", display: "flex", alignItems: "center", gap: 10, maxWidth: 460, margin: "0 auto" }}>
+          <span style={{ fontSize: 18 }}>📖</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Your guide is ready</div>
+            <div style={{ fontSize: 11, opacity: 0.75 }}>Tap to open it</div>
+          </div>
+          <button onClick={e => { e.stopPropagation(); setGuideReady(false); }} aria-label="Dismiss"
+            style={{ background: "rgba(10,15,30,0.14)", border: "none", color: "#0A0F1E", width: 26, height: 26, borderRadius: "50%", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>✕</button>
+        </div>
+      )}
+
+      {guideModal === "loading" && !guideMinimized && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={() => setGuideMinimized(true)}>
+          {/* WAS A ✕ THAT SET guideModal TO null. It never cancelled anything,
+              because the build is an async function nothing aborts, so the only
+              thing the ✕ ever did was hide the evidence: the guide kept
+              building, and then navigated the traveler away from wherever they
+              had gone. A ✕ that means "keep going, just let me look at
+              something else" has to say that, or nobody presses it. */}
+          <button onClick={e => { e.stopPropagation(); setGuideMinimized(true); }} aria-label="Keep browsing while this builds"
+            style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.09)", border: `1px solid ${C.gold}55`, color: C.gold, height: 40, borderRadius: 20, padding: "0 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", zIndex: 951, fontFamily: "'Inter', sans-serif" }}>Keep browsing ↓</button>
           {/* PASS 27 EXTRACTION: moved into components/EventMatchCard.jsx as
               part of the App.jsx file-split — see that file's header comment
               for the full "worth knowing" backstory. Same matching rules,
@@ -10877,7 +11007,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         sets the same real expectation (this takes a few minutes, not
                         seconds) without describing the pipeline to the traveler. */}
                     <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8 }}>
-                      Planning your trip, can take a few minutes.
+                      Planning your trip, can take a few minutes. You can keep browsing, this carries on without you.
                     </div>
                   </div>
                 </>

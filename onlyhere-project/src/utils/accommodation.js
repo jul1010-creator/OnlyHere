@@ -64,11 +64,53 @@ const TIERS = [
   { id: "hotel", match: /\bhotels?\b/i },
 ];
 
+// ── A SENTENCE THAT NAMES TWO TIERS IS NAMING ONE AND REJECTING ONE ──
+// This was `TIERS.find(r => r.match.test(t))`, which answers "which entry of
+// this list appears somewhere in the sentence", and that is not the question.
+// The order of TIERS is a specificity ordering for the REGEXES (hostel before
+// hotel so "youth hostel" is not read as a hotel); it says nothing about which
+// tier a sentence is recommending. Reading it as if it did made list position
+// beat everything the sentence said:
+//
+//   "a real hotel rather than a hostel"  ->  hostel
+//
+// which is the opposite of the sentence, and then costs twice. stayTierMismatch
+// compares that answer against the named property, so a legitimately named
+// hotel became "this day contradicts itself", a warning invented out of a
+// sentence that was right. And stayTiers records the wrong tier for the day, so
+// a trip that never changes tier looks like it does.
+//
+// This shape is not a corner case: the enrichment prompt explicitly contrasts
+// the two tiers ("a tight budget there realistically means a hostel or budget
+// guesthouse, NOT a hotel"), so the model is being taught to write it.
+//
+// Two rules, in this order:
+//   1. A tier introduced by a contrast ("rather than a hostel", "not a hotel")
+//      is the one being turned down. It does not count.
+//   2. Of what is left, the one mentioned FIRST is the recommendation, because
+//      that is how the sentence is built: lead with the advice.
+//
+// If every mention is rejected, the answer is null. "Not a hotel" says what the
+// traveler is not booking and nothing about what they are, and inventing a tier
+// from it would be exactly the guess this file exists to stop.
+const CONTRAST = /(?:rather than|instead of|as opposed to|other than|not just|not|never|no)\s+(?:an?|the|any|some)?\s*$/i;
+
 export const stayTier = (text) => {
   const t = clean(text);
   if (!t) return null;
-  const hit = TIERS.find(r => r.match.test(t));
-  return hit ? hit.id : null;
+  const hits = [];
+  for (const tier of TIERS) {
+    // A fresh regex per call, never TIERS' own: a /g/ pattern carries lastIndex
+    // between calls and would skip matches on the second sentence it ever saw.
+    const re = new RegExp(tier.match.source, "gi");
+    let m;
+    while ((m = re.exec(t)) !== null) {
+      hits.push({ id: tier.id, at: m.index, rejected: CONTRAST.test(t.slice(0, m.index)) });
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+  }
+  const wanted = hits.filter(h => !h.rejected).sort((a, b) => a.at - b.at);
+  return wanted.length ? wanted[0].id : null;
 };
 
 // The tiers a whole trip recommends. More than one is not automatically wrong:

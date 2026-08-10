@@ -1,6 +1,6 @@
 import { C } from "../utils/theme";
 import { testTravelerLine } from "../utils/helpers";
-import { fold, variantsOf, samePlaceName } from "../utils/danishNames";
+import { fold, variantsOf, samePlaceName, containsName } from "../utils/danishNames";
 
 // ── "Here's what's coming up" preview screen ────────────────────────
 // PASS 27 EXTRACTION (App.jsx file-split, per Oliver: "you gotta start
@@ -111,14 +111,28 @@ export const GuidePreviewScreen = ({
   //    the screen's whole job is to prove Gemlyx knows the ground. Gemlyx knows
   //    dozens of things IN Copenhagen. Those are not a guess, they are rows
   //    with a `city`/`town` field pointing at a town he did name.
-  const norm = fold(convoText);
-  const mentions = (name) => {
-    const hay = ` ${norm} `;
-    return variantsOf(name, { includeSights: true }).some(v => {
-      const f = fold(v);
-      return f.length >= 3 && hay.includes(f);
-    });
-  };
+  // 3. AND THE FIX FOR 1 BROUGHT ITS OWN HOLE. `hay` was built with a space on
+  //    each side, which is exactly the right idea, and then never used as one:
+  //    the test was a bare `hay.includes(f)`, so the padding did nothing and any
+  //    fold that appeared ANYWHERE inside the conversation counted.
+  //
+  //    Danish place names are short, so that is not a rare accident:
+  //
+  //      "we would ALSO like a beach"     -> Als
+  //      "not much MONey to spend"        -> Møn
+  //      "arriving MONday"                -> Møn
+  //      "somewhere with a COMMON room"   -> Møn
+  //
+  //    Each one puts a card for an island the traveller never mentioned onto a
+  //    screen whose only job is to prove Gemlyx knows the ground. The 3-char
+  //    minimum was standing in for a boundary check and cannot do that job:
+  //    "Als" and "Møn" are three characters, so the guard let precisely the
+  //    worst offenders through while blocking nothing.
+  //
+  //    containsName does the padding properly and treats punctuation as a gap,
+  //    so "Copenhagen." and "Aarhus," still match. Shared with discovery.js so
+  //    the two cannot drift.
+  const mentions = (name) => variantsOf(name, { includeSights: true }).some(v => containsName(convoText, v));
   const parentOf = (p) => String(p.city || p.town || "").trim();
   const pools = [
     ...towns.map(p => ({ ...p, _src: "town" })),

@@ -43,7 +43,7 @@ const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
   export { journeyParts, journeyBlock, vehicleWord } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
-  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
@@ -53,7 +53,7 @@ writeFileSync(entry, `
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -68,14 +68,14 @@ writeFileSync(entry, `
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
-  export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
+  export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { stopKind, tripScaleLine, tripCharacter, bookingActions } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -4086,6 +4086,428 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the picker is wired to the search", /framingForTarget\(discoverTarget/.test(appSrc));
   ok("and the town box reaches it", /town: discoverTown/.test(appSrc));
   ok("picking a town clears the region chip", /setDiscoverTarget\(opt\.id\); setDiscoverTown\(""\)/.test(appSrc));
+}
+
+// ── THE DANISH LETTERS, AND THE CANDIDATES THEY WERE COSTING ────────
+// Bug A of 10 Aug. helpers.js's normName ran NFD and then stripped anything
+// outside [a-z0-9 ]. NFD leaves æ, ø and å alone, so the strip deleted them:
+//
+//     "Ærø" -> "r"       "Møn" -> "mn"      "Læsø" -> "ls"
+//
+// dedupeAgainstExisting then dropped any candidate whose normalised name
+// CONTAINED an existing one. With Ærø published that is the letter r, so four
+// of five real candidates were binned, and nothing counted them. The visible
+// symptom was a discovery run that kept coming back nearly empty, which reads
+// exactly like "there is nothing left to find in Denmark".
+//
+// A test written against normName alone could not have caught this: it would
+// have asserted whatever normName already did. The assertion that has teeth is
+// the one about the CANDIDATES, so that is the one below.
+{
+  const { splitAlreadyCovered, isAlreadyCovered, containsName, fold } = M;
+  const helpersSrc = readFileSync(join(root, "src/utils/helpers.js"), "utf8");
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // The fold is the thing normName should have been all along.
+  is("ae survives the fold", fold("Ærø"), "aero");
+  is("o survives the fold", fold("Møn"), "mon");
+  is("and so does the pair", fold("Læsø"), "laeso");
+
+  // THE ONE THAT MATTERS. Five real Danish places, one published island.
+  const candidates = ["Rudkøbing", "Marstal", "Dragør", "Mariager", "Ebeltoft"].map(name => ({ name }));
+  const { kept, dropped } = splitAlreadyCovered(candidates, ["Ærø"]);
+  is("publishing Ærø costs no candidate", kept.map(c => c.name), ["Rudkøbing", "Marstal", "Dragør", "Mariager", "Ebeltoft"]);
+  is("and nothing is dropped behind his back", dropped.length, 0);
+
+  // A real duplicate still goes, and is handed back rather than swallowed.
+  const two = splitAlreadyCovered([{ name: "Ærø" }, { name: "Marstal" }], ["Ærø"]);
+  is("a genuine duplicate is still dropped", two.kept.map(c => c.name), ["Marstal"]);
+  is("and the drop is reported", two.dropped.map(c => c.name), ["Ærø"]);
+  is("a nameless candidate is neither kept nor counted", splitAlreadyCovered([{ hook: "no name" }], []).kept.length, 0);
+
+  // ── THE WORD BOUNDARY ─────────────────────────────────────────────
+  // Fixing the fold alone would have left a second silent drop behind, because
+  // the containment test compared raw substrings. These are four real Danish
+  // islands, not four spellings of one.
+  ok("Falster is not Als", !isAlreadyCovered("Falster", ["Als"]));
+  ok("Furesø is not Fur", !isAlreadyCovered("Furesø", ["Fur"]));
+  ok("Ærøskøbing is a town, not the island Ærø", !isAlreadyCovered("Ærøskøbing", ["Ærø"]));
+  ok("Mønsted is not Møn", !isAlreadyCovered("Mønsted", ["Møn"]));
+  // And the case the containment fallback exists for still works.
+  ok("a longer form of a published name is still caught", isAlreadyCovered("Reffen Street Food", ["Reffen"]));
+  ok("punctuation is a gap, not a letter", isAlreadyCovered("Reffen, Copenhagen", ["Reffen"]));
+  ok("the cross-language pair still holds", isAlreadyCovered("København", ["Copenhagen"]));
+
+  // containsName is shared with the preview screen (bug D), so it is pinned here
+  // as its own unit rather than only through its callers.
+  ok("a whole word matches", containsName("four days in Copenhagen", "Copenhagen"));
+  ok("a word at the very end matches", containsName("we fly into Aalborg", "Aalborg"));
+  ok("Als does not match inside also", !containsName("we would also like a beach", "Als"));
+  ok("Møn does not match inside money", !containsName("not much money to spend", "Møn"));
+  ok("Møn does not match inside Monday", !containsName("arriving Monday", "Møn"));
+  ok("an empty name matches nothing", !containsName("anything at all", ""));
+  ok("Aarhus and Århus are one place", containsName("three days in Århus", "Aarhus"));
+
+  // ── AND THAT IT IS ACTUALLY WIRED ─────────────────────────────────
+  // isAlreadyCovered was written, tested and imported by nothing for a whole
+  // session while the broken helper stayed in the call path. A passing unit
+  // test proved only that the function worked, never that it ran.
+  ok("the broken normName is gone", !/export const normName/.test(stripNonCode(helpersSrc)));
+  ok("and so is dedupeAgainstExisting", !/export const dedupeAgainstExisting/.test(stripNonCode(helpersSrc)));
+  ok("the app no longer imports it", !/dedupeAgainstExisting/.test(stripNonCode(appSrc)));
+  ok("the app imports the real one", /splitAlreadyCovered/.test(stripNonCode(appSrc)));
+  ok("and calls it on the discovery candidates", /splitAlreadyCovered\(candidates, existing\)/.test(stripNonCode(appSrc)));
+  // The screen promises a list is never silently shorter. Now it can keep it.
+  ok("the already-published drops are counted", /setDiscoverCovered\(covered\.length\)/.test(stripNonCode(appSrc)));
+  // Raw source, not stripNonCode, and this is the one place in this block where
+  // that is right: stripNonCode reads a JSX body as string content and deletes
+  // it, so the render site disappears before the regex ever sees it. The usual
+  // danger of raw source is matching a COMMENT describing the code rather than
+  // the code, so the pattern is shaped like the expression and not like prose.
+  ok("and shown", /\{discoverCovered > 0 && \(/.test(appSrc));
+  ok("and reset on the next run", /setDiscoverCovered\(0\)/.test(stripNonCode(appSrc)));
+}
+
+// ── ONE resolveLegMode, NOT TWO ─────────────────────────────────────
+// Bug C of 10 Aug. App.jsx carried its own resolveLegMode alongside the one in
+// utils/guideEnrichment.js. BOTH had a comment reading "SINGLE SOURCE OF TRUTH
+// for leg transport mode" above them, and they disagreed: the local copy kept
+// the old rule that turned any 1.1 to 60 km walk into bicycling, while the
+// shared one had moved to following the trip's primary mode.
+//
+// The cost was invisible, which is why it lasted. fetchExactDurations stored a
+// real, paid-for Google duration under `A|B|bicycling`; GuidePage looked up
+// `A|B|transit`, missed, and printed a straight-line estimate. A measured answer
+// discarded in favour of a guess, with nothing on screen to say so.
+//
+// The behavioural assertions below would pass against either copy read alone.
+// The one with teeth against a THIRD copy appearing is the file scan.
+{
+  const { resolveLegMode, WALK_MAX_KM } = M;
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // Both ends precise and about 10 km apart: far past any walk.
+  const geo = { A: { lat: 55.6761, lon: 12.5683 }, B: { lat: 55.7661, lon: 12.5683 } };
+  ok("the fixture really is a long leg", WALK_MAX_KM < 5);
+  is("a too-far walk on a transit trip is transit", resolveLegMode("walk along the harbour", "transit", "A", "B", false, geo), "transit");
+  is("a too-far walk on a car trip is driving", resolveLegMode("walk", "car", "A", "B", false, geo), "driving");
+  is("a too-far walk on a bike trip is bicycling", resolveLegMode("walk", "bike", "A", "B", false, geo), "bicycling");
+  // The deleted copy answered "bicycling" to all three. That is the drift.
+  ok("the old every-walk-becomes-a-bike rule is gone", resolveLegMode("walk", "transit", "A", "B", false, geo) !== "bicycling");
+  // And a walk that IS a walk still is one.
+  is("a short walk stays a walk", resolveLegMode("walk", "transit", "A", "A", false, { A: { lat: 55.6761, lon: 12.5683 } }), "walking");
+  // onlyWalking lifts the cap rather than rewriting the leg.
+  is("a walking-only trip keeps its long walk", resolveLegMode("walk", "transit", "A", "B", true, geo), "walking");
+
+  // ── AND ONLY ONE OF IT EXISTS ─────────────────────────────────────
+  const jsFiles = [];
+  const walk = (d) => readdirSync(d, { withFileTypes: true }).forEach(e => {
+    if (e.isDirectory()) walk(join(d, e.name));
+    else if (/\.(js|jsx|mjs)$/.test(e.name)) jsFiles.push(join(d, e.name));
+  });
+  walk(join(root, "src"));
+  ok("the scan found the source tree", jsFiles.length > 30);
+  const definers = jsFiles.filter(f => /(?:const|function)\s+resolveLegMode\s*[=(]/.test(stripNonCode(readFileSync(f, "utf8"))));
+  is("resolveLegMode is defined in exactly one file", definers.map(f => f.slice(root.length)), ["src/utils/guideEnrichment.js"]);
+  ok("the app imports it rather than declaring it", /import \{[^}]*\bresolveLegMode\b[^}]*\} from "\.\/utils\/guideEnrichment"/.test(appSrc));
+  ok("and its private distance helper went with it", !/legKmOrNull/.test(stripNonCode(appSrc)));
+}
+
+// ── THE PREVIEW SCREEN'S PADDING THAT WAS NEVER USED ────────────────
+// Bug D of 10 Aug. `mentions` built `const hay = \` ${norm} \``, a haystack
+// padded on both sides, which is exactly how a whole-word check is built, and
+// then tested `hay.includes(f)` on it, which ignores the padding entirely.
+// The 3-character minimum beside it was standing in for the boundary check and
+// could not do that job: "Als" and "Møn" are three characters, so the guard
+// admitted precisely the names that cause trouble.
+{
+  const previewSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  const code = stripNonCode(previewSrc);
+  ok("the preview screen uses the shared boundary check", /containsName\(convoText, v\)/.test(code));
+  ok("and imports it", /import \{[^}]*\bcontainsName\b[^}]*\} from "\.\.\/utils\/danishNames"/.test(previewSrc));
+  // The bare include is what made "also" an island. It must not come back.
+  ok("the unpadded include is gone", !/hay\.includes\(/.test(code));
+  ok("and the length guard standing in for it is gone", !/f\.length >= 3/.test(code));
+}
+
+// ── THE MAP FRAME THAT OUTLIVES THE MAP ─────────────────────────────
+// Bug F of 10 Aug. requestAnimationFrame(() => map.invalidateSize()) captured
+// the Leaflet instance directly and was never cancelled, while the unmount
+// effect below it calls map.remove(). Unmount inside one frame of creation and
+// invalidateSize reads a size off a nulled container and throws.
+//
+// StrictMode happens to run the cleanup before the frame fires, so this cannot
+// show up in development. That is the whole reason it is asserted on the source
+// rather than left to be noticed.
+{
+  const mapSrc = readFileSync(join(root, "src/components/GuideRouteMap.jsx"), "utf8");
+  const code = stripNonCode(mapSrc);
+  ok("the frame is held so it can be cancelled", /rafRef\.current = requestAnimationFrame\(/.test(code));
+  ok("and the unmount cleanup cancels it", /cancelAnimationFrame\(rafRef\.current\)/.test(code));
+  ok("the callback reads the ref, not the captured map", /if \(mapRef\.current\) mapRef\.current\.invalidateSize\(\)/.test(code));
+  ok("no bare frame is left calling the captured instance", !/requestAnimationFrame\(\(\) => map\.invalidateSize\(\)\)/.test(code));
+  // The cancel has to be in the effect that also removes the map, or an unmount
+  // takes one path and not the other.
+  const cleanup = code.slice(code.indexOf("cancelAnimationFrame"));
+  ok("the cancel runs before the map is removed", cleanup.indexOf("mapRef.current.remove()") > 0);
+}
+
+// ── THE TIER A SENTENCE RECOMMENDS, NOT THE ONE IT MENTIONS FIRST ───
+// Bug E of 10 Aug. stayTier was TIERS.find(...), so the answer was decided by
+// position in a list whose order exists for regex specificity (hostel before
+// hotel so "youth hostel" is not read as a hotel) and says nothing about what a
+// sentence recommends. "A real hotel rather than a hostel" came back "hostel".
+//
+// That is not only a wrong label. stayTierMismatch compares it against the
+// named property, so a correctly named hotel became "this day contradicts
+// itself", a warning manufactured from a sentence that was right, shown to
+// Oliver as a plan problem.
+{
+  const { stayTier, stayTiers, stayTierMismatch, stayProblems } = M;
+
+  // THE ONE FROM THE HANDOFF.
+  is("rather than a hostel means a hotel", stayTier("a real hotel rather than a hostel"), "hotel");
+  is("and the sentence the other way round still reads correctly", stayTier("a hostel rather than a hotel"), "hostel");
+  is("not a hotel, a hostel", stayTier("not a hotel, book a hostel near the station"), "hostel");
+  is("instead of is a contrast too", stayTier("a guesthouse instead of a hotel"), "guesthouse");
+  is("so is not just", stayTier("not just a hostel, a proper hotel"), "hotel");
+
+  // A sentence that only says what it is NOT names no tier. Inventing one from
+  // it is the guess this file exists to stop.
+  is("a refusal alone names no tier", stayTier("this is not a hotel town"), null);
+
+  // Everything the plain version got right, it still gets right.
+  is("a hostel sentence is still a hostel", stayTier("Book a hostel near Norreport, from EUR 30"), "hostel");
+  is("a hotel sentence is still a hotel", stayTier("Stay in central Odense for a comfortable hotel base"), "hotel");
+  is("Danhostel is still a hostel", stayTier("Danhostel Copenhagen City"), "hostel");
+  is("a youth hostel is not a hotel", stayTier("a youth hostel in the old town"), "hostel");
+  is("an area sentence still names no tier", stayTier("Stay in central Odense near the cathedral"), null);
+  is("Danish still counts", stayTier("et vandrerhjem i byen"), "hostel");
+
+  // AND THE CONSEQUENCE, which is the assertion that would have caught it.
+  ok("a contrasting sentence with a matching hotel is not a contradiction",
+    !stayTierMismatch("a real hotel rather than a hostel", "Hotel Odeon"));
+  ok("a genuine disagreement is still caught",
+    stayTierMismatch("a real hotel rather than a hostel", "Danhostel Copenhagen City"));
+  is("and no plan problem is invented from it",
+    stayProblems([{ glance: { accommodation: "a real hotel rather than a hostel", recommendedStay: "Hotel Odeon" } }]), []);
+  is("the trip's tier list reads the sentence, not the list order",
+    stayTiers([{ glance: { accommodation: "a real hotel rather than a hostel" } }]), ["hotel"]);
+
+  // The regexes are rebuilt per call. A /g/ pattern reused across calls carries
+  // lastIndex and would answer differently the second time it saw the same text.
+  const twice = ["Book a hostel near Norreport", "Book a hostel near Norreport"].map(stayTier);
+  is("the same sentence answers the same way twice", twice, ["hostel", "hostel"]);
+}
+
+// ── THE ROUNDS BEFORE A GUIDE ───────────────────────────────────────
+// Oliver, 10 Aug 2026, relaying a friend: "he finds the Gemlyx guide annoying.
+// It talks too much before giving a guide to him... I also think the 'do you
+// want a simple guide or bla bla bla' is unnecessary to ask."
+//
+// Two separate rules in the system prompt were charging a round trip each.
+//
+// 1. A MANDATED FINAL QUESTION WHOSE ANSWER WAS NEVER READ. The prompt required
+//    "simple plan or full hour-by-hour schedule?" as the last question before
+//    building. The interface then asks the same thing on the "How do you want
+//    to see it?" screen, and ONLY that screen's answer reaches generateGuide as
+//    modeOverride. The chat answer fed nothing at all.
+//
+// 2. A TICK-BOX RULE THAT FIRED 100% OF THE TIME. It said the reply after the
+//    intake form must never contain a plan "not even if literally every single
+//    field was filled in and there is genuinely nothing left to ask". So the
+//    traveler who did the most work to be clear was guaranteed the most
+//    friction.
+//
+// NOTE ON WHY THESE READ RAW appSrc AND NOT stripNonCode: the system prompt IS
+// a template literal, so stripNonCode deletes the entire thing and every one of
+// these assertions would pass against nothing at all.
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const sysStart = appSrc.indexOf("const sysPrompt = `");
+  ok("the system prompt was found", sysStart > 0);
+  const sysPrompt = appSrc.slice(sysStart, appSrc.indexOf("MERCHANDISE:", sysStart));
+  ok("and it is the real thing, not an empty slice", sysPrompt.length > 4000);
+
+  // 1. The question is gone, in every phrasing it was written in.
+  ok("the mandated final question is gone", !/hour-by-hour schedule/.test(sysPrompt));
+  ok("and it is not quoted back at the model either", !/simple plan you can glance at/.test(appSrc));
+  ok("the model is told to build instead", /ONCE YOU KNOW ENOUGH TO BUILD, BUILD/.test(sysPrompt));
+  ok("and told why, so it is not reinvented", /never ask how detailed or how simple they want it/.test(sysPrompt));
+  // The screen that DOES own this choice is still there and still the only
+  // thing feeding modeOverride. Deleting the question must not delete the choice.
+  ok("the choice still lives on its own screen", /How do you want to see it\?/.test(appSrc));
+  // Raw source: this call sits in JSX, and stripNonCode blanks JSX wholesale.
+  ok("and still reaches generateGuide", /generateGuide\(undefined, "plain"\)/.test(appSrc));
+
+  // 2. The tick-box reply is conditional now.
+  ok("the absolute never-plan rule is gone", !/THIS RULE IS ABSOLUTE, NO EXCEPTIONS/.test(sysPrompt));
+  ok("and so is the 100% of the time wording", !/This is true 100% of the time/.test(sysPrompt));
+  ok("a complete form goes straight to the handoff", /go straight to the ready-to-build handoff/.test(sysPrompt));
+  ok("a question is only for something genuinely missing", /WHAT COMES AFTER THAT LINE DEPENDS ENTIRELY ON WHETHER ANYTHING IS STILL MISSING/.test(sysPrompt));
+  ok("inventing one to fill the slot is forbidden", /do NOT manufacture a question to fill the slot/.test(sysPrompt));
+  // The Applied line survives: it is what tells someone their ticks landed.
+  ok("the Applied line is still required", /"Applied: \.\.\." line/.test(sysPrompt));
+  // And the follow-on rule no longer assumes a question was asked.
+  ok("the green light is conditional on having asked", /If you DID ask a question after the Applied line/.test(sysPrompt));
+}
+
+// ── THE BUTTON THAT COULD NOT BE SEEN ───────────────────────────────
+// "I don't know, perhaps it wasn't visible to him that he could click 'turn
+// this into a guide'." It could have been absent, not merely unnoticed: the
+// only gate was the [[GEMLYX_READY_TO_BUILD]] marker, and the prompt tells the
+// model to withhold it on any doubt. isFullPlanText was written for this exact
+// case and was imported into App.jsx and called nowhere.
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(appSrc);
+  const { isFullPlanText, isReadyToBuild } = M;
+
+  ok("the fallback is wired to the button", /isReadyToBuild\(lastAssistantMsg\.text\) \|\| isFullPlanText\(lastAssistantMsg\.text\)/.test(code));
+
+  // What the fallback catches: a real plan with no marker on it.
+  const planNoMarker = "Day 1: Copenhagen, Nyhavn and the Round Tower.\nDay 2: train to Odense for H.C. Andersen's house.\nDay 3: Aarhus and Den Gamle By.";
+  ok("a plan without the marker is still a plan", isFullPlanText(planNoMarker));
+  ok("and the marker gate alone would have missed it", !isReadyToBuild(planNoMarker));
+  // What it must NOT catch: ordinary conversation, which would put a build
+  // button under a question and offer to spend money on nothing.
+  ok("a question is not a plan", !isFullPlanText("Where are you flying into, and how many days do you have?"));
+  ok("a short answer is not a plan", !isFullPlanText("Kronborg is worth the trip, it is 45 minutes by train."));
+  ok("one bare day header is not a plan", !isFullPlanText("Day 1: arrive."));
+
+  // The wait estimate. The CTA promised seconds over a screen that admits to
+  // minutes, on the exact screen where somebody decides whether to wait.
+  ok("the CTA no longer promises seconds", !/Takes a few seconds/.test(appSrc));
+  ok("it says minutes, like the loading screen does", /Takes a few minutes\. Real places, real routes, checked\./.test(appSrc));
+}
+
+// ── MINIMIZE THE WAIT, KEEP THE BUILD ───────────────────────────────
+// "maybe we should be able to minimize the loading screen.. and then when it's
+// done, it will show as a notification at the top."
+//
+// The ✕ already left the build running, because nothing cancels an async
+// function, so the only thing it ever did was hide the evidence and then
+// navigate the traveler away from wherever they had gone.
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(appSrc);
+
+  ok("minimizing is a state, not a close", /const \[guideMinimized, setGuideMinimized\] = useState\(false\)/.test(code));
+  ok("and readiness is its own state", /const \[guideReady, setGuideReady\] = useState\(false\)/.test(code));
+  // THE ONE THAT MATTERS: dismissing must not drop the build state.
+  ok("the overlay backdrop minimizes rather than nulling the build", /onClick=\{\(\) => setGuideMinimized\(true\)\}/.test(appSrc));
+  ok("the corner control does too", /setGuideMinimized\(true\); \}\} aria-label="Keep browsing while this builds"/.test(appSrc));
+  ok("the overlay hides while minimized", /guideModal === "loading" && !guideMinimized/.test(appSrc));
+  ok("and the bar shows in its place", /guideModal === "loading" && guideMinimized/.test(appSrc));
+  // One source of progress, so the bar cannot claim a different stage.
+  const bar = appSrc.slice(appSrc.indexOf('guideModal === "loading" && guideMinimized'));
+  ok("the bar reads the real pipeline stage", /guideBuildStage\?\.label/.test(bar.slice(0, 1600)));
+  ok("and the real percent", /guideBuildStage\?\.percent/.test(bar.slice(0, 1600)));
+
+  // The notification, and the interruption it replaces.
+  ok("a minimized build does not navigate on its own", /if \(guideMinimized\) \{ setGuideReady\(true\); return; \}/.test(code));
+  ok("the ref is claimed before that return, so it cannot re-fire", code.indexOf("navigatedGuideGidRef.current = guideModal._gid") < code.indexOf("if (guideMinimized) { setGuideReady(true); return; }"));
+  ok("the effect re-runs when minimizing changes", /\}, \[guideModal, guideMinimized\]\)/.test(code));
+  ok("the banner exists", /Your guide is ready/.test(appSrc));
+  ok("and opens the guide when tapped", /setGuideReady\(false\); setGuideMinimized\(false\); if \(guideModal && typeof guideModal === "object"\) navigate\("\/guide\/new"/.test(appSrc));
+  // A watched build behaves exactly as before. Minimizing is opt-in.
+  ok("an unminimized build still navigates straight there", /if \(guideMinimized\) \{ setGuideReady\(true\); return; \}\s*\n\s*navigate\("\/guide\/new", \{ state: \{ guide: guideModal \} \}\);/.test(appSrc));
+
+  // Both flags reset where a stale one would be visible. Anchors asserted
+  // before slicing: a missed indexOf gives -1, and !/x/.test("") is true, which
+  // is how a real guard silently becomes a passing one.
+  ok("the build start was found", appSrc.includes('setGuideModal("loading");'));
+  // ANCHORED ON THE CALL, NOT THE PHRASE. The words "Guide build failed:"
+  // appear EARLIER in this file inside a comment quoting the 8 Aug TDZ crash,
+  // so a plain indexOf lands 5000 lines above the catch block and the slice
+  // below tests a comment about a different bug entirely. This is the trap the
+  // handoff names, met in the wild.
+  ok("the failure path was found", appSrc.includes('console.warn("Guide build failed:'));
+  const build = appSrc.slice(appSrc.indexOf('setGuideModal("loading");'));
+  ok("a new build clears the minimized flag", /setGuideMinimized\(false\);/.test(build.slice(0, 400)));
+  ok("and clears any old ready banner", /setGuideReady\(false\);/.test(build.slice(0, 400)));
+  // A failure has to reach someone who stepped away, or the bar just stops.
+  const failAt = appSrc.indexOf('console.warn("Guide build failed:');
+  // From the catch that owns it, not a fixed byte window: the comment between
+  // the two is longer than any window worth hard-coding, and a window that
+  // happens to miss would read as a passing negative.
+  const catchAt = appSrc.lastIndexOf("} catch (err) {", failAt);
+  ok("the catch block that owns it was found", catchAt > 0 && catchAt < failAt);
+  const fail = appSrc.slice(catchAt, failAt);
+  ok("a failed build un-minimizes so the error is seen", /setGuideMinimized\(false\)/.test(fail));
+}
+
+// ── THE INTAKE FORM ─────────────────────────────────────────────────
+// "Maybe we should make it clear that giving more information is optional.
+// Perhaps we should also leave out tent/camping wagon.. it's just too akward."
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  ok("the panel says it is optional", /✦ Optional: fine-tune the plan/.test(appSrc));
+  ok("and says what skipping it costs", /skip it and Gemlyx still plans/.test(appSrc));
+
+  // Getting around asks how you MOVE. A tent is where you sleep.
+  const row = appSrc.match(/\{\["🚲 Bike"[^\]]*\]/);
+  ok("the transport row was found", !!row);
+  ok("tent is gone from the transport row", !/Tent/.test(row[0]));
+  ok("camper van stays, it is a vehicle", /🚐 Camper van/.test(row[0]));
+  // AND THE CAPABILITY IS UNTOUCHED. Removing a tick box must not remove the
+  // routing, or someone who types it gets a worse trip than before.
+  ok("the tent routing rule survives in the prompt", /tent → same real-campsite guidance/.test(appSrc));
+  ok("including that Denmark has no roadside camping", /not roadside\/wild camping/.test(appSrc));
+}
+
+// ── PAYING TO ASK COPENHAGEN ABOUT ODENSE ───────────────────────────
+// Oliver, 10 Aug 2026: "the AI blogger is searching through sources for
+// Copenhagen, even if I am trying to find sources about Odense... Thankfully
+// they don't use the Copenhagen ones. But it's a waste."
+//
+// placeMightMatch let the RESEARCH TEXT unlock any place-scoped source. An
+// Odense research snippet says "1 hour 15 from Copenhagen by train", so the
+// Copenhagen source unlocked, and the draft paid to ask visitcopenhagen.com
+// about Odense.
+//
+// The existing assertion "an Aarhus draft must not search visitcopenhagen"
+// could never have caught this: it passes no text, and the text is the bug.
+{
+  const { directSourceSearches, placeMightMatch } = M;
+  const rows = [
+    { id: 1, domain: "visitdenmark.dk", applies_to: "", applies_place: "", enabled: true },
+    { id: 2, domain: "visitcopenhagen.com", applies_to: "", applies_place: "Copenhagen", enabled: true },
+    { id: 3, domain: "visitodense.com", applies_to: "", applies_place: "Odense", enabled: true },
+    { id: 4, domain: "visitaarhus.com", applies_to: "", applies_place: "Aarhus", enabled: true },
+  ];
+  // A realistic Odense research text. Both other cities appear, as facts ABOUT
+  // Odense, which is exactly how a travel snippet is written.
+  const text = "Odense is Hans Christian Andersen's birthplace on Funen. It is about 1 hour 15 minutes from Copenhagen by train, and roughly the same from Aarhus.";
+
+  is("an Odense draft searches Odense and the national site, nothing else",
+     directSourceSearches(rows, "town", { name: "Odense", text }).map(x => x.domain).sort(),
+     ["visitdenmark.dk", "visitodense.com"]);
+  ok("naming Copenhagen in the research does not unlock its source",
+     !placeMightMatch("Copenhagen", { name: "Odense", text }, "town"));
+  ok("and neither does naming Aarhus",
+     !placeMightMatch("Aarhus", { name: "Odense", text }, "town"));
+
+  // THE CAP IS WHY THIS WAS WORSE THAN WASTE. Four sources, cap of four, and
+  // the alphabetical sort puts both wrong ones ahead of visitodense.com.
+  is("the cap is still four", M.MAX_DIRECT_SEARCHES, 4);
+  ok("the draft's own source is no longer at risk of being crowded out",
+     directSourceSearches(rows, "town", { name: "Odense", text }).some(x => x.domain === "visitodense.com"));
+
+  // AND THE CASE THE FALLBACK EXISTS FOR STILL WORKS. An event draft knows only
+  // the event's name, and Copenhell is not Copenhagen.
+  const tivoli = [{ id: 9, domain: "tivoli.dk", applies_to: "festival", applies_place: "Copenhagen", enabled: true }];
+  is("an event still gets placed by its research text",
+     directSourceSearches(tivoli, "festival", { name: "Copenhell", text: "Copenhell is a metal festival held at Refshaleøen in Copenhagen each June." }).map(x => x.domain),
+     ["tivoli.dk"]);
+  ok("in either spelling, still", placeMightMatch("Copenhagen", { name: "Copenhell", text: "afholdes i København hvert år" }, "festival"));
+  // But an event that DOES know its town is placed by the town, not the text.
+  ok("a festival with a town field trusts the field",
+     !placeMightMatch("Copenhagen", { name: "Odense Blomsterfestival", town: "Odense", text: "two hours from Copenhagen" }, "festival"));
+  // And the word boundary, which here spends money rather than showing a card.
+  ok("a source scoped to Als is not unlocked by the word also",
+     !placeMightMatch("Als", { name: "Copenhell", text: "there is also a camping area on site" }, "festival"));
 }
 
 rmSync(dir, { recursive: true, force: true });

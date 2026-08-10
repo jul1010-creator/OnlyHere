@@ -55,6 +55,9 @@ export const GuideRouteMap = ({ points, legs }) => {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const didFitRef = useRef(false);
+  // The pending invalidateSize frame, so unmount can cancel it. See the note at
+  // the requestAnimationFrame call below.
+  const rafRef = useRef(null);
   // One entry per leg: the real polyline, or null once we know there isn't one.
   const [geometry, setGeometry] = useState({});
 
@@ -100,7 +103,23 @@ export const GuideRouteMap = ({ points, legs }) => {
       // exactly as "looks off" and "poor animation" the first time it's
       // seen. invalidateSize() forces that re-measure once the container
       // has genuinely settled.
-      requestAnimationFrame(() => map.invalidateSize());
+      // The frame is CANCELLED on unmount and the callback reads mapRef rather
+      // than the `map` it closes over. Both matter, for the same reason: this
+      // schedules work for the next frame against a Leaflet instance that the
+      // unmount effect below may destroy first. map.remove() nulls the
+      // container, and invalidateSize() then reads a size off nothing and
+      // throws. An uncaught error out of a rendered guide, from a map the
+      // reader never even saw.
+      //
+      // The window is one frame wide, so it needs a guide page that unmounts
+      // within ~16ms of a day card mounting: a fast back tap, a re-render that
+      // swaps the route, a saved guide opened and closed. Rare, not impossible,
+      // and invisible in development because StrictMode's double mount happens
+      // to run the cleanup before the frame fires.
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        if (mapRef.current) mapRef.current.invalidateSize();
+      });
     }
     const map = mapRef.current;
     map.invalidateSize();
@@ -230,7 +249,10 @@ export const GuideRouteMap = ({ points, legs }) => {
     return () => { group.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(points), JSON.stringify(legs), geometry]);
-  useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
+  useEffect(() => () => {
+    if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+  }, []);
   if (points.length < 2) return null;
   return <div ref={holderRef} style={{ width: "100%", height: "100%" }} />;
 };
