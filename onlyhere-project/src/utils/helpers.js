@@ -509,7 +509,41 @@ export const arrivalRow = (value, kind) => {
 // ONLY for transit. Driving is deliberately left unanchored, because without
 // departure_time Google returns its typical duration rather than a live-traffic
 // snapshot, and a typical duration is the right thing to publish.
-export const transitDepartureAnchor = () => {
+// ── ASK GOOGLE ABOUT THE RIGHT DAY ──────────────────────────────────
+// Oliver, 11 Aug 2026: "How do we make Gemlyx act as intelligent as Google AI
+// on Google? Google AI has access to Google maps and always seem to be very
+// strong on logistics."
+//
+// Part of the answer is that Google is not reasoning better, it is reading the
+// timetable. But part of it was that Gemlyx was asking about the wrong day.
+//
+// This anchored EVERY transit query to next Tuesday at 09:00, including every
+// leg of a real traveller's real itinerary. Meanwhile fetchGuideWeather, called
+// FOUR LINES LATER in the same function, already took the trip's real arrival
+// date and fetched the forecast for the right days. So a guide for a Sunday in
+// January showed January's weather over a Tuesday-in-August timetable.
+//
+// In Denmark that is not a rounding error. Sunday service is thinner across the
+// regional network, several routes do not run at all, and seasonal ferries stop
+// for the winter. A Tuesday-morning answer about a Sunday in January is the
+// wrong answer delivered confidently, which is the thing this codebase exists
+// to avoid.
+//
+// EACH LEG GETS ITS OWN DAY, because a five-day trip crosses a weekend and day
+// four's Sunday bus is a different question from day one's Wednesday train.
+export const transitDepartureAnchor = (tripDate, dayOffset = 0) => {
+  if (tripDate) {
+    const d = new Date(tripDate);
+    if (!Number.isNaN(d.getTime())) {
+      d.setDate(d.getDate() + (Number(dayOffset) || 0));
+      d.setHours(9, 0, 0, 0);
+      // Google rejects a departure_time in the past, so a trip already under
+      // way, or one whose date has slipped, falls back rather than erroring.
+      // Falling back is honest: it is a generic answer, and it says so by being
+      // the same generic answer every other undated query gets.
+      if (d.getTime() > Date.now()) return Math.floor(d.getTime() / 1000);
+    }
+  }
   const d = new Date();
   d.setHours(9, 0, 0, 0);
   do { d.setDate(d.getDate() + 1); } while (d.getDay() !== 2);
@@ -518,7 +552,8 @@ export const transitDepartureAnchor = () => {
 
 // Appends the anchor only for a transit leg, so call sites stay one-liners and
 // cannot accidentally anchor a driving query.
-export const departureParam = (mode) => (mode === "transit" ? `&departure_time=${transitDepartureAnchor()}` : "");
+export const departureParam = (mode, tripDate, dayOffset) =>
+  (mode === "transit" ? `&departure_time=${transitDepartureAnchor(tripDate, dayOffset)}` : "");
 
 // ── Is this domain literally the place's own name ───────────────────
 // Oliver, 6 Aug 2026, on the Aarhus Festuge draft that published with an empty

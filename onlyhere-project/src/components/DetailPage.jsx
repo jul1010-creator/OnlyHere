@@ -1,6 +1,7 @@
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow } from "../utils/helpers";
 import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
+import { ticketBadge } from "../utils/tickets";
 import { AtAGlanceCard } from "./AtAGlanceCard";
 import { GemlyxFindCard } from "./GemlyxFindCard";
 import { InstagramEmbed } from "./InstagramEmbed";
@@ -447,7 +448,12 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                 )}
                 {townEvents.map(e => {
                   const live = isCurrentlyLive(e.date, e.dateEnd);
-                  const soldOut = e.ticketStatus === "sold_out";
+                  // Was a bare comparison against one string, so "cancelled"
+                  // and "off_sale" both fell through to showing ticketInfo as
+                  // though nothing were wrong. The badge table decides what a
+                  // status is allowed to say, in one place. See utils/tickets.js.
+                  const ticket = ticketBadge(e.ticketStatus);
+                  const ticketWarn = ticket.tone === "bad" || ticket.tone === "warn";
                   return (
                     <button key={e.id ?? e.name} onClick={() => onOpenEvent && onOpenEvent(e)} disabled={!onOpenEvent}
                       style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${live ? "#4CAF5066" : C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: onOpenEvent ? "pointer" : "default", fontFamily: "'Inter', sans-serif" }}>
@@ -468,8 +474,8 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
                         {/* Ticket reality carried through verbatim from the published
                             row. A sold-out festival that reads as a plan is the single
                             most expensive way to mislead someone about a trip. */}
-                        {soldOut ? (
-                          <div style={{ fontSize: 11, color: "#FF8A80", fontWeight: 600, marginTop: 3 }}>Sold out</div>
+                        {ticketWarn ? (
+                          <div style={{ fontSize: 11, color: ticket.tone === "bad" ? "#FF8A80" : "#FFB347", fontWeight: 600, marginTop: 3 }}>{ticket.label}</div>
                         ) : e.ticketInfo ? (
                           <div style={{ fontSize: 11, color: C.muted, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.ticketInfo}</div>
                         ) : null}

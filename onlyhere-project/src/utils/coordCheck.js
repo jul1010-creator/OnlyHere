@@ -138,6 +138,7 @@ export const blockingCoordProblems = (payload, type = "") =>
 // means one was copied, or both fell back to the same town centre and that
 // fallback was then stored as though it were measured.
 const coordKey = (c) => `${c.lat.toFixed(4)},${c.lon.toFixed(4)}`;
+const sameName = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 export const sharedCoords = (rows) => {
   const byPoint = new Map();
   (Array.isArray(rows) ? rows : []).forEach(r => {
@@ -147,7 +148,24 @@ export const sharedCoords = (rows) => {
     if (!byPoint.has(k)) byPoint.set(k, []);
     byPoint.get(k).push({ id: r.id, name: r?.payload?.name || "(unnamed)", type: r?.type });
   });
-  return [...byPoint.values()].filter(list => list.length > 1);
+  return [...byPoint.values()]
+    .filter(list => list.length > 1)
+    // ── "SAME POINT: COPENHAGEN, COPENHAGEN" ──────────────────────
+    // Oliver's screenshot, 11 Aug, five lines of it. He is right that it reads
+    // as nonsense, and the nonsense was hiding the actual finding.
+    //
+    // Two rows on one point with DIFFERENT names is a coordinate error: one of
+    // them is in the wrong place. Two rows on one point with the SAME name is
+    // not a coordinate error at all, it is THE SAME PLACE PUBLISHED TWICE, and
+    // it is the worse problem: liveContent dedupes by type and name and keeps
+    // whichever comes first, so the site silently shows one copy and every edit
+    // made to the other one does nothing.
+    //
+    // placeEdit.js has detected exactly that since 8 Aug, with the explanation
+    // written out. This was re-detecting it and mislabelling it, which is the
+    // sixth duplicated detector found this week. Handed back to duplicateNames
+    // where it belongs, so this reports only what it is actually for.
+    .filter(list => !list.every(x => sameName(x.name, list[0].name)));
 };
 
 export const coordAudit = (rows) => {

@@ -144,6 +144,109 @@ const WINDOW_DAYS = 3; // either side, so a 7 day window centred on the date
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const iso = (d) => d.toISOString().slice(0, 10);
 
+// ── THE DANISH NATIONAL RECORD, NOT A GLOBAL MODEL'S GUESS AT IT ────
+//
+// Oliver, 11 Aug 2026, sending DMI's own page after I twice told him their free
+// data needed an API key: it does not. Authentication was dropped on 2 Dec 2025.
+// "You can now access all endpoints directly, neither registration, nor API key
+// are needed." I had been reading a stale FAQ on a different host. Two copies of
+// one fact and I read the wrong one, which is the exact failure this codebase
+// has spent two days removing.
+//
+// WHY DMI RATHER THAN WHAT WAS HERE. The ten year averages below come from
+// Open-Meteo's archive, which is ERA5: a global reanalysis, interpolated to a
+// point. Perfectly respectable, and not Danish. DMI's climate data is the
+// national record, quality controlled by DMI's climatologists, and it publishes
+// EXACTLY the three numbers this function computes by hand:
+//
+//   mean_daily_max_temp    the high
+//   mean_daily_min_temp    the low
+//   no_days_acc_precip_1   days with 1mm or more, which is the wet-day rule
+//                          the comment below already defines by hand
+//
+// For a Denmark-only product answering "what is late September usually like in
+// Ribe", the Danish national record is the right source and a global model
+// standing in for it is not.
+//
+// MUNICIPALITY LEVEL, NOT STATIONS. Verified against the live API: a bounding
+// box around Ribe returns Esbjerg, the municipality it is in. That avoids the
+// nearest-station problem entirely, which for small Danish towns is the whole
+// difficulty. 10kmGridValue was tried first and returns nothing for these
+// parameters.
+//
+// THREE CALLS, NOT THIRTY. One request per parameter covering the whole ten
+// years at monthly resolution, then filtered to the target month in code.
+const DMI_CLIMATE = "https://dmigw.govcloud.dk/v2/climateData/collections/municipalityValue/items";
+const DMI_BOX = 0.35;   // degrees either side; wide enough to catch a municipality centroid
+
+const dmiSeries = async (lat, lon, parameterId, fromYear, toYear) => {
+  const bbox = [ (lon - DMI_BOX).toFixed(3), (lat - DMI_BOX).toFixed(3),
+                 (lon + DMI_BOX).toFixed(3), (lat + DMI_BOX).toFixed(3) ].join(",");
+  const url = `${DMI_CLIMATE}?parameterId=${parameterId}&timeResolution=month`
+    + `&bbox=${bbox}&datetime=${fromYear}-01-01T00:00:00Z/${toYear}-12-31T23:59:59Z&limit=1000`;
+  const r = await fetch(url, { headers: { "User-Agent": "Gemlyx/1.0 (gemlyxtravel.com)" } });
+  if (!r.ok) throw new Error(`DMI ${parameterId} ${r.status}`);
+  const j = await r.json();
+  return Array.isArray(j.features) ? j.features : [];
+};
+
+// A bbox can straddle several municipalities. Pick the one whose point is
+// nearest the town, rather than whichever the API happened to list first.
+const nearestMunicipality = (features, lat, lon) => {
+  let best = null, bestD = Infinity;
+  features.forEach(f => {
+    const c = f?.geometry?.coordinates;
+    if (!Array.isArray(c) || c.length < 2) return;
+    const d = ((c[1] - lat) * 111.32) ** 2 + ((c[0] - lon) * 62.06) ** 2;
+    if (d < bestD) { bestD = d; best = f?.properties?.municipalityId || null; }
+  });
+  return best;
+};
+
+async function dmiNormals(lat, lon, dateStr) {
+  const target = new Date(`${dateStr}T12:00:00Z`);
+  if (!Number.isFinite(target.getTime())) return null;
+  const month = target.getUTCMonth() + 1;
+  const latestYear = new Date().getUTCFullYear() - 1;
+  const fromYear = latestYear - (NORMALS_YEARS - 1);
+
+  const [hi, lo, wet] = await Promise.all([
+    dmiSeries(lat, lon, "mean_daily_max_temp", fromYear, latestYear),
+    dmiSeries(lat, lon, "mean_daily_min_temp", fromYear, latestYear),
+    dmiSeries(lat, lon, "no_days_acc_precip_1", fromYear, latestYear),
+  ]);
+
+  const muni = nearestMunicipality([...hi, ...lo, ...wet], lat, lon);
+  if (!muni) return null;
+  // One municipality, one month, and only real numbers. `from` carries a
+  // timezone offset, so the month is read off the string rather than parsed
+  // into a Date that could tip into the previous month at midnight.
+  const pick = (features) => features
+    .filter(f => f?.properties?.municipalityId === muni)
+    .filter(f => Number(String(f?.properties?.from || "").slice(5, 7)) === month)
+    .map(f => Number(f?.properties?.value))
+    .filter(Number.isFinite);
+
+  const highs = pick(hi), lows = pick(lo), wets = pick(wet);
+  // Same rule as the Open-Meteo path: a normal built from two years is not a
+  // normal, and refusing beats printing an average of noise as a climate.
+  if (highs.length < 5 || lows.length < 5) return null;
+
+  const daysInMonth = new Date(Date.UTC(latestYear, month, 0)).getUTCDate();
+  const name = [...hi, ...lo, ...wet].find(f => f?.properties?.municipalityId === muni)?.properties?.municipalityName || "";
+  return {
+    kind: "normals",
+    date: dateStr,
+    years: highs.length,
+    high_c: Math.round(mean(highs)),
+    low_c: Math.round(mean(lows)),
+    // DMI publishes the count of wet days directly, so this is their number
+    // divided by the month's length rather than a share computed from dailies.
+    wet_day_share: wets.length ? Math.min(1, mean(wets) / daysInMonth) : null,
+    source: `DMI, the Danish national climate record${name ? ` (${name} municipality)` : ""}`,
+  };
+}
+
 async function climateNormals(lat, lon, dateStr) {
   const target = new Date(`${dateStr}T12:00:00Z`);
   if (!Number.isFinite(target.getTime())) return null;
@@ -206,7 +309,21 @@ export default async function handler(req, res) {
   if (mode === "normals") {
     if (!date) return res.status(400).json({ error: "Missing 'date' for normals" });
     try {
-      const normals = await climateNormals(lat, lon, String(date));
+      // ── DMI FIRST, OPEN-METEO AS THE FALLBACK ──────────────────
+      // Not a replacement. DMI covers Denmark and Greenland only, and a
+      // national service can be down like any other, so the global archive
+      // stays as the second answer rather than being deleted. Which one
+      // answered is named in `source`, because "ten year average" from the
+      // Danish national record and from a global reanalysis are not the same
+      // claim and the page should not pretend they are.
+      let normals = null;
+      try {
+        normals = await dmiNormals(lat, lon, String(date));
+      } catch (e) {
+        // A DMI outage must not cost the traveller the figure entirely.
+        console.warn("DMI normals unavailable, falling back to the global archive:", e.message);
+      }
+      if (!normals) normals = await climateNormals(lat, lon, String(date));
       // Not an error. Not enough archive coverage to state a normal honestly is
       // a real answer, and the caller shows nothing rather than a guess.
       if (!normals) return res.status(200).json({ kind: "normals", available: false });

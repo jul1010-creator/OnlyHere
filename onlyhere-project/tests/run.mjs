@@ -73,9 +73,10 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
-  export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
+  export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
+  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
   export { TOWN_COORDS } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
@@ -1305,7 +1306,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // ── WIRED ─────────────────────────────────────────────────────────
   const app4 = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("Manage can sweep the whole library", /setSweep\(sweepAll\(manageItems\)\)/.test(app4));
-  ok("and the button says it is free", /Fact-check everything \(free\)/.test(app4));
+  ok("and the button says it is free", /Fact-check \(free\)/.test(app4));
+  // ── ONE HEALTH LINE, NOT THREE REPORTS ──────────────────────────
+  // Oliver, 11 Aug, on his own Manage screenshot: "The blogs in manage
+  // published have started looking like a massive mess.. do you agree?" He was
+  // right and it was my doing: three report blocks bolted onto the top of a
+  // 320px scroll box over two sessions, so 67 entries were reachable only by
+  // scrolling past three walls of prose and one row was visible at a time.
+  ok("the reports collapse behind one line", /const \[healthOpen, setHealthOpen\] = useState\(false\);/.test(app4));
+  ok("closed by default, because a list is not a report", /useState\(false\);\s*$/m.test(app4.slice(app4.indexOf("healthOpen"), app4.indexOf("healthOpen") + 200)));
+  ok("and the list has room again", /maxHeight: "min\(62vh, 640px\)"/.test(app4));
+  // The duplicate case is named first, because it is the only one where an edit
+  // silently does nothing.
+  ok("published-twice is stated in the words that explain it", /Only the lower id is ever shown, so edits to the other do nothing/.test(app4));
   ok("findings appear on the row they belong to", /\(sweep\?\.rows \|\| \[\]\)\.filter\(r => r\.id === row\.id\)/.test(app4));
 
   // ── GOOGLE PLACES, AND THE FACT IT WAS ASKING NICELY ABOUT ────────
@@ -1448,6 +1461,179 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("the result reaches the prompt", /if \(hoursText\) realOpeningHoursText = hoursText;/.test(app5));
     // A disagreement is a recorded decision, and the decision is that nobody won.
     ok("a disagreement is logged as resolving nothing", /winner: "neither, deliberately"/.test(app5));
+  }
+
+  // ── ASKING GOOGLE ABOUT THE RIGHT DAY ─────────────────────────────
+  // Oliver, 11 Aug: "How do we make Gemlyx act as intelligent as Google AI on
+  // Google? Google AI has access to Google maps and always seem to be very
+  // strong on logistics."
+  //
+  // Part of that was not intelligence at all. Every transit query was anchored
+  // to next Tuesday 09:00, including every leg of a real traveller's real
+  // itinerary, while fetchGuideWeather, called FOUR LINES LATER in the same
+  // function, already used the trip's real arrival date for the forecast. So a
+  // guide for a Sunday in January showed January's weather over a
+  // Tuesday-in-August timetable.
+  //
+  // In Denmark that is not a rounding error: Sunday service is thinner across
+  // the regional network, some routes do not run, and seasonal ferries stop for
+  // the winter.
+  {
+    const { transitDepartureAnchor, departureParam } = M;
+    const dayOf = (ts) => new Date(ts * 1000).getDay();
+    const hourOf = (ts) => new Date(ts * 1000).getHours();
+
+    // A real future trip date is used, on its own day of the week.
+    const future = new Date(Date.now() + 40 * 86400000);
+    while (future.getDay() !== 0) future.setDate(future.getDate() + 1);   // a Sunday
+    const iso = future.toISOString();
+    is("a Sunday trip is routed on a Sunday", dayOf(transitDepartureAnchor(iso)), 0);
+    is("at a sensible hour rather than midnight", hourOf(transitDepartureAnchor(iso)), 9);
+    // EACH LEG ON ITS OWN DAY: a five-day trip crosses a weekend, and day four's
+    // Sunday bus is a different question from day one's Wednesday train.
+    is("day two lands on the Monday after", dayOf(transitDepartureAnchor(iso, 1)), 1);
+    is("and day six wraps to the next Friday", dayOf(transitDepartureAnchor(iso, 5)), 5);
+
+    // ── THE FALLBACK, WHICH MUST STAY HONEST ───────────────────────
+    // Google rejects a departure_time in the past, so a trip already under way
+    // or one whose date has slipped falls back rather than erroring. It falls
+    // back to exactly the generic answer every undated query gets, which is the
+    // honest thing: a generic answer that looks like one.
+    is("no date at all still answers", dayOf(transitDepartureAnchor(null)), 2);
+    is("a past date falls back rather than erroring", dayOf(transitDepartureAnchor("2020-01-05T00:00:00.000Z")), 2);
+    is("and unparseable rubbish does too", dayOf(transitDepartureAnchor("not a date")), 2);
+    ok("the fallback is always in the future, which Google requires", transitDepartureAnchor(null) * 1000 > Date.now());
+
+    // Driving and walking must never be anchored: a car does not have a
+    // timetable, and anchoring one would just add a parameter Google ignores.
+    is("only transit carries a departure time", departureParam("driving", iso), "");
+    is("walking too", departureParam("walking", iso), "");
+    ok("transit does carry one", /&departure_time=\d+/.test(departureParam("transit", iso)));
+
+    // ── WIRED, WHICH IS WHERE IT WAS BROKEN ────────────────────────
+    const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the router takes the trip's real date", /const fetchExactDurations = async \(days, primaryMode, freshGeo = \{\}, onlyWalking = false, tripDate = null\)/.test(app6));
+    ok("and the caller actually passes it", /fetchExactDurations\(parsed\.days, travelMode, freshGeo, onlyWalking, arrivalDate\)/.test(app6));
+    ok("each leg carries its own day number", /legs\.push\(\[day\.stops\[i\]\.name, day\.stops\[i \+ 1\]\.name, day\.glance\?\.legs\?\.\[i\]\?\.how \|\| "", Math\.max\(0, \(Number\(day\.day\) \|\| 1\) - 1\)\]\);/.test(app6));
+    ok("and both routing calls use it", (app6.match(/departureParam\((?:legMode|upgrade), tripDate, dayOffset\)/g) || []).length === 2);
+    // The bug in one line: no transit call may anchor to nothing any more.
+    ok("no transit call is left on the generic anchor", !/departureParam\(legMode\)|departureParam\(upgrade\)/.test(app6));
+  }
+
+  // ── A MUSEUM THAT IS SHUT ON THE DAY YOU SEND SOMEBODY ────────────
+  // Oliver, 11 Aug, relaying Google's architecture advice: "Hvis din AI
+  // foreslår et museum, der er lukket om mandagen, skal din pipeline fange det
+  // her." They were right that it was a hole, and it was worse than they could
+  // see from outside: the GUIDE builder never calls Places AT ALL, so the thing
+  // that plans a traveller's Monday had no idea what was shut.
+  //
+  // Their fix costs money per guide: one Place Details call per stop, per
+  // build, on the Enterprise SKU. This reads the hours already stored on the
+  // published row instead, which every stop is already matched against by
+  // lookupRealPlace. No call, no key, no cost.
+  {
+    const { closedDays, dayOfVisit, shutOnVisit } = M;
+    const week = { hours: ["Monday: Closed", "Tuesday: 10:00 – 17:00", "Wednesday: 10:00 – 17:00",
+                           "Thursday: 10:00 – 17:00", "Friday: 10:00 – 17:00", "Saturday: 10:00 – 16:00",
+                           "Sunday: Closed"], fetchedAt: "2026-08-11T00:00:00Z" };
+    is("the closed days are read from Google's own lines", closedDays(week.hours), [0, 1]);
+    // A line WITH times is open, even though the word appears elsewhere in it.
+    is("a day with hours is not closed", closedDays(["Monday: 10:00 – 17:00, kitchen closed 14:00 – 17:00"]), []);
+    is("Danish lukket counts too", closedDays(["Monday: Lukket"]), [1]);
+    is("and a line naming no day is ignored", closedDays(["Closed for renovation"]), []);
+
+    const sunday = "2026-09-06T00:00:00.000Z";
+    is("day 1 of a Sunday arrival is a Sunday", dayOfVisit(sunday, 1), 0);
+    is("and day 2 is the Monday", dayOfVisit(sunday, 2), 1);
+    // The whole point: a stop scheduled on a day it is shut.
+    is("a Monday museum visit is caught", (shutOnVisit(week, sunday, 2) || {}).dayName, "Monday");
+    ok("and it carries the date those hours were true on", (shutOnVisit(week, sunday, 2) || {}).checkedOn === "2026-08-11");
+    is("a Tuesday visit is fine", shutOnVisit(week, sunday, 3), null);
+
+    // ── IT REFUSES TO GUESS, WHICH IS MOST OF THE TIME ─────────────
+    // A guide that warns about half its stops and stays silent on the rest,
+    // with no way to tell which is which, is worse than one that never warns.
+    is("no stored hours means no opinion", shutOnVisit({ hours: [] }, sunday, 2), null);
+    is("no hours object at all means no opinion", shutOnVisit(null, sunday, 2), null);
+    is("and no trip date means no weekday to check", shutOnVisit(week, null, 2), null);
+    is("an unparseable date is not a guess either", shutOnVisit(week, "not a date", 2), null);
+
+    // ── NO SECOND SOURCE OF HOURS ──────────────────────────────────
+    // This reads __hours, which shapeForLive already stores. If the guide
+    // builder ever starts calling Places per stop, that is a cost decision and
+    // should be a deliberate one, not something that creeps in.
+    const oh = readFileSync(join(root, "src/utils/openingHours.js"), "utf8");
+    ok("the check lives beside the other hours rules", /export const shutOnVisit/.test(oh));
+    const guideBuildSlice = readFileSync(join(root, "src/App.jsx"), "utf8");
+    // Anchored on the FETCH, not the bare string: the second occurrence is a
+  // comment mentioning the endpoint, which is the comment trap that has cost
+  // this suite four assertions today.
+  // ── THE DANISH NATIONAL RECORD, NOT A GLOBAL MODEL ────────────────
+  // Oliver, 11 Aug, after sending DMI's own authentication page: their free
+  // data needs no key at all, since 2 Dec 2025. I had twice told him it did,
+  // from a stale FAQ on a different host. Two copies of one fact, and I read
+  // the wrong one.
+  //
+  // The ten year averages came from Open-Meteo's archive, which is ERA5: a
+  // global reanalysis interpolated to a point. DMI publishes the Danish
+  // national record, quality controlled, and it publishes EXACTLY the three
+  // numbers this function computes by hand.
+  {
+    const w = readFileSync(join(root, "api/weather.js"), "utf8");
+    // Verified against the live API before this was written: keyless, on
+    // dmigw.govcloud.dk, and a bbox around Ribe correctly returns Esbjerg.
+    ok("it calls DMI's climate collection", /municipalityValue\/items/.test(w));
+    ok("with no api key anywhere", !/api-key/.test(w));
+    // The three parameters that match what the function already computed.
+    ok("the high is DMI's own mean of daily maxima", /mean_daily_max_temp/.test(w));
+    ok("the low likewise", /mean_daily_min_temp/.test(w));
+    // The wet-day rule was hand-written here as "1mm or more". DMI publishes
+    // that exact statistic, so it stops being computed and starts being read.
+    ok("and the wet day count is DMI's published statistic", /no_days_acc_precip_1/.test(w));
+
+    // MUNICIPALITY, NOT STATION. A bbox can straddle several, and picking
+    // whichever the API listed first would silently attribute one town's
+    // climate to another.
+    // Asserted on the CALL, not the declaration. The first version matched
+    // `const nearestMunicipality = ...`, which stays in the file when the
+    // function stops being used, so swapping the call for `hi[0]` passed.
+    ok("the nearest municipality is chosen deliberately", /const muni = nearestMunicipality\(\[\.\.\.hi, \.\.\.lo, \.\.\.wet\], lat, lon\);/.test(w));
+    ok("and nothing just takes whichever came back first", !/const muni = hi\[0\]/.test(w));
+    ok("and only that municipality's values are used", /f\?\.properties\?\.municipalityId === muni/.test(w));
+    // The month is read off the string, because `from` carries a timezone
+    // offset and parsing it into a Date can tip into the previous month.
+    ok("the month is read off the string, not parsed", /String\(f\?\.properties\?\.from \|\| ""\)\.slice\(5, 7\)/.test(w));
+
+    // THREE CALLS, NOT THIRTY. One per parameter across the whole ten years.
+    ok("one request per parameter, not one per year", (w.match(/dmiSeries\(lat, lon, "/g) || []).length === 3);
+
+    // ── IT REFUSES RATHER THAN GUESSES ─────────────────────────────
+    // Same rule the Open-Meteo path already had: a normal built from two years
+    // is not a normal.
+    ok("too few years is a refusal", /if \(highs\.length < 5 \|\| lows\.length < 5\) return null;/.test(w));
+    ok("and no municipality at all is too", /if \(!muni\) return null;/.test(w));
+
+    // ── DMI FIRST, THE GLOBAL ARCHIVE AS FALLBACK, NOT DELETED ─────
+    // DMI covers Denmark only and can be down like any service.
+    // ── THE indexOf(-1) TRAP ──────────────────────────────────────
+    // The first version was a bare `indexOf(a) < indexOf(b)`. Deleting the DMI
+    // call entirely makes indexOf return -1, which is less than anything, so
+    // the assertion passed against a file where DMI had been removed. Both
+    // positions have to be proven to exist before they can be compared.
+    const dmiAt = w.indexOf("dmiNormals(lat, lon, String(date))");
+    const omAt = w.indexOf("normals = await climateNormals(lat, lon, String(date))");
+    ok("both calls are present to be ordered", dmiAt >= 0 && omAt >= 0);
+    ok("DMI is tried first", dmiAt >= 0 && omAt >= 0 && dmiAt < omAt);
+    ok("and the old path survives as the fallback", /if \(!normals\) normals = await climateNormals/.test(w));
+    ok("a DMI outage does not cost the figure entirely", /falling back to the global archive/.test(w));
+    // Which one answered is named, because a ten year average from the Danish
+    // national record and from a global reanalysis are not the same claim.
+    ok("the Danish source names itself", /DMI, the Danish national climate record/.test(w));
+    ok("and the global one still names itself too", /Open-Meteo archive, recorded observations/.test(w));
+  }
+
+  ok("api/places-hours is fetched from exactly one place",
+     (guideBuildSlice.match(/await fetch\(`\/api\/places-hours/g) || []).length === 1);
   }
 }
 
@@ -1825,9 +2011,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // ── WHO GETS THE TAGS, AND WHO MUST NEVER ──────────────────────────
 // This gate used to be a regex string inside vercel.json, which could only be
 // verified by deploying and squinting at a WhatsApp preview. It is ordinary
-// JavaScript now (the deploy failed on the Hobby plan's 12-function limit, which
-// forced the move to Edge Middleware and made the list testable as a side
-// effect), so it can be checked here in a millisecond.
+// JavaScript now (a deploy failure attributed at the time to a 12-function cap
+// on the Hobby plan forced the move to Edge Middleware, and made the list
+// testable as a side effect), so it can be checked here in a millisecond.
+// See the note on that cap further down: it is not in Vercel's current docs,
+// and the account is on Pro now regardless. The move to middleware was still
+// the right outcome, whatever prompted it.
 {
   const { isCrawler, guideIdFromPath } = M;
   ["WhatsApp/2.23.20 A",
@@ -1891,10 +2080,27 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // against that limit, which is why the preview lives in middleware.js — but
   // the next person to add an api/ route deserves to find out here, in a second,
   // rather than from a failed deploy.
+  // ── THE 12-FUNCTION CAP, CORRECTED 11 AUG 2026 ────────────────────
+  // This asserted `fns.length <= 12` against "the Hobby plan's limit". That
+  // number came from a comment in this repo and was repeated as fact, including
+  // by me, twice in one day, which is precisely what the first standing rule
+  // forbids: never state a number the pipeline did not verify.
+  //
+  // Checked against Vercel's own docs on 11 Aug 2026: there is NO function-count
+  // limit on the Hobby plan page or the Functions Limits page. The documented
+  // limits are memory, duration, bundle size, concurrency and file descriptors.
+  // A count cap existed historically, so the comment was probably true when
+  // written, and then quietly stopped being true.
+  //
+  // And the account is on Pro now anyway. So this assertion would have FAILED
+  // the day a thirteenth function was added, for a limit that does not apply
+  // and may not exist. A test enforcing a constraint that is gone is the mirror
+  // image of a test that cannot fail, and it is worse: it blocks real work.
+  //
+  // What is still worth asserting is the thing that was actually true and still
+  // is: the crawler preview belongs in middleware, not in api/.
   const fns = existsSync(join(root, "api")) ? readdirSync(join(root, "api")).filter(f => /\.(js|ts|mjs)$/.test(f)) : [];
-  // fns.length > 0 matters: an empty or missing api/ would otherwise satisfy
-  // "<= 12" and read as a pass.
-  ok(`api/ holds ${fns.length} functions, within the Hobby limit of 12`, fns.length > 0 && fns.length <= 12);
+  ok(`api/ holds ${fns.length} functions`, fns.length > 0);
   ok("the preview is NOT one of them", !fns.includes("guide-preview.js"));
 
   // vercel.json is back to the plain single-page-app catch-all: no crawler
@@ -4467,9 +4673,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The old tooltip stopped being true the moment arrival dates became real.
   ok("the trip-starts-today tooltip is gone", !/Forecast assumes the trip starts today/.test(guideSrc));
 
-  // ── ONE FILE, TWO MODES, BECAUSE OF THE FUNCTION CAP ────────────
-  const apiFiles = readdirSync(join(root, "api")).filter(f => f.endsWith(".js"));
-  ok("api/ is still within Vercel Hobby's 12 function cap", apiFiles.length <= 12);
+  // ── ONE FILE, TWO MODES ─────────────────────────────────────────
+  // Written when a 12-function cap was believed to apply. That number is not in
+  // Vercel's current docs and the account is on Pro, so the cap is not the
+  // reason any more. Keeping the two modes in one file is still right: normals
+  // and forecast share the same coordinate handling and the same source-error
+  // reporting, and splitting them would be two copies of both.
   ok("normals live inside the existing weather function", /mode === "normals"/.test(apiSrc));
 }
 
@@ -5802,9 +6011,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the sitemap is served ahead of the crawler gate",
      mw.indexOf('url.pathname === "/sitemap.xml"') < mw.indexOf('if (!isCrawler(request.headers.get("user-agent"))) return next();'));
   ok("and lists the published towns, not only the hardcoded ones", /type=eq\.town&published=eq\.true/.test(mw));
-  // api/ is at the Hobby plan's twelve-function limit, which is why this lives
-  // in edge middleware at all.
-  is("api/ is still within its limit", readdirSync(join(root, "api")).filter(f => f.endsWith(".js")).length <= 12, true);
+  // The sitemap lives in edge middleware rather than api/. The original reason
+  // given was a 12-function Hobby cap; that number is not in Vercel's current
+  // docs and the account is on Pro now. Middleware is still the right home,
+  // because the sitemap must be served AHEAD of the crawler gate above, which is
+  // a middleware-ordering property rather than a function-count one.
 }
 
 
@@ -6200,6 +6411,46 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("one precise end is not a collapse", !collapsedRoute({ ...a, precise: true }, b, true));
   ok("and two town centres far apart are not a collapse", !collapsedRoute(a, { lat: 56.15, lon: 10.20, precise: false }, true));
   ok("a missing end is not a collapse", !collapsedRoute(a, null, true));
+
+  // ── "SAME POINT: COPENHAGEN, COPENHAGEN" ──────────────────────────
+  // Oliver's screenshot, 11 Aug, five lines of it. He was right that it reads
+  // as nonsense, and the nonsense was hiding the real finding.
+  //
+  // Two rows on one point with DIFFERENT names is a coordinate error: one is in
+  // the wrong place. Two rows on one point with the SAME name is not a
+  // coordinate error at all, it is the same place published twice, and it is
+  // worse: liveContent dedupes by type and name and keeps whichever comes
+  // first, so the site shows one copy and every edit to the other does nothing.
+  // placeEdit.js has detected exactly that since 8 Aug. This was re-detecting it
+  // and mislabelling it.
+  {
+    const { sharedCoords, coordAudit } = M;
+    const twice = [
+      { id: 3, type: "town", payload: { name: "Copenhagen", __lat: 55.676, __lon: 12.568 } },
+      { id: 51, type: "town", payload: { name: "Copenhagen", __lat: 55.676, __lon: 12.568 } },
+    ];
+    is("the same place published twice is not a shared coordinate", sharedCoords(twice), []);
+    is("and it does not reach the coordinate audit either", coordAudit(twice).shared, []);
+    // Case differences and stray whitespace are the same name.
+    is("nor is it, with different casing", sharedCoords([
+      { id: 1, type: "town", payload: { name: "Ribe", __lat: 55.328, __lon: 8.765 } },
+      { id: 2, type: "town", payload: { name: " ribe ", __lat: 55.328, __lon: 8.765 } },
+    ]), []);
+    // And the thing it IS for still fires: two genuinely different places
+    // sitting on one point means one of them is in the wrong place.
+    const real = sharedCoords([
+      { id: 1, type: "town", payload: { name: "Ribe", __lat: 55.328, __lon: 8.765 } },
+      { id: 2, type: "free", payload: { name: "Ribe VikingeCenter", __lat: 55.328, __lon: 8.765 } },
+    ]);
+    is("two different places on one point still fire", real.length, 1);
+    is("and both are named", (real[0] || []).map(r => r.name).sort(), ["Ribe", "Ribe VikingeCenter"]);
+    // A three-way group where only two share a name is still a real finding.
+    is("a mixed group is still reported", sharedCoords([
+      { id: 1, type: "town", payload: { name: "Ribe", __lat: 55.328, __lon: 8.765 } },
+      { id: 2, type: "town", payload: { name: "Ribe", __lat: 55.328, __lon: 8.765 } },
+      { id: 3, type: "free", payload: { name: "Ribe Domkirke", __lat: 55.328, __lon: 8.765 } },
+    ]).length, 1);
+  }
 
   // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ─────────────────
   // Written-and-never-called is the signature bug here, so assert the call
@@ -6807,6 +7058,198 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("prefer not to say is an option", SEX_OPTIONS.includes("Prefer not to say"));
   ok("age is a band, not a birthdate", AGE_BANDS.every(b => !/\d{4}/.test(b)));
   ok("the fields that change a guide are there", COMPANY.length >= 4 && PACE.length >= 3);
+}
+
+// ── TICKETS, AND THE ONE THING TICKETMASTER CANNOT SAY ─────────────
+// Oliver, 11 Aug 2026: "I have Ticketmaster."
+//
+// The whole feature turns on a single fact about their data: dates.status.code
+// has five values and none of them is sold out. "offsale" means sold out OR
+// not open yet OR closed, and the obvious integration flattens those three into
+// a red SOLD OUT badge that talks a reader out of a trip that would have
+// worked. Most of the assertions below exist to keep that flattening from
+// creeping back in later as a "simplification".
+{
+  const { TICKET_STATUS, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent,
+          nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText,
+          SAME_EDITION_DAYS, bookingActions } = M;
+
+  // ── THE VOCABULARY THAT WAS WRITTEN DOWN THREE TIMES ─────────────
+  // studioPrompts asked for free/on_sale/limited/sold_out, the badges rendered
+  // sold_out/selling_fast/available/free, guideReading read sold_out/limited.
+  // Two badges could never fire and the most common stored value showed nothing.
+  is("an old spelling folds onto the vocabulary", normaliseTicketStatus("selling_fast"), "limited");
+  is("and the other one", normaliseTicketStatus("available"), "on_sale");
+  is("spacing and case do not matter", normaliseTicketStatus("Sold Out"), "sold_out");
+  is("a value nobody wrote down is unknown, not a guess", normaliseTicketStatus("probably fine"), "unknown");
+  is("and an absent value is unknown", normaliseTicketStatus(undefined), "unknown");
+  ok("every value in the vocabulary has a badge", TICKET_STATUS.every(s => Object.prototype.hasOwnProperty.call(M.TICKET_BADGE, s)));
+  // The two that used to render nothing at all.
+  ok("on_sale is no longer a silent status", !!ticketBadge("on_sale").label);
+  ok("neither is limited", !!ticketBadge("limited").label);
+  is("unknown stays silent, which is correct", ticketBadge("unknown").label, "");
+  // THE ONE THAT MATTERS: off sale must never read as sold out anywhere.
+  ok("off sale does not say sold out", !/sold out/i.test(ticketBadge("off_sale").label));
+
+  // ── THE FIVE CODES ───────────────────────────────────────────────
+  is("onsale is a real fact", statusFromCode("onsale").status, "on_sale");
+  ok("and it is certain", statusFromCode("onsale").certain === true);
+  is("canceled, in their spelling, is cancelled", statusFromCode("canceled").status, "cancelled");
+  is("offsale is its own status", statusFromCode("offsale").status, "off_sale");
+  ok("offsale is explicitly NOT a sold-out confirmation", statusFromCode("offsale").certain === false);
+  ok("and the ambiguity is spelled out for whoever reads it", /sold out, sales not open yet, or sales already closed/.test(statusFromCode("offsale").detail));
+  is("postponed says nothing about tickets", statusFromCode("postponed").status, "unknown");
+  is("an unknown code is unknown", statusFromCode("something-new").status, "unknown");
+
+  // ── READING THEIR OBJECT ─────────────────────────────────────────
+  const raw = (over = {}) => ({
+    id: "Z698", name: "Roskilde Festival 2026", url: "https://tm.dk/rf",
+    dates: { status: { code: "onsale" }, start: { localDate: "2026-06-27" } },
+    sales: { public: { startDateTime: "2025-11-01T10:00:00Z" } },
+    priceRanges: [{ type: "standard", currency: "DKK", min: 2400, max: 2400 }],
+    _embedded: { venues: [{ name: "Dyrskuepladsen", city: { name: "Roskilde" }, country: { countryCode: "DK" } }] },
+    ...over,
+  });
+  const ev = readTicketmasterEvent(raw());
+  is("the venue city is read", ev.city, "Roskilde");
+  is("the date is read", ev.localDate, "2026-06-27");
+  is("the status code is read", ev.statusCode, "onsale");
+  // A partial event object is normal, not an error, so nothing may throw.
+  const bare = readTicketmasterEvent({ name: "Something" });
+  is("an event with nothing on it still reads", bare.city, "");
+  is("and its price is absent rather than zero", bare.priceMin, null);
+  is("a non-object is null", readTicketmasterEvent("nope"), null);
+
+  // ── MATCHING, WHICH IS WHERE THESE GO WRONG ──────────────────────
+  is("a year is not part of the identity", nameTokens("Roskilde Festival 2026"), ["roskilde"]);
+  ok("two different festivals do not match", nameOverlap("Skagen Festival", "Skanderborg Festival") < 1);
+  is("the same festival matches across a suffix", nameOverlap("Roskilde Festival", "Roskilde Festival 2026, 7 Day Ticket"), 1);
+
+  const onFile = { name: "Roskilde Festival", date: "2026-06-27" };
+  const strong = matchEvent(onFile, [raw()]);
+  is("name and date together are a strong match", strong.confidence, "strong");
+  // THE SAFETY MARGIN. Next year's edition is a different set of tickets, and
+  // writing its status onto this year's entry is the failure this gate exists
+  // for. 2027 is 365 days away, well past SAME_EDITION_DAYS.
+  ok("the tolerance is a fortnight, not a year", SAME_EDITION_DAYS <= 14);
+  const nextYear = matchEvent(onFile, [raw({ name: "Roskilde Festival 2027", dates: { status: { code: "offsale" }, start: { localDate: "2027-06-26" } } })]);
+  is("a different edition is never strong", nextYear.confidence, "weak");
+  is("a wrong festival is no match at all", matchEvent(onFile, [raw({ name: "Aarhus Festuge" })]).confidence, "none");
+  is("and an empty search is no match", matchEvent(onFile, []).confidence, "none");
+  // A name match with nothing to confirm the edition against is real and is
+  // still not allowed to write anything.
+  is("no date on file means weak, never strong", matchEvent({ name: "Roskilde Festival" }, [raw()]).confidence, "weak");
+
+  // ── WHO IS ALLOWED TO WRITE THE FIELD ────────────────────────────
+  const filed = (status, date = "2026-06-27") => ({ ticketStatus: status, date });
+  const soldOutClaim = reconcileTickets(filed("sold_out"), strong);
+  is("a measured on-sale overrules a written sold-out", soldOutClaim.status, "on_sale");
+  ok("and the change is marked as a change", soldOutClaim.changed === true);
+  ok("with the reason a person would want", soldOutClaim.findings.some(f => /talks a reader out of a trip/.test(f.detail)));
+
+  // THE CENTRAL ONE. offsale is allowed to replace a DEFAULT and is never
+  // allowed to become sold_out, anywhere, in any field.
+  const off = matchEvent(onFile, [raw({ dates: { status: { code: "offsale" }, start: { localDate: "2026-06-27" } } })]);
+  const offRec = reconcileTickets(filed("on_sale"), off);
+  is("off sale replaces the default", offRec.status, "off_sale");
+  // Stated as the invariant rather than as one example: whatever is on file,
+  // an offsale listing can never turn it into a sold-out claim. The first
+  // version of this assertion tested the PROMPT for the words "sold out", which
+  // it legitimately contains while explaining that it does not mean sold out.
+  // A test that has to strip its own exceptions is testing the wrong thing.
+  ok("offsale can never produce a sold-out claim, whatever was on file",
+     TICKET_STATUS.every(s => reconcileTickets(filed(s), off).status !== "sold_out" || s === "sold_out"));
+  // Positive, not a negative "does not contain sold out": the sentence doing
+  // the work here has to SAY the words in order to rule them out, so a negative
+  // assertion is defeated by the fix itself. That is the same trap that has
+  // caught this suite five times when a comment quoted the code it replaced.
+  ok("and the model is told in as many words what to write instead", /Write it as "not on sale at the moment, check the official site", never as sold out/.test(ticketsForPrompt(offRec)));
+  ok("and the model is told the difference in capitals", /NOT THE SAME AS SOLD OUT/.test(ticketsForPrompt(offRec)));
+  // A human wrote sold_out. Ticketmaster's offsale cannot confirm OR deny it,
+  // so it must not quietly overwrite a stated claim with a vaguer one either.
+  is("off sale does not overwrite a stated sold-out", reconcileTickets(filed("sold_out"), off).status, "sold_out");
+
+  const cancelled = reconcileTickets(filed("on_sale"), matchEvent(onFile, [raw({ dates: { status: { code: "canceled" }, start: { localDate: "2026-06-27" } } })]));
+  is("a cancelled event is written through", cancelled.status, "cancelled");
+  ok("and it is the one finding that stops a publish", cancelled.findings.some(f => f.severity === "critical"));
+
+  // A weak match is reported and never applied. Without this, next year's
+  // listing silently rewrites this year's entry.
+  const weakRec = reconcileTickets(filed("on_sale"), nextYear);
+  ok("a weak match changes nothing", weakRec.changed === false);
+  ok("but it is not silent either", weakRec.findings.length > 0);
+  ok("and nothing from it is stated as fact to the model", /Do NOT state anything from it as fact/.test(ticketsForPrompt(weakRec)));
+
+  // ── NO MATCH IS THE COMMON CASE AND MUST SAY SO ──────────────────
+  // Danish festivals mostly sell through their own site. A miss has to leave
+  // the field a guess AND say it is one, or a guess looks like a measurement.
+  const missed = reconcileTickets(filed("limited"), matchEvent(onFile, []));
+  is("a miss leaves the model's value alone", missed.status, "limited");
+  ok("and says out loud that it is the writer's own", /not a measured one/.test(missed.detail));
+  is("with nothing sent to the model", ticketsForPrompt(missed), "");
+  // An entry that never had a status must not collect a finding saying its
+  // absent status is unverified. Nothing was claimed, so nothing is wrong.
+  is("an unclaimed status raises nothing", reconcileTickets(filed(""), matchEvent(onFile, [])).findings.length, 0);
+
+  // ── A REAL PRICE, OR NONE ────────────────────────────────────────
+  is("a single price is not written as a range", priceText(ev), "2400 DKK");
+  is("a range is a range", priceText({ priceMin: 300, priceMax: 800, currency: "DKK" }), "300 to 800 DKK");
+  is("no price is an empty string, never a zero", priceText(bare), "");
+  ok("a real price is offered to the model as statable", /may be stated plainly/.test(ticketsForPrompt(reconcileTickets(filed("on_sale"), strong))));
+
+  // ── A FREE FESTIVAL WITH A PAID STAGE IS NOT A CONTRADICTION TO FIX
+  const freeRec = reconcileTickets(filed("free"), strong);
+  is("free is never overwritten by a paid listing", freeRec.status, "free");
+  ok("it is handed over as something to explain", freeRec.findings.some(f => /Both can be true/.test(f.detail)));
+
+  // ── THE READER-FACING SENTENCE ───────────────────────────────────
+  const guide = { days: [{ day: 1, stops: [{ name: "Roskilde Festival" }] }] };
+  const lookup = (n) => n === "Roskilde Festival" ? { _src: "event", date: "2026-06-27", ticketStatus: "off_sale" } : null;
+  const why = bookingActions(guide, lookup)[0].why;
+  ok("the guide explains off sale rather than calling it sold out", /can mean sold out, not open yet, or closed/.test(why));
+  // The old code compared the raw field against two strings, so a row written
+  // by an older publish fell through to the generic line.
+  const legacy = bookingActions(guide, () => ({ _src: "event", date: "2026-06-27", ticketStatus: "selling_fast" }))[0].why;
+  ok("an old spelling still reaches its real advice", /Book before you fly/.test(legacy));
+
+  // ── WIRED ────────────────────────────────────────────────────────
+  const app6 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const shaped = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  // The default that invented a fact: every festival the writer said nothing
+  // about was filed as ON SALE, through the only insert path there is.
+  // Read off the festival LINE rather than the file. stripNonCode() would blank
+  // the string contents and make `|| "on_sale"` unmatchable, so the negative
+  // could never fail, and the raw file contains those words in the comment
+  // explaining the removal. Both are traps this suite has hit before. One line,
+  // no comments in it, so the assertion means what it says.
+  const festivalLine = shaped.split("\n").find(l => /if \(type === "festival"\) return \{/.test(l)) || "";
+  ok("the festival shape was found to read", festivalLine.includes("ticketStatus"));
+  ok("the on_sale default is gone", !/\|\| "on_sale"/.test(festivalLine));
+  ok("and the field is normalised on the way in", /ticketStatus: normaliseTicketStatus\(t\.ticketStatus\)/.test(festivalLine));
+  // Anchored on the GUARD, not the call: a source-text assertion on the call
+  // alone survives the whole block being switched off, which has caught this
+  // suite five times now.
+  ok("festivals, and only festivals, are looked up",
+     /if \(sType === "festival"\) \{[\s\S]{0,400}await fetch\(`\/api\/tickets\?name=/.test(app6));
+  ok("the result is re-matched against the model's own date",
+     /matchEvent\(\{ name, date: t\.dateStart \|\| hint\?\.dates \|\| "" \}/.test(app6));
+  ok("a measured status is a recorded decision", /winner: "Ticketmaster's own listing"/.test(app6));
+  // The honest half. Without this the run log cannot tell a guess from a fact.
+  ok("and so is the absence of one", /the status is WRITTEN, not measured/.test(app6));
+  ok("a cancelled event blocks the publish in words a person reads", /STOP, DO NOT PUBLISH: /.test(app6));
+
+  const fn = readFileSync(join(root, "api/tickets.js"), "utf8");
+  ok("the key is read from the environment, never shipped", /process\.env\.TICKETMASTER_API_KEY/.test(fn));
+  ok("and it is the name he set in Vercel", /TICKETMASTER_API_KEY not set/.test(fn));
+  // Their documented time format carries no milliseconds, which toISOString adds.
+  ok("the timestamp is cut to their format", /toISOString\(\)\.slice\(0, 19\)/.test(fn));
+  // Rate limiting is not an answer about a festival, and merging the two is how
+  // a whole library gets quietly marked unlisted during one bad minute.
+  ok("a rate limit is not reported as a missing event", /error: "rate-limited"/.test(fn));
+  // The probe, which is the only way to tell "no Danish coverage on this key"
+  // apart from sixty separate "this festival is not listed".
+  ok("there is a coverage probe", /probe: true/.test(fn));
+  ok("and it says what a zero actually means", /coverage answer rather than an answer about any one festival/.test(fn));
 }
 
 rmSync(dir, { recursive: true, force: true });

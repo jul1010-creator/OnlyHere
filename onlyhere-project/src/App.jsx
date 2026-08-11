@@ -14,6 +14,7 @@ import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } 
 import { fetchProfile, profileForPrompt, isBlank as profileIsBlank } from "./utils/profile";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
+import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus } from "./utils/tickets";
 import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
@@ -977,6 +978,9 @@ function GemlyxApp() {
   // The sweep is FREE and total. See utils/factSweep.js for why the paid half
   // is deliberately narrow.
   const [sweep, setSweep] = useState(null);
+  // Collapsed by default. The library health is a report, and a report does not
+  // belong permanently on top of the list you use to act on one row.
+  const [healthOpen, setHealthOpen] = useState(false);
   const [repairBusy, setRepairBusy] = useState(null);
   const [repairNote, setRepairNote] = useState(null);
   const repairRowHeadings = async (row) => {
@@ -2512,6 +2516,57 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         }
       }
 
+      // ── TICKETS, FROM THE TICKETING SYSTEM ───────────────────────
+      // Oliver, 11 Aug: "I have Ticketmaster."
+      //
+      // ONE call, and only for festivals, because a town does not have a ticket
+      // status. The candidates are fetched here so the writer can be told a real
+      // price, and kept in scope so the SAME candidates get re-matched after the
+      // draft against the date the model actually produced. Matching before the
+      // draft can only use the source listing's date, which is often absent;
+      // matching again afterwards costs nothing and is far stricter.
+      //
+      // Why it is not simply believed: see utils/tickets.js. Ticketmaster has no
+      // sold-out code, only "offsale", which means sold out OR not yet open OR
+      // closed, and flattening those three into "sold out" is a lie a third of
+      // the time in the direction that costs somebody a trip.
+      let ticketCandidates = [];
+      let ticketText = "";
+      if (sType === "festival") {
+        try {
+          const tr = await fetch(`/api/tickets?name=${encodeURIComponent(name)}`);
+          const td = await tr.json();
+          if (td?.error) {
+            note("Ticket status from Ticketmaster", {
+              provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
+              outcome: "failed", used: false, got: "",
+              // The three failures are kept apart on purpose. "Rate limited" and
+              // "this festival is not listed" are completely different facts and
+              // collapsing them is how a whole library gets quietly downgraded.
+              why: `${td.error}: ${td.detail || ""}`,
+            });
+          } else {
+            ticketCandidates = Array.isArray(td?.events) ? td.events : [];
+            const early = matchEvent({ name, date: hint?.dates || "" }, ticketCandidates);
+            const rec = reconcileTickets({ ticketStatus: "", date: hint?.dates || "" }, early);
+            ticketText = ticketsForPrompt(rec);
+            note("Ticket status from Ticketmaster", {
+              provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
+              outcome: ticketCandidates.length ? "ok" : "empty",
+              used: !!ticketText,
+              got: ticketCandidates.length
+                ? `${ticketCandidates.length} Danish ${ticketCandidates.length === 1 ? "listing" : "listings"} · match: ${early.confidence} · ${early.why}`
+                : "no Danish listing with this name. Most Danish festivals sell through their own site or Billetto, so this is expected rather than a failure.",
+            });
+          }
+        } catch (err) {
+          note("Ticket status from Ticketmaster", {
+            provider: "ticketmaster", detail: `listings for "${name}" in Denmark`,
+            outcome: "failed", used: false, why: String(err),
+          });
+        }
+      }
+
       // The eight per-type draft prompts now live in utils/studioPrompts.js,
       // lifted out verbatim. They are a pure function of the entry name: the
       // only interpolations across all 37 KB of them were ${name}, ${J(name)}
@@ -2521,7 +2576,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
 
       const rawResearch = (hint && (hint.town || hint.dates)
         ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[hint.town && `town/city = ${hint.town}`, hint.dates && `dates = ${hint.dates}`].filter(Boolean).join(", ")}\n\n`
-        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}${realAddressText ? `\n${realAddressText}` : ""}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
+        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}${realAddressText ? `\n${realAddressText}` : ""}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
 WHEN THESE TWO CONFLICT, PREFER THE ONE YOU CAN POINT AT. "More specific" is not the test and never was: a synthesised answer always reads as more specific than a raw snippet, so preferring specificity means preferring whichever source happens to sound most confident, which is the opposite of what this pipeline is for. Prefer the claim that names a real page, an operator, an official site or a dated announcement. If the two disagree and neither is traceable, say so in uncertainties and leave the field empty rather than picking a winner.
 A DATE, PRICE OR OPENING TIME FROM EITHER SOURCE IS A LEAD, NOT A FACT, unless it comes from the place's own site or its official ticketing page.
 ${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
@@ -2878,6 +2933,57 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // than trusted, and said out loud in the place the human actually reads.
         t.lat = null; t.lon = null;
         t.uncertainties = [...(t.uncertainties || []), "Coordinates could not be verified by geocoding, so they were cleared rather than guessed. Set the map pin manually before publishing."];
+      }
+
+      // ── TICKET STATUS, MEASURED WHERE IT CAN BE AND MARKED WHERE IT
+      //    CANNOT ────────────────────────────────────────────────────
+      // Same rule as travelTime directly below: anything the system KNOWS is
+      // applied as code, never requested in a prompt. The difference is that
+      // Google can always measure a distance and Ticketmaster very often has
+      // nothing to say about a Danish festival, so the second branch matters
+      // more here than it does there.
+      //
+      // Re-matched against t.dateStart, which is the model's own date and did
+      // not exist when the search ran. A name match with a confirmed date is
+      // the only thing allowed to write a status; everything else becomes a
+      // line a person reads before publishing.
+      if (sType === "festival") {
+        const match = matchEvent({ name, date: t.dateStart || hint?.dates || "" }, ticketCandidates);
+        const rec = reconcileTickets({ ticketStatus: t.ticketStatus, date: t.dateStart || "" }, match);
+        const modelSaid = t.ticketStatus || "(nothing, so it would have been filed as on sale)";
+        if (rec.changed) {
+          t.ticketStatus = rec.status;
+          decide("ticketStatus", {
+            winner: "Ticketmaster's own listing", loser: `the model ("${modelSaid}")`,
+            rule: "A ticketing system's own record of its own listing beats a written guess. Only ever applied on a confirmed name AND date match.",
+            value: `${rec.status}${rec.verdict === "off-sale" ? " (off sale, which is NOT sold out)" : ""}`,
+          });
+        } else if (rec.verdict === "no-match" || rec.verdict === "weak-match") {
+          // The honest half, and the common one. Without this line a guessed
+          // status is indistinguishable from a measured one in the run log.
+          decide("ticketStatus", {
+            winner: `the model ("${modelSaid}")`, loser: "nobody, there was nothing to check it against",
+            rule: "Ticketmaster has no confirmed listing for this festival, so the status is WRITTEN, not measured. Most Danish festivals sell through their own site.",
+            value: rec.detail,
+          });
+        }
+        // A real price, from the operator's ticketing system. The festival
+        // prompt has to carry the words "never invent prices" precisely because
+        // there was no source for one until now.
+        const price = rec.confidence === "strong" ? priceText(rec.event) : "";
+        if (price && typeof t.ticketInfo !== "undefined" && !String(t.ticketInfo || "").trim()) {
+          t.ticketInfo = `From ${price} on Ticketmaster`;
+        }
+        // Critical and high findings go where a person actually reads them,
+        // above whatever the model wrote about itself. A cancelled event is the
+        // one finding in this whole pipeline that should stop a publish.
+        const loud = (rec.findings || []).filter(f => f.severity === "critical" || f.severity === "high");
+        if (loud.length) {
+          t.uncertainties = [
+            ...loud.map(f => `${f.severity === "critical" ? "STOP, DO NOT PUBLISH: " : "CHECK BEFORE PUBLISHING: "}${f.detail}`),
+            ...(t.uncertainties || []),
+          ];
+        }
       }
 
       // ── ENFORCE THE TRANSPORT FACTS, DO NOT ASK FOR THEM ─────────
@@ -4968,7 +5074,10 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // guide, fetched once before it's shown. Needs /api/directions.js + GOOGLE_MAPS_KEY —
   // if either is missing, this silently no-ops and legs fall back to the km estimate,
   // same graceful-degradation pattern as the Gemini pre-check.
-  const fetchExactDurations = async (days, primaryMode, freshGeo = {}, onlyWalking = false) => {
+  // tripDate is the traveller's real arrival date. Without it every leg was
+  // routed for next Tuesday 09:00, while fetchGuideWeather four lines below
+  // already used the real dates for the forecast. See transitDepartureAnchor.
+  const fetchExactDurations = async (days, primaryMode, freshGeo = {}, onlyWalking = false, tripDate = null) => {
     // Build (origin, dest, how-text) triples instead of flat pairs, so each leg can be
     // routed with ITS OWN mode — e.g. a mostly-bike trip that needs a ferry to Bornholm
     // gets that one leg queried as transit, not bicycling (which has no route across
@@ -4985,7 +5094,10 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       }
       for (let i = 0; i < day.stops.length - 1; i++) {
         if (samePlace(day.stops[i].name, day.stops[i + 1].name)) continue;
-        legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || ""]);
+        // Day number carried so each leg is routed on ITS OWN date: a five-day
+        // trip crosses a weekend, and day four's Sunday bus is a different
+        // question from day one's Wednesday train.
+        legs.push([day.stops[i].name, day.stops[i + 1].name, day.glance?.legs?.[i]?.how || "", Math.max(0, (Number(day.day) || 1) - 1)]);
       }
     });
     // Resolves BOTH already-known coords (towns/landmarks/prior geocodes) and this
@@ -5042,7 +5154,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       if (collapsedRoute(a, b, sentAsCoords)) return false;
       return true;
     };
-    await Promise.all(legs.map(async ([origin, dest, how]) => {
+    await Promise.all(legs.map(async ([origin, dest, how, dayOffset = 0]) => {
       // Same shared function the render uses — guarantees fetch and display can
       // never disagree on mode, and therefore never miss each other's cache entry.
       let legMode = resolveLegMode(how, primaryMode, origin, dest, onlyWalking, freshGeo);
@@ -5072,7 +5184,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       const originParam = originEnd.param, destParam = destEnd.param;
       const sentAsCoords = originEnd.fromCoords && destEnd.fromCoords;
       try {
-        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode)}`);
+        const res = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${legMode}${departureParam(legMode, tripDate, dayOffset)}`);
         const data = await res.json();
         if (usable(data, originCoord, destCoord, sentAsCoords)) {
           // ABSURD-WALK GUARD (Oliver's screenshots: a leg shipped as "1 hour
@@ -5088,7 +5200,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
           if (legMode === "walking" && !onlyWalking && data.durationMinutes > WALK_MAX_MINUTES) {
             const upgrade = primaryMode === "bike" ? "bicycling" : primaryMode === "car" ? "driving" : "transit";
             try {
-              const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}${departureParam(upgrade)}`);
+              const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}${departureParam(upgrade, tripDate, dayOffset)}`);
               const udata = await ures.json();
               if (!udata.error) {
                 console.warn(`Leg ${origin} → ${dest}: Google says ${data.durationMinutes} min on foot, over the ${WALK_MAX_MINUTES} min walking cap — re-routed as ${upgrade}.`);
@@ -5858,7 +5970,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // concurrently inside fetchExactDurations now (was sequential) so this
       // wait stays reasonable even for a multi-day trip with many legs.
       const { found: exactFound, failed: routeFailed } = mode !== "plain"
-        ? await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking)
+        ? await fetchExactDurations(parsed.days, travelMode, freshGeo, onlyWalking, arrivalDate)
         : { found: {}, failed: {} };
       // The forecast, also baked on rather than posted to a component that is
       // about to stop existing. Cheap: one /api/weather call per distinct day.
@@ -6966,7 +7078,21 @@ If the conversation only covers a single day or a few stops with no explicit day
       const nightlifeList = nightlifeSpots.map(f => `${f.name} (${f.type}, crowd: ${f.crowd}, ${f.location})`).join("; ");
       const attractionsList = freeEntrance.map(a => `${a.name} in ${a.city} (${a.type}, free entry)`).join("; ");
       const handmadeList = handmadeCraftShops.map(s => `${s.name} in ${s.location} (${s.yearRound ? "open year-round" : "seasonal"})`).join("; ");
-      const eventTicketNote = (e) => e.ticketStatus === "sold_out" ? " [SOLD OUT]" : e.ticketInfo ? ` [tickets: ${e.ticketInfo}]` : "";
+      // ── THE FLAG THE GUIDE PROMPT ACTS ON ─────────────────────────
+      // The prompt below tells the writer that if it says SOLD OUT it must say
+      // so plainly and not suggest attending, so this string decides whether a
+      // reader is talked out of a day. It may therefore only carry a status
+      // that was measured or explicitly written, never a fallback: "off sale"
+      // gets its own wording precisely because Ticketmaster cannot tell sold
+      // out apart from not-open-yet. See utils/tickets.js.
+      const eventTicketNote = (e) => {
+        const st = normaliseTicketStatus(e.ticketStatus);
+        if (st === "cancelled") return " [CANCELLED, do not plan around it]";
+        if (st === "sold_out") return " [SOLD OUT]";
+        if (st === "off_sale") return " [NOT ON SALE RIGHT NOW, which is not the same as sold out: it can also mean sales have not opened or have closed. Say it needs checking, never say sold out]";
+        if (st === "limited") return " [tickets limited, book before travelling]";
+        return e.ticketInfo ? ` [tickets: ${e.ticketInfo}]` : "";
+      };
       // isConfirmedUpcoming: an event with no announced dates cannot go into a
       // day plan, and handing one to the writer is how "check the dates" ends up
       // scheduled at 14:00 on a Tuesday.
@@ -7291,10 +7417,24 @@ ${profileForPrompt(userProfile)}`;
             {event.tier === "Best If You're Already Nearby" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#FFB347", background: "#FFB34722" }}>Best if already nearby</span>}
             {event.rating && <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>}
             <span style={{ fontSize: 11.5, color: C.muted }}>{travelLabel(userCoords, event.town, event.travelTime)}</span>
-            {event.ticketStatus === "sold_out" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FF6B6B", background: "rgba(255,107,107,0.12)", padding: "3px 9px", borderRadius: 100 }}>Sold out</span>}
-            {event.ticketStatus === "selling_fast" && <span style={{ fontSize: 10, fontWeight: 700, color: "#FFB347", background: "#FFB34722", padding: "3px 9px", borderRadius: 100 }}>Selling fast</span>}
-            {event.ticketStatus === "available" && <span style={{ fontSize: 10, fontWeight: 700, color: "#6ECF97", background: "rgba(110,207,151,0.12)", padding: "3px 9px", borderRadius: 100 }}>Tickets available</span>}
-            {event.ticketStatus === "free" && <span style={{ fontSize: 10, fontWeight: 700, color: "#6ECF97", background: "rgba(110,207,151,0.12)", padding: "3px 9px", borderRadius: 100 }}>Free entry</span>}
+            {/* ── FOUR HARDCODED COMPARISONS, TWO OF THEM UNREACHABLE ───
+                Was sold_out, selling_fast, available, free. The festival
+                prompt has only ever asked for free / on_sale / limited /
+                sold_out, and shapeForLive stored "on_sale" as the DEFAULT, so
+                "selling_fast" and "available" could never be produced by
+                anything, while "on_sale" and "limited" showed no badge at all.
+                The single most common value in the table rendered nothing.
+                One table in utils/tickets.js now (TICKET_BADGE), so a new
+                status cannot quietly come out blank, and "off sale" gets to
+                say what it means instead of borrowing the sold-out badge. */}
+            {(() => {
+              const b = ticketBadge(event.ticketStatus);
+              if (!b.label) return null;
+              const tone = b.tone === "bad" ? { color: "#FF6B6B", background: "rgba(255,107,107,0.12)" }
+                : b.tone === "warn" ? { color: "#FFB347", background: "#FFB34722" }
+                : { color: "#6ECF97", background: "rgba(110,207,151,0.12)" };
+              return <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 100, ...tone }}>{b.label}</span>;
+            })()}
           </div>
           {(event.nearestStation || event.ticketInfo) && (
             <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 12, paddingTop: 11, display: "flex", flexDirection: "column", gap: 5 }}>
@@ -7651,79 +7791,69 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     )}
 
                     {manageOpen && (
-                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16, maxHeight: 320, overflowY: "auto" }}>
+                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", marginBottom: 16, maxHeight: "min(62vh, 640px)", overflowY: "auto" }}>
                         {manageLoading ? (
                           <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Loading…</div>
                         ) : !manageItems || manageItems.length === 0 ? (
                           <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "12px 0" }}>Nothing published yet.</div>
                         ) : (<>
-                          {/* ── HOW BIG IS THIS, BEFORE HE FINDS OUT ONE PAGE
-                              AT A TIME ─────────────────────────────────
-                              This was found by browsing his own live site. The
-                              count is stated up front so the rest are not found
-                              the same way, and the two costs are kept apart
-                              because only one of them spends money. */}
+                          {/* ── ONE HEALTH LINE, NOT THREE REPORTS ──────
+                              Oliver, 11 Aug, on his own screenshot: "The blogs
+                              in manage published have started looking like a
+                              massive mess.. do you agree?" He was right and it
+                              was my doing. Three separate report blocks had been
+                              bolted onto the top of a 320px scroll box over two
+                              sessions, so 67 entries were reachable only by
+                              scrolling past three walls of orange prose, and one
+                              row was visible at a time.
+                              A LIST AND A REPORT ARE DIFFERENT THINGS. The list
+                              is for finding one row and acting on it. The report
+                              is for understanding the library. So this is one
+                              line with the counts, and the detail is behind it. */}
                           {(() => {
                             const a = auditPublished(manageItems);
-                            if (!a.total) return null;
-                            return (
-                              <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.6, padding: "8px 0 10px", borderBottom: `1px solid ${C.border}` }}>
-                                {describeAudit(a)}
-                                {a.renameable.length > 0 ? " Renaming changes no text and calls no model." : ""}
-                              </div>
-                            );
-                          })()}
-                          {/* ── THE MAP, WHICH IS THE ONE HE CARES ABOUT ──
-                              The gate stops NEW bad coordinates. It cannot
-                              reach a row already stored, and a wrong TOWN
-                              coordinate is worse than a wrong pin: liveContent
-                              writes a published town's __lat into TOWN_COORDS
-                              on every load, so it becomes the reference frame
-                              every other entry in that town is measured
-                              against. Named, not counted. */}
-                          {(() => {
                             const ca = coordAudit(manageItems);
-                            if (!ca.total && !ca.shared.length) return null;
+                            const dupes = duplicateNames(manageItems);
+                            const total = a.total + ca.total + dupes.length;
+                            const worst = ca.critical.length + dupes.length;
                             return (
-                              <div style={{ fontSize: 11, color: ca.critical.length ? "#E57373" : "#FFB347", lineHeight: 1.6, padding: "8px 0 10px", borderBottom: `1px solid ${C.border}` }}>
-                                {describeCoordAudit(ca)}
-                                {ca.shared.map((list, i) => (
-                                  <div key={i} style={{ color: C.muted, marginTop: 4 }}>Same point: {list.map(r => r.name).join(", ")}.</div>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                          {/* ── THE FACT-CHECK LADDER ────────────────────
-                              Free and total first. "Check all of them" against
-                              a live search would be the most expensive button
-                              in the app: every row, every claim, one search
-                              each. This one costs nothing and catches the class
-                              a search never can, which is an entry that
-                              contradicts itself. */}
-                          <div style={{ padding: "9px 0", borderBottom: `1px solid ${C.border}` }}>
-                            <button onClick={() => setSweep(sweepAll(manageItems))}
-                              style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                              🔍 Fact-check everything (free)
-                            </button>
-                            {sweep && (
-                              <div style={{ fontSize: 11, color: C.light, lineHeight: 1.6, marginTop: 8 }}>
-                                {sweep.flagged === 0
-                                  ? `All ${sweep.checked} entries pass every check that costs nothing.`
-                                  : <>
-                                      {sweep.flagged} of {sweep.checked} entries have something worth reading
-                                      {sweep.critical ? <>, <span style={{ color: "#E57373" }}>{sweep.critical} critical</span></> : null}
-                                      {sweep.high ? <>, <span style={{ color: "#FFB347" }}>{sweep.high} high</span></> : null}.
-                                    </>}
-                                {sweep.byField.length > 0 && (
-                                  <div style={{ color: C.muted, marginTop: 5 }}>
-                                    {/* A rule firing across forty entries is a prompt
-                                        problem, not forty content problems. */}
-                                    Most common: {sweep.byField.slice(0, 3).map(([f, n]) => `${f} (${n})`).join(", ")}.
+                              <div style={{ padding: "2px 0 10px", borderBottom: `1px solid ${C.border}`, marginBottom: 8 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                  <button onClick={() => setHealthOpen(v => !v)}
+                                    style={{ background: "none", border: "none", color: total === 0 ? C.muted : worst ? "#E57373" : "#FFB347", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: 0, textAlign: "left" }}>
+                                    {total === 0
+                                      ? `All ${manageItems.length} entries are clean ▸`
+                                      : `${total} thing${total === 1 ? "" : "s"} to look at across ${manageItems.length} entries ${healthOpen ? "▾" : "▸"}`}
+                                  </button>
+                                  <button onClick={() => setSweep(sweepAll(manageItems))}
+                                    style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "4px 11px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                    🔍 Fact-check (free)
+                                  </button>
+                                </div>
+                                {healthOpen && (
+                                  <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.65, marginTop: 8 }}>
+                                    {/* THE SAME PLACE PUBLISHED TWICE is first,
+                                        because it is the only one where an edit
+                                        silently does nothing: liveContent keeps
+                                        whichever row comes first. */}
+                                    {dupes.length > 0 && (
+                                      <div style={{ color: "#E57373", marginBottom: 5 }}>
+                                        <b>{dupes.length} published twice.</b> Only the lower id is ever shown, so edits to the other do nothing: {dupes.map(l => l[0]?.payload?.name).filter(Boolean).join(", ")}.
+                                      </div>
+                                    )}
+                                    {a.total > 0 && <div style={{ marginBottom: 5 }}>{describeAudit(a)}{a.renameable.length > 0 ? " Renaming calls no model." : ""}</div>}
+                                    {ca.total > 0 && <div style={{ marginBottom: 5 }}>{describeCoordAudit(ca)}</div>}
+                                    {ca.shared.map((list, i) => (
+                                      <div key={i}>Two different places on one point: {list.map(r => r.name).join(", ")}.</div>
+                                    ))}
+                                    {sweep && sweep.byField.length > 0 && (
+                                      <div style={{ marginTop: 5 }}>Most common: {sweep.byField.slice(0, 3).map(([f, n]) => `${f} (${n})`).join(", ")}.</div>
+                                    )}
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
+                            );
+                          })()}
                           {repairNote && (
                             <div style={{ fontSize: 11, color: C.light, lineHeight: 1.6, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>{repairNote}</div>
                           )}

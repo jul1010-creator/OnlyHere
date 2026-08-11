@@ -173,3 +173,73 @@ export const hoursForPrompt = (googleHours, reconciled) => {
   }
   return parts.join("\n");
 };
+
+
+// ── IS IT OPEN ON THE DAY THE GUIDE SENDS SOMEBODY THERE ────────────
+//
+// Oliver, 11 Aug 2026, passing on Google's own architecture advice: "Hvis din AI
+// foreslår et museum, der er lukket om mandagen, skal din pipeline fange det
+// her."
+//
+// They are right that it is a hole, and it was worse than they could know from
+// outside: the GUIDE builder never calls Places at all. Not once. The Studio
+// draft pipeline does, so a published entry has been near Google's hours, but
+// the thing that actually plans a traveller's Monday had no idea what was shut.
+//
+// THEIR FIX WOULD HAVE COST MONEY PER GUIDE. The advice is to call Places
+// during the build, which is one Place Details request per stop, per guide, on
+// the Enterprise SKU. For a five day trip with four stops a day that is twenty
+// paid calls to re-learn something already bought once.
+//
+// This reads the hours already stored on the published row instead (see __hours
+// in studioContent.js). Every stop in a guide is already matched against those
+// rows by lookupRealPlace, so the answer is sitting in memory. No call, no key,
+// no cost, and it works offline.
+//
+// WHAT IT DELIBERATELY WILL NOT DO: guess. If the row has no stored hours, or
+// the day cannot be read, it says nothing. A guide that warns about half its
+// stops and stays silent on the other half, with no way to tell which is which,
+// is worse than one that never warns at all.
+
+const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+// Google writes weekdayDescriptions as "Monday: 10:00 – 17:00" or
+// "Monday: Closed", one line per day, in the language of the request.
+export const closedDays = (hours) => {
+  const out = new Set();
+  (Array.isArray(hours) ? hours : []).forEach(line => {
+    const t = String(line || "");
+    const day = DAY_NAMES.findIndex(d => new RegExp(`^\\s*${d}\\b`, "i").test(t));
+    if (day < 0) return;
+    // "Closed" with no times after it. A line carrying clock times is open,
+    // even if it also says something was closed earlier in the string.
+    if (/\bclosed\b|\blukket\b/i.test(t) && timesIn(t).length === 0) out.add(day);
+  });
+  return [...out].sort((a, b) => a - b);
+};
+
+// Which real calendar day is day N of this trip.
+export const dayOfVisit = (arrivalDate, dayNumber) => {
+  if (!arrivalDate) return null;
+  const d = new Date(arrivalDate);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + Math.max(0, (Number(dayNumber) || 1) - 1));
+  return d.getDay();
+};
+
+// The answer, per stop. Returns null when it does not know, which is most of
+// the time and is the correct answer then.
+export const shutOnVisit = (storedHours, arrivalDate, dayNumber) => {
+  const hours = storedHours?.hours;
+  if (!Array.isArray(hours) || !hours.length) return null;   // nothing stored, so nothing to say
+  const day = dayOfVisit(arrivalDate, dayNumber);
+  if (day === null) return null;                             // no trip date, so no weekday
+  if (!closedDays(hours).includes(day)) return null;
+  return {
+    day,
+    dayName: DAY_NAMES[day].replace(/^./, c => c.toUpperCase()),
+    // The date the hours were true on, never dropped. An hours array with no
+    // date is a claim that quietly ages into a lie.
+    checkedOn: storedHours.fetchedAt ? String(storedHours.fetchedAt).slice(0, 10) : "",
+  };
+};

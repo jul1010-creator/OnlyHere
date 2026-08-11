@@ -1,4 +1,5 @@
 import { isFerryText } from "./helpers";
+import { normaliseTicketStatus } from "./tickets";
 // ── READING A GUIDE WHEN YOU HAVE NEVER BEEN TO DENMARK ─────────────
 // Oliver, 7 Aug 2026, asking whether the guide would still be overwhelming to
 // someone who has never been. It would, and not for the reason I had been
@@ -190,10 +191,22 @@ export const bookingActions = (guide, lookupRealPlace) => {
       // A dated event with a real ticket status is the clearest case there is.
       if (real._src === "event" && real.date) {
         seen.add(s.name);
+        // ── READ THROUGH THE VOCABULARY, NOT PAST IT ────────────────
+        // This used to compare the raw field against two strings, so a row
+        // storing "selling_fast" or "available" (both real, both written by
+        // older publishes) fell through to the generic line, and the two new
+        // statuses had nowhere to land. off_sale gets its own sentence on
+        // purpose: Ticketmaster's "offsale" is not a sold-out confirmation, and
+        // telling a reader it is talks them out of a trip that would have
+        // worked. See utils/tickets.js.
+        const st = normaliseTicketStatus(real.ticketStatus);
         out.push({
           what: s.name,
-          why: real.ticketStatus === "sold_out" ? "Sold out on the official site, so this one is worth checking for returns rather than counting on."
-            : real.ticketStatus === "limited" ? "Tickets are limited. Book before you fly."
+          why: st === "cancelled" ? "Listed as cancelled, so check the official site before building a day around it."
+            : st === "sold_out" ? "Sold out on the official site, so this one is worth checking for returns rather than counting on."
+            : st === "off_sale" ? "Tickets are not on sale at the moment, which can mean sold out, not open yet, or closed. Check the official site before you count on it."
+            : st === "limited" ? "Tickets are limited. Book before you fly."
+            : st === "free" ? "Free to get in, so nothing to book, but the date is fixed."
             : "Dated event, so book before you travel rather than at the gate.",
         });
       }
