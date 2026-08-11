@@ -1,3 +1,4 @@
+import { isFerryText } from "./helpers";
 // ── READING A GUIDE WHEN YOU HAVE NEVER BEEN TO DENMARK ─────────────
 // Oliver, 7 Aug 2026, asking whether the guide would still be overwhelming to
 // someone who has never been. It would, and not for the reason I had been
@@ -117,7 +118,22 @@ export const tripScaleLine = (shape) => {
 // towns, how often you change hotel, and how you are getting around. Never a
 // model's impression of the trip.
 export const tripCharacter = (guide, shape) => {
-  if (!shape || !shape.days) return null;
+  // ── THIS SENTENCE HAS NEVER ONCE APPEARED ON A GUIDE ──────────────
+  // The guard read `shape.days`. tripShape (pages/GuidePage.jsx) returns
+  // { dayCount, stopCount, towns, km, minutes, longest } and has no `days` key
+  // at all, so this returned null on every guide ever rendered. Its only
+  // production caller is GuidePage line 717, which passes exactly that object.
+  //
+  // The reason it survived: three tests build the shape BY HAND as
+  // { days: 3, towns: [...] } and assert on the returned sentence. All three
+  // were green while the feature was dead, which is this codebase's most
+  // repeated failure (one thing described in two places, and the test read the
+  // copy that was not the one production uses) in its purest form. The tests
+  // now pass the real tripShape output.
+  //
+  // Guarded on what it actually reads: `towns` off the shape, and days off the
+  // GUIDE. Not on a key nothing produces.
+  if (!shape || !guide) return null;
   const towns = shape.towns || [];
   const parts = [];
 
@@ -148,7 +164,7 @@ export const tripCharacter = (guide, shape) => {
 
   // A ferry is worth naming on its own: it is the one leg that runs to a
   // timetable you cannot argue with, and a visitor will not expect it.
-  const anyFerry = days.some(d => (d.glance?.legs || []).some(l => /ferry|færge|boat/i.test(l?.how || "")));
+  const anyFerry = days.some(d => (d.glance?.legs || []).some(l => isFerryText(l?.how)));
   if (anyFerry) parts.push("with at least one ferry crossing");
 
   const s = parts.join(", ");
@@ -182,7 +198,7 @@ export const bookingActions = (guide, lookupRealPlace) => {
         });
       }
     });
-    if ((d.glance?.legs || []).some(l => /ferry|færge/i.test(l?.how || ""))) {
+    if ((d.glance?.legs || []).some(l => isFerryText(l?.how))) {
       const key = `ferry-${d.day}`;
       if (!seen.has(key)) {
         seen.add(key);

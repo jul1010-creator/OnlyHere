@@ -1,3 +1,4 @@
+import { fold } from "../src/utils/danishNames.js";
 // /api/commons-photo.js
 // ── Find a freely licensed photo on Wikimedia Commons, WITH its credit ──
 //
@@ -167,8 +168,22 @@ export const distinctiveToken = (term) => {
 // ("Amalienborgs", "Amalienborg-pladsen"), so this is a substring test rather
 // than a word test. Accents and case are normalised because file titles are
 // written by everybody.
-const fold = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-  .replace(/ø/g, "o").replace(/æ/g, "ae").replace(/å/g, "aa");
+// ── THIS WAS BUG A AGAIN, IN A SECOND FILE ──────────────────────────
+// The local copy normalised to NFD FIRST and replaced ø/æ/å after. NFD
+// decomposes å into a + combining ring, the ring is then stripped as an accent,
+// and the å rule never gets to run. So this folded "Ålborg" to "alborg" where
+// the shared rule gives "aalborg", and "Århus" to "arhus" instead of "aarhus".
+//
+// Verified by running both: mentionsSubject("Ålborg Slot", "Aalborg") returned
+// FALSE here and TRUE with the shared fold. Every Commons file titled with Å is
+// rejected for an Aa-spelled Danish place, so the photo finder silently falls
+// through to worse sources for exactly the places whose names need it.
+//
+// danishNames.js line 38 documents this fix in prose ("The Danish letters are
+// now replaced BEFORE decomposition, so the rule reaches them") and this file
+// still carried the pre-fix ordering. Imported now instead of restated, which
+// is the only version of this that cannot drift again.
+// (import hoisted to the top of the file, see below)
 
 export const mentionsSubject = (token, ...texts) => {
   if (!token) return true;                       // nothing distinctive to test against

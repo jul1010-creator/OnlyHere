@@ -7,6 +7,8 @@ export const ReviewsSection = ({ itemType, itemName }) => {
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [status, setStatus] = useState(null);
+  // Distinguishes "nobody has written one" from "we could not read them".
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -15,9 +17,21 @@ export const ReviewsSection = ({ itemType, itemName }) => {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_reviews?select=*&item_type=eq.${encodeURIComponent(itemType)}&item_name=eq.${encodeURIComponent(itemName)}&order=created_at.desc`, {
           headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
         });
+        // res.ok, because a PostgREST error body is an OBJECT and the
+        // Array.isArray fallback turned every failure into an empty list. The
+        // empty state then says "No comments yet — be the first to share your
+        // experience" on every page in the app, which is a confident claim
+        // about somebody else's data made from a failed request. The SUBMIT
+        // path in this same file already checks res.ok, so the two halves
+        // disagreed: the list invited a first comment while posting failed.
+        if (!res.ok) {
+          console.warn(`Reviews: gemlyx_reviews read failed (${res.status}). Showing the error rather than claiming there are none.`);
+          if (!cancelled) { setReviews([]); setLoadFailed(true); }
+          return;
+        }
         const data = await res.json();
         if (!cancelled) setReviews(Array.isArray(data) ? data : []);
-      } catch { if (!cancelled) setReviews([]); }
+      } catch { if (!cancelled) { setReviews([]); setLoadFailed(true); } }
     })();
     return () => { cancelled = true; };
   }, [itemType, itemName]);
@@ -60,7 +74,11 @@ export const ReviewsSection = ({ itemType, itemName }) => {
       {reviews === null ? (
         <div style={{ fontSize: 12, color: C.muted }}>Loading comments…</div>
       ) : reviews.length === 0 ? (
-        <div style={{ fontSize: 12, color: C.muted }}>No comments yet — be the first to share your experience.</div>
+        <div style={{ fontSize: 12, color: C.muted }}>
+          {loadFailed
+            ? "Comments could not be loaded just now. They are not gone, this end simply could not reach them."
+            : "No comments yet — be the first to share your experience."}
+        </div>
       ) : (
         reviews.map((r, i) => (
           <div key={r.id || i} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: i < reviews.length - 1 ? `1px solid ${C.border}` : "none" }}>

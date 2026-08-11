@@ -276,7 +276,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>{getEventDate(item.date, item.dateEnd)}</span>
-              <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span>
+              {/* GUARDED, like the other two rating sites (App.jsx 7026 and
+                  9561). shapeForLive's festival branch has no `rating` field,
+                  and it is the only insert path into gemlyx_content, so
+                  item.rating is undefined on EVERY published event and this
+                  rendered a lone gold star with nothing after it. React prints
+                  undefined as nothing, so there was no error to notice. */}
+              {item.rating ? <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {item.rating}</span> : null}
               <span style={{ fontSize: 12, color: C.muted }}>{travelLabel(userCoords, item.town, item.travelTime)}</span>
             </div>
           </div>

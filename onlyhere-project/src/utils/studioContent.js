@@ -69,7 +69,13 @@ const shapeForLiveFields = (type, t) => {
     nearestStation: t.nearestStation || "", recommendedStayGlance: t.recommendedStayGlance || "", bestTimeGlance: t.bestTimeGlance || "", accommodationGlance: t.accommodationGlance || "", typicalCosts: t.typicalCosts || "", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]]),
-      ...bulletsBlock("Good to Know", t.thingsToKnow),
+      // "Good to Know" here while every other type and the whole paste-ready
+      // codegen said "Things to Know". shapeForLive is the ONLY insert path into
+      // gemlyx_content, so every town published through the button carried a
+      // heading no generator claims to write, and publishedRepair classified it
+      // as "unrecognised". Found 10 Aug by an audit, not by the heading test,
+      // which read bbData() and never bulletsBlock().
+      ...bulletsBlock("Things to Know", t.thingsToKnow),
     ] };
   if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", camping: t.camping || "", accommodationTip: t.accommodationTip || "", budgetLevel: t.budgetLevel || "", travelTime: t.travelTime || "", ticketStatus: t.ticketStatus || "on_sale", town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", website: t.website || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", gemlyxFind: t.gemlyxFind || "",
     blogBody: [

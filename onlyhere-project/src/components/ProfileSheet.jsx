@@ -71,8 +71,16 @@ export const ProfileSheet = ({ open, session, initial, onDone, onNeedsSetup }) =
   const legend = { fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted, fontWeight: 700, marginBottom: 8 };
   const field = { width: "100%", boxSizing: "border-box", background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 13px", fontSize: 14, fontFamily: "'Inter', sans-serif" };
 
-  const Group = ({ label, note, options, k }) => (
-    <div>
+  // ── NOT A COMPONENT DECLARED IN THE RENDER BODY ──────────────────
+  // `const Group = ({...}) => ...` inside the body creates a new component TYPE
+  // on every render, so React unmounts and remounts the entire chip subtree
+  // rather than updating it. Every keystroke in the name field or the
+  // description box destroyed and rebuilt all four groups and their twenty
+  // buttons, and any chip holding keyboard focus lost it. A plain function that
+  // returns elements is inlined into this render instead, so there is no
+  // component identity to change.
+  const group = (label, note, options, k) => (
+    <div key={k}>
       <div style={legend}>{label}{note ? <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: C.muted }}> · {note}</span> : null}</div>
       <div style={row}>
         {options.map(o => <button key={o} onClick={() => pick(k, o)} style={chip(p[k] === o)}>{o}</button>)}
@@ -100,10 +108,10 @@ export const ProfileSheet = ({ open, session, initial, onDone, onNeedsSetup }) =
         <input value={p.name} onChange={e => set("name", e.target.value.slice(0, 60))} placeholder="First name is plenty"
           autoComplete="given-name" style={{ ...field, marginBottom: 16 }} />
 
-        <Group label="Age" note="it changes what is worth recommending" options={AGE_BANDS} k="ageBand" />
-        <Group label="Who you usually travel with" options={COMPANY} k="company" />
-        <Group label="Pace" options={PACE} k="pace" />
-        <Group label="Sex" note="optional, and it changes very little" options={SEX_OPTIONS} k="sex" />
+        {group("Age", "it changes what is worth recommending", AGE_BANDS, "ageBand")}
+        {group("Who you usually travel with", "", COMPANY, "company")}
+        {group("Pace", "", PACE, "pace")}
+        {group("Sex", "optional, and it changes very little", SEX_OPTIONS, "sex")}
 
         <div style={legend}>Anything else worth knowing</div>
         <textarea value={p.description} onChange={e => set("description", e.target.value.slice(0, DESCRIPTION_MAX))}

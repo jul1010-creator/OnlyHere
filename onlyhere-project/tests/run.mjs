@@ -90,6 +90,8 @@ writeFileSync(entry, `
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { stopKind, tripScaleLine, tripCharacter, bookingActions } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
@@ -898,7 +900,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     { day: 2, stops: [{ name: "Roskilde Domkirke", town: "Roskilde" }, { name: "Nyhavn", town: "Copenhagen" }] },
     { day: 3, stops: [{ name: "Dragør Havn", town: "Dragør" }, { name: "Nyhavn", town: "Copenhagen" }] },
   ] };
-  const c1 = M.tripCharacter(dayTrips, { days: 3, towns: ["Copenhagen", "Roskilde", "Dragør"] });
+  const c1 = M.tripCharacter(dayTrips, { dayCount: 3, stopCount: 9, towns: ["Copenhagen", "Roskilde", "Dragør"], km: 120, minutes: 200, longest: 90 });
   ok("out and back all three nights reads as one base", /One base/.test(c1));
   ok("and names the transport in the traveler's words", /train and bus/.test(c1));
 
@@ -907,14 +909,162 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     { day: 2, stops: [{ name: "B", town: "Ribe" }] },
     { day: 3, stops: [{ name: "C", town: "Odense" }] },
   ] };
-  ok("changing town every night reads as a moving trip", /change town 2 times/.test(M.tripCharacter(moving, { days: 3, towns: ["Aarhus", "Ribe", "Odense"] })));
+  ok("changing town every night reads as a moving trip", /change town 2 times/.test(M.tripCharacter(moving, { dayCount: 3, stopCount: 9, towns: ["Aarhus", "Ribe", "Odense"], km: 300, minutes: 400, longest: 180 })));
   // A ferry is the one leg that runs to a timetable you cannot argue with.
   const ferry = { _mode: "car", days: [
     { day: 1, stops: [{ name: "A", town: "Svendborg" }], glance: { legs: [{ how: "~1h by ferry" }] } },
     { day: 2, stops: [{ name: "B", town: "Ærøskøbing" }] },
   ] };
-  ok("a ferry crossing is called out on its own", /ferry crossing/.test(M.tripCharacter(ferry, { days: 2, towns: ["Svendborg", "Ærøskøbing"] })));
+  ok("a ferry crossing is called out on its own", /ferry crossing/.test(M.tripCharacter(ferry, { dayCount: 2, stopCount: 5, towns: ["Svendborg", "Ærøskøbing"], km: 80, minutes: 150, longest: 90 })));
   is("no plan, nothing said", M.tripCharacter(null, null), null);
+  // ── THE ASSERTION THAT WOULD HAVE CAUGHT IT ───────────────────────
+  // Every test above builds the shape BY HAND, and for months they built it
+  // with a `days` key that tripShape has never produced. So the guard
+  // `if (!shape.days) return null` made this function return null on every real
+  // guide while these tests stayed green. A hand-built fixture is a second
+  // description of a contract, and this codebase's most repeated bug is exactly
+  // that: two descriptions, and the test reads the one production does not use.
+  //
+  // So: assert against the REAL producer's output. tripShape lives in a .jsx
+  // page, so its shape is pinned by reading the source rather than importing a
+  // component tree, and the point is that the two lists must match.
+  {
+    const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    const block = gp.slice(gp.indexOf("const tripShape ="), gp.indexOf("const tripShape =") + 1400);
+    const returned = [...block.matchAll(/^\s{4}(\w+)[:,]/gm)].map(m => m[1]);
+    ok("tripShape's return keys were found", returned.length >= 5);
+    ok("tripShape does not return a `days` key", !returned.includes("days"));
+    // And the consumer must not require one.
+    const gr = readFileSync(join(root, "src/utils/guideReading.js"), "utf8");
+    ok("tripCharacter no longer guards on a key nothing produces", !/if \(!shape \|\| !shape\.days\) return null;/.test(gr));
+    // The real thing, end to end: the shape tripShape actually returns must
+    // produce a sentence, not null.
+    const realShape = { dayCount: 2, stopCount: 5, towns: ["Svendborg", "Ærøskøbing"], km: 80, minutes: 150, longest: 90 };
+    ok("a real tripShape produces a sentence", typeof M.tripCharacter(ferry, realShape) === "string" && M.tripCharacter(ferry, realShape).length > 10);
+  }
+
+  // ── ONE ANSWER TO "IS THIS LEG A BOAT" ────────────────────────────
+  // Audited 10 Aug: this was asked in SEVEN places in FIVE spellings, and two
+  // of those pairs tested the SAME variable a few dozen lines apart. FÆRGE is
+  // the Danish word for ferry and three of the seven did not contain it.
+  {
+    const detectLegMode = M.detectLegMode || M.detectLegModeX;
+    const { isFerryText } = M;
+    // The one that mattered most, verified by running it before the fix:
+    // detectLegMode returned "bicycling", a bike route across open water, which
+    // is the exact failure helpers.js says the function exists to prevent.
+    is("a Danish ferry is not a bike ride", detectLegMode("Take the færge to Ærø", "bike"), "transit");
+    is("nor is the definite form", detectLegMode("Tag færgen til Ærø", "bike"), "transit");
+    is("nor is sailing", detectLegMode("Sail to Samsø", "bike"), "transit");
+    is("and the English spelling still works", detectLegMode("Take the ferry to Ærø", "bike"), "transit");
+    ok("færge is a ferry", isFerryText("Take the færge"));
+    ok("faerge without the letter is too", isFerryText("the faerge to Aero"));
+    ok("and boat", isFerryText("boat across the harbour"));
+    // The half that keeps it from crying wolf: a boathouse is not a crossing.
+    ok("a boathouse is not a ferry", !isFerryText("walk past the old boathouse"));
+    ok("and neither is a sailmaker", !isFerryText("the sailmaker on the corner"));
+    // ONE definition, not seven. Every site that asks this question must ask it
+    // through the shared helper, or the drift comes straight back.
+    const files = ["src/utils/operators.js", "src/utils/guideEnrichment.js", "src/utils/guideReading.js",
+                   "src/pages/GuidePage.jsx", "src/utils/helpers.js"];
+    // ── A NEW stripNonCode TRAP, FOUND BY MUTATION ────────────────
+    // This scan first used stripNonCode, and the mutation that put
+    // /ferry|boat/i back into GuidePage did NOT go red. stripNonCode blanks
+    // REGEX LITERAL CONTENTS as well as string contents: `/ferry|boat/i.test(x)`
+    // comes out as `           i.test(x)`. So a test that hunts for an inline
+    // regex can never use it. The known trap was strings and JSX; add regex
+    // literals to that list.
+    //
+    // Raw source instead, with comment LINES dropped by hand, because the
+    // comment above FERRY_TEXT quotes all five of the old patterns verbatim and
+    // would otherwise match itself. That is the other standing trap in this
+    // suite, and the two of them together are why this assertion needed three
+    // attempts to become real.
+    const codeLines = (f) => readFileSync(join(root, f), "utf8").split("\n")
+      .filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))
+      .join("\n")
+      .replace(/export const FERRY_TEXT = [^;]+;/, "");
+    const strays = files.filter(f => /\/[^\n\/]*(?:ferry|færge|faerge)[^\n\/]*\/i/.test(codeLines(f)));
+    is("nothing writes its own ferry pattern any more", strays, []);
+  }
+
+  // ── AND THE DANISH FOLD, WHICH WAS BUG A IN A SECOND FILE ─────────
+  // api/commons-photo.js kept its own fold that ran normalize("NFD") BEFORE
+  // replacing ø/æ/å. NFD decomposes å into a + combining ring, the ring is
+  // stripped as an accent, and the å rule never runs. Verified by running both
+  // before the fix: mentionsSubject("Ålborg Slot", "Aalborg") was FALSE.
+  {
+    const photo = readFileSync(join(root, "api/commons-photo.js"), "utf8");
+    ok("commons-photo imports the shared fold", /import \{ fold \} from "\.\.\/src\/utils\/danishNames\.js"/.test(photo));
+    ok("and no longer declares its own", !/const fold = \(s\) => String/.test(stripNonCode(photo)));
+    // The behaviour, not just the import.
+    is("Å folds to aa, not a", M.foldName("Ålborg"), "aalborg");
+    is("and Å in Århus too", M.foldName("Århus"), "aarhus");
+  }
+
+  // ── THE REST OF THE 10 AUG AUDIT ──────────────────────────────────
+  // Each of these was verified against the live source before being fixed, and
+  // each is the same shape: something that renders, or fails to, with no error
+  // anywhere to say so.
+  {
+    const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    // EVERY HOOK ABOVE THE EARLY RETURNS. Three useState/useEffect calls sat
+    // BELOW `if (loading) return` and `if (loadError || !guide) return`, so a
+    // cold load of a VALID shared guide link mounted 22 hooks on render one and
+    // reached hook 23 on render two. React throws, the ErrorBoundary catches,
+    // and every shared link was a permanent dead end. A BROKEN id returned at
+    // the same guard with the same hook count and rendered "Guide not found"
+    // correctly, so only the working case crashed.
+    const firstReturn = gp.split("\n").findIndex(l => l.trim() === "if (loading) {");
+    ok("the loading guard was found", firstReturn > 0);
+    const hooksAfter = gp.split("\n").slice(firstReturn)
+      .filter(l => /use(State|Effect|Memo|Ref|Callback)\(/.test(l) && !/^\s*(\/\/|\*)/.test(l));
+    is("no hook is declared after an early return", hooksAfter, []);
+
+    // The Leaflet map was destroyed and rebuilt on every parent render, because
+    // its deps held an array literal and a closure that are new each time.
+    const mini = readFileSync(join(root, "src/components/PlaceMiniMap.jsx"), "utf8");
+    ok("the map depends on the neighbours by value", /\}, \[ok, lat, lon, color, neighbourKey\]\);/.test(mini));
+    ok("and the click handler cannot invalidate it", /openNeighbourRef\.current\?\.\(n\)/.test(mini));
+
+    // A component type declared in a render body remounts its whole subtree on
+    // every keystroke.
+    const ps = readFileSync(join(root, "src/components/ProfileSheet.jsx"), "utf8");
+    ok("no component type is declared in the render body", !/const Group = \(\{/.test(stripNonCode(ps)));
+
+    // A lone gold star on every published event, because shapeForLive's
+    // festival branch has no rating field and React prints undefined as nothing.
+    const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+    ok("the rating is guarded like the other two sites", /\{item\.rating \? <span/.test(dp));
+
+    // A failed reviews read used to render "be the first to share your
+    // experience", which is a confident claim about somebody else's data made
+    // from a request that failed.
+    const rs = readFileSync(join(root, "src/components/ReviewsSection.jsx"), "utf8");
+    ok("a failed reviews read is not reported as zero reviews", /if \(!res\.ok\)/.test(rs));
+    ok("and it says so honestly", /could not be loaded just now/.test(rs));
+
+    // The paste-ready coordinate sentinel could never fire: .toFixed() always
+    // returns a non-empty string, so `|| "??"` was dead and a missing latitude
+    // was pasted as NaN or as 0.000, which is the Gulf of Guinea.
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the coordinate sentinel can fire", /Number\.isFinite\(Number\(t\.lat\)\) \? Number\(t\.lat\)\.toFixed\(3\) : "\?\?"/.test(app));
+    ok("and no dead toFixed sentinel survives", !/toFixed\(3\) \|\| "\?\?"/.test(app));
+
+    // The paid quota applied to nobody: a failed count read was laundered into
+    // "used 0" because res.ok was never checked and parseInt(undefined) is NaN.
+    const ask = readFileSync(join(root, "api/ask.js"), "utf8");
+    ok("the quota read checks res.ok", /if \(!countRes\.ok\) \{/.test(ask));
+    ok("and a missing count refuses rather than serving", /Refusing rather than serving an unmetered answer/.test(ask));
+    ok("no branch turns a failed read into zero used", !/if \(!Number\.isFinite\(used\)\) used = 0;/.test(ask));
+
+    // The sign-in merge read state from a closure captured before the pending
+    // guide was claimed, then wrote it back with a plain value, deleting the
+    // guide the person had just signed in to keep, on every device.
+    ok("the sign-in merge reads the freshest local list", /const localPlaces = readLocal\("gemlyx_saved_places"\);/.test(app));
+    ok("and writes it back functionally", /setSavedGuides\(prev => \{ finalGuides = mergeSaves/.test(app));
+    ok("a refused cloud write is no longer reported as synced", /could not be sent to your account/.test(app));
+  }
 
   // ── WHAT ACTUALLY HAS TO BE BOOKED ────────────────────────
   // Only things the guide can stand up. A list that pads itself out is one a
@@ -5790,8 +5940,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // heading arrays themselves have each been duplicated and gone out of sync.
   // So it is not trusted, it is checked against what shapeForLive really emits.
   const shapeSrc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
-  const emitted = [...new Set([...shapeSrc.matchAll(/bbData\(\s*(?:isClub \? )?\[\[([\s\S]{0,400}?)\]\]/g)]
-    .flatMap(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2])))];
+  // BOTH generators in this file, not just one. This scan read bbData() only,
+  // and shapeForLive's TOWN branch writes its bullet heading with a SECOND
+  // helper, bulletsBlock(). So "Good to Know" shipped on every town published
+  // through the button while this test stayed green and publishedRepair.js
+  // claimed, in a comment, that the list "cannot quietly fall behind the
+  // generator". It could, and it had. That claim is only true once every
+  // heading-emitting call in the file is read.
+  const emitted = [...new Set([
+    ...[...shapeSrc.matchAll(/bbData\(\s*(?:isClub \? )?\[\[([\s\S]{0,400}?)\]\]/g)]
+      .flatMap(m => [...m[1].matchAll(/"([^"]+)"|`([^`]+)`/g)].map(h => h[1] || h[2])),
+    ...[...shapeSrc.matchAll(/bulletsBlock\(\s*"([^"]+)"/g)].map(m => m[1]),
+  ])];
+  ok("both heading helpers in the publish path were read", emitted.length >= 10);
   const uncovered = emitted.filter(h => !CURRENT_HEADINGS.includes(h) && !DYNAMIC_HEADING.test(h));
   is("every heading the publish path writes is a heading the repair knows", uncovered, []);
   // And the reverse would be just as bad: a rename target nothing emits means

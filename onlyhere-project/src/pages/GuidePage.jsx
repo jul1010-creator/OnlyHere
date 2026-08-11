@@ -11,7 +11,7 @@ import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetai
 import { operatorsForLeg, operatorNote } from "../utils/operators";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { askClaude } from "../utils/aiClient";
-import { testTravelerLine } from "../utils/helpers";
+import { testTravelerLine, isFerryText } from "../utils/helpers";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { shareMessage, shareTitle } from "../utils/share";
@@ -409,6 +409,67 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
     setChatLoading(false);
   };
 
+  // ── EVERY HOOK LIVES ABOVE THE EARLY RETURNS ────────────────────
+  // These three used to sit BELOW `if (loading) return` and
+  // `if (loadError || !guide) return`, which is a hooks-order violation and it
+  // broke every shared guide link in the product.
+  //
+  // The sequence: someone opens /guide/:id cold, from a WhatsApp link, a
+  // bookmark or a search result. freshGuide is null, so `loading` starts true,
+  // render one bails at the loading guard having mounted 22 hooks. The Supabase
+  // fetch resolves, setGuide and setLoading(false) commit together, render two
+  // falls past both guards and reaches hook 23. React throws "Rendered more
+  // hooks than during the previous render", the ErrorBoundary catches it, and
+  // the recipient is told "Something broke on our end". Reloading re-runs the
+  // identical path, so it is a permanent dead end rather than a glitch.
+  //
+  // WHY NOBODY SAW IT. The person who built the guide never hits it: saving
+  // navigates with the guide in router state, so freshGuide is set and loading
+  // was false from the first render. And a BROKEN id sets loadError, which
+  // returns at the second guard with the same 22 hooks and renders "Guide not
+  // found" perfectly. Only a VALID shared link crashes, which is the one case
+  // that never gets tested by hand because it looks like the working case.
+  //
+  // `days` is derived here rather than read from the const below, because that
+  // const is declared after the guards and cannot be reached from up here.
+  // A saved guide's weather is frozen at the moment it was built, so a trip
+  // saved in August still shows August's answer when it is opened in October.
+  // Re-checking on open fixes that with no cron and no subscriber list, and it
+  // makes the forecast ARRIVE on its own: a guide saved fourteen weeks out
+  // shows ten year averages, and the same guide opened the week before flying
+  // has crossed into the forecast window and shows a real forecast, with
+  // nobody having done anything. See utils/weather.js for what this honestly
+  // does not do, which is tell somebody who never opens the app.
+  const [freshWeather, setFreshWeather] = useState(null);
+  const [weatherMoved, setWeatherMoved] = useState([]);
+  useEffect(() => {
+    const days = guide?.days || [];
+    if (!guide || !Array.isArray(days) || !days.length) return;
+    if (!weatherIsStale(guide._weatherFetchedAt)) return;
+    let cancelled = false;
+    const arrival = guide._arrivalDate ? new Date(guide._arrivalDate) : null;
+    const startOffset = arrival
+      ? Math.max(0, Math.round((new Date(arrival).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000))
+      : 0;
+    (async () => {
+      const next = await Promise.all(days.map(async (d, i) => {
+        const st = (d.stops || []).map(x => resolveStopCoords(x.name, guide._geo || {})).find(Boolean);
+        if (!st) return d.weather || null;
+        const on = new Date(arrival || new Date());
+        on.setDate(on.getDate() + i);
+        return await dayWeather({
+          point: st, date: on, daysOut: startOffset + i,
+          fetchJson: (url) => fetch(url).then(r => r.json()).catch(() => null),
+        }) || d.weather || null;
+      }));
+      if (cancelled) return;
+      setFreshWeather(next);
+      setWeatherMoved(weatherChanges(days.map(d => d.weather), next));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guide?._gid, guide?._weatherFetchedAt, (guide?.days || []).length]);
+
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -457,42 +518,6 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   // The per-day leg chips stay exactly where they are. He asked to keep the
   // transport visible and it is the thing first-time visitors need most.
   // ── "IT SHOULD BE TRACKING EVERYDAY FOR THEM" ──────────────────
-  // A saved guide's weather is frozen at the moment it was built, so a trip
-  // saved in August still shows August's answer when it is opened in October.
-  // Re-checking on open fixes that with no cron and no subscriber list, and it
-  // makes the forecast ARRIVE on its own: a guide saved fourteen weeks out
-  // shows ten year averages, and the same guide opened the week before flying
-  // has crossed into the forecast window and shows a real forecast, with
-  // nobody having done anything. See utils/weather.js for what this honestly
-  // does not do, which is tell somebody who never opens the app.
-  const [freshWeather, setFreshWeather] = useState(null);
-  const [weatherMoved, setWeatherMoved] = useState([]);
-  useEffect(() => {
-    if (!guide || !Array.isArray(days) || !days.length) return;
-    if (!weatherIsStale(guide._weatherFetchedAt)) return;
-    let cancelled = false;
-    const arrival = guide._arrivalDate ? new Date(guide._arrivalDate) : null;
-    const startOffset = arrival
-      ? Math.max(0, Math.round((new Date(arrival).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000))
-      : 0;
-    (async () => {
-      const next = await Promise.all(days.map(async (d, i) => {
-        const st = (d.stops || []).map(x => resolveStopCoords(x.name, guide._geo || {})).find(Boolean);
-        if (!st) return d.weather || null;
-        const on = new Date(arrival || new Date());
-        on.setDate(on.getDate() + i);
-        return await dayWeather({
-          point: st, date: on, daysOut: startOffset + i,
-          fetchJson: (url) => fetch(url).then(r => r.json()).catch(() => null),
-        }) || d.weather || null;
-      }));
-      if (cancelled) return;
-      setFreshWeather(next);
-      setWeatherMoved(weatherChanges(days.map(d => d.weather), next));
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guide?._gid, guide?._weatherFetchedAt, days.length]);
 
   const tripGeo = guide._geo || {};
   const allStops = days.flatMap((d, di) => (d.stops || []).map(st => ({ ...st, _day: d.day || di + 1 })));
@@ -942,7 +967,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             // modeUsed is the mode the result actually came from, and the icon/
             // label/link must match IT, not the originally-resolved mode.
             const usedMode = exact?.modeUsed || mode;
-            const icon = usedMode === "bicycling" ? "🚲" : usedMode === "driving" ? "🚗" : usedMode === "walking" ? "🚶" : /ferry|boat/i.test(how || "") ? "⛴" : "🚆";
+            const icon = usedMode === "bicycling" ? "🚲" : usedMode === "driving" ? "🚗" : usedMode === "walking" ? "🚶" : isFerryText(how) ? "⛴" : "🚆";
             // legDistanceKm, not kmBetween — when two stops only resolved to
             // the same town centre we do NOT know the distance, and saying so
             // (null → the AI's own leg text, or "Check route") is the honest
@@ -1011,7 +1036,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             // the Maps link cannot help with that: Google will show them the
             // journey and cannot put them on it. See utils/operators.js for
             // why a ferry gets the national planner and never a company name.
-            const ferryLeg = /ferry|færge|boat/i.test(how || "") || usedMode === "ferry";
+            const ferryLeg = isFerryText(how) || usedMode === "ferry";
             const ops = operatorsForLeg({ km, mode: ferryLeg ? "ferry" : usedMode, how });
             const opsNote = operatorNote({ mode: ferryLeg ? "ferry" : usedMode, how });
             const chip = (

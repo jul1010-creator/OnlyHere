@@ -20,7 +20,7 @@ import { towns, TOWN_COORDS } from "../data/towns";
 import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { foodSpots } from "../data/food";
-import { detectLegMode, haversineKm } from "./helpers";
+import { detectLegMode, haversineKm, isFerryText } from "./helpers";
 import { containsName } from "./danishNames";
 
 // Looks up a stop name against everything real Gemlyx already knows, so a
@@ -278,7 +278,7 @@ export const resolveLegMode = (how, primaryMode, originName, destName, onlyWalki
     // check Rome2Rio" chip — for what is in reality a five minute walk. Any
     // transit leg this short is a walk; the only exception is an explicit
     // ferry/boat leg (a 1km harbour crossing is genuinely not walkable).
-    else if (mode === "transit" && distKm <= 1.5 && !/ferry|boat|færge/i.test(how || "")) mode = "walking";
+    else if (mode === "transit" && distKm <= 1.5 && !isFerryText(how)) mode = "walking";
   }
   return mode;
 };
@@ -295,7 +295,7 @@ export const isSameTownWalk = (mode, originTown, destTown, how) =>
   mode === "transit" &&
   !!originTown && !!destTown &&
   originTown.trim().toLowerCase() === destTown.trim().toLowerCase() &&
-  !/ferry|boat|færge/i.test(how || "");
+  !isFerryText(how);
 
 // FALLBACK TIME ESTIMATE (Oliver's report: legs without a real Google Directions
 // result were showing a bare "~34 km by car" instead of any actual time, which

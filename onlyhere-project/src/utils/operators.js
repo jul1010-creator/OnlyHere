@@ -43,6 +43,7 @@
 // time. Below that it is regional travel where a ticket is a tap-in, and
 // offering a booking site for a 30 km hop is noise.
 import { WALK_MAX_KM } from "./guideEnrichment";
+import { isFerryText } from "./helpers";
 
 export const LONG_LEG_KM = 100;
 
@@ -70,7 +71,7 @@ export const OPERATORS = {
   },
 };
 
-const isFerryLeg = (mode, how) => mode === "ferry" || /\bferry|færge|faerge|\bboat\b|sail/i.test(String(how || ""));
+const isFerryLeg = (mode, how) => mode === "ferry" || isFerryText(how);
 
 // ── WHO SELLS A TICKET FOR THIS LEG ─────────────────────────────────
 // Returns an ordered list, or an empty one, and an empty one is the common and

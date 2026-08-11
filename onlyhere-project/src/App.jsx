@@ -2489,7 +2489,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       let code = "";
       if (sType === "town") {
         const nextId = Math.max(0, ...towns.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, placeKind: ${J(t.placeKind || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number(t.lat)?.toFixed(3) || "??"}, ${Number(t.lon)?.toFixed(3) || "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
+        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, placeKind: ${J(t.placeKind || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number.isFinite(Number(t.lat)) ? Number(t.lat).toFixed(3) : "??"}, ${Number.isFinite(Number(t.lon)) ? Number(t.lon).toFixed(3) : "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
       } else if (sType === "festival") {
         const isMajor = (t.scale || "").toLowerCase().startsWith("major");
         const targetArr = isMajor ? majorEvents : events;
@@ -4565,17 +4565,42 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         setTimeout(() => setToast(null), 3000);
         return;
       }
-      const merged = mergeSaves(savedPlaces, cloud.places, savedGuides, cloud.guides);
-      const gained = (merged.places.length - savedPlaces.length) + (merged.guides.length - savedGuides.length);
-      setSavedPlaces(merged.places);
-      setSavedGuides(merged.guides);
+      // ── THIS MERGE USED TO EAT THE GUIDE IT WAS SIGNED IN TO SAVE ──
+      // It read `savedPlaces` and `savedGuides` from the closure captured when
+      // this effect started, then wrote them back with a PLAIN value after an
+      // await. Two effects key on [userSession] and both run in the same flush:
+      // this one, which is async, and the pending-save claim above, which is
+      // synchronous. So the claim added the guide, this landed 300ms later with
+      // the list as it was BEFORE the claim, and the guide vanished.
+      //
+      // Not a glitch either: line 4574 overwrote localStorage with the shorter
+      // list and pushCloudSaves uploaded it, so the trip was destroyed on every
+      // device the account touches. The Google path made it certain rather than
+      // likely, because a cold load re-seeds savedGuides from disk first.
+      //
+      // Fixed twice over. The merge INPUT is re-read from localStorage, which
+      // every save path writes synchronously, so it is never the stale copy.
+      // And the state WRITE is functional, so anything that landed between the
+      // read and the set is unioned in rather than replaced.
+      const readLocal = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
+      const localPlaces = readLocal("gemlyx_saved_places");
+      const localGuides = readLocal("gemlyx_saved_guides");
+      const merged = mergeSaves(localPlaces, cloud.places, localGuides, cloud.guides);
+      const gained = (merged.places.length - localPlaces.length) + (merged.guides.length - localGuides.length);
+      let finalPlaces = merged.places, finalGuides = merged.guides;
+      setSavedPlaces(prev => { finalPlaces = mergeSaves(prev, merged.places, [], []).places; return finalPlaces; });
+      setSavedGuides(prev => { finalGuides = mergeSaves([], [], prev, merged.guides).guides; return finalGuides; });
       try {
-        localStorage.setItem("gemlyx_saved_places", JSON.stringify(merged.places));
-        localStorage.setItem("gemlyx_saved_guides", JSON.stringify(merged.guides));
+        localStorage.setItem("gemlyx_saved_places", JSON.stringify(finalPlaces));
+        localStorage.setItem("gemlyx_saved_guides", JSON.stringify(finalGuides));
       } catch { /* private mode */ }
-      await pushCloudSaves(userSession, merged.places, merged.guides);
-      setToast(gained > 0 ? `Signed in · ${gained} saved ${gained === 1 ? "item" : "items"} restored` : "Signed in · saves synced");
-      setTimeout(() => setToast(null), 2600);
+      // pushCloudSaves returns false on a refused write and both call sites used
+      // to discard it, so a green "saves synced" could sit over a 403 and the
+      // person found out weeks later on another device.
+      const pushed = await pushCloudSaves(userSession, finalPlaces, finalGuides);
+      setToast(!pushed ? "Signed in, but your saves could not be sent to your account"
+        : gained > 0 ? `Signed in · ${gained} saved ${gained === 1 ? "item" : "items"} restored` : "Signed in · saves synced");
+      setTimeout(() => setToast(null), pushed ? 2600 : 3600);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userSession]);

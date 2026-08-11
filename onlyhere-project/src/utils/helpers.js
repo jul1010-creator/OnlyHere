@@ -1,5 +1,37 @@
 import { TOWN_COORDS } from "../data/towns";
 
+// ── ONE ANSWER TO "IS THIS LEG A BOAT" ───────────────────────────────
+// Audited 10 Aug 2026: this question was being asked in SEVEN places in FIVE
+// different spellings, and two of those pairs tested the same variable.
+//
+//   operators.js       /\bferry|færge|faerge|\bboat\b|sail/i
+//   guideEnrichment.js /ferry|boat|færge/i        (twice)
+//   guideReading.js    /ferry|færge|boat/i  AND  /ferry|færge/i   ← no "boat"
+//   GuidePage.jsx      /ferry|boat/i        AND  /ferry|færge|boat/i  ← no "færge"
+//   helpers.js         /ferry|boat/i                              ← no "færge"
+//
+// The consequences were real and all in the same direction, because FÆRGE is
+// the Danish word for ferry and this is a Danish travel guide:
+//
+//   detectLegMode("Take the færge to Ærø", "bike") returned "bicycling", which
+//   is a bike route across open water. That is the exact failure the comment
+//   under this block says the function exists to prevent, and it was verified
+//   by running it, not by reading it.
+//
+//   GuidePage's legChip tested the SAME `how` twice, 69 lines apart, with two
+//   different patterns. A leg saying "færge" got the ferry booking notice under
+//   a train icon.
+//
+//   guideReading tested the SAME `l.how` twice, 34 lines apart. A leg saying
+//   "boat" made the trip summary announce a ferry crossing while the
+//   book-before-you-go list left it out.
+//
+// One pattern now, and it is the union of what the seven were reaching for.
+// "sail" and the Danish definite form "færgen" are both covered, and \bboat\b
+// keeps it off words like "boathouse".
+export const FERRY_TEXT = /\bferry\b|\bferries\b|færge|færgen|faerge|\bboat\b|\bsail\b|\bsailing\b/i;
+export const isFerryText = (how) => FERRY_TEXT.test(String(how || ""));
+
 // Works out the real travel mode for ONE leg of a guide, instead of assuming
 // the traveler's whole-trip primary mode applies to every leg. This is what
 // lets a mostly-bike trip correctly show/fetch a ferry leg to Bornholm (etc.)
@@ -7,7 +39,7 @@ import { TOWN_COORDS } from "../data/towns";
 // which fails and silently falls back to a wrong straight-line estimate.
 export const detectLegMode = (how, primaryMode) => {
   const text = how || "";
-  if (/ferry|boat/i.test(text)) return "transit"; // closest Directions API mode — transit itineraries can include ferry legs
+  if (isFerryText(text)) return "transit"; // closest Directions API mode — transit itineraries can include ferry legs
   if (/bike|cycl/i.test(text)) return "bicycling";
   if (/drive|car\b/i.test(text)) return "driving";
   if (/walk/i.test(text)) return "walking";

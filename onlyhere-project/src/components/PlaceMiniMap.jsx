@@ -31,6 +31,26 @@ import { C } from "../utils/theme";
 export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbour }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
+  // ── THE MAP WAS TORN DOWN AND REBUILT ON EVERY PARENT RENDER ──────
+  // The effect below listed `neighbours` and `onOpenNeighbour` in its deps.
+  // DetailPage passes `neighbours={nearbyEntries(...)}` — a fresh array literal
+  // every render — and `onOpenNeighbour={(n) => ...}` — a fresh closure. It is
+  // rendered unmemoised inside GemlyxApp, so ANY state change anywhere in that
+  // component ran `map.remove()` and built a whole new Leaflet instance:
+  // hearting a place, a toast expiring, a window resize.
+  //
+  // What that looked like: the map blanks, re-downloads its tiles from
+  // openstreetmap.org, and snaps back to the fitted bounds, throwing away
+  // wherever the person had panned or zoomed to. Plus a steady stream of
+  // duplicate tile requests against a service with a published usage policy.
+  //
+  // The callback goes in a ref so a new closure each render cannot invalidate
+  // anything, and the neighbours are depended on by VALUE via a signature
+  // string rather than by array identity.
+  const openNeighbourRef = useRef(onOpenNeighbour);
+  openNeighbourRef.current = onOpenNeighbour;
+  const neighbourKey = (Array.isArray(neighbours) ? neighbours : [])
+    .slice(0, 5).map(n => `${n?.name}@${n?.lat},${n?.lon}`).join("|");
   const ok = Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) && (Number(lat) !== 0 || Number(lon) !== 0);
 
   useEffect(() => {
@@ -66,7 +86,7 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
       // A tooltip rather than a popup: a popup steals the map and needs closing,
       // and this is a label, not a card.
       m.bindTooltip(`${n.name}${n.km != null ? ` · ${n.km < 10 ? n.km.toFixed(1) : Math.round(n.km)} km` : ""}`, { direction: "top", offset: [0, -6], opacity: 0.95 });
-      if (onOpenNeighbour) m.on("click", () => onOpenNeighbour(n));
+      m.on("click", () => openNeighbourRef.current?.(n));
     });
     L.marker([Number(lat), Number(lon)], { icon: pin, zIndexOffset: 1000 }).addTo(map);
     // Fit to everything that is actually on the map, so the neighbours are not
@@ -82,7 +102,10 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
     requestAnimationFrame(() => map.invalidateSize());
     const t = setTimeout(() => map.invalidateSize(), 400);
     return () => { clearTimeout(t); map.remove(); mapRef.current = null; };
-  }, [ok, lat, lon, color, neighbours, onOpenNeighbour]);
+    // neighbourKey, not `neighbours`: same neighbours in the same places must
+    // not count as a change just because the array is a new object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ok, lat, lon, color, neighbourKey]);
 
   useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
 

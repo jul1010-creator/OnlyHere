@@ -72,6 +72,10 @@ export const LEGACY_HEADINGS = {
   "Who Is It For": "Who It's For",
   "Who Is It Perfect For": "Who It's For",
   "Reality Check": "The Reality Check",
+  // shapeForLive's TOWN branch wrote this while every other type and the whole
+  // codegen wrote "Things to Know", so every town published through the button
+  // has it. Same bullets underneath, so this is a pure rename like the rest.
+  "Good to Know": "Things to Know",
 };
 
 const isHeading = (b) => b && b.type === "heading" && typeof b.content === "string";

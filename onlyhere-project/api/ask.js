@@ -85,6 +85,27 @@ export default async function handler(req, res) {
   // "charge" and "answer" cannot leave someone charged for nothing. The row is
   // written AFTER a successful answer for the same reason: a failed request
   // should not cost a traveler one of their ten.
+  // ── AUDIT, 10 AUG 2026: THE QUOTA APPLIED TO NOBODY ────────────────
+  // The block below checked `catch` but never `countRes.ok`, and fetch only
+  // rejects on a network fault. So a missing gemlyx_ask_log table (PostgREST
+  // answers 404 / PGRST205), a service key with the wrong scope (401), or an
+  // RLS refusal (403) all arrived as a RESOLVED response carrying no
+  // content-range header. Then:
+  //
+  //     "" -> "".split("/")[1] -> undefined -> parseInt(undefined) -> NaN
+  //     !Number.isFinite(NaN) -> used = 0
+  //
+  // A read that FAILED was laundered into "they have used none", so the limit
+  // could never be reached, and the catch block's own rule (a quota that cannot
+  // be read must not become a quota that does not apply) was unreachable for
+  // the failure that actually happens.
+  //
+  // AND THE TABLE HAS NEVER EXISTED: SETUP_ASK.md, named above as the home of
+  // its SQL, is not in this repo. So this is not hypothetical. Every question
+  // asked has been unmetered, each one firing up to two Claude calls and a
+  // Perplexity call, while AskGemlyx reported "10 questions left today" because
+  // the logging write no-ops the same way. The gemlyx_research shape again,
+  // except this one costs money per request rather than merely doing nothing.
   const day = todayKey();
   let used = 0;
   try {
@@ -92,9 +113,18 @@ export default async function handler(req, res) {
       `${SUPABASE_URL}/rest/v1/gemlyx_ask_log?select=id&user_id=eq.${userId}&day=eq.${day}`,
       { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Prefer: "count=exact", Range: "0-0" } }
     );
-    const range = countRes.headers.get("content-range") || "";
-    used = parseInt(range.split("/")[1], 10);
-    if (!Number.isFinite(used)) used = 0;
+    if (!countRes.ok) {
+      console.warn(`ask: quota read failed (${countRes.status}). A 404 or PGRST205 means gemlyx_ask_log does not exist. create table gemlyx_ask_log (id bigserial primary key, user_id uuid not null, day date not null, created_at timestamptz default now()); create index on gemlyx_ask_log (user_id, day);`);
+      return json(res, 503, { error: "Could not check your question allowance just now. Try again in a moment." });
+    }
+    // No header is not zero. It means the answer carried no count, and the only
+    // honest reading of that is that the allowance is unknown.
+    const parsed = parseInt(String(countRes.headers.get("content-range") || "").split("/")[1], 10);
+    if (!Number.isFinite(parsed)) {
+      console.warn("ask: quota response carried no content-range count. Refusing rather than serving an unmetered answer.");
+      return json(res, 503, { error: "Could not check your question allowance just now. Try again in a moment." });
+    }
+    used = parsed;
   } catch {
     // A quota that cannot be read must not become a quota that does not apply.
     return json(res, 503, { error: "Could not check your question allowance just now. Try again in a moment." });
