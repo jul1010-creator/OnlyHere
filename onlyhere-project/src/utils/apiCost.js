@@ -167,16 +167,52 @@ export const averageFor = (label) => {
   const runs = finished.filter(r => r.label === label).map(summarise);
   if (!runs.length) return null;
   const complete = runs.filter(r => r.complete);
+  const totalCalls = runs.reduce((a, r) => a + r.calls, 0);
+  const totalUnpriced = runs.reduce((a, r) => a + r.unpriced, 0);
   return {
     label,
     runs: runs.length,
     completeRuns: complete.length,
     avgMeasured: runs.reduce((a, r) => a + r.measured, 0) / runs.length,
-    avgCalls: runs.reduce((a, r) => a + r.calls, 0) / runs.length,
+    avgCalls: totalCalls / runs.length,
     avgTokens: runs.reduce((a, r) => a + r.tokensIn + r.tokensOut, 0) / runs.length,
+    // ── "at least $0.0000 · 51 calls · 104.525 tok" ─────────────────
+    // Oliver pasted that line back on 11 Aug, and it is nonsense. At least zero
+    // dollars is true of everything anyone has ever done, and read at a glance
+    // it says the run was free. It happens because every rate in PRICES is
+    // still null, so `measured` is 0 and the panel printed the floor anyway.
+    //
+    // describe() has handled exactly this since it was written ("none of them
+    // priced yet") and the panel never called it, because describe() takes a
+    // summarise() and the panel holds an averageFor(). One describer, two
+    // shapes, so the correct one was unreachable: the written-and-never-wired
+    // failure this codebase keeps finding. These two fields are what make an
+    // average describable, and describeAverage below is the single sentence.
+    unpriced: totalUnpriced,
+    priced: totalCalls - totalUnpriced,
     // True only when EVERY run in the average was itself complete.
     complete: complete.length === runs.length,
   };
+};
+
+// ── THE SENTENCE, IN ONE PLACE ──────────────────────────────────────
+// Three states, and the middle one is the whole reason this exists:
+//
+//   every call priced   a real total, said plainly
+//   some priced         a genuine floor, and "at least" earns its place
+//   none priced         there is NO money figure. Not a small one. None.
+//
+// The token count prints in all three, because tokens are measured off the real
+// API responses and stay true whatever the rates say. Somebody who wants to know
+// what a run costs can multiply those by his own dashboard rate today, which is
+// strictly more useful than a dollar sign in front of a zero.
+export const describeAverage = (a) => {
+  if (!a) return "";
+  const calls = `${Math.round(a.avgCalls)} calls`;
+  const tok = `${Math.round(a.avgTokens).toLocaleString()} tok`;
+  if (a.priced === 0) return `${calls} · ${tok} · no rates set`;
+  const money = `$${a.avgMeasured.toFixed(4)}`;
+  return a.complete ? `${money} · ${calls} · ${tok}` : `at least ${money} · ${calls} · ${tok}`;
 };
 
 // One line a person can read, and which never overstates what it knows.

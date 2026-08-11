@@ -150,6 +150,19 @@ const shapeForLiveFields = (type, t) => {
 // inventing a field that silently renders nowhere. This is one deliberate,
 // named exception, applied after the fact rather than repeated across eight
 // type branches where the ninth would be forgotten.
+// ── A NOTE TO THE PUBLISHER, NOT AN OPEN QUESTION ───────────────────
+// Both live in `uncertainties`, and only one of them is for a traveller. These
+// are the exact shapes the pipeline writes, each anchored on the shouted phrase
+// that makes it an instruction: a reader must never be shown "STOP, DO NOT
+// PUBLISH", and equally must not lose "the ferry time could not be confirmed".
+//
+// Deliberately a small closed list rather than "anything in capitals". A real
+// uncertainty can legitimately contain a shouted word, and a rule that guesses
+// would quietly eat the honest ones, which is the failure this whole file keeps
+// being about.
+export const PUBLISHER_NOTE = /^(?:STOP, DO NOT PUBLISH|CHECK BEFORE PUBLISHING|PIPELINE CONTRADICTION|FIX BEFORE PUBLISHING)|Coordinates could not be verified by geocoding/;
+export const isPublisherNote = (u) => PUBLISHER_NOTE.test(String(u || "").trim());
+
 export const shapeForLive = (type, t) => {
   const shaped = shapeForLiveFields(type, t);
   if (!shaped) return shaped;
@@ -174,8 +187,73 @@ export const shapeForLive = (type, t) => {
   const hours = h && (Array.isArray(h.hours) ? h.hours.length : 0) + (h.status ? 1 : 0) > 0
     ? { hours: (h.hours || []).slice(0, 7), status: String(h.status || ""), fetchedAt: String(h.fetchedAt || ""), source: String(h.source || "") }
     : null;
+  // ── AND THE TICKET PROVENANCE, WHICH WOULD HAVE BEEN THE THIRD ──
+  // Oliver, 11 Aug: "considering some events are ticketmaster.com and some
+  // aren't, how do we differentiate that?" The differentiation is stampTicketSource
+  // in utils/tickets.js, written onto the draft right after the Ticketmaster
+  // check. And this allow-list would have dropped every one of them on publish,
+  // silently, exactly as it did to __sources for 79 rows and nearly did to
+  // __hours. The comment above this function says it has eaten a feature twice.
+  // It was about to be three, so the check for it is now part of adding one:
+  // if a draft computes a field, look here before believing it ships.
+  //
+  // Same terms as __hours: stored with its date, so an event checked today is
+  // visibly different from one checked in March, and so a status nobody
+  // measured cannot pass itself off as one that was.
+  // Same terms again, and checked here on purpose: this allow-list has eaten a
+  // feature four times, so a new __field gets added to it in the same edit that
+  // creates it rather than a week later when somebody notices it never shipped.
+  const ds = t?.__dateSource;
+  const dateSource = ds?.by && Array.isArray(ds.dates) && ds.dates.length
+    ? { by: String(ds.by), dates: ds.dates.slice(0, 4).map(String), at: String(ds.at || "") }
+    : null;
+
+  const tk = t?.__ticket;
+  const ticket = tk?.source
+    ? { source: String(tk.source), at: String(tk.at || ""), verdict: String(tk.verdict || ""), url: String(tk.url || "") }
+    : null;
+  // ── AND THE ARGUMENT ITSELF, WHICH WAS THE FOURTH ───────────────
+  //
+  // Oliver, 11 Aug 2026: "Does the 'draft argument' section also save the
+  // sources?" It recorded them and publish deleted them, and which of those two
+  // you got depended on where you were standing:
+  //
+  //   arguing with a PUBLISHED entry  savePending PATCHes the payload straight
+  //                                   to Supabase. shapeForLive is never
+  //                                   involved, so __corrections and every
+  //                                   source URL in it survive. That is the
+  //                                   "1 correction · Show" on the live page.
+  //   arguing with a DRAFT            the patch goes into studioDraftText, and
+  //                                   Publish runs it through here, where the
+  //                                   allow-list dropped __corrections AND
+  //                                   uncertainties on every single type.
+  //
+  // So every claim argued before publishing lost the URL that settled it, and
+  // every claim deliberately parked as unresolved for the next reviewer was
+  // deleted rather than parked. HowWeKnow reads both fields on the live page,
+  // so the reader got an entry that looked like nobody had ever checked it.
+  const corrections = (Array.isArray(t?.__corrections) ? t.__corrections : [])
+    .filter(c => c && typeof c === "object" && c.field)
+    .slice(-20)
+    .map(c => ({ at: String(c.at || ""), field: String(c.field), was: String(c.was || ""), source: String(c.source || "") }));
+
+  // ── NOT EVERY UNCERTAINTY IS FOR A READER ───────────────────────
+  // The pipeline writes instructions to HIM into the same array: "STOP, DO NOT
+  // PUBLISH", "PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING", the note about
+  // cleared coordinates. Those belong in the Studio editor before publishing
+  // and nowhere near a traveller, so carrying the array across wholesale would
+  // have fixed one leak by opening a worse one. A publisher note announces
+  // itself in capitals; an open question is written to be read.
+  const readerFacing = (Array.isArray(t?.uncertainties) ? t.uncertainties : [])
+    .filter(u => typeof u === "string" && u.trim() && !isPublisherNote(u))
+    .slice(0, 8);
+
   // Absent rather than empty when there is nothing: an empty array would make
   // HowWeKnow render a heading over no links.
-  const out = sources.length ? { ...shaped, __sources: sources } : shaped;
-  return hours ? { ...out, __hours: hours } : out;
+  let out = sources.length ? { ...shaped, __sources: sources } : shaped;
+  if (hours) out = { ...out, __hours: hours };
+  if (ticket) out = { ...out, __ticket: ticket };
+  if (dateSource) out = { ...out, __dateSource: dateSource };
+  if (corrections.length) out = { ...out, __corrections: corrections };
+  return readerFacing.length ? { ...out, uncertainties: readerFacing } : out;
 };

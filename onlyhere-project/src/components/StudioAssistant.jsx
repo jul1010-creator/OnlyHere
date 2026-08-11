@@ -430,7 +430,11 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
               flex parent gives this its height, but the inline form is an
               ordinary block with no height of its own, and flex:1 in that
               context collapses the conversation to zero pixels. */}
-          <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: 8, maxHeight: inline ? 300 : undefined, minHeight: inline && log.length ? 120 : undefined }}>
+          {/* 300px was a fixed guess made on a desktop. On a phone that is most
+              of the screen when the keyboard is up and not much when it is not,
+              so it follows the viewport with 300 as the ceiling rather than the
+              value. */}
+          <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: 8, maxHeight: inline ? "min(300px, 45vh)" : undefined, minHeight: inline && log.length ? 120 : undefined }}>
             {log.length === 0 && (
               <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
                 {studioMode
@@ -508,12 +512,29 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
             )}
           </div>
 
+          {/* ── "ARGUE WITH THIS DRAFT DOESN'T WORK PROPERLY AT PHONE" ──
+              Oliver, 11 Aug. Three separate things, and the box he pastes a
+              whole Gemini critique into is where all three land at once.
+
+              1. fontSize was 12.5. iOS zooms the entire page whenever a focused
+                 field renders under 16px, so tapping this box threw the layout
+                 sideways. index.html tried to stop that with maximum-scale=1 and
+                 user-scalable=no, which is the wrong lever: it did not fix the
+                 real cause, and Android honours it exactly as specified, so it
+                 was blocking pinch-to-zoom for everyone on Android instead. Both
+                 are gone and the size is fixed here, where the cause is.
+              2. resize: "vertical" with rows={2}. There is no resize handle on
+                 a touch screen, so a two-line box could not be made bigger by
+                 any means, for the one input in the app most likely to receive
+                 a long paste. It grows with its content now.
+              3. No minWidth on a flex child, so a long unbroken paste could push
+                 the Send button off the edge of a narrow screen. */}
           <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-end" }}>
             <textarea value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
               placeholder={!target ? "Ask which entries need work" : studioMode ? `Paste a fact-check, ask for a rewrite, or just ask` : `Ask anything about ${target.name || "this page"}`}
-              rows={2}
-              style={{ flex: 1, resize: "vertical", minHeight: 40, maxHeight: 160, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 12.5, padding: "8px 10px", outline: "none", fontFamily: "'Inter', sans-serif" }} />
+              rows={Math.min(10, Math.max(2, input.split("\n").length, Math.ceil(input.length / 46)))}
+              style={{ flex: 1, minWidth: 0, resize: "vertical", minHeight: 44, maxHeight: "40vh", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 16, lineHeight: 1.45, padding: "9px 10px", outline: "none", fontFamily: "'Inter', sans-serif" }} />
             <button onClick={() => send()} disabled={busy || !input.trim()}
               style={{ background: busy || !input.trim() ? C.surface : C.gold, border: `1px solid ${C.border}`, color: busy || !input.trim() ? C.muted : "#000", borderRadius: 100, padding: "9px 14px", fontSize: 12, fontWeight: 700, cursor: busy ? "default" : "pointer", flexShrink: 0 }}>
               {busy ? "…" : "Send"}

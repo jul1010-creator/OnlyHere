@@ -76,8 +76,9 @@ writeFileSync(entry, `
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
-  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
+  export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
   export { TOWN_COORDS } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
@@ -86,7 +87,7 @@ writeFileSync(entry, `
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
   export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
   export { towns as TOWNS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/towns.js"))};
-  export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
+  export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, describeAverage, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
@@ -105,7 +106,8 @@ writeFileSync(entry, `
   export { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
-  export { shapeForLive } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
+  export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { costContradictions, pricesIn, priceForNoun } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 const esbuild = [
@@ -5877,7 +5879,30 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("per-request calls are metered in one place", /window\.fetch = \(input, init\) =>/.test(cost));
   ok("and the model endpoints are skipped there to avoid double counting", /MODEL_ENDPOINTS\.has\(m\[1\]\)/.test(cost));
   ok("metering can never break a request", /catch \{ \/\* metering must never be able to break a request \*\//.test(cost));
-  ok("the readout says at least when it must", /a\.complete \? "" : "at least "/.test(app));
+  // ── "at least $0.0000 · 51 calls · 104.525 tok" ───────────────────
+  // Oliver pasted that back on 11 Aug. At least zero dollars is true of
+  // everything anybody has ever done, and at a glance it reads as free. The
+  // panel was building its own string, so describe()'s correct handling of the
+  // no-rates case ("none of them priced yet") sat there unreachable.
+  //
+  // These assert the BEHAVIOUR of the one describer rather than the shape of
+  // the JSX, which is what let the old assertion pass while the screen lied.
+  const { describeAverage } = M;
+  const avgOf = (over) => ({ avgMeasured: 0, avgCalls: 51, avgTokens: 104525, priced: 0, unpriced: 51, complete: false, ...over });
+  // THE ONE THAT MATTERS. No money figure at all when nothing is priced, not a
+  // small one, and no dollar sign anywhere in the string.
+  ok("nothing priced means no money figure at all", !/\$/.test(describeAverage(avgOf())));
+  ok("and it says so plainly", /no rates set/.test(describeAverage(avgOf())));
+  // The counts are measured off real API responses and stay true either way, so
+  // they must survive the case where the price does not.
+  ok("the measured half is still shown", /51 calls/.test(describeAverage(avgOf())) && /104,525 tok/.test(describeAverage(avgOf())));
+  // A genuine floor is where "at least" earns its place, and only there.
+  ok("a partial price is a floor and says so", /^at least \$0\.4000/.test(describeAverage(avgOf({ avgMeasured: 0.4, priced: 30, unpriced: 21 }))));
+  ok("a complete price says it flat", /^\$0\.9000 · 51 calls/.test(describeAverage(avgOf({ avgMeasured: 0.9, priced: 51, unpriced: 0, complete: true }))));
+  ok("and never hedges a total", !/at least/.test(describeAverage(avgOf({ avgMeasured: 0.9, priced: 51, unpriced: 0, complete: true }))));
+  is("nothing to describe is an empty string, not a zero", describeAverage(null), "");
+  // The panel must not grow a second copy of the sentence.
+  ok("the panel reads the describer rather than building a string", /\{describeAverage\(a\)\}/.test(app));
   __reset();
 }
 
@@ -7268,6 +7293,28 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Rate limiting is not an answer about a festival, and merging the two is how
   // a whole library gets quietly marked unlisted during one bad minute.
   ok("a rate limit is not reported as a missing event", /error: "rate-limited"/.test(fn));
+  // ── A 401 THAT SAYS WHICH 401 ───────────────────────────────────
+  // The first probe came back 401 and the message named every possible cause
+  // at once, which helps with none of them. Their gateway states the reason,
+  // so it is passed through rather than replaced by a paraphrase of it.
+  ok("Ticketmaster's own reason is passed through", /body\?\.fault\?\.faultstring/.test(fn));
+  ok("and reported under its own key", /ticketmasterSaid: fault/.test(fn));
+  // Length only. Enough to tell a Consumer Secret from a Consumer Key against
+  // what the portal shows, and this endpoint is public, so nothing more.
+  ok("the key is fingerprinted by length", /keyLength: key\.length/.test(fn));
+  ok("and no part of the key is ever returned", !/key\.slice\(|key\.substring\(|key\.charAt\(/.test(fn));
+  // A pasted newline is invisible in a dashboard and is one of the two silent
+  // causes of a 401.
+  ok("the key is trimmed before use", /const key = String\(raw \|\| ""\)\.trim\(\)/.test(fn));
+  ok("and stray whitespace is reported rather than quietly swallowed", /trimmed: String\(raw \|\| ""\)\.length !== key\.length/.test(fn));
+  // Their FAQ and their API reference give different rate limits. Same rule as
+  // a ferry operator contradicting itself: take the lower, say the other exists.
+  ok("the conflicting rate limits are both recorded", /TWO of their own pages disagree/.test(fn));
+  // Both figures present, and the conservative one actually chosen. The first
+  // version asserted only that the disagreement was mentioned, and a mutation
+  // that kept that sentence while picking the higher number sailed through it.
+  ok("both numbers survive in the comment", /5 requests per second/.test(fn) && /2 requests per second/.test(fn));
+  ok("and the lower one is the one taken", /So: 2 per second/.test(fn));
   // The probe, which is the only way to tell "no Danish coverage on this key"
   // apart from sixty separate "this festival is not listed".
   ok("there is a coverage probe", /probe: true/.test(fn));
@@ -7361,6 +7408,440 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The ref stays, for the within-session half. The persisted check is the
   // across-session half that was missing, and the sheet must be behind it.
   ok("the profile sheet is behind the persisted check", /const verdict = shouldAskProfile\(\{[\s\S]{0,200}if \(verdict\.show\) setProfileOpen\(true\)/.test(app7));
+}
+
+
+// ── NINETY ROWS IS A LIBRARY, NOT A LIST ───────────────────────────
+// Oliver, 11 Aug: "it's not very 'manageble' having a list of 90 different
+// blogs to change."
+{
+  const { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, CONTENT_TYPES } = M;
+
+  // ── THE ORDER IS DERIVED, NOT A SECOND COPY OF THE TYPE LIST ─────
+  // The first draft of GROUP_ORDER was written out by hand and invented two
+  // types that do not exist ("nightlife", "craft") while dropping two that do
+  // ("night", "nightTown"), which would have parked real categories at the
+  // bottom under a rank of unknown. Walked from CONTENT_TYPES so a tenth type
+  // cannot be forgotten here, which is the failure this codebase repeats most.
+  is("every real type has a place in the order", GROUP_ORDER.slice().sort(), CONTENT_TYPES.slice().sort());
+  is("and the order invents nothing", GROUP_ORDER.filter(t => !CONTENT_TYPES.includes(t)), []);
+  // Towns first, deliberately: a town coordinate is the reference frame every
+  // other entry in that town is measured against. See coordCheck.js.
+  is("towns come first", GROUP_ORDER[0], "town");
+  ok("festivals come before food", GROUP_ORDER.indexOf("festival") < GROUP_ORDER.indexOf("food"));
+
+  const gRow = (id, type, name, over = {}) => ({ id, type, published: true, payload: { name, ...over } });
+  const gRows = [
+    gRow(1, "town", "Viborg"), gRow(2, "town", "Aarhus"), gRow(3, "town", "Ærøskøbing"),
+    gRow(4, "festival", "Roskilde Festival"), gRow(5, "food", "Harry's Place"),
+    gRow(6, "town", "Ribe", { photo: "/x.jpg" }),
+  ];
+  // Flag exactly one town, so the counts cannot pass by accident.
+  const problemsFor = (r) => (r.payload.name === "Viborg" ? [{ severity: "low" }] : []);
+  const groups = groupRows(gRows, problemsFor);
+
+  is("one group per type", groups.map(g => g.type), ["town", "festival", "food"]);
+  is("counted", groups[0].count, 4);
+  is("and the flagged ones counted separately", groups[0].flagged, 1);
+  is("a group with nothing wrong knows it", groups[1].clean, true);
+  is("and one with something wrong knows that", groups[0].clean, false);
+  // ── DANISH COLLATION, INCLUDING THE PART THAT LOOKS WRONG ────
+  // Sorted with localeCompare(..., "da"), so Æ, Ø and Å come after Z where a
+  // Danish reader expects them. It also applies the rule that AA SORTS AS Å,
+  // which puts Aarhus at the END of the list rather than the top. That caught
+  // this test out when it was written, and it is recorded here rather than
+  // quietly "fixed", because it is correct Danish and it is exactly the kind of
+  // thing that looks like a bug at a glance. If Aarhus not being under A ever
+  // costs more than it is worth, this is the line to change.
+  is("sorted by name inside a group", groups[0].rows.map(r => r.payload.name), ["Ribe", "Viborg", "Ærøskøbing", "Aarhus"]);
+  ok("Danish letters land after Z, not among the A s", groups[0].rows.map(r => r.payload.name).indexOf("Ærøskøbing") > groups[0].rows.map(r => r.payload.name).indexOf("Ribe"));
+  is("a missing photo is counted where it matters", groups[2].noPhoto, 1);
+
+  // ── OPENING THE RIGHT ONES ───────────────────────────────────────
+  // All open reproduces the flat list with headings on it. None open makes him
+  // click before he can see anything.
+  const openSet = initiallyOpen(groups);
+  is("the group with work in it opens itself", openSet.has("town"), true);
+  is("a clean group stays shut", openSet.has("festival"), false);
+  is("and only the dirty ones open", openSet.size, 1);
+
+  // ── ROBUSTNESS, BECAUSE ONE BAD ROW MUST NOT BLANK THE PANEL ─────
+  is("no rows is no groups", groupRows(null, problemsFor), []);
+  is("a row with no type still appears", groupRows([{ id: 9, payload: { name: "x" } }]).map(g => g.type), [""]);
+  // A finder that throws on one row is a finder, not a reason to lose the list.
+  //
+  // CALLED THROUGH A CATCH, deliberately. Removing the try/catch inside
+  // groupRows made the throw propagate straight out of the test and take the
+  // whole suite down with a stack trace, which is not the same as the suite
+  // catching anything: a run that crashes reports no failures at all, so the
+  // next person sees a broken harness rather than a broken guard. Degrading the
+  // call here is what turns that crash into a red line with a name on it. Fifth
+  // instance of this trap in this file.
+  const attempt = (fn, fallback) => { try { return fn(); } catch { return fallback; } };
+  const thrower = () => { throw new Error("one bad row"); };
+  is("a thrown finding does not lose the group", attempt(() => groupRows(gRows, thrower).length, -1), 3);
+  is("and counts it as unflagged rather than crashing", attempt(() => groupRows(gRows, thrower)[0].flagged, -1), 0);
+
+  // ── WHAT IT SAYS ─────────────────────────────────────────────────
+  ok("the line names the categories with work", /Towns: 1/.test(describeGroups(groups)));
+  ok("and the total", /6 entries across 3 categories/.test(describeGroups(groups)));
+  ok("a clean library says so", /nothing flagged/.test(describeGroups(groupRows(gRows, () => []))));
+  is("nothing at all says nothing", describeGroups([]), "");
+
+  // A registered type with nothing published looks identical to a type missing
+  // from the picker, which is a bug this app has actually had.
+  ok("a type with nothing published is named", emptyTypes(groups).includes("booking"));
+  ok("and a type that has entries is not", !emptyTypes(groups).includes("town"));
+
+  // ── WIRED ────────────────────────────────────────────────────────
+  const app8 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the panel groups the rows", /const groups = groupRows\(manageItems, problemsFor\)/.test(app8));
+  // Anchored on the toggle: a header that cannot collapse is a heading, not a group.
+  ok("a group can be opened and shut", /setOpenGroups\(prev => \{ const n = new Set\(prev\); if \(n\.has\(g\.type\)\)/.test(app8));
+  ok("and the rows only render when it is open", /\{open && g\.rows\.map\(row => \(/.test(app8));
+  // Seeded once on load, not per render, or a group he opens closes itself again.
+  ok("which groups start open is decided at load", /setOpenGroups\(initiallyOpen\(groupRows\(list/.test(app8));
+}
+
+// ── HOW MUCH OF A RUN NOBODY WROTE DOWN ────────────────────────────
+// Oliver's first real run log, 11 Aug: a 210 second draft with three steps in
+// it, the last at 43.4s. Eighty per cent of the run had nothing recording it and
+// the log did not say so.
+{
+  const { summariseLog, formatLog } = M;
+  const log = {
+    label: "Studio draft", subject: "Bornholms Kulturuge (festival)", ms: 210200,
+    startedAt: "2026-08-11T21:37:14.245Z",
+    steps: [
+      { step: "Fact-check the place", at: 38500, provider: "perplexity", outcome: "ok", used: true, got: "902 chars" },
+      { step: "Google's business listing", at: 40100, provider: "google", outcome: "ok", used: true, got: "CLOSED_TEMPORARILY" },
+      { step: "Reconcile opening hours", at: 43400, provider: "google", outcome: "empty", used: false, got: "google-silent" },
+    ],
+    decisions: [],
+  };
+  const s = summariseLog(log);
+  is("the last thing anybody recorded", s.lastAt, 43400);
+  is("so this much of the run is unaccounted for", s.unlogged, 166800);
+  ok("which is most of it", s.unloggedShare > 0.79 && s.unloggedShare < 0.8);
+  const text = formatLog(log);
+  ok("and the log says so rather than leaving him the arithmetic", /NOT RECORDED: 166\.8s/.test(text));
+  ok("as a share, because 167 seconds means nothing on its own", /79% of the run/.test(text));
+  // A step time is a MOMENT, not a duration. Three steps reading 38.5, 40.1 and
+  // 43.4 look like three forty-second calls when they are five seconds apart.
+  ok("a step time reads as a moment", /at 38\.5s/.test(text));
+  ok("one discarded step is singular", /1 answered and was discarded/.test(text));
+  // A fully instrumented run must not carry the warning.
+  const full = { ...log, ms: 44000 };
+  ok("a run with nothing missing says nothing", !/NOT RECORDED/.test(formatLog(full)));
+  is("and reports no gap", summariseLog(full).unlogged, 600);
+}
+
+
+// ── WHERE A TICKET STATUS CAME FROM ────────────────────────────────
+// Oliver, 11 Aug: "considering some events are ticketmaster.com and some
+// aren't, how do we differentiate that?"
+{
+  const { stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, matchEvent, reconcileTickets } = M;
+  const tmRaw = {
+    id: "Z", name: "Roskilde Festival 2026", url: "https://ticketmaster.dk/rf",
+    dates: { status: { code: "onsale" }, start: { localDate: "2026-06-27" } },
+    _embedded: { venues: [{ name: "D", city: { name: "Roskilde" }, country: { countryCode: "DK" } }] },
+  };
+  const onFile = { name: "Roskilde Festival", date: "2026-06-27" };
+
+  const strong = reconcileTickets({ ticketStatus: "unknown", date: "2026-06-27" }, matchEvent(onFile, [tmRaw]));
+  const stamped = stampTicketSource({ name: "Roskilde Festival" }, strong);
+  is("a confirmed match records the seller", stamped.__ticket.source, "ticketmaster");
+  ok("with the listing itself, so it can be re-checked", /ticketmaster\.dk/.test(stamped.__ticket.url));
+  ok("and a date, because a status with no date ages into a lie", /^\d{4}-\d{2}-\d{2}/.test(stamped.__ticket.at));
+  ok("that source counts as measured", isMeasured(stamped.__ticket.source));
+
+  // THE OTHER HALF, and the one that matters: a miss must be recorded as a
+  // miss, not left blank where it reads the same as a confirmed check.
+  const missed = reconcileTickets({ ticketStatus: "on_sale" }, matchEvent(onFile, []));
+  const stampedMiss = stampTicketSource({ name: "Some Local Festival" }, missed);
+  is("no listing means the writer wrote it", stampedMiss.__ticket.source, "writer");
+  is("and that is not measured", isMeasured(stampedMiss.__ticket.source), false);
+  is("no unverifiable link is offered", stampedMiss.__ticket.url, "");
+  // A weak match is not a source either. It is the case most likely to be
+  // quietly upgraded later, so it is asserted rather than assumed.
+  const weak = reconcileTickets({ ticketStatus: "on_sale" }, matchEvent({ name: "Roskilde Festival" }, [tmRaw]));
+  is("a weak match is still the writer's word", stampTicketSource({}, weak).__ticket.source, "writer");
+  // And it must not hand over the link either. A URL sitting beside an
+  // unconfirmed status is an invitation to treat it as a confirmed one.
+  is("nor does a weak match offer its listing", stampTicketSource({}, weak).__ticket.url, "");
+
+  ok("a checked event says who checked it", /checked against Ticketmaster on 20/.test(ticketProvenance(stamped)));
+  ok("an unchecked one says so plainly", /has not been checked against a ticket seller/.test(ticketProvenance(stampedMiss)));
+  is("and an event with no record says nothing at all", ticketProvenance({ name: "x" }), "");
+  // The label for the unmeasured case must not flatter itself. "Gemlyx
+  // research" would read as a check to anybody.
+  ok("the writer label does not sound like a source", /not checked/.test(TICKET_SOURCE_LABEL.writer));
+  ok("every source has a label", TICKET_SOURCES.every(s => TICKET_SOURCE_LABEL[s] !== undefined));
+
+  // ── shapeForLive IS AN ALLOW-LIST AND HAS EATEN A FEATURE TWICE ──
+  // __sources was dropped on all 79 published rows. __hours nearly went the
+  // same way. __ticket would have been the third, silently.
+  const { shapeForLive } = M;
+  const shaped = shapeForLive("festival", {
+    name: "Roskilde Festival", desc: "x", dateStart: "2026-06-27",
+    __ticket: { source: "ticketmaster", at: "2026-08-11T00:00:00Z", verdict: "confirmed", url: "https://ticketmaster.dk/rf" },
+  });
+  // Read with a fallback deliberately: when shapeForLive drops the field the
+  // assertion has to FAIL, not throw. A mutation that crashes the suite is not
+  // a mutation the suite caught, and this one crashed it the first time.
+  is("the provenance survives publish", (shaped.__ticket || {}).source, "ticketmaster");
+  is("with its date", String((shaped.__ticket || {}).at || "").slice(0, 10), "2026-08-11");
+  is("a draft with no ticket record gets no empty one", shapeForLive("festival", { name: "x", desc: "y" }).__ticket, undefined);
+
+  // ── AND THE BADGE CANNOT LOOK THE SAME EITHER ────────────────────
+  const app9 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the badge marks a measured status", /\{measured \? "✓ " : ""\}\{b\.label\}/.test(app9));
+  ok("and the provenance is readable on it", /title=\{ticketProvenance\(event\)\}/.test(app9));
+  ok("the stamp is written onto the draft", /t = stampTicketSource\(t, rec\)/.test(app9));
+}
+
+// ── THE PHONE ─────────────────────────────────────────────────────
+// Oliver, 11 Aug: "when I put in bloggers, the '✦ Argue with this draft'
+// section doesn't work properly at phone."
+//
+// Three things, and the paste box is where all three landed at once.
+{
+  const sa = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
+  const html = readFileSync(join(root, "index.html"), "utf8");
+
+  // iOS zooms the whole page whenever a focused field renders under 16px, so
+  // tapping the box threw the layout sideways. Asserted as a NUMBER rather than
+  // a string match, because 15.5 would pass a "has a fontSize" check and still
+  // zoom. The regex finds the textarea's own declaration, not any other.
+  const areaStyle = sa.slice(sa.indexOf("<textarea value={input}"), sa.indexOf("<textarea value={input}") + 900);
+  const px = Number((areaStyle.match(/fontSize: (\d+(?:\.\d+)?)/) || [])[1]);
+  ok("the paste box was found", areaStyle.length > 200);
+  ok("and it is at least 16px, or iOS zooms the page on focus", px >= 16);
+
+  // The wrong lever for the same problem, and it broke something else. Android
+  // honours maximum-scale exactly as specified, so this was stopping Android
+  // users pinching to zoom at all. MDN treats anything under 3 as a failure.
+  // Read the META TAG, not the file. The comment above it in index.html names
+  // both attributes it removed, so a negative over the whole file can never
+  // fail: the fifth time an explanation has defeated the assertion defending it.
+  const viewport = (html.match(/<meta name="viewport"[^>]*>/) || [""])[0];
+  ok("the viewport tag was found", /width=device-width/.test(viewport));
+  ok("the viewport no longer blocks zoom", !/user-scalable=no/.test(viewport));
+  ok("nor caps it", !/maximum-scale/.test(viewport));
+
+  // There is no resize handle on a touch screen, so rows={2} with resize:
+  // vertical was a two-line box that could not be made bigger by any means.
+  ok("the box grows with what is pasted into it", /rows=\{Math\.min\(10, Math\.max\(2,/.test(sa));
+  // A long unbroken paste in a flex child with no minWidth pushes Send off a
+  // narrow screen.
+  ok("and cannot push the Send button off the edge", /flex: 1, minWidth: 0, resize/.test(sa));
+  // 300px was a desktop guess. On a phone with the keyboard up it is the screen.
+  ok("the log height follows the viewport", /maxHeight: inline \? "min\(300px, 45vh\)"/.test(sa));
+}
+
+
+// ── DOES THE DRAFT ARGUMENT SAVE ITS SOURCES ───────────────────────
+// Oliver, 11 Aug: "Does the 'draft argument' section also save the sources?"
+//
+// It recorded them and publish deleted them, and which of the two you got
+// depended on where you were standing when you argued. correctEntry writes
+// __corrections with the URL that settled each claim, savePending PATCHes that
+// straight to Supabase for a PUBLISHED row (so it survives), and routes a DRAFT
+// back through shapeForLive (where the allow-list dropped it). Fourth feature
+// this allow-list has eaten.
+{
+  const { shapeForLive, isPublisherNote } = M;
+  const base = {
+    name: "Ribe", desc: "d", whatToDo: "w", gettingThereReality: "r", thingsToKnow: ["a", "b", "c"],
+    atmosphere: "a", whoItsFor: "w", realityCheck: "rc", dateStart: "2026-06-27",
+  };
+  const argued = {
+    ...base,
+    __corrections: [{ at: "2026-08-11", field: "history", was: "founded in 988", source: "https://ribe.dk/historie" }],
+    uncertainties: ["The ferry crossing time could not be confirmed on the operator's own site."],
+  };
+
+  // Every type, because the allow-list has eight branches and the ninth is
+  // always the one that gets forgotten.
+  M.CONTENT_TYPES.forEach(type => {
+    const out = shapeForLive(type, argued);
+    if (!out) return;   // a type with no shape is a different bug, tested elsewhere
+    ok(`${type} keeps the correction through publish`, Array.isArray(out.__corrections) && out.__corrections.length === 1);
+    ok(`${type} keeps the URL that settled it`, /ribe\.dk\/historie/.test(JSON.stringify(out.__corrections || [])));
+    ok(`${type} keeps the open question`, Array.isArray(out.uncertainties) && out.uncertainties.length === 1);
+  });
+
+  // ── AND NOT THE NOTES THAT WERE WRITTEN TO HIM ───────────────────
+  // The same array carries instructions to the publisher. Carrying it across
+  // wholesale would have fixed one leak by opening a worse one: a traveller
+  // reading "STOP, DO NOT PUBLISH" under How We Know.
+  const mixed = shapeForLive("festival", {
+    ...base,
+    uncertainties: [
+      "The ferry crossing time could not be confirmed.",
+      "STOP, DO NOT PUBLISH: Ticketmaster says this event is CANCELLED.",
+      "CHECK BEFORE PUBLISHING: the date on file is two days out.",
+      "PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: this draft says there is no public transport.",
+      "Coordinates could not be verified by geocoding, so they were cleared rather than guessed.",
+    ],
+  });
+  is("only the reader-facing one survives", mixed.uncertainties, ["The ferry crossing time could not be confirmed."]);
+  ok("a cancelled-event stop order never reaches a reader", !/DO NOT PUBLISH/.test(JSON.stringify(mixed)));
+  ok("nor a pipeline contradiction", !/PIPELINE CONTRADICTION/.test(JSON.stringify(mixed)));
+
+  // Each note shape asserted on its own, because these are four separate
+  // writers in App.jsx and a fifth will be added without anyone checking here.
+  ok("stop orders are publisher notes", isPublisherNote("STOP, DO NOT PUBLISH: x"));
+  ok("so are check-before notes", isPublisherNote("CHECK BEFORE PUBLISHING: x"));
+  ok("so are pipeline contradictions", isPublisherNote("PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING: x"));
+  ok("and the cleared-coordinate note", isPublisherNote("Coordinates could not be verified by geocoding, so they were cleared rather than guessed."));
+  // The half that matters more: an honest uncertainty must not be eaten. This
+  // is why the rule is a closed list and not "anything shouty".
+  ok("a real uncertainty is not a publisher note", !isPublisherNote("Ticket price unconfirmed, no source found."));
+  ok("nor one that happens to shout", !isPublisherNote("The operator's own site gives TWO different crossing times."));
+
+  // Nothing to carry must produce no empty field, or HowWeKnow renders a
+  // heading over nothing, which is the rule that file opens with.
+  is("no corrections means no empty array", shapeForLive("town", base).__corrections, undefined);
+  is("no uncertainties means no empty array", shapeForLive("town", base).uncertainties, undefined);
+  is("and a payload of only publisher notes leaves nothing behind",
+     shapeForLive("town", { ...base, uncertainties: ["STOP, DO NOT PUBLISH: x"] }).uncertainties, undefined);
+  // Malformed entries in the log must not reach the page as blank rows.
+  is("a correction with no field is dropped", shapeForLive("town", { ...base, __corrections: [{ at: "x" }, null, "nope"] }).__corrections, undefined);
+
+  // ── THE PUBLISHED PATH, WHICH ALWAYS WORKED ──────────────────────
+  // Asserted so the two paths cannot silently diverge again: a correction on a
+  // published row bypasses shapeForLive entirely.
+  const sa = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
+  ok("a published correction PATCHes the payload straight through", /body: JSON\.stringify\(\{ payload: pending\.after \}\)/.test(sa));
+  ok("and a draft correction goes back into the draft text", /onDraftPatched\?\.\(pending\.after\)/.test(sa));
+  // The correction pass must keep recording the URL in the first place.
+  const corr = readFileSync(join(root, "src/utils/correction.js"), "utf8");
+  ok("the source url is written into the log", /source: c\.verdict === "asserted"/.test(corr));
+  ok("and an asserted value never reads as a sourced one", /asserted by the founder, not source-verified/.test(corr));
+}
+
+
+// ── A FACT-CHECK THAT WAS WRONG ABOUT BEING RIGHT ──────────────────
+// Oliver, 12 Aug 2026: "This is a massive problem.. individual perplexity
+// searched this website up and didn't even look at the front-page?"
+//
+// The real case, kept verbatim because paraphrasing it would lose the point:
+// the draft said 2026-09-19 to 2026-09-20, the festival's own front page said
+// "den 19. og 20. september 2026", and the check came back CONTRADICTED.
+{
+  const { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy } = M;
+
+  const REAL = [
+    "- **CONTRADICTED:** The 2026 dates in the draft are wrong. The festival's own site currently shows **20-21 September 2025** on the program page, and VisitDenmark's press material says the festival was **16-17 September** for that edition; I did not find any official 2026 dates published on the pages reached, so the draft's **2026-09-19 to 2026-09-20** should not be treated as verified current dates.[2][1]",
+    "- **UNVERIFIED:** The draft's claim about a direct **\"Frugtbussen\" from Copenhagen** is not confirmed by the official pages reached.[2][3][1]",
+    "- **UNVERIFIED:** The optional **support wristband price** is missing. The pages reached do not state a price.[3]",
+  ].join("\n");
+
+  const r = readFactCheck(REAL);
+  is("every finding is read", r.findings.length, 3);
+  // THE ONE THAT MATTERS. It called itself CONTRADICTED and then said it did
+  // not find the thing. By the prompt's own definition that is UNVERIFIED.
+  is("the mislabelled one is downgraded", r.findings[0].label, "UNVERIFIED");
+  ok("and it is marked as moved", r.findings[0].moved === true);
+  is("nothing is left claiming a contradiction", r.contradicted, 0);
+  ok("the reason is in the checker's own terms", /did not find|came up empty/.test(r.findings[0].why));
+  // Findings that were honestly labelled are not touched.
+  ok("an honest UNVERIFIED is left alone", r.findings[1].moved === false && r.findings[2].moved === false);
+
+  // NEVER UPWARDS. This file may only ever make a finding weaker: promoting one
+  // would be inventing evidence, which is the failure it exists to stop.
+  const upgrade = relabel("- UNVERIFIED: the official page states 14:00 and the draft says 15:00.");
+  is("an unverified is never promoted to a contradiction", upgrade.label, "UNVERIFIED");
+  is("and nothing is moved", upgrade.moved, false);
+
+  // A REAL contradiction has to survive untouched, or the guard is worse than
+  // the problem: it would start silencing findings that are genuinely right.
+  const genuine = relabel("- CONTRADICTED: the operator's own timetable states 80 minutes, the draft says 60.");
+  is("a real contradiction stands", genuine.label, "CONTRADICTED");
+  is("and is not moved", genuine.moved, false);
+  // A contradiction is allowed to say "not" about the draft. Only language
+  // about its own SEARCH counts.
+  is("saying the draft is not right is not admitting a failed search",
+     relabel("- CONTRADICTED: this is not the correct price. The shop page states 250 DKK.").moved, false);
+
+  // ── EVERY PHRASE ON ITS OWN LINE ─────────────────────────────────
+  // The first version of this asserted the phrase list through the three real
+  // findings, and a mutation proved that hollow: deleting the "the pages
+  // reached do not" detector changed nothing, because the only finding using
+  // that wording was already honestly labelled UNVERIFIED. A detector exercised
+  // only through a case that does not need it is not covered at all.
+  //
+  // So each way a checker admits its own search came up empty is asserted
+  // separately, and the list cannot quietly shrink.
+  [
+    "I did not find any official 2026 dates",
+    "I could not find a price on their site",
+    "could not be verified from the sources opened",
+    "the date is not confirmed by the pages I read",
+    "none of the opened sources give a figure",
+    "none of those pages mention it",
+    "the pages reached do not state a price",
+    "no pages I opened carry this",
+    "the official site did not state a time",
+    "it is not published on the pages reached",
+    "not fully supported by the pages reached",
+  ].forEach(phrase => ok(`"${phrase.slice(0, 34)}..." reads as a failed search`, admitsNotFound(phrase)));
+
+  // The other half, and the one that decides whether this guard is safe to keep
+  // on: prose about the WORLD must never look like prose about a SEARCH.
+  [
+    "The festival runs on 19 and 20 September 2026.",
+    "The operator's own timetable states 80 minutes, not 60.",
+    "This is not the correct price, the shop page shows 250 DKK.",
+    "The museum does not open on Mondays.",
+  ].forEach(phrase => ok(`"${phrase.slice(0, 34)}..." is not a failed search`, !admitsNotFound(phrase)));
+
+  // The banner appears only when something moved.
+  ok("the warning names the risk", /not evidence the draft is wrong/.test(describeFactCheck(r)));
+  is("and stays quiet when nothing moved", describeFactCheck(readFactCheck("- UNVERIFIED: no page states this.")), "");
+  is("an empty check is not a report", readFactCheck("").findings.length, 0);
+  // Unrecognisable output must come back whole rather than chopped on a guess.
+  is("prose with no labels is left as one piece", readFactCheck("Everything in this draft looks right to me.").findings.length, 1);
+
+  // ── THE PAGE NOBODY FETCHED ──────────────────────────────────────
+  is("a root is derived from a deep page", rootOf("https://frugtfestival.dk/program/2025?x=1"), "https://frugtfestival.dk/");
+  is("a non-url is not a root", rootOf("not a url"), "");
+  is("and neither is a javascript link", rootOf("javascript:alert(1)"), "");
+  is("the root is added to the fetch list", withRoots(["https://frugtfestival.dk/program/2025"]), ["https://frugtfestival.dk/program/2025", "https://frugtfestival.dk/"]);
+  is("a root already present is not duplicated", withRoots(["https://frugtfestival.dk/"]), ["https://frugtfestival.dk/"]);
+  is("nor by a trailing-slash difference", withRoots(["https://a.dk/x", "https://a.dk"]).length, 2);
+  is("the pages already chosen keep their order", withRoots(["https://a.dk/x", "https://b.dk/y"]).slice(0, 2), ["https://a.dk/x", "https://b.dk/y"]);
+
+  // ── THE FRONT PAGE, READ ─────────────────────────────────────────
+  const FRONT = "Vi ses den 19. - 20. september i Sakskøbing by på Lolland. Når du køber støttearmbånd får du 20 % rabat på entrébilletten den 19. og 20. september 2026 (sidstnævnte kun lørdag den 19. september 2026).";
+  is("both days are read out of the Danish announcement", datesIn(FRONT).sort(), ["2026-09-19", "2026-09-20"]);
+  ok("the draft's dates are confirmed by the operator", datesConfirmedBy(FRONT, "2026-09-19", "2026-09-20").confirmed);
+  ok("and it says whose word that is", /states 2026-09-19 and 2026-09-20/.test(datesConfirmedBy(FRONT, "2026-09-19", "2026-09-20").detail));
+  ok("English announcements read the same", datesConfirmedBy("The festival runs 19 - 20 September 2026.", "2026-09-19", "").confirmed);
+
+  // THE HALF THAT KEEPS THIS HONEST. A date with no year cannot confirm a year.
+  // Treating "19. september" as proof of 2026 is the same mistake pointing the
+  // other way, and it is exactly what the stale programme page would have done.
+  is("an undated day confirms nothing", datesConfirmedBy("Vi ses den 19. - 20. september", "2026-09-19", "2026-09-20").confirmed, false);
+  is("and last year's edition does not confirm this year's", datesConfirmedBy("20.-21. september 2025", "2026-09-19", "2026-09-20").confirmed, false);
+  is("no date on the draft is nothing to confirm", datesConfirmedBy(FRONT, "", "").confirmed, false);
+  is("an impossible day is not read as one", datesIn("den 45. september 2026"), []);
+
+  // ── WIRED ────────────────────────────────────────────────────────
+  const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the root of every source is fetched", /const toFetch = withRoots\(/.test(appF));
+  // Anchored on the guard, not the call.
+  ok("the check is re-read before he sees it", /const read = readFactCheck\(googleCheckResult\.text\);[\s\S]{0,200}if \(!note\) return null;/.test(appF));
+  ok("the operator's own dates are read first", /if \(sType === "festival" && scrapedSiteText\.trim\(\) && \(t\.dateStart \|\| t\.dateEnd\)\)/.test(appF));
+  ok("and a confirmation is a recorded decision", /winner: "the festival's own site"/.test(appF));
+  // The prompt line that pushed it off the front page in the first place.
+  ok("an event's front page is no longer called a marketing page", /THE FRONT PAGE OF AN EVENT'S OWN SITE IS NOT A MARKETING PAGE/.test(appF));
+  // And the fifth field this allow-list would otherwise have eaten.
+  const shapedD = M.shapeForLive("festival", { name: "F", desc: "d", dateStart: "2026-09-19", __dateSource: { by: "official-site", dates: ["2026-09-19"], at: "2026-08-12T00:00:00Z" } });
+  is("the date provenance survives publish", (shapedD.__dateSource || {}).by, "official-site");
+  is("and an absent one adds no empty field", M.shapeForLive("festival", { name: "F", desc: "d" }).__dateSource, undefined);
 }
 
 rmSync(dir, { recursive: true, force: true });

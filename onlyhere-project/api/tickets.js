@@ -6,7 +6,12 @@
 // VERIFIED AGAINST THEIR LIVE REFERENCE ON 11 AUG 2026, not from memory:
 //   host    https://app.ticketmaster.com/discovery/v2/events.json
 //   auth    ?apikey=  (query parameter, not a header, not Bearer)
-//   limits  5 requests per second, 5000 calls per day
+//   limits  TWO of their own pages disagree and neither is obviously newer:
+//           the Discovery API reference says 5 requests per second, and the
+//           developer FAQ says "a quota of 2 requests per second and 5000
+//           requests per day". Same rule this codebase applies to a ferry
+//           operator whose own pages give two crossing times: take the
+//           conservative one and say the other exists. So: 2 per second.
 //   status  dates.status.code is one of onsale, offsale, canceled, postponed,
 //           rescheduled. There is NO sold-out code. See utils/tickets.js for
 //           why that single fact decides the shape of the whole feature.
@@ -41,7 +46,12 @@ const HOST = "https://app.ticketmaster.com/discovery/v2/events.json";
 const tmTime = (d) => `${d.toISOString().slice(0, 19)}Z`;
 
 export default async function handler(req, res) {
-  const key = process.env.TICKETMASTER_API_KEY;
+  const raw = process.env.TICKETMASTER_API_KEY;
+  // ── TRIMMED, BECAUSE A PASTED NEWLINE IS INVISIBLE ────────────────
+  // Oliver hit a 401 on the first probe. An env value that picked up a trailing
+  // space or newline in the dashboard is one of the two silent causes of that,
+  // and it costs one call to rule out rather than an evening.
+  const key = String(raw || "").trim();
   if (!key) {
     return res.status(500).json({ error: "TICKETMASTER_API_KEY not set on the server" });
   }
@@ -77,7 +87,29 @@ export default async function handler(req, res) {
       return res.status(200).json({ error: "rate-limited", detail: "Ticketmaster's rate limit was hit (5 requests per second, 5000 a day). This is not an answer about the event." });
     }
     if (r.status === 401 || r.status === 403) {
-      return res.status(200).json({ error: "key-rejected", detail: `Ticketmaster rejected the key (${r.status}). Check TICKETMASTER_API_KEY in Vercel.` });
+      // ── SAY WHICH REJECTION IT IS ───────────────────────────────
+      // The first version returned "Ticketmaster rejected the key. Check
+      // TICKETMASTER_API_KEY in Vercel", which is true of every possible cause
+      // and therefore helps with none of them. Their gateway names the reason
+      // in fault.faultstring ("Invalid ApiKey", "Invalid ApiKey for given
+      // resource"), so it is passed through rather than replaced by my
+      // paraphrase of it.
+      //
+      // The fingerprint is length only, deliberately. A Ticketmaster app shows
+      // a Consumer Key and a Consumer Secret of different lengths, and pasting
+      // the secret is the other silent cause of a 401, so the length alone
+      // settles it against what the portal shows. No part of the key is
+      // returned: this endpoint is public.
+      const body = await r.json().catch(() => null);
+      const fault = body?.fault?.faultstring || body?.fault?.detail?.errorcode || "";
+      return res.status(200).json({
+        error: "key-rejected",
+        status: r.status,
+        ticketmasterSaid: fault || "(no reason given)",
+        keyLength: key.length,
+        trimmed: String(raw || "").length !== key.length,
+        detail: `Ticketmaster rejected the key with ${r.status}${fault ? `: "${fault}"` : ""}. Three things cause this and the key length tells you which: the value in Vercel is the Consumer SECRET rather than the Consumer KEY (they are different lengths, compare ${key.length} against what the portal shows), the key belongs to an app that is not active yet, or the value picked up stray characters when it was pasted${String(raw || "").length !== key.length ? " (it did have surrounding whitespace, which has been trimmed here, so redeploy before re-reading this)" : ""}.`,
+      });
     }
     const data = await r.json().catch(() => null);
     if (!r.ok || !data) {

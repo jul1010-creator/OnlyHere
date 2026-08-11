@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- No maximum-scale, no user-scalable=no. Both were here to stop iOS
+         zooming the page when a field is focused, and the real cause of that is
+         a field rendered under 16px, which is fixed where the field is styled.
+         Meanwhile Android honours maximum-scale exactly as specified, so this
+         line was genuinely stopping Android users from pinching to zoom at all.
+         MDN treats any maximum-scale under 3 as an accessibility failure. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0A0F1E" />
     <title>Gemlyx — It exists nowhere else.</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

@@ -119,10 +119,23 @@ export const summariseLog = (log) => {
   const steps = log?.steps || [];
   const by = (o) => steps.filter(s => s.outcome === o);
   const providers = [...new Set(steps.map(s => s.provider).filter(Boolean))];
+  // ── HOW MUCH OF THE RUN NOBODY WROTE DOWN ─────────────────────────
+  // Oliver's first real log, 11 Aug: a 210 second draft with three steps in it,
+  // the last one at 43.4s. So 167 seconds, eighty per cent of the run, happened
+  // with nothing recording it, and the log did not say so. It listed what it
+  // had and left the reader to notice the arithmetic.
+  //
+  // That is the exact failure this file was written against, one level up: a
+  // step that did not run is not the same as a step that ran and found nothing,
+  // AND A STEP NOBODY INSTRUMENTED IS NOT THE SAME AS A STEP THAT DID NOT RUN.
+  // Three outcomes became four, and the fourth was invisible.
+  const lastAt = steps.length ? Math.max(...steps.map(s => s.at || 0)) : 0;
+  const ms = log?.ms ?? null;
+  const unlogged = ms != null && ms > lastAt ? ms - lastAt : 0;
   return {
     label: log?.label || "",
     subject: log?.subject || "",
-    ms: log?.ms ?? null,
+    ms,
     total: steps.length,
     ok: by("ok").length,
     empty: by("empty").length,
@@ -130,6 +143,9 @@ export const summariseLog = (log) => {
     skipped: by("skipped").length,
     // The number that matters: steps that ran, succeeded, and were thrown away.
     discarded: steps.filter(s => s.used === false).length,
+    lastAt,
+    unlogged,
+    unloggedShare: ms ? unlogged / ms : 0,
     providers,
     decisions: (log?.decisions || []).length,
   };
@@ -145,10 +161,16 @@ export const formatLog = (log) => {
     `${s.label}${s.subject ? `: ${s.subject}` : ""}`,
     `${log.startedAt || ""}${s.ms != null ? `  ·  ${(s.ms / 1000).toFixed(1)}s` : ""}`,
     `${s.total} steps  ·  ${s.ok} ok, ${s.empty} found nothing, ${s.failed} failed, ${s.skipped} skipped`
-      + (s.discarded ? `  ·  ${s.discarded} answered and were discarded` : ""),
+      // Was "1 answered and were discarded".
+      + (s.discarded ? `  ·  ${s.discarded} answered and ${s.discarded === 1 ? "was" : "were"} discarded` : ""),
     `providers: ${s.providers.join(", ") || "none"}`,
-    "",
   ];
+  // Printed as its own line rather than tucked into the counts, because it is
+  // the one number that says how much of this report to trust as a whole.
+  if (s.unlogged > 1000) {
+    lines.push(`NOT RECORDED: ${(s.unlogged / 1000).toFixed(1)}s after the last logged step, ${Math.round(s.unloggedShare * 100)}% of the run. Those steps ran, nothing wrote them down.`);
+  }
+  lines.push("");
   (log.steps || []).forEach((st, i) => {
     const head = `${String(i + 1).padStart(2, " ")}. ${st.step}`;
     const tail = [
@@ -156,7 +178,10 @@ export const formatLog = (log) => {
       mark[st.outcome] || st.outcome,
       st.used === false ? "discarded" : null,
     ].filter(Boolean).join(" · ");
-    lines.push(`${head}  [${tail}]${st.at != null ? `  ${(st.at / 1000).toFixed(1)}s` : ""}`);
+    // "at 38.5s", not "38.5s". Three steps reading 38.5, 40.1 and 43.4 look
+    // like three forty-second calls when they are actually three moments five
+    // seconds apart. He read it that way, and so did I writing it.
+    lines.push(`${head}  [${tail}]${st.at != null ? `  at ${(st.at / 1000).toFixed(1)}s` : ""}`);
     if (st.detail) lines.push(`     asked: ${st.detail}`);
     if (st.got) lines.push(`     got:   ${st.got}`);
     // The reason is the point of the whole file for these two.

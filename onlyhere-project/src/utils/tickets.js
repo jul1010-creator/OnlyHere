@@ -110,6 +110,68 @@ export const TICKET_BADGE = {
 
 export const ticketBadge = (status) => TICKET_BADGE[normaliseTicketStatus(status)] || TICKET_BADGE.unknown;
 
+// ── WHERE DID THIS STATUS COME FROM ─────────────────────────────────
+//
+// Oliver, 11 Aug 2026: "considering some events are ticketmaster.com and some
+// aren't, how do we differentiate that?"
+//
+// Today, nothing does. ticketStatus is one field with no memory. An event whose
+// status was measured against Ticketmaster's own listing and an event where the
+// writer had a feeling both render the identical green badge, and no screen,
+// prompt or audit can tell them apart afterwards.
+//
+// That is the SAME failure travelTime had and that the run log fixed for it: a
+// measured figure and a written one that look alike are worse than the written
+// one alone, because the measured ones teach you to trust the written ones.
+//
+// So the source travels with the status. Not as a nice-to-have label: as the
+// thing that decides whether the guide is allowed to state it as fact.
+export const TICKET_SOURCES = ["ticketmaster", "billetto", "official-site", "writer", "none"];
+
+export const TICKET_SOURCE_LABEL = {
+  ticketmaster: "Ticketmaster",
+  billetto: "Billetto",
+  "official-site": "the festival's own site",
+  // Deliberately not "Gemlyx" or "our research". The whole point of the field is
+  // that this one was NOT measured, so it says so in a word he cannot misread.
+  writer: "not checked against a ticket seller",
+  none: "",
+};
+
+// Can a status from this source be stated to a reader as fact? Only the two
+// that are a ticket seller's own record of its own listing.
+export const MEASURED_SOURCES = ["ticketmaster", "billetto"];
+export const isMeasured = (source) => MEASURED_SOURCES.includes(String(source || ""));
+
+// ── STORED ON THE ROW, WITH A DATE ──────────────────────────────────
+// Same shape and the same reason as __hours: a ticket status with no date is a
+// claim that quietly ages into a lie, and a status with no source is one that
+// cannot be re-checked or argued with. `checkedOn` is what a reader is shown.
+export const stampTicketSource = (payload, rec) => ({
+  ...(payload || {}),
+  __ticket: {
+    source: rec?.confidence === "strong" && rec?.event ? "ticketmaster"
+      : rec?.confidence === "none" ? "writer"
+      : rec?.confidence === "weak" ? "writer"
+      : "none",
+    at: new Date().toISOString(),
+    verdict: rec?.verdict || "",
+    // The listing itself, so a person checking does not have to search for it.
+    url: rec?.confidence === "strong" ? (rec?.event?.url || "") : "",
+  },
+});
+
+// One line a reader can act on, or "" when there is nothing honest to say.
+export const ticketProvenance = (payload) => {
+  const t = payload?.__ticket;
+  if (!t?.source || t.source === "none") return "";
+  const when = t.at ? String(t.at).slice(0, 10) : "";
+  if (isMeasured(t.source)) {
+    return `Ticket status checked against ${TICKET_SOURCE_LABEL[t.source]}${when ? ` on ${when}` : ""}.`;
+  }
+  return "Ticket status has not been checked against a ticket seller. Confirm on the official site before you count on it.";
+};
+
 // ── READING TICKETMASTER'S OWN FIELDS ───────────────────────────────
 // Field names taken from the live reference, and every one of them optional,
 // because a partial event object is normal rather than an error.
