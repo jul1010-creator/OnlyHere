@@ -73,6 +73,9 @@ writeFileSync(entry, `
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
+  export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
+  export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
+  export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
   export { TOWN_COORDS } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
@@ -1065,6 +1068,388 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("and writes it back functionally", /setSavedGuides\(prev => \{ finalGuides = mergeSaves/.test(app));
     ok("a refused cloud write is no longer reported as synced", /could not be sent to your account/.test(app));
   }
+
+
+// ── WHAT THE PIPELINE ACTUALLY DID ──────────────────────────────────
+// Oliver, 11 Aug: "In order to finally sort out logistics, I need to be able to
+// exactly have a note of what the Pipeline did... I want to see what happened
+// in the making of a draft."
+//
+// A Studio draft makes 25 to 40 external calls across 28 steps to six
+// providers, and FIFTEEN of those steps fail silently. So a draft that came out
+// thin was indistinguishable from a draft where nine grounding steps quietly
+// returned nothing. Nothing survived a run: apiCost kept an in-memory array
+// gone on reload, gemlyx_research stored the research text but nothing about
+// the process, and the stage bar cleared itself.
+  {
+    const { startLog, endLog, note, decide, summariseLog, formatLog, OUTCOMES } = M;
+
+    startLog("Studio draft", "Ribe (town)");
+    note("Plan the research", { provider: "openai", outcome: "ok", got: "3 queries", used: true });
+    note("Journey research", { provider: "tavily", outcome: "failed", why: "network", used: false });
+    note("Night transport", { provider: "google", outcome: "skipped", why: "not a nightlife type" });
+    note("Official site", { provider: "tavily", outcome: "empty", why: "no result named the place", used: false });
+    decide("travelTime", { winner: "Google Directions (measured)", loser: 'the model ("2h")', rule: "measured beats written", value: "3h 15min" });
+    const log = endLog();
+    const sum = summariseLog(log);
+
+    // ── THE THREE OUTCOMES THAT WERE ONE BLANK ────────────────────
+    // A step that did not run, a step that ran and found nothing, and a step
+    // that failed are three different facts. Collapsing them is exactly how
+    // nine silent failures looked like a working pipeline.
+    is("every step is counted", sum.total, 4);
+    is("what worked", sum.ok, 1);
+    is("what found nothing", sum.empty, 1);
+    is("what failed", sum.failed, 1);
+    is("and what never ran at all", sum.skipped, 1);
+    ok("skipped is a real outcome, not an absence", OUTCOMES.includes("skipped"));
+    // A step can succeed and have its answer thrown away, which a cost meter
+    // cannot show and is the thing worth seeing when sources disagree.
+    is("answers that were discarded are counted", sum.discarded, 2);
+    is("and every provider consulted is named", sum.providers.sort(), ["google", "openai", "tavily"]);
+
+    // ── THE REASON IS THE POINT ───────────────────────────────────
+    const text = formatLog(log);
+    ok("a failure says why", /why:   network/.test(text));
+    ok("and so does a skip", /why:   not a nightlife type/.test(text));
+    ok("a discarded answer is marked as such", /discarded/.test(text));
+    ok("the decision is reported separately from the steps", /DECISIONS/.test(text));
+    ok("naming who was believed and who was overruled", /believed Google Directions \(measured\), overruled the model/.test(text));
+
+    // ── IT MUST NEVER BE ABLE TO BREAK A DRAFT ────────────────────
+    // Same rule the fetch meter follows. Logging is not load-bearing.
+    // `ok(..., true)` was the first version of this and it asserted nothing:
+    // it passed with the guard deleted, because the inner try/catch swallowed
+    // the throw anyway. Asserted through the EFFECT instead: a stray note must
+    // not throw, and must not end up attached to the next run.
+    note("after the run ended", { provider: "x" });
+    decide("after the run ended", {});
+    is("an empty log formats to nothing", formatLog(null), "");
+    startLog("empty run", "");
+    const bare = endLog();
+    is("a note made outside a run does not leak into the next one", summariseLog(bare).total, 0);
+    is("and neither does a decision", (bare.decisions || []).length, 0);
+    // The completed run is not retroactively altered either.
+    is("the finished run still has exactly its own steps", summariseLog(log).total, 4);
+
+    // ── AND IT SURVIVES A RELOAD ──────────────────────────────────
+    // The difference between a log and a status bar. apiCost's array is
+    // in-memory and capped at 25, so it is gone the moment the tab closes.
+    const rl = readFileSync(join(root, "src/utils/runLog.js"), "utf8");
+    ok("finished runs are persisted", /localStorage\.setItem\(STORE_KEY/.test(rl));
+    ok("and read back when memory is empty", /localStorage\.getItem\(STORE_KEY\)/.test(rl));
+
+    // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ─────────────
+    const appSrc3 = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the draft opens a log", /startLog\("Studio draft"/.test(appSrc3));
+    ok("and closes it", /endLog\(\);/.test(appSrc3));
+    ok("the one measured journey is recorded", /note\("Measure the journey from Copenhagen"/.test(appSrc3));
+    ok("and Studio can read the trace back", /const logs = recentLogs\(\);/.test(appSrc3));
+    ok("with a way to get it out of the browser", /Copy the full trace/.test(appSrc3));
+
+    // ── THE GAP HE CALLED "BACK AND FORTH FIGHTING" ───────────────
+    // The travelTime override requires realTransport.transit, but the outer
+    // guard passes on driving ALONE. So when Google returns a car route and no
+    // transit itinerary, nothing is written and the MODEL's own string survives
+    // into the stored payload. It is the one path by which an unmeasured travel
+    // time reaches a published page, and it was completely silent.
+    ok("an unmeasured travelTime is now recorded as written, not measured",
+       /rule: "Google returned no transit itinerary, so no measured figure existed\. This number is WRITTEN, not measured\."/.test(appSrc3));
+    ok("and the measured case names what it overruled", /rule: "A measured duration always replaces a written one/.test(appSrc3));
+    // Google finding no transit is NOT evidence that no transit exists. The
+    // codebase already knows this (entryAudit's NO_TRANSPORT check exists
+    // because that claim "has been wrong every time it was checked").
+    ok("no transit route is logged as 'found nothing', never as an absence",
+       /NOT that no public transport exists/.test(appSrc3));
+
+    // ── TAVILY AND PERPLEXITY ARE NOT THE SAME INSTRUMENT ─────────
+    // Oliver, 11 Aug: "do they need to cooperate better? Because clearly Tavily
+    // alone from start, proved that on research AI alone is not good enough."
+    //
+    // Tavily is RETRIEVAL: every snippet arrives with the URL it came from,
+    // which is what fills candidateUrls, __sources and HowWeKnow. Perplexity is
+    // a MODEL WITH SEARCH: it returns a conclusion.
+    //
+    // But Perplexity DOES return where it looked, and api/perplexity.js has
+    // always parsed search_results and citations into {title, url}. The DRAFT
+    // pipeline read .text and dropped .citations entirely; the only consumer
+    // anywhere was the manual Google-check button. So the merge asked the model
+    // to choose between a claim with a URL behind it and a claim with nothing,
+    // under an instruction that favoured whichever sounded more specific.
+    const pplxApi = readFileSync(join(root, "api/perplexity.js"), "utf8");
+    ok("the endpoint has always returned citations", /citations,/.test(pplxApi));
+    const client = readFileSync(join(root, "src/utils/aiClient.js"), "utf8");
+    ok("and the client hands them back", /citations: data\.citations \|\| \[\]/.test(client));
+    // The fix: the draft path keeps them, and puts them in the SAME pool as
+    // Tavily's, so they face the same relevance filter and reach How We Know.
+    ok("the draft keeps Perplexity's citations", /const pplxCites = Array\.isArray\(preCheck\.citations\) \? preCheck\.citations : \[\];/.test(appSrc3));
+    ok("they join the same URL pool as Tavily's", /pplxCites\.forEach\(c => \{[\s\S]{0,200}candidateUrls\.push\(c\.url\);/.test(appSrc3));
+    ok("and the same relevance map, so the filter cannot tell them apart", /if \(!urlSaidWhat\.has\(c\.url\)\) urlSaidWhat\.set\(c\.url/.test(appSrc3));
+    // An answer with nothing behind it must not look like an answer with sources.
+    // Anchored on the GUARD, not the message. The first version tested for the
+    // string "Perplexity returned no citations", which is still sitting in the
+    // source when the condition producing it is replaced with `if (false)` —
+    // the third time tonight that a source-text assertion survived the rule
+    // being switched off.
+    ok("a citation-free answer is recorded as such",
+       /if \(pplxCites\.length === 0\) \{[\s\S]{0,400}note\("Perplexity returned no citations"/.test(appSrc3));
+
+    // ── THE INSTRUCTION THAT BIASED TOWARDS THE UNVERIFIABLE ──────
+    // "prefer whichever is more specific/recent" reliably picks synthesised
+    // prose over a raw snippet, because synthesis always reads as more
+    // specific. In a codebase whose first standing rule is never to state
+    // something the pipeline did not verify, that was backwards.
+    ok("specificity is no longer the tie-break", !/prefer whichever is more specific\/recent\)/.test(appSrc3));
+    ok("traceability is", /PREFER THE ONE YOU CAN POINT AT/.test(appSrc3));
+    ok("and neither-traceable is allowed to stay empty", /leave the field empty rather than picking a winner/.test(appSrc3));
+  }
+
+
+// ── FACT-CHECKING WHAT IS ALREADY PUBLISHED ─────────────────────────
+// Oliver, 11 Aug: "can we make a fact-checker on all of them that our pipeline
+// can go through? It can be both individual and all of them. Because I noticed
+// Faxe has some history wrong. Which I assume was from before we fixed history."
+//
+// He is right about the cause. Fourth standing rule: fixing a writer does not
+// fix what it already wrote. The Odense-988 history rule went into the drafting
+// prompts, and every row published before that day still carries whatever it
+// carried.
+{
+  const { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION } = M;
+
+  // ── HIS ACTUAL CASE, AND IT COSTS NOTHING TO CATCH ────────────────
+  const faxe = { id: 7, type: "town", payload: {
+    name: "Faxe",
+    desc: "Faxe dates back to 1231 and sits on a limestone quarry.",
+    blogBody: [
+      { type: "heading", content: "What to Do in Faxe" },
+      { type: "paragraph", content: "The town was founded in 1231. Faxe Kalkbrud is the largest quarry in Denmark." },
+      { type: "heading", content: "The Reality Check" },
+      { type: "paragraph", content: "Little to do after dark." },
+    ],
+    __lat: 55.255, __lon: 12.118,
+  }};
+  const r = sweepRow(faxe);
+  const history = r.findings.filter(f => f.field === "history");
+  is("the bare year is caught with no model call at all", history.length, 1);
+  ok("and it explains why a year alone is not a fact", /three different dates/.test((history[0] || {}).detail || ""));
+  ok("an unqualified ranking is caught too", r.findings.some(f => f.field === "ranking"));
+  // Sorted worst-first, because a list nobody can triage is a list nobody reads.
+  is("findings are ranked by severity", r.worst, "high");
+  ok("and the worst one is first", (r.findings[0] || {}).severity === "high");
+
+  // ── THE HALF THAT DECIDES WHETHER HE KEEPS IT ON ──────────────────
+  // A sweep that flags every entry is a sweep he switches off.
+  const clean = sweepRow({ id: 1, type: "town", payload: {
+    name: "Ribe", desc: "Ribe has been a town since it was first mentioned in writing around 700 AD.",
+    photo: "/towns/ribe.jpg", uncertainties: [],
+    blogBody: [{ type: "heading", content: "What to Do in Ribe" },
+               { type: "paragraph", content: "The cathedral tower is climbable, and the marshland view from the top is the reason to do it. Puggaardsgade is the real medieval core rather than a rebuilt version, and the whole of it fits comfortably into a half day on foot." },
+               { type: "heading", content: "The Reality Check" },
+               { type: "paragraph", content: "Little in the way of nightlife or late dining if you are staying over, so this is an early-to-bed kind of town and it will disappoint anyone hoping otherwise." }],
+    __lat: 55.328, __lon: 8.765,
+  }});
+  is("a named event with its year is not flagged", clean.findings.filter(f => f.field === "history"), []);
+
+  // ── ONE BAD ROW MUST NOT STOP A SWEEP OF SIXTY ───────────────────
+  // `.length >= 0` was the first version of this and it asserted nothing: an
+  // array's length is always >= 0, so it passed with every guard removed.
+  // Asserted through the EFFECT instead. A malformed row sitting in the middle
+  // of the list must not cost him the findings for the rows after it, which is
+  // the only reason the guards are there.
+  const mixed = sweepAll([null, { id: 2 }, faxe, undefined]);
+  ok("a malformed row does not swallow the ones after it", mixed.rows.some(x => x.name === "Faxe"));
+  is("and Faxe's history finding still arrives", ((mixed.rows.find(x => x.name === "Faxe") || {}).findings || []).filter(f => f.field === "history").length, 1);
+  is("every row is still counted, malformed included", mixed.checked, 4);
+
+  // ── THE WHOLE LIBRARY, AND WHICH RULE IS FIRING ───────────────────
+  const all = sweepAll([faxe, { id: 9, type: "town", payload: { name: "X" } }]);
+  is("every row is counted, flagged or not", all.checked, 2);
+  ok("only the ones with something to say are listed", all.flagged >= 1);
+  ok("the worst rows come first", all.rows[0].worst === "critical" || all.rows[0].worst === "high");
+  // A rule firing across forty entries is a prompt problem, not forty content
+  // problems, and that is only visible in aggregate.
+  ok("the rules are counted across the library", all.byField.length > 0 && Array.isArray(all.byField[0]));
+
+  // ── COST IS STATED BEFORE IT IS SPENT ─────────────────────────────
+  // "Check all of them" against a live search would be the most expensive
+  // button in the app. The paid tier is per row, opt-in, and counted first.
+  const plan = deepCheckPlan(r);
+  is("only claims a search could settle are counted", plan.calls, 2);
+  ok("and they are named", /history/.test(plan.why) && /ranking/.test(plan.why));
+  ok("voice and photo findings never cost money", CHECKABLE_FIELDS.every(f => !["voice", "photo", "body", "structure", "provenance"].includes(f)));
+  // The common case: nothing here is a question about the world.
+  const noneToBuy = deepCheckPlan({ name: "X", findings: [{ field: "voice", severity: "high", detail: "" }, { field: "photo", severity: "medium", detail: "" }] });
+  is("an entry with nothing checkable costs nothing", noneToBuy.calls, 0);
+  ok("and says why rather than offering a pointless button", noneToBuy.worthIt === false && /cannot settle/.test(noneToBuy.why));
+
+  // ── A CHECK IS NOT RE-BOUGHT TO RE-READ ITS ANSWER ────────────────
+  const stamped = stampCheck({ name: "Faxe" }, r, null);
+  ok("the result is stored on the row", stamped.__checked?.at && stamped.__checked.rules === RULES_VERSION);
+  ok("a fresh check reads as current", checkAge(stamped).everChecked && !checkAge(stamped).stale);
+  // And a row checked under an older rule set is visibly different from one
+  // checked under this one, or "already checked" becomes a false comfort.
+  ok("a check under older rules reads as stale", checkAge({ __checked: { at: "2026-01-01", rules: "old" } }).stale);
+  ok("and never checked is not the same as clean", !checkAge({}).everChecked);
+
+  // ── NO NEW RULES, WHICH IS THE POINT ──────────────────────────────
+  // Every check here already existed and was pointed at drafts, never at the
+  // published table. A fifth duplicated checker would have been the fifth
+  // duplicated thing found this week.
+  const fs = readFileSync(join(root, "src/utils/factSweep.js"), "utf8");
+  ok("it reuses the deterministic audit", /import \{ auditEntry \} from "\.\/entryAudit"/.test(fs));
+  ok("and the coordinate rules", /import \{ coordProblems \} from "\.\/coordCheck"/.test(fs));
+  ok("and the structure rules", /import \{ bodyProblems \} from "\.\/publishedRepair"/.test(fs));
+  ok("it declares no regexes of its own", !/= \/.*\/[gimsu]*;/.test(stripNonCode(fs)));
+
+  // ── WIRED ─────────────────────────────────────────────────────────
+  const app4 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("Manage can sweep the whole library", /setSweep\(sweepAll\(manageItems\)\)/.test(app4));
+  ok("and the button says it is free", /Fact-check everything \(free\)/.test(app4));
+  ok("findings appear on the row they belong to", /\(sweep\?\.rows \|\| \[\]\)\.filter\(r => r\.id === row\.id\)/.test(app4));
+
+  // ── GOOGLE PLACES, AND THE FACT IT WAS ASKING NICELY ABOUT ────────
+  // Oliver, 11 Aug: "How is Places used? Because that should surely be used as
+  // well for opening hours..." It already is: api/places-hours.js asks for
+  // regularOpeningHours, currentOpeningHours AND businessStatus, on Google's
+  // Place Details Enterprise SKU, which that file's own comment notes is billed
+  // higher than the basic Places calls.
+  //
+  // businessStatus is the hardest fact this pipeline ever receives: the
+  // operator's own listing, not a search result and not a model's reading of a
+  // page. The ONLY thing done with it was a sentence inside a prompt asking the
+  // model to "flag this in uncertainties if it suggests the place may be
+  // closed". A polite request, to a model that may decline, about a restaurant
+  // that no longer exists.
+  const hoursApi = readFileSync(join(root, "api/places-hours.js"), "utf8");
+  ok("Places really is asked for opening hours", /places\.regularOpeningHours/.test(hoursApi));
+  ok("and for whether the business still exists", /places\.businessStatus/.test(hoursApi));
+  ok("the endpoint returns the status to the client", /businessStatus: place\.businessStatus/.test(hoursApi));
+
+  // The stop. Placed at step 13 of 28, BEFORE the OpenAI structuring pass, the
+  // 8192-token Claude draft, the phrasing scan, the rewrite and the
+  // invented-claim check, so a dead business costs almost nothing.
+  ok("a permanently closed business stops the draft", /if \(hoursData\.businessStatus === "CLOSED_PERMANENTLY"\) \{/.test(app4));
+  ok("and it throws rather than noting and continuing", /throw new Error\(`Google lists "\$\{name\}" as permanently closed/.test(app4));
+  ok("the stop happens before the writing steps", app4.indexOf('CLOSED_PERMANENTLY') < app4.indexOf('setStudioStage({ label: "Writing the draft (Claude)"'));
+  // The catch around the Places block would otherwise swallow the stop, which
+  // would turn the whole thing into an expensive no-op.
+  ok("the Places catch cannot swallow the stop", /if \(\/permanently closed\/i\.test\(String\(e\?\.message \|\| ""\)\)\) throw e;/.test(app4));
+  // And the half that keeps it from crying wolf: temporarily closed places
+  // reopen, and a seasonal Danish attraction shut for the winter is the normal
+  // case, not an error.
+  ok("temporarily closed is not a stop", !/CLOSED_TEMPORARILY[\s\S]{0,80}throw/.test(app4));
+  ok("a failed Places lookup no longer looks like a clean one", /outcome: "failed", why: String\(e\?\.message \|\| e\), used: false,/.test(app4));
+
+  // ── HOURS: KEPT, DATED, NEVER RENDERED ────────────────────────────
+  // His call between the two options. Stored so a redraft does not re-buy them
+  // from Google's Place Details Enterprise SKU, and never shown, because hours
+  // change and a stale opening time shown confidently is worse than none.
+  ok("the draft captures them as structured data", /placesHours = \{/.test(app4));
+  ok("with the date they were fetched", /fetchedAt: new Date\(\)\.toISOString\(\),/.test(app4));
+  ok("and they are attached to the draft", /if \(placesHours\) t\.__hours = placesHours;/.test(app4));
+  {
+    const base = { name: "Bones", city: "Aarhus", type: "Restaurant", desc: "d", special: "s", whoFor: "w", realityCheck: "r", thingsToKnow: [] };
+    const kept = M.shapeForLive("free", { ...base, __hours: { hours: ["Monday: 11-22"], status: "OPERATIONAL", fetchedAt: "2026-08-11T00:00:00.000Z", source: "google-places" } });
+    is("the hours survive publish", kept.__hours.hours, ["Monday: 11-22"]);
+    // THE DATE IS THE WHOLE POINT. An hours array with no date is a claim that
+    // quietly ages into a lie, which is why the FROZEN TRANSPORT FACT stamps
+    // were changed from "verified Aug 2026" to "checked 10 Aug 2026".
+    is("carrying the date they were true on", kept.__hours.fetchedAt, "2026-08-11T00:00:00.000Z");
+    is("and where they came from", kept.__hours.source, "google-places");
+    // Absent rather than empty, same rule as __sources.
+    ok("a place with no hours carries no hours field", !("__hours" in M.shapeForLive("free", base)));
+    ok("and an empty array is not stored as if it were hours",
+       !("__hours" in M.shapeForLive("free", { ...base, __hours: { hours: [], status: "", fetchedAt: "x" } })));
+    // A week has seven days. More than that is a parsing failure, not data.
+    is("the array is bounded to a week", M.shapeForLive("free", { ...base, __hours: { hours: Array(30).fill("x"), status: "OPERATIONAL", fetchedAt: "t" } }).__hours.hours.length, 7);
+  }
+  // NEVER RENDERED, which is the half he chose. If anything ever reads __hours
+  // to put an opening time on a page, this is the assertion that should be
+  // deleted on purpose rather than quietly stopping being true.
+  {
+    const rendered = ["src/components/DetailPage.jsx", "src/pages/GuidePage.jsx", "src/components/HowWeKnow.jsx"]
+      .filter(f => /__hours/.test(readFileSync(join(root, f), "utf8")));
+    is("nothing on the site renders stored hours", rendered, []);
+  }
+
+  // ── GOOGLE OWNS THE WEEK, THE SITE OWNS THE EXCEPTIONS ────────────
+  // Oliver, 11 Aug: "Website opening hours of course should be prioritised.
+  // Right?" Not by default. For a small Danish venue a website footer written
+  // in 2019 is usually STALER than a Google Business Profile that the owner and
+  // Google's corrections keep nudging, and Google's field is structured where
+  // the page is prose read out of stripped HTML by api/scan-source.js.
+  //
+  // But weekdayDescriptions is seven lines, one per weekday, and it physically
+  // cannot say "lukket i januar" or "sidste indgang 30 minutter før lukketid".
+  // Those decide whether a trip works and are invisible to the structured field.
+  {
+    const { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE } = M;
+    const google = ["Monday: 10:00 – 17:00", "Tuesday: 10:00 – 17:00", "Wednesday: Closed"];
+
+    // ── WHAT GOOGLE'S SHAPE CANNOT HOLD, IN BOTH LANGUAGES ──────────
+    const dk = seasonalNotes("Museet er lukket i januar og februar. Sidste indgang 30 minutter før lukketid.");
+    ok("a Danish seasonal closure is caught", dk.some(n => n.kind === "seasonal-closure"));
+    ok("and the Danish last-admission line", dk.some(n => n.kind === "last-entry"));
+    ok("the note quotes the site's own words", /lukket i januar/.test(dk.map(n => n.quote).join(" ")));
+    const en = seasonalNotes("The mill is open May to September. Visits outside the season by appointment.");
+    ok("an English season window is caught", en.some(n => n.kind === "seasonal"));
+    ok("and by-appointment", en.some(n => n.kind === "appointment"));
+    ok("a Christmas closure is caught", seasonalNotes("We are closed 24-26 December and on public holidays.").some(n => n.kind === "holiday"));
+    // The half that decides whether he keeps it on: ordinary prose must be quiet.
+    is("an ordinary page produces no notes", seasonalNotes("Welcome to the museum. Book tickets online. Our shop sells local ceramics."), []);
+    is("and empty text does not throw", seasonalNotes(null), []);
+
+    // ── THE WEEKLY PATTERN, COMPARED BUT NEVER RESOLVED ─────────────
+    const dis = reconcileHours(google, "Åbningstider: 11:00 - 21:00 alle dage.");
+    is("a time the site states and Google never does is a disagreement", dis.verdict, "disagree");
+    is("and the times are named", dis.extraTimes.sort(), ["11:00", "21:00"]);
+    // THE POINT: it does not pick. One of the two is out of date and nothing
+    // here can tell which, so saying which would be inventing a fact.
+    ok("it refuses to say which is right", /no way to tell which/.test(dis.detail));
+    ok("and the model is told not to pick either", /Do NOT pick one and state it as fact/.test(hoursForPrompt(google, dis)));
+
+    is("matching times agree", reconcileHours(google, "We are open 10:00 to 17:00 Monday and Tuesday.").verdict, "agree");
+    // The COMMON case, and not a problem: the page fetched was a front page.
+    is("a page with no clock times is not a disagreement", reconcileHours(google, "Welcome. Book tickets online.").verdict, NO_HOURS_ON_PAGE);
+    is("and Google having nothing is its own verdict", reconcileHours([], "open 11:00-21:00").verdict, "google-silent");
+
+    // Seasonal notes survive even when there is no weekly comparison to make,
+    // which is the case that matters most: a front page that says "lukket i
+    // januar" and nothing else is the single most useful scrape there is.
+    const frontPage = reconcileHours(google, "Velkommen. Museet er lukket i januar.");
+    is("a front page with a seasonal line still yields the note", frontPage.notes.length, 1);
+    ok("and the prompt carries it as an addition, not a contradiction",
+       /CANNOT express this, so it is not a contradiction/.test(hoursForPrompt(google, frontPage)));
+
+    // ── THE PARSER ─────────────────────────────────────────────────
+    is("both separators are read", timesIn("open 10:00 and 17.30").sort(), ["10:00", "17:30"]);
+    is("hours are zero-padded so 9:00 and 09:00 are one time", timesIn("9:00").concat(timesIn("09:00")), ["09:00", "09:00"]);
+    is("a price is not a time", timesIn("entry is 125 DKK"), []);
+    is("and 25:00 is not a time", timesIn("25:00"), []);
+    // The /g/-statefulness assertion that belongs here was DELETED rather than
+    // kept: `while ((m = re.exec(t)) !== null)` always runs to null, and exec
+    // resets lastIndex when it returns null, so a shared regex cannot actually
+    // misbehave under this loop. The mutation proved it: swapping the fresh
+    // regex for the module-level one changed nothing. A test that cannot fail
+    // is worse than no test, so this is the real invariant instead.
+    is("the same time twice is one time, not two", timesIn("open 10:00, closed 10:00"), ["10:00"]);
+    is("and order follows first appearance", timesIn("17:00 and 09:30"), ["17:00", "09:30"]);
+
+    // ── WIRED ──────────────────────────────────────────────────────
+    const app5 = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the site's own text is kept separately from the research blob", /scrapedSiteText \+= ` \$\{scanData\.text\}`;/.test(app5));
+    // Anchored on the GUARD. The first version matched the call, which is still
+    // in the source when the block around it is replaced with `if (false)` —
+    // the fourth time in this session a source-text assertion survived the rule
+    // being switched off. Worth naming as a standing trap.
+    ok("and reconciled after the scrape",
+       /if \(placesHours\?\.hours\?\.length \|\| scrapedSiteText\.trim\(\)\) \{[\s\S]{0,300}const reconciled = reconcileHours\(/.test(app5));
+    ok("the result reaches the prompt", /if \(hoursText\) realOpeningHoursText = hoursText;/.test(app5));
+    // A disagreement is a recorded decision, and the decision is that nobody won.
+    ok("a disagreement is logged as resolving nothing", /winner: "neither, deliberately"/.test(app5));
+  }
+}
 
   // ── WHAT ACTUALLY HAS TO BE BOOKED ────────────────────────
   // Only things the guide can stand up. A list that pads itself out is one a
@@ -2938,7 +3323,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // THE CAUSE. shapeForLive is an allow-list and __sources was not on it, so
   // publish threw away the source list the research had already built. Zero of
   // 79 live rows carried it, which is why every entry said one.
-  ok("publish carries the source list through", /return sources\.length \? \{ \.\.\.shaped, __sources: sources \} : shaped;/.test(sc));
+  // Asserted through shapeForLive ITSELF rather than the line that implements
+  // it. The source-text version broke the moment a second exception was added
+  // beside __sources, which is a test failing for a change that was correct.
+  {
+    const withSrc = M.shapeForLive("town", { name: "Ribe", characterAndFit: "x", whatToDo: "y", gettingThereReality: "z", thingsToKnow: [], __sources: ["https://visitribe.dk"] });
+    is("publish carries the source list through", withSrc.__sources, ["https://visitribe.dk"]);
+    const noSrc = M.shapeForLive("town", { name: "Ribe", characterAndFit: "x", whatToDo: "y", gettingThereReality: "z", thingsToKnow: [] });
+    ok("and leaves it absent rather than empty", !("__sources" in noSrc));
+  }
   ok("the allow-list is still an allow-list, with one named exception", /shapeForLiveFields/.test(sc));
   ok("only real http links survive", /\/\^https\?:\\\/\\\/\/i\.test\(u\)/.test(sc));
   // Absent rather than empty, so the panel never draws a heading over no links.

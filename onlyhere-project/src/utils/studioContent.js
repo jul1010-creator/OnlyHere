@@ -145,7 +145,26 @@ export const shapeForLive = (type, t) => {
   const sources = Array.isArray(t?.__sources)
     ? t.__sources.filter(u => typeof u === "string" && /^https?:\/\//i.test(u)).slice(0, 8)
     : [];
+  // ── AND THE HOURS, ON THE SAME TERMS ────────────────────────────
+  // Oliver, 11 Aug, choosing between showing hours with a date and keeping them
+  // for the pipeline only: he took the second. So this is stored and NEVER
+  // rendered. Nothing reads __hours on the site, deliberately, because hours
+  // change and a stale opening time shown confidently is worse than none.
+  //
+  // What it buys: a redraft does not re-buy them from Google's Place Details
+  // Enterprise SKU, the audit can tell a place checked last week from one
+  // checked in March, and the essentials freshness queue has something to work
+  // from when it exists.
+  //
+  // The DATE is the whole point. An hours array with no date is a claim that
+  // quietly ages into a lie, which is exactly why the FROZEN TRANSPORT FACT
+  // stamps were changed from "verified Aug 2026" to "checked 10 Aug 2026".
+  const h = t?.__hours;
+  const hours = h && (Array.isArray(h.hours) ? h.hours.length : 0) + (h.status ? 1 : 0) > 0
+    ? { hours: (h.hours || []).slice(0, 7), status: String(h.status || ""), fetchedAt: String(h.fetchedAt || ""), source: String(h.source || "") }
+    : null;
   // Absent rather than empty when there is nothing: an empty array would make
   // HowWeKnow render a heading over no links.
-  return sources.length ? { ...shaped, __sources: sources } : shaped;
+  const out = sources.length ? { ...shaped, __sources: sources } : shaped;
+  return hours ? { ...out, __hours: hours } : out;
 };
