@@ -77,6 +77,7 @@ writeFileSync(entry, `
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
   export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
   export { TOWN_COORDS } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
@@ -6850,42 +6851,63 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const sheet = readFileSync(join(root, "src/components/AuthSheet.jsx"), "utf8");
   const sheetCode = stripNonCode(sheet);
 
-  // ── THE GATE IS ON SAVING, NOT ON THE GUIDE ───────────────────────
-  // Raw, not stripNonCode: every anchor below is a string literal or sits
-  // beside one, and stripNonCode blanks string CONTENTS. The comments inside
-  // saveCurrentGuide were paraphrased so none of them contains these shapes.
+  // ── AND THEN HE REVERSED IT, 11 AUG ───────────────────────────────
+  // "You should also be able to sign up casually. I don't wanna be one of those
+  // annoying apps that are like 'wanna save it? Sign up now!'"
+  //
+  // The block below used to assert the gate: sheet opens, guide goes into a
+  // pending slot, save withheld. Those assertions were correct about the old
+  // decision and are deleted rather than kept "just in case", because a test
+  // defending a reversed product decision is how a reversal gets quietly undone.
+  //
+  // What replaces them is stronger, because the new rule is absolute where the
+  // old one was conditional: SAVING DOES NOT KNOW WHETHER YOU ARE SIGNED IN.
+  //
+  // Read raw rather than through stripNonCode, and asserted only against the
+  // function's own small region, because stripNonCode blanks string contents and
+  // the negative below would then be unfalsifiable. The comments inside the
+  // function are worded to avoid every shape asserted here, which is the other
+  // half of the same trap.
   const saveFn = appSrc.slice(appSrc.indexOf("const saveCurrentGuide = () =>"), appSrc.indexOf("const deleteSavedGuide"));
   ok("the save function was found", saveFn.length > 100);
-  ok("saving without an account opens the sheet instead", /if \(!userSession\) \{/.test(saveFn));
-  ok("and says why it opened", /setAuthReason\("guide"\);/.test(saveFn));
-  ok("a signed-in save still just saves", /commitGuideSave\(newGuide\);/.test(saveFn));
+  // THE WHOLE CHANGE, IN ONE ASSERTION. Not "it does not open the sheet", which
+  // a later refactor could satisfy while still branching. The word does not
+  // appear, so there is no branch to reintroduce by accident.
+  ok("saving does not know whether anyone is signed in", !/userSession/.test(saveFn));
+  ok("and never opens the auth sheet", !/setAuthOpen/.test(saveFn));
+  ok("it just saves, on one path", /commitGuideSave\(guideToSave\(\)\)/.test(saveFn));
+  // The heart on a place has always worked this way. The point is that the two
+  // now agree, so this asserts the older one has not drifted the other way.
+  const heartFn = appSrc.slice(appSrc.indexOf("const toggleSavePlace = (kind, item, townName)"), appSrc.indexOf("// Resolve a guide stop name to real coordinates"));
+  ok("the heart function was found", heartFn.length > 100 && heartFn.length < 3000);
+  ok("hearting a place still asks nobody", !/setAuthOpen|userSession/.test(heartFn));
 
-  // ── WRITTEN DOWN BEFORE THE BROWSER LEAVES ────────────────────────
-  ok("the trip is stored before the sheet opens",
-     saveFn.indexOf("PENDING_SAVE_KEY") >= 0 &&
-     saveFn.indexOf("PENDING_SAVE_KEY") < saveFn.indexOf("setAuthOpen(true)"));
-  ok("and it is the real guide, not a flag", /localStorage\.setItem\(PENDING_SAVE_KEY, JSON\.stringify\(newGuide\)\)/.test(code));
-  // A full-page redirect is why the success path CANNOT be a callback.
-  ok("Google sign-in really does leave the page", /window\.location\.href = /.test(readFileSync(join(root, "src/utils/auth.js"), "utf8")));
+  // ── AND THE TOAST TELLS THE TRUTH ABOUT WHERE IT WENT ─────────────
+  // "Guide saved" was true either way and told a signed-out person nothing
+  // about the one thing worth knowing, which is that it is on this device only.
+  ok("a signed-out save says where it went", /Saved on this device/.test(appSrc));
+  ok("and a signed-in one says the other thing", /Guide saved to your account/.test(appSrc));
 
-  // ── AND CLAIMED ON THE WAY BACK IN ────────────────────────────────
-  // Keyed on userSession, not called from handleSignedIn, because
-  // handleSignedIn is never reached at all on the Google path: the session is
-  // restored by captureRedirectSession on a cold load.
-  ok("the claim runs on arriving at a session", /if \(!userSession\) return;[\s\S]{0,500}gemlyx_pending_guide_save/.test(appSrc));
-  ok("a cold load really can restore a session", /captureRedirectSession/.test(appSrc));
-  // Functional update, because the cloud merge lands at the same moment on a
-  // cold load and a stale-closure write would drop whichever arrived second.
-  ok("the claim cannot drop a concurrent cloud merge", /setSavedGuides\(prev => \{/.test(appSrc));
-  ok("it is removed once claimed, so it cannot be added twice", /removeItem\("gemlyx_pending_guide_save"\)/.test(appSrc));
-  ok("and a duplicate is refused even so", /prev\.some\(g => g\.title === pending\.title && g\.savedAt === pending\.savedAt\)/.test(appSrc));
-  // Unparseable or half-written localStorage must not throw on a cold load,
-  // which is the render that decides whether the site works at all.
+  // ── NOTHING WRITES A PENDING SAVE ANY MORE ────────────────────────
+  // The pending slot only ever existed because the save was blocked, and it is
+  // where the documented data loss came from: two effects keyed on the session
+  // racing over the same list. Removing the gate removes the second write path.
+  ok("no code writes a pending guide save", !/setItem\("gemlyx_pending_guide_save"/.test(appSrc));
+  ok("and the constant is gone with it", !/PENDING_SAVE_KEY/.test(code));
+  // The rescue for people caught by the old gate runs on MOUNT, not on a
+  // session, because the people it is for are exactly the ones who never made
+  // an account. Anchored on the empty dependency array, which is the thing that
+  // makes that true.
+  ok("the one-time rescue no longer waits for an account",
+     /getItem\("gemlyx_pending_guide_save"\)[\s\S]{0,900}\}, \[\]\);/.test(appSrc));
   ok("a corrupt pending save is ignored, not thrown", /if \(!pending\?\.title \|\| !Array\.isArray\(pending\.days\)\) return;/.test(appSrc));
-  // Declining is not deferring. Leaving it behind would silently attach the
-  // trip to their account the next time they signed in for anything else.
-  ok("closing the sheet drops the pending guide",
-     /setAuthOpen\(false\); setAuthReason\(null\);[\s\S]{0,220}removeItem\("gemlyx_pending_guide_save"\)/.test(appSrc));
+  ok("it is removed once rescued, so it cannot be added twice", /removeItem\("gemlyx_pending_guide_save"\)/.test(appSrc));
+  ok("and a duplicate is refused even so", /prev\.some\(g => g\.title === pending\.title && g\.savedAt === pending\.savedAt\)/.test(appSrc));
+  // The save itself is now the functional form too. The stale-closure read is
+  // what let the old claim and the cloud merge drop each other's writes, and
+  // with one path left it should be the safe write rather than the easy one.
+  ok("the save cannot drop a concurrent cloud merge", /setSavedGuides\(prev => \{[\s\S]{0,200}after = \[newGuide, \.\.\.prev\]/.test(appSrc));
+  ok("a cold load really can restore a session", /captureRedirectSession/.test(appSrc));
 
   // ── WHAT THE SHEET PROMISES ───────────────────────────────────────
   // The old copy said an account "is optional" and "does one thing: keeps your
@@ -7250,6 +7272,95 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // apart from sixty separate "this festival is not listed".
   ok("there is a coverage probe", /probe: true/.test(fn));
   ok("and it says what a zero actually means", /coverage answer rather than an answer about any one festival/.test(fn));
+}
+
+// ── ASKING WITHOUT NAGGING ─────────────────────────────────────────
+// Oliver, 11 Aug: "I don't wanna be one of those annoying apps that are like
+// 'wanna save it? Sign up now!'"
+//
+// Every assertion here is about RESTRAINT, which is the hard kind to keep,
+// because each individual loosening looks reasonable on the day somebody wants
+// more signups. The counters and the cooldown are the product decision.
+{
+  const { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge,
+          MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS } = M;
+  const NOW = Date.UTC(2026, 7, 11);
+  const daysAgo = (n) => new Date(NOW - n * 86400000).toISOString();
+
+  // ── THE THRESHOLD ────────────────────────────────────────────────
+  is("one save is not a reason to open an account", shouldOfferAccount({ saveCount: 1, now: NOW }).show, false);
+  ok("and the refusal says why", /Nothing worth an account yet/.test(shouldOfferAccount({ saveCount: 1, now: NOW }).why));
+  is("nothing saved, nothing to offer", shouldOfferAccount({ saveCount: 0, now: NOW }).show, false);
+  is("three is where it becomes worth mentioning", shouldOfferAccount({ saveCount: MIN_SAVES, now: NOW }).show, true);
+  // The one that matters most: somebody signed in is never sold an account.
+  is("a signed-in person is never asked", shouldOfferAccount({ saveCount: 20, signedIn: true, now: NOW }).show, false);
+
+  // ── DISMISS MEANS DISMISS ────────────────────────────────────────
+  const once = noteDismiss(null, NOW);
+  is("a dismissal is counted", once.asks, 1);
+  is("and dated", String(once.lastAt).slice(0, 10), "2026-08-11");
+  is("dismissed today means not today", shouldOfferAccount({ saveCount: 9, state: once, now: NOW }).show, false);
+  is("nor a week later", shouldOfferAccount({ saveCount: 9, state: { asks: 1, lastAt: daysAgo(7) }, now: NOW }).show, false);
+  is("a month later it may ask again", shouldOfferAccount({ saveCount: 9, state: { asks: 1, lastAt: daysAgo(COOLDOWN_DAYS + 1) }, now: NOW }).show, true);
+  // THE HARD STOP. Not a cooldown, an ending.
+  //
+  // LITERAL 2, not MAX_ASKS. The first version of these three lines passed
+  // `asks: MAX_ASKS` and read the constant it was testing, so raising the limit
+  // to 99 moved both sides of the comparison and the assertion stayed green.
+  // The mutation caught it. A test that imports the number it is defending
+  // cannot defend it, and "two nos and it stops" is the product decision, so
+  // two is what the test should say out loud.
+  is("the limit is two, stated here and not imported", MAX_ASKS, 2);
+  is("two nos ends it, cooldown or not", shouldOfferAccount({ saveCount: 40, state: { asks: 2, lastAt: daysAgo(9999) }, now: NOW }).show, false);
+  ok("and it says that is an answer", /That is an answer/.test(shouldOfferAccount({ saveCount: 40, state: { asks: 2, lastAt: daysAgo(9999) }, now: NOW }).why));
+
+  // ── A BROKEN OR ABSENT RECORD MUST NOT SILENCE IT, NOR CRASH ─────
+  // Private mode, a cleared browser, or a half-written value. The safe failure
+  // is asking, not throwing and not going silent forever.
+  is("no record at all is a clean slate", readNudge(null), { asks: 0, lastAt: null });
+  is("unparseable JSON is a clean slate", readNudge("{{{"), { asks: 0, lastAt: null });
+  is("a negative count cannot buy extra asks", readNudge('{"asks":-5}').asks, 0);
+  is("a nonsense date is treated as never", shouldOfferAccount({ saveCount: 5, state: { asks: 1, lastAt: "banana" }, now: NOW }).show, true);
+  is("and a raw JSON string is read the same as an object", readNudge('{"asks":2,"lastAt":null}').asks, 2);
+
+  // ── WHAT IT SAYS ─────────────────────────────────────────────────
+  // The test for the copy: does the sentence still make sense to somebody who
+  // reads it and does nothing? "Sign up to save" fails, because they saved it.
+  const copy = nudgeCopy(4);
+  ok("it states a fact rather than making a demand", /live on this device/.test(copy.headline));
+  ok("it does not claim saving needs an account", !/sign up to save|save it\?/i.test(`${copy.headline} ${copy.detail}`));
+  ok("it says what actually goes wrong", /Clear your browser or pick up your phone/.test(copy.detail));
+  ok("and promises nothing else changes", /Nothing else changes/.test(copy.detail));
+  is("one saved thing reads as one", nudgeCopy(1).headline, "Your 1 saved thing lives on this device");
+
+  // ── THE SECOND NAG, WHICH IS THE ONE THAT SHIPPED ────────────────
+  // profileAskedRef is a useRef, so it guarded one session and nothing else. A
+  // signed-in person with a blank profile met the six-field sheet on every cold
+  // load, forever, under a comment saying that would be nagging.
+  is("no account means nothing to attach answers to", shouldAskProfile({ signedIn: false, now: NOW }).show, false);
+  is("a filled profile is never asked again", shouldAskProfile({ signedIn: true, hasProfile: true, now: NOW }).show, false);
+  is("a blank one is asked once", shouldAskProfile({ signedIn: true, now: NOW }).show, true);
+  is("skipping survives a reload", shouldAskProfile({ signedIn: true, state: { asks: 1, lastAt: daysAgo(1) }, now: NOW }).show, false);
+  is("and two skips end it", shouldAskProfile({ signedIn: true, state: { asks: 2, lastAt: daysAgo(9999) }, now: NOW }).show, false);
+  // Separate counters: answering one ask must not silence the other, or a
+  // person who dismissed the account strip would silently never be asked
+  // anything again after they did sign up.
+  is("the two asks are counted separately",
+     shouldAskProfile({ signedIn: true, state: { asks: 0, lastAt: null }, now: NOW }).show, true);
+
+  // ── WIRED ────────────────────────────────────────────────────────
+  const app7 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // Anchored on the GUARD, because a source-text assertion on the call alone
+  // survives the whole block being switched off.
+  ok("the strip only appears beside something saved",
+     /\{savedGuides\.length > 0 && \(\(\) => \{[\s\S]{0,300}shouldOfferAccount\(\{/.test(app7));
+  ok("it counts places as well as guides", /saveCount: savedPlaces\.length \+ savedGuides\.length/.test(app7));
+  ok("and it is a strip, not a modal", !/shouldOfferAccount[\s\S]{0,400}position: "fixed"/.test(app7));
+  ok("dismissing writes it down", /writeStored\(NUDGE_KEY, next\)/.test(app7));
+  ok("skipping the profile writes it down too", /writeStored\(PROFILE_NUDGE_KEY, noteDismiss/.test(app7));
+  // The ref stays, for the within-session half. The persisted check is the
+  // across-session half that was missing, and the sheet must be behind it.
+  ok("the profile sheet is behind the persisted check", /const verdict = shouldAskProfile\(\{[\s\S]{0,200}if \(verdict\.show\) setProfileOpen\(true\)/.test(app7));
 }
 
 rmSync(dir, { recursive: true, force: true });

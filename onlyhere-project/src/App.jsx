@@ -12,6 +12,7 @@ import { nightlifeTowns } from "./data/nightlifeTowns";
 import { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
 import { fetchProfile, profileForPrompt, isBlank as profileIsBlank } from "./utils/profile";
+import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus } from "./utils/tickets";
@@ -4880,8 +4881,26 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileSetupSql, setProfileSetupSql] = useState(null);
   // Asked once per session at most. Somebody who skipped should not be asked
-  // again every time a token refresh produces a new session object.
+  // again every time a token refresh produces a new session object. The ACROSS
+  // sessions half is the persisted counter, not this ref, which is what was
+  // missing. See utils/accountNudge.js.
   const profileAskedRef = useRef(false);
+
+  // ── THE ONLY TWO PLACES A NUDGE IS REMEMBERED ─────────────────────
+  // Local, deliberately. A dismissal is not worth a network round trip or a
+  // column, and it must survive on the device of somebody who has no account,
+  // which is the entire group being nudged.
+  const readStored = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+  const writeStored = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode: it will ask again, which is the safe failure */ } };
+  // Held as state rather than re-read on every render, so a dismiss re-renders
+  // because the VALUE changed. A bare counter would have worked and would have
+  // been one more thing that exists for a reason nobody can see later.
+  const [nudgeState, setNudgeState] = useState(() => { try { return localStorage.getItem(NUDGE_KEY); } catch { return null; } });
+  const dismissNudge = () => {
+    const next = noteDismiss(nudgeState);
+    writeStored(NUDGE_KEY, next);
+    setNudgeState(JSON.stringify(next));
+  };
   const [accountBusy, setAccountBusy] = useState(false);
   const syncedOnceRef = useRef(false);
 
@@ -4979,8 +4998,16 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   //
   // Deliberately keyed on userSession rather than called from handleSignedIn:
   // handleSignedIn is never reached on the Google path at all.
+  // ── ONE-TIME RESCUE, THEN THIS GOES AWAY ────────────────────────────
+  // The pending slot itself is gone (see saveCurrentGuide). This stays only for
+  // the people who pressed Save under the old gate, met the sheet, and closed
+  // it: their trip is sitting in that key right now and nothing else will ever
+  // read it. It is claimed on ANY load rather than on a session, because they
+  // are the ones who did not make an account.
+  //
+  // Deletable once the live site has turned over, roughly a month. Kept short
+  // and dated rather than left as permanent machinery nobody can date.
   useEffect(() => {
-    if (!userSession) return;
     let pending = null;
     try {
       const raw = localStorage.getItem("gemlyx_pending_guide_save");
@@ -4988,18 +5015,13 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     } catch { /* unparseable is the same as absent */ }
     if (!pending?.title || !Array.isArray(pending.days)) return;
     try { localStorage.removeItem("gemlyx_pending_guide_save"); } catch { /* ignore */ }
-    // Not commitGuideSave: that reads savedGuides from this closure, and on the
-    // Google path the cloud merge is landing at the same moment. The functional
-    // update is the only form that cannot drop whichever arrives second.
     setSavedGuides(prev => {
       if (prev.some(g => g.title === pending.title && g.savedAt === pending.savedAt)) return prev;
       const updated = [pending, ...prev].slice(0, 20);
       try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
       return updated;
     });
-    setToast("📖 Saved to your account");
-    setTimeout(() => setToast(null), 2600);
-  }, [userSession]);
+  }, []);
 
   // ── ASK ONCE, AFTER THE ACCOUNT EXISTS ──────────────────────────────
   // Keyed on userSession for the same reason the pending-save claim is: on the
@@ -5010,6 +5032,16 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // is not asked again in this session. Both matter because a refreshed token
   // produces a new session object, and an "optional" step that reappears on
   // every refresh is not optional, it is nagging.
+  //
+  // ── AND IT REAPPEARED ON EVERY REFRESH ────────────────────────────
+  // profileAskedRef is a useRef. A ref lives as long as the tab, so the guard
+  // above stopped it firing twice in one session and did nothing at all across
+  // cold loads. Somebody signed in who had not filled the profile in met a
+  // six-field sheet EVERY TIME they opened the site, forever. The comment
+  // directly above named the failure and the implementation was it.
+  //
+  // The skip is persisted now, with the same rules as the account nudge: a
+  // month's cooldown, and two skips ends it for good. utils/accountNudge.js.
   useEffect(() => {
     if (!userSession || profileAskedRef.current) return;
     profileAskedRef.current = true;
@@ -5021,7 +5053,11 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       if (res?.missingColumn) { setProfileSetupSql("alter table gemlyx_user_data add column if not exists profile jsonb;"); return; }
       if (!res) return;                       // network failure: ask another day
       if (res.profile && !profileIsBlank(res.profile)) { setUserProfile(res.profile); return; }
-      setProfileOpen(true);
+      const verdict = shouldAskProfile({
+        signedIn: true, hasProfile: false,
+        state: readStored(PROFILE_NUDGE_KEY),
+      });
+      if (verdict.show) setProfileOpen(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userSession]);
@@ -6221,30 +6257,56 @@ If the conversation only covers a single day or a few stops with no explicit day
   // updated on future events that can be good for the trip or get help along
   // the way. That's for paying users."
   //
-  // So the guide itself is free and ungated, and the ask happens once, at the
-  // one moment the person has something they want to keep.
+  // ── AND THAT IS THE PART THAT WAS WRONG, 11 AUG ──────────────────
+  // "You should also be able to sign up casually. I don't wanna be one of those
+  // annoying apps that are like 'wanna save it? Sign up now!'"
   //
-  // THE GUIDE IS WRITTEN DOWN BEFORE THE SHEET OPENS, and that is the whole
-  // reason this is more than three lines. Google sign-in is a FULL PAGE
-  // REDIRECT (see startGoogleSignIn in utils/auth.js): the browser leaves
-  // gemlyxtravel.com entirely and comes back on a fresh load, so guideModal,
-  // and every other piece of React state holding this trip, is gone. Asking
-  // someone to sign in to save a guide and then losing that guide in the act of
-  // signing in is the worst possible version of this feature, and it is exactly
-  // what a naive "open the sheet, save on success" would do.
+  // What this used to do: stash the guide in a PENDING localStorage slot, open
+  // the auth sheet over it, and RETURN WITHOUT SAVING. A modal on top of the
+  // thing they just made, at the moment they reached for it, with the save held
+  // back until they complied.
   //
-  // Instead the trip goes into localStorage as a pending save FIRST, survives
-  // the round trip, and is claimed on the way back in.
-  const PENDING_SAVE_KEY = "gemlyx_pending_guide_save";
+  // The heart on a place has never worked that way. It writes to local storage
+  // and says nothing. And that is the rule userSaves.js declares in its own
+  // header: "LOCAL STORAGE IS NOT REPLACED, it stays as the offline cache and
+  // THE STORE FOR SIGNED-OUT USERS. The account is a sync layer on top." This
+  // was the one place in the app that broke it.
+  //
+  // THE GATE WAS ALSO WHERE THE DATA LOSS CAME FROM. Because the guide could
+  // not be saved normally it needed a pending slot, claimed by a second effect
+  // keyed on the session, which raced the cloud merge keyed on the same thing.
+  // The long comment above mergeSaves describes the outcome: the guide vanished
+  // and "the trip was destroyed on every device the account touches". Both
+  // fixes for that were right and neither was the cause. The cause was a save
+  // that was not allowed to just be a save.
+  //
+  // So it just saves. One path, the same one the heart uses, signed in or not.
+  // The Google full-page-redirect problem that the pending slot existed to
+  // survive cannot arise, because nothing redirects: nobody is being sent
+  // anywhere. When they do sign in later, the cloud merge re-reads localStorage
+  // and carries the guide up with everything else, which is what it was always
+  // for. See utils/accountNudge.js for when an account gets mentioned instead.
   const guideToSave = () => ({
     id: Date.now(), title: guideModal.title, days: guideModal.days,
     savedAt: new Date().toISOString(), arrivalDate: guideModal._arrivalDate || null,
   });
   const commitGuideSave = (newGuide) => {
-    const updated = [newGuide, ...savedGuides].slice(0, 20);
-    setSavedGuides(updated);
-    try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
-    setToast("📖 Guide saved — weather included for each day");
+    // Functional, not a read of `savedGuides` from this closure. The old version
+    // read the closure copy, which is exactly how the pending-save claim and the
+    // cloud merge managed to drop each other's writes. One save path now, so it
+    // should be the safe form of the write rather than the convenient one.
+    let after = [];
+    setSavedGuides(prev => {
+      after = [newGuide, ...prev].slice(0, 20);
+      try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(after)); } catch { /* ignore */ }
+      return after;
+    });
+    // The toast says what actually happened. "Guide saved" was true either way
+    // and told a signed-out person nothing about where it went, which is the one
+    // thing worth knowing when it lives on one device.
+    setToast(userSession
+      ? "📖 Guide saved to your account"
+      : "📖 Saved on this device");
     setTimeout(() => setToast(null), 2200);
   };
   const saveCurrentGuide = () => {
@@ -6255,14 +6317,8 @@ If the conversation only covers a single day or a few stops with no explicit day
       setTimeout(() => setToast(null), 2600);
       return;
     }
-    const newGuide = guideToSave();
-    if (!userSession) {
-      try { localStorage.setItem(PENDING_SAVE_KEY, JSON.stringify(newGuide)); } catch { /* private mode: the sheet still works, the claim just will not fire */ }
-      setAuthReason("guide");
-      setAuthOpen(true);
-      return;
-    }
-    commitGuideSave(newGuide);
+    // No branch on the session. That IS the change.
+    commitGuideSave(guideToSave());
   };
 
   const deleteSavedGuide = (id) => {
@@ -9713,6 +9769,52 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </button>
               </div>
 
+              {/* ── THE ACCOUNT OFFER, WHERE THE LOSS IS VISIBLE ────
+                  Not a modal, not over anything, and not at the moment of
+                  saving. It sits above the list of saved things, on a screen
+                  the person chose to open, and it states a fact rather than
+                  making a demand: these are on this device. Somebody who reads
+                  it and does nothing has still understood something true.
+
+                  Every rule about WHEN is in utils/accountNudge.js and none of
+                  it is in this file, because a rule buried in JSX can only be
+                  tested by asserting on source text.
+
+                  The one condition that IS here, because it is about this
+                  screen rather than about fairness: at least one saved guide has
+                  to be on the page. Home lists guides and not hearted places, so
+                  without this a person with four hearted places would read "your
+                  four saved things live on this device" above an empty gap.
+                  Places still count toward the number, because the sentence is
+                  about what is at risk and they are at risk too. */}
+              {savedGuides.length > 0 && (() => {
+                const verdict = shouldOfferAccount({
+                  saveCount: savedPlaces.length + savedGuides.length,
+                  signedIn: !!userSession,
+                  state: nudgeState,
+                });
+                if (!verdict.show) return null;
+                const copy = nudgeCopy(savedPlaces.length + savedGuides.length);
+                return (
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 18 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 4 }}>{copy.headline}</div>
+                    <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6, marginBottom: 12 }}>{copy.detail}</div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button onClick={() => { setAuthReason(null); setAuthMode("up"); setAuthOpen(true); }}
+                        style={{ background: C.gold, border: "none", color: "#12100B", borderRadius: 100, padding: "8px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        {copy.accept}
+                      </button>
+                      {/* Dismiss is a real button with a real consequence, not an
+                          × that reopens tomorrow. Two of these and it ends. */}
+                      <button onClick={dismissNudge}
+                        style={{ background: "none", border: "none", color: C.muted, fontSize: 12.5, cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: "8px 4px" }}>
+                        {copy.decline}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {savedGuides.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Guides</div>
@@ -12159,12 +12261,23 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       <AuthSheet open={authOpen && !userSession} onSignedIn={handleSignedIn}
         onClose={() => {
           setAuthOpen(false); setAuthReason(null);
-          try { localStorage.removeItem("gemlyx_pending_guide_save"); } catch { /* ignore */ }
+          // The "declining is not deferring" cleanup that used to live here is
+          // gone with the gate. Nothing writes a pending save any more, and the
+          // one-time rescue on mount has already emptied the key before this
+          // handler can ever run, so this was clearing something that could not
+          // be there. Dead machinery is what this codebase keeps getting caught
+          // by, so it goes rather than staying as a harmless-looking line.
         }}
         reason={authReason} initialMode={authMode}
         localSaveCount={savedPlaces.length + savedGuides.length} />
       <ProfileSheet open={profileOpen && !!userSession} session={userSession} initial={userProfile}
-        onDone={(saved) => { setProfileOpen(false); if (saved) setUserProfile(saved); }}
+        onDone={(saved) => {
+          setProfileOpen(false);
+          if (saved) { setUserProfile(saved); return; }
+          // Closed without saving. Written down, because the whole point is that
+          // a skip survives a reload. A ref did not.
+          writeStored(PROFILE_NUDGE_KEY, noteDismiss(readStored(PROFILE_NUDGE_KEY)));
+        }}
         onNeedsSetup={(sql) => { setProfileOpen(false); setProfileSetupSql(sql); }} />
 
       {authOpen && userSession && (
