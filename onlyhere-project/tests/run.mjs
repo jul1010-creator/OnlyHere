@@ -76,7 +76,7 @@ writeFileSync(entry, `
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
-  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
@@ -7119,7 +7119,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 {
   const { TICKET_STATUS, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent,
           nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText,
-          SAME_EDITION_DAYS, bookingActions } = M;
+          SAME_EDITION_DAYS, bookingActions, isAncillaryListing } = M;
 
   // ── THE VOCABULARY THAT WAS WRITTEN DOWN THREE TIMES ─────────────
   // studioPrompts asked for free/on_sale/limited/sold_out, the badges rendered
@@ -7182,6 +7182,41 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const nextYear = matchEvent(onFile, [raw({ name: "Roskilde Festival 2027", dates: { status: { code: "offsale" }, start: { localDate: "2027-06-26" } } })]);
   is("a different edition is never strong", nextYear.confidence, "weak");
   is("a wrong festival is no match at all", matchEvent(onFile, [raw({ name: "Aarhus Festuge" })]).confidence, "none");
+
+  // ── THE SHUTTLE BUS ────────────────────────────────────────────
+  // Straight out of Oliver's first working probe, 12 Aug. Two of the five
+  // Danish events Ticketmaster returned were these:
+  //   "Wonderfestiwall 2026 - Natbus, natten til fredag"
+  //   "Wonderfestiwall 2026 - Shuttlebus"
+  // Same name, same town, same days. Every carrying word of "Wonderfestiwall"
+  // is present and the date is inside the tolerance, so the matcher rated a
+  // COACH as a strong match for the festival and would have written the bus's
+  // sale status onto it, stamped ticketmaster and ticked as measured.
+  const bus = (n) => raw({ id: n, name: n, dates: { status: { code: "offsale" }, start: { localDate: "2026-06-27" } } });
+  const onlyBuses = matchEvent(onFile, [bus("Roskilde Festival 2026 - Shuttlebus"), bus("Roskilde Festival 2026 - Natbus")]);
+  is("a shuttle bus is never the festival", onlyBuses.confidence, "none");
+  ok("and it says what it found instead", /travel or add-on tickets rather than admission/.test(onlyBuses.why));
+  // Refused BEFORE ranking, not merely ranked lower. Ranking would hand back
+  // the bus whenever the bus is the only listing there is, which is exactly
+  // the case above.
+  is("nothing is read from it", onlyBuses.event, null);
+  // The real listing still wins when both exist.
+  const mixed = matchEvent(onFile, [bus("Roskilde Festival 2026 - Shuttlebus"), raw()]);
+  is("the admission ticket is still found beside the bus", mixed.confidence, "strong");
+  is("and it is the festival, not the coach", mixed.event.name, "Roskilde Festival 2026");
+
+  // Every add-on word on its own line, or the list can quietly shrink. Same
+  // lesson as the fact-check phrases: a detector exercised only through a case
+  // that does not need it is not covered.
+  ["Shuttlebus", "Natbus", "Bus", "Parkering", "Camping", "Garderobe", "VIP-tillæg", "Merchandise", "Transport", "Billetforsikring"]
+    .forEach(w => ok(`"${w}" beside a name is an add-on, not the event`, isAncillaryListing("Roskilde Festival", `Roskilde Festival 2026 - ${w}`)));
+
+  // THE HALF THAT KEEPS IT SAFE. The word is only disqualifying when it is
+  // NOT part of the event's own name, or a festival called Bus Stop could
+  // never match itself.
+  is("a festival with the word in its own name still matches", isAncillaryListing("Bus Stop Festival", "Bus Stop Festival 2026"), false);
+  is("and a plain edition suffix is not an add-on", isAncillaryListing("Roskilde Festival", "Roskilde Festival 2026"), false);
+  is("nor a ticket type", isAncillaryListing("Roskilde Festival", "Roskilde Festival 2026 - 7 Day Ticket"), false);
   is("and an empty search is no match", matchEvent(onFile, []).confidence, "none");
   // A name match with nothing to confirm the edition against is real and is
   // still not allowed to write anything.
@@ -7310,6 +7345,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Their FAQ and their API reference give different rate limits. Same rule as
   // a ferry operator contradicting itself: take the lower, say the other exists.
   ok("the conflicting rate limits are both recorded", /TWO of their own pages disagree/.test(fn));
+  // A Vercel variable is scoped per environment, so a value edited under
+  // Preview leaves Production holding the old one and the symptom is identical
+  // to not having edited it at all. Two rounds of "I did redeploy" went past
+  // before this was answerable from the response itself.
+  ok("the response says which environment read the value", /environment: process\.env\.VERCEL_ENV/.test(fn));
+  ok("and which build it came from", /VERCEL_GIT_COMMIT_SHA/.test(fn));
   // Both figures present, and the conservative one actually chosen. The first
   // version asserted only that the disagreement was mentioned, and a mutation
   // that kept that sentence while picking the higher number sailed through it.

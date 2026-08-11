@@ -236,6 +236,46 @@ export const statusFromCode = (code) => {
 
 const STOPWORDS = new Set(["the", "festival", "festivalen", "de", "den", "det", "og", "and", "i", "in", "of", "a"]);
 
+// ── THE THING SOLD ALONGSIDE THE EVENT IS NOT THE EVENT ─────────────
+//
+// Found in Oliver's own probe output, 12 Aug 2026, the first time the key
+// worked. Five Danish events came back and TWO of them were this:
+//
+//   "Wonderfestiwall 2026 - Natbus, natten til fredag"   Allinge, 13 Aug
+//   "Wonderfestiwall 2026 - Shuttlebus"                  Allinge, 13 Aug
+//
+// Bus tickets. Same name, same town, same days as the festival, and the
+// matcher would have taken either one: the on-file name is "Wonderfestiwall",
+// every carrying word of it is present, and the date is inside the tolerance.
+// A STRONG match, on a coach.
+//
+// What that writes onto the festival is the sale status of a night bus. Sold
+// out buses on a festival with tickets left reads as SOLD OUT, which is the
+// exact direction that talks somebody out of a trip, and it would have been
+// stamped ticketmaster and shown with a tick as measured.
+//
+// These words never appear in a Danish festival's own name and always appear
+// in the add-on sold beside it. Anything matching is refused as the event
+// itself rather than merely ranked lower, because "the only listing I found is
+// a shuttle bus" and "there is no listing" are both correctly no-match, and
+// ranking would have picked the bus whenever it was the only thing there.
+// Matched against ONE TOKEN at a time, which is why every entry here is a
+// single word. The first version carried "vip[-\s]?tillæg" and could never
+// fire: nameTokens folds æ to ae and splits on the hyphen, so what actually
+// arrives is "vip" and then "tillaeg". A pattern written for the raw string and
+// applied to the tokenised one is a rule that reads correctly and never runs.
+const ANCILLARY = /^(?:shuttlebus|natbus|bus|busser|transport|parkering|parking|camping|campingvogn|garderobe|cloakroom|merch|merchandise|tillaeg|opgradering|upgrade|afhentning|billetforsikring|insurance)$/i;
+
+// True when a Ticketmaster listing is a product sold FOR an event rather than
+// admission TO it. Checked against the part of the name the on-file name does
+// not account for, so a festival genuinely called something with "bus" in it
+// cannot rule itself out.
+export const isAncillaryListing = (onFileName, candidateName) => {
+  const own = new Set(nameTokens(onFileName));
+  const extra = nameTokens(candidateName).filter(w => !own.has(w));
+  return extra.some(w => ANCILLARY.test(w));
+};
+
 // The words that carry the identity. "Roskilde Festival 2026" and "Roskilde
 // Festival, 7 Day Ticket" both reduce to {roskilde}, which is correct: the
 // distinguishing word in a Danish festival name is nearly always the place.
@@ -274,9 +314,20 @@ export const matchEvent = (onFile, candidates) => {
   const list = (Array.isArray(candidates) ? candidates : []).map(readTicketmasterEvent).filter(Boolean);
   if (!list.length) return { event: null, confidence: "none", why: "Ticketmaster returned no events for this search." };
 
+  // Refused before ranking, not after: see isAncillaryListing. When the shuttle
+  // bus is the ONLY listing carrying the name, the honest answer is that the
+  // event was not found, and ranking would have handed back the bus.
+  const buses = list.filter(e => isAncillaryListing(onFile?.name, e.name));
   const named = list
+    .filter(e => !buses.includes(e))
     .map(e => ({ e, overlap: nameOverlap(onFile?.name, e.name) }))
     .filter(x => x.overlap >= MIN_NAME_OVERLAP);
+  if (!named.length && buses.length) {
+    return {
+      event: null, confidence: "none",
+      why: `Ticketmaster has ${buses.length} listing${buses.length === 1 ? "" : "s"} under this name and ${buses.length === 1 ? "it is" : "they are"} travel or add-on tickets rather than admission (${buses.slice(0, 2).map(e => e.name).join(", ")}). The status of a shuttle bus is not the status of the festival, so nothing was read from ${buses.length === 1 ? "it" : "them"}.`,
+    };
+  }
   if (!named.length) {
     return {
       event: null, confidence: "none",
