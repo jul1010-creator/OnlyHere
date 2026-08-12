@@ -342,7 +342,18 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
         // "Pipeline test" describing a traveler who does not exist. Stripped
         // here rather than only hidden at render, because the render guard
         // cannot help a payload that is already in the database.
-        body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, ...rest }) => rest)(guide) }),
+        //
+        // ── AND _planProblems, FOR THE SAME REASON ────────────────────
+        // Added 12 Aug 2026. The guide's logistics gates write their findings
+        // into planProblems, and those are notes to HIM in the pipeline's own
+        // voice: "This suggests a bus for the last leg, and the last leg was
+        // MEASURED at 8 minutes on foot from Ribe Station." Nothing renders
+        // them, so this is not a display leak, but they were being written into
+        // the saved payload of every shared guide and sent to every browser
+        // that opens the link. The same night's Studio fix moved the identical
+        // findings out of `uncertainties` for the identical reason; this is the
+        // other half of it, on the pipeline he cares about most.
+        body: JSON.stringify({ id, payload: (({ _testProfile, _testPlan, _planProblems, ...rest }) => rest)(guide) }),
       });
       if (!res.ok) { setSaveError("Couldn't save this guide — try again."); setSaving(false); return; }
       // Also bookmark it into the same "gemlyx_saved_guides" localStorage list

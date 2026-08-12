@@ -21,7 +21,7 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stripNonCode, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration } from "./tdz.mjs";
+import { stripNonCode, functionBody, useBeforeDeclare, namedFunctions, hookDepsBeforeDeclaration, readOutOfScope } from "./tdz.mjs";
 
 let passed = 0, failed = 0;
 const fails = [];
@@ -2209,6 +2209,32 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   }
   ok(`swept ${swept} functions in App.jsx for temporal dead zones`, swept >= 20);
   is("nothing reads a const before it is declared", bad, []);
+
+  // ── AND THE OTHER HALF: DECLARED FIRST, BUT OUT OF SCOPE ─────────
+  //
+  // Oliver's run log, 12 Aug 2026: "7. Nearest arrival point [google · FAILED]
+  // ... why: draftTown is not defined". A ReferenceError on every festival
+  // draft, from a `const draftTown` declared inside a bare block a hundred and
+  // forty lines long and read two hundred lines past its closing brace.
+  //
+  // useBeforeDeclare could never have caught it, and that is the point of
+  // adding a second scanner rather than widening the first: the declaration
+  // comes FIRST, which is all that one looks at. The failure is SCOPE, not
+  // ORDER, and in a diff the two look identical.
+  //
+  // The component is included here, unlike above, because the component is
+  // exactly where it happened.
+  const scopeBad = [];
+  for (const [nm, decl] of fns) {
+    const body = functionBody(stripped, decl);
+    if (!body || body.length < 1200) continue;
+    readOutOfScope(body).forEach(f => scopeBad.push(
+      `${nm}(): reads ${f.name} on line ${f.readLine}, but its block closed on line ${f.blockClosesLine}`));
+  }
+  readOutOfScope(component).forEach(f => scopeBad.push(
+    `GemlyxApp(): reads ${f.name} on line ${f.readLine}, but its block closed on line ${f.blockClosesLine}`));
+  is("nothing reads a const after its block has closed", scopeBad, []);
+
   // generateGuide by name, because it is where the 8 Aug crash was and a
   // discovery regression must not quietly drop it.
   ok("generateGuide is among them", fns.some(([nm]) => nm === "generateGuide") && (functionBody(stripped, "const generateGuide = ") || "").length > 20000);
@@ -2226,6 +2252,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // was every false positive left after the parameter rule.
   const keys = `const f = async () => {\n  setState({ fixed: 0, failed: [] });\n  const fixed = 1; const failed = [];\n  return fixed;\n};`;
   is("a property key is not a read", useBeforeDeclare(bodyOf(keys, "const f = ")), []);
+
+  // ── AND THE SECOND SCANNER, AGAINST THE SHAPE IT EXISTS FOR ──────
+  // Placed here rather than beside its sweep above, because the first version
+  // of these three lines read `bodyOf` forty lines before it is declared and
+  // died with "Cannot access 'bodyOf' before initialization". A temporal dead
+  // zone, in the tests for the temporal dead zone checker.
+  const scoped = `const f = async () => {\n  {\n    const draftTown = "Ribe";\n    use(draftTown);\n  }\n  return geocode(draftTown);\n};`;
+  is("it catches a read past a closing brace",
+     readOutOfScope(bodyOf(scoped, "const f = ")).map(x => x.name), ["draftTown"]);
+  const hoisted = `const f = async () => {\n  let draftTown = "";\n  {\n    draftTown = "Ribe";\n  }\n  return geocode(draftTown);\n};`;
+  is("and passes the hoisted version", readOutOfScope(bodyOf(hoisted, "const f = ")), []);
+  // Shadowing is not modelled, so a name declared twice is SKIPPED rather than
+  // guessed at. A checker that guesses gets switched off.
+  const shadowed = `const f = async () => {\n  {\n    const x = 1;\n    use(x);\n  }\n  const x = 2;\n  return x;\n};`;
+  is("a name declared twice is left alone", readOutOfScope(bodyOf(shadowed, "const f = ")), []);
   // THE STRIPPER IS WHAT IS BEING TESTED HERE, so this fixture has to have a
   // real read INSIDE an interpolation and prose OUTSIDE it. The earlier version
   // asserted [] and passed against a stripper that blanked ${...} too — which
@@ -4196,7 +4237,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // partOf: "" and part: "". The Studio exists to make first drafts, and the
   // first draft of a place was the one handed no context at all.
   ok("a first draft falls back past the row it does not have",
-     /const draftTown = known\?\.town \|\| known\?\.city \|\| known\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| "";/.test(app5));
+     /draftTown = known\?\.town \|\| known\?\.city \|\| known\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| "";/.test(app5));
+  // ── AND IT IS DECLARED WHERE THE GEOCODER CAN SEE IT ─────────────
+  // It was `const draftTown` INSIDE the founder-source block, which closes
+  // about two hundred lines before the geocode fallback that reads it. Oliver's
+  // run log, 12 Aug: "Nearest arrival point [google · FAILED] ... why:
+  // draftTown is not defined." A ReferenceError on every festival draft.
+  ok("declared at the function's level, not inside the source block",
+     /^      let draftTown = "";$/m.test(app5));
+  ok("and the geocode fallback that reads it is still there",
+     /coords = await geocodePlace\(`\$\{name\}, \$\{draftTown\}`\);/.test(app5));
   ok("and that is what the scoping is given", /town: draftTown,/.test(app5));
   // THE ORDER MATTERS AND SO DOES THE OMISSION. Free research text must never
   // name the town: a realistic Odense snippet says "1 hour 15 from Copenhagen
@@ -4612,8 +4662,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the gate runs inside gateDraft, so the correction pass is checked too",
      codeJ.indexOf("const tp = transitProblems(readerText(t)") > codeJ.indexOf("const gateDraft = (pass) =>") &&
      codeJ.indexOf("const tp = transitProblems(readerText(t)") < codeJ.indexOf('gateDraft("first")'));
-  ok("a problem goes to uncertainties rather than rewriting the prose",
-     /for \(const line of tp\) \{[\s\S]{0,200}t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\)\.filter\(u => u !== line\), line\];/.test(codeJ));
+  ok("a problem goes to a founder note rather than rewriting the prose",
+     /for \(const line of tp\) \{\s*noteToFounder\(line\);/.test(codeJ));
   ok("and the run log records the comparison either way",
      /note\(`The journey, against what was measured\$\{suffix\}`/.test(app6));
 
@@ -9165,8 +9215,8 @@ rmSync(dir, { recursive: true, force: true });
   }
   // Deduplicated, because the gate now runs twice and the same sentence added
   // twice reads as two separate problems with the draft.
-  ok("an untraced price goes to uncertainties, not into the prose",
-     /t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\)\.filter\(u => u !== line\), line\]/.test(stripNonCode(app)));
+  ok("an untraced price goes to a founder note, not into the prose",
+     /const line = describePriceTrace\(pt\);\s*noteToFounder\(line\);/.test(stripNonCode(app)));
   ok("and the run log records the comparison either way", /note\(`Prices against the official site\$\{suffix\}`/.test(app));
 }
 
@@ -9229,8 +9279,8 @@ rmSync(dir, { recursive: true, force: true });
      codeG.indexOf("const gp = [") > codeG.indexOf("const gateDraft = (pass) =>") &&
      codeG.indexOf("const gp = [") < codeG.indexOf('gateDraft("first")'));
   ok("and is journalled either way", /note\(`Glance fields\$\{suffix\}`/.test(appG));
-  ok("a leak goes to uncertainties rather than being rewritten",
-     /for \(const line of gp\) \{[\s\S]{0,200}t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\)\.filter\(u => u !== line\), line\];/.test(codeG));
+  ok("a leak goes to a founder note rather than being rewritten",
+     /for \(const line of gp\) \{\s*noteToFounder\(line\);/.test(codeG));
   // ── AND THE INSTRUCTION THAT CAUSED IT IS GONE ───────────────────
   ok("the writer is no longer told to attribute inside a field",
      !/it must be attributed as a listing rather than written as the organiser's own word/.test(appG));
@@ -9267,6 +9317,33 @@ rmSync(dir, { recursive: true, force: true });
 
   // All three field gates feed one list, so a leak of any kind lands in
   // uncertainties by the same route and is deduplicated by the same filter.
+  // ── A NOTE TO HIM IS NOT AN OPEN QUESTION FOR A TRAVELLER ───────
+  //
+  // uncertainties is PUBLISHED. shapeForLive carries it to the live entry and
+  // HowWeKnow.jsx renders it to readers, and the only thing that has ever held
+  // anything back is PUBLISHER_NOTE, a closed list of four shouted prefixes.
+  // Not one gate finding written on 12 Aug matched it, so a reader of the live
+  // guide was going to be shown "the last leg was MEASURED at 8 minutes on
+  // foot" and "ticketInfo credits a source, so it was cut back to the fact".
+  //
+  // __notes rather than a fifth prefix, because shapeForLive is an ALLOW-LIST:
+  // a __ field it does not name cannot reach a reader by accident, and a prefix
+  // rule can be defeated by rewording a message.
+  // Anchored on the guard as well as the write, because a mutation inverting
+  // `if (!line) return` to `if (line) return` drops every finding silently and
+  // a looser pattern stayed green through it.
+  ok("gate findings go to a founder-only field",
+     /const noteToFounder = \(line\) => \{\s*if \(!line\) return;\s*t\.__notes = \[\.\.\.\(t\.__notes \|\| \[\]\)\.filter\(u => u !== line\), line\];/.test(codeG));
+  is("and no gate writes to uncertainties any more",
+     (codeG.match(/t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\)/g) || []).length, 1);
+  ok("the one that remains is the coordinate note PUBLISHER_NOTE already catches",
+     /t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\), "Coordinates could not be verified/.test(codeG));
+  ok("and shapeForLive cannot carry __notes, because it names what it carries",
+     !/__notes/.test(readFileSync(join(root, "src/utils/studioContent.js"), "utf8")));
+  ok("while the Studio panel still shows them to him",
+     /studioDraft\.__notes\.map/.test(appG));
+  ok("labelled as not for a reader", /never shown to a reader/.test(appG));
+
   ok("all three field gates run together",
      /const gp = \[\s*\.\.\.repairGlance\(t\),\s*\.\.\.curatedFindProblems\(t\),\s*\.\.\.lastLegProblems\(/.test(codeG));
   ok("the writer is told an errand is not a find", /NEVER IN gemlyxFind/.test(appG));
@@ -9795,11 +9872,82 @@ rmSync(dir, { recursive: true, force: true });
      /const orderBlock = sourceOrderBlock\(rankedSources\);/.test(codeR));
   ok("using the hosts this run judged official rather than a guess",
      /officialHosts: \[\.\.\.officialHosts, \.\.\.\(placesWebsite \? \[domainOf\(placesWebsite\)\] : \[\]\)\]/.test(codeR));
-  ok("and an operator page is what puts a host on that list",
-     /scrapedSiteText \+= ` \$\{scanData\.text\}`;\s*if \(!officialHosts\.includes\(domainOf\(url\)\)\) officialHosts\.push/.test(codeR));
+  // ── AND "OFFICIAL" MEANS THE HOST, NOT THE HEADLINE ──────────────
+  // Oliver's run log step 16 ranked vindrosen-huset.dk as (official). That is
+  // a volunteer centre in Esbjerg that REPUBLISHED the 2022 press release; its
+  // URL slug is the 2022 headline word for word. It outranked oplev.esbjerg.dk,
+  // the actual organiser. It qualified because any scraped non-listing page was
+  // pushed, and a page reaches the scrape queue by merely MENTIONING the place.
+  ok("only a host that names the place, or Google's own registered site, is official",
+     /if \(hostNames\(url\) \|\| \(placesWebsite && domainOf\(url\) === domainOf\(placesWebsite\)\)\) \{\s*if \(!officialHosts\.includes\(domainOf\(url\)\)\) officialHosts\.push/.test(codeR));
+  ok("so a page that merely mentions it cannot become the operator",
+     !/scrapedSiteText \+= ` \$\{scanData\.text\}`;\s*if \(!officialHosts\.includes/.test(codeR));
   ok("the order goes in front of the research, not after it",
      /const rawResearch = \(orderBlock \? `\$\{orderBlock\}/.test(codeR));
   ok("and the run log records what outranked what", /note\("Source order"/.test(appR));
+
+  // ── AND NOTHING FOR HIM GOES INTO A SAVED GUIDE ──────────────────
+  //
+  // The save path stripped _testProfile and _testPlan, with a comment
+  // explaining exactly why: they are for him, and a shared link would show a
+  // stranger a box describing a traveller who does not exist. NOTHING TESTED
+  // THAT, so the guard was one careless edit from vanishing.
+  //
+  // _planProblems joins them, added 12 Aug 2026. The guide's logistics gates
+  // write findings in the pipeline's own voice ("the last leg was MEASURED at 8
+  // minutes on foot"), nothing renders them, and they were going into the saved
+  // payload of every shared guide and down the wire to every browser that opens
+  // the link. The same night's Studio fix moved identical findings out of
+  // `uncertainties`; this is the other half, on the live guide.
+  const gp2 = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const strip = gp2.match(/payload: \(\(\{([^}]*)\}\) => rest\)\(guide\)/);
+  ok("the save path strips a named list", !!strip);
+  for (const k of ["_testProfile", "_testPlan", "_planProblems"]) {
+    ok(`${k} never reaches the database`, strip && strip[1].includes(k));
+  }
+  // The render genuinely needs these, so a broader strip would break the guide.
+  for (const k of ["_geo", "_exactDurations"]) {
+    ok(`${k} is kept, because the render reads it`, strip && !strip[1].includes(k));
+    ok(`and it is genuinely read`, new RegExp(`guide[?.]*\\${k}`).test(gp2));
+  }
+
+  // ── EVERY SNIPPET KEEPS THE HOST IT CAME FROM ────────────────────
+  //
+  // Oliver, 12 Aug 2026, after the 2022 "companions get in free" fact returned
+  // for the fourth time: "sometimes it gets certain things right, while getting
+  // others wrong, and reverse."
+  //
+  // The main research pass did `context + " " + results.slice(0,6).map(r =>
+  // r.snippet).join(" ")`. Six snippets, joined by a space, WITH NO HOST AND NO
+  // DATE, and the line immediately below it calls rememberUrlText on the same
+  // results to store url -> snippet. Provenance captured and discarded in the
+  // same breath.
+  //
+  // Three things follow and together they are his whole complaint: the source
+  // hierarchy ranks hosts and then cannot reach inside an unlabelled blob; the
+  // age gate only ever ran on SCRAPED pages, so a snippet from a 2022 press
+  // release never met the six-month rule; and WHICH six snippets come back
+  // varies per run, so both the writer and the invented-claim checker see a
+  // different pile of anonymous sentences every time.
+  ok("the research is built from labelled snippets", /const labelled = \(results, cap = 6\) =>/.test(codeR));
+  ok("each one carries its host", /return host \? `\[\$\{host\}\] \$\{text\}` : text;/.test(codeR));
+  ok("and the anonymous join is gone",
+     !/\.map\(r => r\.snippet \|\| r\.content \|\| ""\)\.filter\(Boolean\)\.slice\(0, 6\)\.join\(" "\)/.test(codeR));
+  // A SYNTHESISED answer has no page behind it and must not read like one.
+  ok("a synthesised answer says it is synthesised",
+     /\[tavily, a synthesised answer with no single page behind it\]/.test(appR));
+  ok("and so does the OpenAI one", /\[openai, a synthesised answer with no single page behind it\]/.test(appR));
+  // Every path that feeds the blob, not just the main one: a labelled main pass
+  // and three unlabelled side doors would be the same bug with better odds.
+  is("every research path into the context is labelled",
+     (codeR.match(/labelled\((?:sData|tData|fData)\.results/g) || []).length, 3);
+  // And the writer is told what the brackets mean, or they are decoration.
+  const psR = readFileSync(join(root, "src/utils/pageScan.js"), "utf8");
+  ok("the order block explains the labels", /EVERY SNIPPET IN THE RESEARCH BELOW CARRIES THE HOST IT CAME FROM/.test(psR));
+  ok("and ranks a synthesised line below every named host",
+     /it ranks below every named host here/.test(psR));
+  ok("with the 2022 case named as the thing it keeps catching",
+     /a press release from 2022 saying companions get in free is not evidence about 2026/.test(psR));
 }
 
 // ── THE EVENT UPDATER HAD CHECKED ZERO EVENTS SINCE 5 AUGUST ────────

@@ -1748,6 +1748,51 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // arriving with each result were discarded. It was made in one place and
       // not the other.
       const urlText = {};
+      // ── EVERY SNIPPET KEEPS THE HOST IT CAME FROM ────────────────
+      //
+      // Oliver, 12 Aug 2026, after the 2022 "companions get in free" fact came
+      // back for the fourth time: "sometimes it gets certain things right,
+      // while getting others wrong, and reverse."
+      //
+      // THIS IS WHY. The main research pass did:
+      //
+      //   context = context + " " + answer + " " + results.slice(0,6)
+      //             .map(r => r.snippet).join(" ")
+      //
+      // Six snippets, joined by a space, WITH NO URL, NO HOST, NO DATE. One
+      // anonymous paragraph. And the line immediately below it calls
+      // rememberUrlText on the same results, which stores url -> snippet. The
+      // provenance is captured and thrown away in the same breath, which is the
+      // fifth time tonight this pipeline has measured something and kept a
+      // fragment.
+      //
+      // Three things follow, and together they are the whole answer to his
+      // question:
+      //
+      // 1. THE SOURCE HIERARCHY CANNOT REACH INSIDE THE BLOB. It ranks hosts,
+      //    and then the text it was meant to rank arrives unlabelled, so a
+      //    sentence from a 2022 press release sits beside one from a current
+      //    listing with identical standing.
+      // 2. THE AGE GATE NEVER SEES MOST OF THE RESEARCH. scrapeTier runs on
+      //    SCRAPED pages. via.ritzau.dk was never scraped, so its 2022
+      //    sentence walked straight past the six-month rule.
+      // 3. IT IS DIFFERENT EVERY RUN. Which six snippets Tavily returns varies,
+      //    so the blob's composition varies, so the writer sees a different
+      //    pile of anonymous sentences each time AND the invented-claim check
+      //    compares the draft against a different pile. Right one run, wrong
+      //    the next, on the same entry. That is his exact complaint.
+      //
+      // The label costs nothing: the host is already in r.url.
+      const labelled = (results, cap = 6) =>
+        (Array.isArray(results) ? results : []).slice(0, cap)
+          .map(r => {
+            const text = String(r?.snippet || r?.content || "").trim();
+            if (!text) return "";
+            const host = r?.url ? domainOf(r.url) : "";
+            return host ? `[${host}] ${text}` : text;
+          })
+          .filter(Boolean)
+          .join("\n");
       const rememberUrlText = (results) => {
         (Array.isArray(results) ? results : []).forEach(r => {
           if (!r?.url) return;
@@ -1834,7 +1879,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           `Web research (Tavily) — "${q}"`
         );
         if (!sData.__ok || sData.error) throw new Error(`Web research failed (Tavily): ${sData.error || `request failed (${sData.__status})`}`);
-        context = (context + " " + (sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 6).join(" ")).trim();
+        context = `${context}\n${sData.answer ? `[tavily, a synthesised answer with no single page behind it] ${sData.answer}\n` : ""}${labelled(sData.results, 6)}`.trim();
         rememberUrlText(sData.results);
         candidateUrls.push(...(sData.results || []).map(r => r.url).filter(Boolean));
         // ── AND WHAT EACH URL SAID IT WAS ABOUT ─────────────────────
@@ -1886,7 +1931,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           if (tRes.ok && !tData.error) {
             const snips = (tData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 5).join(" ");
             if (tData.answer || snips) {
-              context += ` JOURNEY RESEARCH (a search specifically about getting to this place by public transport, so real service names can be used instead of a vague "check locally"): ${tData.answer || ""} ${snips}`
+              context += `\nJOURNEY RESEARCH (a search specifically about getting to this place by public transport, so real service names can be used instead of a vague "check locally"):\n${tData.answer ? `[tavily, synthesised] ${tData.answer}\n` : ""}${labelled(tData.results, 3)}`
                 + ` TREAT THIS AS A LEAD, NOT AS A TIMETABLE. Journey-planner and aggregator pages go out of date, and a wrong route here costs a traveler hours. Use it to NAME the real services (which train line, which bus number, which ferry and operator) only where it is specific and consistent, never to state a departure time or a price. Whatever you write, point the reader at rejseplanen.dk and the ferry operator's own site to check current times.`;
             }
           }
@@ -1922,7 +1967,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // showed up while asking about something else.
             rememberUrlText(oData.results);
             candidateUrls.unshift(...(oData.results || []).map(r => r.url).filter(Boolean));
-            context = (context + " " + (oData.answer || "")).trim();
+            context = `${context}\n[openai, a synthesised answer with no single page behind it] ${oData.answer || ""}`.trim();
           }
         } catch { /* the general research still stands on its own */ }
       }
@@ -1952,6 +1997,28 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // already ran, and nothing here changes what the writer is allowed to say.
       const founderUrls = [];
       const sourceHits = [];
+      // ── DECLARED OUT HERE, AND THAT IS THE BUG THIS FIXES ────────
+      // This was `const draftTown` INSIDE the block below, which spans about a
+      // hundred and forty lines and closes long before the geocoding does. The
+      // geocode fallback added on 12 Aug 2026 reads draftTown, and his run log
+      // says what that cost:
+      //
+      //   7. Nearest arrival point [google · FAILED · discarded]
+      //      got: the location lookup threw, so nothing about this coordinate
+      //           was verified
+      //      why: draftTown is not defined
+      //
+      // A ReferenceError, on every festival draft, from the moment that
+      // fallback shipped. The whole frozen-facts block threw, so frozenGeo and
+      // frozenFactsText were never built from the name-based path, AND the
+      // Google-address recovery threw too because it passes draftTown into
+      // buildFrozenFacts. The writer got no verified location data at all.
+      //
+      // The suite's own use-before-declare check did not catch it because this
+      // is not use-before-declare: the declaration comes FIRST and is simply
+      // out of scope by the time it is read. See the block-scope check added
+      // beside it in tests/tdz.mjs.
+      let draftTown = "";
       {
         // `text` is the research gathered so far. A place-scoped source cannot
         // match an EVENT by name alone (Copenhell is not Copenhagen), and the
@@ -2012,7 +2079,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // Copenhagen source and paid to ask visitcopenhagen.com about Odense.
         // townKeyFor requires the town to stand as its own word, so it cannot
         // do that.
-        const draftTown = known?.town || known?.city || known?.location || hint?.town || townKeyFor(name) || "";
+        draftTown = known?.town || known?.city || known?.location || hint?.town || townKeyFor(name) || "";
         const searches = directSourceSearches(founderSources, sType, {
           name,
           text: context,
@@ -2085,7 +2152,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
               used: !!(fData.answer || snips),
             });
             if (fData.answer || snips) {
-              context += ` SOURCE THE FOUNDER VOUCHES FOR (${domain}), searched directly for this place: ${fData.answer || ""} ${snips}`;
+              context += `\nSOURCE THE FOUNDER VOUCHES FOR (${domain}), searched directly for this place:\n${fData.answer ? `[${domain}, synthesised from that site] ${fData.answer}\n` : ""}${labelled(fData.results, 3)}`;
             }
           } catch {
             // One vouched domain failing is not a reason to lose a draft that
@@ -2871,7 +2938,30 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                 // the hours reconciliation below has the site's own words to read
                 // rather than a blob that also contains Tavily and Perplexity.
                 scrapedSiteText += ` ${scanData.text}`;
-                if (!officialHosts.includes(domainOf(url))) officialHosts.push(domainOf(url));
+                // ── AND "OFFICIAL" MEANS THE HOST, NOT THE HEADLINE ──
+                // Oliver's run log, 12 Aug 2026, step 16:
+                //
+                //   Source order: vindrosen-huset.dk (official) > ...
+                //
+                // vindrosen-huset.dk is a volunteer centre in Esbjerg that
+                // REPUBLISHED the 2022 press release. Its URL slug is
+                // ribelund-festival-er-tilbage-for-fuld-musik, the 2022
+                // headline word for word. It was ranked the operator's own
+                // website and therefore outranked everything, including
+                // oplev.esbjerg.dk, which is the actual organiser.
+                //
+                // It got there because this pushed any scraped page that was
+                // not a listing, and a page reaches the scrape queue by MERELY
+                // MENTIONING THE PLACE (pageNames). So any blog reprinting a
+                // press release became the operator, and on this entry the blog
+                // reprinting a FOUR-YEAR-OLD press release became the operator.
+                //
+                // A host is the operator's when the HOST says so, or when
+                // Google's business listing registered it. A headline is not a
+                // domain.
+                if (hostNames(url) || (placesWebsite && domainOf(url) === domainOf(placesWebsite))) {
+                  if (!officialHosts.includes(domainOf(url))) officialHosts.push(domainOf(url));
+                }
               }
               context += ` ${tier === "old"
                 ? `HISTORY ONLY, NOT CURRENT (${age?.why || era.why}). Anything that CHANGES is off limits here: no price, no date, no opening hour, no phone number, no booking detail, no transport or timetable claim. What the place IS, and what it has been, are fine. Nothing older than ${MAX_FACT_AGE_MONTHS} months may price or time anything in this entry`
@@ -3296,7 +3386,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const isAdvice = /\b(check|likely|probably|see |visit |consult|rejseplanen|google maps|no train|none|unknown|n\/a|varies)\b/i.test(v);
         if (v && (isSentence || isAdvice)) {
           t.nearestStation = "";
-          t.uncertainties = [...(t.uncertainties || []), `The nearest stop could not be named, so that field was left empty rather than filled with advice. The draft had put "${v.slice(0, 70)}" there. Mention how to get there in the prose instead.`];
+          // A note to him, not to a traveller: an empty nearestStation already
+          // tells a reader everything a reader can act on, and "mention how to
+          // get there in the prose instead" is an instruction to a writer.
+          t.__notes = [...(t.__notes || []), `The nearest stop could not be named, so that field was left empty rather than filled with advice. The draft had put "${v.slice(0, 70)}" there. Mention how to get there in the prose instead.`];
         }
       }
 
@@ -3481,6 +3574,30 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // not fix what it already wrote, and CHECKING A DRAFT DOES NOT CHECK
       // WHAT REPLACED IT. So the gates are a function, and the function runs
       // again on whatever comes back from the correction.
+      // ── A NOTE TO HIM IS NOT AN OPEN QUESTION FOR A TRAVELLER ────
+      //
+      // Every gate built on 12 Aug 2026 appended its finding to
+      // `t.uncertainties`. uncertainties is PUBLISHED: shapeForLive carries it
+      // through to the live entry and HowWeKnow.jsx renders it to readers. The
+      // only thing that has ever held anything back is PUBLISHER_NOTE, a closed
+      // list of four shouted prefixes, and not one of these findings matches it.
+      //
+      // So a reader of the live guide was going to be shown sentences like
+      // "This suggests a bus for the last leg, and the last leg was MEASURED at
+      // 8 minutes on foot from Ribe Station" and "ticketInfo credits a source,
+      // so it was cut back to the fact". Oliver, the same night: "I can't
+      // deliver a product that makes mistakes. Especially with the live guide."
+      // I built that leak in one evening while closing others.
+      //
+      // __notes rather than a fifth shouted prefix, because shapeForLive is an
+      // ALLOW-LIST: a __ field it does not name cannot reach a reader by
+      // accident, whereas a prefix rule can be defeated by a reworded message.
+      // The Studio panel renders them separately, so he loses nothing.
+      const noteToFounder = (line) => {
+        if (!line) return;
+        t.__notes = [...(t.__notes || []).filter(u => u !== line), line];
+      };
+
       const gateDraft = (pass) => {
         const again = pass === "again";
         const suffix = again ? ", after the correction" : "";
@@ -3522,7 +3639,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // would otherwise be added twice on a draft the correction did not
           // change, and an uncertainty stated twice reads as two problems.
           const line = describePriceTrace(pt);
-          t.uncertainties = [...(t.uncertainties || []).filter(u => u !== line), line];
+          noteToFounder(line);
         }
 
         // ── AND THE JOURNEY, AGAINST THE ONE THING THAT MEASURED IT ──
@@ -3550,7 +3667,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             used: !!transitParts && !tp.length,
           });
           for (const line of tp) {
-            t.uncertainties = [...(t.uncertainties || []).filter(u => u !== line), line];
+            noteToFounder(line);
           }
         }
 
@@ -3590,7 +3707,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             used: !gp.length,
           });
           for (const line of gp) {
-            t.uncertainties = [...(t.uncertainties || []).filter(u => u !== line), line];
+            noteToFounder(line);
           }
         }
 
@@ -3615,7 +3732,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             used: !ac.length,
           });
           for (const line of ac) {
-            t.uncertainties = [...(t.uncertainties || []).filter(u => u !== line), line];
+            noteToFounder(line);
           }
         }
 
@@ -3640,7 +3757,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           if (again && !dc.confirmed && t.__dateSource?.by === "official-site") {
             const stale = "The operator's own page confirmed an earlier date, and the correction pass changed it. Nothing now confirms the date in this draft. Re-check it before publishing.";
             t.__dateSource = null;
-            t.uncertainties = [...(t.uncertainties || []).filter(u => u !== stale), stale];
+            noteToFounder(stale);
             note("A confirmed date was overwritten", {
               provider: "claude", detail: "the correction pass moved a date the operator had confirmed",
               outcome: "failed", used: false, why: stale,
@@ -10277,6 +10394,25 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }} />
                           <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>Added automatically on Publish — no JSON editing needed. Clear this field and re-publish to remove it later.</div>
                         </div>
+
+                        {/* ── WHAT THE GATES FOUND, AND WHY IT IS NOT ABOVE ──
+                            Every automatic gate writes here rather than into
+                            uncertainties, because uncertainties is PUBLISHED and
+                            rendered to readers by HowWeKnow.jsx. These are notes
+                            to you: what a check measured, what it repaired, what
+                            it refused. A traveller has no use for "the last leg
+                            was MEASURED at 8 minutes on foot" and should never
+                            be shown it. There is no resolve button because there
+                            is nothing to settle: they describe this run, and the
+                            next run recomputes them from scratch. */}
+                        {Array.isArray(studioDraft?.__notes) && studioDraft.__notes.length > 0 && (
+                          <div style={{ background: "#4C8BF512", border: "1px solid #4C8BF544", borderRadius: 10, padding: "11px 13px", marginBottom: 12 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: "#7FB0F7", letterSpacing: 0.5, marginBottom: 6 }}>🔧 WHAT THE AUTOMATIC CHECKS FOUND (for you, never shown to a reader)</div>
+                            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 10.5, color: C.light, lineHeight: 1.7 }}>
+                              {studioDraft.__notes.map((n, i) => <li key={i} style={{ marginBottom: 3 }}>{n}</li>)}
+                            </ul>
+                          </div>
+                        )}
 
                         {Array.isArray(studioDraft?.uncertainties) && studioDraft.uncertainties.length > 0 && (
                           <div style={{ background: "#E23B4E12", border: "1px solid #E23B4E44", borderRadius: 10, padding: "11px 13px", marginBottom: 12 }}>

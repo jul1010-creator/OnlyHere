@@ -349,7 +349,10 @@ ${lines.join("\n")}
 
 WHEN TWO OF THESE DISAGREE, THE HIGHER ONE WINS AND THE LOWER ONE IS NOT MENTIONED. Not in the prose, not in uncertainties, not as "some sources say". A disagreement you can settle by this order is settled, and reporting it anyway hands the reader a decision that was already made for them.
 The order is: the place's own website, then a ticket site or calendar, then an encyclopedia or history page, then a blog. A source from before ${STALE_BEFORE_YEAR} sits below every current source for anything that changes, so an old page may still carry history and may not carry a price, a date, an opening hour or a phone number.
-Only say sources disagree when they are at the SAME level and you cannot separate them by date.`;
+Only say sources disagree when they are at the SAME level and you cannot separate them by date.
+
+EVERY SNIPPET IN THE RESEARCH BELOW CARRIES THE HOST IT CAME FROM, in square brackets at the start of the line, like "[kultunaut.dk] Pris: Entré: 400 kr." Look the host up in the order above before you use the sentence. A line marked [tavily, ...] or [openai, ...] is a SYNTHESISED answer with no single page behind it: it ranks below every named host here, and it may not be the only thing supporting a price, a date or a policy.
+A LINE WHOSE HOST IS MARKED OLD ABOVE MAY NOT PRICE OR TIME ANYTHING, however confidently it is worded. That is the rule that keeps catching this entry: a press release from 2022 saying companions get in free is not evidence about 2026, and a current page from the organiser saying otherwise beats it without the older line being mentioned at all.`;
 };
 
 // ── SIX MONTHS, AND ONLY FOR THE THINGS THAT CHANGE ─────────────────

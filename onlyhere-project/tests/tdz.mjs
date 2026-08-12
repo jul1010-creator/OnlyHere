@@ -265,3 +265,59 @@ export const hookDepsBeforeDeclaration = (body) => {
   }
   return found;
 };
+
+// ── AND THE OTHER HALF: DECLARED FIRST, BUT OUT OF SCOPE ────────────
+//
+// Oliver's run log, 12 Aug 2026:
+//
+//   7. Nearest arrival point [google · FAILED · discarded]
+//      why: draftTown is not defined
+//
+// A ReferenceError on every festival draft. `const draftTown` was declared
+// inside a BARE BLOCK about a hundred and forty lines long, and a geocode
+// fallback added later read it two hundred lines past the closing brace.
+// useBeforeDeclare could never catch it: the declaration comes FIRST, which is
+// all that function looks at. The failure is SCOPE, not ORDER.
+//
+// ── AND IT ONLY LOOKS AT BARE BLOCKS, WHICH IS THE POINT ────────────
+// The first version tracked brace depth across the whole component and
+// produced several hundred false positives in one run: JSX, object literals,
+// arrow bodies and destructuring all open braces, and a line-based depth count
+// cannot tell them apart. A checker that noisy gets switched off, which is this
+// codebase's own stated reason for keeping every scanner narrow.
+//
+// So it looks for one shape and one shape only: a line that is nothing but `{`,
+// which is a deliberate scoping block somebody wrote on purpose. That is the
+// shape that caused this, it is rare, and inside it the brace counting has a
+// known starting point rather than an inherited one.
+export const readOutOfScope = (body) => {
+  const lines = stripNonCode(String(body || "")).split("\n");
+  const found = [];
+  for (let open = 0; open < lines.length; open++) {
+    if (!/^\s*\{\s*$/.test(lines[open])) continue;
+    // Walk to the matching brace, counting from a known depth of one.
+    let depth = 1, close = -1;
+    for (let i = open + 1; i < lines.length && depth > 0; i++) {
+      for (const ch of lines[i]) { if (ch === "{") depth++; else if (ch === "}") depth--; }
+      if (depth === 0) close = i;
+    }
+    if (close === -1) continue;                     // unbalanced: say nothing
+    const names = new Set();
+    for (let i = open + 1; i < close; i++) {
+      for (const m of lines[i].matchAll(/(?:^|[\s;{}(,])(?:const|let)\s+([A-Za-z_$][\w$]*)\s*[=;]/g)) names.add(m[1]);
+    }
+    for (const name of names) {
+      // Declared again anywhere outside is shadowing, which this does not model.
+      const outside = lines.filter((l, i) => (i < open || i > close) && new RegExp(`(?:const|let|var|function)\\s+${name}\\b`).test(l)).length;
+      if (outside) continue;
+      const word = new RegExp(`(?:^|[^\\w$.])${name}(?![\\w$:])`);
+      for (let i = close + 1; i < lines.length; i++) {
+        if (!word.test(lines[i])) continue;
+        if (new RegExp(`\\(([^()]*\\W)?${name}(\\W[^()]*)?\\)\\s*=>`).test(lines[i])) continue;   // a parameter
+        found.push({ name, blockOpensLine: open + 1, blockClosesLine: close + 1, readLine: i + 1 });
+        break;
+      }
+    }
+  }
+  return found;
+};
