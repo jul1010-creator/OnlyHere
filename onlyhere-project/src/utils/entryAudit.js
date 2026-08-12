@@ -527,3 +527,121 @@ export const describePriceTrace = (r) => {
   const many = r.untraced.length > 1;
   return `NOT FROM THE OFFICIAL SITE: ${r.untraced.map(showPrice).join(", ")}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text, so ${many ? "they came" : "it came"} from a search result or a blog rather than from whoever charges it. Name the day, the ticket tier and whether it is still buyable, or move ${many ? "them" : "it"} to uncertainties.${listedNote}`;
 };
+
+// ── A GLANCE FIELD IS AN ANSWER, NOT A REPORT ON THE SEARCH ─────────
+//
+// Oliver, 12 Aug 2026, reading a Ribelund draft: ticketInfo said
+//
+//   "400 kr entry per the KultuNaut listing; 2026 tickets were not found on
+//    United Tickets or Billetlugen at the time of writing"
+//
+// and his reaction was "wtf?", which is the right one. That is a paragraph
+// about the pipeline's own afternoon, sitting in the two-word field a traveller
+// reads to find out what a ticket costs.
+//
+// BOTH HALVES ARE MINE, FROM EARLIER THE SAME DAY. The listing tier put
+// "it must be attributed as a listing rather than written as the organiser's
+// own word" into the scrape heading, and the writer attributed, in the field.
+// The founder-source notes reported billetlugen and unitedtickets as searched
+// and empty, and the writer turned two empty search results into prose.
+//
+// The rule already existed for exactly one field. The nearestStation prompt
+// says: "NEVER put that advice in a short At a Glance field... no sentence, no
+// semicolon, no 'likely', no 'check rejseplanen', no explanation," because a
+// field containing advice once shipped as a station called
+// "check rejseplanen.dk". It was a prompt, it named one field, and the first
+// standing rule here is that anything the system already knows is enforced in
+// code. Provenance and doubt have two homes that are not this one: __sources
+// and uncertainties.
+export const GLANCE_FIELDS = [
+  "nearestStation", "ticketInfo", "camping", "accommodationTip", "travelTime",
+  "budgetLevel", "typicalCosts", "price", "priceNote", "extraCosts", "timeNeeded",
+  "ticketsGlance", "accessibility", "recommendedStayGlance", "bestTimeGlance",
+  "accommodationGlance", "highlight", "tag", "location", "crowd", "bookingType",
+];
+
+// Two kinds of leak, and they are different sentences with the same cause.
+const SEARCH_REPORT = [
+  [/\b(?:was|were|are|is)\s+not\s+(?:found|listed|available|shown)\b/i, "says what a search did not find"],
+  [/\bnot\s+found\s+(?:on|at|in)\b/i, "says what a search did not find"],
+  [/\bat the time of writing\b/i, "dates itself to when the draft was written"],
+  [/\bcould\s*n[o']?t\s+be\s+(?:confirmed|verified|found)\b/i, "reports that a check came up empty"],
+  [/\b(?:un|not )(?:confirmed|verified)\b/i, "reports that a check came up empty"],
+  [/\bno\s+(?:listing|listings|price|prices)\s+(?:was|were)?\s*(?:found|available)\b/i, "reports that a check came up empty"],
+  [/\bin (?:our |the |this )?research\b/i, "describes the research rather than the place"],
+  [/\bwe\s+could\s*n[o']?t\b/i, "describes the research rather than the place"],
+];
+const ATTRIBUTION = [
+  [/\b(?:per|according to|via|source:|as listed on|from)\s+(?:the\s+)?[A-ZÆØÅ][\wÆØÅæøå.-]*\s*(?:listing|calendar|site|page)\b/i, "credits a source"],
+  [/\b(?:per|according to)\s+(?:the\s+)?(?:kultunaut|billetto|billetlugen|billetten|ticketmaster|unitedtickets|eventim)\b/i, "credits a source"],
+];
+
+// Returns "" for a clean value, or the reason it is not one. Deliberately says
+// nothing about length or tone: a long glance field is a style problem, and a
+// glance field reporting on the pipeline is a correctness one.
+export const glanceLeak = (value) => {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  for (const [re, why] of SEARCH_REPORT) if (re.test(v)) return why;
+  for (const [re, why] of ATTRIBUTION) if (re.test(v)) return why;
+  return "";
+};
+
+export const glanceProblems = (payload, fields = GLANCE_FIELDS) => {
+  const out = [];
+  for (const k of fields) {
+    const why = glanceLeak(payload?.[k]);
+    if (!why) continue;
+    out.push(`${k} ${why}: "${String(payload[k]).trim().slice(0, 140)}". A glance field is the answer a reader scans, so provenance belongs in __sources and doubt belongs in uncertainties. Put the plain fact here, or leave it empty.`);
+  }
+  return out;
+};
+
+// ── A FIND IS A THING TO DO, NOT AN ERRAND TO RUN ───────────────────
+//
+// Oliver, 12 Aug 2026, on a Ribelund draft. gemlyxFind said:
+//
+//   "...the useful move is to check Rejseplanen the same week for the real bus
+//    connection from Ribe Station instead of assuming a fixed route exists..."
+//
+// Ribe Station is an eight-minute walk from the festival ground, which he
+// checked on Google Maps himself. The draft sent a reader to a journey planner
+// to look up a bus for a walk.
+//
+// WHERE IT COMES FROM. When Google's transit query returns no itinerary the
+// prompt says, correctly, that this means UNCONFIRMED rather than "no route
+// exists", and then tells the writer to "point at rejseplanen.dk and the ferry
+// operator, IN THE PROSE ONLY". That was written for islands, where a real,
+// frequent ferry genuinely is not in the transit feed. Pointed at a place 600
+// metres from a station it produces an errand.
+//
+// gemlyxFind is defined in every schema in studioPrompts.js as "ONE specific
+// curated recommendation only Gemlyx would flag". It is the single field in the
+// entry whose whole job is to give the reader something they did not know. A
+// hedge in it is not a small style problem: it is the field failing at the one
+// thing it exists for, and it ships on every draft where transit is
+// unconfirmed, which is most of them.
+//
+// realityCheck is deliberately NOT covered. The prompt says this advice belongs
+// in the prose and it does; the Reality Check is where a reader expects a
+// caveat. This is about the field that promised a find.
+const GO_CHECK = [
+  [/\b(?:check|consult|look\s*up|search)\s+(?:on\s+)?(?:rejseplanen|dsb\.dk|the journey planner|a journey planner|the timetable)/i, "sends the reader to a journey planner"],
+  [/\bcheck\s+(?:the\s+)?(?:website|site|locally|with\s+the\s+(?:operator|organiser|venue))\b/i, "sends the reader off to check"],
+  [/\bconfirm\s+(?:the\s+)?(?:route|connection|times?|schedule|departure)/i, "asks the reader to confirm the logistics"],
+  [/\binstead of assuming\b/i, "argues with an assumption rather than stating a fact"],
+  [/\bthe (?:useful|smart|right) move is to\b/i, "gives a procedure where a place was promised"],
+];
+
+export const findLeak = (value) => {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  for (const [re, why] of GO_CHECK) if (re.test(v)) return why;
+  return "";
+};
+
+export const curatedFindProblems = (payload) => {
+  const why = findLeak(payload?.gemlyxFind);
+  if (!why) return [];
+  return [`gemlyxFind ${why}: "${String(payload.gemlyxFind).trim().slice(0, 140)}". This field is the one curated recommendation in the entry, so it takes a real place, dish or detail. Logistics belong in the Reality Check, and an unconfirmed connection belongs in uncertainties. If there is no genuine find, leave it empty.`];
+};

@@ -40,7 +40,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { journeyParts, journeyBlock, vehicleWord, transitProblems, journeyDurations, absenceClaims } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { journeyParts, journeyBlock, vehicleWord, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
@@ -109,7 +109,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -4645,6 +4645,68 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and it is logged whether or not it finds anything",
      /note\(`Stated absences\$\{suffix\}`/.test(app6));
 
+  // ── LESS THAN TEN MINUTES ON FOOT IS NEVER A BUS ─────────────────
+  //
+  // Oliver, 12 Aug 2026: "make a rule, tell it that less than 10 minutes walk
+  // will never be suggested public transport or taxi?" His draft's gemlyxFind
+  // told a reader to "check Rejseplanen the same week for the real bus
+  // connection from Ribe Station" for a station he then measured himself on
+  // Google Maps at eight minutes' walk.
+  //
+  // The gap under his rule: findRealNearestStop was ALREADY running a real
+  // walking-route query and returning walkMinutes, and App.jsx wrote
+  // frozenGeo = { lat, lon, station, stopKind } and dropped it. Every draft
+  // measured the number that decides walk-or-bus and kept none of it.
+  const { lastLegProblems, SHORT_WALK_MINUTES } = M;
+  const errandProse = "The useful move is to check Rejseplanen for the real bus connection from Ribe Station. A taxi from the station is simplest.";
+  const short = lastLegProblems(errandProse, { stop: "Ribe Station", walkMinutes: 8 });
+  is("a bus and a taxi are both caught on a short walk", short.length, 2);
+  ok("and the measurement is quoted back", short.every(p => /MEASURED at 8 minutes on foot from Ribe Station/.test(p)));
+  // A BUS WITH NO PLANNER BESIDE IT. In the sentence above, "Rejseplanen" and
+  // "bus" sit together, so deleting the bus rule left the count unchanged and
+  // the mutation survived. Each mode needs a sentence only it can catch.
+  ok("a bus on its own is caught",
+     lastLegProblems("Take the bus from Ribe Station to the gates.", { stop: "Ribe Station", walkMinutes: 8 }).length === 1);
+  ok("a journey planner counts too",
+     lastLegProblems("Check Rejseplanen for the connection from the station.", { stop: "Ribe Station", walkMinutes: 8 }).length === 1);
+  ok("and so does driving",
+     lastLegProblems("Drive to the venue from the station.", { stop: "Ribe Station", walkMinutes: 5 }).length === 1);
+
+  // ── AND A REAL BUS RIDE IS LEFT ALONE ────────────────────────────
+  // The rule is about a walk short enough that no Dane would board anything.
+  // Past that, a bus is a legitimate answer and flagging it would be the gate
+  // arguing with the truth.
+  is("a longer walk may legitimately suggest a bus",
+     lastLegProblems(errandProse, { stop: "Ribe Station", walkMinutes: 25 }), []);
+  is("and one exactly on the line is still short", 
+     lastLegProblems("A taxi from the station is simplest.", { stop: "Ribe Station", walkMinutes: SHORT_WALK_MINUTES }).length, 1);
+  is("while one minute over is not",
+     lastLegProblems("A taxi from the station is simplest.", { stop: "Ribe Station", walkMinutes: SHORT_WALK_MINUTES + 1 }), []);
+
+  // ── NO MEASUREMENT, NO ACCUSATION ────────────────────────────────
+  // The discipline every gate in this file follows. An unmeasured last leg is
+  // exactly the case where the pipeline knows nothing, and it is also the case
+  // that produced the errand in the first place.
+  is("an unmeasured walk says nothing", lastLegProblems(errandProse, { stop: "Ribe Station", walkMinutes: null }), []);
+  is("and neither does a missing stop", lastLegProblems(errandProse, {}), []);
+  // A sentence about something other than the arrival is none of its business.
+  is("city buses in a town entry are not the last leg",
+     lastLegProblems("City buses run every ten minutes across town.", { stop: "Ribe Station", walkMinutes: 8 }), []);
+  // And the honest sentence, which is what should be written instead.
+  is("saying the walk is what it wants",
+     lastLegProblems("Ribe Station is an eight-minute walk from the gates.", { stop: "Ribe Station", walkMinutes: 8 }), []);
+
+  // ── WIRED, AND THE MEASUREMENT IS KEPT THIS TIME ─────────────────
+  ok("the measured walk is stored rather than dropped",
+     /frozenGeo = \{ lat: coords\.lat, lon: coords\.lon, station, stopKind, walkMinutes: st\?\.walkMinutes \?\? null/.test(app6));
+  ok("and survives the exact-coordinate refinement",
+     /walkMinutes: st2\?\.walkMinutes \?\? frozenGeo\.walkMinutes \?\? null/.test(app6));
+  ok("the rule runs inside gateDraft with the other field gates",
+     /\.\.\.lastLegProblems\(readerText\(t\), \{ stop: frozenGeo\?\.station, walkMinutes: frozenGeo\?\.walkMinutes \}\)/.test(app6));
+  ok("and the writer is told the number as well",
+     /NOTHING in this entry may suggest a bus, a taxi, driving or a journey planner/.test(app6));
+  ok("with one constant behind both", /\$\{SHORT_WALK_MINUTES\}/.test(app6));
+
   // ── AND THE NULL THAT CAUSED IT IS NOW READABLE ──────────────────
   // The invented negative was the symptom. The cause is that the nearest-stop
   // lookup was the one major step in the drafting function with no note(), so
@@ -8968,6 +9030,110 @@ rmSync(dir, { recursive: true, force: true });
   ok("an untraced price goes to uncertainties, not into the prose",
      /t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\)\.filter\(u => u !== line\), line\]/.test(stripNonCode(app)));
   ok("and the run log records the comparison either way", /note\(`Prices against the official site\$\{suffix\}`/.test(app));
+}
+
+// ── A GLANCE FIELD IS AN ANSWER, NOT A REPORT ON THE SEARCH ─────────
+//
+// Oliver, 12 Aug 2026, reading a Ribelund draft: ticketInfo said "400 kr entry
+// per the KultuNaut listing; 2026 tickets were not found on United Tickets or
+// Billetlugen at the time of writing". Both halves are mine from earlier the
+// same day. The listing tier told the writer to attribute; the founder-source
+// notes told it two sites came back empty. It put both in the field a traveller
+// scans to find out what a ticket costs.
+{
+  const { glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems } = M;
+  const shipped = "400 kr entry per the KultuNaut listing; 2026 tickets were not found on United Tickets or Billetlugen at the time of writing";
+  const found = glanceProblems({ ticketInfo: shipped });
+  is("the field he read is caught", found.length, 1);
+  // (found[0] || "") ON PURPOSE. Without it, a mutation that drops ticketInfo
+  // from scope makes found[0] undefined and the next line throws, and a
+  // mutation that CRASHES the suite is not one that FAILS it: the TypeError
+  // stops every later assertion from running, so the count is meaningless.
+  // Fourth time this trap has been documented in this file.
+  const first = found[0] || "";
+  ok("and named", /^ticketInfo/.test(first));
+  ok("with the value quoted back", first.includes("400 kr entry per the KultuNaut listing"));
+  ok("and the two places it should have gone", /__sources/.test(first) && /uncertainties/.test(first));
+
+  // Both halves independently, because the shipped value trips either one and a
+  // gate that only catches the pair would miss each on its own.
+  ok("a search that found nothing", glanceLeak("2026 tickets were not found on United Tickets") !== "");
+  ok("a run stamped with when it ran", glanceLeak("400 kr at the time of writing") !== "");
+  ok("a source credited inside the field", glanceLeak("400 kr per the KultuNaut listing") !== "");
+  ok("a check reported as empty", glanceLeak("Ribe Station, exact route not confirmed") !== "");
+  ok("and advice where a value belongs", glanceLeak("could not be confirmed, check rejseplanen.dk") !== "");
+
+  // ── AND THE ORDINARY VALUES MUST SURVIVE ─────────────────────────
+  // A gate that flags everything is as useless as one that flags nothing, and
+  // "See website" is a fallback this codebase uses on purpose.
+  for (const v of ["400 kr", "Ribe Station", "2h 51min", "See website", "Free entry",
+                   "Adults 155 DKK, under 18 free", "Hotels near the station",
+                   "May to September", "Day trip or one night", "", null]) {
+    is(`a plain value is left alone: ${JSON.stringify(v)}`, glanceLeak(v), "");
+  }
+  // The nearestStation rule that already existed in prose, now covering the
+  // field it was written for and every other short field beside it.
+  ok("nearestStation is in scope", GLANCE_FIELDS.includes("nearestStation"));
+  ok("and so is ticketInfo", GLANCE_FIELDS.includes("ticketInfo"));
+  ok("and travelTime", GLANCE_FIELDS.includes("travelTime"));
+  // Prose fields are NOT: a Reality Check saying a price could not be confirmed
+  // is doing its job, and flagging it would teach the writer to stop admitting
+  // what it does not know.
+  ok("but the Reality Check is not", !GLANCE_FIELDS.includes("realityCheck"));
+  ok("nor is uncertainties", !GLANCE_FIELDS.includes("uncertainties"));
+  is("so an honest paragraph is untouched",
+     glanceProblems({ realityCheck: "The ticket price could not be confirmed at the time of writing." }), []);
+
+  // ── WIRED, AND ON BOTH PASSES ────────────────────────────────────
+  const appG = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const codeG = appG.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  ok("the gate runs inside gateDraft",
+     codeG.indexOf("const gp = [") > codeG.indexOf("const gateDraft = (pass) =>") &&
+     codeG.indexOf("const gp = [") < codeG.indexOf('gateDraft("first")'));
+  ok("and is journalled either way", /note\(`Glance fields\$\{suffix\}`/.test(appG));
+  ok("a leak goes to uncertainties rather than being rewritten",
+     /for \(const line of gp\) \{[\s\S]{0,200}t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\)\.filter\(u => u !== line\), line\];/.test(codeG));
+  // ── AND THE INSTRUCTION THAT CAUSED IT IS GONE ───────────────────
+  ok("the writer is no longer told to attribute inside a field",
+     !/it must be attributed as a listing rather than written as the organiser's own word/.test(appG));
+  ok("it is told where attribution belongs instead",
+     /ATTRIBUTE IT IN uncertainties, NEVER IN A FIELD/.test(appG));
+  ok("and that an empty search is not a fact about the festival",
+     /two empty ticket sites are a fact about this run, not about the festival/.test(appG));
+
+  // ── A FIND IS A THING TO DO, NOT AN ERRAND TO RUN ────────────────
+  // Same draft, next field: "the useful move is to check Rejseplanen the same
+  // week for the real bus connection from Ribe Station instead of assuming a
+  // fixed route exists." Ribe Station is an eight-minute walk, which Oliver
+  // checked on Google Maps himself. The draft sent a reader to a journey
+  // planner to look up a bus for a walk.
+  const errand = "Because the day runs on Ribelund's own routines, the useful move is to check Rejseplanen the same week for the real bus connection from Ribe Station instead of assuming a fixed route exists.";
+  is("the errand is caught", curatedFindProblems({ gemlyxFind: errand }).length, 1);
+  ok("and named as the field that promised a find",
+     /^gemlyxFind/.test(curatedFindProblems({ gemlyxFind: errand })[0] || ""));
+  ok("a journey planner", findLeak("check Rejseplanen for the bus") !== "");
+  ok("a procedure where a place was promised", findLeak("the useful move is to plan ahead") !== "");
+  ok("and arguing with an assumption", findLeak("instead of assuming a fixed route exists") !== "");
+
+  // ── AND A REAL FIND SURVIVES ─────────────────────────────────────
+  for (const v of [
+    "Ribe, Denmark's oldest town with its medieval cathedral, is about 30 minutes away by train.",
+    "The stall at the back does smoked eel the old way, and it sells out by two.",
+    "Ask for the corner table upstairs, it looks straight down the harbour.",
+    "Arrive close to the 10:30 opening if you want the full programme.",
+    "",
+  ]) is(`a real find is left alone: ${JSON.stringify(v).slice(0, 40)}`, findLeak(v), "");
+  // The Reality Check is where this advice BELONGS, and the prompt says so.
+  is("the Reality Check is not policed by this",
+     curatedFindProblems({ realityCheck: "Check rejseplanen.dk yourself and allow extra time." }), []);
+
+  // All three field gates feed one list, so a leak of any kind lands in
+  // uncertainties by the same route and is deduplicated by the same filter.
+  ok("all three field gates run together",
+     /const gp = \[\s*\.\.\.glanceProblems\(t\),\s*\.\.\.curatedFindProblems\(t\),\s*\.\.\.lastLegProblems\(/.test(codeG));
+  ok("the writer is told an errand is not a find", /NEVER IN gemlyxFind/.test(appG));
+  ok("and that a measured walk is the answer, not a planner",
+     /the walk is the connection, and it is measured/.test(appG));
 }
 
 // ── A CHECK THAT RUNS BEFORE THE LAST WRITER CHECKS NOTHING ─────────

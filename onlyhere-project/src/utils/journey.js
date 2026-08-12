@@ -335,3 +335,57 @@ export const absenceClaims = (prose) => {
   }
   return [...new Set(out)];
 };
+
+// ── THE LAST LEG WAS MEASURED AND THROWN AWAY ───────────────────────
+//
+// Oliver, 12 Aug 2026: "Mind you, I'm looking for a universal fix here. We need
+// more accuracy... we need to figure out the logistics." Then, one message
+// later, the fix itself: "make a rule, tell it that less than 10 minutes walk
+// will never be suggested public transport or taxi?"
+//
+// He is right, and there was a gap under it worth naming. findRealNearestStop
+// already runs a REAL WALKING-ROUTE QUERY from the venue to the stop it
+// returns, and hands back { name, walk, walkMinutes, kind }. App.jsx then wrote
+//
+//   frozenGeo = { lat, lon, station, stopKind }
+//
+// and dropped walkMinutes on the floor. Every draft measured the one number
+// that decides walk-or-bus and kept none of it. That is the same shape as the
+// interchange names, and as every price before tracePrices existed: the
+// pipeline measures, keeps a fragment, and lets the writer describe the rest.
+//
+// So the universal part is not a new rule, it is KEEPING THE MEASUREMENT. His
+// rule is the enforcement clause on top of it, and ten minutes is the right
+// number: it is short enough that no Dane would board a bus for it and long
+// enough not to argue with.
+export const SHORT_WALK_MINUTES = 10;
+
+// A sentence is about the arrival if it names the stop, or talks about getting
+// to the place at all. Without this the check would police a town entry's
+// sentence about city buses, which is a different subject.
+const ARRIVAL_TALK = /\b(station|banegård|banegaard|stop|terminal|platform|arriv\w*|getting (?:there|here)|from the (?:station|stop|terminal)|to the (?:venue|festival|site|ground|grounds|entrance|gates))\b/i;
+// The modes and errands that a ten-minute walk makes wrong.
+const NOT_FOR_A_SHORT_WALK = [
+  [/\btaxis?\b|\bcab\b/i, "suggests a taxi"],
+  [/\bbus(?:sen|ser|es)?\b|\bshuttle\b/i, "suggests a bus"],
+  [/\brejseplanen\b|\bjourney planner\b/i, "sends the reader to a journey planner"],
+  [/\bdriv\w+\b|\bby car\b/i, "suggests driving"],
+];
+
+// Returns problems, or nothing at all when the walk was never measured. Same
+// discipline as the rest of this file: no measurement, no accusation.
+export const lastLegProblems = (prose, { stop, walkMinutes } = {}) => {
+  const mins = Number(walkMinutes);
+  if (!Number.isFinite(mins) || mins <= 0 || mins > SHORT_WALK_MINUTES) return [];
+  const out = [];
+  for (const s of String(prose || "").split(/(?<=[.!?])\s+/)) {
+    const named = stop && s.toLowerCase().includes(String(stop).toLowerCase());
+    if (!named && !ARRIVAL_TALK.test(s)) continue;
+    for (const [re, why] of NOT_FOR_A_SHORT_WALK) {
+      if (!re.test(s)) continue;
+      out.push(`This ${why} for the last leg, and the last leg was MEASURED at ${mins} minute${mins === 1 ? "" : "s"} on foot from ${stop || "the nearest stop"}. A walk that short is the connection. Say the walk, or say nothing: "${s.trim().slice(0, 110)}"`);
+      break;
+    }
+  }
+  return [...new Set(out)];
+};
