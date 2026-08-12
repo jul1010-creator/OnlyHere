@@ -42,7 +42,7 @@ const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
   export { journeyParts, journeyBlock, vehicleWord } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
-  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
@@ -6234,9 +6234,38 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // A page we never saw the text of is not a source. Never conclude a fact from
   // a failed lookup, which is this project's own standing rule.
   ok("a url with no snippet is not a source", /if \(!said\) return false;/.test(code));
-  // The two exemptions, both principled: he chose those domains, and an
-  // official site is about the place by definition.
-  ok("founder-vouched domains are exempt", /founderUrls\.includes\(u\)/.test(code));
+  // ── ONE EXEMPTION, NOT TWO ───────────────────────────────────────
+  // The official site is about the place by definition, so it is exempt. A
+  // founder-vouched DOMAIN is not, and used to be. That conflated two
+  // questions: the vouch answers "is this site an authority", the snippet
+  // answers "is this page about this place", and only the second decides
+  // whether something is a source.
+  //
+  // Oliver's Ribelund Festival draft, 12 Aug 2026, recorded three vouched URLs
+  // as sources and not one was about the festival: a Ribe art museum event
+  // priced 140 to 165 DKK, which is where the wrong price came from; an Aalborg
+  // category listing on Billetlugen; and Billetto's homepage.
+  ok("a vouched domain is no longer waved through", !/founderUrls\.includes\(u\)/.test(code));
+  ok("the official site is still exempt", /if \(placesWebsite && u === placesWebsite\) return true;/.test(code));
+  // Which is only safe because the vouched results now record what they said,
+  // the same as every other result. Without that they would all fail the
+  // no-snippet rule and vanish.
+  ok("vouched results record their own title and snippet",
+     /\(fData\.results \|\| \[\]\)\.forEach\(r => \{\s*if \(r\?\.url\) urlSaidWhat\.set\(r\.url/.test(code));
+
+  // ── THE THREE THAT GOT THROUGH, AS DATA ──────────────────────────
+  {
+    const names = (said) => variantsOf("Ribelund Festival", { includeSights: true }).some(v => containsName(said, v));
+    ok("a different event at the Ribe art museum is not a source",
+       !names("Sommeraftener i Museumshaven | Ribe Kunstmuseum | billetter 140-165 kr"));
+    ok("an Aalborg category listing is not a source",
+       !names("Koncerter i Aalborg | Billetlugen"));
+    ok("a ticket site's homepage is not a source", !names("Billetto - Find events near you"));
+    // And a vouched page that IS about the festival still counts, which is the
+    // whole point of vouching for billetto.dk in the first place.
+    ok("a vouched page that names the festival still counts",
+       names("Ribelund Festival 2026 | Billetter | Ribe | Billetto"));
+  }
   ok("and so is the official site", /placesWebsite && u === placesWebsite/.test(code));
 
   // ── THE BEHAVIOUR, ON HIS ACTUAL CASE ─────────────────────────────
@@ -8623,9 +8652,43 @@ rmSync(dir, { recursive: true, force: true });
     // reader can actually see.
     is("only the visible price is traced",
        tracePrices(text, "the site says nothing about money").untraced.map(p => p.lo), [400]);
-    // And with the whole draft it would have found the ids, which is what shipped.
-    ok("the old input really did produce that noise",
-       tracePrices(JSON.stringify(draft), "nothing").untraced.length > 1);
+    // TWO INDEPENDENT GUARDS, and this asserts they both hold. readerText keeps
+    // the URL out of the text, and the currency rule would keep its digits from
+    // counting even if it got in. Either one alone fixes the shipped bug; both
+    // together mean a future change to one cannot quietly reintroduce it.
+    is("even the whole draft now yields only the real claim",
+       tracePrices(JSON.stringify(draft), "nothing").untraced.map(p => p.lo), [400]);
+
+    // ── AND A NUMBER IN PROSE IS NOT A PRICE ───────────────────────
+    // Oliver's log, after the __sources fix, still reported "8 to 2026, 19,
+    // 6760, 33, 7" alongside the two real figures. Those are a postcode, a house
+    // number and a date, all in reader-facing fields. A price claim names a
+    // currency; an address does not.
+    const proseDraft = {
+      name: "Ribelund Festival",
+      ticketInfo: "Around 140-165 DKK according to event listings",
+      realityCheck: "the ticket price floating around is roughly 140-165 DKK, though there are unverified claims of 400 kr",
+      mapHint: "Ribelund Festivalplads, Pile Alle 2, 6760 Ribe, Denmark",
+      gemlyxFind: "The public entrance is on Kastanie Allé 7, not the Pile Alle address.",
+      dateStart: "2026-08-19",
+    };
+    const r = tracePrices(readerText(proseDraft), "the site says nothing about money");
+    is("only the currency-named figures are claims", r.untraced.map(p => `${p.lo}-${p.hi}`), ["140-165", "400-400"]);
+    ok("the postcode is not a price", !r.draft.some(p => p.lo === 6760));
+    ok("nor the house number", !r.draft.some(p => p.lo === 7));
+    ok("nor the day of the month", !r.draft.some(p => p.lo === 19));
+    // A price stated in prose is still caught, which is why this reads prose at
+    // all rather than retreating to the cost fields.
+    ok("a price inside a Reality Check is still a claim", r.draft.some(p => p.lo === 400));
+
+    // ── LENIENT ON THE OTHER SIDE ──────────────────────────────────
+    // A site that prints the figure without a currency beside it still
+    // corroborates. Being strict both ways would invent a disagreement out of
+    // somebody else's formatting.
+    is("a bare figure on the site still confirms the claim",
+       tracePrices("tickets are 400 kr", "Entré 400 per person").untraced.length, 0);
+    is("and a genuinely absent figure is still reported",
+       tracePrices("tickets are 400 kr", "Entré 250 per person").untraced.map(p => p.lo), [400]);
   }
   ok("an untraced price goes to uncertainties, not into the prose",
      /t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\), describePriceTrace\(pt\)\]/.test(stripNonCode(app)));
@@ -8700,6 +8763,91 @@ rmSync(dir, { recursive: true, force: true });
   ok("a genuine pass is journalled too, so the log speaks either way", /got: "every claim traced back to the research"/.test(app));
   ok("and a failure is put in front of him, not only in the log", /THE INVENTED-CLAIM CHECK DID NOT RUN/.test(app));
   ok("naming it as the last gate rather than a detail", /last accuracy gate in the pipeline/.test(app));
+}
+
+
+// ── "FESTIVAL" IS NOT WHICH FESTIVAL ────────────────────────────────
+// Oliver's run log, 12 Aug 2026. Drafting "Ribelund Festival", the pipeline
+// selected these as the place's own website and read them:
+//   keramikfestival.dk/en/practical-information   a ceramics festival
+//   festivalabroad.com/festivals/nibe-festival    a different festival
+//   ribemetalfestival.dk                          a different event
+// because the hostname match accepted any word of the name four letters or
+// longer, and every festival domain contains "festival". Everything downstream
+// was then measured against the wrong operator: the price trace called every
+// figure "NOT FROM THE OFFICIAL SITE" while comparing against a ceramics
+// festival, and the date check found no announcement because it was reading
+// somebody else's.
+{
+  const { distinctiveWords } = M;
+
+  // THE CASE THAT SHIPPED.
+  is("the category word is dropped", distinctiveWords("Ribelund Festival"), ["ribelund"]);
+  // And with only the distinctive word, the three wrong hosts stop matching.
+  const hostMatches = (placeName, host) => {
+    const words = distinctiveWords(placeName);
+    return words.some(w => host.includes(w) || w.includes(host));
+  };
+  ok("a ceramics festival is no longer the official site", !hostMatches("Ribelund Festival", "keramikfestival"));
+  ok("nor is an aggregator", !hostMatches("Ribelund Festival", "festivalabroad"));
+  ok("nor is a different event at the same place", !hostMatches("Ribelund Festival", "ribemetalfestival"));
+  // And the real one still would.
+  ok("the operator's own domain still matches", hostMatches("Ribelund Festival", "ribelundfestival"));
+  ok("and so does a shorter form of it", hostMatches("Ribelund Festival", "ribelund"));
+
+  // It must not swallow real names that happen to look generic.
+  is("a real place keeps its identifying words", distinctiveWords("Den Gamle By"), ["gamle"]);
+  is("a two-word name keeps both", distinctiveWords("Amalienborg Slot"), ["amalienborg"]);
+  is("a city name survives", distinctiveWords("Copenhagen Jazz Festival"), ["copenhagen", "jazz"]);
+  // Danish letters fold the same way they do everywhere else in this file.
+  // fold maps ae for æ and a plain o for ø, which is what containsName already
+  // relies on everywhere else, so the same word shape reaches both.
+  is("Danish letters fold", distinctiveWords("Ærøskøbing Marked"), ["aeroskobing"]);
+  // Short words were already excluded and still are.
+  is("short words do not count", distinctiveWords("Bar Og Kro"), []);
+
+  // ── AND WHEN A NAME IS NOTHING BUT CATEGORY WORDS ────────────────
+  // An empty list is the honest answer: nothing in that name identifies the
+  // place, so no hostname should be accepted as its official site. The pipeline
+  // still has Google's registered website and the .dk-preferred candidates.
+  is("a wholly generic name identifies nothing", distinctiveWords("Festival Marked"), []);
+  ok("so no host can claim to be it", !hostMatches("Festival Marked", "keramikfestival"));
+
+  // ── AND A PAGE CAN QUALIFY BY NAMING THE PLACE ───────────────────
+  // Oliver, 12 Aug, showing the page itself: oplev.esbjerg.dk/events/
+  // ribelund-festival states "Billet til festivalen koster 400 kr." That URL was
+  // in the draft's own __sources. The pipeline found it and never opened it,
+  // because the selection judged candidates by HOSTNAME and that host is
+  // "oplev". Tavily returns a title and a snippet with every result and both
+  // were being discarded here, which is the same fix already made for __sources
+  // on 10 Aug and not made in this second place.
+  {
+    const { containsName } = M;
+    const pageNames = (text, place) => containsName(text || "", place);
+    ok("a municipal events page naming the festival qualifies",
+       pageNames("Ribelund Festival - Oplev Esbjerg", "Ribelund Festival"));
+    ok("even though its hostname says nothing",
+       !distinctiveWords("Ribelund Festival").some(w => "oplev".includes(w) || w.includes("oplev")));
+    // It must not let a neighbouring event through on a shared word.
+    ok("a different event at the same site does not qualify",
+       !pageNames("Ribe MetalFestival 2026 | Billetter", "Ribelund Festival"));
+    ok("nor a ceramics festival", !pageNames("Keramikfestival praktisk information", "Ribelund Festival"));
+  }
+
+  // Wired.
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the site selection uses it", /const nameWords = distinctiveWords\(name\);/.test(stripNonCode(app)));
+  ok("a candidate qualifies by hostname or by naming the place",
+     /const nameMatched = usable\.filter\(u => hostNames\(u\) \|\| pageNames\(u\)\);/.test(stripNonCode(app)));
+  ok("and the title and snippet are kept rather than dropped",
+     /const rememberUrlText = \(results\) =>/.test(stripNonCode(app)));
+  // Three call sites: the main Tavily search, the official-site search, and the
+  // discovery candidates. The declaration reads "rememberUrlText = (" so it does
+  // not match, which is what makes this a count of CALLS rather than of mentions.
+  is("every place that fills candidateUrls from search results also keeps their text",
+     (stripNonCode(app).match(/rememberUrlText\(/g) || []).length, 3);
+  ok("and no longer splits the raw name itself",
+     !/nameWords = name\.toLowerCase\(\)\.replace/.test(stripNonCode(app)));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

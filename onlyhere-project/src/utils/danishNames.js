@@ -75,6 +75,58 @@ export const containsName = (haystack, name) => {
 // pairs: a town, an island, a region, the country. Anything ambiguous stays out,
 // because this table decides whether a source scoped to one city gets sent along
 // on a draft about another, and that is the mistake the scoping exists to stop.
+// ── "FESTIVAL" IS NOT WHICH FESTIVAL ────────────────────────────────
+//
+// Oliver, 12 Aug 2026, from a real run. Drafting "Ribelund Festival", the
+// pipeline picked these as the place's own website and read them:
+//
+//   keramikfestival.dk/en/practical-information     a ceramics festival
+//   festivalabroad.com/festivals/nibe-festival      a different festival
+//   ribemetalfestival.dk                            a different event
+//
+// The selection matched a candidate domain when its hostname contained any word
+// of the place's name of four letters or more. For "Ribelund Festival" those
+// words are "ribelund" and "festival", and every festival domain on earth
+// contains "festival". So the filter that exists to find the operator's own site
+// admitted three unrelated operators, and then the whole draft was measured
+// against them: the price trace reported every figure as "NOT FROM THE OFFICIAL
+// SITE" while comparing against a ceramics festival, and the date check found no
+// announcement because it was reading the wrong announcement.
+//
+// A word identifies a place only if it is not the CATEGORY the place belongs to.
+// "ribelund" identifies. "festival" classifies. The distinction is the whole fix.
+//
+// The list is Danish and English because the domains are: a Danish venue writes
+// "marked" and an aggregator writes "market". It is deliberately about categories
+// of PLACE, not adjectives, so it cannot swallow a real name. Where a name is
+// nothing but category words the answer is an empty list, which is honest: we
+// cannot identify that place from its hostname and should not pretend to.
+export const GENERIC_PLACE_WORDS = new Set([
+  "festival", "festivalen", "festspil", "marked", "markedet", "market",
+  "museum", "museet", "musem", "galleri", "gallery", "bibliotek", "library",
+  "slot", "slottet", "castle", "borg", "kirke", "kirken", "church", "kloster",
+  "teater", "teatret", "theatre", "theater", "scene", "spillested",
+  "center", "centret", "centre", "centrum", "forum", "hallen", "arena",
+  "plads", "pladsen", "torv", "torvet", "square", "park", "parken", "garden",
+  "havn", "havnen", "harbour", "harbor", "strand", "stranden", "beach",
+  "hotel", "hotellet", "kro", "kroen", "vandrerhjem", "hostel", "camping",
+  "restaurant", "restauranten", "cafe", "cafeen", "kaffe", "bar", "baren",
+  "klub", "klubben", "club", "diskotek", "vinstue", "bodega", "brewery",
+  "bryggeri", "bageri", "bakery", "butik", "shop", "store", "gaard", "gard",
+  "forsamlingshus", "festsal", "kulturhus", "medborgerhus", "events", "event",
+  "koncert", "concert", "tour", "tours", "billetter", "billet", "tickets",
+  "visit", "oplev", "guide", "travel", "rejse", "denmark", "danmark",
+]);
+
+// Fold first, so Ærø and Aero are the same word here as everywhere else in this
+// file. Four letters is the existing threshold and is kept: it is what stops
+// "of", "the" and "og" counting.
+export const distinctiveWords = (name) =>
+  fold(name)
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= 4 && !GENERIC_PLACE_WORDS.has(w));
+
 export const PLACE_NAMES = [
   ["Denmark", "Danmark"],
   ["Copenhagen", "København"],

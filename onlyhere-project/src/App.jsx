@@ -76,7 +76,7 @@ import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liv
 import { journeyParts, journeyBlock } from "./utils/journey";
 import { correctEntry, keepMeasured } from "./utils/correction";
 import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
-import { otherNameFor, variantsOf, containsName, samePlaceName } from "./utils/danishNames";
+import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
@@ -1700,6 +1700,32 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       const allQueries = [...cfg.queries, ...plannedQueries, ...(daName ? [`${daName} ${daWords}`] : [])];
       let context = "";
       let candidateUrls = [];
+      // ── WHAT EACH CANDIDATE PAGE SAYS IT IS ───────────────────────
+      // Oliver, 12 Aug 2026, showing me the page: oplev.esbjerg.dk/events/
+      // ribelund-festival states "Billet til festivalen koster 400 kr. Hvis man
+      // har ledsager med, koster en billet til ledsager 50 kr." That URL was
+      // already in this draft's __sources. The pipeline found it and never
+      // opened it, then reported the ticket price as unconfirmed and the
+      // official site as not found.
+      //
+      // It could not have opened it. The selection below decides which pages are
+      // the operator's own by looking at the HOSTNAME, and that host is "oplev".
+      // Nothing in a hostname says a page is about Ribelund Festival, but the
+      // page's own TITLE says exactly that, and Tavily returns the title and the
+      // snippet with every result. Both were being dropped on the floor here.
+      //
+      // This is the same fix made on 10 Aug for __sources, where a village
+      // smithy was sourced to Frederiksborg Castle because the title and snippet
+      // arriving with each result were discarded. It was made in one place and
+      // not the other.
+      const urlText = {};
+      const rememberUrlText = (results) => {
+        (Array.isArray(results) ? results : []).forEach(r => {
+          if (!r?.url) return;
+          const t = [r.title, r.snippet, r.content].filter(Boolean).join(" ").slice(0, 400);
+          if (t) urlText[r.url] = `${urlText[r.url] || ""} ${t}`.trim();
+        });
+      };
       // url -> the title and snippet it arrived with. See the note where it is filled.
       const urlSaidWhat = new Map();
       // RESEARCH MEMORY (Oliver: "make the AI learn... if some very important
@@ -1780,6 +1806,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         );
         if (!sData.__ok || sData.error) throw new Error(`Web research failed (Tavily): ${sData.error || `request failed (${sData.__status})`}`);
         context = (context + " " + (sData.answer || "") + " " + (sData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 6).join(" ")).trim();
+        rememberUrlText(sData.results);
         candidateUrls.push(...(sData.results || []).map(r => r.url).filter(Boolean));
         // ── AND WHAT EACH URL SAID IT WAS ABOUT ─────────────────────
         // Oliver, 10 Aug 2026, looking at a draft for Skovgårde Bysmedie, a
@@ -1864,6 +1891,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // PREPENDED, not appended: these are the results of asking the
             // official-site question directly, so they outrank URLs that merely
             // showed up while asking about something else.
+            rememberUrlText(oData.results);
             candidateUrls.unshift(...(oData.results || []).map(r => r.url).filter(Boolean));
             context = (context + " " + (oData.answer || "")).trim();
           }
@@ -1992,6 +2020,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             const snips = fRes.ok && !fData.error
               ? (fData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 3).join(" ")
               : "";
+            // What each vouched page SAYS, recorded like every other result.
+            // Without this the relevance check below has nothing to read for a
+            // founder-vouched URL, which is the only reason those URLs needed to
+            // be exempted from it at all.
+            (fData.results || []).forEach(r => {
+              if (r?.url) urlSaidWhat.set(r.url, `${r.title || ""} ${r.snippet || r.content || ""}`);
+            });
             founderUrls.push(...urls);
             sourceHits.push({ domain, count: urls.length, ok: fRes.ok && !fData.error });
             // One line per source. "Searched and found nothing" and "refused"
@@ -2092,6 +2127,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           const pplxCites = Array.isArray(preCheck.citations) ? preCheck.citations : [];
           pplxCites.forEach(c => {
             if (!c?.url) return;
+            rememberUrlText([c]);
             candidateUrls.push(c.url);
             // Same shape Tavily's results are recorded in, so the relevance
             // filter can read them without knowing which provider they came from.
@@ -2546,14 +2582,32 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       const AGGREGATOR_HOSTS = /tripadvisor|booking\.com|expedia|hotels|airbnb|getyourguide|viator|yelp|facebook|instagram|twitter|x\.com|youtube|reddit|quora|wikipedia|wikivoyage|directferries|rome2rio|lonelyplanet|visitdenmark|pinterest|tiktok/i;
       const isPlaceType = ["town", "festival", "nightTown"].includes(sType);
       if (["food", "foodStreet", "night", "booking", "free", "town", "festival", "nightTown"].includes(sType) && candidateUrls.length > 0) {
-        const nameWords = name.toLowerCase().replace(/[^a-z0-9æøå ]/g, "").split(" ").filter(w => w.length >= 4);
+        // ── ONLY A WORD THAT IDENTIFIES THE PLACE COUNTS ──────────────
+        // This was every word of four letters or more, so "Ribelund Festival"
+        // matched keramikfestival.dk on the word "festival" and the pipeline
+        // read a ceramics festival as the operator's own site. See
+        // distinctiveWords in utils/danishNames.js for the full story.
+        const nameWords = distinctiveWords(name);
         const usable = candidateUrls.filter(u => { try { return !AGGREGATOR_HOSTS.test(new URL(u).hostname); } catch { return false; } });
-        const nameMatched = usable.filter(u => {
+        // ── A PAGE THAT NAMES THE PLACE IS A CANDIDATE FOR BEING ITS ──
+        // ── OWN PAGE, WHATEVER ITS HOSTNAME IS ────────────────────────
+        // Two ways to qualify now, and the second is the one that was missing.
+        // A hostname carrying a distinctive word from the name, which finds
+        // ribelundfestival.dk. Or the page's own title and snippet naming the
+        // place, which finds oplev.esbjerg.dk/events/ribelund-festival, whose
+        // host says nothing and whose title says everything.
+        //
+        // containsName, not includes: it needs the name to stand as its own
+        // words, so "Ribe" does not match "Ribers Gaard" and a page about Ribe
+        // Metalfestival does not pass as Ribelund Festival.
+        const hostNames = (u) => {
           try {
             const host = new URL(u).hostname.replace(/^www\./, "").split(".")[0].toLowerCase();
             return nameWords.some(w => host.includes(w) || w.includes(host));
           } catch { return false; }
-        });
+        };
+        const pageNames = (u) => containsName(urlText[u] || "", name);
+        const nameMatched = usable.filter(u => hostNames(u) || pageNames(u));
         // A venue keeps the strict single name-matched site. A town or festival
         // takes the name-matched one first if there is one, then fills up to
         // three with the best remaining non-aggregator pages, Danish domains
@@ -3005,15 +3059,39 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // site. Here they belong, because this list answers "what did the
       // research actually open", and it is the only place he can check.
       // ── A SOURCE IS A PAGE THAT MENTIONS THE PLACE ────────────────
-      // Founder-vouched pages and the entry's own official site are kept
-      // whatever their snippet says: he chose those domains, and an official
-      // site is about the place by definition. Everything else has to have
-      // named the place in its title or snippet to be called a source for it.
+      // The entry's own official site is kept whatever its snippet says,
+      // because an official site is about the place by definition. Everything
+      // else has to have named the place in its title or snippet to be called a
+      // source for it.
+      //
+      // ── VOUCHING FOR A DOMAIN IS NOT VOUCHING FOR A PAGE ──────────
+      // This used to exempt founder-vouched URLs too, reasoning that he chose
+      // those domains. That conflates two different questions: the vouch answers
+      // "is this site an authority", and the snippet answers "is this page about
+      // this place". Only the second one decides whether something is a source.
+      //
+      // Oliver's Ribelund Festival draft, 12 Aug 2026, recorded these three as
+      // sources, all of them vouched, none of them about the festival:
+      //
+      //   billet.unitedtickets.dk/tour/sommeraftener-i-museumshaven
+      //       a different event, at the Ribe art museum, whose tickets are
+      //       140 to 165 DKK. That is where the wrong price came from.
+      //   billetlugen.dk/city/aalborg-1670/musik-140/koncert-1642
+      //       a category listing page for AALBORG
+      //   billetto.dk/en
+      //       Billetto's homepage
+      //
+      // Billetto is a good authority on Danish tickets and its homepage still
+      // says nothing about Ribe. And it compounds exactly the way the village
+      // smithy did on 10 Aug: __sources renders under a heading promising how we
+      // know, is stored in gemlyx_research, is reused on redraft, and pre-fills
+      // the sites-to-open-first box. A wrong source is a standing instruction to
+      // keep going back to it.
       //
       // containsName, not a substring test, for the same reason as everywhere
       // else: a source scoped to Als must not match "also". See danishNames.js.
       const mentionsThisPlace = (u) => {
-        if (founderUrls.includes(u) || (placesWebsite && u === placesWebsite)) return true;
+        if (placesWebsite && u === placesWebsite) return true;
         const said = urlSaidWhat.get(u);
         // No snippet at all means we never saw what the page says, and we do not
         // conclude a fact from a failed lookup. It is not a source.

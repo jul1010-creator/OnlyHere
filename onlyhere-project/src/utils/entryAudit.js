@@ -448,8 +448,30 @@ export const readerText = (payload) => {
 // insisting the token match would flag it as invented.
 const priceKey = (p) => `${p.lo}-${p.hi}`;
 
+// ── A NUMBER IS NOT A PRICE UNTIL IT NAMES A CURRENCY ───────────────
+// Second correction to my own work, from Oliver's run log of 12 Aug. After the
+// trace stopped reading __sources it still reported this:
+//
+//   NOT FROM THE OFFICIAL SITE: 8 to 2026, 19, 140 to 165 DKK, 6760, 33,
+//   400 DKK, 7
+//
+// 6760 is the postcode in mapHint, 7 is the house number in "Kastanie Allé 7",
+// 19 is the day of the month. All reader-facing, none of them prices. pricesIn
+// accepts a bare number on purpose, because it was written for the cost FIELDS,
+// where a bare figure beside a priced noun is a price. Turned loose on prose it
+// reads an address.
+//
+// The two real claims in that line, "140 to 165 DKK" and "400 DKK", both name a
+// currency. The seven pieces of noise do not. That is the whole distinction, and
+// it keeps the trace working on prose rather than retreating to the cost fields,
+// which would have missed a price stated inside a Reality Check.
+//
+// DELIBERATELY ASYMMETRIC. Strict about what counts as a CLAIM, lenient about
+// what counts as corroboration: a site writing "Entré 400" with the currency in
+// a heading still confirms a draft saying "400 kr". Being strict on both sides
+// would invent disagreements out of a site's formatting.
 export const tracePrices = (draftText, siteText) => {
-  const draft = [...new Map(pricesIn(draftText).map(p => [priceKey(p), p])).values()];
+  const draft = [...new Map(pricesIn(draftText).filter(p => p.currency).map(p => [priceKey(p), p])).values()];
   // Nothing to trace AGAINST is not the same as nothing tracing. Flagging every
   // price when the site could not be read would be accusing a draft of
   // something we cannot check, which is the discipline coordProblems and
