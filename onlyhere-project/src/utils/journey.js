@@ -38,6 +38,8 @@
 // their names attached, and forbid the two sentences that conflate them. The
 // numbers were always in the response; only the total was being passed on.
 
+import { durationsIn } from "./claimCheck";
+
 const mins = (s) => (Number.isFinite(Number(s?.mins)) ? Number(s.mins) : 0);
 
 // Google's vehicle types, in the words a traveller uses.
@@ -71,6 +73,16 @@ export const journeyParts = (steps, totalMinutes) => {
     // to whole minutes can otherwise overshoot the total by one.
     waiting: Math.max(0, total - onBoard - onFoot),
     changes: Math.max(0, rides.length - 1),
+    // ── WHERE YOU CHANGE, NOT JUST HOW OFTEN ────────────────────────
+    // Oliver, 12 Aug 2026, on an Esbjerg draft: "We got maps directions.."
+    // The draft said "one change in Odense", which is right, and nothing in
+    // this file could have told it so. `changes` was a COUNT and the only
+    // place a station name survived was the longest leg's endpoints, so the
+    // interchange had to be inferred. It happened to be inferred correctly.
+    // Getting the right answer from a guess is not the same as knowing, and
+    // the name was in the response the whole time: you get off ride i at
+    // rides[i].to and onto ride i+1 there.
+    interchanges: rides.slice(0, -1).map(s => s.to || "").filter(Boolean),
     longest: longest ? { mins: mins(longest), vehicle: vehicleWord(longest.vehicle), line: longest.line || "", from: longest.from || "", to: longest.to || "" } : null,
     vehicles: [...new Set(rides.map(s => vehicleWord(s.vehicle)).filter(Boolean))],
   };
@@ -91,7 +103,198 @@ export const journeyBlock = (parts) => {
     const l = parts.longest;
     bits.push(`ON BOARD: ${hm(parts.onBoard)} of that is actually moving${parts.changes ? `, across ${parts.changes + 1} legs with ${parts.changes} change${parts.changes === 1 ? "" : "s"}` : ""}. The longest single leg is ${hm(l.mins)}${l.vehicle ? ` by ${l.vehicle}` : ""}${l.line ? ` on ${l.line}` : ""}${l.from && l.to ? `, ${l.from} to ${l.to}` : ""}.`);
   }
-  if (parts.onFoot) bits.push(`ON FOOT: ${hm(parts.onFoot)} of walking across both ends combined.`);
+  if (parts.interchanges?.length) {
+    bits.push(`CHANGE AT: ${parts.interchanges.map(x => x.replace(/\.$/, "")).join(", then ")}. These are the interchange stations Google returned. Name them if you name any, and never name one that is not on this list.`);
+  }
+  if (parts.onFoot) bits.push(`ON FOOT: ${hm(parts.onFoot)} of walking across both ends combined. This is the walk at BOTH ends added together, measured to a geocoded centroid, so it is not "the station is N minutes from the centre" and must never be written as that.`);
   if (parts.waiting) bits.push(`WAITING: about ${hm(parts.waiting)} of connection and platform time.`);
   return bits.join("\n");
+};
+
+// ── AND NOW THE SAME THING WHERE IT CANNOT FAIL ─────────────────────
+//
+// Everything above is a PROMPT. The header of this file diagnosed the exact
+// bug on 8 August and fixed it by explaining the difference to the model, and
+// on 12 August an Esbjerg draft wrote "2h51min by train with one change in
+// Odense" over a DOOR TO DOOR figure anyway. DSB's own page says the train is
+// 2t 36min station to station; the 15 minutes are the walks. Neither number is
+// wrong and the sentence does not say which it means, which is the same defect
+// the header describes, four days and one explanation later.
+//
+// The first standing rule of this codebase is that anything the system already
+// knows is enforced in code, because a request has a failure rate. The system
+// knows: journeyParts holds every figure and every name. Nothing compared them
+// to the sentence.
+
+// Two passes so "3-hour-15-minute" and "51 mins" both read correctly without
+// the minutes half of an H+M form being counted twice. Bare "m" is NOT a
+// minute here: "500 m" is a distance, and reading it as eight hours of walking
+// is a worse error than missing a duration written that way.
+// ── BUILT ON THE EXTRACTOR THAT ALREADY EXISTS ──────────────────────
+// The first version of this was a second duration parser with its own pair of
+// regexes, written without checking, and the bundler caught it: claimCheck.js
+// has exported durationsIn since it was written. That is the same mistake as
+// the duplicate pricesIn earlier the same day, and this codebase's own note on
+// that one says a second extractor would have been the seventh duplicated
+// function of the week and a worse one. So this reads its tokens and adds the
+// one thing it does not do.
+//
+// WHAT IT ADDS: composition. claimCheck reads "2 hours 51 mins" as two claims,
+// which is right for its job, because it checks one duration against one
+// distance in a sentence and a range like "10 to 15 minutes" is one claim
+// centred on 12. Here "2 hours 51 mins" is ONE journey figure, and comparing
+// 120 against a measured 171 would invent a disagreement out of English.
+const JOINER = /^[\s-]*(?:and\s+)?$/;
+const isHours = (tok) => /(hours?|hrs?)(?![a-z])/i.test(tok.raw) || /\d\s*h(?![a-z])/i.test(tok.raw);
+
+export const journeyDurations = (text) => {
+  const t = String(text || "");
+  const toks = durationsIn(t);
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    const a = toks[i], b = toks[i + 1];
+    const gap = b ? t.slice(a.at + a.raw.length, b.at) : null;
+    // An hours token immediately followed by a minutes token, with nothing
+    // between them but a space, a hyphen or "and", is one figure.
+    if (b && isHours(a) && !isHours(b) && JOINER.test(gap)) {
+      out.push({ at: a.at, mins: a.minutes + b.minutes, text: t.slice(a.at, b.at + b.raw.length).trim() });
+      i++;
+      continue;
+    }
+    out.push({ at: a.at, mins: a.minutes, text: a.raw.trim() });
+  }
+  return out;
+};
+
+// A word that makes a sentence about being ON something rather than about the
+// whole trip. "Togr" is not a typo: fold() maps ø to o, and Danish prose in
+// this product mixes both spellings.
+const RIDE_WORDS = /\b(train|togr?|rail|lyntog|intercity|bus|coach|ferry|faerge|færge|metro|tram)\b/i;
+const DOOR_WORDS = /\b(door to door|door-to-door|all in|in total|altogether|including the walk)\b/i;
+const DIRECT_WORDS = /\b(direct|non-?stop|straight through|without (?:a |any )?chang(?:e|es|ing)|no chang(?:e|es))\b/i;
+const CHANGE_COUNT = /\b(?:(one|two|three|four|\d{1,2}))\s+chang(?:e|es)\b/i;
+const WORD_NUM = { one: 1, two: 2, three: 3, four: 4 };
+
+const WALK_WORDS = /\b(walk|walks|walking|on foot|stroll)\b/i;
+const STOP_WORDS = /\b(station|banegård|banegaard|railway|rail stop|bus stop|terminal|platform)\b/i;
+
+const near = (a, b, slack = 2) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= slack;
+
+// Interchange names come back as "Odense St." and get joined into a sentence
+// that already ends in a full stop.
+const stripDot = (s) => String(s || "").replace(/\.$/, "");
+
+// Returns a list of problems, each already phrased as the sentence a reader
+// would get in uncertainties. Empty list means the prose agrees with what was
+// measured, which is a real answer and is logged as one.
+export const transitProblems = (prose, { parts, drivingMins } = {}) => {
+  if (!parts) return [];
+  const out = [];
+  const measured = [parts.total, parts.onBoard, parts.onFoot, parts.waiting, parts.longest?.mins, drivingMins]
+    .filter(n => Number.isFinite(Number(n)) && Number(n) > 0)
+    .map(Number);
+  // Split on sentence ends, because attribution is a sentence-level property:
+  // the duration and the word "train" have to be in the same claim to be one.
+  for (const s of String(prose || "").split(/(?<=[.!?])\s+/)) {
+    const ride = RIDE_WORDS.test(s) && !DOOR_WORDS.test(s);
+    for (const d of journeyDurations(s)) {
+      // ── THE CONFLATION ────────────────────────────────────────────
+      // Only when the two figures actually differ. On a short hop where the
+      // ride IS the journey there is nothing to confuse and nothing to flag.
+      if (ride && near(d.mins, parts.total) && parts.onBoard > 0 && !near(parts.total, parts.onBoard, 5)) {
+        out.push(`"${d.text}" is presented as time on board, and it is the DOOR TO DOOR figure: it includes the walk at both ends and the wait. The measured time actually moving is ${hm(parts.onBoard)}. Say which one the sentence means, or a reader who checks the timetable will read this as wrong.`);
+      } else if (!measured.some(m => near(d.mins, m))) {
+        out.push(`"${d.text}" was not measured by anything in this run. The figures that were: ${measured.map(hm).join(", ")}. Either name a source for it or take it out.`);
+      }
+    }
+    // ── THE WALK FROM THE STATION TO THE CENTRE, WHICH IS NEVER MEASURED ──
+    // The second error in this file's header, still shipping four days later:
+    // "Odense railway station is about 5 minutes on foot from the city centre",
+    // where the station IS the centre. Esbjerg's version was "the station is a
+    // 7-minute walk from the centre".
+    //
+    // This is not caught by asking whether the number was measured, and the
+    // Esbjerg run proves why: 7 minutes happened to land within a minute of the
+    // measured WAITING time, so a bag-of-numbers check waved it through. The
+    // quantity claimed here is a walk between one named stop and a town centre.
+    // Nothing in this pipeline measures that. What it measures is the walk at
+    // BOTH ends added together, to a geocoded centroid that is whatever point
+    // somebody's geocoder picked. The claim is wrong in KIND, so no value of
+    // the number can rescue it.
+    if (WALK_WORDS.test(s) && STOP_WORDS.test(s) && journeyDurations(s).length) {
+      out.push(`This draft puts a time on the walk between a station and the centre. Nothing measured that: the ${hm(parts.onFoot)} on foot is the walk at BOTH ends of the journey added together, to a geocoded centroid rather than to the town centre. Drop the figure or measure that specific walk.`);
+    }
+    // ── DIRECT, WHEN IT IS NOT ────────────────────────────────────
+    if (parts.changes > 0 && DIRECT_WORDS.test(s) && RIDE_WORDS.test(s)) {
+      out.push(`This draft calls the journey direct. The measured route has ${parts.changes} change${parts.changes === 1 ? "" : "s"}${parts.interchanges?.length ? `, at ${parts.interchanges.map(stripDot).join(" and ")}` : ""}.`);
+    }
+    const cc = s.match(CHANGE_COUNT);
+    if (cc) {
+      const said = WORD_NUM[String(cc[1]).toLowerCase()] ?? Number(cc[1]);
+      if (Number.isFinite(said) && said !== parts.changes) {
+        out.push(`This draft states ${said} change${said === 1 ? "" : "s"}. The measured route has ${parts.changes}${parts.interchanges?.length ? `, at ${parts.interchanges.map(stripDot).join(" and ")}` : ""}.`);
+      }
+    }
+  }
+  // ── A STATION NAMED THAT IS NOT ON THE ROUTE ──────────────────────
+  // Only checked when Google gave us names to check against. With no
+  // interchange list this says nothing, rather than accusing the draft of
+  // something no measurement can settle.
+  if (parts.interchanges?.length) {
+    const named = String(prose || "").match(/\bchange (?:trains? )?(?:at|in) ([A-ZÆØÅ][\wÆØÅæøå-]+(?: [A-ZÆØÅ][\wÆØÅæøå-]+)?)/g) || [];
+    for (const phrase of named) {
+      const place = phrase.replace(/^change (?:trains? )?(?:at|in) /, "").trim();
+      if (!parts.interchanges.some(i => i.toLowerCase().includes(place.toLowerCase()) || place.toLowerCase().includes(i.toLowerCase()))) {
+        out.push(`This draft says you change at ${place}. The measured route changes at ${parts.interchanges.map(stripDot).join(" and ")}.`);
+      }
+    }
+  }
+  return [...new Set(out)];
+};
+
+// ── AN EMPTY FIELD IS NOT EVIDENCE OF AN ABSENCE ────────────────────
+//
+// Oliver, 12 Aug 2026. Two drafts, hours apart, from the same null:
+//
+//   "Ribe has no train station of its own"
+//   "Public transport to the exact festival ground isn't clearly mapped"
+//
+// Ribe Station exists. It is on the Bramming to Tønder line and both
+// GoCollective and DSB publish it. Nothing measured its absence, because
+// NOTHING IN THIS PIPELINE CAN. nearestStation came back empty, and an empty
+// field means "we do not know", which the writer read as "there is none".
+//
+// That makes the rule total rather than conditional, and this is the part
+// worth being exact about: there is no measurement that could license these
+// sentences. Google returning no transit itinerary is already documented three
+// hundred lines up as meaning UNCONFIRMED and not "no route exists", because
+// rural Danish bus links and island ferry operators are routinely missing from
+// the feed. So a stated transport absence is always unproven, and the check
+// needs no measurement to run.
+//
+// A HEDGE IS NOT AN ABSENCE, and the difference is the whole design. "The
+// connection could not be confirmed" is a statement about this run and is
+// exactly what the pipeline is supposed to say. "There is no connection" is a
+// statement about Denmark. Only the second is caught.
+const ABSENCE = [
+  /\b(?:has|have|with)\s+no\s+(?:\w+\s+){0,3}(?:train station|railway station|station|stop|bus|buses|public transport|transport|rail)\b/i,
+  /\bthere\s+(?:is|are)\s+no\s+(?:\w+\s+){0,3}(?:train station|railway station|station|stop|bus|buses|public transport|transport|rail)\b/i,
+  /\bno\s+(?:\w+\s+){0,3}(?:train station|railway station|public transport|transport links?|rail link|rail connection|bus route)\b/i,
+  /\b(?:is|are)\s*n[o']?t\s+(?:\w+\s+){0,2}(?:mapped|served|connected|accessible by public transport)\b/i,
+  /\bnot\s+(?:\w+\s+){0,2}(?:reachable|served)\s+by\s+(?:public transport|train|bus)\b/i,
+  /\bonly\s+(?:option|way)\s+is\s+to\s+drive\b/i,
+];
+// Said about the RESEARCH rather than about the world. These are the sentences
+// this pipeline is built to produce, and flagging them would teach it to stop
+// admitting what it does not know, which is the opposite of the point.
+const HEDGED = /\b(?:could ?n[o']?t be|was ?n[o']?t|were ?n[o']?t|not)\s+(?:\w+\s+){0,2}(?:confirmed|verified|found|established)\b|\bin (?:our |the |this )?research\b|\bwe could ?n[o']?t\b|\bunconfirmed\b|\b(?:was|were|has been|have been) (?:confirmed|verified|found|established)\b/i;
+
+export const absenceClaims = (prose) => {
+  const out = [];
+  for (const s of String(prose || "").split(/(?<=[.!?])\s+/)) {
+    if (HEDGED.test(s)) continue;
+    if (!ABSENCE.some(re => re.test(s))) continue;
+    out.push(`"${s.trim().slice(0, 120)}" states that something does not exist. Nothing in this run measured an absence and nothing could: an empty nearestStation means the pipeline does not know, and Google returning no itinerary means it could not route this, neither of which is evidence that no station or no service exists. Say it could not be confirmed, or take the sentence out.`);
+  }
+  return [...new Set(out)];
 };

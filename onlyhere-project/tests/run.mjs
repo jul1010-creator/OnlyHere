@@ -40,7 +40,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { journeyParts, journeyBlock, vehicleWord } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { journeyParts, journeyBlock, vehicleWord, transitProblems, journeyDurations, absenceClaims } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
@@ -4409,6 +4409,20 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     { mode: "transit", vehicle: "BUS", line: "4", mins: 25, from: "Fredericia", to: "Somewhere" },
   ], 120);
   is("two rides is one change", twoLeg.changes, 1);
+  // ── AND WHERE, WHICH THE COUNT COULD NEVER SAY ───────────────────
+  // Oliver, 12 Aug: "We got maps directions.." The Esbjerg draft wrote "one
+  // change in Odense", which is correct, and nothing in journey.js could have
+  // told it so: only the count survived, and the station name had to be
+  // inferred from the longest leg's endpoints. It was inferred correctly, and
+  // getting the right answer from a guess is not the same as knowing.
+  is("and the interchange is named, not just counted", twoLeg.interchanges, ["Fredericia"]);
+  is("one ride changes nowhere", p1.interchanges, []);
+  is("and the arrival is never listed as an interchange",
+     journeyParts([
+       { mode: "transit", vehicle: "HEAVY_RAIL", mins: 70, from: "A", to: "B" },
+       { mode: "transit", vehicle: "HEAVY_RAIL", mins: 60, from: "B", to: "C" },
+       { mode: "transit", vehicle: "BUS", mins: 10, from: "C", to: "D" },
+     ], 150).interchanges, ["B", "C"]);
   is("and the longest is the train, not the last leg", twoLeg.longest.mins, 70);
   is("every vehicle used is listed", twoLeg.vehicles, ["train", "bus"]);
   is("google's vehicle codes become words a traveller uses", [vehicleWord("HEAVY_RAIL"), vehicleWord("FERRY"), vehicleWord("SUBWAY")], ["train", "ferry", "metro"]);
@@ -4432,11 +4446,156 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the operator's timetable still outranks the measurement", /THE OPERATOR'S TIMETABLE OUTRANKS ALL OF THIS/.test(j));
   // His second complaint, which is the same number's other half.
   ok("the walking figure is refused as geography", /THE WALKING FIGURE IS NOT A FACT ABOUT GEOGRAPHY/.test(j));
+
+  // ── AND NOW THE SAME RULES WHERE THEY CANNOT FAIL ────────────────
+  //
+  // Everything asserted above this line is PROMPT. It was written on 8 August
+  // and explained to the model, and on 12 August the Esbjerg draft wrote
+  //
+  //   "about a 3-hour-15-minute drive versus 2h51min by train with one change
+  //    in Odense, and the station is a 7-minute walk from the centre"
+  //
+  // where 2h51min is the DOOR TO DOOR figure and DSB's own page puts the train
+  // at 2t 36min station to station. Both of this file's original two bugs, four
+  // days after they were explained. The first standing rule of this codebase
+  // is that anything the system already knows is enforced in code.
+  const { transitProblems, journeyDurations } = M;
+
+  // The parser first, because it is where the real bug in this work was: the
+  // first version read "2h51min" as 51 minutes, because \b cannot match between
+  // "h" and "5". Found by running it on the shipped sentence rather than on an
+  // example written to suit the regex.
+  is("an hour-and-minutes figure with no spaces", journeyDurations("2h51min").map(d => d.mins), [171]);
+  is("the same figure written out", journeyDurations("2 hours 51 mins").map(d => d.mins), [171]);
+  is("and hyphenated", journeyDurations("a 3-hour-15-minute drive").map(d => d.mins), [195]);
+  is("bare minutes", journeyDurations("about 45 minutes").map(d => d.mins), [45]);
+  is("and a hyphenated walk", journeyDurations("a 7-minute walk").map(d => d.mins), [7]);
+  // A DISTANCE IS NOT A DURATION. Reading "500 m" as 500 minutes would be a
+  // worse error than missing a duration written that way, so bare "m" is not
+  // a minute here.
+  is("metres are not minutes", journeyDurations("500 m along the quay").map(d => d.mins), []);
+  is("and kilometres are not either", journeyDurations("300 km").map(d => d.mins), []);
+  is("the minutes half of an hour form is not counted twice",
+     journeyDurations("2 hours 51 mins").length, 1);
+
+  const esbjerg = journeyParts([
+    { mode: "walking", mins: 8 },
+    { mode: "transit", vehicle: "HIGH_SPEED_TRAIN", line: "IC", mins: 82, from: "København H", to: "Odense St." },
+    { mode: "transit", vehicle: "HIGH_SPEED_TRAIN", line: "ICL", mins: 68, from: "Odense St.", to: "Esbjerg St." },
+    { mode: "walking", mins: 7 },
+  ], 171);
+  const shipped = "From Copenhagen it's about a 3-hour-15-minute drive versus 2h51min by train with one change in Odense, and the station is a 7-minute walk from the centre.";
+  const found = transitProblems(shipped, { parts: esbjerg, drivingMins: 195 });
+  ok("the door-to-door figure written as time on a train is caught",
+     found.some(p => /2h51min.*DOOR TO DOOR/.test(p)));
+  ok("and the sentence says what the ride actually was",
+     found.some(p => /actually moving is 2h 30min/.test(p)));
+  // ── THE ONE A BAG OF NUMBERS CANNOT CATCH ────────────────────────
+  // 7 minutes lands within a minute of this route's measured WAITING time, so
+  // asking only "was this number measured" waves it through. The claim is
+  // wrong in KIND: a walk between one named station and a town centre is not
+  // something this pipeline measures at all.
+  ok("a timed walk from the station to the centre is caught",
+     found.some(p => /walk between a station and the centre/.test(p)));
+  ok("even though that number is a minute from a measured one",
+     Math.abs(7 - esbjerg.waiting) <= 2);
+  // The measured driving figure is in the same sentence and must survive.
+  ok("the measured drive is not flagged", !found.some(p => /3-hour-15-minute/.test(p)));
+
+  // The same two errors, from the 8 August draft in this file's own header.
+  ok("the original Odense walk claim is caught too",
+     transitProblems("Odense railway station is about 5 minutes on foot from the city centre.", { parts: esbjerg })
+       .some(p => /walk between a station and the centre/.test(p)));
+
+  // ── AND AN HONEST SENTENCE PASSES CLEAN ──────────────────────────
+  // Without this the gate could be satisfied by flagging everything, which is
+  // the same uselessness as flagging nothing.
+  is("a sentence that names which figure it means is left alone",
+     transitProblems("The whole journey is about 2h51min door to door, of which 2h 30min is on the train, with one change in Odense. Driving takes 3h 15min.",
+       { parts: esbjerg, drivingMins: 195 }), []);
+
+  const wrong = transitProblems("A direct train runs to Esbjerg. You change trains at Fredericia. There are two changes.", { parts: esbjerg, drivingMins: 195 });
+  ok("a journey called direct that is not", wrong.some(p => /calls the journey direct/.test(p)));
+  ok("a change count that contradicts the route", wrong.some(p => /states 2 changes\. The measured route has 1/.test(p)));
+  ok("and an interchange that is not on the route", wrong.some(p => /change at Fredericia/.test(p)));
+  ok("with the real one named", wrong.some(p => /Odense St\b/.test(p)));
+
+  // ── NOTHING MEASURED, NOTHING ALLEGED ────────────────────────────
+  // The discipline tracePrices and coordFitsTown already follow. Google having
+  // no transit itinerary is not evidence about the prose.
+  is("no measurement means no accusation", transitProblems(shipped, { parts: null, drivingMins: 195 }), []);
+  // A short hop where the ride IS the journey has nothing to conflate.
+  is("a ride that is the whole journey is not a conflation",
+     transitProblems("The bus takes about 20 minutes.",
+       { parts: journeyParts([{ mode: "transit", vehicle: "BUS", mins: 20, from: "A", to: "B" }], 21) }), []);
+
+  // ── WIRED, AND ON BOTH PASSES ────────────────────────────────────
+  const codeJ = app6.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  ok("the breakdown is kept rather than thrown away inside a prompt",
+     /transitParts = journeyParts\(transitD\?\.steps, transitD\?\.durationMinutes\);/.test(codeJ));
+  ok("and the prompt reads the same object the gate does",
+     /journeyBlock\(transitParts\)/.test(codeJ));
+  ok("the gate runs inside gateDraft, so the correction pass is checked too",
+     codeJ.indexOf("const tp = transitProblems(readerText(t)") > codeJ.indexOf("const gateDraft = (pass) =>") &&
+     codeJ.indexOf("const tp = transitProblems(readerText(t)") < codeJ.indexOf('gateDraft("first")'));
+  ok("a problem goes to uncertainties rather than rewriting the prose",
+     /for \(const line of tp\) \{[\s\S]{0,200}t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\)\.filter\(u => u !== line\), line\];/.test(codeJ));
+  ok("and the run log records the comparison either way",
+     /note\(`The journey, against what was measured\$\{suffix\}`/.test(app6));
+
+  // ── AN EMPTY FIELD IS NOT EVIDENCE OF AN ABSENCE ─────────────────
+  //
+  // Two drafts hours apart on 12 Aug 2026, from the same empty nearestStation:
+  //   "Ribe has no train station of its own"
+  //   "Public transport to the exact festival ground isn't clearly mapped"
+  // Ribe Station exists. Nothing measured its absence and nothing could, which
+  // is why this check needs no measurement to run.
+  const { absenceClaims } = M;
+  ok("a town said to have no station", absenceClaims("Ribe has no train station of its own.").length === 1);
+  ok("a service said not to be mapped", absenceClaims("Public transport to the ground isn't clearly mapped.").length === 1);
+  ok("an absence stated outright", absenceClaims("There is no public transport to the venue.").length === 1);
+  ok("a link said not to exist", absenceClaims("No reliable rail link serves the island.").length === 1);
+  ok("and driving called the only way", absenceClaims("The only option is to drive.").length === 1);
+  // ── THE BARE NOUNS, WHICH THE SPECIFIC PATTERNS MISS ─────────────
+  // "no train station" is caught by more than one rule; "no station" and "no
+  // stop" are caught by exactly one each, and a mutation deleting either left
+  // every other assertion here green.
+  ok("a bare station, with no qualifier", absenceClaims("The village has no station.").length === 1);
+  ok("a bare stop", absenceClaims("The hamlet has no stop.").length === 1);
+  ok("and the same said the other way round", absenceClaims("There is no station in the village.").length === 1);
+  ok("and a place said to be unreachable by train", absenceClaims("The venue is not reachable by train.").length === 1);
+
+  // ── A HEDGE IS NOT AN ABSENCE, AND THIS HALF IS THE DESIGN ───────
+  // "Could not be confirmed" is a statement about this run and is exactly what
+  // the pipeline is built to say. Flagging it would teach the writer to stop
+  // admitting what it does not know, which is the opposite of the point.
+  is("a research hedge is left alone",
+     absenceClaims("No reliable public transport route from Ribe Station to the festival ground was found in research."), []);
+  is("and so is an unconfirmed connection",
+     absenceClaims("The connection could not be confirmed, so check rejseplanen.dk."), []);
+  is("and so is a link that was merely not verified",
+     absenceClaims("No transport link was verified for this venue."), []);
+  // A real station, stated positively, is not an absence.
+  is("naming a station is not claiming one is missing",
+     absenceClaims("Ribe Station is on the Bramming to Tonder line."), []);
+  // ── AND IT IS ABOUT TRANSPORT, NOT ABOUT EVERYTHING ──────────────
+  // Without this it becomes a general "no" detector and gets switched off.
+  is("an absence that is not about transport is none of its business",
+     absenceClaims("There is no charge for companions. The museum has no cafe."), []);
+
+  ok("the absence check runs inside gateDraft too",
+     codeJ.indexOf("const ac = absenceClaims(readerText(t))") > codeJ.indexOf("const gateDraft = (pass) =>") &&
+     codeJ.indexOf("const ac = absenceClaims(readerText(t))") < codeJ.indexOf('gateDraft("first")'));
+  ok("and it is logged whether or not it finds anything",
+     /note\(`Stated absences\$\{suffix\}`/.test(app6));
   ok("including the softer phrasings of it", /"just outside" or "a short walk from"/.test(j));
   ok("a wait is not published as a fact about the service", /never publish it as a fact about the service/.test(j));
   is("the rules carry no em or en dashes", (j.match(/[—–]/g) || []).length, 0);
   // Wired, or it is an essay in a file.
-  ok("the named breakdown reaches the writer", /journeyBlock\(journeyParts\(transitD\?\.steps, transitD\?\.durationMinutes\)\)/.test(app6));
+  // The breakdown is computed once and HELD, rather than built inside the
+  // prompt string and discarded on the same line, so the gate below reads the
+  // same object the writer was handed.
+  ok("the named breakdown reaches the writer", /journeyBlock\(transitParts\)/.test(app6));
   ok("and the rules ride in with every research prompt", /\$\{MEASURED_JOURNEY_RULES\}/.test(app6));
   // The step minutes have to exist, or journeyParts adds up zeros.
   const dir = readFileSync(join(root, "api/directions.js"), "utf8");

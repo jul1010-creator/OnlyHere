@@ -53,7 +53,13 @@ const modeIn = (text) => {
 // fastest way to get a check like this switched off.
 const num = (a, b) => (b == null ? Number(a) : (Number(a) + Number(b)) / 2);
 
-const DURATION = /(\d+(?:[.,]\d+)?)\s*(?:to|-|–|—)?\s*(\d+(?:[.,]\d+)?)?\s*(hours?|hrs?|h|minutes?|mins?|min)\b/gi;
+// (?![a-z]) RATHER THAN \b AFTER THE UNIT. In "2h51min" the character after
+// "h" is "5": both are word characters, so \b cannot match between them, the
+// "2h" was never seen, and the figure read as 51 minutes. Found 12 Aug 2026
+// while building the transit gate in utils/journey.js, on the exact sentence
+// an Esbjerg draft shipped. The alternation is already longest-first, which is
+// what stops "h" winning inside "hours" and stranding the rest.
+const DURATION = /(\d+(?:[.,]\d+)?)\s*(?:to|-|–|—)?\s*(\d+(?:[.,]\d+)?)?\s*(hours?|hrs?|h|minutes?|mins?|min)(?![a-z])/gi;
 const DISTANCE = /(\d+(?:[.,]\d+)?)\s*(?:to|-|–|—)?\s*(\d+(?:[.,]\d+)?)?\s*(kilometres?|kilometers?|km|metres?|meters?|m)\b/gi;
 
 const dec = (s) => Number(String(s).replace(",", "."));

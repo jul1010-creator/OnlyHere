@@ -73,7 +73,7 @@ import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyBlock } from "./utils/journey";
+import { journeyParts, journeyBlock, transitProblems, absenceClaims } from "./utils/journey";
 import { correctEntry, keepMeasured } from "./utils/correction";
 import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
@@ -2268,6 +2268,13 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // good but not complete for rural bus links. Stating a confident absence
       // from a failed lookup is the exact error that produced this bug.
       let realTransport = null;   // structured, so it can be ENFORCED and not merely suggested
+      // ── THE BREAKDOWN, KEPT SO A GATE CAN READ IT ────────────────
+      // journeyParts was computed inline inside the prompt string and thrown
+      // away on the same line, so the only consumer of the one real
+      // measurement in this pipeline was a model. Held here instead, and
+      // gateDraft compares the prose against it. See utils/journey.js.
+      let transitParts = null;
+      let drivingMins = null;
       if (["town", "festival", "free", "booking"].includes(sType) && frozenGeo) {
         try {
           const CPH = "55.6761,12.5683";
@@ -2307,6 +2314,8 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           const fmt = (d) => (d ? `${d.durationText} (${d.distanceText})` : null);
           const transit = fmt(transitD), driving = fmt(drivingD);
           realTransport = { transit, driving };   // ferry verdict is attached below, once measured
+          transitParts = journeyParts(transitD?.steps, transitD?.durationMinutes);
+          drivingMins = Number.isFinite(Number(drivingD?.durationMinutes)) ? Number(drivingD.durationMinutes) : null;
           // ── THE ONLY MEASUREMENT IN THE WHOLE DRAFT ──────────────
           // Every other number about distance or duration in this pipeline is
           // either a model's prose or a research snippet. This is the one call
@@ -2396,7 +2405,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               : "")
               + (namedLegs.length > 0 ? `REAL CONNECTING SERVICES on that public transport route, also from the API: ${namedLegs.join("; ")}.\n` : "")
               + `REAL TRANSPORT CHECK from Copenhagen (a live Google Directions query, not a search result and not a guess; the public transport figure is for a normal weekday mid-morning departure, which is the journey a traveler would actually make, not a late-night or weekend timetable): `
-              + (transit ? `BY PUBLIC TRANSPORT: ${transit}.\n${journeyBlock(journeyParts(transitD?.steps, transitD?.durationMinutes))}\n` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links and island ferry operators are not always in the transit feed, and this is ESPECIALLY common for islands, where a real, frequent, well-used ferry simply is not indexed. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk and the ferry operator, IN THE PROSE ONLY. NEVER put that advice in a short At a Glance field. The nearestStation field takes a real station, stop or terminal NAME and nothing else: no sentence, no semicolon, no "likely", no "check rejseplanen", no explanation. If no real stop can be named, nearestStation must be an EMPTY STRING. An empty field reads as "we do not know"; a field containing advice reads as a station called "check rejseplanen.dk", which is what actually shipped. If a ferry is named anywhere above, that crossing is real and carries foot passengers unless the operator says otherwise. `)
+              + (transit ? `BY PUBLIC TRANSPORT: ${transit}.\n${journeyBlock(transitParts)}\n` : `BY PUBLIC TRANSPORT: the routing query returned no itinerary. This means UNCONFIRMED, NOT "no route exists" — rural Danish bus links and island ferry operators are not always in the transit feed, and this is ESPECIALLY common for islands, where a real, frequent, well-used ferry simply is not indexed. Do NOT write that public transport is unavailable or that driving is the only option; say the connection could not be confirmed and point at rejseplanen.dk and the ferry operator, IN THE PROSE ONLY. NEVER put that advice in a short At a Glance field. The nearestStation field takes a real station, stop or terminal NAME and nothing else: no sentence, no semicolon, no "likely", no "check rejseplanen", no explanation. If no real stop can be named, nearestStation must be an EMPTY STRING. An empty field reads as "we do not know"; a field containing advice reads as a station called "check rejseplanen.dk", which is what actually shipped. If a ferry is named anywhere above, that crossing is real and carries foot passengers unless the operator says otherwise. `)
               + (driving ? `BY CAR: ${driving}. ` : "")
               + `Use these real figures for travelTime and for anything you say about getting there, in preference to any duration from a search snippet. If a ferry is involved, these already include it. NEVER state that no public transport route exists on the strength of this block alone.`;
           }
@@ -3304,6 +3313,60 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // change, and an uncertainty stated twice reads as two problems.
           const line = describePriceTrace(pt);
           t.uncertainties = [...(t.uncertainties || []).filter(u => u !== line), line];
+        }
+
+        // ── AND THE JOURNEY, AGAINST THE ONE THING THAT MEASURED IT ──
+        // Oliver, 12 Aug: "Why can't we get logistics right?" followed by his
+        // own answer, "We got maps directions.." He was right. Google measures
+        // the route, journeyParts breaks it into named figures, and until now
+        // the only consumer of that breakdown was the prompt. travelTime was
+        // the single field enforced against the measurement; every other
+        // logistic sentence a reader sees was unchecked prose.
+        //
+        // Same shape as the price trace, deliberately: it does not rewrite
+        // anything, it moves an unproven claim to uncertainties.
+        {
+          const tp = transitProblems(readerText(t), { parts: transitParts, drivingMins });
+          note(`The journey, against what was measured${suffix}`, {
+            provider: "google",
+            detail: "every duration and change in the prose, against Google's own step list",
+            outcome: !transitParts ? "skipped" : tp.length ? "empty" : "ok",
+            why: transitParts ? "" : "no transit itinerary was measured, so nothing here can be checked",
+            got: !transitParts
+              ? "nothing to check against"
+              : tp.length
+                ? tp.join(" ")
+                : `every duration and change in the prose matches the measured route (${transitParts.changes} change${transitParts.changes === 1 ? "" : "s"}${transitParts.interchanges?.length ? ` at ${transitParts.interchanges.join(", ")}` : ""})`,
+            used: !!transitParts && !tp.length,
+          });
+          for (const line of tp) {
+            t.uncertainties = [...(t.uncertainties || []).filter(u => u !== line), line];
+          }
+        }
+
+        // ── AND NO STATED ABSENCE, EVER, FROM AN EMPTY FIELD ─────────
+        // "Ribe has no train station of its own" and "Public transport to the
+        // exact festival ground isn't clearly mapped", hours apart on 12 Aug,
+        // both out of the same empty nearestStation. Ribe Station exists, on
+        // the Bramming to Tønder line, published by DSB and GoCollective.
+        //
+        // NO MEASUREMENT GATES THIS ONE, because there is no measurement that
+        // could: nothing in this pipeline can establish that a station or a
+        // service does not exist, and the code already says exactly that where
+        // Google returns no itinerary. An empty field means we do not know.
+        // See absenceClaims in utils/journey.js.
+        {
+          const ac = absenceClaims(readerText(t));
+          note(`Stated absences${suffix}`, {
+            provider: "google",
+            detail: "any sentence claiming a station or a service does not exist",
+            outcome: ac.length ? "empty" : "ok",
+            got: ac.length ? ac.join(" ") : "the draft states no absence it cannot support",
+            used: !ac.length,
+          });
+          for (const line of ac) {
+            t.uncertainties = [...(t.uncertainties || []).filter(u => u !== line), line];
+          }
         }
 
         if (sType === "festival" && (t.dateStart || t.dateEnd)) {
