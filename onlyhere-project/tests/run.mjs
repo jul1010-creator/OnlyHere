@@ -3274,7 +3274,26 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     { id: 2, domain: "visitcopenhagen.com", applies_to: "", applies_place: "Copenhagen", enabled: true },
     { id: 3, domain: "visitaarhus.com", applies_to: "", applies_place: "Aarhus", enabled: true },
   ];
-  is("an Aarhus draft gets the national one and Aarhus", sourcesFor(placed, "town", { name: "Aarhus" }).map(x => x.domain), ["visitaarhus.com", "visitdenmark.dk"].sort());
+  // ── THIS COMPARED A DANISH SORT AGAINST A CODEPOINT SORT ─────────
+  // It read `["visitaarhus.com", "visitdenmark.dk"].sort()`, which is JavaScript's
+  // default sort, so the EXPECTATION was in codepoint order while sourcesFor
+  // returns its list in DANISH order. Danish sorts "aa" as "å", the last letter
+  // of the alphabet, so visitaarhus.com correctly comes AFTER visitdenmark.dk.
+  //
+  // The two only agree when Danish collation is not actually applied, which is
+  // why this passed in a Linux container with different ICU data and failed on
+  // Oliver's Windows machine, where it was working properly. The machine that
+  // failed was the machine that was right.
+  //
+  // What this assertion is for is SCOPE, which domains are in play for an
+  // Aarhus draft, and it says so in its own name. So both sides are now put in
+  // one ICU-independent order and the claim stops depending on which Node built
+  // the container. Order under the MAX_DIRECT_SEARCHES cap is a separate
+  // question and is asserted separately.
+  const byCodepoint = (list) => [...list].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  is("an Aarhus draft gets the national one and Aarhus",
+     byCodepoint(sourcesFor(placed, "town", { name: "Aarhus" }).map(x => x.domain)),
+     byCodepoint(["visitaarhus.com", "visitdenmark.dk"]));
   is("a Copenhagen draft gets Copenhagen, not Aarhus", sourcesFor(placed, "town", { name: "Copenhagen" }).map(x => x.domain).sort(), ["visitcopenhagen.com", "visitdenmark.dk"]);
   is("and a draft with no place known gets only the national one", sourcesFor(placed, "town", null).map(x => x.domain), ["visitdenmark.dk"]);
   ok("the block names the place a scoped source is for", /for Copenhagen specifically/.test(sourceRulesBlock(placed, "town", { name: "Copenhagen" })));
@@ -5111,7 +5130,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   walk(join(root, "src"));
   ok("the scan found the source tree", jsFiles.length > 30);
   const definers = jsFiles.filter(f => /(?:const|function)\s+resolveLegMode\s*[=(]/.test(stripNonCode(readFileSync(f, "utf8"))));
-  is("resolveLegMode is defined in exactly one file", definers.map(f => f.slice(root.length)), ["src/utils/guideEnrichment.js"]);
+  // join() gives "src\\utils\\guideEnrichment.js" on Windows, so a path built
+  // with it can never equal a hardcoded forward-slash string. Normalised, since
+  // what is being asserted is which file, not which separator.
+  is("resolveLegMode is defined in exactly one file",
+     definers.map(f => f.slice(root.length).split(sep).join("/")), ["src/utils/guideEnrichment.js"]);
   ok("the app imports it rather than declaring it", /import \{[^}]*\bresolveLegMode\b[^}]*\} from "\.\/utils\/guideEnrichment"/.test(appSrc));
   ok("and its private distance helper went with it", !/legKmOrNull/.test(stripNonCode(appSrc)));
 }
@@ -5973,7 +5996,18 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and it says so plainly", /no rates set/.test(describeAverage(avgOf())));
   // The counts are measured off real API responses and stay true either way, so
   // they must survive the case where the price does not.
-  ok("the measured half is still shown", /51 calls/.test(describeAverage(avgOf())) && /104,525 tok/.test(describeAverage(avgOf())));
+  // ── AND NOT IN ONE COUNTRY'S NUMBER FORMAT ───────────────────────
+  // This asserted "104,525 tok". apiCost.js line 212 calls a bare
+  // .toLocaleString(), which formats in whatever locale the machine is set to,
+  // so the same number reads 104,525 in a US container and 104.525 on a Danish
+  // Windows box. The assertion is about the counts still being SHOWN when no
+  // price could be computed, so it now reads the digits and ignores whichever
+  // separator the machine chose.
+  const digitsOf = (s) => String(s).replace(/\D/g, "");
+  ok("the measured half is still shown",
+     /51 calls/.test(describeAverage(avgOf()))
+     && /tok/.test(describeAverage(avgOf()))
+     && digitsOf(describeAverage(avgOf())).includes("104525"));
   // A genuine floor is where "at least" earns its place, and only there.
   ok("a partial price is a floor and says so", /^at least \$0\.4000/.test(describeAverage(avgOf({ avgMeasured: 0.4, priced: 30, unpriced: 21 }))));
   ok("a complete price says it flat", /^\$0\.9000 · 51 calls/.test(describeAverage(avgOf({ avgMeasured: 0.9, priced: 51, unpriced: 0, complete: true }))));
