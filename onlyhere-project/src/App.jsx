@@ -18,6 +18,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } fro
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy } from "./utils/factCheckRead";
+import { tracePrices, describePriceTrace } from "./utils/entryAudit";
 import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
@@ -26,6 +27,7 @@ import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
+import { domainOf } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -2530,6 +2532,19 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           try {
             const scanRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
             const scanData = await scanRes.json();
+            // ── THE LIST THAT DECIDES WHETHER FIRECRAWL IS WORTH PAYING FOR ──
+            // A read that failed was indistinguishable from one that returned a
+            // thin page, because a Cloudflare wall and a JavaScript-rendered
+            // shell both answer HTTP 200. So nothing anywhere recorded WHICH
+            // domains cannot be read, and "sites that block AI" had no list
+            // behind it. One line per source now, named, on every draft.
+            note(`Source ${scanData.blocked ? "blocked" : "read"}: ${domainOf(url)}`, {
+              provider: scanData.via || "fetch",
+              detail: url.slice(0, 120),
+              outcome: scanData.blocked ? "failed" : "ok",
+              why: scanData.read || "",
+              used: !!scanData.text,
+            });
             if (scanData.text) {
               // Kept as its own string as well as being appended to context, so
               // the hours reconciliation below has the site's own words to read
@@ -3018,6 +3033,37 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // the year is not a lead, and once this is recorded a later "I could not
       // find it" is visibly a report about that search rather than about the
       // entry. See utils/factCheckRead.js.
+      // ── EVERY PRICE, TRACED BACK TO THE SITE THAT CHARGES IT ─────
+      // Oliver, 12 Aug: "the tickets on the official website HAS TO BE
+      // PRIORITISED. Otherwise Tavily and Perplexity might take some 2024 blog
+      // and put in their ticket prices."
+      //
+      // TICKET_SOURCE_RULES already says all of this to the model, and
+      // RESEARCH_SOURCE_RULES already says anything priced before 2025 is
+      // stale. Both are PROMPT, and the first standing rule of this codebase is
+      // that anything the system already knows is enforced in code, because a
+      // request has a failure rate. The system does know: the official site's
+      // own text is fetched and deliberately kept as its own string rather than
+      // folded into the blob that also holds Tavily and Perplexity. Nothing was
+      // comparing the two.
+      //
+      // It does not rewrite the prose. A figure that did not come from the site
+      // is not proven wrong, it is unproven, and the honest place for an
+      // unproven figure in this product is the uncertainties list.
+      {
+        const pt = tracePrices(JSON.stringify(t), scrapedSiteText);
+        note("Prices against the official site", {
+          provider: "google", detail: "the site's own words, compared with every price in the draft",
+          outcome: !pt.checked ? "skipped" : pt.untraced.length ? "empty" : "ok",
+          why: pt.checked ? "" : pt.why,
+          got: describePriceTrace(pt) || "the draft states no price",
+          used: pt.checked && !pt.untraced.length,
+        });
+        if (pt.checked && pt.untraced.length) {
+          t.uncertainties = [...(t.uncertainties || []), describePriceTrace(pt)];
+        }
+      }
+
       if (sType === "festival" && scrapedSiteText.trim() && (t.dateStart || t.dateEnd)) {
         const dc = datesConfirmedBy(scrapedSiteText, t.dateStart, t.dateEnd);
         note("Dates against the official site", {
@@ -3181,7 +3227,31 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const inventedCheck = await askPerplexity(
           `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${researchRules(sType, t)}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
         );
+        // ── A FAILED LAST GATE LOOKED EXACTLY LIKE A CLEAN PASS ──────
+        // Studio audit, 12 Aug, open item 1. askPerplexity NEVER THROWS: it
+        // returns { error }. So on a bad key, a 500 or a network blip this
+        // whole block was skipped, and the only stage in the function with no
+        // note() said nothing about it. What you saw was a finished draft with
+        // no invented-claim warning, which is the identical thing you see when
+        // every claim traced back to the research.
+        //
+        // This is the LAST accuracy gate in the pipeline. It cannot be allowed
+        // to be silently absent, so it now reports all three outcomes and a
+        // failure is put in front of you rather than only in the log. It still
+        // does not BLOCK: the draft is already on screen and refusing to show
+        // it would lose work, but "I could not check this" is now something you
+        // read rather than something you have to infer from an absence.
+        if (inventedCheck.error) {
+          note("Invented-claim check", { provider: "perplexity", outcome: "failed", why: String(inventedCheck.error).slice(0, 200), used: false });
+          ui(setStudioInventedWarning, inventedWarning = `THE INVENTED-CLAIM CHECK DID NOT RUN. This is the last accuracy gate in the pipeline and it failed rather than passing: ${String(inventedCheck.error).slice(0, 200)}. Nothing below has been compared against its own research, so treat every number and name in this draft as unverified until you check it yourself or redraft.`);
+        } else if (!inventedCheck.text) {
+          note("Invented-claim check", { provider: "perplexity", outcome: "empty", why: "no text came back", used: false });
+          ui(setStudioInventedWarning, inventedWarning = "THE INVENTED-CLAIM CHECK CAME BACK EMPTY. The last accuracy gate returned nothing at all, which is not the same as returning \"everything checks out\". Treat this draft as unchecked.");
+        } else if (/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
+          note("Invented-claim check", { provider: "perplexity", outcome: "ok", got: "every claim traced back to the research", used: true });
+        }
         if (!inventedCheck.error && inventedCheck.text && !/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
+          note("Invented-claim check", { provider: "perplexity", outcome: "ok", got: "claims flagged", why: inventedCheck.text.slice(0, 160), used: true });
           // AUTO-CORRECTION (Oliver: "The last fact-check was actually pointed
           // out as 'possibly made-up'. So why wasn't it re-researched and
           // changed? Then it would have been fully accurate!") — he's right:

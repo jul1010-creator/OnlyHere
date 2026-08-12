@@ -383,3 +383,66 @@ export const auditEntry = (row) => {
 export const auditAll = (rows) => (Array.isArray(rows) ? rows : [])
   .map(auditEntry)
   .sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
+
+// ── A PRICE IS ONLY A FACT IF IT CAME FROM WHO CHARGES IT ───────────
+//
+// Oliver, 12 Aug 2026: "I want to make it clear that the tickets on the
+// official website HAS TO BE PRIORITISED. Otherwise Tavily and Perplexity might
+// take some 2024 blog and put in their ticket prices."
+//
+// The rule already existed and is good. TICKET_SOURCE_RULES is mandatory on
+// anything ticketed and says where a price actually lives, that a sold out early
+// tier is not the price, and that a figure without a named day and tier is not
+// checkable. RESEARCH_SOURCE_RULES says anything priced before 2025 is stale.
+//
+// All of that is PROMPT, and the first standing rule of this codebase is that
+// anything the system already knows is applied as CODE, because telling a model
+// a fact is a request with a failure rate. The system does know this one: the
+// official site's own text is already fetched, and already kept as its own
+// string (scrapedSiteText) rather than folded into the blob that also holds
+// Tavily and Perplexity, precisely so it can be compared against later. Nothing
+// was comparing it.
+//
+// Built on the pricesIn above rather than a second extractor, which is the
+// whole reason this lives in this file: that one already handles ranges, both
+// separator conventions, currency tokens, and refuses genuinely ambiguous
+// shapes instead of guessing. A second one would have been the seventh
+// duplicated function found this week, and a worse one.
+//
+// NUMBERS ONLY, currency deliberately ignored in the comparison: a Danish site
+// writing "155,-" and a draft writing "155 DKK" are the same claim, and
+// insisting the token match would flag it as invented.
+const priceKey = (p) => `${p.lo}-${p.hi}`;
+
+export const tracePrices = (draftText, siteText) => {
+  const draft = [...new Map(pricesIn(draftText).map(p => [priceKey(p), p])).values()];
+  // Nothing to trace AGAINST is not the same as nothing tracing. Flagging every
+  // price when the site could not be read would be accusing a draft of
+  // something we cannot check, which is the discipline coordProblems and
+  // coordFitsTown already follow.
+  if (!String(siteText || "").trim()) {
+    return { checked: false, why: "the official site's text was not available", draft, traced: [], untraced: [] };
+  }
+  const site = new Set(pricesIn(siteText).map(priceKey));
+  return {
+    checked: true, why: "", draft,
+    traced: draft.filter(p => site.has(priceKey(p))),
+    untraced: draft.filter(p => !site.has(priceKey(p))),
+  };
+};
+
+// The formatter that already exists a hundred lines above, reused. It reads a
+// range as "lo to hi" and uppercases the currency, which is the same shape a
+// reader sees everywhere else in an audit.
+
+// Phrased as what it is. A price that did not come from the site that charges it
+// is not proven wrong, it is unproven, and the honest place for an unproven
+// figure in this product is the uncertainties list rather than the prose.
+export const describePriceTrace = (r) => {
+  if (!r) return "";
+  if (!r.checked) return r.draft.length ? `${r.draft.length} price${r.draft.length === 1 ? "" : "s"} in this draft could not be traced, because ${r.why}.` : "";
+  if (!r.draft.length) return "";
+  if (!r.untraced.length) return `Every price in this draft (${r.traced.map(showPrice).join(", ")}) appears in the official site's own text.`;
+  const many = r.untraced.length > 1;
+  return `NOT FROM THE OFFICIAL SITE: ${r.untraced.map(showPrice).join(", ")}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text, so ${many ? "they came" : "it came"} from a search result or a blog rather than from whoever charges it. Name the day, the ticket tier and whether it is still buyable, or move ${many ? "them" : "it"} to uncertainties.`;
+};

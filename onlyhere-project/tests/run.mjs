@@ -48,6 +48,8 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -108,7 +110,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { costContradictions, pricesIn, priceForNoun } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 const esbuild = [
   join(root, "node_modules/.bin/esbuild"),
@@ -8260,6 +8262,278 @@ rmSync(dir, { recursive: true, force: true });
   // missed, so it is this year.
   is("today itself is this year's edition", nextEditionYear("2026-08-12", AUG26), 2026);
   is("yesterday's was missed", nextEditionYear("2025-08-11", AUG26), 2027);
+}
+
+
+// ── A BOT WALL WAS BEING HANDED TO THE WRITER AS THE OFFICIAL SITE ──
+// Oliver, 12 Aug 2026: "Implementation of Firecrawl to get information from
+// websites that block AI."
+//
+// api/scan-source.js checked pageRes.ok, which catches a 403 and is right as
+// far as it goes. The two failures that matter most both answer HTTP 200: a
+// Cloudflare interstitial, whose whole body is "Just a moment, enable
+// JavaScript and cookies to continue", and a JavaScript-rendered page, which
+// strips down to a nav bar and a cookie notice.
+//
+// Both came back as { text } with a 200. And the draft pipeline appends that
+// text to the prompt under the heading "OFFICIAL WEBSITE CONTENT ... more
+// reliable than a search snippet for exact current prices, hours, tour days and
+// ferry times", so a challenge page was reaching the writer as the most
+// trustworthy source in the room.
+{
+  const { readPage, stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText,
+          domainOf, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL } = M;
+
+  const REAL_PAGE = "Den Gamle By is an open air museum in Aarhus. " + "Opening hours vary by season and tickets cost 155 DKK for adults. ".repeat(30);
+  const CLOUDFLARE = "Just a moment... Enable JavaScript and cookies to continue";
+  const JS_SHELL = "Menu Home About Contact Cookies We use cookies Accept Reject";
+
+  // ── THE GOOD PATH IS STILL THE GOOD PATH ────────────────────────
+  is("a real page reads", pageReadVerdict(200, REAL_PAGE).usable, true);
+  is("and says so", pageReadVerdict(200, REAL_PAGE).reason, "read");
+
+  // ── THE TWO THAT ANSWERED 200 ───────────────────────────────────
+  is("a Cloudflare wall is not a page", pageReadVerdict(200, CLOUDFLARE).usable, false);
+  is("and is named as what it is", pageReadVerdict(200, CLOUDFLARE).reason, "challenge-page");
+  is("a JavaScript shell is not a page either", pageReadVerdict(200, JS_SHELL).usable, false);
+  is("named separately, because it is a different problem", pageReadVerdict(200, JS_SHELL).reason, "almost-no-text");
+
+  // ── AND IT MUST NOT ACCUSE A REAL PAGE ──────────────────────────
+  // A challenge page is short AND says so at the top. Both halves are load
+  // bearing: an article that discusses bot walls is a real page and has to
+  // survive this, or the check costs a credit every time somebody drafts a
+  // place whose website writes about online security.
+  const ARTICLE = "A long article about web security. you have been blocked is a phrase it quotes. ".repeat(60);
+  ok("the fixture is genuinely a long page", ARTICLE.length > CHALLENGE_MAX_CHARS);
+  ok("and it really does contain the marker, at the top", ARTICLE.slice(0, MARKER_WINDOW).includes("you have been blocked"));
+  is("a long page that merely mentions a wall is still a page", pageReadVerdict(200, ARTICLE).usable, true);
+  // BOTH HALVES OF THE RULE, PINNED AGAINST EACH OTHER. The identical marker
+  // decides the verdict differently depending only on length, which is the
+  // whole design: a real wall is short, and a page discussing one is not.
+  const SHORT_WALL = "you have been blocked";
+  is("the same marker in a short body IS a wall", pageReadVerdict(200, SHORT_WALL).reason, "challenge-page");
+  ok("and the two fixtures differ only in length", ARTICLE.includes(SHORT_WALL) && ARTICLE.length > CHALLENGE_MAX_CHARS && SHORT_WALL.length < CHALLENGE_MAX_CHARS);
+  // The marker only counts near the top, where a real wall puts it. This body
+  // is past MIN_USEFUL_CHARS, so once the marker is out of the window there is
+  // nothing left to object to and "read" is the right answer.
+  const LATE = "x".repeat(1600) + " just a moment ";
+  ok("the buried-marker fixture is long enough to be readable", LATE.length > MIN_USEFUL_CHARS);
+  is("a marker past the window does not fire", pageReadVerdict(200, LATE).reason, "read");
+
+  // ── THE HTTP CASES, INCLUDING THE ONE THAT USED TO BE SILENT ────
+  is("a 403 is caught", pageReadVerdict(403, "").reason, "http-403");
+  is("a 404 is caught", pageReadVerdict(404, "").reason, "http-404");
+  is("a network throw is caught", pageReadVerdict(0, "", "getaddrinfo ENOTFOUND").reason, "fetch-failed");
+  is("an empty 200 is caught", pageReadVerdict(200, "").reason, "empty");
+
+  // ── WHAT IS WORTH A CREDIT ──────────────────────────────────────
+  // A 404 is a dead link, not a wall, and Firecrawl does not have the login
+  // for a 401 either. Paying to re-read nothing is the quiet waste this
+  // project keeps finding.
+  ok("a wall is worth escalating", worthDeepRead(pageReadVerdict(200, CLOUDFLARE)));
+  ok("so is a JavaScript shell", worthDeepRead(pageReadVerdict(200, JS_SHELL)));
+  ok("so is a 403", worthDeepRead(pageReadVerdict(403, "")));
+  ok("a dead link is NOT", !worthDeepRead(pageReadVerdict(404, "")));
+  ok("nor is a login", !worthDeepRead(pageReadVerdict(401, "")));
+  ok("and a page that read fine is never escalated", !worthDeepRead(pageReadVerdict(200, REAL_PAGE)));
+
+  // ── THE REQUEST BODY, TESTABLE WITHOUT A KEY OR A NETWORK ───────
+  const body = firecrawlBody("https://visitodense.dk/x");
+  is("it asks for markdown", body.formats, ["markdown"]);
+  is("and only the main content, which is the half we were paying to read past", body.onlyMainContent, true);
+  is("it escalates the proxy only as needed", body.proxy, "auto");
+  ok("and it caches, because a redraft asks for the identical URLs", body.maxAge > 0);
+  ok("the endpoint is their v2 scrape route", /^https:\/\/api\.firecrawl\.dev\/v2\/scrape$/.test(FIRECRAWL_URL));
+
+  // A shape change at their end must not read as an empty page: "the scraper
+  // moved a field" and "the site had nothing on it" need different actions.
+  is("their content is found", firecrawlText({ data: { markdown: "real text here" } }).text, "real text here");
+  is("a refusal is not an empty page", firecrawlText({ success: false }).reason, "firecrawl-refused");
+  is("nor is a moved field", firecrawlText({ data: {} }).reason, "firecrawl-shape");
+  is("and neither throws on null", firecrawlText(null).ok, false);
+
+  // ── THE STRIPPER, MOVED OUT OF THE HANDLER SO IT CAN BE TESTED ──
+  is("tags go", stripToText("<p>Hello <b>there</b></p>"), "Hello there");
+  is("scripts go entirely, contents included", stripToText("<script>var x=1;</script>Real"), "Real");
+  is("styles too", stripToText("<style>.a{color:red}</style>Real"), "Real");
+  ok("and the payload is capped", stripToText("<p>" + "x".repeat(TEXT_CAP + 5000) + "</p>").length <= TEXT_CAP);
+  is("null does not throw", stripToText(null), "");
+
+  // ── NAMED, BECAUSE A COUNT IS NOT ACTIONABLE ────────────────────
+  is("the domain is what gets logged", domainOf("https://www.visitodense.dk/en/page?x=1"), "visitodense.dk");
+  is("and a malformed url does not throw", domainOf("not a url"), "not a url");
+
+  // ── THE HANDLER IS WIRED TO ALL OF THIS ─────────────────────────
+  const api = readFileSync(join(root, "api/scan-source.js"), "utf8");
+  const reader = readFileSync(join(root, "src/utils/readPage.js"), "utf8");
+  ok("the reader uses the shared judgement rather than its own copy",
+     /import \{[\s\S]*?pageReadVerdict[\s\S]*?\} from "\.\/pageScan\.js"/.test(reader));
+  ok("scan-source calls the shared reader instead of carrying a second copy",
+     /import \{ readPage \} from "\.\.\/src\/utils\/readPage\.js"/.test(api));
+  ok("and follows the .js import style commons-photo already proved deploys",
+     /from "\.\.\/src\/utils\/[a-zA-Z]+\.js"/.test(api));
+  // ── THE READER ITSELF, RUN, NOT READ ────────────────────────────
+  // readPage takes an injectable fetch for exactly this reason. A source-text
+  // assertion about a key check survives that check being switched off. Running
+  // it against a fake network does not.
+  {
+    const PAGE = "<html><body>" + "Real content about a Danish festival with prices and dates. ".repeat(30) + "</body></html>";
+    const WALL = "<html><body>Just a moment... Enable JavaScript and cookies to continue</body></html>";
+    const fake = (plainBody, plainStatus, fireJson, fireOk = true) => async (u) => {
+      if (String(u).includes("api.firecrawl.dev")) {
+        return { ok: fireOk, status: fireOk ? 200 : 402, json: async () => fireJson, text: async () => "" };
+      }
+      return { ok: plainStatus < 400, status: plainStatus, text: async () => plainBody, json: async () => ({}) };
+    };
+
+    const good = await readPage("https://x.dk", { key: "k", fetchImpl: fake(PAGE, 200) });
+    is("a readable page is read for free", [good.via, good.credits, good.blocked], ["fetch", 0, false]);
+
+    const noKey = await readPage("https://x.dk", { key: "", fetchImpl: fake(WALL, 200) });
+    is("a wall with no key is reported, not escalated", [noKey.via, noKey.blocked, noKey.credits, noKey.read], ["fetch", true, 0, "challenge-page"]);
+    is("and it hands back no text, which is what stops it reaching a prompt", noKey.text, "");
+
+    const rescued = await readPage("https://x.dk", { key: "k", fetchImpl: fake(WALL, 200, { data: { markdown: "The real page. ".repeat(80) } }) });
+    is("a wall with a key is rescued, for one credit", [rescued.via, rescued.credits, rescued.blocked], ["firecrawl", 1, false]);
+    is("and it remembers what the first try said", rescued.firstTry, "challenge-page");
+
+    const stillWalled = await readPage("https://x.dk", { key: "k", fetchImpl: fake(WALL, 200, { error: "blocked" }, false) });
+    is("a refused scrape costs nothing, because a failed request is not charged", stillWalled.credits, 0);
+    is("and it is still reported as blocked", stillWalled.blocked, true);
+
+    const dead = await readPage("https://x.dk", { key: "k", fetchImpl: fake("", 404) });
+    is("a dead link is never escalated: it is not a wall", [dead.credits, dead.escalated, dead.read], [0, false, "http-404"]);
+  }
+  ok("the app records every source read by domain", /note\(`Source \$\{scanData\.blocked \? "blocked" : "read"\}: \$\{domainOf\(url\)\}`/
+     .test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+}
+
+
+// ── A PRICE THAT DID NOT COME FROM WHOEVER CHARGES IT ───────────────
+// Oliver, 12 Aug 2026: "I want to make it clear that the tickets on the
+// official website HAS TO BE PRIORITISED. Otherwise Tavily and Perplexity might
+// take some 2024 blog and put in their ticket prices."
+//
+// TICKET_SOURCE_RULES already says all of this to the model and
+// RESEARCH_SOURCE_RULES already says a pre-2025 price is stale. Both are PROMPT,
+// and the first standing rule here is that anything the system already knows is
+// enforced in code. The system does know: the official site's own text is
+// fetched and kept as its own string precisely so it can be compared against.
+// Nothing was comparing it.
+{
+  const { tracePrices, describePriceTrace } = M;
+
+  // Cross notation, which is the case that matters: a Danish site writes
+  // "155,-" and a draft writes "155 DKK". Same claim. Insisting the currency
+  // token match would flag a correct price as invented.
+  const ok155 = tracePrices("adults 155 DKK", "entry is 155,- for adults");
+  is("a price the site states is traced", ok155.untraced.length, 0);
+  is("and it was genuinely checked", ok155.checked, true);
+
+  // THE BUG HE DESCRIBED.
+  const blog = tracePrices("adults 120 kr", "entry is 155,- for adults");
+  is("a price the site does NOT state is flagged", blog.untraced.map(x => x.lo), [120]);
+  ok("and it is named in the warning", /NOT FROM THE OFFICIAL SITE: 120 DKK/.test(describePriceTrace(blog)));
+  ok("which says where it came from instead", /a search result or a blog/.test(describePriceTrace(blog)));
+
+  // Ranges survive, because Danish tickets are tiered and a range is one claim.
+  is("a range is one claim, not two", tracePrices("tickets 155-800 DKK", "tickets 155-800 kr").untraced.length, 0);
+
+  // ── AND IT MUST NOT ACCUSE WHAT IT CANNOT CHECK ─────────────────
+  // With no site text there is nothing to trace AGAINST, and flagging every
+  // price then would be accusing a draft of something unknowable. Same
+  // discipline coordProblems and coordFitsTown follow.
+  const noSite = tracePrices("adults 120 kr", "");
+  is("with no site text nothing is flagged", noSite.untraced.length, 0);
+  is("and it says plainly that it did not check", noSite.checked, false);
+  ok("which is reported, not swallowed", /could not be traced, because/.test(describePriceTrace(noSite)));
+
+  is("a draft with no price says nothing", describePriceTrace(tracePrices("free entry", "some page text")), "");
+
+  // It reuses the extractor that was already here rather than adding a second.
+  const ea = readFileSync(join(root, "src/utils/entryAudit.js"), "utf8");
+  is("there is exactly one price extractor in the codebase",
+     ["src/utils/entryAudit.js", "src/utils/claimCheck.js", "src/utils/helpers.js", "src/utils/sweeps.js"]
+       .filter(f => /export const pricesIn/.test(readFileSync(join(root, f), "utf8"))),
+     ["src/utils/entryAudit.js"]);
+  ok("and the trace is built on it", /pricesIn\(draftText\)/.test(ea));
+
+  // Wired into the draft, and into the uncertainties list rather than the prose.
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the draft pipeline runs the trace", /const pt = tracePrices\(JSON\.stringify\(t\), scrapedSiteText\);/.test(stripNonCode(app)));
+  ok("an untraced price goes to uncertainties, not into the prose",
+     /t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\), describePriceTrace\(pt\)\]/.test(stripNonCode(app)));
+  ok("and the run log records the comparison either way", /note\("Prices against the official site"/.test(app));
+}
+
+// ── THE EVENT UPDATER HAD CHECKED ZERO EVENTS SINCE 5 AUGUST ────────
+// It imported events, majorEvents and vikingEvents from src/data/events.js. All
+// three became `export const x = []` on 5 August when content moved to Supabase,
+// and liveContent.js refills them AT RUNTIME IN THE BROWSER. A serverless
+// function has no browser, so the batch was empty, the loop never ran, and the
+// endpoint returned a clean 200 reporting no changes. It never cost a Perplexity
+// call and never updated an event.
+{
+  const upd = readFileSync(join(root, "api/update-events-check.js"), "utf8");
+  const data = readFileSync(join(root, "src/data/events.js"), "utf8");
+
+  // The precondition, asserted rather than assumed, so this test explains
+  // itself if somebody ever refills those arrays.
+  ok("the static event arrays really are empty", /export const events = \[\];/.test(data) && /export const majorEvents = \[\];/.test(data));
+  // THE COMMENT TRAP, met head on: the file's own header QUOTES the old import
+  // line while explaining the bug, so a plain regex matches the explanation. And
+  // stripNonCode is no help here either, because the import path is a string
+  // literal and it blanks string contents. So this reads code lines only.
+  const codeLines = (src) => src.split("\n").filter(l => !/^\s*\/\//.test(l)).join("\n");
+  ok("the updater no longer reads them", !/from "\.\.\/src\/data\/events\.js"/.test(codeLines(upd)));
+  ok("the scan can still see a real import, so it is not matching nothing",
+     /from "\.\.\/src\/utils\/readPage\.js"/.test(codeLines(upd)));
+  ok("it reads the table the events actually live in", /gemlyx_content\?select=id,type,payload&type=eq\.festival/.test(upd));
+
+  // The api/ask.js quota bug, not repeated: fetch only rejects on a network
+  // fault, so a missing table or an RLS refusal arrives as a RESOLVED response
+  // and reading rows off it gives an empty list that looks like "no events".
+  // ANCHORED ON THE CONDITION AND ON WHAT IS UNIQUELY INSIDE IT. The first
+  // version of this read /if \(!r\.ok\) \{/ and there are TWO of those in this
+  // file, the Supabase read and the Perplexity call, so deleting the Supabase
+  // guard left the other one to match and the assertion passed. That is the
+  // same-shape-elsewhere trap this suite documents, met in the wild.
+  ok("it checks res.ok on the Supabase read and not just the catch",
+     /if \(!r\.ok\) \{\s*const body = await r\.text\(\)/.test(upd));
+  ok("and on the Perplexity call as well",
+     /if \(!r\.ok\) \{\s*failed\.push/.test(upd));
+  ok("and says plainly that a refusal is not an empty library", /This is NOT "no events on file"/.test(upd));
+  ok("a non-array answer is caught too", /if \(!Array\.isArray\(rows\)\)/.test(upd));
+
+  // It goes from zero spend to real spend, so it has to be able to say how much.
+  ok("there is a dry run that makes no paid call", /const dry = req\.query\.dry === "1"/.test(upd));
+  ok("the dry run reports what it would cost", /wouldCost:/.test(upd));
+  ok("a real run reports what it actually spent", /spend: \{ perplexityCalls: batch\.length, firecrawlCredits: credits \}/.test(upd));
+  ok("credits are counted from the reader rather than guessed", /credits \+= r\.credits \|\| 0;/.test(upd));
+
+  // The official site goes in FIRST, which is what makes the priority real.
+  ok("it reads the event's own site through the shared reader", /await readPage\(p\.website, \{ key: firecrawlKey \}\)/.test(upd));
+  ok("and tells the model that page outranks anything it finds", /it OUTRANKS anything you find in a search result, a blog or a listing site/.test(upd));
+  ok("a reported change records whether the official site was seen", /sawOfficialSite: !!siteText/.test(upd));
+  ok("and every read is named by domain, not counted", /domain: domainOf\(p\.website\)/.test(upd));
+  // The end date decides whether a multi-day festival is over, same rule
+  // eventDateIssues follows.
+  ok("upcoming is judged on the END date", /const last = end && parseEventDate\(end\) \? end : start;/.test(upd));
+}
+
+// ── THE LAST ACCURACY GATE COULD BE SILENTLY ABSENT ─────────────────
+// Studio audit open item 1. askPerplexity NEVER THROWS, it returns { error }, so
+// on a bad key or a 500 the whole invented-claim block was skipped, and it was
+// the only stage in the function with no note(). A finished draft with no
+// warning looked identical whether every claim traced back or nothing was
+// checked at all.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("a failed check is journalled as failed", /note\("Invented-claim check", \{ provider: "perplexity", outcome: "failed"/.test(app));
+  ok("an empty answer is journalled separately, because it is not a pass", /outcome: "empty", why: "no text came back"/.test(app));
+  ok("a genuine pass is journalled too, so the log speaks either way", /got: "every claim traced back to the research"/.test(app));
+  ok("and a failure is put in front of him, not only in the log", /THE INVENTED-CLAIM CHECK DID NOT RUN/.test(app));
+  ok("naming it as the last gate rather than a detail", /last accuracy gate in the pipeline/.test(app));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
