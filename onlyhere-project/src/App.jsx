@@ -19,7 +19,7 @@ import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
 import { tracePrices, describePriceTrace, readerText, glanceProblems, curatedFindProblems } from "./utils/entryAudit";
-import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
+import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
@@ -27,7 +27,7 @@ import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
-import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR } from "./utils/pageScan";
+import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, rankSources, sourceOrderBlock } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -73,7 +73,7 @@ import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES } from "./utils/journey";
+import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems } from "./utils/journey";
 import { correctEntry, keepMeasured } from "./utils/correction";
 import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
@@ -2231,7 +2231,47 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // where it is. nightTown is a town by another name.
       if (["town", "festival", "free", "booking", "food", "foodStreet", "night", "nightTown"].includes(sType)) {
         try {
-          const coords = await geocodePlace(name);
+          // ── ONE ATTEMPT, ON THE BARE NAME, AND SILENCE IF IT MISSED ──
+          // Oliver, 12 Aug 2026, on a Ribelund draft: "nearestStation": "".
+          // Ribe Station is a six-hundred-metre walk from that festival ground.
+          //
+          // This geocoded the bare NAME. "Ribelund Festival" is an event, and
+          // Nominatim indexes places, so for most festivals the query has
+          // nothing to hit. When it missed, coords was null, the whole `if`
+          // was skipped, AND THERE WAS NO ELSE BRANCH: no station lookup, no
+          // frozen coordinate, no line in the log. An empty nearestStation and
+          // a place with genuinely no nearby stop were the same blank, which
+          // is the silent-failure shape this codebase keeps finding, and it is
+          // what licensed "Ribe has no train station of its own".
+          //
+          // THE TOWN IS ALREADY KNOWN HERE. draftTown is resolved above from
+          // the source listing, so the second attempt is free and is the one
+          // that actually finds an event's field: "Ribelund Festival, Ribe".
+          // The third falls back to the town centre, which for a festival on
+          // the edge of a small Danish town is a far better answer than
+          // nothing, and is labelled as what it is rather than passed off as
+          // the venue.
+          let coords = await geocodePlace(name);
+          let geoVia = coords ? "the name on its own" : "";
+          if (!coords && draftTown) {
+            coords = await geocodePlace(`${name}, ${draftTown}`);
+            if (coords) geoVia = `the name with its town, "${name}, ${draftTown}"`;
+          }
+          let coordIsTownCentre = false;
+          if (!coords && draftTown) {
+            const t = townPointFor(draftTown);
+            if (t) { coords = { lat: t.lat, lon: t.lon }; geoVia = `the centre of ${draftTown}, because neither geocode found the venue`; coordIsTownCentre = true; }
+          }
+          note("Location lookup", {
+            provider: "fetch",
+            detail: "Nominatim, on the name, then on the name with its town",
+            outcome: coords ? "ok" : "empty",
+            got: coords
+              ? `${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)} from ${geoVia}`
+              : `nothing was found for "${name}"${draftTown ? ` or for "${name}, ${draftTown}"` : ", and no town was known to try with it"}`,
+            why: coords ? "" : "With no coordinate there is no station lookup and no map pin, and nothing here is evidence about what is near this place.",
+            used: !!coords,
+          });
           if (coords) {
             // Now returns { name, walk, kind } so the walk time can be stated as
             // its own fact instead of being glued onto the name, which is how
@@ -2272,9 +2312,9 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             // walkMinutes was measured by a real walking-route query inside
             // findRealNearestStop and then dropped here, on every draft ever
             // made. It is the one number that decides walk against bus.
-            frozenGeo = { lat: coords.lat, lon: coords.lon, station, stopKind, walkMinutes: st?.walkMinutes ?? null, walkText: st?.walk || "" };
+            frozenGeo = { lat: coords.lat, lon: coords.lon, station, stopKind, walkMinutes: coordIsTownCentre ? null : (st?.walkMinutes ?? null), walkText: coordIsTownCentre ? "" : (st?.walk || ""), fromTownCentre: coordIsTownCentre };
             frozenFactsText = `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station
-              ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here by a real walking-route query, so it is genuinely the stop that serves this place AND THE READER CAN WALK IT. Do not tell them to look up a bus, a taxi or a journey planner for this leg, and do not hedge the connection: the walk is the connection, and it is measured.${st.walkMinutes != null && st.walkMinutes <= SHORT_WALK_MINUTES ? ` THAT WALK IS ${st.walkMinutes} MINUTES. Under ${SHORT_WALK_MINUTES} minutes, NOTHING in this entry may suggest a bus, a taxi, driving or a journey planner for getting from there to here. Write the walk.` : ""} ${hasArrivalField(sType) ? "Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it." : "There is deliberately NO nearestStation field on this content type: a town is the destination itself and has as many arrival points as it has edges, so naming one states a fact about a coordinate rather than about the place. This is given to you so the PROSE gets the mode of arrival right, and for nothing else."} Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
+              ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here by a real walking-route query, so it is genuinely the stop that serves this place AND THE READER CAN WALK IT. Do not tell them to look up a bus, a taxi or a journey planner for this leg, and do not hedge the connection: the walk is the connection, and it is measured.${coordIsTownCentre ? ` THIS COORDINATE IS THE CENTRE OF ${String(draftTown || "the town").toUpperCase()}, NOT THE VENUE, because neither geocode found the venue itself. The stop above is the one nearest the town centre. Do not state a walking time from it to this place, and do not put a walking time in any field.` : ""}${!coordIsTownCentre && st.walkMinutes != null && st.walkMinutes <= SHORT_WALK_MINUTES ? ` THAT WALK IS ${st.walkMinutes} MINUTES. Under ${SHORT_WALK_MINUTES} minutes, NOTHING in this entry may suggest a bus, a taxi, driving or a journey planner for getting from there to here. Write the walk.` : ""} ${hasArrivalField(sType) ? "Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it." : "There is deliberately NO nearestStation field on this content type: a town is the destination itself and has as many arrival points as it has edges, so naming one states a fact about a coordinate rather than about the place. This is given to you so the PROSE gets the mode of arrival right, and for nothing else."} Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
               : " This lookup returned no arrival point, so leave nearestStation EMPTY rather than naming a landmark or a stop on the other side of water. AN EMPTY FIELD MEANS THIS SEARCH FOUND NOTHING, AND IT IS NOT EVIDENCE THAT NO STATION OR SERVICE EXISTS. A Ribelund draft turned this exact blank into the sentence 'Ribe has no train station of its own', and Ribe has a station on the Bramming to Tønder line. Do not write that this place has no station, no stop, no bus or no public transport, and do not write that its transport is unmapped or unclear. Say nothing about the arrival point at all, or say plainly that it could not be confirmed here."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
           }
         } catch (e) {
@@ -2480,6 +2520,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // blocked" that the scan log already fixed.
       const listingDomains = [];
       const staleSkipped = [];
+      // Which hosts THIS RUN decided were the operator's own, rather than a
+      // guess made inside the ranker. Feeds rankSource, so "official" means
+      // the pipeline's own answer and nothing is promoted on a hunch.
+      const officialHosts = [];
       let placesWebsite = "";   // Google's registered URL for this business, when there is one
       let realAddressText = "";  // Google's formatted address, which is the transport fact
       // ── "TAVILY/PERPLEXITY DOES A POOR JOB FINDING THE EVENTS/
@@ -2768,6 +2812,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                 // the hours reconciliation below has the site's own words to read
                 // rather than a blob that also contains Tavily and Perplexity.
                 scrapedSiteText += ` ${scanData.text}`;
+                if (!officialHosts.includes(domainOf(url))) officialHosts.push(domainOf(url));
               }
               context += ` ${tier === "old"
                 ? `OLD PAGE, BACKGROUND ONLY (${era.why}). Do NOT take any price, date, opening hour, phone number or booking detail from this. Use it only for what the place IS`
@@ -2899,7 +2944,41 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // the pre-split originals on every run, so a silent drift here fails.
       const prompts = studioPrompts(name);
 
-      const rawResearch = (hint && (hint.town || hint.dates)
+      // ── THE ORDER, IN HIS WORDS, IN FRONT OF THE RESEARCH ───────
+      // Oliver, 12 Aug 2026: "It goes Website > Wiki/Encyclopedia/other history
+      // pages > Blogs > Old Blogs", and "if something is written in 2020 and
+      // something else is contradicting in 2026, then choose the 2026".
+      //
+      // THIS IS THE ONE CHANGE TODAY MEANT TO MAKE A DRAFT QUIETER. Every gate
+      // built this afternoon turns a doubt into a line in uncertainties. A
+      // hierarchy turns a doubt into a DECISION, and a disagreement the order
+      // can settle is not reported at all. "One listing shows 400 kr, another
+      // calls it free" is a 2022 press release losing to a current listing,
+      // and under this it never reaches the reader.
+      //
+      // It also settles the question he asked while this was being written: do
+      // Tavily and Perplexity fight? They did, and the resolution was a prompt.
+      // This ranks by SOURCE rather than by ENGINE, so Perplexity's citations
+      // are ranked like any other URL and its synthesis with nothing behind it
+      // ranks under everything.
+      const rankedSources = rankSources(
+        [...new Set([...founderUrls, ...candidateUrls])].map(u => ({ url: u, text: urlSaidWhat.get(u) || "" })),
+        { officialHosts: [...officialHosts, ...(placesWebsite ? [domainOf(placesWebsite)] : [])] }
+      );
+      const orderBlock = sourceOrderBlock(rankedSources);
+      note("Source order", {
+        provider: "tavily",
+        detail: "highest authority first, newest first inside a level",
+        outcome: rankedSources.length ? "ok" : "empty",
+        got: rankedSources.length
+          ? rankedSources.slice(0, 8).map(r => `${r.host} (${r.cls}${r.year ? `, ${r.year}` : ""})`).join(" > ")
+          : "no source could be ranked, so nothing outranks anything and every disagreement stays a disagreement",
+        why: rankedSources.some(r => r.stale)
+          ? `below the current ones: ${rankedSources.filter(r => r.stale).map(r => `${r.host} (${r.year})`).join(", ")}`
+          : "",
+        used: rankedSources.length > 0,
+      });
+      const rawResearch = (orderBlock ? `${orderBlock}\n\n` : "") + (hint && (hint.town || hint.dates)
         ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[hint.town && `town/city = ${hint.town}`, hint.dates && `dates = ${hint.dates}`].filter(Boolean).join(", ")}\n\n`
         : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (realAddressText ? `${realAddressText}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
 WHEN THESE TWO CONFLICT, PREFER THE ONE YOU CAN POINT AT. "More specific" is not the test and never was: a synthesised answer always reads as more specific than a raw snippet, so preferring specificity means preferring whichever source happens to sound most confident, which is the opposite of what this pipeline is for. Prefer the claim that names a real page, an operator, an official site or a dated announcement. If the two disagree and neither is traceable, say so in uncertainties and leave the field empty rather than picking a winner.
@@ -6738,6 +6817,30 @@ If the conversation only covers a single day or a few stops with no explicit day
       // stage from the route, one call per day, in parallel, and until now
       // nothing read all of those answers together. See utils/accommodation.js.
       planProblems = [...planProblems, ...stayProblems(parsed.days)];
+
+      // ── AND THE LOGISTICS GATES, ON THIS PIPELINE TOO ────────────
+      // Oliver, 12 Aug 2026: "Have you put this rule on everything? Also the
+      // guide?" No. Every gate built that day was called from generateArea,
+      // and generateGuide had none of them while being the pipeline a traveller
+      // actually reads. Its only pass over the finished writing hunts marketing
+      // verbs.
+      //
+      // RUNS HERE, NOT WITH THE STYLE SCAN, and the position is the point: the
+      // prose scan happens around a hundred lines above, BEFORE fetchExactDurations
+      // has measured a single leg. A gate that runs before the measurement has
+      // nothing to check against, which is the same ordering bug as the price
+      // trace running before the correction pass. exactFound exists by this line.
+      {
+        const gl = guideLogisticsProblems(collectGuideProseFields(parsed), exactFound);
+        note("The guide's logistics, against its own legs", {
+          provider: "google",
+          detail: `${Object.keys(exactFound || {}).length} measured legs, against every travel sentence in the guide`,
+          outcome: gl.length ? "empty" : "ok",
+          got: gl.length ? gl.join(" ") : "no travel sentence states a duration, an absence or a mode the legs do not support",
+          used: !gl.length,
+        });
+        planProblems = [...planProblems, ...gl];
+      }
       const finalEssentials = stripDashesDeep(weatherNote
         ? { ...(parsed.essentials || {}), weatherNote }
         : (parsed.essentials || null));

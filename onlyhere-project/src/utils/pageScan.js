@@ -250,3 +250,95 @@ export const domainOf = (url) => {
 };
 export const describeRead = (url, verdict, via) =>
   `${domainOf(url)}: ${verdict?.usable ? `read via ${via}` : `not readable (${verdict?.reason || "unknown"})`}`;
+
+// ── THE ORDER, IN HIS WORDS ─────────────────────────────────────────
+//
+// Oliver, 12 Aug 2026, after a draft came back with six flagged items and five
+// more uncertainties: "This is ridiculous." Then the rule, in two messages:
+//
+//   "If something is written in 2020 and something else is contradicting in
+//    2026, then choose the 2026."
+//   "It goes Website > Wiki/Encyclopedia/other history pages > Blogs > Old
+//    Blogs."
+//
+// This is the fix for the NOISE, not only for the accuracy, and that is worth
+// being explicit about because it is the opposite of everything else built
+// today. Every gate so far turns a doubt into a line in uncertainties. A
+// hierarchy turns a doubt into a DECISION: when two sources disagree and one
+// outranks the other, there is no uncertainty to report, there is an answer.
+// "One listing shows 400 kr, another calls it free" stops being a sentence a
+// reader has to resolve, because the 2022 press release loses to the current
+// listing and never reaches the draft.
+//
+// TWO AXES, AND RECENCY CUTS ACROSS THE CLASSES. A blog from this year beats a
+// blog from 2020; it does not beat the operator's own page. An old official
+// site still owns the history and no longer owns the price, which is what
+// RESEARCH_SOURCE_RULES has always said in prose.
+export const SOURCE_CLASS = {
+  official: { rank: 1, label: "the place's own website" },
+  listing: { rank: 2, label: "a ticket site or event calendar" },
+  reference: { rank: 3, label: "an encyclopedia or history page" },
+  blog: { rank: 4, label: "a blog or a write-up" },
+};
+
+// Encyclopedias and reference works, which he groups together and which are
+// good for history and bad for a price. Matched on the registrable domain for
+// the same reason isListingHost is.
+export const REFERENCE_DOMAINS = [
+  "wikipedia.org", "wikivoyage.org", "wikidata.org", "britannica.com",
+  "denmark.dk", "denstoredanske.lex.dk", "lex.dk", "kulturarv.dk",
+  "danmarkshistorien.dk", "natmus.dk", "arkiv.dk",
+];
+
+const hostOf = (url) => {
+  try { return new URL(String(url)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
+};
+const inList = (host, list) => list.some(d => host === d || host.endsWith(`.${d}`));
+
+export const isReferenceHost = (url) => inList(hostOf(url), REFERENCE_DOMAINS);
+
+// officialHosts is what the pipeline has already decided is the operator's own
+// site, rather than a guess made here. Passing none is fine: nothing is ranked
+// official, which is honest rather than optimistic.
+export const rankSource = (url, text, { officialHosts = [] } = {}) => {
+  const host = hostOf(url);
+  const era = pageEra(text);
+  const cls = officialHosts.map(h => String(h).toLowerCase().replace(/^www\./, "")).some(h => h && (host === h || host.endsWith(`.${h}`)))
+    ? "official"
+    : isListingHost(url) ? "listing"
+    : isReferenceHost(url) ? "reference"
+    : "blog";
+  const base = SOURCE_CLASS[cls];
+  return {
+    url, host, cls, year: era.year,
+    stale: era.stale,
+    // A stale source keeps its class for stable facts and drops below every
+    // current source of the same class for anything current. One number, so
+    // sorting is a sort and not a special case.
+    rank: base.rank + (era.stale ? 10 : 0),
+    label: era.stale ? `${base.label}, and it is from ${era.year}` : base.label,
+  };
+};
+
+// Highest authority first, and within a class the newest first. Returns the
+// same objects rankSource made, so a caller can print the reason beside the URL.
+export const rankSources = (sources, opts) =>
+  (Array.isArray(sources) ? sources : [])
+    .map(s => rankSource(s?.url ?? s, s?.text ?? "", opts))
+    .sort((a, b) => a.rank - b.rank || (b.year || 0) - (a.year || 0));
+
+// ── WHAT THE WRITER IS TOLD, AND WHY IT IS SHORT ────────────────────
+// A hierarchy is only useful if it settles things. This states the order, names
+// each source's place in it, and then says the part that removes the noise: a
+// source that loses does not become an uncertainty.
+export const sourceOrderBlock = (ranked) => {
+  const list = (Array.isArray(ranked) ? ranked : []).filter(Boolean);
+  if (!list.length) return "";
+  const lines = list.map((r, i) => `${i + 1}. ${r.host} — ${r.label}${r.year ? ` (${r.year})` : ""}`);
+  return `SOURCE ORDER FOR THIS ENTRY, HIGHEST AUTHORITY FIRST:
+${lines.join("\n")}
+
+WHEN TWO OF THESE DISAGREE, THE HIGHER ONE WINS AND THE LOWER ONE IS NOT MENTIONED. Not in the prose, not in uncertainties, not as "some sources say". A disagreement you can settle by this order is settled, and reporting it anyway hands the reader a decision that was already made for them.
+The order is: the place's own website, then a ticket site or calendar, then an encyclopedia or history page, then a blog. A source from before ${STALE_BEFORE_YEAR} sits below every current source for anything that changes, so an old page may still carry history and may not carry a price, a date, an opening hour or a phone number.
+Only say sources disagree when they are at the SAME level and you cannot separate them by date.`;
+};

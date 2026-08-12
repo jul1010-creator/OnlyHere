@@ -389,3 +389,69 @@ export const lastLegProblems = (prose, { stop, walkMinutes } = {}) => {
   }
   return [...new Set(out)];
 };
+
+// ── AND ALL OF IT AGAIN, ON THE PIPELINE PEOPLE ACTUALLY READ ───────
+//
+// Oliver, 12 Aug 2026: "Have you put this rule on everything? Also the guide?"
+// No. Every gate above was called from generateArea, the Studio draft pipeline.
+// generateGuide had none of them, and its only pass over the finished writing
+// is a STYLE scan hunting marketing verbs.
+//
+// The guide is not short of measurements. fetchExactDurations runs a real
+// Directions call per leg, re-routes any leg Google says is over
+// WALK_MAX_MINUTES on foot, and returns a map keyed "origin|dest|mode". Then
+// the prose describing those legs was never compared to them. Same shape as
+// everything else today, one pipeline over.
+//
+// Takes the prose fields and the leg map, so it is testable without a network
+// and without a guide.
+const TRAVEL_TALK = /\b(walk|walks|walking|on foot|ride|rides|journey|travel|get(?:ting)? (?:there|here|to|between|around)|from .{2,30} to |train|bus|ferry|metro|tram|taxi|drive|driving|by car|tog(?:et)?|f[æa]?erge)\b/i;
+
+export const legMinutesIn = (legs) => {
+  const out = [];
+  for (const [key, d] of Object.entries(legs || {})) {
+    const mins = Number(d?.durationMinutes);
+    if (!Number.isFinite(mins) || mins <= 0) continue;
+    const [from = "", to = "", keyMode = ""] = String(key).split("|");
+    out.push({ key, mins, from, to, mode: String(d.modeUsed || keyMode || "") });
+  }
+  return out;
+};
+
+export const guideLogisticsProblems = (fields, legs) => {
+  const measured = legMinutesIn(legs);
+  const minutes = measured.map(l => l.mins);
+  const out = [];
+  for (const f of Array.isArray(fields) ? fields : []) {
+    const id = f?.id || "field";
+    const text = String(f?.text || "");
+    if (!text.trim()) continue;
+
+    // 1. A STATED ABSENCE needs no measurement to be wrong, which is why this
+    //    half runs even on a guide where every route lookup failed.
+    for (const a of absenceClaims(text)) out.push(`${id}: ${a}`);
+
+    // 2. A DURATION THAT MATCHES NO LEG THIS GUIDE MEASURED. Scoped to
+    //    sentences about travel, because "the museum takes about an hour" is a
+    //    real sentence and not a route claim, and flagging it would get this
+    //    switched off inside a week.
+    if (measured.length) {
+      for (const s of text.split(/(?<=[.!?])\s+/)) {
+        if (!TRAVEL_TALK.test(s)) continue;
+        for (const d of journeyDurations(s)) {
+          if (minutes.some(m => near(d.mins, m, 3))) continue;
+          out.push(`${id}: "${d.text}" matches no leg this guide measured. The legs it did measure are ${minutes.map(hm).join(", ")}. Use a measured figure or leave the number out.`);
+        }
+      }
+    }
+
+    // 3. HIS TEN MINUTE RULE, per leg. A leg Google routed as a walk of ten
+    //    minutes or less may not be answered with a bus, a taxi or a planner.
+    for (const l of measured) {
+      if (!/walk/i.test(l.mode) || l.mins > SHORT_WALK_MINUTES) continue;
+      if (!l.to || !text.toLowerCase().includes(l.to.toLowerCase())) continue;
+      out.push(...lastLegProblems(text, { stop: l.to, walkMinutes: l.mins }).map(p => `${id}: ${p}`));
+    }
+  }
+  return [...new Set(out)];
+};

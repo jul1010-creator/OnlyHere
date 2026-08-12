@@ -40,14 +40,14 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { journeyParts, journeyBlock, vehicleWord, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { journeyParts, journeyBlock, vehicleWord, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
@@ -4698,7 +4698,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // ── WIRED, AND THE MEASUREMENT IS KEPT THIS TIME ─────────────────
   ok("the measured walk is stored rather than dropped",
-     /frozenGeo = \{ lat: coords\.lat, lon: coords\.lon, station, stopKind, walkMinutes: st\?\.walkMinutes \?\? null/.test(app6));
+     /frozenGeo = \{ lat: coords\.lat, lon: coords\.lon, station, stopKind, walkMinutes: coordIsTownCentre \? null : \(st\?\.walkMinutes \?\? null\)/.test(app6));
+  // ── AND A TOWN-CENTRE FALLBACK CARRIES NO WALK ───────────────────
+  // The walk is from the venue to the stop. If the coordinate is the town
+  // centre because neither geocode found the venue, that walk was never
+  // measured, and passing it on would be the pipeline's own invented number.
+  ok("but not when the coordinate is only the town centre",
+     /walkText: coordIsTownCentre \? "" : \(st\?\.walk \|\| ""\), fromTownCentre: coordIsTownCentre/.test(app6));
+  ok("and the writer is told which it is",
+     /THIS COORDINATE IS THE CENTRE OF/.test(app6));
+  // ── THE GEOCODE ITSELF, WHICH HAD NO ELSE BRANCH AT ALL ──────────
+  // "nearestStation": "" on a festival 600 m from Ribe Station. geocodePlace
+  // was given the bare event name, Nominatim indexes places rather than
+  // events, and a null result skipped the whole block in silence.
+  ok("a second geocode attempt uses the town it already knows",
+     /coords = await geocodePlace\(`\$\{name\}, \$\{draftTown\}`\);/.test(app6));
+  ok("and the lookup is journalled whether it lands or not",
+     /note\("Location lookup"/.test(app6));
+  ok("with an empty result saying what it means",
+     /With no coordinate there is no station lookup and no map pin/.test(app6));
   ok("and survives the exact-coordinate refinement",
      /walkMinutes: st2\?\.walkMinutes \?\? frozenGeo\.walkMinutes \?\? null/.test(app6));
   ok("the rule runs inside gateDraft with the other field gates",
@@ -4706,6 +4724,65 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the writer is told the number as well",
      /NOTHING in this entry may suggest a bus, a taxi, driving or a journey planner/.test(app6));
   ok("with one constant behind both", /\$\{SHORT_WALK_MINUTES\}/.test(app6));
+
+  // ── AND ALL OF IT AGAIN, ON THE PIPELINE PEOPLE ACTUALLY READ ────
+  //
+  // Oliver, 12 Aug 2026: "Have you put this rule on everything? Also the
+  // guide?" No. Every gate above was called from generateArea. generateGuide
+  // had none of them, and its only pass over the finished writing is a STYLE
+  // scan hunting marketing verbs. It is not short of measurements:
+  // fetchExactDurations runs a real Directions call per leg and re-routes any
+  // leg Google says is over WALK_MAX_MINUTES on foot. Nothing compared the
+  // prose to them.
+  const { guideLogisticsProblems, legMinutesIn } = M;
+  const gLegs = {
+    "Ribe|Ribelund Festivalplads|walking": { durationMinutes: 8, modeUsed: "walking" },
+    "Copenhagen|Ribe|transit": { durationMinutes: 195, modeUsed: "transit" },
+  };
+  is("the leg map is read into measurements", legMinutesIn(gLegs).map(l => l.mins).sort((x, y) => x - y), [8, 195]);
+  is("a leg with no duration is not a measurement", legMinutesIn({ "a|b|walking": { modeUsed: "walking" } }), []);
+
+  const gFields = [
+    { id: "essentials.transportTip", text: "There is no public transport to the festival ground, so drive or take a taxi." },
+    { id: "days.0.stops.1.note", text: "Take a bus from Ribe to Ribelund Festivalplads, it saves the walk." },
+    { id: "days.0.stops.2.note", text: "The train from Copenhagen to Ribe takes about 45 minutes." },
+    { id: "days.0.stops.3.note", text: "The museum takes about an hour to see properly." },
+    { id: "days.0.stops.4.note", text: "Ribelund Festivalplads is an eight-minute walk from Ribe." },
+  ];
+  const gp2 = guideLogisticsProblems(gFields, gLegs);
+  ok("a stated absence in the guide is caught", gp2.some(p => /^essentials\.transportTip/.test(p)));
+  ok("a bus offered for a measured eight-minute walk is caught",
+     gp2.some(p => /^days\.0\.stops\.1\.note/.test(p) && /MEASURED at 8 minutes/.test(p)));
+  ok("a duration matching no measured leg is caught",
+     gp2.some(p => /^days\.0\.stops\.2\.note/.test(p) && /matches no leg this guide measured/.test(p)));
+  // ── AND THE TWO HONEST SENTENCES SURVIVE ─────────────────────────
+  // "The museum takes about an hour" is not a route claim, and a gate that
+  // cannot tell the difference gets switched off inside a week.
+  ok("a duration that is not about travel is left alone", !gp2.some(p => /stops\.3\.note/.test(p)));
+  ok("and saying the measured walk is exactly right", !gp2.some(p => /stops\.4\.note/.test(p)));
+  // Every finding names the field, because "the guide has a problem" is not
+  // something anyone can act on.
+  ok("every finding names its field", gp2.every(p => /^(essentials|days)\./.test(p)));
+
+  // ── NO LEGS MEASURED, ONLY THE CLAIM THAT NEEDS NO MEASUREMENT ───
+  const noLegs = guideLogisticsProblems(gFields, {});
+  is("a guide whose routing failed still catches a stated absence", noLegs.length, 1);
+  ok("and alleges nothing about durations", !noLegs.some(p => /matches no leg/.test(p)));
+
+  // ── WIRED, AND AFTER THE MEASUREMENT ─────────────────────────────
+  // The style scan runs about a hundred lines earlier, BEFORE
+  // fetchExactDurations has measured a single leg. A gate placed there would
+  // have nothing to check against, which is the ordering bug that let an
+  // untraceable 275 kr through this morning.
+  const codeGu = app6.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  ok("the guide runs the gate", /const gl = guideLogisticsProblems\(collectGuideProseFields\(parsed\), exactFound\);/.test(codeGu));
+  ok("after the legs are measured",
+     codeGu.indexOf("const gl = guideLogisticsProblems(") > codeGu.indexOf("await fetchExactDurations("));
+  ok("and after the prose has been rewritten for style",
+     codeGu.indexOf("const gl = guideLogisticsProblems(") > codeGu.indexOf("writeGuideProseField(parsed, flag.id, cleaned)"));
+  ok("its findings reach the same place the plan problems do",
+     /planProblems = \[\.\.\.planProblems, \.\.\.gl\];/.test(codeGu));
+  ok("and it is journalled either way", /note\("The guide's logistics, against its own legs"/.test(app6));
 
   // ── AND THE NULL THAT CAUSED IT IS NOW READABLE ──────────────────
   // The invented negative was the symptom. The cause is that the nearest-stop
@@ -9335,6 +9412,102 @@ rmSync(dir, { recursive: true, force: true });
      (code.match(/scrapedSiteText \+=/g) || []).length, 1);
   ok("the run log names who the checks will believe", /note\("Whose words the checks will use"/.test(appS));
   ok("and names any source held back for being too old", /note\("Sources too old to state a fact"/.test(appS));
+}
+
+// ── WEBSITE > ENCYCLOPEDIA > BLOG > OLD BLOG ────────────────────────
+//
+// Oliver, 12 Aug 2026, after a draft came back with six flagged items and five
+// uncertainties: "This is ridiculous." Then the rule, in two messages:
+//   "If something is written in 2020 and something else is contradicting in
+//    2026, then choose the 2026."
+//   "It goes Website > Wiki/Encyclopedia/other history pages > Blogs > Old Blogs."
+//
+// This is the only change of the day meant to make a draft QUIETER. Every gate
+// built that afternoon turns a doubt into a line in uncertainties; a hierarchy
+// turns a doubt into a decision, and a disagreement the order can settle is
+// not reported at all.
+{
+  const { rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, STALE_BEFORE_YEAR } = M;
+  const cur = "the 2026 edition";
+  const old = "our trip in 2019";
+
+  is("the operator's own site is first",
+     rankSource("https://oplev.esbjerg.dk/events/x", cur, { officialHosts: ["oplev.esbjerg.dk"] }).cls, "official");
+  is("a calendar or reseller is second", rankSource("https://kultunaut.dk/x", cur).cls, "listing");
+  is("an encyclopedia is third", rankSource("https://en.wikipedia.org/wiki/Ribe", cur).cls, "reference");
+  is("and anything else is a blog", rankSource("https://someblog.dk/ribe", cur).cls, "blog");
+  ok("the Danish reference works count too", isReferenceHost("https://denstoredanske.lex.dk/Ribe"));
+  ok("but a lookalike domain does not", !isReferenceHost("https://notwikipedia.org/x"));
+  ok("every reference entry is a bare registrable domain",
+     REFERENCE_DOMAINS.every(d => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)));
+
+  // ── AND HIS TIEBREAK, WHICH CUTS ACROSS THE CLASSES ──────────────
+  // ── INPUT ORDER IS DELIBERATELY THE WRONG ORDER ──────────────────
+  // Array.prototype.sort is stable, so a fixture that happens to arrive in
+  // roughly the right order passes even when the comparator is gutted. The
+  // 2019 blog is placed BEFORE the 2022 one so only his date tiebreak can put
+  // them right, and the whole list arrives worst-first.
+  const ranked = rankSources([
+    { url: "https://oldtravelblog.com/x", text: old },
+    { url: "https://via.ritzau.dk/x", text: "24. august 2022" },
+    { url: "https://someblog.dk/x", text: cur },
+    { url: "https://en.wikipedia.org/wiki/Ribe", text: cur },
+    { url: "https://kultunaut.dk/x", text: cur },
+    { url: "https://oplev.esbjerg.dk/x", text: cur },
+  ], { officialHosts: ["oplev.esbjerg.dk"] });
+  is("the order is his order", ranked.map(r => r.host),
+     ["oplev.esbjerg.dk", "kultunaut.dk", "en.wikipedia.org", "someblog.dk", "via.ritzau.dk", "oldtravelblog.com"]);
+  // A 2022 press release outranks a 2019 blog and is still below every current
+  // source, which is exactly "old blogs last" generalised past blogs.
+  ok("an old source sits below every current one",
+     ranked.findIndex(r => r.host === "via.ritzau.dk") > ranked.findIndex(r => r.host === "someblog.dk"));
+  ok("and the newer of two old ones comes first",
+     ranked.findIndex(r => r.host === "via.ritzau.dk") < ranked.findIndex(r => r.host === "oldtravelblog.com"));
+  ok("a stale source is marked stale", ranked.find(r => r.host === "via.ritzau.dk").stale);
+  ok("and says its year in its label", /2022/.test(ranked.find(r => r.host === "via.ritzau.dk").label));
+  // An undatable page is not demoted, same discipline as pageEra.
+  ok("a page with no year is not treated as old", !rankSource("https://someblog.dk/x", "no year here").stale);
+
+  // ── CLASS AND DATE PULLING OPPOSITE WAYS ─────────────────────────
+  // The case that proves staleness actually sinks a source rather than merely
+  // being recorded on it: the operator's own page, but from 2019, against a
+  // blog from this year. His rule says the current source wins anything that
+  // changes, and an old official site keeps only its history.
+  const clash = rankSources([
+    { url: "https://ribelundfestival.dk/x", text: "the 2019 edition" },
+    { url: "https://someblog.dk/x", text: cur },
+  ], { officialHosts: ["ribelundfestival.dk"] });
+  is("a current blog outranks the operator's own page from 2019",
+     clash.map(r => r.host), ["someblog.dk", "ribelundfestival.dk"]);
+  ok("and the old one is still named as the operator's site",
+     /the place's own website/.test(clash[1].label));
+
+  // ── THE CLAUSE THAT ACTUALLY REMOVES THE NOISE ───────────────────
+  const block = sourceOrderBlock(ranked);
+  ok("the block states the order", /SOURCE ORDER FOR THIS ENTRY/.test(block));
+  ok("with each source's place in it", /oplev\.esbjerg\.dk — the place's own website/.test(block));
+  ok("and the loser is not mentioned anywhere",
+     /THE HIGHER ONE WINS AND THE LOWER ONE IS NOT MENTIONED/.test(block));
+  ok("not even as an uncertainty", /not in uncertainties/.test(block));
+  ok("a disagreement it can settle is settled", /is settled/.test(block));
+  ok("and only a genuine tie is reported",
+     /Only say sources disagree when they are at the SAME level/.test(block));
+  ok("the year it names matches the gate", new RegExp(`before ${STALE_BEFORE_YEAR}`).test(block));
+  is("nothing to rank says nothing", sourceOrderBlock([]), "");
+
+  // ── WIRED, AND IN FRONT OF THE RESEARCH ──────────────────────────
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const codeR = appR.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  ok("the sources are ranked", /const rankedSources = rankSources\(/.test(codeR));
+  ok("and the block is built from that ranking rather than left empty",
+     /const orderBlock = sourceOrderBlock\(rankedSources\);/.test(codeR));
+  ok("using the hosts this run judged official rather than a guess",
+     /officialHosts: \[\.\.\.officialHosts, \.\.\.\(placesWebsite \? \[domainOf\(placesWebsite\)\] : \[\]\)\]/.test(codeR));
+  ok("and an operator page is what puts a host on that list",
+     /scrapedSiteText \+= ` \$\{scanData\.text\}`;\s*if \(!officialHosts\.includes\(domainOf\(url\)\)\) officialHosts\.push/.test(codeR));
+  ok("the order goes in front of the research, not after it",
+     /const rawResearch = \(orderBlock \? `\$\{orderBlock\}/.test(codeR));
+  ok("and the run log records what outranked what", /note\("Source order"/.test(appR));
 }
 
 // ── THE EVENT UPDATER HAD CHECKED ZERO EVENTS SINCE 5 AUGUST ────────

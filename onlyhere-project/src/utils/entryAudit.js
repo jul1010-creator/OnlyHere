@@ -567,6 +567,13 @@ const SEARCH_REPORT = [
   [/\bat the time of writing\b/i, "dates itself to when the draft was written"],
   [/\bcould\s*n[o']?t\s+be\s+(?:confirmed|verified|found)\b/i, "reports that a check came up empty"],
   [/\b(?:un|not )(?:confirmed|verified)\b/i, "reports that a check came up empty"],
+  // Oliver, 12 Aug, on a later draft: "One listing shows 400 kr, another calls
+  // it free; this hasn't been confirmed with the organiser, so call ahead."
+  // The contracted perfect slipped past every pattern above, and the errand on
+  // the end was only being policed in gemlyxFind.
+  [/\b(?:has|have|had)\s*(?:n[o']?t|not)\s+been\s+(?:confirmed|verified|checked)\b/i, "reports that a check came up empty"],
+  [/\bremains?\s+(?:unconfirmed|unverified|unclear)\b/i, "reports that a check came up empty"],
+  [/\b(?:one|another|other)\s+(?:listing|source|site)s?\s+(?:shows?|says?|calls?|lists?|gives?)\b/i, "narrates two sources disagreeing"],
   [/\bno\s+(?:listing|listings|price|prices)\s+(?:was|were)?\s*(?:found|available)\b/i, "reports that a check came up empty"],
   [/\bin (?:our |the |this )?research\b/i, "describes the research rather than the place"],
   [/\bwe\s+could\s*n[o']?t\b/i, "describes the research rather than the place"],
@@ -584,8 +591,24 @@ export const glanceLeak = (value) => {
   if (!v) return "";
   for (const [re, why] of SEARCH_REPORT) if (re.test(v)) return why;
   for (const [re, why] of ATTRIBUTION) if (re.test(v)) return why;
+  // An errand belongs in no short field either, not only in gemlyxFind. "so
+  // call ahead" sitting where a price goes is the same failure as "check
+  // rejseplanen.dk" sitting where a station name goes, which is the case this
+  // whole rule was written for. GO_CHECK is declared below, and a const
+  // declaration is hoisted into the module scope before this ever runs.
+  for (const [re, why] of ERRANDS) if (re.test(v)) return why;
   return "";
 };
+
+// The subset of GO_CHECK that is wrong in a glance field regardless of which
+// field it is. Kept separate from GO_CHECK rather than reusing it whole,
+// because "check the website" is a legitimate short answer in a price field and
+// a bad one in the single curated find.
+const ERRANDS = [
+  [/\b(?:so |then )?call\s+(?:ahead|them|first|the\s+\w+)/i, "tells the reader to phone instead of answering"],
+  [/\b(?:check|confirm)\s+(?:with\s+)?(?:the\s+)?(?:organiser|organizer|venue|operator|them)\b/i, "tells the reader to go and check"],
+  [/\b(?:check|consult|look\s*up)\s+(?:on\s+)?(?:rejseplanen|the journey planner)/i, "sends the reader to a journey planner"],
+];
 
 export const glanceProblems = (payload, fields = GLANCE_FIELDS) => {
   const out = [];
