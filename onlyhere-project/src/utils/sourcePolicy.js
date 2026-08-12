@@ -338,7 +338,28 @@ export const sourcesToSearch = (rows, type, ctx) => {
     seen.add(s.domain);
     out.push(s);
   }
-  return out.sort((a, b) => (a.appliesTo === b.appliesTo ? a.domain.localeCompare(b.domain) : a.appliesTo ? 1 : -1));
+  // ── MOST SPECIFIC FIRST, BECAUSE THIS LIST GETS CUT ───────────────
+  // sourcesFor orders universal first, and it is right to: it feeds the PROMPT,
+  // where the general policy should read before the exception to it. This list
+  // feeds a BUDGET. Its only caller is directSourceSearches, which slices it at
+  // MAX_DIRECT_SEARCHES, so ordering universal first means the cap is spent
+  // before a type-specific source is ever reached.
+  //
+  // Oliver, 12 Aug 2026, after adding billetto.dk and watching nothing change:
+  // "I have put this.. but it doesen't matter.." He was right, and it was worse
+  // than he thought. He had six sources scoped to Everything and four scoped to
+  // Events, the cap is four, and his run log named the four chosen:
+  // enjoynordjylland.dk, getyourguide.com, visitcopenhagen.dk, visitdenmark.dk.
+  // Every one of them universal. So ticketmaster.dk, kultunaut.dk, billetto.dk
+  // and visitorservice.kk.dk were unreachable on every festival draft ever made,
+  // and would have stayed unreachable however many more he added. Three
+  // ticketing sources sat in that list doing nothing while the pipeline reported
+  // "no Danish listing" for a festival whose tickets are on Billetto.
+  //
+  // A source scoped to this exact type is the one he chose FOR this type, so it
+  // goes first. The universal ones still reach the draft through
+  // sourceRulesBlock, so nothing is lost. They just stop eating the budget.
+  return out.sort((a, b) => (a.appliesTo === b.appliesTo ? a.domain.localeCompare(b.domain) : a.appliesTo ? -1 : 1));
 };
 
 // ── "IF I PUT IN TICKETMASTER.DK, DOES IT GO THROUGH ALL OF

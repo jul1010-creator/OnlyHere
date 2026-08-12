@@ -109,7 +109,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -4051,6 +4051,52 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      M.sourcesToSearch([{ id: 1, domain: "tivoli.dk", applies_to: "", applies_place: "", enabled: false }], "festival", { name: "Copenhell" }), []);
   is("and the wrong type is still skipped",
      M.sourcesToSearch([{ id: 1, domain: "tivoli.dk", applies_to: "festival", applies_place: "", enabled: true }], "town", { name: "Aarhus" }), []);
+
+  // ── THE CAP WAS BEING SPENT BEFORE THE TICKET SOURCES WERE REACHED ─
+  // Oliver, 12 Aug 2026, having added billetto.dk to his vouched list and
+  // watched the run log ignore it: "I have put this.. but it doesen't matter.."
+  //
+  // sourcesToSearch sorted universal sources FIRST, and its only caller slices
+  // the result at MAX_DIRECT_SEARCHES. With six Everything sources and four
+  // Events sources against a cap of four, every slot went to a universal source
+  // and no event or ticketing source was ever searched on any festival draft.
+  // His log named the four: enjoynordjylland.dk, getyourguide.com,
+  // visitcopenhagen.dk, visitdenmark.dk.
+  {
+    const { sourcesToSearch, directSourceSearches, MAX_DIRECT_SEARCHES } = M;
+    // His actual list, in the order the Studio shows it.
+    const his = [
+      { id: 1, domain: "visitdenmark.dk", applies_to: "", applies_place: "", enabled: true },
+      { id: 2, domain: "visitaarhus.dk", applies_to: "", applies_place: "", enabled: true },
+      { id: 3, domain: "getyourguide.com", applies_to: "", applies_place: "", enabled: true },
+      { id: 4, domain: "enjoynordjylland.dk", applies_to: "", applies_place: "", enabled: true },
+      { id: 5, domain: "visitodense.dk", applies_to: "", applies_place: "", enabled: true },
+      { id: 6, domain: "visitnorthzealand.com", applies_to: "", applies_place: "", enabled: true },
+      { id: 7, domain: "ticketmaster.dk", applies_to: "festival", applies_place: "", enabled: true },
+      { id: 8, domain: "kultunaut.dk", applies_to: "festival", applies_place: "", enabled: true },
+      { id: 9, domain: "billetto.dk", applies_to: "festival", applies_place: "", enabled: true },
+    ];
+    const chosen = directSourceSearches(his, "festival", { name: "Ribelund Festival" }).map(s => s.domain);
+    ok("the cap is still four", chosen.length === MAX_DIRECT_SEARCHES);
+    // THE ONE THAT MATTERS. Every source he tagged for events must survive the
+    // cut on an event draft, or tagging one is a no-op.
+    is("every ticketing source he vouched for now survives the cap",
+       ["billetto.dk", "kultunaut.dk", "ticketmaster.dk"].filter(d => chosen.includes(d)),
+       ["billetto.dk", "kultunaut.dk", "ticketmaster.dk"]);
+    ok("and a universal source still gets the spare slot", chosen.some(d => !["billetto.dk", "kultunaut.dk", "ticketmaster.dk"].includes(d)));
+    // Specificity, not alphabet: billetto sorts first either way, so assert the
+    // GROUPING rather than a single position.
+    const scopedFirst = sourcesToSearch(his, "festival", { name: "Ribelund Festival" }).map(s => !!s.appliesTo);
+    is("type-scoped sources come before universal ones",
+       scopedFirst, [...scopedFirst].sort((a, b) => (a === b ? 0 : a ? -1 : 1)));
+    // A town draft must not suddenly pull ticketing sources in.
+    const townChosen = directSourceSearches(his, "town", { name: "Ribe" }).map(s => s.domain);
+    ok("a town draft still gets no ticketing source", !townChosen.some(d => ["billetto.dk", "kultunaut.dk", "ticketmaster.dk"].includes(d)));
+    // And the shop subdomains were already built and never used, because these
+    // domains never won a slot.
+    const billetto = directSourceSearches(his, "festival", { name: "Ribelund Festival" }).find(s => s.domain === "billetto.dk");
+    ok("the ticket shop subdomains ride along with it", !!billetto && billetto.domains.some(d => /^billet\./.test(d)));
+  }
 
   // ── THE STRICT RULE IS UNTOUCHED ────────────────────────────────
   // Deciding where to LOOK is not deciding what to BELIEVE. A wrong search
@@ -8548,7 +8594,39 @@ rmSync(dir, { recursive: true, force: true });
 
   // Wired into the draft, and into the uncertainties list rather than the prose.
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the draft pipeline runs the trace", /const pt = tracePrices\(JSON\.stringify\(t\), scrapedSiteText\);/.test(stripNonCode(app)));
+  ok("the draft pipeline runs the trace", /const pt = tracePrices\(readerText\(t\), scrapedSiteText\);/.test(stripNonCode(app)));
+
+  // ── AND ONLY OVER WHAT A READER CAN SEE ──────────────────────────
+  // It was handed JSON.stringify(t), the whole draft, so it read numbers out of
+  // the machinery and reported Ritzau press-release ids from inside __sources
+  // URLs as prices that were "NOT FROM THE OFFICIAL SITE", straight into
+  // uncertainties. Same rule stripDashesDeep already followed: a key beginning
+  // with _ is machinery, not prose.
+  {
+    const { readerText, tracePrices } = M;
+    const draft = {
+      name: "Ribelund Festival",
+      ticketInfo: "Day tickets 400 DKK",
+      blogBody: [{ heading: "Being There", body: "A field outside Ribe." }],
+      __lat: 55.328, __lon: 8.765,
+      __sources: ["https://via.ritzau.dk/pressemeddelelse/13654191/x?publisherId=13560064"],
+      __hours: { mon: "10 to 17" },
+    };
+    const text = readerText(draft);
+    ok("the prose is read", /Day tickets 400 DKK/.test(text) && /A field outside Ribe/.test(text));
+    ok("the heading is read too, since a reader sees it", /Being There/.test(text));
+    ok("a source URL is not", !/ritzau/.test(text));
+    ok("nor a press-release id inside one", !/13654191/.test(text) && !/13560064/.test(text));
+    ok("nor a coordinate", !/55\.328/.test(text));
+    ok("nor a cached measurement", !/10 to 17/.test(text));
+    // THE REGRESSION, END TO END. The only figure reported must be the one a
+    // reader can actually see.
+    is("only the visible price is traced",
+       tracePrices(text, "the site says nothing about money").untraced.map(p => p.lo), [400]);
+    // And with the whole draft it would have found the ids, which is what shipped.
+    ok("the old input really did produce that noise",
+       tracePrices(JSON.stringify(draft), "nothing").untraced.length > 1);
+  }
   ok("an untraced price goes to uncertainties, not into the prose",
      /t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\), describePriceTrace\(pt\)\]/.test(stripNonCode(app)));
   ok("and the run log records the comparison either way", /note\("Prices against the official site"/.test(app));

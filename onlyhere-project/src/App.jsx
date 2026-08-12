@@ -18,7 +18,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } fro
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText } from "./utils/entryAudit";
 import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
@@ -3106,7 +3106,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // is not proven wrong, it is unproven, and the honest place for an
       // unproven figure in this product is the uncertainties list.
       {
-        const pt = tracePrices(JSON.stringify(t), scrapedSiteText);
+        const pt = tracePrices(readerText(t), scrapedSiteText);
         note("Prices against the official site", {
           provider: "google", detail: "the site's own words, compared with every price in the draft",
           outcome: !pt.checked ? "skipped" : pt.untraced.length ? "empty" : "ok",

@@ -384,6 +384,40 @@ export const auditAll = (rows) => (Array.isArray(rows) ? rows : [])
   .map(auditEntry)
   .sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
 
+
+// ── ONLY WHAT A READER CAN SEE IS A PRICE CLAIM ─────────────────────
+// My own regression, found by Oliver's run log on 12 Aug within hours of
+// shipping it. tracePrices was handed JSON.stringify(t), the WHOLE draft, so it
+// read numbers out of the machinery and reported this:
+//
+//   NOT FROM THE OFFICIAL SITE: 8 to 2026, 19, 93, 7, 400 DKK, 21 to 22,
+//   26902, 1157325, 1072724, 645998, 19918555, 13654191, 13560064
+//
+// 13654191 and 13560064 are Ritzau press-release ids sitting inside __sources
+// URLs. None of those are prices, the one plausible figure is buried in noise,
+// and the whole line went into uncertainties on the entry.
+//
+// This codebase already had the rule and I did not apply it: keys beginning
+// with _ are machinery, not prose, which is exactly why stripDashesDeep skips
+// them. A price claim is something a reader can see. Nothing else counts.
+export const readerText = (payload) => {
+  const out = [];
+  const walk = (v) => {
+    if (typeof v === "string") { out.push(v); return; }
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if (v && typeof v === "object") {
+      for (const [k, val] of Object.entries(v)) {
+        // Same test stripDashesDeep uses. A url, a coordinate, a cached
+        // measurement and a source list are not sentences anybody reads.
+        if (k.startsWith("_")) continue;
+        walk(val);
+      }
+    }
+  };
+  walk(payload);
+  return out.join(" ");
+};
+
 // ── A PRICE IS ONLY A FACT IF IT CAME FROM WHO CHARGES IT ───────────
 //
 // Oliver, 12 Aug 2026: "I want to make it clear that the tickets on the
