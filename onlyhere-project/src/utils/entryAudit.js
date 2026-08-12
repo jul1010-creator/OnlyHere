@@ -838,13 +838,34 @@ export const selfContradictions = (payload) => {
 //
 // pagesByUrl is a map of url to the text actually read from it, so this reports
 // where a price WAS SEEN rather than guessing from a source list.
-export const priceSource = (priceText, pagesByUrl) => {
+// ── AND IT ASKS THE BEST PAGE FIRST, NOT THE FIRST PAGE ─────────────
+// Oliver, 12 Aug 2026, on a draft whose __sources listed
+// oplev.esbjerg.dk, Esbjerg Kommune's own page for its own festival, and whose
+// __priceSource credited kultunaut.dk: "!?!?!?!?!!?!?!?!?"
+//
+// Fair. The first version of this walked Object.entries and returned the FIRST
+// page whose text contained the figure, which is insertion order, which is
+// whatever got scraped first. I had built the source hierarchy ninety minutes
+// earlier and then written a function that ignored it. The organiser's own
+// page was sitting in the same map.
+//
+// `order` is a list of hosts, best first, as rankSources produces it. Pages on
+// no known host are tried last rather than dropped: a page that states the
+// price is still where the price came from, even if nothing ranked it.
+export const priceSource = (priceText, pagesByUrl, order = []) => {
   const wanted = pricesIn(priceText).filter(p => p.currency).map(priceKey);
   if (!wanted.length) return null;
-  for (const [url, text] of Object.entries(pagesByUrl || {})) {
-    const here = new Set(pricesIn(text).map(priceKey));
+  const hostOf = (u) => { try { return new URL(String(u)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
+  const rankOf = (u) => {
+    const h = hostOf(u);
+    const i = order.findIndex(x => { const o = String(x).toLowerCase().replace(/^www\./, ""); return h === o || h.endsWith(`.${o}`); });
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  const urls = Object.keys(pagesByUrl || {}).sort((a, b) => rankOf(a) - rankOf(b));
+  for (const url of urls) {
+    const here = new Set(pricesIn(pagesByUrl[url]).map(priceKey));
     const hit = wanted.find(k => here.has(k));
-    if (hit) return { url, price: hit };
+    if (hit) return { url, price: hit, host: hostOf(url), ranked: rankOf(url) !== Number.MAX_SAFE_INTEGER };
   }
   return null;
 };

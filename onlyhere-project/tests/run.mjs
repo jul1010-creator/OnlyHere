@@ -8675,6 +8675,47 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   };
   const kept = keepMeasured(measuredDraft, rewritten);
   is("the rewrite's prose is accepted", kept.patched.desc, "a better intro");
+  ok("and a healthy correction is not refused as truncated", !kept.rejected);
+
+  // ── A FIELD THE REWRITE OMITTED IS NOT A FIELD IT DELETED ────────
+  //
+  // Oliver, 12 Aug 2026, on a draft that came back holding name, nearestStation,
+  // travelTime, ticketStatus, website and the four __ fields AND NOTHING ELSE:
+  // no desc, no dates, no ticketInfo, no prose. That set is exactly `name` plus
+  // MEASURED_FIELDS plus the __ fields, which is precisely what this function
+  // restores, which is how it was diagnosed.
+  //
+  // `const out = { ...corrected }` was the whole bug: it started from the
+  // REWRITE, so every ordinary field the rewrite failed to echo back was
+  // deleted. An 8192-token rewrite of a large JSON that runs out of room does
+  // exactly that, and what reaches Publish is a shell.
+  const full = {
+    name: "Ribelund Festival", town: "Ribe", dateStart: "2026-08-19", ticketInfo: "400 kr",
+    desc: "A one-day music festival.", atmosphere: "Gates open at 10:30.",
+    realityCheck: "Entry is 400 kr.", mapHint: "Pile Alle 2",
+    nearestStation: "Ribe Station", travelTime: "", ticketStatus: "unknown", website: "",
+    __sources: ["https://oplev.esbjerg.dk/x"],
+  };
+  const shell = { name: "Ribelund Festival", nearestStation: "Ribe Station (regional trains via Bramming)", travelTime: "", ticketStatus: "unknown", website: "" };
+  const trunc = keepMeasured(full, shell);
+  ok("a truncated rewrite is refused outright", trunc.rejected);
+  is("and the draft is returned untouched", trunc.patched.desc, "A one-day music festival.");
+  is("including the field the rewrite decorated", trunc.patched.nearestStation, "Ribe Station");
+  ok("with the missing fields named", /town, dateStart, ticketInfo, desc/.test(trunc.why));
+
+  // ── AND OMISSION ALONE NEVER DELETES, EVEN BELOW THE THRESHOLD ───
+  // The refusal catches the catastrophic case. This catches the quiet one: a
+  // rewrite that drops a single field must not delete it either.
+  const oneGone = { ...full };
+  delete oneGone.mapHint;
+  const partial = keepMeasured(full, oneGone);
+  ok("a single omitted field is not a refusal", !partial.rejected);
+  is("and it is still there", partial.patched.mapHint, "Pile Alle 2");
+  // ── BUT AN HONEST EMPTYING STILL WINS ────────────────────────────
+  // The prompt tells the correction to empty a field it cannot verify. That
+  // sends the KEY with "", which must survive the merge.
+  is("a field the rewrite deliberately emptied stays empty",
+     keepMeasured(full, { ...full, ticketInfo: "" }).patched.ticketInfo, "");
   // THE POINT. Every measured value survives a rewrite that dropped it.
   is("a measured travel time is put back", kept.patched.travelTime, "38min 🚂");
   is("a verified ticket status is put back", kept.patched.ticketStatus, "on_sale");
@@ -9345,7 +9386,39 @@ rmSync(dir, { recursive: true, force: true });
   is("a date is not traced to a page that happens to charge that much",
      priceSource("open from 19 August", { "https://x.dk/": "entry 19 kr" }), null);
   is("and a price on no page read is null", priceSource("Entry is 275 kr", { "https://x.dk/": "400 kr" }), null);
+  // ── AND IT ASKS THE BEST PAGE FIRST, NOT THE FIRST PAGE ─────────
+  // Oliver, 12 Aug 2026, on a draft whose __sources listed oplev.esbjerg.dk,
+  // Esbjerg Kommune's own page for its own festival, and whose __priceSource
+  // credited kultunaut.dk: "!?!?!?!?!!?!?!?!?" The first version walked
+  // Object.entries and took the first match, which is insertion order, which is
+  // whatever got scraped first. The hierarchy had been built ninety minutes
+  // earlier and this ignored it.
+  const twoPages = {
+    "https://www.kultunaut.dk/perl/arrmore?ArrNr=19918555": "Pris: Entre: 400 kr.",
+    "https://oplev.esbjerg.dk/events/ribelund-festival": "Billet til festivalen koster 400 kr.",
+  };
+  is("the organiser's own page wins over the calendar",
+     priceSource("Entry 400 kr", twoPages, ["oplev.esbjerg.dk", "kultunaut.dk"])?.host, "oplev.esbjerg.dk");
+  is("and the order is what decides it, not the insertion order",
+     priceSource("Entry 400 kr", twoPages, ["kultunaut.dk", "oplev.esbjerg.dk"])?.host, "kultunaut.dk");
+  // A page nothing ranked is tried last rather than dropped: it still states
+  // the price, and where the price came from is a fact either way.
+  is("an unranked page is still where the price came from",
+     priceSource("Entry 400 kr", { "https://someblog.dk/x": "400 kr" }, ["oplev.esbjerg.dk"])?.host, "someblog.dk");
+  ok("and is marked as outside the ranked list",
+     priceSource("Entry 400 kr", { "https://someblog.dk/x": "400 kr" }, ["oplev.esbjerg.dk"])?.ranked === false);
   ok("the draft records it", /t\.__priceSource = \{ url: src\.url, host: domainOf\(src\.url\), price: src\.price/.test(appG));
+  ok("with the ranking passed in", /priceSource\(readerText\(t\), pagesByUrl, rankedSources\.map\(r => r\.host\)\)/.test(appG));
+
+  // ── AND A MEASURED FIELD IS FORCED AFTER THE REWRITE TOO ─────────
+  // The frozenGeo override runs before the correction. keepMeasured restores a
+  // measured field only when the rewrite CHANGED it, so a rewrite that
+  // DECORATES one can drift: "Ribe Station (regional trains via Bramming)"
+  // where the measurement says "Ribe Station".
+  ok("nearestStation is set back to the measurement after the correction",
+     /t\.nearestStation !== frozenGeo\.station\) \{[\s\S]{0,600}t\.nearestStation = frozenGeo\.station;/.test(appG));
+  ok("and the drift is journalled rather than silently undone",
+     /note\("A measured field was rewritten"/.test(appG));
   ok("and the log names the page", /note\("Where the price came from"/.test(appG));
   ok("with per-URL text kept rather than one blob", /pagesByUrl\[url\] = scanData\.text;/.test(appG));
 
@@ -9891,6 +9964,7 @@ rmSync(dir, { recursive: true, force: true });
      RESEARCH_CHECK_CAP > 3000 * 4);
 
   // ── WIRED: ALL FOUR, ON THE AUTOMATIC PATH ───────────────────────
+  const appI = app;
   const codeI = app.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
   ok("the check reads the whole research through the window",
      /const checkResearch = researchForCheck\(rawResearch\);/.test(codeI));
@@ -9925,10 +9999,35 @@ rmSync(dir, { recursive: true, force: true });
      !/\^\(everything\|no issues\|nothing\|all claims\)/.test(codeI));
   // ── AND IT IS ASKED TO VERIFY ONLY WHAT A READER SEES ────────────
   // 36% of the Ribelund payload was source URLs and ISO timestamps.
+  // ── AND MEASURED FIELDS ARE NOT CLAIMS TO FACT-CHECK ─────────────
+  // Oliver's 12 Aug run flagged "Ribe Station (regional trains via Bramming)"
+  // as "not supported anywhere in the research provided". Of course not: Ribe
+  // Station came from GOOGLE PLACES. Asking a text-search model whether a
+  // measurement appears in web snippets is a category error that puts a flag on
+  // every measured field of every draft, and then hands those flags to a
+  // rewriter.
   ok("the draft is stripped of machine fields before being checked",
-     /JSON\.stringify\(readerFields\(t\)\)/.test(codeI));
+     /JSON\.stringify\(writtenFields\(t\)\)/.test(codeI));
   is("in both the check and the rewrite",
-     (codeI.match(/JSON\.stringify\(readerFields\(t\)\)/g) || []).length, 2);
+     (codeI.match(/JSON\.stringify\(writtenFields\(t\)\)/g) || []).length, 2);
+  // Anchored on the ONE definition, so a second shadowing helper cannot satisfy
+  // it: a mutation that added `const writtenFieldsUnused = o => o` above the
+  // real one left this green in its first form.
+  is("writtenFields is defined exactly once",
+     (codeI.match(/const writtenFields = \(o\) =>/g) || []).length, 1);
+  ok("and it drops the measured ones on top of the machine ones",
+     /const writtenFields = \(o\) =>[\s\S]{0,200}!MEASURED_FIELDS\.includes\(k\)/.test(codeI));
+  // ── AND THE REFUSAL IS PUT IN FRONT OF HIM ───────────────────────
+  // A refused correction that says nothing looks exactly like a correction that
+  // had nothing to do, which is the silent-failure shape this codebase keeps
+  // finding.
+  // ── ANCHORED ON THE CONDITION, NOT THE STRING ───────────────────
+  // Checking for the note's text alone stays green when the branch is switched
+  // off, because the string is still in the file. The guard is the thing.
+  ok("a refused correction is journalled",
+     /if \(kept\.rejected\) \{[\s\S]{0,400}note\("The correction was refused"/.test(codeI));
+  ok("and shown, not only logged", /THE AUTO-CORRECTION WAS REFUSED AND THE DRAFT BELOW IS THE ORIGINAL/.test(appI));
+  ok("with the flagged claims still put in front of him", /still need your eye/.test(appI));
   ok("and the rewriter is handed the relabelled findings, not the raw reply",
      /Flagged claims:\\n\$\{flaggedText\}/.test(codeI));
   ok("an UNVERIFIED finding is not licence to change a value",

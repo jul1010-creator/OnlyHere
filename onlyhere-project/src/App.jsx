@@ -74,7 +74,7 @@ import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems } from "./utils/journey";
-import { correctEntry, keepMeasured } from "./utils/correction";
+import { correctEntry, keepMeasured, MEASURED_FIELDS } from "./utils/correction";
 import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
@@ -375,6 +375,22 @@ create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticat
 const readerFields = (o) =>
   (o && typeof o === "object")
     ? Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith("_")))
+    : o;
+
+// ── AND A MEASURED FIELD IS NOT A CLAIM TO FACT-CHECK ───────────────
+// Oliver's 12 Aug run flagged "Ribe Station (regional trains via Bramming)" as
+// UNVERIFIED, "not supported anywhere in the research provided". Of course it
+// is not: RIBE STATION CAME FROM GOOGLE PLACES, not from the research. Asking a
+// text-search model whether a measurement appears in a pile of web snippets is
+// a category error, and it generates a flag on every measured field in every
+// draft, which then goes to a rewriter that tries to "fix" it.
+//
+// So the checker sees what the WRITER wrote and nothing the pipeline measured.
+// Whether the station is right is settled by findRealNearestStop and by the
+// override that runs after the correction, neither of which needs an opinion.
+const writtenFields = (o) =>
+  (o && typeof o === "object")
+    ? Object.fromEntries(Object.entries(readerFields(o)).filter(([k]) => !MEASURED_FIELDS.includes(k)))
     : o;
 
 const researchRules = (type, where) => {
@@ -3483,14 +3499,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // carrying { source: "writer" } because nothing ever filled it from a
         // page that was actually read.
         {
-          const src = priceSource(readerText(t), pagesByUrl);
+          const src = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host));
           if (src) {
             t.__priceSource = { url: src.url, host: domainOf(src.url), price: src.price, at: new Date().toISOString() };
             note("Where the price came from", {
               provider: "fetch",
               detail: "the page whose own text carries the figure in this draft",
               outcome: "ok", used: true,
-              got: `${src.price} DKK is on ${domainOf(src.url)}: ${src.url.slice(0, 120)}`,
+              got: `${src.price} DKK is on ${domainOf(src.url)}${src.ranked ? ", the highest-ranked page read that states it" : " (a page outside the ranked list)"}: ${src.url.slice(0, 120)}`,
             });
           } else if (pt.checked && pt.draft.length) {
             note("Where the price came from", {
@@ -3798,7 +3814,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // things. See researchForCheck in utils/factCheckRead.js.
         const checkResearch = researchForCheck(rawResearch);
         const inventedCheck = await askPerplexity(
-          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing.\n${INVENTED_CHECK_FORMAT}\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, t)}\n\nResearch it was written from:\n${checkResearch.text}\n\nFinished draft:\n${JSON.stringify(readerFields(t))}`
+          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing.\n${INVENTED_CHECK_FORMAT}\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, t)}\n\nResearch it was written from:\n${checkResearch.text}\n\nFinished draft:\n${JSON.stringify(writtenFields(t))}`
         );
         // ── A FAILED LAST GATE LOOKED EXACTLY LIKE A CLEAN PASS ──────
         // Studio audit, 12 Aug, open item 1. askPerplexity NEVER THROWS: it
@@ -3886,7 +3902,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
                 `Here is a draft (JSON), a list of claims flagged as possibly invented, and FRESH targeted research with the real facts. Correct ONLY the flagged claims: where the fresh research gives the real fact, replace the wrong value with it; where the research could NOT verify a flagged claim, remove that specific claim from the prose or set that field to an honest empty string — never keep an unverified claim and never invent a replacement. Leave every other field and sentence completely untouched — same structure, same keys, same wording for everything not flagged. Respond with ONLY the complete corrected JSON, valid JSON, nothing else.\n${FACT_CHECK_SCOPE_RULES}\n\nA finding marked UNVERIFIED means no page states this either way, and what you do with it DEPENDS ENTIRELY ON WHERE IT IS.
 IN A MEASURED FIELD (travelTime, ticketStatus, website, nearestStation, a coordinate, a price this pipeline traced): unverified is not evidence the draft is wrong. Leave the value alone and add a line to uncertainties.
 IN PROSE (atmosphere, whoItsFor, realityCheck, desc, any sentence a reader reads): unverified means NOBODY WROTE THIS ANYWHERE AND THE WRITER PUT IT IN. That is an invention, not a doubt. DELETE THE SENTENCE. Do not soften it, do not hedge it, do not keep it and note it. A draft that states "Coach loads of visitors arrive from around the country" and then says in its own uncertainties that this could not be confirmed has published an invention and a retraction side by side, which is worse than either alone.
-Removing a sentence is always allowed and never needs a replacement. A shorter honest paragraph beats a longer one carrying something no source supports.\n\nFlagged claims:\n${flaggedText}\n\nFresh research (the real facts):\n${reResearch.text}\n\nCurrent draft:\n${JSON.stringify(readerFields(t))}`,
+Removing a sentence is always allowed and never needs a replacement. A shorter honest paragraph beats a longer one carrying something no source supports.\n\nFlagged claims:\n${flaggedText}\n\nFresh research (the real facts):\n${reResearch.text}\n\nCurrent draft:\n${JSON.stringify(writtenFields(t))}`,
                 8192
               );
               if (!fixResult.error) {
@@ -3906,6 +3922,19 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   // all along. This one had nothing. See keepMeasured.
                   const kept = keepMeasured(t, corrected);
                   const merged = kept.patched;
+                  // ── A TRUNCATED REWRITE IS NOT A CORRECTION ─────
+                  // Oliver's draft came back holding name, the measured fields
+                  // and the __ fields, and nothing else: no desc, no dates, no
+                  // ticketInfo, no prose. keepMeasured refuses that outright
+                  // now, and this is where you find out it happened rather
+                  // than looking at a shell and wondering.
+                  if (kept.rejected) {
+                    note("The correction was refused", {
+                      provider: "claude", detail: "rewrite of the flagged claims only",
+                      outcome: "failed", used: false, why: kept.why,
+                    });
+                    ui(setStudioInventedWarning, inventedWarning = `THE AUTO-CORRECTION WAS REFUSED AND THE DRAFT BELOW IS THE ORIGINAL. ${kept.why} The claims it was asked to fix are still in it and still need your eye:\n\n${flaggedText}`);
+                  }
                   // t, not just the editor. draftOutcome below returns t, and
                   // for a queued draft that return value IS the draft, so an
                   // auto-correction that only reached state was thrown away.
@@ -3921,6 +3950,27 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   // Before the ui() calls below, not after: t and merged are
                   // the same object, so an uncertainty added here is in the
                   // JSON that reaches the editor rather than one render late.
+                  // ── AND THE MEASURED VALUES, FORCED AGAIN ────────
+                  // The frozenGeo override runs five hundred lines above this,
+                  // BEFORE the rewrite. keepMeasured then restores a measured
+                  // field only when the rewrite CHANGED it, so a field the
+                  // rewrite decorated rather than replaced can drift: Oliver's
+                  // draft carried "Ribe Station (regional trains via Bramming)"
+                  // where the measurement said "Ribe Station". nearestStation
+                  // takes a NAME and nothing else, and an override that runs
+                  // before the last writer overrides nothing. Same lesson as
+                  // gateDraft itself, applied to the values rather than the
+                  // checks.
+                  if (frozenGeo?.station && typeof t.nearestStation !== "undefined" && t.nearestStation !== frozenGeo.station) {
+                    note("A measured field was rewritten", {
+                      provider: "claude", detail: "nearestStation, after the correction pass",
+                      outcome: "failed", used: false,
+                      why: `the rewrite made it "${String(t.nearestStation).slice(0, 80)}"; the measurement says "${frozenGeo.station}", and that is what it is set back to`,
+                    });
+                    t.nearestStation = frozenGeo.station;
+                  }
+                  if (frozenGeo && typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
+                  if (frozenGeo && typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
                   gateDraft("again");
                   if (kept.restored.length) {
                     note("Auto-correction overreached", {

@@ -160,9 +160,46 @@ export const keepMeasured = (before, corrected) => {
   if (!corrected || typeof corrected !== "object") {
     return { patched: before, restored: [], why: "The correction returned nothing usable, so the draft is unchanged." };
   }
-  const out = { ...corrected };
+  // ── A FIELD THE REWRITE OMITTED IS NOT A FIELD IT DELETED ────────
+  //
+  // Oliver, 12 Aug 2026, on a draft that came back holding name, nearestStation,
+  // travelTime, ticketStatus, website and the four __ fields, AND NOTHING ELSE.
+  // No desc, no ticketInfo, no dates, no town, no atmosphere, no Reality Check.
+  // That set is exactly `name` plus MEASURED_FIELDS plus the __ fields, which is
+  // precisely the set this function restores, which is how it was diagnosed.
+  //
+  // `{ ...corrected }` was the whole bug. It starts from the REWRITE and then
+  // puts back only what isPipelineOwned covers, so every ordinary field the
+  // rewrite failed to echo back was silently deleted. An 8192-token rewrite of
+  // a large JSON that runs out of room mid-object does exactly that, and the
+  // draft that reaches Publish is a shell.
+  //
+  // Starting from `before` fixes it without weakening the correction: a rewrite
+  // that genuinely wants a field EMPTIED still sends the key with "" and that
+  // wins, because it is later in the spread. Only an OMITTED key falls through
+  // to the original, and omission is never something the prompt asks for.
+  const out = { ...before, ...corrected };
   const restored = [];
   const keys = new Set([...Object.keys(before || {}), ...Object.keys(corrected || {})]);
+  // And a rewrite that dropped a large share of the draft did not correct it,
+  // it truncated. That is not a merge worth making: the whole thing is refused
+  // and the caller is told, rather than publishing a shell with the measured
+  // fields intact and the entry gone.
+  // ORDINARY FIELDS ONLY. A rewrite routinely omits the __ keys, because the
+  // prompt sends a draft with them stripped and the model has nothing to echo
+  // back; restoring those is this function's ordinary job and not evidence of
+  // anything. Counting them as losses made the refusal fire on a healthy
+  // correction, which the suite caught immediately.
+  const beforeKeys = Object.keys(before || {}).filter(k => !isPipelineOwned(k));
+  const dropped = beforeKeys.filter(k => !(k in (corrected || {})));
+  if (beforeKeys.length >= 5 && dropped.length > beforeKeys.length / 3) {
+    return {
+      patched: before,
+      restored: [],
+      rejected: true,
+      why: `The correction came back missing ${dropped.length} of ${beforeKeys.length} fields (${dropped.slice(0, 8).join(", ")}${dropped.length > 8 ? ", and more" : ""}), which is a truncated rewrite rather than a correction. The draft is unchanged.`,
+    };
+  }
   for (const k of keys) {
     if (!isPipelineOwned(k)) continue;
     if (JSON.stringify(before?.[k]) === JSON.stringify(out[k])) continue;
