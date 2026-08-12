@@ -2009,14 +2009,28 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             : `none of ${founderSources.length} vouched sources were in scope`,
           used: searches.length > 0,
         });
-        for (const { domain, domains, query } of searches) {
+        for (const { domain, domains, query, fallbackQuery } of searches) {
           try {
             // The domain AND its ticket-shop subdomains, in one query: a Danish
             // festival's prices live on billet.<site> far more often than on the
             // site itself. See domainVariants in utils/sourcePolicy.js.
-            const fRes = await fetch(`/api/search?q=${encodeURIComponent(query)}&domains=${encodeURIComponent((domains || [domain]).join(","))}`);
-            const fData = await fRes.json();
-            const urls = fRes.ok && !fData.error ? (fData.results || []).map(r => r.url).filter(Boolean) : [];
+            const domainParam = encodeURIComponent((domains || [domain]).join(","));
+            const runSearch = async (q) => {
+              const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&domains=${domainParam}`);
+              const d = await r.json();
+              return { r, d, urls: r.ok && !d.error ? (d.results || []).map(x => x.url).filter(Boolean) : [] };
+            };
+            // ── THE NAME FIRST, THE KEYWORD TAIL ONLY IF IT FOUND NOTHING ──
+            // Measured against the live endpoint on 12 Aug: scoped to
+            // kultunaut.dk, the old combined query returned nothing at all and
+            // the bare name returned eight results, one carrying "Pris: Entré:
+            // 400 kr." See directSourceSearches for the full measurement.
+            let { r: fRes, d: fData, urls } = await runSearch(query);
+            let usedFallback = false;
+            if (fRes.ok && !fData.error && !urls.length && fallbackQuery && fallbackQuery !== query) {
+              const second = await runSearch(fallbackQuery);
+              if (second.urls.length) { ({ r: fRes, d: fData, urls } = second); usedFallback = true; }
+            }
             const snips = fRes.ok && !fData.error
               ? (fData.results || []).map(r => r.snippet || r.content || "").filter(Boolean).slice(0, 3).join(" ")
               : "";
@@ -2033,10 +2047,12 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // are different answers and were previously the same blank.
             note(`Founder source: ${domain}`, {
               provider: "tavily",
-              detail: String(query).slice(0, 140),
+              detail: String(usedFallback ? fallbackQuery : query).slice(0, 140),
               outcome: !(fRes.ok && !fData.error) ? "failed" : urls.length ? "ok" : "empty",
               why: !(fRes.ok && !fData.error) ? String(fData?.error || `search failed (${fRes.status})`).slice(0, 160) : "",
-              got: urls.length ? `${urls.length} page${urls.length === 1 ? "" : "s"} about this place` : "nothing about this place on that site",
+              got: urls.length
+                ? `${urls.length} page${urls.length === 1 ? "" : "s"} from that site${usedFallback ? ", found only after adding the keyword tail" : ""}`
+                : "nothing about this place on that site, with or without the keyword tail",
               used: !!(fData.answer || snips),
             });
             if (fData.answer || snips) {

@@ -401,7 +401,37 @@ export const directSourceSearches = (rows, type, ctx) => {
     .slice(0, MAX_DIRECT_SEARCHES)
     // `domain` stays the bare host, because it is what the panel reports back to
     // him and what he typed. `domains` is what the search is actually given.
-    .map(s => ({ domain: s.domain, domains: domainVariants(s.domain), query: `${names} ${words}` }));
+    // ── THE NAME FIRST. THE KEYWORDS ONLY IF THAT FINDS NOTHING ─────
+    // Measured on 12 Aug 2026 against the live endpoint, same key, same code
+    // path, scoped to kultunaut.dk:
+    //
+    //   "Ribelund Festival billetter datoer program tickets dates programme"
+    //       -> results: []          the query this function has always sent
+    //   "Ribelund Festival"
+    //       -> 8 results, one of them carrying
+    //          "Hvor: Ribelund Festivalplads, Pile Alle 2, Ribe ;
+    //           Hvornår: Ons. d. 19. august 2026, kl. 10.30-19. ;
+    //           Pris: Entré: 400 kr."
+    //
+    // The price, the date, the hours and the address, in the snippet, from a
+    // source he had vouched for. The keyword tail was turning eight results into
+    // none. A control search for "koncert" on the same domain returned eight, so
+    // the index is fine and the query was the problem.
+    //
+    // The tail is not deleted, because it is doing real work elsewhere: it is
+    // what biases a search toward a price or an opening-hours page rather than
+    // any page that mentions the place. It becomes the FALLBACK. A bare name is
+    // tried first, and the tail only runs when that came back empty.
+    //
+    // COST: one call in the normal case, exactly as now. Two only when the first
+    // found nothing, which is the case that currently returns nothing at all, so
+    // the extra call buys an answer where today there is none.
+    .map(s => ({
+      domain: s.domain,
+      domains: domainVariants(s.domain),
+      query: names,
+      fallbackQuery: `${names} ${words}`,
+    }));
 };
 
 // ── WHAT THE LIST COSTS ─────────────────────────────────────────────

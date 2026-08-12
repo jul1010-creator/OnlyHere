@@ -4124,7 +4124,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // BOTH SPELLINGS IN THE QUERY, because a Danish tourist board files the
   // capital under København and an English-only query cannot reach that page.
   ok("the query carries both names of the place", cph.every(x => /Copenhagen/.test(x.query) && /København/.test(x.query)));
-  ok("and asks in Danish as well as English", cph.every(x => /åbningstider/.test(x.query)));
+  // ── THE KEYWORD TAIL MOVED TO A FALLBACK, AND WHY ────────────────
+  // Measured against the live endpoint on 12 Aug 2026, scoped to kultunaut.dk:
+  //   "Ribelund Festival billetter datoer program tickets dates programme" -> []
+  //   "Ribelund Festival" -> 8 results, one carrying "Pris: Entré: 400 kr."
+  // A control search for "koncert" on the same domain returned eight, so the
+  // index was fine and the query was the problem. The tail still does real work
+  // biasing toward a price or opening-hours page, so it is kept as the second
+  // attempt rather than deleted.
+  ok("the Danish keywords are still asked", cph.every(x => /åbningstider/.test(x.fallbackQuery)));
+  ok("but not in the first query, which is what was returning nothing",
+     cph.every(x => !/åbningstider/.test(x.query)));
+  ok("the fallback still carries both names too", cph.every(x => /Copenhagen/.test(x.fallbackQuery) && /København/.test(x.fallbackQuery)));
+  ok("and the two queries genuinely differ", cph.every(x => x.query !== x.fallbackQuery));
   is("a name with one spelling is not doubled up",
      (M.directSourceSearches(rows, "town", { name: "Odense" })[0].query.match(/Odense/g) || []).length, 1);
   // The scoping still holds: this is a second consumer of sourcesFor, not a
@@ -4218,7 +4230,20 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a town drafted from nothing claims no relationship it does not have",
      searched({ name: "Dragør", text: "Dragør is a fishing town 12 km from Copenhagen." }),
      ["visitdenmark.dk"]);
-  ok("through the endpoint's domain restriction", /&domains=\$\{encodeURIComponent\(\(domains \|\| \[domain\]\)\.join\(","\)\)\}/.test(app5));
+  // The domain list is built once and reused by both attempts, so a fallback
+  // cannot quietly search the open web.
+  ok("the domain restriction is built from the whole list",
+     /const domainParam = encodeURIComponent\(\(domains \|\| \[domain\]\)\.join\(","\)\);/.test(app5));
+  ok("and every attempt goes through it", /&domains=\$\{domainParam\}/.test(app5));
+  // ── THE SECOND ATTEMPT ONLY RUNS WHEN THE FIRST FOUND NOTHING ────
+  // Cost matters: one call in the normal case exactly as before, two only where
+  // today's single call returns nothing at all.
+  ok("the fallback is gated on an empty result",
+     /if \(fRes\.ok && !fData\.error && !urls\.length && fallbackQuery && fallbackQuery !== query\)/.test(app5));
+  ok("and only replaces the answer if it actually found something",
+     /if \(second\.urls\.length\) \{ \(\{ r: fRes, d: fData, urls \} = second\); usedFallback = true; \}/.test(app5));
+  ok("the log says which query answered",
+     /detail: String\(usedFallback \? fallbackQuery : query\)/.test(app5));
   // /api/search has accepted this parameter the whole time and nothing used it.
   const api = readFileSync(join(root, "api/search.js"), "utf8");
   ok("which the endpoint has always supported", /include_domains/.test(api));
