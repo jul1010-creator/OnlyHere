@@ -1,3 +1,5 @@
+import { MONTHS } from "./factCheckRead";
+
 // ── WAS THAT A PAGE, OR A WALL? ─────────────────────────────────────
 //
 // Oliver, 12 Aug 2026: "Implementation of Firecrawl to get information from
@@ -236,10 +238,17 @@ export const pageEra = (text, maxYear) => {
 //   operator  the place's own site. May confirm a price or a date.
 //   listing   a calendar or ticket shop. May price and date, never confirm.
 //   old       too old to carry either. Background only.
-export const scrapeTier = (url, text) => {
+// nowMs is threaded through because the age gate is six MONTHS as of 12 Aug
+// 2026, and six months cannot be answered by a year. Omitting it falls back to
+// the year comparison rather than failing, so an older caller still works.
+export const scrapeTier = (url, text, nowMs) => {
+  const age = factAge(text, nowMs);
   const era = pageEra(text);
-  if (era.stale) return { tier: "old", era };
-  return { tier: isListingHost(url) ? "listing" : "operator", era };
+  // "old" here means old FOR A PRICE OR A TIMETABLE. The page still reaches the
+  // writer; it is demoted to history, which is exactly the split he drew:
+  // "History is fine. But NOT logistics and prices."
+  if (!age.perishableOk) return { tier: "old", era, age };
+  return { tier: isListingHost(url) ? "listing" : "operator", era, age };
 };
 
 // One line, for the run log and for the founder reading it. Names the domain,
@@ -341,4 +350,76 @@ ${lines.join("\n")}
 WHEN TWO OF THESE DISAGREE, THE HIGHER ONE WINS AND THE LOWER ONE IS NOT MENTIONED. Not in the prose, not in uncertainties, not as "some sources say". A disagreement you can settle by this order is settled, and reporting it anyway hands the reader a decision that was already made for them.
 The order is: the place's own website, then a ticket site or calendar, then an encyclopedia or history page, then a blog. A source from before ${STALE_BEFORE_YEAR} sits below every current source for anything that changes, so an old page may still carry history and may not carry a price, a date, an opening hour or a phone number.
 Only say sources disagree when they are at the SAME level and you cannot separate them by date.`;
+};
+
+// ── SIX MONTHS, AND ONLY FOR THE THINGS THAT CHANGE ─────────────────
+//
+// Oliver, 12 Aug 2026: "Make a rule.. everything about price and logistics that
+// are older than 6 months SHOULD NOT BE INCLUDED. History is fine. But NOT
+// logistics and prices."
+//
+// STALE_BEFORE_YEAR was a year, and a year is the wrong instrument for this.
+// From August, "before 2025" lets a page from January of the current year
+// through as though it were current, and it is seven months old. Six months
+// needs a date, so this reads one.
+//
+// The split he draws is the one the pipeline already half-implements: an old
+// page keeps its history and loses its prices. That is why a page over the
+// limit is not dropped, it is DEMOTED to background, exactly as the scrape tier
+// already does. What changes is the line, and that the line is now measured in
+// months against a date rather than in years against a year.
+export const MAX_FACT_AGE_MONTHS = 6;
+
+// Facts that go off. Everything else on a page is history and has no shelf life.
+export const PERISHABLE = ["price", "date", "opening hours", "phone number", "booking", "transport", "timetable"];
+
+const MONTH_NAMES = Object.keys(MONTHS).join("|");
+// A full date, either order, Danish or English: "19. august 2026" and
+// "August 19, 2026" are the same day. Also plain ISO, which is what a CMS emits.
+const DMY = new RegExp(`\\b(\\d{1,2})\\s*\\.?\\s*(${MONTH_NAMES})\\s+((?:19|20)\\d{2})`, "gi");
+const MDY = new RegExp(`\\b(${MONTH_NAMES})\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+((?:19|20)\\d{2})`, "gi");
+const ISO = /\b((?:19|20)\d{2})-(\d{2})-(\d{2})\b/g;
+
+// The newest date the page states, as a UTC timestamp, or null. Newest rather
+// than first for the same reason newestYearIn is: an archive page listing every
+// edition since 2011 is a live page with history on it.
+export const newestDateIn = (text) => {
+  const t = String(text || "");
+  let best = null;
+  const take = (y, mo, d) => {
+    if (!(y >= 1990 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return;
+    const ms = Date.UTC(y, mo - 1, d);
+    if (best === null || ms > best) best = ms;
+  };
+  let m;
+  DMY.lastIndex = 0; while ((m = DMY.exec(t)) !== null) take(Number(m[3]), MONTHS[m[2].toLowerCase()], Number(m[1]));
+  MDY.lastIndex = 0; while ((m = MDY.exec(t)) !== null) take(Number(m[3]), MONTHS[m[1].toLowerCase()], Number(m[2]));
+  ISO.lastIndex = 0; while ((m = ISO.exec(t)) !== null) take(Number(m[1]), Number(m[2]), Number(m[3]));
+  return best;
+};
+
+// nowMs is passed in rather than read, so this is pure and so a test can sit on
+// a fixed day. Returns what the page may be used FOR, which is the whole point
+// of his rule: nothing here ever says "drop this page".
+export const factAge = (text, nowMs) => {
+  const now = Number(nowMs);
+  if (!Number.isFinite(now)) return { ageMonths: null, perishableOk: true, why: "no clock was given, so nothing can be aged", dated: false };
+  const newest = newestDateIn(text);
+  if (newest !== null) {
+    const ageMonths = (now - newest) / (1000 * 60 * 60 * 24 * 30.44);
+    return ageMonths > MAX_FACT_AGE_MONTHS
+      ? { ageMonths, perishableOk: false, dated: true, why: `its newest date is about ${Math.round(ageMonths)} months old` }
+      : { ageMonths, perishableOk: true, dated: true, why: `dated within the last ${MAX_FACT_AGE_MONTHS} months` };
+  }
+  // No full date. A YEAR still settles it in one direction: from any month of
+  // 2026, a page whose newest year is 2025 is at least seven months old. The
+  // current year alone cannot settle it either way, and a page that cannot be
+  // dated is not a page caught being old, which is the discipline every gate in
+  // this codebase follows. It passes, and it is marked undated so the caller
+  // can say so rather than implying it was checked.
+  const year = newestYearIn(text);
+  const nowYear = new Date(now).getUTCFullYear();
+  if (year === null) return { ageMonths: null, perishableOk: true, dated: false, why: "no date and no year on the page, so it cannot be aged" };
+  if (year < nowYear) return { ageMonths: (nowYear - year) * 12, perishableOk: false, dated: false, why: `the newest year on this page is ${year}, so nothing on it can be inside ${MAX_FACT_AGE_MONTHS} months` };
+  return { ageMonths: null, perishableOk: true, dated: false, why: `the page carries ${year} but states no day, so its exact age is unknown` };
 };

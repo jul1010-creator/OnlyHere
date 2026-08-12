@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
@@ -109,7 +109,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -9138,7 +9138,7 @@ rmSync(dir, { recursive: true, force: true });
 // notes told it two sites came back empty. It put both in the field a traveller
 // scans to find out what a ticket costs.
 {
-  const { glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems } = M;
+  const { glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS } = M;
   const shipped = "400 kr entry per the KultuNaut listing; 2026 tickets were not found on United Tickets or Billetlugen at the time of writing";
   const found = glanceProblems({ ticketInfo: shipped });
   is("the field he read is caught", found.length, 1);
@@ -9231,6 +9231,68 @@ rmSync(dir, { recursive: true, force: true });
   ok("the writer is told an errand is not a find", /NEVER IN gemlyxFind/.test(appG));
   ok("and that a measured walk is the answer, not a planner",
      /the walk is the connection, and it is measured/.test(appG));
+
+  // ── AN INVENTION AND ITS RETRACTION, SHIPPED TOGETHER ────────────
+  //
+  // Oliver, 12 Aug 2026, quoting a fact-check of his own draft: "The writer
+  // layer is still introducing poetic claims that your validation layer
+  // immediately rejects." Then: "I don't wanna just write it in. I want the
+  // pipeline to fix it."
+  //
+  // The draft's atmosphere said "Coach loads of visitors arrive from around the
+  // country" and its own uncertainties said that could not be confirmed. Both
+  // shipped. THAT IS MINE, from three hours earlier: I told the correction to
+  // leave an UNVERIFIED claim alone and note it instead. Right for a MEASURED
+  // field, where a price the checker could not find may still be the real one.
+  // Exactly wrong for prose, where nothing sourcing a sentence means the writer
+  // made it up.
+  const both = selfContradictions({
+    atmosphere: "Coach loads of visitors arrive from around the country, and the day runs at an easy pace.",
+    uncertainties: ['UNVERIFIED: the draft\u2019s "**Coach loads of visitors arrive from around the country**" is not stated in the research.'],
+  });
+  is("a claim the draft itself retracts is caught", both.length, 1);
+  ok("and quoted back", /coach loads of visitors/.test(both[0]));
+  ok("with the resolution named", /delete it rather than publishing the claim and the retraction together/.test(both[0]));
+
+  // ── AND THE HALF THAT MUST NOT CHANGE ────────────────────────────
+  // A measured value the checker could not find is unverified, not invented,
+  // and deleting it would be the fact-check undoing a fact-check. Same rule
+  // FACT_CHECK_SCOPE_RULES was written for.
+  is("a measured field is not prose and is left alone",
+     selfContradictions({ travelTime: "2h 51min", uncertainties: ['UNVERIFIED: the draft\u2019s "**2h 51min**" could not be confirmed.'] }), []);
+  is("and a claim the correction actually deleted no longer contradicts",
+     selfContradictions({ atmosphere: "The day runs at an easy pace.", uncertainties: ['UNVERIFIED: the draft\u2019s "**Coach loads of visitors arrive**" is not stated in the research.'] }), []);
+  // ── AN UNCERTAINTY THAT RETRACTS NOTHING IS JUST AN UNCERTAINTY ──
+  // Quoting a sentence is not the same as rejecting it, and a check that
+  // cannot tell the difference deletes honest notes.
+  is("a note that quotes the prose without retracting it is left alone",
+     selfContradictions({
+       atmosphere: "Coach loads of visitors arrive from around the country.",
+       uncertainties: ['The organiser mentions "**Coach loads of visitors arrive from around the country**" but crowd size varies year to year.'],
+     }), []);
+  // ── AND A FRAGMENT IS NOT A CLAIM ────────────────────────────────
+  // Short spans match by accident. A claim worth deleting is a clause.
+  is("a two-word quote is not treated as a claim",
+     selfContradictions({ atmosphere: "The day is easy.", uncertainties: ['UNVERIFIED: "**the day**" is not stated in the research.'] }), []);
+  // ── AND MEASURED FIELDS ARE NOT IN SCOPE AT ALL ──────────────────
+  // Asserted on the list rather than through a fixture, because a fixture with
+  // a short value passes for the wrong reason.
+  ok("no measured field is policed as prose",
+     M.MEASURED_FIELDS.every(f => !PROSE_FIELDS.includes(f)));
+  is("a long measured value is left alone even when retracted",
+     selfContradictions({
+       nearestStation: "Ribe Station on the Bramming to Tonder line",
+       uncertainties: ['UNVERIFIED: the draft\u2019s "**Ribe Station on the Bramming to Tonder line**" could not be confirmed.'],
+     }), []);
+
+  // ── WIRED, AND THE INSTRUCTION SPLIT BY WHERE THE CLAIM LIVES ────
+  ok("the check runs with the other field gates", /\.\.\.selfContradictions\(t\),/.test(codeG));
+  ok("prose and measured fields are told apart in the rewrite",
+     /IN PROSE \(atmosphere, whoItsFor, realityCheck, desc, any sentence a reader reads\): unverified means NOBODY WROTE THIS ANYWHERE/.test(appG));
+  ok("with deletion named as the action", /DELETE THE SENTENCE\. Do not soften it, do not hedge it/.test(appG));
+  ok("and a measured field still protected from deletion",
+     /IN A MEASURED FIELD[\s\S]{0,200}Leave the value alone and add a line to uncertainties/.test(appG));
+  ok("removing a sentence is explicitly allowed", /Removing a sentence is always allowed and never needs a replacement/.test(appG));
 }
 
 // ── A CHECK THAT RUNS BEFORE THE LAST WRITER CHECKS NOTHING ─────────
@@ -9407,18 +9469,30 @@ rmSync(dir, { recursive: true, force: true });
   // line is ABSENT. So the decision moved into scrapeTier and is asserted as
   // an answer.
   const { scrapeTier } = M;
+  // A fixed clock, so the six-month line sits somewhere a reader of this test
+  // can check by hand rather than moving with the calendar.
+  const NOW = Date.UTC(2026, 7, 12);
   const old = "Ribelund Festival er tilbage for fuld musik. 24. august 2022.";
   const now = "Ribelund Festival. Ons. d. 19. august 2026. Billet 400 kr.";
-  is("a 2022 page on the operator's own domain is still old",
-     scrapeTier("https://oplev.esbjerg.dk/events/ribelund-festival", old).tier, "old");
-  is("a 2022 page on a calendar is old too, not a listing",
-     scrapeTier("https://www.kultunaut.dk/perl/arrmore?ArrNr=1", old).tier, "old");
+  is("a 2022 page on the operator's own domain is history only",
+     scrapeTier("https://oplev.esbjerg.dk/events/ribelund-festival", old, NOW).tier, "old");
+  is("a 2022 page on a calendar is too, not a listing",
+     scrapeTier("https://www.kultunaut.dk/perl/arrmore?ArrNr=1", old, NOW).tier, "old");
   is("a current calendar page is a listing",
-     scrapeTier("https://www.kultunaut.dk/perl/arrmore?ArrNr=1", now).tier, "listing");
+     scrapeTier("https://www.kultunaut.dk/perl/arrmore?ArrNr=1", now, NOW).tier, "listing");
   is("a current page on the operator's own site is the operator",
-     scrapeTier("https://oplev.esbjerg.dk/events/ribelund-festival", now).tier, "operator");
+     scrapeTier("https://oplev.esbjerg.dk/events/ribelund-festival", now, NOW).tier, "operator");
   is("an undatable operator page is still the operator",
-     scrapeTier("https://ribemetalfestival.dk/faq/", "Billetter koster 400 kr.").tier, "operator");
+     scrapeTier("https://ribemetalfestival.dk/faq/", "Billetter koster 400 kr.", NOW).tier, "operator");
+  // ── SIX MONTHS, NOT A YEAR, WHICH IS THE POINT OF THE CHANGE ─────
+  // Oliver, 12 Aug 2026: "everything about price and logistics that are older
+  // than 6 months SHOULD NOT BE INCLUDED. History is fine." A year boundary
+  // let a page from January of the current year through as current, and from
+  // August that page is seven months old.
+  is("a page from January of this year is over the line",
+     scrapeTier("https://oplev.esbjerg.dk/x", "Opdateret 1. januar 2026. Billet 400 kr.", NOW).tier, "old");
+  is("and one from last month is not",
+     scrapeTier("https://oplev.esbjerg.dk/x", "Opdateret 30. juli 2026. Billet 400 kr.", NOW).tier, "operator");
 
   // Wired: each tier reaches exactly one string, and the old tier reaches none.
   const code = stripNonCode(appS);
@@ -9434,6 +9508,59 @@ rmSync(dir, { recursive: true, force: true });
   ok("and names any source held back for being too old", /note\("Sources too old to state a fact"/.test(appS));
 }
 
+// ── SIX MONTHS, AND ONLY FOR THE THINGS THAT CHANGE ─────────────────
+//
+// Oliver, 12 Aug 2026: "Make a rule.. everything about price and logistics that
+// are older than 6 months SHOULD NOT BE INCLUDED. History is fine. But NOT
+// logistics and prices."
+{
+  const { factAge, newestDateIn, MAX_FACT_AGE_MONTHS } = M;
+  const NOW = Date.UTC(2026, 7, 12);   // 12 August 2026
+
+  // A date, in every shape the sources actually write it.
+  is("Danish day-month-year", newestDateIn("Ons. d. 19. august 2026"), Date.UTC(2026, 7, 19));
+  is("English month-day-year", newestDateIn("August 19, 2026"), Date.UTC(2026, 7, 19));
+  is("plain ISO, which is what a CMS emits", newestDateIn("Published 2026-07-30"), Date.UTC(2026, 6, 30));
+  // NEWEST, not first: an archive page listing every edition since 2011 is a
+  // live page with history on it.
+  is("the newest of several", newestDateIn("held 12. juni 2019, 14. juni 2022 and 19. august 2026"), Date.UTC(2026, 7, 19));
+  is("no date is null, not a guess", newestDateIn("Billet koster 400 kr."), null);
+  is("and an impossible one is ignored", newestDateIn("45. august 2026"), null);
+
+  // ── THE LINE ITSELF ──────────────────────────────────────────────
+  ok("last month may price things", factAge("Opdateret 30. juli 2026.", NOW).perishableOk);
+  ok("seven months ago may not", !factAge("Opdateret 1. januar 2026.", NOW).perishableOk);
+  // THE CASE A YEAR BOUNDARY GOT WRONG. Under STALE_BEFORE_YEAR this page was
+  // "2026, therefore current". From August it is seven months old.
+  ok("which a year boundary called current", factAge("Opdateret 1. januar 2026.", NOW).ageMonths > MAX_FACT_AGE_MONTHS);
+  ok("a 2022 press release is far past it", !factAge("24. august 2022.", NOW).perishableOk);
+  ok("and it says how far", /48 months/.test(factAge("24. august 2022.", NOW).why));
+
+  // ── A YEAR STILL SETTLES IT IN ONE DIRECTION ─────────────────────
+  // From any month of 2026, a page whose newest year is 2025 is at least seven
+  // months old, so the year alone is enough to demote it.
+  ok("a bare 2025 is over the line whatever month it was", !factAge("Copyright 2025.", NOW).perishableOk);
+  // And not in the other. A page carrying only the current year could be from
+  // yesterday or from January, and a page that cannot be dated is not a page
+  // caught being old. Same discipline as every other gate here.
+  ok("a bare 2026 cannot be aged, so it is not accused", factAge("Copyright 2026.", NOW).perishableOk);
+  ok("but it is marked undated rather than checked", !factAge("Copyright 2026.", NOW).dated);
+  ok("and a page with no date at all passes the same way", factAge("Billet koster 400 kr.", NOW).perishableOk);
+  ok("with no clock, nothing is aged", factAge("24. august 2022.", null).perishableOk);
+
+  // ── HISTORY IS FINE, WHICH IS HALF THE RULE ──────────────────────
+  // Nothing here ever drops a page. An old page is demoted to history and still
+  // reaches the writer, which is exactly the split he drew.
+  const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("an old page is labelled history only rather than discarded",
+     /HISTORY ONLY, NOT CURRENT/.test(appA));
+  ok("with the perishable things named", /no price, no date, no opening hour, no phone number, no booking detail, no transport or timetable claim/.test(appA));
+  ok("and history explicitly allowed", /What the place IS, and what it has been, are fine/.test(appA));
+  ok("the months are one constant, not a number typed twice",
+     /Nothing older than \$\{MAX_FACT_AGE_MONTHS\} months may price or time anything/.test(appA));
+  ok("the tier is asked with a clock", /scrapeTier\(url, scanData\.text, Date\.now\(\)\)/.test(appA));
+}
+
 // ── WEBSITE > ENCYCLOPEDIA > BLOG > OLD BLOG ────────────────────────
 //
 // Oliver, 12 Aug 2026, after a draft came back with six flagged items and five
@@ -9447,7 +9574,7 @@ rmSync(dir, { recursive: true, force: true });
 // turns a doubt into a decision, and a disagreement the order can settle is
 // not reported at all.
 {
-  const { rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, STALE_BEFORE_YEAR } = M;
+  const { rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, STALE_BEFORE_YEAR } = M;
   const cur = "the 2026 edition";
   const old = "our trip in 2019";
 

@@ -668,3 +668,52 @@ export const curatedFindProblems = (payload) => {
   if (!why) return [];
   return [`gemlyxFind ${why}: "${String(payload.gemlyxFind).trim().slice(0, 140)}". This field is the one curated recommendation in the entry, so it takes a real place, dish or detail. Logistics belong in the Reality Check, and an unconfirmed connection belongs in uncertainties. If there is no genuine find, leave it empty.`];
 };
+
+// ── A DRAFT MUST NOT PUBLISH AN INVENTION AND ITS RETRACTION ────────
+//
+// Oliver, 12 Aug 2026, quoting a fact-check of his own draft: "The writer layer
+// is still introducing poetic claims that your validation layer immediately
+// rejects." The draft's atmosphere said "Coach loads of visitors arrive from
+// around the country", and the draft's own uncertainties said that could not be
+// confirmed. Both shipped. Then: "I don't wanna just write it in. I want the
+// pipeline to fix it."
+//
+// THIS ONE IS MINE, FROM THREE HOURS EARLIER. When I gave the auto-correction
+// the CONTRADICTED/UNVERIFIED split I told it, in as many words, to "leave an
+// UNVERIFIED claim exactly as it is and add a line to uncertainties instead".
+// That is right for a MEASURED field: a price the checker could not find may
+// still be the real price, and deleting it would be the fact-check undoing a
+// fact-check. It is exactly wrong for PROSE. In a sentence nobody sourced,
+// "unverified" does not mean "we could not check it", it means the writer made
+// it up, and the honest edit is to delete it.
+//
+// So this is the enforcement, not the request. A quoted claim that the draft's
+// own uncertainties call unsupported must not still be sitting in its prose.
+const RETRACTS = /\b(?:not stated in the research|could not be confirmed|not supported|unverified|no source|nothing (?:states|supports)|was not found)\b/i;
+// Findings quote the claim they are about, and the checker's output arrives
+// with markdown emphasis around it. Both shapes, and the quotes themselves are
+// not part of the claim.
+const QUOTED = /[""]([^""]{4,200})[""]|\*\*([^*]{4,200})\*\*/g;
+
+export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "desc", "special", "whoFor", "afterDark", "beforeDark", "bestTime", "howItsMade", "vibeLocation", "characterAndFit", "whatToDo", "gettingThereReality", "highlight"];
+
+const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").replace(/[*"""]/g, "").trim();
+
+export const selfContradictions = (payload) => {
+  const notes = Array.isArray(payload?.uncertainties) ? payload.uncertainties : [];
+  const prose = PROSE_FIELDS.map(k => norm(payload?.[k])).filter(Boolean).join(" ␟ ");
+  if (!prose) return [];
+  const out = [];
+  for (const line of notes) {
+    if (!RETRACTS.test(String(line))) continue;
+    QUOTED.lastIndex = 0;
+    let m;
+    while ((m = QUOTED.exec(String(line))) !== null) {
+      const claim = norm(m[1] || m[2]);
+      // Short fragments match by accident; a claim worth deleting is a clause.
+      if (claim.length < 12 || !prose.includes(claim)) continue;
+      out.push(`This draft states "${claim.slice(0, 120)}" in its prose AND says in its own uncertainties that it is unsupported. One of the two has to go, and it is the sentence: an unsourced line in prose is an invention rather than a doubt, so delete it rather than publishing the claim and the retraction together.`);
+    }
+  }
+  return [...new Set(out)];
+};

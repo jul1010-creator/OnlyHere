@@ -175,12 +175,12 @@ export const withRoots = (urls) => {
 //
 // Danish and English month names, both orders, because "19. - 20. september"
 // and "September 19-20" are the same announcement.
-const MONTHS = {
+export const MONTHS = {
   january: 1, februar: 2, february: 2, januar: 1, marts: 3, march: 3, april: 4, maj: 5, may: 5,
   juni: 6, june: 6, juli: 7, july: 7, august: 8, september: 9, oktober: 10, october: 10,
   november: 11, december: 12,
 };
-const MONTH_RE = Object.keys(MONTHS).join("|");
+export const MONTH_RE = Object.keys(MONTHS).join("|");
 
 // Every (day, month, year) the text states, with the year taken from the
 // nearest one that follows within the same sentence. A date with no year at all
