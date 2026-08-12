@@ -17,7 +17,6 @@
 // Only PURE functions are tested. Nothing here touches the network, Supabase,
 // or React, so it always runs in about a second and can never be flaky.
 
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
@@ -112,18 +111,37 @@ writeFileSync(entry, `
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
-const esbuild = [
-  join(root, "node_modules/.bin/esbuild"),
-  join(root, "node_modules/esbuild/bin/esbuild"),
-].find(existsSync);
-if (!esbuild) {
-  console.error("\n  Could not find esbuild in node_modules. Run `npm install` first.\n");
+// ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
+// This spawned node_modules/.bin/esbuild, located with existsSync. That works
+// on Linux and macOS, where the shim is a symlink to a real executable, and it
+// FAILS ON WINDOWS, where npm writes an extensionless shell shim at .bin\esbuild
+// for Git Bash alongside esbuild.cmd and esbuild.ps1. existsSync says the file
+// is there, CreateProcess refuses to run something that is not an executable,
+// and Node reports ENOENT:
+//
+//   Bundling failed:
+//   spawnSync ...\onlyhere-project\node_modules\.bin\esbuild ENOENT
+//
+// Which reads exactly like a missing install and is not one. The existsSync
+// guard is the trap: it passes, so the honest "run npm install first" message
+// never fires and the failure surfaces from the spawn instead.
+//
+// Nothing here needs a subprocess. esbuild ships a Node API, it is the same
+// package Vite already installs, and buildSync and transformSync behave
+// identically on every platform. That removes the shim, the file extension, the
+// shell quoting and the stdin plumbing all at once.
+let buildSync, transformSync;
+try {
+  ({ buildSync, transformSync } = await import("esbuild"));
+} catch {
+  console.error("\n  Could not load esbuild from node_modules. Run `npm install` first.\n");
   process.exit(1);
 }
+const esbuildFailed = (e) => String([e?.message, ...(e?.errors || []).map(x => x.text)].filter(Boolean).join("\n"));
 try {
-  execFileSync(esbuild, [entry, "--bundle", "--format=esm", "--platform=node", `--outfile=${bundle}`], { stdio: "pipe" });
+  buildSync({ entryPoints: [entry], bundle: true, format: "esm", platform: "node", outfile: bundle, logLevel: "silent" });
 } catch (e) {
-  console.error("\n  Bundling failed:\n" + String(e.stderr || e.message));
+  console.error("\n  Bundling failed:\n" + esbuildFailed(e));
   process.exit(1);
 }
 const M = await import("file://" + bundle);
@@ -2168,7 +2186,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 {
   const appPath = join(root, "src/App.jsx");
   const transformed = join(dir, "app.transformed.js");
-  execFileSync(esbuild, [appPath, "--loader:.jsx=jsx", "--format=esm", `--outfile=${transformed}`], { stdio: "pipe" });
+  buildSync({ entryPoints: [appPath], loader: { ".jsx": "jsx" }, format: "esm", outfile: transformed, logLevel: "silent" });
   const stripped = stripNonCode(readFileSync(transformed, "utf8"));
   const fns = namedFunctions(stripped);
   ok(`${fns.length} named functions discovered in App.jsx`, fns.length > 100);
@@ -2216,7 +2234,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("prose is ignored but ${…} is not", useBeforeDeclare(bodyOf(prose, "const f = ")).map(x => x.name), ["travelMode"]);
   // And JSX must survive both hazards that broke it on the real file.
   const jsx = `function C() {\n  const t = <div>Denmark's capital</div>;\n  useEffect(() => { go(); }, [later]);\n  const later = 1;\n  return t;\n}`;
-  const jsxBody = bodyOf(execFileSync(esbuild, ["--loader=jsx", "--format=esm"], { input: jsx, encoding: "utf8" }), "function C(");
+  const jsxBody = bodyOf(transformSync(jsx, { loader: "jsx", format: "esm" }).code, "function C(");
   ok("an apostrophe in JSX text does not swallow the body", !!jsxBody && jsxBody.length > 80);
   is("and the hook check still fires through it", hookDepsBeforeDeclaration(jsxBody).map(x => x.name), ["later"]);
 }
