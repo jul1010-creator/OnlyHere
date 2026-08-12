@@ -109,7 +109,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -9138,7 +9138,7 @@ rmSync(dir, { recursive: true, force: true });
 // notes told it two sites came back empty. It put both in the field a traveller
 // scans to find out what a ticket costs.
 {
-  const { glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS } = M;
+  const { glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource } = M;
   const shipped = "400 kr entry per the KultuNaut listing; 2026 tickets were not found on United Tickets or Billetlugen at the time of writing";
   const found = glanceProblems({ ticketInfo: shipped });
   is("the field he read is caught", found.length, 1);
@@ -9227,7 +9227,7 @@ rmSync(dir, { recursive: true, force: true });
   // All three field gates feed one list, so a leak of any kind lands in
   // uncertainties by the same route and is deduplicated by the same filter.
   ok("all three field gates run together",
-     /const gp = \[\s*\.\.\.glanceProblems\(t\),\s*\.\.\.curatedFindProblems\(t\),\s*\.\.\.lastLegProblems\(/.test(codeG));
+     /const gp = \[\s*\.\.\.repairGlance\(t\),\s*\.\.\.curatedFindProblems\(t\),\s*\.\.\.lastLegProblems\(/.test(codeG));
   ok("the writer is told an errand is not a find", /NEVER IN gemlyxFind/.test(appG));
   ok("and that a measured walk is the answer, not a planner",
      /the walk is the connection, and it is measured/.test(appG));
@@ -9286,6 +9286,69 @@ rmSync(dir, { recursive: true, force: true });
      }), []);
 
   // ── WIRED, AND THE INSTRUCTION SPLIT BY WHERE THE CLAIM LIVES ────
+  // ── A GATE THAT REPORTS IS NOT A GATE THAT FIXES ────────────────
+  //
+  // Oliver, 12 Aug 2026, on a draft whose ticketInfo read "400 kr per the
+  // KultuNaut listing; not confirmed directly by the organiser": ":/". The gate
+  // had ALREADY CAUGHT IT and returned a finding. The finding went into
+  // uncertainties and the field shipped unchanged. Earlier the same evening:
+  // "I don't wanna just write it in. I want the pipeline to fix it."
+  is("the field he read is cut back to the fact",
+     cleanGlance("400 kr per the KultuNaut listing; not confirmed directly by the organiser"), "400 kr");
+  is("and the earlier one too",
+     cleanGlance("400 kr entry per the KultuNaut listing; 2026 tickets were not found on United Tickets or Billetlugen at the time of writing"), "400 kr entry");
+  // ── AN EMPTY RESULT IS A REAL RESULT ─────────────────────────────
+  // If every clause was commentary there was never a fact in the field. Empty
+  // reads as "we do not know"; hedging reads as an answer.
+  is("a field that was only hedging is emptied",
+     cleanGlance("One listing shows 400 kr, another calls it free; this hasn't been confirmed with the organiser, so call ahead"), "");
+  // ── AND AN HONEST FIELD IS NOT TOUCHED ───────────────────────────
+  for (const v of ["400 kr", "Admission 400 kr; a companion ticket is 50 kr", "Ribe Station",
+                   "See website", "Free entry", "Adults 155 DKK, under 18 free", "May to September", ""]) {
+    is(`left alone: ${JSON.stringify(v)}`, cleanGlance(v), v);
+  }
+  // ── AND A STRIP THAT LEAVES ANOTHER LEAK IS REFUSED ──────────────
+  // Comma rather than semicolon, so the credit and the report share a clause.
+  // Cutting the credit out leaves "400 kr, not confirmed by the organiser",
+  // which is still a report, so the clause goes rather than being half-cleaned.
+  is("a half-cleaned clause is not accepted",
+     cleanGlance("400 kr per the KultuNaut listing, not confirmed by the organiser"), "");
+  is("a whole clause of report is dropped, a credit is only stripped",
+     [glanceLeakKind("not confirmed by the organiser"), glanceLeakKind("400 kr per the KultuNaut listing"), glanceLeakKind("400 kr")],
+     ["report", "attribution", ""]);
+
+  // repairGlance MUTATES, which nothing else in that file does, and that is
+  // the point of it.
+  const draft = { ticketInfo: "400 kr per the KultuNaut listing; not confirmed directly by the organiser" };
+  const said = repairGlance(draft);
+  is("the payload is actually repaired", draft.ticketInfo, "400 kr");
+  is("and the repair is reported, not silent", said.length, 1);
+  ok("naming the before and the after", /became "400 kr"/.test(said[0]));
+  const gone = { ticketInfo: "not confirmed by the organiser" };
+  repairGlance(gone);
+  is("a field with no fact under the hedging is emptied", gone.ticketInfo, "");
+
+  // ── AND THE PAGE IT CAME FROM IS RECORDED ────────────────────────
+  // Oliver: "Then write the page it got it from.. it got it from a very very
+  // reliable source." The fact belongs in the field, the page belongs in
+  // structured data where the UI can make it a link.
+  is("the price is traced to the page whose own text carries it",
+     priceSource("Entry is 400 kr", {
+       "https://kultunaut.dk/x": "no money here",
+       "https://oplev.esbjerg.dk/events/ribelund-festival": "Billet til festivalen koster 400 kr.",
+     })?.url, "https://oplev.esbjerg.dk/events/ribelund-festival");
+  is("a draft with no price has no page to show", priceSource("Free entry", { "https://x.dk/": "400 kr" }), null);
+  // ── A NUMBER WITHOUT A CURRENCY IS NOT A PRICE TO TRACE ──────────
+  // Same discipline tracePrices already follows on the draft side. Without it,
+  // a day of the month matches a price on some unrelated page and the draft
+  // records that page as where its price came from.
+  is("a date is not traced to a page that happens to charge that much",
+     priceSource("open from 19 August", { "https://x.dk/": "entry 19 kr" }), null);
+  is("and a price on no page read is null", priceSource("Entry is 275 kr", { "https://x.dk/": "400 kr" }), null);
+  ok("the draft records it", /t\.__priceSource = \{ url: src\.url, host: domainOf\(src\.url\), price: src\.price/.test(appG));
+  ok("and the log names the page", /note\("Where the price came from"/.test(appG));
+  ok("with per-URL text kept rather than one blob", /pagesByUrl\[url\] = scanData\.text;/.test(appG));
+
   ok("the check runs with the other field gates", /\.\.\.selfContradictions\(t\),/.test(codeG));
   ok("prose and measured fields are told apart in the rewrite",
      /IN PROSE \(atmosphere, whoItsFor, realityCheck, desc, any sentence a reader reads\): unverified means NOBODY WROTE THIS ANYWHERE/.test(appG));
@@ -9403,7 +9466,16 @@ rmSync(dir, { recursive: true, force: true });
   // still fills the listed bucket and every other assertion here passes. That
   // implementation is the bug being fixed: a reseller reported as the operator.
   is("but the operator never said it", tiered.traced.map(p => p.lo), []);
-  ok("and the sentence says which", /not on the operator's own page/.test(describePriceTrace(tiered)));
+  ok("and the sentence says which", /rather than on the operator's own page/.test(describePriceTrace(tiered)));
+  // ── AND IT DOES NOT TEACH THE WRITER TO DOUBT IT ─────────────────
+  // Oliver, 12 Aug 2026: "I mean.. it is.. it shouldn't be considered an
+  // estimate. IT IS 400 DKK." The hedge came from this sentence, which used to
+  // end "and it is still not the operator's word for it": a true statement
+  // about PROVENANCE that reads as one about CONFIDENCE.
+  ok("a listed price is called real and current",
+     /THAT IS A REAL, CURRENT PRICE AND IT IS WRITTEN AS ONE/.test(describePriceTrace(tiered)));
+  ok("with the hedges named as forbidden",
+     /Do not call it an estimate, do not write that it is unconfirmed/.test(describePriceTrace(tiered)));
   ok("without calling it an invention", !/search result or a blog/.test(describePriceTrace(tiered)));
   ok("and without claiming the official site",
      !/appears in the official site's own text/.test(describePriceTrace(tiered)));

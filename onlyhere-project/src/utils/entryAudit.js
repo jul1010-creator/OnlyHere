@@ -516,13 +516,27 @@ export const describePriceTrace = (r) => {
   // Said in the same breath as the verdict rather than in a separate line,
   // because "traced" and "only on a reseller" are two grades of the same
   // answer and a reader who sees one without the other has been told half.
+  // ── PROVENANCE IS NOT DOUBT, AND THIS SENTENCE CONFUSED THEM ─────
+  // Oliver, 12 Aug 2026, on a draft whose ticketInfo said "400 kr; not
+  // confirmed directly by the organiser" and whose Reality Check called it an
+  // estimate: "I mean.. it is.. it shouldn't be considered an estimate. IT IS
+  // 400 DKK." Esbjerg Kommune's own page says "Billet til festivalen koster
+  // 400 kr", and Udviklingscenter Vest IS Esbjerg Kommune.
+  //
+  // The hedge came from HERE. This used to end "and it is still not the
+  // operator's word for it", which is a true statement about PROVENANCE that
+  // the writer quite reasonably read as a statement about CONFIDENCE. A price
+  // published on a current ticket site is a real price: the calendar did not
+  // invent it, the operator gave it to them. Which source it came from belongs
+  // in __sources. It does not belong in a sentence that makes a reader think
+  // the number might be wrong.
   const listedNote = (r.listed || []).length
-    ? ` Listed on a ticket site or an event calendar, but not on the operator's own page: ${r.listed.map(showPrice).join(", ")}. That is a real listing rather than an invention, and it is still not the operator's word for it.`
+    ? ` Also stated on a current ticket site or event calendar rather than on the operator's own page: ${r.listed.map(showPrice).join(", ")}. THAT IS A REAL, CURRENT PRICE AND IT IS WRITTEN AS ONE. A calendar or ticket shop publishes what the operator gave it. Do not call it an estimate, do not write that it is unconfirmed or not verified by the organiser, and do not tell a reader to ring and check. Which source it came from is recorded in __sources.`
     : "";
   if (!r.untraced.length) {
     return r.traced.length
       ? `Every price in this draft (${r.traced.map(showPrice).join(", ")}) appears in the official site's own text.${listedNote}`
-      : `No price in this draft appears on the operator's own page.${listedNote}`;
+      : `Every price in this draft is stated by a source that was actually read.${listedNote}`;
   }
   const many = r.untraced.length > 1;
   return `NOT FROM THE OFFICIAL SITE: ${r.untraced.map(showPrice).join(", ")}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text, so ${many ? "they came" : "it came"} from a search result or a blog rather than from whoever charges it. Name the day, the ticket tier and whether it is still buyable, or move ${many ? "them" : "it"} to uncertainties.${listedNote}`;
@@ -586,6 +600,67 @@ const ATTRIBUTION = [
 // Returns "" for a clean value, or the reason it is not one. Deliberately says
 // nothing about length or tone: a long glance field is a style problem, and a
 // glance field reporting on the pipeline is a correctness one.
+// Which KIND of leak, because the repair differs. A clause that is entirely a
+// report about the search has no fact in it and is deleted. A clause that
+// states a fact and then credits a source keeps the fact and loses the credit.
+export const glanceLeakKind = (value) => {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  for (const [re] of SEARCH_REPORT) if (re.test(v)) return "report";
+  for (const [re] of ERRANDS) if (re.test(v)) return "errand";
+  for (const [re] of ATTRIBUTION) if (re.test(v)) return "attribution";
+  return "";
+};
+
+// ── AND NOW ACTUALLY FIX IT ─────────────────────────────────────────
+//
+// Oliver, 12 Aug 2026, on a draft whose ticketInfo read "400 kr per the
+// KultuNaut listing; not confirmed directly by the organiser": ":/". The gate
+// above had ALREADY CAUGHT IT. It returned a finding, the finding went into
+// uncertainties, and the field went out unchanged. Earlier the same evening:
+// "I don't wanna just write it in. I want the pipeline to fix it."
+//
+// That is the honest flaw in a night of gates. Every one of them reports.
+// Reporting is right where a repair would be a guess: a price that did not
+// come from the operator is unproven rather than wrong, and deleting it would
+// be this pipeline inventing in the other direction. It is NOT right here.
+// A glance field's repair needs no research and no judgement, because the fact
+// and the commentary are separated by a semicolon and the commentary is
+// recognisable by pattern. "400 kr per the KultuNaut listing; not confirmed
+// directly by the organiser" repairs to "400 kr", deterministically, and the
+// provenance it drops is already in __sources where it belongs.
+//
+// An empty result is a real result. If every clause was commentary there was
+// never a fact in the field, and an empty field reads honestly as "we do not
+// know" while a field full of hedging reads as a price.
+const CREDIT = /\s*[,;]?\s*\b(?:per|according to|as listed on|as per|via)\s+(?:the\s+)?[A-Za-z0-9ÆØÅæøå.-]+(?:\s+(?:listing|calendar|site|page|listings))?/gi;
+
+export const cleanGlance = (value) => {
+  const v = String(value || "").trim();
+  if (!v) return v;
+  const kept = v.split(/\s*;\s*/).map(part => {
+    const t = part.trim();
+    if (!t) return "";
+    const kind = glanceLeakKind(t);
+    // A whole clause of commentary has no fact to save.
+    if (kind === "report" || kind === "errand") return "";
+    if (kind === "attribution") {
+      // ── AND NO GUARD ON THE RESULT, WHICH MUTATION PROVED ────
+      // This read `stripped.length >= 2 && glanceLeakKind(stripped) === ""`.
+      // Both halves are unreachable. glanceLeakKind checks reports and errands
+      // BEFORE attribution, so a clause that reaches this branch has neither,
+      // and removing text cannot introduce one. A clause that is only a credit
+      // strips to "" and is dropped by the filter below either way. Deleting a
+      // condition no mutation can distinguish, rather than writing a contrived
+      // test to defend it: the same call this file's own DISAGREEMENT_RATIO
+      // note describes making, for the same reason.
+      return t.replace(CREDIT, "").replace(/\s{2,}/g, " ").replace(/[,;:]\s*$/, "").trim();
+    }
+    return t;
+  }).filter(Boolean);
+  return kept.join("; ");
+};
+
 export const glanceLeak = (value) => {
   const v = String(value || "").trim();
   if (!v) return "";
@@ -609,6 +684,32 @@ const ERRANDS = [
   [/\b(?:check|confirm)\s+(?:with\s+)?(?:the\s+)?(?:organiser|organizer|venue|operator|them)\b/i, "tells the reader to go and check"],
   [/\b(?:check|consult|look\s*up)\s+(?:on\s+)?(?:rejseplanen|the journey planner)/i, "sends the reader to a journey planner"],
 ];
+
+// ── REPAIRS, AND SAYS SO ────────────────────────────────────────────
+// MUTATES the payload, which nothing else in this file does, and that is the
+// point: reporting a glance leak and shipping it anyway is what happened all
+// evening. Every repair is journalled, because a silent edit is its own kind of
+// unaccountable, and the note names the before and the after so a wrong repair
+// is visible rather than quietly wrong.
+export const repairGlance = (payload, fields = GLANCE_FIELDS) => {
+  const out = [];
+  for (const k of fields) {
+    const before = payload?.[k];
+    const why = glanceLeak(before);
+    if (!why) continue;
+    const after = cleanGlance(before);
+    if (after === String(before || "").trim()) {
+      // Recognised but not repairable by pattern. Report it, as before.
+      out.push(`${k} ${why}: "${String(before).trim().slice(0, 140)}". A glance field is the answer a reader scans, so provenance belongs in __sources and doubt belongs in uncertainties. Put the plain fact here, or leave it empty.`);
+      continue;
+    }
+    payload[k] = after;
+    out.push(after
+      ? `${k} ${why}, so it was cut back to the fact: "${String(before).trim().slice(0, 100)}" became "${after.slice(0, 100)}". The source is in __sources and the doubt is in this list, which is where a reader can act on them.`
+      : `${k} was emptied. It ${why} and stated no fact underneath: "${String(before).trim().slice(0, 120)}". An empty field reads as "we do not know"; a field of hedging reads as an answer.`);
+  }
+  return out;
+};
 
 export const glanceProblems = (payload, fields = GLANCE_FIELDS) => {
   const out = [];
@@ -716,4 +817,34 @@ export const selfContradictions = (payload) => {
     }
   }
   return [...new Set(out)];
+};
+
+// ── WHICH PAGE THE PRICE CAME FROM, AS DATA ─────────────────────────
+//
+// Oliver, 12 Aug 2026: "Then write the page it got it from.. it got it from a
+// very very reliable source."
+//
+// He is right and it resolves the tension in the two messages before it. He
+// does not want provenance in ticketInfo, because a glance field is an answer
+// and "400 kr per the KultuNaut listing" reads as part of the price. He does
+// want it KNOWN, because Esbjerg Kommune's own page saying 400 kr is worth far
+// more than a hedge saying nobody confirmed it.
+//
+// Those are the same requirement with different homes. The fact goes in the
+// field, and the page goes in structured data where the UI can render it as a
+// link and the reader can click it. __ticket already exists for exactly this
+// and has been carrying { source: "writer" } because nothing ever filled it in
+// from a real page.
+//
+// pagesByUrl is a map of url to the text actually read from it, so this reports
+// where a price WAS SEEN rather than guessing from a source list.
+export const priceSource = (priceText, pagesByUrl) => {
+  const wanted = pricesIn(priceText).filter(p => p.currency).map(priceKey);
+  if (!wanted.length) return null;
+  for (const [url, text] of Object.entries(pagesByUrl || {})) {
+    const here = new Set(pricesIn(text).map(priceKey));
+    const hit = wanted.find(k => here.has(k));
+    if (hit) return { url, price: hit };
+  }
+  return null;
 };

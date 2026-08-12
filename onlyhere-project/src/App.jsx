@@ -18,7 +18,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } fro
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, curatedFindProblems, selfContradictions } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
@@ -2536,6 +2536,10 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // guess made inside the ranker. Feeds rankSource, so "official" means
       // the pipeline's own answer and nothing is promoted on a hunch.
       const officialHosts = [];
+      // Per URL, not one blob. scrapedSiteText answers "does the operator say
+      // this"; this answers "WHICH PAGE says it", which is what a reader can
+      // click. See priceSource in utils/entryAudit.js.
+      const pagesByUrl = {};
       let placesWebsite = "";   // Google's registered URL for this business, when there is one
       let realAddressText = "";  // Google's formatted address, which is the transport fact
       // ── "TAVILY/PERPLEXITY DOES A POOR JOB FINDING THE EVENTS/
@@ -2833,6 +2837,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               // first two may ever CORROBORATE a price or a date, and only the
               // first is what the log is permitted to call the official site.
               const { tier, era, age } = scrapeTier(url, scanData.text, Date.now());
+              pagesByUrl[url] = scanData.text;
               const listing = tier === "listing";
               if (tier === "old") {
                 // A page whose newest year is before STALE_BEFORE_YEAR cannot
@@ -3021,6 +3026,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (realAddressText ? `${realAddressText}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
 WHEN THESE TWO CONFLICT, PREFER THE ONE YOU CAN POINT AT. "More specific" is not the test and never was: a synthesised answer always reads as more specific than a raw snippet, so preferring specificity means preferring whichever source happens to sound most confident, which is the opposite of what this pipeline is for. Prefer the claim that names a real page, an operator, an official site or a dated announcement. If the two disagree and neither is traceable, say so in uncertainties and leave the field empty rather than picking a winner.
 A DATE, PRICE OR OPENING TIME FROM EITHER SOURCE IS A LEAD, NOT A FACT, unless it comes from the place's own site or its official ticketing page.
+BUT A LEAD THAT A CURRENT SOURCE ACTUALLY STATES IS STILL WRITTEN AS A FACT. "Lead" governs how much you should go looking for a better source, not how you phrase the number once it is the best you have. If a current page states a price, WRITE THE PRICE. Never write that it is unconfirmed, never call it an estimate, never say it was not verified by the organiser, and never tell the reader to ring and check. A reader who is told 400 kr and finds 400 kr is served; a reader told "400 kr, but treat it as an estimate" is told nothing and trusts nothing. Where the figure came from goes in __sources, and it goes nowhere else.
 ${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
 
       // STAGE 4 — OpenAI structures the raw research into organized notes per
@@ -3470,6 +3476,31 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           got: describePriceTrace(pt) || "the draft states no price",
           used: pt.checked && !pt.untraced.length,
         });
+        // ── AND THE PAGE IT CAME FROM, RECORDED ─────────────────
+        // Oliver: "Then write the page it got it from.. it got it from a very
+        // very reliable source." The fact stays in the field; the page goes
+        // here, where the UI can render it as a link. __ticket has been
+        // carrying { source: "writer" } because nothing ever filled it from a
+        // page that was actually read.
+        {
+          const src = priceSource(readerText(t), pagesByUrl);
+          if (src) {
+            t.__priceSource = { url: src.url, host: domainOf(src.url), price: src.price, at: new Date().toISOString() };
+            note("Where the price came from", {
+              provider: "fetch",
+              detail: "the page whose own text carries the figure in this draft",
+              outcome: "ok", used: true,
+              got: `${src.price} DKK is on ${domainOf(src.url)}: ${src.url.slice(0, 120)}`,
+            });
+          } else if (pt.checked && pt.draft.length) {
+            note("Where the price came from", {
+              provider: "fetch",
+              detail: "the page whose own text carries the figure in this draft",
+              outcome: "empty", used: false,
+              got: "no page that was actually read states this figure, so there is no page to show a reader",
+            });
+          }
+        }
         if (pt.checked && pt.untraced.length) {
           // Deduplicated by hand rather than by pushing blindly: the same line
           // would otherwise be added twice on a draft the correction did not
@@ -3523,7 +3554,11 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // reads is the one findRealNearestStop was already taking and
           // App.jsx was already throwing away.
           const gp = [
-            ...glanceProblems(t),
+            // repairGlance, not glanceProblems: it CUTS THE LEAK OUT of the
+            // field and then reports what it did. The reporting version shipped
+            // "400 kr per the KultuNaut listing; not confirmed directly by the
+            // organiser" with a note attached, which is not a fix.
+            ...repairGlance(t),
             ...curatedFindProblems(t),
             ...lastLegProblems(readerText(t), { stop: frozenGeo?.station, walkMinutes: frozenGeo?.walkMinutes }),
             // Runs on BOTH passes, and the second is the one that matters: it
