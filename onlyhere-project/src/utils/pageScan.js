@@ -151,6 +151,97 @@ export const firecrawlText = (json) => {
   return { text: "", ok: false, reason: json?.success === false ? "firecrawl-refused" : "firecrawl-shape" };
 };
 
+// ── A CALENDAR THAT LISTS THE EVENT IS NOT THE EVENT'S OWN SITE ─────
+//
+// From Oliver's Ribelund run of 12 Aug 2026. The log said, in two places,
+// "Prices against the official site" and "confirmed on the site itself". The
+// only pages read were kultunaut.dk, including its BARE HOMEPAGE, a national
+// calendar carrying 139,020 events. The official-site picker had a blocklist,
+// AGGREGATOR_HOSTS, and it was written against international travel sites:
+// tripadvisor, booking.com, expedia, viator, yelp. In a Denmark-only events
+// product it contained not one Danish event aggregator, so every Danish
+// calendar and every ticket reseller counted as an operator's own website.
+//
+// These are NOT dropped. A Danish festival's price genuinely does live on
+// KultuNaut or Billetto far more often than on the festival's own site, and
+// dropping them would throw away the 400 kr that this same run finally found.
+// They are TIERED: read, quoted, and credited by name, but never allowed to be
+// the thing the log calls "the official site".
+//
+// MATCHED ON THE REGISTRABLE DOMAIN, NOT AS A SUBSTRING, and that is
+// load-bearing: domainVariants deliberately searches billet.<site> because a
+// festival's own ticket shop lives there, so a substring test for "billet"
+// would classify billet.frugtfestival.dk, the operator's own shop, as a
+// reseller.
+export const LISTING_DOMAINS = [
+  "kultunaut.dk",
+  "billetto.dk", "billetto.com",
+  "billetlugen.dk", "billetten.dk", "billetfix.dk",
+  "ticketmaster.dk", "ticketmaster.com",
+  "unitedtickets.dk", "eventim.dk", "safeticket.dk", "ticketbutler.io",
+  "place2book.com", "nemtilmeld.dk",
+  "evently.se", "evently.dk", "musikevent.dk", "livejazz.dk",
+  "eventbrite.com", "eventbrite.dk", "songkick.com", "bandsintown.com", "ra.co",
+];
+
+export const isListingHost = (url) => {
+  let h;
+  try { h = new URL(String(url)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return false; }
+  return LISTING_DOMAINS.some(d => h === d || h.endsWith(`.${d}`));
+};
+
+// ── A PAGE THAT ONLY TALKS ABOUT 2022 CANNOT PRICE A 2026 TICKET ────
+//
+// Also from the Ribelund draft. Its gemlyxFind told the reader to phone
+// 76168405, and its ticketInfo said a companion "gets in free". Both are real
+// and both are sourced: they come from the Ritzau press release sitting in
+// __sources, which is dated 24 August 2022. RESEARCH_SOURCE_RULES already says
+// "anything priced or timed from before 2025 should be treated as stale". That
+// is a PROMPT, and the first standing rule here is that anything the system
+// already knows is enforced in code, because a request has a failure rate.
+//
+// STALE_BEFORE_YEAR is exported so the prompt and the gate cannot drift apart;
+// there is a test asserting the prompt names this same year.
+export const STALE_BEFORE_YEAR = 2025;
+
+// The newest year the page mentions anywhere. Newest rather than first, because
+// an archive page carrying "2019, 2020, 2021, 2026" is a live page with history
+// on it, and only the most recent year says how current the page is.
+export const newestYearIn = (text, maxYear = STALE_BEFORE_YEAR + 25) => {
+  const years = (String(text || "").match(/\b(?:19|20)\d{2}\b/g) || [])
+    .map(Number)
+    .filter(y => y >= 1990 && y <= maxYear);
+  return years.length ? Math.max(...years) : null;
+};
+
+// A page with NO year on it is NOT called stale. We cannot date it, and
+// accusing a source of being old when we could not read a date is the same
+// mistake tracePrices refuses to make when the site text is missing: it returns
+// checked:false rather than flagging every price. Undatable is its own answer.
+export const pageEra = (text, maxYear) => {
+  const year = newestYearIn(text, maxYear);
+  if (year === null) return { year: null, stale: false, why: "no year on the page, so it cannot be dated" };
+  return year < STALE_BEFORE_YEAR
+    ? { year, stale: true, why: `the newest year on this page is ${year}` }
+    : { year, stale: false, why: `the page carries ${year}` };
+};
+
+// ── WHICH OF THE THREE STRINGS A SCRAPED PAGE IS ALLOWED INTO ───────
+// The routing itself, as a function, because the first version of it lived as
+// an if/else inside the draft loop and a mutation that ALSO wrote a 2022 page
+// into the operator's string left every test green. A branch in a 1 MB file
+// can only be asserted by regex, and a regex checks that a line is present,
+// never that another line is absent. Here the answer is a value.
+//
+//   operator  the place's own site. May confirm a price or a date.
+//   listing   a calendar or ticket shop. May price and date, never confirm.
+//   old       too old to carry either. Background only.
+export const scrapeTier = (url, text) => {
+  const era = pageEra(text);
+  if (era.stale) return { tier: "old", era };
+  return { tier: isListingHost(url) ? "listing" : "operator", era };
+};
+
 // One line, for the run log and for the founder reading it. Names the domain,
 // because "a source was blocked" is not something anyone can act on and
 // "visitodense.dk was blocked" is.

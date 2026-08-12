@@ -470,20 +470,35 @@ const priceKey = (p) => `${p.lo}-${p.hi}`;
 // what counts as corroboration: a site writing "Entré 400" with the currency in
 // a heading still confirms a draft saying "400 kr". Being strict on both sides
 // would invent disagreements out of a site's formatting.
-export const tracePrices = (draftText, siteText) => {
+// ── THREE ANSWERS, NOT TWO ──────────────────────────────────────────
+// listingText is a third tier, added 12 Aug 2026 after Oliver's Ribelund run
+// reported KultuNaut's text as "the official site's own words". A price on a
+// national calendar or a ticket reseller is not the operator's word for it, and
+// it is not a blog either. Collapsing those two into one verdict forces a
+// choice between calling a reseller official, which is the bug being fixed, and
+// calling it unproven, which would flag the 400 kr that is almost certainly
+// right. So it gets its own bucket and its own sentence.
+export const tracePrices = (draftText, siteText, listingText = "") => {
   const draft = [...new Map(pricesIn(draftText).filter(p => p.currency).map(p => [priceKey(p), p])).values()];
+  const official = String(siteText || "").trim();
+  const listing = String(listingText || "").trim();
   // Nothing to trace AGAINST is not the same as nothing tracing. Flagging every
   // price when the site could not be read would be accusing a draft of
   // something we cannot check, which is the discipline coordProblems and
   // coordFitsTown already follow.
-  if (!String(siteText || "").trim()) {
-    return { checked: false, why: "the official site's text was not available", draft, traced: [], untraced: [] };
+  if (!official && !listing) {
+    return { checked: false, why: "the official site's text was not available", draft, traced: [], listed: [], untraced: [] };
   }
-  const site = new Set(pricesIn(siteText).map(priceKey));
+  const site = new Set(pricesIn(official).map(priceKey));
+  const seenOnListing = new Set(pricesIn(listing).map(priceKey));
+  const onSite = (p) => site.has(priceKey(p));
   return {
     checked: true, why: "", draft,
-    traced: draft.filter(p => site.has(priceKey(p))),
-    untraced: draft.filter(p => !site.has(priceKey(p))),
+    traced: draft.filter(onSite),
+    // The operator's own page wins outright. A figure that appears on BOTH is
+    // traced, not listed, because the better provenance is the true one.
+    listed: draft.filter(p => !onSite(p) && seenOnListing.has(priceKey(p))),
+    untraced: draft.filter(p => !onSite(p) && !seenOnListing.has(priceKey(p))),
   };
 };
 
@@ -498,7 +513,17 @@ export const describePriceTrace = (r) => {
   if (!r) return "";
   if (!r.checked) return r.draft.length ? `${r.draft.length} price${r.draft.length === 1 ? "" : "s"} in this draft could not be traced, because ${r.why}.` : "";
   if (!r.draft.length) return "";
-  if (!r.untraced.length) return `Every price in this draft (${r.traced.map(showPrice).join(", ")}) appears in the official site's own text.`;
+  // Said in the same breath as the verdict rather than in a separate line,
+  // because "traced" and "only on a reseller" are two grades of the same
+  // answer and a reader who sees one without the other has been told half.
+  const listedNote = (r.listed || []).length
+    ? ` Listed on a ticket site or an event calendar, but not on the operator's own page: ${r.listed.map(showPrice).join(", ")}. That is a real listing rather than an invention, and it is still not the operator's word for it.`
+    : "";
+  if (!r.untraced.length) {
+    return r.traced.length
+      ? `Every price in this draft (${r.traced.map(showPrice).join(", ")}) appears in the official site's own text.${listedNote}`
+      : `No price in this draft appears on the operator's own page.${listedNote}`;
+  }
   const many = r.untraced.length > 1;
-  return `NOT FROM THE OFFICIAL SITE: ${r.untraced.map(showPrice).join(", ")}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text, so ${many ? "they came" : "it came"} from a search result or a blog rather than from whoever charges it. Name the day, the ticket tier and whether it is still buyable, or move ${many ? "them" : "it"} to uncertainties.`;
+  return `NOT FROM THE OFFICIAL SITE: ${r.untraced.map(showPrice).join(", ")}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text, so ${many ? "they came" : "it came"} from a search result or a blog rather than from whoever charges it. Name the day, the ticket tier and whether it is still buyable, or move ${many ? "them" : "it"} to uncertainties.${listedNote}`;
 };

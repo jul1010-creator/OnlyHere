@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
@@ -8225,10 +8225,22 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // ── WIRED ────────────────────────────────────────────────────────
   const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the root of every source is fetched", /const toFetch = withRoots\(/.test(appF));
+  // ── ROOTS FOR OPERATORS, NEVER FOR CALENDARS ─────────────────────
+  // withRoots exists because a festival's own front page carries the new
+  // edition's dates first. Pointed at kultunaut.dk it fetched the homepage of
+  // 139,020 unrelated events, and that text went into the string the log calls
+  // the official site. See Oliver's Ribelund run of 12 Aug 2026.
+  ok("the root of an operator's own site is still fetched",
+     /\.\.\.withRoots\(picked\.filter\(u => !isListingHost\(u\)\)\),/.test(appF));
+  ok("but a calendar or ticket site goes in without its root",
+     /\.\.\.picked\.filter\(isListingHost\),/.test(appF));
   // Anchored on the guard, not the call.
   ok("the check is re-read before he sees it", /const read = readFactCheck\(googleCheckResult\.text\);[\s\S]{0,200}if \(!note\) return null;/.test(appF));
-  ok("the operator's own dates are read first", /if \(sType === "festival" && scrapedSiteText\.trim\(\) && \(t\.dateStart \|\| t\.dateEnd\)\)/.test(appF));
+  // Only the OPERATOR's text may confirm a date. When no operator page was
+  // read the check still runs and still logs, and says plainly that nothing
+  // confirmed it, rather than being skipped into an absence.
+  ok("the operator's own dates are read first",
+     /const dc = scrapedSiteText\.trim\(\)\s*\? datesConfirmedBy\(scrapedSiteText, t\.dateStart, t\.dateEnd\)\s*: \{ confirmed: false, found: \[\] \};/.test(appF));
   ok("and a confirmation is a recorded decision", /winner: "the festival's own site"/.test(appF));
   // The prompt line that pushed it off the front page in the first place.
   ok("an event's front page is no longer called a marketing page", /THE FRONT PAGE OF AN EVENT'S OWN SITE IS NOT A MARKETING PAGE/.test(appF));
@@ -8648,7 +8660,7 @@ rmSync(dir, { recursive: true, force: true });
 
   // Wired into the draft, and into the uncertainties list rather than the prose.
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the draft pipeline runs the trace", /const pt = tracePrices\(readerText\(t\), scrapedSiteText\);/.test(stripNonCode(app)));
+  ok("the draft pipeline runs the trace", /const pt = tracePrices\(readerText\(t\), scrapedSiteText, listingSiteText\);/.test(stripNonCode(app)));
 
   // ── AND ONLY OVER WHAT A READER CAN SEE ──────────────────────────
   // It was handed JSON.stringify(t), the whole draft, so it read numbers out of
@@ -8715,9 +8727,212 @@ rmSync(dir, { recursive: true, force: true });
     is("and a genuinely absent figure is still reported",
        tracePrices("tickets are 400 kr", "Entré 250 per person").untraced.map(p => p.lo), [400]);
   }
+  // Deduplicated, because the gate now runs twice and the same sentence added
+  // twice reads as two separate problems with the draft.
   ok("an untraced price goes to uncertainties, not into the prose",
-     /t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\), describePriceTrace\(pt\)\]/.test(stripNonCode(app)));
-  ok("and the run log records the comparison either way", /note\("Prices against the official site"/.test(app));
+     /t\.uncertainties = \[\.\.\.\(t\.uncertainties \|\| \[\]\)\.filter\(u => u !== line\), line\]/.test(stripNonCode(app)));
+  ok("and the run log records the comparison either way", /note\(`Prices against the official site\$\{suffix\}`/.test(app));
+}
+
+// ── A CHECK THAT RUNS BEFORE THE LAST WRITER CHECKS NOTHING ─────────
+//
+// Oliver's Ribelund run, 12 Aug 2026. Step 12: "Every price in this draft (400
+// DKK) appears in the official site's own text." The draft it handed him says
+// "ticket prices ranging from 275 kr to 400 kr" in its Reality Check.
+//
+// The trace was not wrong. It ran, passed, and was then overtaken: the
+// invented-claim check re-researches flagged claims, Claude rewrites them, and
+// `t = merged` REPLACES the draft. keepMeasured restores the measured fields,
+// but realityCheck is prose the writer owns, so an unverified price can land
+// in it after the gate has signed off.
+{
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // ── NOT stripNonCode HERE, AND THAT IS THE POINT ─────────────────
+  // stripNonCode blanks the CONTENTS of every string literal, so gateDraft("first")
+  // becomes gateDraft("") and a regex hunting the argument matches nothing. It
+  // cost this block four assertions on the first run. Comment lines are dropped
+  // instead, which closes the other documented trap: a comment quoting the old
+  // code satisfying an assertion about the new code.
+  const code = app.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+
+  // THE GATES ARE A FUNCTION, so there is one definition to keep correct
+  // rather than two copies drifting apart.
+  ok("the gates are one function", /const gateDraft = \(pass\) => \{/.test(code));
+  is("and it is called exactly twice", (code.match(/gateDraft\("(?:first|again)"\)/g) || []).length, 2);
+  ok("once on the first draft", /gateDraft\("first"\)/.test(code));
+  ok("and again after the correction", /gateDraft\("again"\)/.test(code));
+
+  // ── THE ORDER IS THE WHOLE FIX ───────────────────────────────────
+  // A second call placed before the merge would re-check the draft that was
+  // about to be thrown away, which is this bug wearing a passing test.
+  const atMerged = code.indexOf("t = merged;");
+  const atAgain = code.indexOf('gateDraft("again")');
+  ok("the correction replaces the draft before the re-check", atMerged > 0 && atAgain > atMerged);
+  // And before the editor is handed the JSON, so an uncertainty the re-check
+  // adds is in what he reads rather than one render late.
+  ok("and the re-check happens before the draft reaches the editor",
+     atAgain < code.indexOf("ui(setStudioDraftText, JSON.stringify(merged", atMerged));
+
+  // ── A CONFIRMATION DOES NOT SURVIVE THE DATE IT CONFIRMED ────────
+  ok("a rewrite that moves a confirmed date clears the confirmation",
+     /if \(again && !dc\.confirmed && t\.__dateSource\?\.by === "official-site"\) \{[\s\S]{0,400}t\.__dateSource = null;/.test(code));
+  ok("and says so in the log rather than only in the draft",
+     /note\("A confirmed date was overwritten"/.test(code));
+
+  // The decision is recorded once. Running the same comparison twice is not
+  // two sources disagreeing twice.
+  is("a repeated comparison is not a second decision",
+     (code.match(/winner: "the festival's own site"/g) || []).length, 1);
+}
+
+// ── THE 275 KR, END TO END ──────────────────────────────────────────
+// The exact draft Oliver was handed, against the exact text KultuNaut showed,
+// proving the trace itself was never the broken part.
+{
+  const { tracePrices, describePriceTrace, readerText } = M;
+  const shipped = {
+    ticketInfo: "Admission listed at 400 kr; a companion gets in free",
+    realityCheck: "other sources show ticket prices ranging from 275 kr to 400 kr, so budget for a ticket",
+    mapHint: "Ribelund Festivalplads, Pile Alle 2, 6760 Ribe, Denmark",
+    __sources: ["https://www.kultunaut.dk/perl/arrmore/type-nynaut?ArrNr=19918555"],
+  };
+  const site = "Ribelund Festivalplads Pile Alle 2, Ribe Ons. d. 19. august 2026 Pris: Entre: 400 kr.";
+  const r = tracePrices(readerText(shipped), site);
+  is("the 275 kr is caught when the trace sees the final draft", r.untraced.map(p => p.lo), [275]);
+  ok("and it is named", /NOT FROM THE OFFICIAL SITE: 275 DKK/.test(describePriceTrace(r)));
+  // The house number and the postcode in mapHint are still not prices.
+  ok("while the address is left alone", !/6760|Pile/.test(describePriceTrace(r)));
+}
+
+// ── A CALENDAR IS NOT THE OPERATOR, AND IS NOT A BLOG EITHER ────────
+{
+  const { isListingHost, LISTING_DOMAINS, tracePrices, describePriceTrace } = M;
+
+  ok("a national calendar is a listing", isListingHost("https://www.kultunaut.dk/perl/arrmore?ArrNr=19918555"));
+  ok("so is a reseller", isListingHost("https://billetto.dk/e/ribe-metalfestival-2026-billetter-1558331"));
+  ok("and its subdomains", isListingHost("https://billet.unitedtickets.dk/anything"));
+  ok("a festival's own site is not", !isListingHost("https://ribemetalfestival.dk/faq/"));
+  // ── SUFFIX, NOT SUBSTRING ────────────────────────────────────────
+  // A domain that merely CONTAINS a listing domain is a different company.
+  // Without this, any implementation reaching for includes() passes.
+  ok("a domain that only contains a listing name is not one",
+     !isListingHost("https://mykultunaut.dk/program"));
+  ok("nor is one that merely starts the same way",
+     !isListingHost("https://billettomat.dk/"));
+  // ── THE SUBSTRING TRAP THIS AVOIDS ───────────────────────────────
+  // domainVariants deliberately searches billet.<site>, because a Danish
+  // festival's own ticket shop lives there. A regex matching "billet" anywhere
+  // would classify the operator's own shop as a reseller and route its prices
+  // into the tier that cannot confirm anything.
+  ok("and neither is an operator's own ticket subdomain",
+     !isListingHost("https://billet.frugtfestival.dk/2026"));
+  ok("a municipal page for a municipal festival is not a listing",
+     !isListingHost("https://oplev.esbjerg.dk/events/ribelund-festival"));
+  ok("every entry is a bare registrable domain", LISTING_DOMAINS.every(d => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)));
+  ok("with no scheme or path smuggled in", LISTING_DOMAINS.every(d => !/[/:]/.test(d)));
+
+  // THREE TIERS. A price only a reseller states is neither confirmed nor
+  // invented, and calling it either one is a lie in a different direction.
+  const tiered = tracePrices("tickets are 400 kr", "", "KultuNaut: Pris Entre 400 kr.");
+  ok("a price found only on a calendar is checked, not skipped", tiered.checked);
+  is("it is not called untraced", tiered.untraced.map(p => p.lo), []);
+  is("it is called listed", tiered.listed.map(p => p.lo), [400]);
+  // ── AND IT IS NOT CALLED TRACED, WHICH IS THE WHOLE POINT ────────
+  // Without this line, an implementation folding the listing set into `traced`
+  // still fills the listed bucket and every other assertion here passes. That
+  // implementation is the bug being fixed: a reseller reported as the operator.
+  is("but the operator never said it", tiered.traced.map(p => p.lo), []);
+  ok("and the sentence says which", /not on the operator's own page/.test(describePriceTrace(tiered)));
+  ok("without calling it an invention", !/search result or a blog/.test(describePriceTrace(tiered)));
+  ok("and without claiming the official site",
+     !/appears in the official site's own text/.test(describePriceTrace(tiered)));
+
+  // The operator wins outright when both say it.
+  const both = tracePrices("tickets are 400 kr", "Entre 400 kr", "Billetto 400 kr");
+  is("a price on both is traced to the operator", both.traced.map(p => p.lo), [400]);
+  is("and is not double-counted as a listing", both.listed.map(p => p.lo), []);
+
+  // Old callers pass two arguments and must keep their old answer.
+  const twoArg = tracePrices("adults 120 kr", "entry is 155,- for adults");
+  is("a two-argument call still flags a blog price", twoArg.untraced.map(p => p.lo), [120]);
+  is("and has an empty listed bucket rather than an undefined one", twoArg.listed, []);
+}
+
+// ── A PAGE THAT ONLY TALKS ABOUT 2022 CANNOT PRICE A 2026 TICKET ────
+//
+// Oliver's Ribelund draft told the reader a companion "gets in free". Esbjerg
+// Kommune's own current page says "Hvis man har ledsager med, koster en billet
+// til ledsager 50 kr." The free version came from the Ritzau press release in
+// __sources, dated 24 August 2022. RESEARCH_SOURCE_RULES already says anything
+// before 2025 is stale. It said it to a model.
+{
+  const { newestYearIn, pageEra, STALE_BEFORE_YEAR } = M;
+
+  is("the newest year is what dates a page, not the first",
+     newestYearIn("Ribelund Festival 2019, 2020, 2021 and again in 2026"), 2026);
+  is("a page that only ever says 2022 is dated 2022",
+     newestYearIn("Ribelund Festival er tilbage. 24. august 2022."), 2022);
+  is("a page with no year cannot be dated", newestYearIn("Billet til festivalen koster 400 kr."), null);
+  // A phone number, a postcode and a price are not years.
+  is("eight digits in a row are not a year", newestYearIn("ring 76168405 eller kom forbi"), null);
+  is("and a postcode is not a year", newestYearIn("6760 Ribe"), null);
+  // The horizon keeps a stray far-future number from dating a page as fresh.
+  is("a year past the horizon is ignored", newestYearIn("copyright 2099", 2030), null);
+  is("and one inside it is not", newestYearIn("copyright 2029", 2030), 2029);
+  is("so a junk year cannot rescue an old page",
+     newestYearIn("last held in 2022, footer says 2099", 2030), 2022);
+
+  ok("a 2022 press release is stale", pageEra("last held 24. august 2022").stale);
+  ok("and says why", /2022/.test(pageEra("last held 24. august 2022").why));
+  ok("a 2026 page is not", !pageEra("Ons. d. 19. august 2026").stale);
+  // ── UNDATABLE IS ITS OWN ANSWER ──────────────────────────────────
+  // The same discipline tracePrices follows when the site text is missing: it
+  // returns checked:false rather than flagging every price. A page we cannot
+  // date is not a page we have caught being old.
+  ok("a page with no year is not accused of being old", !pageEra("Billet koster 400 kr.").stale);
+  is("and its year is null rather than a guess", pageEra("Billet koster 400 kr.").year, null);
+
+  // ── THE PROMPT AND THE GATE CANNOT DRIFT ─────────────────────────
+  // RESEARCH_SOURCE_RULES names a year in prose. This constant enforces it. If
+  // one moves without the other, the pipeline asks for one thing and enforces
+  // another, which is exactly the class of bug this rule exists to close.
+  const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const rule = appS.match(/Anything priced or timed from before (\d{4}) should be treated as stale/);
+  ok("the prompt states a year", !!rule);
+  is("and the gate enforces that same year", Number(rule[1]), STALE_BEFORE_YEAR);
+
+  // ── THE ROUTING IS A VALUE, NOT A BRANCH ─────────────────────────
+  // This was asserted by regex over the if/else in App.jsx, and a mutation
+  // that ALSO wrote a 2022 page into the operator's string left it green: a
+  // regex can check that a line is PRESENT and can never check that another
+  // line is ABSENT. So the decision moved into scrapeTier and is asserted as
+  // an answer.
+  const { scrapeTier } = M;
+  const old = "Ribelund Festival er tilbage for fuld musik. 24. august 2022.";
+  const now = "Ribelund Festival. Ons. d. 19. august 2026. Billet 400 kr.";
+  is("a 2022 page on the operator's own domain is still old",
+     scrapeTier("https://oplev.esbjerg.dk/events/ribelund-festival", old).tier, "old");
+  is("a 2022 page on a calendar is old too, not a listing",
+     scrapeTier("https://www.kultunaut.dk/perl/arrmore?ArrNr=1", old).tier, "old");
+  is("a current calendar page is a listing",
+     scrapeTier("https://www.kultunaut.dk/perl/arrmore?ArrNr=1", now).tier, "listing");
+  is("a current page on the operator's own site is the operator",
+     scrapeTier("https://oplev.esbjerg.dk/events/ribelund-festival", now).tier, "operator");
+  is("an undatable operator page is still the operator",
+     scrapeTier("https://ribemetalfestival.dk/faq/", "Billetter koster 400 kr.").tier, "operator");
+
+  // Wired: each tier reaches exactly one string, and the old tier reaches none.
+  const code = stripNonCode(appS);
+  const staleBranch = (appS.match(/if \(tier === "old"\) \{([\s\S]*?)\} else if \(tier === "listing"\)/) || [])[1] || "";
+  ok("the stale branch exists at all", staleBranch.length > 0);
+  ok("and it appends to neither corroboration string", !/\+=/.test(staleBranch));
+  ok("a listing goes to its own string", /listingSiteText \+= ` \$\{scanData\.text\}`;/.test(appS));
+  ok("and only an operator page reaches the official one",
+     /\} else \{[\s\S]{0,300}scrapedSiteText \+= ` \$\{scanData\.text\}`;/.test(appS));
+  is("which is written to in exactly one place in the scan loop",
+     (code.match(/scrapedSiteText \+=/g) || []).length, 1);
+  ok("the run log names who the checks will believe", /note\("Whose words the checks will use"/.test(appS));
+  ok("and names any source held back for being too old", /note\("Sources too old to state a fact"/.test(appS));
 }
 
 // ── THE EVENT UPDATER HAD CHECKED ZERO EVENTS SINCE 5 AUGUST ────────
