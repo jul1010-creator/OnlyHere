@@ -2226,6 +2226,20 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // time in publishDraft, so nothing any model does to them survives regardless.
       let frozenGeo = null;
       let frozenFactsText = "";
+            // ── ONE BUILDER, BECAUSE TWO PATHS REACH A COORDINATE ──
+      // Extracted so the Google-address path below can produce the same
+      // facts. It used to exist only here, which is half of why that
+      // path was gated on this one having already succeeded.
+      const buildFrozenFacts = (coords, st, coordIsTownCentre, draftTown) => {
+        const station = st?.name || null;
+        const stopKind = st?.kind || null;
+        const KIND_WORD = { rail: "railway station", ferry: "ferry terminal", bus: "bus stop", air: "airport", other: "transit stop" };
+        const kindWord = KIND_WORD[stopKind] || "transit stop";
+        return `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station
+        ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here by a real walking-route query, so it is genuinely the stop that serves this place AND THE READER CAN WALK IT. Do not tell them to look up a bus, a taxi or a journey planner for this leg, and do not hedge the connection: the walk is the connection, and it is measured.${coordIsTownCentre ? ` THIS COORDINATE IS THE CENTRE OF ${String(draftTown || "the town").toUpperCase()}, NOT THE VENUE, because neither geocode found the venue itself. The stop above is the one nearest the town centre. Do not state a walking time from it to this place, and do not put a walking time in any field.` : ""}${!coordIsTownCentre && st.walkMinutes != null && st.walkMinutes <= SHORT_WALK_MINUTES ? ` THAT WALK IS ${st.walkMinutes} MINUTES. Under ${SHORT_WALK_MINUTES} minutes, NOTHING in this entry may suggest a bus, a taxi, driving or a journey planner for getting from there to here. Write the walk.` : ""} ${hasArrivalField(sType) ? "Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it." : "There is deliberately NO nearestStation field on this content type: a town is the destination itself and has as many arrival points as it has edges, so naming one states a fact about a coordinate rather than about the place. This is given to you so the PROSE gets the mode of arrival right, and for nothing else."} Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
+        : " This lookup returned no arrival point, so leave nearestStation EMPTY rather than naming a landmark or a stop on the other side of water. AN EMPTY FIELD MEANS THIS SEARCH FOUND NOTHING, AND IT IS NOT EVIDENCE THAT NO STATION OR SERVICE EXISTS. A Ribelund draft turned this exact blank into the sentence 'Ribe has no train station of its own', and Ribe has a station on the Bramming to Tønder line. Do not write that this place has no station, no stop, no bus or no public transport, and do not write that its transport is unmapped or unclear. Say nothing about the arrival point at all, or say plainly that it could not be confirmed here."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
+      };
+
       // Nightlife added: a bar has an address like everything else here, and
       // leaving it off the list was the reason a venue page could never show
       // where it is. nightTown is a town by another name.
@@ -2313,9 +2327,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             // findRealNearestStop and then dropped here, on every draft ever
             // made. It is the one number that decides walk against bus.
             frozenGeo = { lat: coords.lat, lon: coords.lon, station, stopKind, walkMinutes: coordIsTownCentre ? null : (st?.walkMinutes ?? null), walkText: coordIsTownCentre ? "" : (st?.walk || ""), fromTownCentre: coordIsTownCentre };
-            frozenFactsText = `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station
-              ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here by a real walking-route query, so it is genuinely the stop that serves this place AND THE READER CAN WALK IT. Do not tell them to look up a bus, a taxi or a journey planner for this leg, and do not hedge the connection: the walk is the connection, and it is measured.${coordIsTownCentre ? ` THIS COORDINATE IS THE CENTRE OF ${String(draftTown || "the town").toUpperCase()}, NOT THE VENUE, because neither geocode found the venue itself. The stop above is the one nearest the town centre. Do not state a walking time from it to this place, and do not put a walking time in any field.` : ""}${!coordIsTownCentre && st.walkMinutes != null && st.walkMinutes <= SHORT_WALK_MINUTES ? ` THAT WALK IS ${st.walkMinutes} MINUTES. Under ${SHORT_WALK_MINUTES} minutes, NOTHING in this entry may suggest a bus, a taxi, driving or a journey planner for getting from there to here. Write the walk.` : ""} ${hasArrivalField(sType) ? "Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it." : "There is deliberately NO nearestStation field on this content type: a town is the destination itself and has as many arrival points as it has edges, so naming one states a fact about a coordinate rather than about the place. This is given to you so the PROSE gets the mode of arrival right, and for nothing else."} Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
-              : " This lookup returned no arrival point, so leave nearestStation EMPTY rather than naming a landmark or a stop on the other side of water. AN EMPTY FIELD MEANS THIS SEARCH FOUND NOTHING, AND IT IS NOT EVIDENCE THAT NO STATION OR SERVICE EXISTS. A Ribelund draft turned this exact blank into the sentence 'Ribe has no train station of its own', and Ribe has a station on the Bramming to Tønder line. Do not write that this place has no station, no stop, no bus or no public transport, and do not write that its transport is unmapped or unclear. Say nothing about the arrival point at all, or say plainly that it could not be confirmed here."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
+            frozenFactsText = buildFrozenFacts(coords, st, coordIsTownCentre, draftTown);
           }
         } catch (e) {
           // Was silent. A thrown geocode or Places call left frozenGeo null and
@@ -2599,9 +2611,35 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             realAddressText = `VERIFIED ADDRESS (from Google's own business listing, not a web page reading): ${hoursData.address}. Use this as the address if the schema asks for one.`;
             try {
               const exact = await geocodePlace(hoursData.address);
-              if (exact && frozenGeo) {
+              // ── AND THIS USED TO READ `if (exact && frozenGeo)` ────
+              // Oliver, 12 Aug 2026: "why is it so desperate to tell people
+              // that a local bus or taxi is needed? Surely ChatGPT and Claude
+              // can conclude from the Maps data that an 8 minute walk doesn't
+              // need a train." There WAS no Maps data, and this line is why.
+              //
+              // The chain: geocodePlace("Ribelund Festival") finds nothing,
+              // because Nominatim indexes places and that is an event. frozenGeo
+              // stays null. Then Google Places Text Search finds the business
+              // anyway and returns its real street address, this geocodes that
+              // address perfectly, AND THE RESULT WAS THROWN AWAY BECAUSE THE
+              // EARLIER, WORSE LOOKUP HAD FAILED. The good answer was gated
+              // behind the bad one, so no station was ever looked for, no walk
+              // was ever measured, and the writer had nothing to reason from.
+              //
+              // Dropping the gate is the whole fix. The frozen facts are built
+              // here too now, because on this path there are none to add to.
+              if (exact) {
                 const st2 = await findRealNearestStation(exact.lat, exact.lon);
-                frozenGeo = { lat: exact.lat, lon: exact.lon, station: st2?.name || frozenGeo.station, stopKind: st2?.kind || frozenGeo.stopKind, walkMinutes: st2?.walkMinutes ?? frozenGeo.walkMinutes ?? null, walkText: st2?.walk || frozenGeo.walkText || "" };
+                note("Nearest arrival point", {
+                  provider: "google",
+                  detail: `re-derived from Google's own address for this business, ${String(hoursData.address).slice(0, 80)}`,
+                  outcome: st2?.name ? "ok" : "empty",
+                  got: st2?.name ? `${st2.name} (${st2.kind})${st2.walk ? `, ${st2.walk} on foot` : ""}` : "nothing transit and walkable within the search radii",
+                  why: st2?.name ? "" : "This is not evidence that none exists.",
+                  used: !!st2?.name,
+                });
+                if (!frozenGeo || !frozenFactsText) frozenFactsText = buildFrozenFacts(exact, st2, false, draftTown);
+                frozenGeo = { lat: exact.lat, lon: exact.lon, station: st2?.name || frozenGeo?.station || null, stopKind: st2?.kind || frozenGeo?.stopKind || null, walkMinutes: st2?.walkMinutes ?? frozenGeo?.walkMinutes ?? null, walkText: st2?.walk || frozenGeo?.walkText || "", fromTownCentre: false };
                 ui(setStudioFrozenGeo, frozenGeo);
               }
             } catch { /* the name-based geocode above still stands */ }

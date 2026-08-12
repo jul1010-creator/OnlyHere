@@ -3368,7 +3368,25 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Never worse than before: a failed second geocode leaves the name-based one
   // standing rather than blanking the entry's location.
   ok("a failed refinement keeps the original", /catch \{ \/\* the name-based geocode above still stands \*\//.test(app14));
-  ok("and it only refines when there was something to refine", /if \(exact && frozenGeo\) \{/.test(app14));
+  // ── THIS ASSERTION USED TO PIN THE BUG IN PLACE ─────────────────
+  // It read: ok("and it only refines when there was something to refine",
+  //             /if \(exact && frozenGeo\) \{/.test(app14));
+  // and it was green for as long as the bug existed, because it was a
+  // description of the code rather than of what the code should do.
+  //
+  // The frozenGeo half was the failure. Google Places finds a business by NAME
+  // and returns its real street address; that address geocodes perfectly. The
+  // gate threw the result away whenever the EARLIER, WORSE geocode on the bare
+  // event name had failed, which for an event is most of the time. So no
+  // station was looked for and no walk was measured, and Oliver's draft told a
+  // reader to take a bus for an eight-minute walk because nothing in the
+  // pipeline knew it was eight minutes.
+  ok("a good address is used even when the name-based geocode found nothing",
+     /const exact = await geocodePlace\(hoursData\.address\);[\s\S]{0,1400}\n              if \(exact\) \{/.test(app14));
+  ok("and the gate that threw it away is gone", !/if \(exact && frozenGeo\) \{/.test(app14));
+  ok("the frozen facts are built on this path too, since there are none to add to",
+     /if \(!frozenGeo \|\| !frozenFactsText\) frozenFactsText = buildFrozenFacts\(exact, st2, false, draftTown\);/.test(app14));
+  ok("one builder serves both paths", /const buildFrozenFacts = \(coords, st, coordIsTownCentre, draftTown\) => \{/.test(app14));
 }
 
 // ── "UNCONFIRMED EVENTS IN 'COMING EVENTS', WHICH IS RIDICULOUS" ─
@@ -4718,7 +4736,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("with an empty result saying what it means",
      /With no coordinate there is no station lookup and no map pin/.test(app6));
   ok("and survives the exact-coordinate refinement",
-     /walkMinutes: st2\?\.walkMinutes \?\? frozenGeo\.walkMinutes \?\? null/.test(app6));
+     /walkMinutes: st2\?\.walkMinutes \?\? frozenGeo\?\.walkMinutes \?\? null/.test(app6));
   ok("the rule runs inside gateDraft with the other field gates",
      /\.\.\.lastLegProblems\(readerText\(t\), \{ stop: frozenGeo\?\.station, walkMinutes: frozenGeo\?\.walkMinutes \}\)/.test(app6));
   ok("and the writer is told the number as well",
@@ -4791,8 +4809,10 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // was wrong" were the same blank. Ribe Station sits 3 km inside this
   // lookup's own rail radius and the log had nothing to say about it.
   ok("the nearest arrival point is journalled", /note\("Nearest arrival point"/.test(app6));
-  is("on both the found path and the thrown one",
-     (app6.match(/note\("Nearest arrival point"/g) || []).length, 2);
+  // Three now: the name-based lookup, the one re-derived from Google's own
+  // address for the business, and the thrown case.
+  is("on every path that could produce or fail to produce one",
+     (app6.match(/note\("Nearest arrival point"/g) || []).length, 3);
   ok("a thrown lookup is reported as failed, not as an absence",
      /outcome: "failed", used: false,[\s\S]{0,200}the location lookup threw/.test(app6));
   ok("and an empty result says it is not evidence of an absence",
