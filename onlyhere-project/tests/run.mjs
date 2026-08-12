@@ -63,7 +63,7 @@ writeFileSync(entry, `
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
-  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
+  export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
@@ -7883,6 +7883,139 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const shapedD = M.shapeForLive("festival", { name: "F", desc: "d", dateStart: "2026-09-19", __dateSource: { by: "official-site", dates: ["2026-09-19"], at: "2026-08-12T00:00:00Z" } });
   is("the date provenance survives publish", (shapedD.__dateSource || {}).by, "official-site");
   is("and an absent one adds no empty field", M.shapeForLive("festival", { name: "F", desc: "d" }).__dateSource, undefined);
+}
+
+
+// ── THE OVERNIGHT AUDIT, 12 AUG 2026 ───────────────────────────────
+// Oliver: "do a narrow search through the studio to search for bugs... Any
+// issues to our prompt and pipeline, I'd like you to search through tonight."
+// These are the ones that were found and fixed. Each is a class, not an
+// instance, so the test walks the real lists rather than the examples.
+{
+  const { keepMeasured, isPipelineOwned, MEASURED_FIELDS, studioPrompts, CONTENT_TYPES, shapeForLive, tierOf } = M;
+
+  // ── 1. THE AUTO-CORRECTION USED TO REPLACE THE WHOLE DRAFT ───────
+  // `t = corrected` handed everything the pipeline measured to an 8192-token
+  // JSON rewrite that runs LAST. The manual correction path has had a scope
+  // guard all along; this one had nothing.
+  const measuredDraft = {
+    name: "Roskilde Festival", desc: "d",
+    travelTime: "38min 🚂", ticketStatus: "on_sale", website: "https://roskilde-festival.dk",
+    __ticket: { source: "ticketmaster", at: "2026-08-12", url: "https://tm.dk/rf" },
+    __dateSource: { by: "official-site", dates: ["2026-06-27"] },
+    __sources: ["https://a.dk"], __lat: 55.6, __lon: 12.0,
+    uncertainties: ["STOP, DO NOT PUBLISH: Ticketmaster says this event is CANCELLED.", "Ticket price unconfirmed."],
+  };
+  // What a rewrite plausibly returns: prose fixed, every __ key quietly gone,
+  // the measured travel time reworded, the stop order tidied away.
+  const rewritten = {
+    name: "Roskilde Festival", desc: "a better intro",
+    travelTime: "about 40 minutes", ticketStatus: "sold_out", website: "https://roskilde.dk",
+    uncertainties: ["Ticket price unconfirmed."],
+  };
+  const kept = keepMeasured(measuredDraft, rewritten);
+  is("the rewrite's prose is accepted", kept.patched.desc, "a better intro");
+  // THE POINT. Every measured value survives a rewrite that dropped it.
+  is("a measured travel time is put back", kept.patched.travelTime, "38min 🚂");
+  is("a verified ticket status is put back", kept.patched.ticketStatus, "on_sale");
+  is("the registered website is put back", kept.patched.website, "https://roskilde-festival.dk");
+  is("and its provenance", (kept.patched.__ticket || {}).source, "ticketmaster");
+  is("the operator's own dates", (kept.patched.__dateSource || {}).by, "official-site");
+  is("the sources list", (kept.patched.__sources || []).length, 1);
+  is("and the map pin", kept.patched.__lat, 55.6);
+  // A stop order is not a claim a model may tidy away, and it goes back FIRST.
+  ok("a dropped stop order comes back", /STOP, DO NOT PUBLISH/.test(String((kept.patched.uncertainties || [])[0])));
+  ok("the ordinary uncertainty is kept too", (kept.patched.uncertainties || []).length === 2);
+  ok("and the overreach is reported rather than silent", /put back: /.test(kept.why));
+
+  // WIRED. keepMeasured being correct is worth nothing if the pipeline stops
+  // calling it, which is this codebase's most repeated failure: a helper
+  // written and never wired. A mutation reverting the call site went straight
+  // through every behaviour test above.
+  const appW = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the auto-correction merges rather than replaces", /const kept = keepMeasured\(t, corrected\);[\s\S]{0,120}const merged = kept\.patched;/.test(appW));
+  ok("and the draft Publish reads is the merged one", /t = merged;/.test(appW));
+  ok("nothing assigns the raw rewrite to the draft", !/\bt = corrected;/.test(appW));
+  ok("and an overreach is recorded as a decision", /winner: "the measured values"/.test(appW));
+
+  // A rewrite that behaves changes nothing and says nothing.
+  const clean = keepMeasured(measuredDraft, { ...measuredDraft, desc: "polished" });
+  is("an obedient rewrite restores nothing", clean.restored.length, 0);
+  is("and stays quiet", clean.why, "");
+  is("while keeping the improvement", clean.patched.desc, "polished");
+  // Garbage in must not blank the draft.
+  is("a null correction leaves the draft alone", keepMeasured(measuredDraft, null).patched.name, "Roskilde Festival");
+
+  // A RULE, NOT A LIST. Five __ fields have been added to this codebase and
+  // shapeForLive forgot four of them; the sixth must be protected on day one.
+  ok("any pipeline-owned key is protected by its prefix", isPipelineOwned("__somethingAddedNextMonth"));
+  ok("and the measured scalars by name", MEASURED_FIELDS.every(f => isPipelineOwned(f)));
+  ok("while ordinary prose stays writable", !isPipelineOwned("realityCheck") && !isPipelineOwned("desc"));
+
+  // ── 2. THE GUARD REQUIRED A FIELD THE SCHEMA NEVER ASKED FOR ─────
+  // booking's schema listed 22 keys and desc was not one of them, while the
+  // code threw "empty" on a draft with no desc. Every workshop draft that
+  // obeyed its own schema died after several minutes of paid research.
+  const P = studioPrompts("Testplace");
+  const schemaOf = (t) => { const i = P[t].indexOf("Respond with ONLY strict JSON"); return i < 0 ? "" : P[t].slice(i); };
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const guard = (app.match(/const noContentField = [^;]+;/) || [""])[0];
+  ok("the content guard was found to read", guard.length > 60);
+  // Walked from CONTENT_TYPES, so a tenth type is covered the day it exists.
+  CONTENT_TYPES.forEach(t => {
+    if (!P[t]) return;
+    // Whichever field the guard requires for this type must be in its schema.
+    const required = t === "food" || t === "foodStreet" ? "vibeLocation"
+      : t === "town" ? "characterAndFit"
+      : t === "essential" ? "desc"
+      : "desc";
+    ok(`${t}: the schema asks for the field the code refuses a draft without (${required})`,
+       new RegExp('"' + required + '"\\s*:').test(schemaOf(t)));
+  });
+
+  // ── 3. FOUR TIER MATCHERS, TWO OF THEM EXACT ─────────────────────
+  // The festival schema asks for "Can't miss out" and every other type asks
+  // for "Can't Miss Out". Two readers matched exactly, each on a different
+  // spelling, so a festival was invisible to the front page and a town had no
+  // badge on its card.
+  is("the two real spellings are the same tier", tierOf({ tier: "Can't miss out" })?.id, tierOf({ tier: "Can't Miss Out" })?.id);
+  is("and that tier is must", tierOf({ tier: "Can't Miss Out" })?.id, "must");
+  ok("no exact tier comparison is left in the app", !/tier === "Can't [Mm]iss/.test(app));
+  ok("the front page picks loosely", /tierOf\(x\)\?\.id === "must"/.test(app));
+  ok("and so does the event badge", /tierOf\(event\)\?\.id === "must"/.test(app));
+
+  // ── 4. THE SECOND INVENTING DEFAULT ──────────────────────────────
+  // An attraction the writer said nothing about was filed as a HIDDEN GEM,
+  // which is the claim this whole app is built on, made by a fallback.
+  is("an unstated popularity is not a claim", shapeForLive("free", { name: "x", desc: "d" }).popularityTag, "");
+  is("and a stated one still lands", shapeForLive("free", { name: "x", desc: "d", popularityTag: "Popular" }).popularityTag, "Popular");
+
+  // ── 5. AN ERROR BODY IS NOT AN ANSWER ────────────────────────────
+  // places-hours returns { error } at HTTP 200. Neither res.ok nor the error
+  // was checked, so an outage read as "Google has no listing for this place".
+  ok("the Places response is checked before it is believed", /if \(!hoursRes\.ok \|\| hoursData\?\.error\)/.test(app));
+  ok("and the three failures are told apart", /This is not the same as Google having no listing/.test(app));
+  ok("without logging the same failure twice", /already noted/.test(app));
+
+  // ── 6. THE VERIFIED ADDRESS RODE ON THE OPENING HOURS ────────────
+  // realAddressText reached the writer only when realOpeningHoursText was
+  // non-empty, so a festival with an address and no weekly hours, which is the
+  // normal case for a festival, lost the most transport-relevant fact there is.
+  ok("the address travels on its own", /\(realAddressText \? `\$\{realAddressText\}/.test(app));
+
+  // ── 7. THE WRONG TYPE PICKED THE SOURCE RULES ────────────────────
+  // researchRules read the component state studioType rather than sType, so a
+  // queued draft filtered its founder-vouched sources by whatever chip
+  // happened to be selected in the UI.
+  const gen = app.slice(app.indexOf("const generateArea = async"), app.indexOf("const publishDraft"));
+  ok("the draft function was found", gen.length > 10000);
+  ok("no research call inside it reads the UI's type", !/researchRules\(studioType/.test(gen));
+  ok("they all read the type being drafted", /researchRules\(sType/.test(gen));
+
+  // ── 8. NO FABRICATED VALUE LEFT IN A SCHEMA EXAMPLE ──────────────
+  // A coordinate printed as an example was copied verbatim into 130km-wrong
+  // map pins. A founding year sat in the food schema the same way.
+  ok("no invented founding year in a schema", !/est\. 1652/.test(readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
 }
 
 rmSync(dir, { recursive: true, force: true });

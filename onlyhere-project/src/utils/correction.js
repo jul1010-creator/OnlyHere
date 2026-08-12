@@ -107,6 +107,88 @@ export const allowedFieldsFor = (entry, claims) => {
   return [...out];
 };
 
+// ── THE SAME GUARD, FOR THE PATH THAT NEVER HAD ONE ─────────────────
+//
+// Found in the overnight audit, 12 Aug 2026, and it is the most damaging thing
+// in the draft pipeline.
+//
+// The MANUAL correction, a pasted fact-check, runs through enforceScope below,
+// so a rewrite that wanders outside the claims it was given is put back and the
+// attempt is reported. The AUTOMATIC one, at the end of generateArea, does this
+// instead:
+//
+//     const corrected = await parseClaudeJSON(fixResult.text, 8192);
+//     if (corrected && corrected.name) { t = corrected;
+//
+// One key checked, then the entire draft replaced with model output. And it
+// runs LAST, after every value the pipeline measured in code:
+//
+//   travelTime      measured by Google Directions, the only measurement there is
+//   ticketStatus    read off Ticketmaster's own listing
+//   __ticket        which seller said it, and when
+//   __dateSource    the operator's own published dates
+//   __lat / __lon   the frozen geocode, or a deliberate CLEARING of a bad one
+//   __hours         Google's business listing, bought once
+//   __sources       every page the research actually opened
+//   website         the URL the owner registered, not a guessed domain
+//   uncertainties   including "STOP, DO NOT PUBLISH: this event is CANCELLED"
+//
+// The prompt asks the model to "leave every other field completely untouched",
+// which is a REQUEST, and this codebase already has the rule about requests:
+// anything the system knows must be applied as code, because a request has a
+// failure rate. An 8192-token JSON round-trip is exactly where a key that looks
+// like internal noise, and all seven __ fields do, gets dropped or tidied away.
+// The result is a draft that quietly loses its measured travel time, its
+// verified ticket status, its map pin and a stop order about a cancelled
+// festival, while the panel above it says AUTO-CORRECTED.
+//
+// ── A RULE, NOT AN ENUMERATION ──────────────────────────────────────
+// Any key starting with `__` is the pipeline's own record and is never
+// model-writable. Deliberately a rule rather than a list: five separate __
+// fields have been added to this codebase and shapeForLive forgot four of them.
+// The sixth is protected here on the day it is written.
+export const MEASURED_FIELDS = ["travelTime", "ticketStatus", "website", "nearestStation", "lat", "lon"];
+export const isPipelineOwned = (key) => String(key || "").startsWith("__") || MEASURED_FIELDS.includes(key);
+
+// Publisher notes are the other half. A correction may add to uncertainties and
+// may clear one it genuinely resolved, but "STOP, DO NOT PUBLISH" is not a claim
+// about the entry, it is an instruction to a person, and a model tidying prose
+// has no standing to delete it.
+const SHOUTED_NOTE = /^(?:STOP, DO NOT PUBLISH|CHECK BEFORE PUBLISHING|PIPELINE CONTRADICTION|FIX BEFORE PUBLISHING)/;
+
+export const keepMeasured = (before, corrected) => {
+  if (!corrected || typeof corrected !== "object") {
+    return { patched: before, restored: [], why: "The correction returned nothing usable, so the draft is unchanged." };
+  }
+  const out = { ...corrected };
+  const restored = [];
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(corrected || {})]);
+  for (const k of keys) {
+    if (!isPipelineOwned(k)) continue;
+    if (JSON.stringify(before?.[k]) === JSON.stringify(out[k])) continue;
+    restored.push(k);
+    if (k in (before || {})) out[k] = before[k];
+    else delete out[k];
+  }
+  // A dropped stop order goes back at the FRONT, where the pipeline puts it,
+  // because its entire job is to be the first thing read.
+  const wasNotes = (Array.isArray(before?.uncertainties) ? before.uncertainties : [])
+    .filter(u => SHOUTED_NOTE.test(String(u || "").trim()));
+  const now = Array.isArray(out.uncertainties) ? out.uncertainties : [];
+  const lost = wasNotes.filter(u => !now.includes(u));
+  if (lost.length) {
+    out.uncertainties = [...lost, ...now];
+    restored.push("uncertainties");
+  }
+  return {
+    patched: out,
+    restored,
+    why: restored.length
+      ? `The auto-correction changed ${restored.length} field${restored.length === 1 ? "" : "s"} it was told to leave alone, and ${restored.length === 1 ? "it was" : "they were"} put back: ${restored.join(", ")}. Those are measured or pipeline-owned, so a rewrite has nothing to correct them with.`
+      : "",
+  };
+};
+
 // ── the scope guard ─────────────────────────────────────────────────
 // The part that makes this a correction rather than a redraft. Anything the
 // rewrite changed outside the allowed set is put back, and the fact that it

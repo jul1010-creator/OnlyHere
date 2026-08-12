@@ -92,7 +92,13 @@ const shapeForLiveFields = (type, t) => {
     blogBody: [
       ...bbData([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]]),
     ] };
-  if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "Hidden Gem", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32",
+  // ── THE SECOND INVENTING DEFAULT ────────────────────────────────
+  // Same bug as ticketStatus, found in the overnight audit on 12 Aug and
+  // sitting eight lines below the comment written about that one. An attraction
+  // the writer said nothing about was filed as a HIDDEN GEM, which is a claim
+  // about the world made by a fallback, and it is the claim this whole app is
+  // built on. The booking branch already uses "" for the same field.
+  if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32",
     ticketsGlance: t.ticketsGlance || "", timeNeeded: t.timeNeeded || "", extraCosts: t.extraCosts || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]]),

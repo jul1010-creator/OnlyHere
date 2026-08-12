@@ -72,7 +72,7 @@ import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock } from "./utils/journey";
-import { correctEntry } from "./utils/correction";
+import { correctEntry, keepMeasured } from "./utils/correction";
 import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { otherNameFor, variantsOf, containsName, samePlaceName } from "./utils/danishNames";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
@@ -1989,7 +1989,7 @@ IDENTITY CHECK, IMPORTANT: a town's real signature event has been mistaken for a
 If you can't find something for a bucket, leave it out rather than guessing. Short facts only, no essay, no flowing sentences — ChatGPT handles the actual writing.`
           : sType === "festival"
           ? `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay. IDENTITY CHECK, IMPORTANT: this exact event has been confused with a different, similarly-named or co-occurring event before (a small event mistaken for a much bigger one sharing part of its name or season) — actively check whether "${name}" might be getting confused with a different real event in your search results. If there's genuine risk of that, start your entire response with a single line: "IDENTITY WARNING: [explain exactly what might be getting mixed up, e.g. a different, larger festival with a similar name in the same town]" — then continue with the facts as normal. If you're confident there's no confusion, don't include that line at all.`
-          : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${researchRules(studioType, name)}`;
+          : `Using real, current web search, find the accurate dates, prices (in local currency), and any specific named venues/stages for "${name}" in Denmark. Be concise — short facts only, no essay.`) + `\n${researchRules(sType, name)}`;
         setStudioStage({ label: "Fact-checking the research (Perplexity)", percent: 50 });
         const preCheck = await withRetry(
           () => askPerplexity(precheckPrompt),
@@ -2330,6 +2330,32 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         try {
           const hoursRes = await fetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`);
           const hoursData = await hoursRes.json();
+          // ── AN ERROR BODY IS NOT AN ANSWER ──────────────────────────
+          // Overnight audit, 12 Aug. Neither hoursRes.ok nor hoursData.error was
+          // ever checked, and places-hours.js returns { error } at HTTP 200 for
+          // a Google failure and 500 for a missing key. Every field below then
+          // read undefined and the step carried on as a clean "Google has
+          // nothing about this place": no registered website, so the
+          // official-site enforcement fell back to a guessed domain; no
+          // verified address; no hours; and no businessStatus, so a permanently
+          // closed business was not caught. Nothing threw, so the failure note
+          // at the bottom of this block could never fire either. In the run log
+          // a Places outage, a dead key and a genuine no-listing were one blank.
+          //
+          // Five other fetches in this function already check. This one is now
+          // the sixth, and it says which of the three happened.
+          if (!hoursRes.ok || hoursData?.error) {
+            note("Opening hours and address", {
+              provider: "google", detail: "Places Text Search for the business listing",
+              outcome: "failed", used: false,
+              why: hoursData?.error
+                ? `Places answered but refused: ${String(hoursData.error).slice(0, 140)}`
+                : `Places returned HTTP ${hoursRes.status}, so nothing was read from it. This is not the same as Google having no listing for this place.`,
+            });
+            // Marked, so the catch below does not log a second, vaguer note for
+            // the same failure. Same pattern the permanent-closure stop uses.
+            throw new Error("places-hours already noted");
+          }
           // Google's registered URL for this business, the authoritative answer
           // to "which site is actually theirs". Put at the FRONT of the fetch
           // list so it beats anything the search happened to surface.
@@ -2429,7 +2455,11 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           // A real Places failure must not look like a clean lookup, and the
           // permanent-closure stop above must not be swallowed by this catch.
           if (/permanently closed/i.test(String(e?.message || ""))) throw e;
-          note("Opening hours and address", {
+          // Already reported in detail at the res.ok check, with which of the
+          // three failures it was. A second, vaguer note for the same event is
+          // exactly the noise that made this log hard to read.
+          if (/already noted/.test(String(e?.message || ""))) { /* reported */ }
+          else note("Opening hours and address", {
             provider: "google", detail: "Places Text Search (Place Details Enterprise SKU)",
             outcome: "failed", why: String(e?.message || e), used: false,
           });
@@ -2609,7 +2639,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
 
       const rawResearch = (hint && (hint.town || hint.dates)
         ? `KNOWN FROM SOURCE LISTING (trust this over a weaker fresh search unless your own search clearly contradicts it with better evidence): ${[hint.town && `town/city = ${hint.town}`, hint.dates && `dates = ${hint.dates}`].filter(Boolean).join(", ")}\n\n`
-        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}${realAddressText ? `\n${realAddressText}` : ""}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
+        : "") + (frozenFactsText ? `${frozenFactsText}\n\n` : "") + (realOpeningHoursText ? `${realOpeningHoursText}\n\n` : "") + (realAddressText ? `${realAddressText}\n\n` : "") + (ticketText ? `${ticketText}\n\n` : "") + (transportFindings ? `${transportFindings}\n\n` : "") + (googleFindings ? `PERPLEXITY FACT-CHECK (a second, independent search — weigh this alongside the research below).
 WHEN THESE TWO CONFLICT, PREFER THE ONE YOU CAN POINT AT. "More specific" is not the test and never was: a synthesised answer always reads as more specific than a raw snippet, so preferring specificity means preferring whichever source happens to sound most confident, which is the opposite of what this pipeline is for. Prefer the claim that names a real page, an operator, an official site or a dated announcement. If the two disagree and neither is traceable, say so in uncertainties and leave the field empty rather than picking a winner.
 A DATE, PRICE OR OPENING TIME FROM EITHER SOURCE IS A LEAD, NOT A FACT, unless it comes from the place's own site or its official ticketing page.
 ${googleFindings}\n\n` : "") + (context || "No search context found — use only well-established knowledge, leave uncertain fields empty, and use 'See website' / 'Check locally' fallbacks.");
@@ -3149,7 +3179,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       try {
         setStudioStage({ label: "Checking for invented claims", percent: 94 });
         const inventedCheck = await askPerplexity(
-          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${researchRules(studioType, t)}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
+          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${researchRules(sType, t)}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
         );
         if (!inventedCheck.error && inventedCheck.text && !/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
           // AUTO-CORRECTION (Oliver: "The last fact-check was actually pointed
@@ -3167,7 +3197,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           setStudioStage({ label: "Re-researching flagged claims", percent: 97 });
           try {
             const reResearch = await askPerplexity(
-              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${researchRules(studioType, name)}\n\nFlagged claims:\n${inventedCheck.text}`
+              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${researchRules(sType, name)}\n\nFlagged claims:\n${inventedCheck.text}`
             );
             if (!reResearch.error && reResearch.text) {
               const fixResult = await askClaude(
@@ -3177,12 +3207,37 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               if (!fixResult.error) {
                 const corrected = await parseClaudeJSON(fixResult.text, 8192);
                 if (corrected && corrected.name) {
+                  // ── MERGED, NOT REPLACED ─────────────────────────
+                  // This used to be `t = corrected`, which handed the entire
+                  // draft to an 8192-token JSON rewrite AFTER every value the
+                  // pipeline had measured in code: the Google-measured
+                  // travelTime, the Ticketmaster status and its provenance, the
+                  // frozen coordinate, the sources list, and any "STOP, DO NOT
+                  // PUBLISH" on a cancelled event. The prompt asks the model to
+                  // leave them alone, and this codebase's own rule is that a
+                  // request has a failure rate while code does not.
+                  //
+                  // The MANUAL correction path has had enforceScope guarding it
+                  // all along. This one had nothing. See keepMeasured.
+                  const kept = keepMeasured(t, corrected);
+                  const merged = kept.patched;
                   // t, not just the editor. draftOutcome below returns t, and
                   // for a queued draft that return value IS the draft, so an
                   // auto-correction that only reached state was thrown away.
-                  t = corrected;
-                  ui(setStudioDraft, corrected);
-                  ui(setStudioDraftText, JSON.stringify(corrected, null, 2));
+                  t = merged;
+                  if (kept.restored.length) {
+                    note("Auto-correction overreached", {
+                      provider: "claude", detail: "rewrite of the flagged claims only",
+                      outcome: "ok", used: true, got: kept.why,
+                    });
+                    decide("auto-correction scope", {
+                      winner: "the measured values", loser: "the rewrite",
+                      rule: "A rewrite may fix the claims it was given and nothing else. Measured and pipeline-owned fields are put back whatever it returns.",
+                      value: kept.restored.join(", "),
+                    });
+                  }
+                  ui(setStudioDraft, merged);
+                  ui(setStudioDraftText, JSON.stringify(merged, null, 2));
                   ui(setStudioInventedWarning, inventedWarning = `AUTO-CORRECTED. These claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${inventedCheck.text}`);
                 } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
               } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
@@ -7533,7 +7588,18 @@ ${profileForPrompt(userProfile)}`;
                 "Best If You're Already Nearby" silently showed no badge at all, and the
                 DEFAULT tier ("Worth Considering") never had a badge either — kept that way
                 on purpose below, same as before, so every event isn't badged. */}
-            {event.tier === "Can't miss out" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#0A0F1E", background: C.gold }}>★ Can't miss out</span>}
+            {/* ── FOUR TIER MATCHERS, TWO OF THEM EXACT ─────────────
+                Overnight audit, 12 Aug. The festival prompt's own schema asks
+                for "Can't miss out" and every other type's asks for "Can't Miss
+                Out". Four places read the field back: placeThemes.tierOf and
+                DetailPage match loosely and are right, this line matched only
+                the lowercase spelling, and the front-page pick at ~9851 matched
+                only the capitalised one. So a festival tiered by its own prompt
+                was invisible to the front page, and a town tiered by its own
+                prompt showed no badge here. tierOf is the one matcher, and
+                placeThemes.js already says why: "the stored strings are long
+                and inconsistently cased across 71 rows written over weeks". */}
+            {tierOf(event)?.id === "must" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#0A0F1E", background: C.gold }}>★ Can't miss out</span>}
             {event.tier === "Highly Recommended" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#6ECF97", background: "rgba(110,207,151,0.12)" }}>Highly Recommended</span>}
             {event.tier === "Best If You're Already Nearby" && <span style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: "#FFB347", background: "#FFB34722" }}>Best if already nearby</span>}
             {event.rating && <span style={{ fontSize: 12, color: C.gold, fontWeight: 700 }}>★ {event.rating}</span>}
@@ -9823,7 +9889,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   { key: "gems", title: "Hidden gems this week", sub: "Places most visitors never reach",
                     pick: (x) => x.popularityTag === "Hidden Gem" || x.tier === "Worth Considering" },
                   { key: "trend", title: "Worth the trip right now", sub: "The ones we would go out of our way for",
-                    pick: (x) => x.tier === "Can't Miss Out" || x.nomiPotential === "Very High" || x.popularityTag === "Popular" },
+                    // Loose, for the same reason as the badge above: a
+                    // festival stores "Can't miss out" and a town stores
+                    // "Can't Miss Out", and an exact match here silently hid
+                    // every festival from this whole section of the front page.
+                    pick: (x) => tierOf(x)?.id === "must" || x.nomiPotential === "Very High" || x.popularityTag === "Popular" },
                 ];
                 const rows = lenses.map((lens, li) => {
                   const matched = pool.filter(lens.pick);
