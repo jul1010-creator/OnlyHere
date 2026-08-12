@@ -4073,7 +4073,43 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("matched by real place name, not a string compare", /samePlaceName\(r\?\.payload\?\.name, name\)/.test(app5));
   ok("and passes the base-town relationship", /dayTripFrom: known\?\.dayTripFrom \|\| ""/.test(app5));
   ok("and containment", /partOf: known\?\.partOf \|\| ""/.test(app5));
-  ok("and the part of the country, computed not typed", /part: known \? partOfCountry\(known\) : ""/.test(app5));
+  ok("and the part of the country, computed not typed",
+     /part: known \? partOfCountry\(known\) : \(draftTown \? partOfCountry\(\{ town: draftTown \}\) : ""\)/.test(app5));
+
+  // ── AND FOR A PLACE WITH NO PUBLISHED ROW AT ALL ─────────────────
+  // Found 12 Aug from a real run on "Ribelund Festival 2026", a genuine
+  // festival on its 24th edition in Ribe. Every field above was derived from
+  // `known`, the existing published row, so a FIRST draft got town: "",
+  // partOf: "" and part: "". The Studio exists to make first drafts, and the
+  // first draft of a place was the one handed no context at all.
+  ok("a first draft falls back past the row it does not have",
+     /const draftTown = known\?\.town \|\| known\?\.city \|\| known\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| "";/.test(app5));
+  ok("and that is what the scoping is given", /town: draftTown,/.test(app5));
+  // THE ORDER MATTERS AND SO DOES THE OMISSION. Free research text must never
+  // name the town: a realistic Odense snippet says "1 hour 15 from Copenhagen
+  // by train", which is how visitcopenhagen.com got paid to answer about Odense
+  // on 10 Aug. townKeyFor needs the town to stand as its own word.
+  ok("the research text is not in the fallback chain",
+     !/const draftTown = [^;]*\btext\b/.test(app5));
+  {
+    const { townKeyFor } = M;
+    is("a festival named after nowhere falls through", townKeyFor("Ribelund Festival 2026"), null);
+    is("a festival named after its town does not", townKeyFor("Odense Blomsterfestival"), "Odense");
+    is("and a street name still does not masquerade as a town", townKeyFor("Vejlebrovej coast viewpoint"), null);
+  }
+
+  // ── THE SELECTION IS WRITTEN DOWN NOW ────────────────────────────
+  // sourceHits already held the answer to "was kultunaut.dk searched" on every
+  // draft and nothing logged it, so a finished run reported providers
+  // "perplexity, google, ticketmaster" and the first 47 seconds were blank. The
+  // cap is the interesting part: a source never chosen looked identical to one
+  // searched that found nothing.
+  ok("the chosen sources are journalled before the loop", /note\("Founder sources chosen", \{/.test(app5));
+  ok("naming them, and how many were dropped", /\$\{searches\.length\} of \$\{founderSources\.length\}: \$\{searches\.map\(s => s\.domain\)\.join\(", "\)\}/.test(app5));
+  ok("and saying whether a town was known to scope by", /no town known for this place, so nothing could be scoped out/.test(app5));
+  ok("each source reports its own outcome", /note\(`Founder source: \$\{domain\}`, \{/.test(app5));
+  ok("distinguishing a refusal from an empty result",
+     /outcome: !\(fRes\.ok && !fData\.error\) \? "failed" : urls\.length \? "ok" : "empty"/.test(app5));
 
   // The behaviour, on the three cases that matter.
   const scoped = [

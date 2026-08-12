@@ -1928,13 +1928,58 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // names the place.
         const existingRow = (manageItems || []).find(r => r?.type === sType && samePlaceName(r?.payload?.name, name));
         const known = existingRow?.payload || null;
+        // ── THE TOWN CAME FROM A ROW THAT DOES NOT EXIST YET ──────────
+        // Found 12 Aug 2026 from a real run. Oliver drafted "Ribelund Festival
+        // 2026", a genuine festival on its 24th edition in Ribe, and the whole
+        // draft worked blind: Places answered "No matching place found" for a
+        // venue it holds as Ribelund Festivalplads, and the source scoping had
+        // no town to scope by.
+        //
+        // The cause is that every piece of place context below was derived from
+        // `known`, which is the EXISTING PUBLISHED ROW. A first-time draft has
+        // no published row, so `known` is null and town, partOf and part were
+        // all the empty string. That is backwards for the case the Studio
+        // exists for: the first draft of a place is exactly when nothing is on
+        // file, and it is the draft handed the least context.
+        //
+        // THE FALLBACK ORDER IS DELIBERATE, most authoritative first:
+        //   known        a published row, already reviewed by him
+        //   hint.town    a town stated in the source listing the scan came from
+        //   townKeyFor   the town standing as its own word inside the name,
+        //                which is null for "Ribelund Festival" and right for
+        //                "Odense Blomsterfestival"
+        //
+        // AND THE RESEARCH TEXT IS DELIBERATELY NOT IN THAT CHAIN. Letting free
+        // research text name the town is the 10 Aug bug: a realistic Odense
+        // snippet says "1 hour 15 from Copenhagen by train", which unlocked the
+        // Copenhagen source and paid to ask visitcopenhagen.com about Odense.
+        // townKeyFor requires the town to stand as its own word, so it cannot
+        // do that.
+        const draftTown = known?.town || known?.city || known?.location || hint?.town || townKeyFor(name) || "";
         const searches = directSourceSearches(founderSources, sType, {
           name,
           text: context,
-          town: known?.town || known?.city || known?.location || "",
+          town: draftTown,
           partOf: known?.partOf || "",
           dayTripFrom: known?.dayTripFrom || "",
-          part: known ? partOfCountry(known) : "",
+          part: known ? partOfCountry(known) : (draftTown ? partOfCountry({ town: draftTown }) : ""),
+        });
+        // ── WHICH SOURCES WERE CHOSEN, AND FROM WHAT ──────────────────
+        // sourceHits already recorded the answer to "was kultunaut.dk searched"
+        // on every draft and nothing wrote it down, which is why the providers
+        // line on a finished run said "perplexity, google, ticketmaster" and the
+        // first forty-seven seconds were blank. The selection is logged before
+        // the loop because the cap is the interesting part: a source that was
+        // never chosen looks identical to one that was searched and found
+        // nothing, and only one of those is worth changing.
+        note("Founder sources chosen", {
+          provider: "tavily",
+          detail: draftTown ? `scoped to ${draftTown}` : "no town known for this place, so nothing could be scoped out",
+          outcome: searches.length ? "ok" : "empty",
+          got: searches.length
+            ? `${searches.length} of ${founderSources.length}: ${searches.map(s => s.domain).join(", ")}`
+            : `none of ${founderSources.length} vouched sources were in scope`,
+          used: searches.length > 0,
         });
         for (const { domain, domains, query } of searches) {
           try {
@@ -1949,6 +1994,16 @@ Say which answer came from which source, so a fact from a vouched page and a fac
               : "";
             founderUrls.push(...urls);
             sourceHits.push({ domain, count: urls.length, ok: fRes.ok && !fData.error });
+            // One line per source. "Searched and found nothing" and "refused"
+            // are different answers and were previously the same blank.
+            note(`Founder source: ${domain}`, {
+              provider: "tavily",
+              detail: String(query).slice(0, 140),
+              outcome: !(fRes.ok && !fData.error) ? "failed" : urls.length ? "ok" : "empty",
+              why: !(fRes.ok && !fData.error) ? String(fData?.error || `search failed (${fRes.status})`).slice(0, 160) : "",
+              got: urls.length ? `${urls.length} page${urls.length === 1 ? "" : "s"} about this place` : "nothing about this place on that site",
+              used: !!(fData.answer || snips),
+            });
             if (fData.answer || snips) {
               context += ` SOURCE THE FOUNDER VOUCHES FOR (${domain}), searched directly for this place: ${fData.answer || ""} ${snips}`;
             }
