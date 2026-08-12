@@ -21,7 +21,7 @@ import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { foodSpots } from "../data/food";
 import { detectLegMode, haversineKm, isFerryText } from "./helpers";
-import { containsName } from "./danishNames";
+import { containsName, variantsOf } from "./danishNames";
 
 // Looks up a stop name against everything real Gemlyx already knows, so a
 // guide can show real price/hours/type instead of just repeating the AI's
@@ -143,12 +143,93 @@ export const townKeyFor = (name) =>
     .filter(t => townInName(name, t))
     .sort((a, b) => b.length - a.length)[0] || null;
 
-export const resolveStopCoords = (name, geo = {}) => {
+
+// ── A COORDINATE IS A CLAIM ABOUT WHICH TOWN YOU ARE IN ─────────────
+// Oliver, 12 Aug 2026, on a live guide: "the maps go all the way to
+// Amalienborg in Billund.. which is a lego castle.. that is embarassing." The
+// header of that guide said 4 DAYS, 6 STOPS, 1 TOWN and described a trip that
+// "stays in one place, mostly by bike". The map crossed the country, and the
+// chip between Nyhavn and Amalienborg, which are a ten minute walk apart, read
+// "13 hours 52 mins by bike".
+//
+// utils/coordCheck.js already does this arithmetic and does it well, but it
+// runs in one place only: against a STORED __lat, at PUBLISH time. Two other
+// coordinates reach a reader and neither was ever checked.
+//
+//   1. THE FRESH GEOCODE. geocodeStopsForGuide takes Nominatim's top hit at
+//      limit=1 and keeps it with no test of any kind, and the resolvers below
+//      then mark it precise: true. A Danish place name is not unique, and
+//      Miniland at Legoland Billund holds scale models of Danish landmarks
+//      carrying their real names.
+//   2. THE STORED COORDINATE, AT READ TIME. The publish gate added 11 Aug
+//      stops a bad coordinate going IN. Every row published before it existed
+//      went in unchecked, and is still trusted at the top of the chain on
+//      every render.
+//
+// So the check has to live where the resolution happens and not only where the
+// publishing happens, and it has to cover both tiers, because from the map's
+// point of view they produce the identical wrong pin. Which of the two put
+// Amalienborg in Billund is not knowable from here, and does not need to be:
+// covering both is correct either way.
+//
+// THE RULE IS DELIBERATELY ONE-SIDED. All it can do is DEMOTE a coordinate to
+// the town-centre fallback, which is already drawn as a dashed ring, labelled
+// "(somewhere in X)", counted under the map, and sent to Google Directions as
+// the stop's NAME rather than a bare pair. So the worst a false positive can
+// do is turn a confident pin into an honest approximate one. It cannot delete
+// a stop, cannot invent a coordinate, and cannot make the map shorter. A check
+// that could do more than that has no business running unattended.
+//
+// And it refuses to judge when it has nothing to judge against: no town on the
+// stop, or a town we hold no coordinate for, and the coordinate stands
+// untouched. Same discipline as coordProblems, which never accuses an entry it
+// cannot actually check.
+export const MAX_TOWN_KM = 50;
+
+// The town the STOP says it is in, resolved to a point. Tries the Danish and
+// English spellings, because a stop in "Kobenhavn" and a stop in "Copenhagen"
+// are the same claim and TOWN_COORDS is keyed on one of them.
+export const townPointFor = (town) => {
+  for (const v of variantsOf(String(town || ""))) {
+    const key = townKeyFor(v);
+    if (key && TOWN_COORDS[key]) return { key, lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
+  }
+  return null;
+};
+
+// Returns a verdict rather than a boolean, because the caller has to be able
+// to say WHY in the run log. A silent rejection would be the same class of bug
+// as the one it exists to fix.
+export const coordFitsTown = (coord, town) => {
+  const lat = Number(coord?.lat), lon = Number(coord?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { ok: false, why: "not-a-coordinate" };
+  const t = townPointFor(town);
+  if (!t) return { ok: true, why: "nothing-to-check-against" };
+  const km = haversineKm({ lat, lon }, { lat: t.lat, lon: t.lon });
+  return km > MAX_TOWN_KM
+    ? { ok: false, why: "far-from-town", km, town: t.key }
+    : { ok: true, why: "near-town", km, town: t.key };
+};
+
+// THE FALLBACK, IN ONE PLACE. The pin, the "(somewhere in X)" label under it
+// and the town centre the coordinate actually comes from have to agree, and
+// they only agree by construction if one function decides all three. They did
+// not before: the resolver fell back on townKeyFor(name) while GuidePage
+// labelled the same pin with a separate townKeyFor(name) call, so any change
+// to one silently disagreed with the other.
+//
+// The stop's own town is tried first because it is a stated fact about the
+// stop, and the name is a guess: townKeyFor("Amalienborg") is null, which is
+// why a pin that WAS being approximated to a town centre could still be
+// labelled only "(approximate)" with no town named.
+export const townFallbackFor = (town, name) => townPointFor(town) || townPointFor(name);
+
+export const resolveStopCoords = (name, geo = {}, town = "") => {
   const real = placeCoords(lookupRealPlace(name));
-  if (real) return { lat: real.lat, lon: real.lon };
-  if (geo[name]) return geo[name];
-  const key = townKeyFor(name);
-  if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
+  if (real && coordFitsTown(real, town).ok) return { lat: real.lat, lon: real.lon };
+  if (geo[name] && coordFitsTown(geo[name], town).ok) return geo[name];
+  const t = townFallbackFor(town, name);
+  if (t) return { lat: t.lat, lon: t.lon };
   return null;
 };
 
@@ -177,19 +258,19 @@ export const kmBetween = (a, b) => {
 // "we do not know this distance" — not zero. legDistanceKm returns null there,
 // and every caller already handles null by showing the AI's own leg text or
 // "Check route" instead of a fabricated figure.
-export const resolveStopCoordsDetailed = (name, geo = {}) => {
+export const resolveStopCoordsDetailed = (name, geo = {}, town = "") => {
   const real = placeCoords(lookupRealPlace(name));
-  if (real) return { lat: real.lat, lon: real.lon, precise: true };
-  if (geo[name]) return { ...geo[name], precise: true };
-  const key = townKeyFor(name);
-  if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1], precise: false };
+  if (real && coordFitsTown(real, town).ok) return { lat: real.lat, lon: real.lon, precise: true };
+  if (geo[name] && coordFitsTown(geo[name], town).ok) return { ...geo[name], precise: true };
+  const t = townFallbackFor(town, name);
+  if (t) return { lat: t.lat, lon: t.lon, precise: false };
   return null;
 };
 
 // Trustworthy straight-line distance, or null when the inputs can't support one.
-export const legDistanceKm = (originName, destName, geo = {}) => {
-  const a = resolveStopCoordsDetailed(originName, geo);
-  const b = resolveStopCoordsDetailed(destName, geo);
+export const legDistanceKm = (originName, destName, geo = {}, originTown = "", destTown = "") => {
+  const a = resolveStopCoordsDetailed(originName, geo, originTown);
+  const b = resolveStopCoordsDetailed(destName, geo, destTown);
   if (!a || !b) return null;
   const km = kmBetween(a, b);
   // Neither end is precise and they landed on (essentially) the same point:

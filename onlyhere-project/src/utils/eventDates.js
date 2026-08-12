@@ -52,10 +52,29 @@ export const isPastDate = (v, today) => {
 
 // The edition a visitor is actually looking for. In August, a June festival's
 // next edition is next year's.
+// A TERNARY WHOSE TWO BRANCHES WERE THE SAME (found 12 Aug). It read:
+//
+//     today.getFullYear() + (d.getMonth() < today.getMonth() ? 1 : 1)
+//
+// Somebody wrote the condition that matters and then answered it identically
+// both ways, so this always said "next year" no matter what it was given. It
+// is right for the common case, a festival whose edition finished earlier this
+// same year, which is why it survived: Copenhell ran in June, we are in August,
+// and 2027 is correct. It is wrong for any row whose stored date is more than a
+// year stale, and those are exactly the rows nobody has looked at. A September
+// 2025 festival, read in August 2026, was told its next edition is 2027 when
+// the real one is a month away.
+//
+// The next edition falls on the same month and day. If that has already gone by
+// this year it is next year, and if it is still ahead it is this year.
 export const nextEditionYear = (v, today) => {
   const d = parseEventDate(v);
   if (!d || !today) return null;
-  return isPastDate(v, today) ? today.getFullYear() + (d.getMonth() < today.getMonth() ? 1 : 1) : d.getFullYear();
+  if (!isPastDate(v, today)) return d.getFullYear();
+  const year = today.getFullYear();
+  const sameDayThisYear = new Date(year, d.getMonth(), d.getDate());
+  const midnightToday = new Date(year, today.getMonth(), today.getDate());
+  return sameDayThisYear >= midnightToday ? year : year + 1;
 };
 
 // ── WHAT IS WRONG WITH THIS DATE, IN PLAIN WORDS ────────────────────

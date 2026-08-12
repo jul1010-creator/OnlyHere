@@ -40,12 +40,20 @@
 
 import { isInDenmark, haversineKm } from "./helpers";
 import { TOWN_COORDS } from "../data/towns";
-import { townKeyFor } from "./guideEnrichment";
+import { townKeyFor, MAX_TOWN_KM } from "./guideEnrichment";
 
 // Denmark is small. Copenhagen to Odense is about 140 km, so 50 km is roughly a
 // third of the way across the country: nothing legitimately described as being
 // in a town is that far from it. The documented failure was 130 km.
-export const MAX_TOWN_KM = 50;
+//
+// THE NUMBER MOVED TO guideEnrichment.js ON 12 AUG and is re-exported here, so
+// every existing importer of it keeps working unchanged. It moved because the
+// guide's own coordinate resolvers need the identical threshold at READ time
+// (see coordFitsTown), guideEnrichment sits below this file in the import
+// graph so it cannot import upward, and a threshold declared in two files is
+// the failure this codebase repeats more than any other. One declaration, two
+// names for it, no second value that can drift.
+export { MAX_TOWN_KM };
 // Not wrong on its own, but far enough to be worth opening. An attraction can
 // honestly sit 20 km outside the town it is listed under (Ribe VikingeCenter is
 // about 3 km out, Møns Klint about 15 from Møn town), so this is a look-at-it

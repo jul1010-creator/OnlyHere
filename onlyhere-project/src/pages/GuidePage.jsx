@@ -7,7 +7,7 @@ import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
+import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { askClaude } from "../utils/aiClient";
@@ -453,7 +453,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
       : 0;
     (async () => {
       const next = await Promise.all(days.map(async (d, i) => {
-        const st = (d.stops || []).map(x => resolveStopCoords(x.name, guide._geo || {})).find(Boolean);
+        const st = (d.stops || []).map(x => resolveStopCoords(x.name, guide._geo || {}, x.town)).find(Boolean);
         if (!st) return d.weather || null;
         const on = new Date(arrival || new Date());
         on.setDate(on.getDate() + i);
@@ -542,11 +542,16 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   // stops that could not be placed at all. Same rule as that line, which this
   // file already got right: never a silently shorter or a silently vaguer map.
   const tripPoints = allStops.map(st => {
-    const c = resolveStopCoordsDetailed(st.name, tripGeo);
+    // st.town is what the planner said this stop is in, and the schema marks
+    // it REQUIRED for exactly this reason. Passing it is what stops a
+    // coordinate about somewhere else being drawn as a confident pin.
+    const c = resolveStopCoordsDetailed(st.name, tripGeo, st.town);
     if (!c) return null;
     // Labelled with the day so one pin in a fourteen stop route still says
     // WHEN as well as where.
-    const town = c.precise ? null : townKeyFor(st.name);
+    // Labelled from the SAME function that chose the point, so the name under
+    // the pin is always the town the pin is actually at.
+    const town = c.precise ? null : (townFallbackFor(st.town, st.name)?.key || null);
     return {
       name: `Day ${st._day} · ${st.name}${c.precise ? "" : town ? ` (somewhere in ${town})` : " (approximate)"}`,
       stopName: st.name,
@@ -974,7 +979,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             // answer. kmBetween returned 0 there, which estimateDurationText
             // turned into a confident "~1 min" for legs that were really 30:
             // the exact bug Oliver has now reported four times.
-            const km = legDistanceKm(originName, destName, geo);
+            const km = legDistanceKm(originName, destName, geo, legOriginTown, legDestTown);
             const modeLabel = usedMode === "bicycling" ? "by bike" : usedMode === "driving" ? "by car" : usedMode === "walking" ? "on foot" : "by train/bus";
             const routeFailed = noRouteFound[`${originName}|${destName}|${mode}`];
             if (routeFailed) {

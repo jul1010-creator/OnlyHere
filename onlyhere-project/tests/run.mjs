@@ -53,7 +53,7 @@ writeFileSync(entry, `
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -68,7 +68,7 @@ writeFileSync(entry, `
   export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode, coordFitsTown, townPointFor, townFallbackFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { lookupRealPlace, placeCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
@@ -5275,11 +5275,33 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // between the anchors, which is a test failing for a reason that has nothing
   // to do with what it guards.
   const buildStart = appSrc.indexOf('setGuideModal("loading");');
-  const buildEnd = appSrc.indexOf("setGuideBuildStage({", buildStart);
+  // The end anchor is the first STAGE call after the setup block. It was
+  // "setGuideBuildStage({", which stopped appearing after that setter was
+  // wrapped in buildStage() so every stage also lands in the run log: the only
+  // remaining literal sits in the wrapper, ABOVE this block, so indexOf
+  // returned -1 and the slice went empty. An empty slice fails loudly here,
+  // which is the right way round, but the anchor has to track the code.
+  const buildEnd = appSrc.indexOf("buildStage(", buildStart);
   ok("the build setup block has an end", buildEnd > buildStart);
   const build = appSrc.slice(buildStart, buildEnd);
   ok("a new build clears the minimized flag", /setGuideMinimized\(false\);/.test(build));
   ok("and clears any old ready banner", /setGuideReady\(false\);/.test(build));
+  // ── AND EVERY STAGE IS JOURNALLED, NOT JUST DISPLAYED ────────────
+  // startLog had one call site in the app and it was the Studio draft, so the
+  // most expensive thing the product does kept no record of where its time
+  // went. note() and decide() both open with `if (!run) return`, so this also
+  // silently disabled every rejection the build tries to record.
+  // RAW SOURCE, not stripNonCode: it blanks string CONTENTS as well as
+  // comments, so any assertion about text inside a literal matches nothing and
+  // passes against nothing. This file documents that trap and it caught this
+  // line on the first run.
+  ok("the guide build opens a run log", /startLog\("Guide build"/.test(appSrc));
+  ok("and closes it on both the success and the failure path",
+     (stripNonCode(appSrc).match(/endLog\(\);/g) || []).length >= 3);
+  ok("the stage setter also writes the stage to that log",
+     /const buildStage = \(label, percent\) => \{\s*setGuideBuildStage\(\{ label, percent \}\);\s*note\(label, \{ percent \}\);/.test(stripNonCode(appSrc)));
+  is("and no stage bypasses it",
+     (stripNonCode(appSrc).match(/setGuideBuildStage\(\{ label:/g) || []).length, 0);
   // A failure has to reach someone who stepped away, or the bar just stops.
   const failAt = appSrc.indexOf('console.warn("Guide build failed:');
   // From the catch that owns it, not a fixed byte window: the comment between
@@ -6338,7 +6360,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // the field that is always undefined it answered false for everything, so
   // every stop in every guide was geocoded whether or not a real coordinate
   // was already on file.
-  ok("the geocode skip reads the real field", /const hasPreciseCoords = \(n\) => !!placeCoords\(lookupRealPlace\(n\)\);/.test(stripNonCode(appSrc)));
+  ok("the geocode skip reads the real field", /const c = placeCoords\(lookupRealPlace\(n\)\);/.test(stripNonCode(appSrc)));
+  // AND IT NO LONGER TRUSTS THAT FIELD ON SIGHT. This line decides which stops
+  // are sent to Nominatim, so a published row carrying a coordinate about
+  // somewhere else used to BLOCK the one step that could have corrected it.
+  ok("and a stored coordinate counts as resolved only if it fits the stop's town",
+     /return !!c && coordFitsTown\(c, town\)\.ok;/.test(stripNonCode(appSrc)));
 
   towns.length = towns.findIndex(t => t.id === 9001);
   freeEntrance.length = freeEntrance.findIndex(t => t.id === 9004);
@@ -6360,10 +6387,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const map = readFileSync(join(root, "src/components/GuideRouteMap.jsx"), "utf8");
   const code = stripNonCode(gp);
 
-  ok("pins are built from the precision-aware resolver", /resolveStopCoordsDetailed\(st\.name, tripGeo\)/.test(code));
+  ok("pins are built from the precision-aware resolver", /resolveStopCoordsDetailed\(st\.name, tripGeo, st\.town\)/.test(code));
   ok("and the flag survives onto the point", /approx: !c\.precise/.test(code));
-  ok("an approximate pin names the town it was approximated to", /townKeyFor\(st\.name\)/.test(code));
+  ok("an approximate pin names the town it was approximated to", /townFallbackFor\(st\.town, st\.name\)/.test(code));
   ok("and says so in its own label", /somewhere in \$\{town\}/.test(gp));
+  // The chip Oliver photographed said "13 hours 52 mins by bike" between two
+  // stops a ten minute walk apart. The distance behind it comes from here, and
+  // it is only honest if both ends were measured against the town they claim.
+  ok("the leg distance is measured with both stops' towns in hand",
+     /legDistanceKm\(originName, destName, geo, legOriginTown, legDestTown\)/.test(code));
 
   // Named, not counted. "One stop is approximate" without saying which one is
   // not something a person can act on.
@@ -6790,6 +6822,137 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const auditSrc = readFileSync(join(root, "src/utils/entryAudit.js"), "utf8");
   ok("entryAudit no longer declares its own copy", !/SCHEMA_EXAMPLE_LAT = /.test(auditSrc));
   ok("it uses the shared rules", /import \{ coordProblems \} from "\.\/coordCheck"/.test(auditSrc));
+
+// ── A COORDINATE THAT DISAGREES WITH THE TOWN ITS OWN STOP NAMES ────
+// Oliver, 12 Aug 2026, on a live guide: "the maps go all the way to
+// Amalienborg in Billund.. which is a lego castle.. that is embarassing."
+//
+// That guide's header read 4 DAYS, 6 STOPS, 1 TOWN over the line "a trip that
+// stays in one place, mostly by bike", and the chip between Nyhavn and
+// Amalienborg, which are a ten minute walk apart, read "13 hours 52 mins by
+// bike". The map drew a line across the country.
+//
+// coordCheck.js has had the arithmetic for this since 11 Aug, and ran it in
+// exactly one place: against a STORED __lat, at PUBLISH time. Two coordinates
+// reach a reader without ever meeting it. The fresh Nominatim hit, taken at
+// limit=1 with no test of any kind. And a stored coordinate at READ time,
+// which matters because every row published before that gate existed went in
+// unchecked and is still trusted at the top of the chain on every render.
+//
+// Which of the two produced the Billund pin is not knowable from the source,
+// and does not need to be: both are checked now, so the fix is correct either
+// way. That is deliberate, not hedging.
+{
+  const { coordFitsTown, townPointFor, townFallbackFor, resolveStopCoordsDetailed,
+          legDistanceKm, MAX_TOWN_KM, TOWN_COORDS, freeEntrance } = M;
+
+  const AMALIENBORG = { lat: 55.684, lon: 12.593 };  // the real palace, Copenhagen
+  const LEGOLAND = { lat: 55.735, lon: 9.126 };      // Billund, about 210 km west
+
+  // ── THE VERDICT ──────────────────────────────────────────────────
+  ok("a coordinate in the town its stop names is accepted", coordFitsTown(AMALIENBORG, "Copenhagen").ok);
+  ok("the Billund one is not", !coordFitsTown(LEGOLAND, "Copenhagen").ok);
+  is("and it names the rule that refused it", coordFitsTown(LEGOLAND, "Copenhagen").why, "far-from-town");
+  ok("and carries the distance, so a log line can say how far", coordFitsTown(LEGOLAND, "Copenhagen").km > MAX_TOWN_KM);
+  ok("the Danish spelling is the same claim", !coordFitsTown(LEGOLAND, "København").ok);
+
+  // ── THE HALF THAT STOPS THIS DELETING CORRECT PINS ───────────────
+  // A check that can accuse an entry it cannot actually check is worse than no
+  // check at all, because it fires on the entries nobody is looking at. Same
+  // discipline coordProblems already follows.
+  ok("no town on the stop is not evidence against the coordinate", coordFitsTown(AMALIENBORG, "").ok);
+  ok("nor is a town we hold no coordinate for", coordFitsTown(AMALIENBORG, "Grindsted").ok);
+  is("and it says that is why it allowed it", coordFitsTown(AMALIENBORG, "Grindsted").why, "nothing-to-check-against");
+  ok("a stop genuinely outside its town still passes", coordFitsTown({ lat: 55.303, lon: 8.775 }, "Ribe").ok);
+  ok("a non-numeric coordinate is refused rather than waved through", !coordFitsTown({ lat: "x", lon: null }, "Copenhagen").ok);
+  is("an unknown town resolves to no point at all", townPointFor("Grindsted"), null);
+
+  // ── THE BUG, THROUGH THE RESOLVER A REAL GUIDE USES ──────────────
+  // The row shape liveContent pushes onto these arrays at runtime.
+  const freeBefore = freeEntrance.length;
+  freeEntrance.push({ id: 9101, name: "Amalienborg", __lat: LEGOLAND.lat, __lon: LEGOLAND.lon });
+
+  const stored = resolveStopCoordsDetailed("Amalienborg", {}, "Copenhagen");
+  ok("a stored coordinate 200 km from the stop's town is not drawn as precise", stored && stored.precise === false);
+  is("it falls back to the town centre instead", [stored?.lat, stored?.lon], TOWN_COORDS["Copenhagen"]);
+  // Without a town there is nothing to check it against, and the old answer
+  // stands. This is what keeps the change backward compatible.
+  ok("with no town given, the stored coordinate is still trusted", resolveStopCoordsDetailed("Amalienborg", {})?.precise === true);
+
+  const geoed = resolveStopCoordsDetailed("Some Venue", { "Some Venue": LEGOLAND }, "Copenhagen");
+  ok("a fresh geocode that lands in the wrong town is demoted too", geoed && geoed.precise === false);
+  const geoedOk = resolveStopCoordsDetailed("Some Venue", { "Some Venue": AMALIENBORG }, "Copenhagen");
+  ok("and a good one is still precise", geoedOk && geoedOk.precise === true);
+
+  // ── THE 13 HOURS 52 MINS BY BIKE ─────────────────────────────────
+  // Both ends are in one town, so the honest answer is that we do not know the
+  // distance, which every caller already renders as the AI's own leg text or
+  // "Check route". A number here is how the cross-country chip happened.
+  is("two stops in one town no longer measure as a cross-country leg",
+     legDistanceKm("Nyhavn", "Amalienborg", {}, "Copenhagen", "Copenhagen"), null);
+
+  // ── AND THE FRESH GEOCODE IS ACTUALLY TESTED BEFORE IT IS KEPT ───
+  // geocodeStopsForGuide fetches, so it cannot be run here. What can be pinned
+  // is that the hit meets the shared rule and that the KEEP is conditional on
+  // the answer: an assertion on the assignment alone survives the condition
+  // being replaced with true, which is this file's own documented trap.
+  {
+    const appGeo = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the Nominatim hit is measured against the stop's town",
+       /const fit = coordFitsTown\(hit, townByName\[name\]\);/.test(appGeo));
+    ok("and it is only kept if that passed", /if \(fit\.ok\) found\[name\] = hit;/.test(appGeo));
+    ok("a rejection is recorded rather than dropped in silence",
+       /else decide\(`Geocode for "\$\{name\}" rejected`/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  }
+  // ── AND THE SECOND COPY OF THE RESOLVER, WHICH IS THE ONE THAT ───
+  // ── DECIDES WHAT GOOGLE IS PAID TO MEASURE ──────────────────────
+  // App.jsx carries its own resolveStopCoordsPrecise, and its own comment says
+  // why it cannot simply call the shared one: this copy matches against live
+  // Supabase content, the shared one against the static files, so they answer
+  // genuinely different questions. That comment also says the rules below it
+  // "must be kept identical to utils/guideEnrichment.js by hand", and a rule
+  // kept by hand is a rule that drifts. Both copies dropping the town check
+  // independently is exactly how this bug class survived four reports.
+  //
+  // Counted structurally rather than matched line by line, so reordering the
+  // tiers or adding a fifth one cannot quietly slip past: EVERY branch in that
+  // function that hands back precise: true has to have tested the town first.
+  {
+    const body = functionBody(stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8")), "const resolveStopCoordsPrecise");
+    ok("App.jsx's own resolver is found by the scan", !!body);
+    // The line that decides what Google is PAID to measure. Without the town,
+    // resolveFresh hands the Directions fetch the same unchecked coordinate
+    // this whole change exists to stop trusting, and the leg comes back
+    // measured, confident and about the wrong point.
+    ok("the Directions fetch resolves each end with that end's own town",
+       /const resolveFresh = \(name\) => resolveStopCoordsPrecise\(name, freshGeo, townByName\[name\]\);/
+         .test(stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"))));
+    const preciseReturns = (body || "").split("\n").filter(l => /precise: true/.test(l));
+    ok("it has precise tiers to check at all", preciseReturns.length >= 3);
+    is("every one of them is gated on the coordinate fitting the town",
+       preciseReturns.filter(l => !/coordFitsTown\(/.test(l)).map(l => l.trim().slice(0, 60)), []);
+    // The self-test, because a scan that silently matches nothing passes
+    // forever. This is the real bug, reduced.
+    const REDUCED = "const resolveStopCoordsPrecise = (name) => {\n  if (rc) return { lat: 1, lon: 2, precise: true };\n};";
+    is("the scan catches the shape it was written for",
+       (functionBody(REDUCED, "const resolveStopCoordsPrecise") || "").split("\n").filter(l => /precise: true/.test(l) && !/coordFitsTown\(/.test(l)).length, 1);
+  }
+
+
+  // ── THE PIN AND ITS LABEL CANNOT NAME DIFFERENT TOWNS ────────────
+  // They agree only by construction, and they only agree by construction if
+  // one function decides both.
+  const t = townFallbackFor("Copenhagen", "Amalienborg");
+  ok("the label names a town we hold a coordinate for", t && t.key === "Copenhagen");
+  is("and it is the very point the resolver returned", [t?.lat, t?.lon], [stored?.lat, stored?.lon]);
+  // The name is only a guess, and for most venues it is a guess that answers
+  // nothing: this is why an approximated pin could read "(approximate)" with no
+  // town named at all.
+  is("the stop name alone places Amalienborg nowhere", townPointFor("Amalienborg"), null);
+
+  freeEntrance.length = freeBefore;
+}
+
 
   // ── PARSING, AND THE Number(x) || null TRAP ───────────────────────
   is("a stored pair is read", storedCoord({ __lat: 55.7, __lon: 9.5 }), { lat: 55.7, lon: 9.5 });
@@ -8019,5 +8182,85 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 }
 
 rmSync(dir, { recursive: true, force: true });
+// ── THE DASHES THE APP WRITES ITSELF ────────────────────────────────
+// Oliver photographed a live Copenhell entry on 12 Aug 2026 whose date line
+// read "23 Jun <en dash> 26 Jun". The dash ban is the most emphatic rule in
+// this project and it is enforced twice, in the prompts and again in code by
+// stripDashes. Neither could reach this one, because stripDashes exists to
+// clean what a MODEL wrote and this string is assembled by us, after any
+// cleaning would have run.
+//
+// Eight of them were sitting in helpers.js, in the two functions that build
+// reader-facing text in code rather than asking for it: the event date line and
+// the stay-duration override, which exists precisely BECAUSE a model cannot be
+// trusted to answer it.
+{
+  const { getEventDate, stayDurationForCategory } = M;
+  const BANNED = /[–—−―]/;
+
+  ok("a multi-day event date carries no banned dash", !BANNED.test(getEventDate("2026-06-23", "2026-06-26")));
+  is("and reads as a range in words", getEventDate("2026-06-23", "2026-06-26"), "23 Jun to 26 Jun");
+  ok("a single-day event is unaffected", !BANNED.test(getEventDate("2026-06-23", "")));
+
+  // Every branch, because the one that shipped was not the first one.
+  const stays = [
+    stayDurationForCategory("food", "hot dog stand"),
+    stayDurationForCategory("food", "bakery"),
+    stayDurationForCategory("food", "restaurant"),
+    stayDurationForCategory("foodStreet", ""),
+    stayDurationForCategory("free", "castle"),
+    stayDurationForCategory("free", "square"),
+    stayDurationForCategory("free", "anything else"),
+  ];
+  is("no stay duration carries one either", stays.filter(s => BANNED.test(String(s))), []);
+  ok("and they still say something", stays.every(s => !s || /\d/.test(String(s))));
+
+  // ── THE DURABLE HALF ────────────────────────────────────────────
+  // Behaviour above covers the eight that were there. This covers the ninth,
+  // on the day somebody writes it: a dash inside a string literal that the code
+  // RETURNS or concatenates is content, and content may not contain one. It
+  // reads raw source rather than stripNonCode, which blanks string contents and
+  // so can never see the inside of a literal.
+  const dashInWrittenText = (s) => {
+    const out = [];
+    for (const re of [/return\s+"([^"\n]*)"/g, /\+\s*"([^"\n]*)"\s*\+/g]) {
+      for (const m of s.matchAll(re)) if (BANNED.test(m[1])) out.push(m[1].trim().slice(0, 40));
+    }
+    return out;
+  };
+  ["src/utils/helpers.js", "src/utils/guideReading.js", "src/utils/journey.js"].forEach(f => {
+    is(`${f} writes no dash into a string it hands back`, dashInWrittenText(readFileSync(join(root, f), "utf8")), []);
+  });
+  // A checker that silently matches nothing passes forever. This is the real
+  // bug, reduced to its shape.
+  is("the scan catches the line that shipped",
+     dashInWrittenText('  if (dateEnd) return a + " – " + b;\n  return "15–30 mins";').length, 2);
+  is("and passes the same code once fixed",
+     dashInWrittenText('  if (dateEnd) return a + " to " + b;\n  return "15 to 30 mins";').length, 0);
+}
+
+// ── A TERNARY WHOSE TWO BRANCHES WERE IDENTICAL ─────────────────────
+// nextEditionYear read `today.getFullYear() + (d.getMonth() < today.getMonth()
+// ? 1 : 1)`. The condition that matters was written and then answered the same
+// way both times, so the function always said "next year".
+//
+// It is right for the case it was tested on, a festival that finished earlier
+// in the same year, which is why it survived. It is wrong for any row whose
+// stored date is more than a year stale, and those are precisely the rows
+// nobody has looked at recently.
+{
+  const { nextEditionYear } = M;
+  const AUG26 = new Date("2026-08-12");
+  is("an edition finished earlier this year rolls to next year", nextEditionYear("2026-06-23", AUG26), 2027);
+  is("a date stale by nearly a year does NOT skip an edition", nextEditionYear("2025-09-10", AUG26), 2026);
+  is("one stale by years still lands on the next real occurrence", nextEditionYear("2024-01-15", AUG26), 2027);
+  is("an upcoming edition keeps its own year", nextEditionYear("2026-12-01", AUG26), 2026);
+  is("and an unreadable date is still null", nextEditionYear("not a date", AUG26), null);
+  // The boundary, both sides: an edition on today's own date has not been
+  // missed, so it is this year.
+  is("today itself is this year's edition", nextEditionYear("2026-08-12", AUG26), 2026);
+  is("yesterday's was missed", nextEditionYear("2025-08-11", AUG26), 2027);
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

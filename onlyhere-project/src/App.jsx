@@ -18,7 +18,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } fro
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy } from "./utils/factCheckRead";
-import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor } from "./utils/guideEnrichment";
+import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
@@ -5261,12 +5261,17 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // state var, which isn't updated in this closure until the next re-render.
     // freshGeo is passed IN now rather than being an afterthought behind a ||
     // that could never be reached. This one line is the "1 min on bike" bug.
-    const resolveFresh = (name) => resolveStopCoordsPrecise(name, freshGeo);
     // Same ambiguity problem as geocoding — a bare name can match the wrong
     // same-named place in a different town, so include real town context in the
     // text fallback too whenever coordinates genuinely aren't available yet.
     const townByName = {};
     days.forEach(d => d.stops.forEach(s => { if (s.town && !townByName[s.name]) townByName[s.name] = s.town; }));
+    // The stop's own town goes in, so a coordinate that disagrees with it is
+    // demoted to the town centre instead of being sent to Google as a
+    // confident bare pair. Declared AFTER townByName on purpose: the suite's
+    // own use-before-declare check is right that reading it earlier is a trap
+    // waiting for someone to call this one line higher up.
+    const resolveFresh = (name) => resolveStopCoordsPrecise(name, freshGeo, townByName[name]);
     const found = {};
     const failed = {};
     // BUG FIX (Oliver: "Google Maps/routes show either no transport or transport
@@ -5439,17 +5444,24 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   // this one matches against live Supabase content too, so they genuinely
   // answer different questions. Worth merging properly, and until then the
   // rules below must be kept identical to utils/guideEnrichment.js by hand.
-  const resolveStopCoordsPrecise = (name, extraGeo = null) => {
+  //
+  // EVERY PRECISE TIER IS NOW CHECKED AGAINST THE STOP'S OWN TOWN (12 Aug,
+  // Oliver's "Amalienborg in Billund" report). Both tiers above the fallback
+  // were unvalidated numbers being promoted to the top of a chain: a stored
+  // __lat written before the 11 Aug publish gate existed, and a Nominatim hit
+  // taken at limit=1. See coordFitsTown in utils/guideEnrichment.js for why
+  // this can only ever demote a pin to the honest town-centre fallback.
+  const resolveStopCoordsPrecise = (name, extraGeo = null, town = "") => {
     const real = lookupRealPlace(name);
     const rc = placeCoords(real);
-    if (rc) return { lat: rc.lat, lon: rc.lon, precise: true };
-    if (extraGeo && extraGeo[name]) return { ...extraGeo[name], precise: true };
-    if (geocodedCoords[name]) return { ...geocodedCoords[name], precise: true };
-    const key = townKeyFor(name);
+    if (rc && coordFitsTown(rc, town).ok) return { lat: rc.lat, lon: rc.lon, precise: true };
+    if (extraGeo && extraGeo[name] && coordFitsTown(extraGeo[name], town).ok) return { ...extraGeo[name], precise: true };
+    if (geocodedCoords[name] && coordFitsTown(geocodedCoords[name], town).ok) return { ...geocodedCoords[name], precise: true };
+    const key = townKeyFor(town) || townKeyFor(name);
     if (key) return { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1], precise: false };
     return null;
   };
-  const resolveStopCoords = (name, extraGeo = null) => resolveStopCoordsPrecise(name, extraGeo);
+  const resolveStopCoords = (name, extraGeo = null, town = "") => resolveStopCoordsPrecise(name, extraGeo, town);
 
   // ── THERE WAS A SECOND resolveLegMode HERE, AND A legKmOrNull ───────
   // Both are deleted. resolveLegMode is imported from utils/guideEnrichment at
@@ -5500,8 +5512,19 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // all, and while it read a field that is always undefined it answered
     // false for everything, so every stop in every guide was sent to
     // Nominatim whether or not a real coordinate was already on file.
-    const hasPreciseCoords = (n) => !!placeCoords(lookupRealPlace(n));
-    const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !hasPreciseCoords(n));
+    // A STORED COORDINATE IS NOT AUTOMATICALLY A GOOD ONE (12 Aug). This line
+    // decides which stops are sent to Nominatim at all, and it decided on the
+    // strength of a number nobody had checked. A published row carrying a
+    // coordinate about somewhere else therefore BLOCKED the one step that
+    // could have corrected it, and the row kept its wrong pin on every render.
+    // It counts as resolved now only if it also agrees with the town the stop
+    // names, so a disagreeing row gets a fresh geocode and, if that disagrees
+    // too, an honest town-centre fallback.
+    const hasPreciseCoords = (n, town) => {
+      const c = placeCoords(lookupRealPlace(n));
+      return !!c && coordFitsTown(c, town).ok;
+    };
+    const names = [...new Set(days.flatMap(d => d.stops.map(s => s.name)))].filter(n => !hasPreciseCoords(n, townByName[n]));
     const found = {};
     for (const name of names) {
       try {
@@ -5513,7 +5536,24 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         const query = real?.mapHint || (townByName[name] ? `${name}, ${townByName[name]}, Denmark` : `${name}, Denmark`);
         const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=dk`);
         const data = await res.json();
-        if (data?.[0]) found[name] = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        // limit=1 means we take whatever the geocoder ranked first and never
+        // look at what it is. A Danish place name is not unique, and the top
+        // hit is accepted here into the tier that draws a solid pin, is
+        // trusted by legDistanceKm and goes to Google as a bare pair. So it
+        // gets the same test the stored coordinate gets, and a rejection is
+        // RECORDED: a silent one would be the same class of bug as the one
+        // this fixes.
+        if (data?.[0]) {
+          const hit = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+          const fit = coordFitsTown(hit, townByName[name]);
+          if (fit.ok) found[name] = hit;
+          else decide(`Geocode for "${name}" rejected`, {
+            winner: `the plan's own town, ${fit.town || townByName[name] || "unnamed"}`,
+            loser: `Nominatim ${Number.isFinite(hit.lat) ? hit.lat.toFixed(4) : "?"}, ${Number.isFinite(hit.lon) ? hit.lon.toFixed(4) : "?"}`,
+            rule: `a stop's coordinate must be within ${MAX_TOWN_KM} km of the town the stop says it is in`,
+            value: fit.km == null ? fit.why : `${Math.round(fit.km)} km away`,
+          });
+        }
       } catch { /* leave this one unresolved — map/leg for it just won't show, no crash */ }
       await new Promise(r => setTimeout(r, 250)); // be a polite, low-volume client to a free public service
     }
@@ -5719,11 +5759,30 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     // reports is allowed to say "at least".
     installFetchMeter();
     startRun("guide");
+    // ── THE GUIDE BUILD WAS NEVER JOURNALLED ──────────────────────────
+    // Oliver, 12 Aug: "the generation of the guide takes very long. I do not
+    // know if that will harm us later on." He could not know, and neither
+    // could anyone: startLog had exactly ONE call site in the whole app, the
+    // Studio draft, so the most expensive thing the product does ran with a
+    // percentage on a progress bar and no record of where the time went.
+    //
+    // The cost meter DOES cover this run (startRun("guide") above), so the
+    // money question was answerable and the time question was not, which is a
+    // strange pair of gaps to have. A percent is not a measurement.
+    //
+    // It also silently disabled something else: note() and decide() both begin
+    // `if (!run) return`, so every rejection this build records, including the
+    // geocode-fitting one added today, was being written to nothing.
+    startLog("Guide build", "");
+    const buildStage = (label, percent) => {
+      setGuideBuildStage({ label, percent });
+      note(label, { percent });
+    };
     // A new build always starts with the wait in front of the traveler and no
     // stale "ready" banner from the previous one still on screen.
     setGuideMinimized(false);
     setGuideReady(false);
-    setGuideBuildStage({ label: "Gathering real places and facts", percent: 15 });
+    buildStage("Gathering real places and facts", 15);
     setGuideError(null);
     try {
       // The person's own stated trip length (e.g. "I'm here for 4 days") is the source of
@@ -5780,7 +5839,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // structuring and keeps Claude's job scoped to writing. Non-fatal: if this
       // fails or returns junk, Claude below just structures the trip itself
       // directly from the conversation, exactly like this pipeline didn't exist.
-      setGuideBuildStage({ label: "Planning your itinerary structure", percent: 25 });
+      buildStage("Planning your itinerary structure", 25);
       let plannerSkeleton = "";
       let plannerStopNames = [];
       let planProblems = [];
@@ -5826,7 +5885,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
             // this", which is worth exactly one more call.
             if (!verdict.ok) {
               console.warn("Plan gate rejected the first skeleton:", verdict.problems.map(pr => pr.detail));
-              setGuideBuildStage({ label: "Rebalancing the days", percent: 29 });
+              buildStage("Rebalancing the days", 29);
               try {
                 const fixRes = await askOpenAI(
                   `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
@@ -5864,7 +5923,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // function) for real current details on the specific places the planner named.
       // Non-fatal for the same reason as above: a Tavily miss just means Claude
       // writes from the conversation + Perplexity grounding alone, same as before.
-      setGuideBuildStage({ label: "Researching real details", percent: 33 });
+      buildStage("Researching real details", 33);
       let tavilyGrounding = "";
       try {
         // ONE search per stop, not a single combined query across up to 8 names.
@@ -5904,11 +5963,11 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // of Perplexity — see project memory.)
       let guideGrounding = "";
       {
-        setGuideBuildStage({ label: "Fact-checking the guide", percent: 42 });
+        buildStage("Fact-checking the guide", 42);
         const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n${researchRules()}\n\n${convoText.slice(0, 3000)}`);
         if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
       }
-      setGuideBuildStage({ label: "Structuring your itinerary", percent: 50 });
+      buildStage("Structuring your itinerary", 50);
       const guideSystemPrompt = `Turn the trip plan discussed in this conversation into strict JSON, no markdown, no commentary — respond with ONLY the JSON object in this exact shape:
 {"title": "Short evocative title for this trip", "essentials": {"budgetReality": "1-2 honest sentences on what this trip will actually cost overall, given what's been discussed (transport, stays, food). ACTIVELY NAME REAL CHEAPER OPTIONS, DON'T WAIT UNTIL SOMETHING IS EXPENSIVE — but name only ones that genuinely serve THIS route. FROZEN COACH-LINE FACT (verified Aug 2026, do not generalise past it): Kombardo Expressen and Flixbus are LONG-DISTANCE coach lines. They run the big crossings and city-to-city corridors — Copenhagen to Aarhus, Aalborg, Odense and the rest of Jutland and Funen, over the Great Belt. They do NOT run internal short-haul commuter routes inside a single island or region: for anything like Faxe, Roskilde, Koge or Helsingor to Copenhagen, the real answer is a regional DSB train or the S-train, never a coach line. So: if the plan contains a genuine long-distance crossing between regions, name Kombardo Expressen or Flixbus (exact spelling, Kombardo EXPRESSEN, never 'Expresbus') as the real budget alternative to a full-fare train on THAT leg. If the whole trip stays within one region or island, do not mention them at all — recommend DSB Orange billetter (discount advance-purchase train tickets) for expensive train legs instead, which applies everywhere. If you are not confident a coach line actually serves a specific route, leave it out and point at kombardoexpressen.dk or flixbus.dk to check rather than asserting it. Never quote just the expensive default fare with no real alternative named.", "transportTip": "REQUIRED, non-empty, whenever this trip starts from Copenhagen Airport (given explicitly or assumed by default) — one practical, positively-framed sentence about getting from the airport into the city, e.g. suggesting a Copenhagen Card for unlimited transport plus free museum entry, or simply buying a ticket via the official Rejsebillet app or the DOT/DSB app before boarding the Metro. Never phrase this as a fine-threat. FROZEN TRANSPORT FACT (checked 10 Aug 2026 against rejsekort.dk): the physical Rejsekort card is discontinued, so never send a visitor to buy one. The Rejsekort APP is a different thing and is NOT resident-only: signing up needs an email, a name, a birthdate, a phone number and a payment card, and rejsekort.dk requires MitID or a CPR number only for pensioner and disabled fare types. So do not tell anyone they cannot use it. The reason to steer a short visit elsewhere is check-in and check-out: forgetting to check OUT is the single most common tourist fine, and a fixed ticket has nothing to forget. Recommend the Rejsebillet app, the DOT or DSB apps, or the Copenhagen Card as the simpler default, and give THAT as the reason. What is not confirmed is whether a foreign phone number and a foreign card work in the Rejsekort app in practice, so never assert either way. If the trip starts somewhere else entirely (a different airport, a specific town), give the equivalent real practical transport tip for THAT starting point instead, or leave this empty if genuinely nothing specific applies. IF ANY REAL PORTION OF THE TRIP IS SPENT INSIDE COPENHAGEN ITSELF: lean against a rental car for that portion specifically — parking is scarce and genuinely expensive there, and the Metro/S-train/bus network plus biking already cover the city well, so say so plainly rather than defaulting to 'rent a car.' A car becomes genuinely worth it once the trip actually leaves the capital for other regions — frame it that way rather than as a blanket anti-car statement.", "keepInMind": "1-2 honest sentences on the single most important practical thing for THIS specific trip — book-ahead urgency, a weather consideration, a transport quirk — whatever actually matters most, not a generic travel-safety platitude."}, "days": [{"day": 1, "title": "Short day title", "stops": [{"name": "Real place name exactly as mentioned", "town": "REQUIRED — the real specific town/city this stop is actually in, e.g. 'Copenhagen', 'Ebeltoft', 'Aarhus'. This matters even for well-known names: several Danish towns each have their own street generically called 'Strøget' (it's the generic Danish word for a pedestrian shopping street, not unique to Copenhagen), so a bare place name alone is genuinely ambiguous — this field is what lets the place actually get looked up in the right town instead of a wrong same-named one elsewhere in Denmark.", "arrivalTime": "suggested clock time to arrive, e.g. '9:00' or '~9:00' — build a sensible day starting around 9-10am, don't cram more stops into a day than realistic travel + visit time allows", "suggestedStay": "how long is actually worth spending here, e.g. '1-1.5 hours', '30 min', '2-3 hours' — vary this by what the place genuinely warrants (a viewpoint is not a museum), never a lazy default like '1 hour' for everything", "note": "2-3 sentences built from CONCRETE, SPECIFIC facts — real details, names, numbers, history, what to actually do there. Generic filler like 'charming', 'colorful houses', 'cozy streets', 'steeped in history', 'quaint', 'vibrant', 'bustling', 'nestled', 'picturesque' is BANNED unless immediately followed by the specific thing that makes it true. Write like a well-travelled friend giving real advice, not a brochure."}]}]}
 CRITICAL — DON'T ASSUME A COPENHAGEN START: never default Day 1 to Copenhagen just because it's the best-known city — actually look at what was said. If the traveler mentioned camping/a tent, a specific other town, a specific airport (Billund is Jutland's real international airport and implies a totally different starting region than Copenhagen/Kastrup), or anything else that implies a different starting point, build the trip from THAT point instead. If nothing in the conversation implies a specific starting point at all, don't silently pick one — say so plainly in essentials.keepInMind (e.g. "Built assuming you're starting from Copenhagen/Kastrup — say if you're flying into Billund or elsewhere instead") rather than guessing without flagging it.
@@ -5949,7 +6008,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // click again and it's fine": pure model variance, not a rendering bug. Retry once
       // automatically instead of making the person notice and click a second time.
       if (requestedDays && (!parsed.days || parsed.days.length < requestedDays)) {
-        setGuideBuildStage({ label: "Finishing the remaining days", percent: 70 });
+        buildStage("Finishing the remaining days", 70);
         const retryResult = await askClaude(
           `Turn the trip plan discussed in this conversation into strict JSON. The "days" array MUST contain EXACTLY ${requestedDays} entries — your last attempt returned only ${parsed.days?.length || 0}, which is wrong. Same shape as before: {"title": "...", "essentials": {"budgetReality": "...", "transportTip": "...", "keepInMind": "..."}, "days": [{"day": 1, "title": "...", "stops": [{"name": "...", "town": "...", "arrivalTime": "...", "suggestedStay": "...", "note": "..."}]}]}. Split every place discussed across all ${requestedDays} days in a sensible order — repeat a base town for a slower day if genuinely too few places were discussed, but never invent one that wasn't mentioned. Use only real place names actually mentioned in the conversation. Respond with ONLY the raw JSON object, no markdown code fences, nothing else.\n\nConversation:\n${convoText}`,
           6000,
@@ -6001,7 +6060,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // this pipeline auto-applies since it runs unattended during guide build.
       // Both stages are fully non-fatal — a scan or rewrite hiccup here should
       // never block the whole guide from finishing.
-      setGuideBuildStage({ label: "Polishing the writing", percent: 75 });
+      buildStage("Polishing the writing", 75);
       try {
         const proseFields = collectGuideProseFields(parsed);
         if (proseFields.length > 0) {
@@ -6036,7 +6095,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // flags something as genuinely wrong, Claude rewrites that one field again
       // to fix it. One corrective pass, not an open-ended loop — same one-shot
       // shape as the poor-writing pass above.
-      setGuideBuildStage({ label: "Final fact-check", percent: 88 });
+      buildStage("Final fact-check", 88);
       try {
         const proseFields2 = collectGuideProseFields(parsed); // re-collect — the polish pass above may have rewritten some
         const stopNames = (parsed.days || []).flatMap(d => (d.stops || []).map(s => `${s.name}${s.town ? ` (${s.town})` : ""}`));
@@ -6101,11 +6160,11 @@ If the conversation only covers a single day or a few stops with no explicit day
       const travelMode = mentionedModes[0] || null;
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
 
-      setGuideBuildStage({ label: "Working out where to stay and how you get around", percent: 90 });
+      buildStage("Working out where to stay and how you get around", 90);
       const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes);
       parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
 
-      setGuideBuildStage({ label: "Verifying exact locations and routes", percent: 95 });
+      buildStage("Verifying exact locations and routes", 95);
       const freshGeo = await geocodeStopsForGuide(parsed.days);
       const gid = Date.now();
       // Oliver's map-vs-plain choice (see modeOverride above): the expensive
@@ -6130,7 +6189,7 @@ If the conversation only covers a single day or a few stops with no explicit day
         : { found: {}, failed: {} };
       // The forecast, also baked on rather than posted to a component that is
       // about to stop existing. Cheap: one /api/weather call per distinct day.
-      setGuideBuildStage({ label: "Checking the forecast", percent: 98 });
+      buildStage("Checking the forecast", 98);
       const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate);
       parsed.days = parsed.days.map((d, i) => (weatherByDay[i] ? { ...d, weather: weatherByDay[i] } : d));
       // ── "IT SUGGESTS HOSTELS, BUT THEN GIVES A SPECIFIC HOTEL???" ──
@@ -6184,12 +6243,14 @@ If the conversation only covers a single day or a few stops with no explicit day
       // test brief (see randomTestProfileRef's comment for the guard's why).
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
       endRun();
+      endLog();
       setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
       // lower than the cost per attempt, which is the number that matters.
       endRun();
+      endLog();
       setGuideModal(null);
       // A failure has to reach a traveler who minimized the wait too. Clearing
       // this is what lets the error line below be the thing they see, rather

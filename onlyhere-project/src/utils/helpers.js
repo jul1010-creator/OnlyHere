@@ -64,7 +64,13 @@ export const getEventDate = (dateStr, dateEnd) => {
   if (!dateStr) return "Dates not confirmed";
   const d = new Date(dateStr);
   const opts = { day: "numeric", month: "short" };
-  if (dateEnd) return d.toLocaleDateString("en-GB", opts) + " – " + new Date(dateEnd).toLocaleDateString("en-GB", opts);
+  // THE DASH BAN NEVER SAW THIS ONE (12 Aug, Oliver's Copenhell screenshot,
+  // reading "23 Jun – 26 Jun" on the live site). stripDashes exists to clean
+  // what a MODEL wrote, and this string is assembled by us, after any cleaning
+  // would have run, so it reached the page untouched every time a festival ran
+  // for more than one day. Its own rule for a range is the word "to", which is
+  // what this now says.
+  if (dateEnd) return d.toLocaleDateString("en-GB", opts) + " to " + new Date(dateEnd).toLocaleDateString("en-GB", opts);
   return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
 };
 
@@ -341,15 +347,15 @@ export const nextWeekdayTimestamp = (dayOfWeek, hour) => {
 export const stayDurationForCategory = (studioType, category) => {
   const c = (category || "").toLowerCase();
   if (studioType === "food") {
-    if (/hot dog|stand|kiosk|food truck|street food|takeaway/.test(c)) return "15–30 mins"; // no seats, eaten standing
-    if (/bakery|café|coffee|ice cream/.test(c)) return "30–45 mins";
-    return "60–90 mins"; // casual dining / restaurant chains / pub strips — a real sit-down meal, not a quick bite
+    if (/hot dog|stand|kiosk|food truck|street food|takeaway/.test(c)) return "15 to 30 mins"; // no seats, eaten standing
+    if (/bakery|café|coffee|ice cream/.test(c)) return "30 to 45 mins";
+    return "60 to 90 mins"; // casual dining / restaurant chains / pub strips — a real sit-down meal, not a quick bite
   }
-  if (studioType === "foodStreet") return "60–120 mins"; // grazing across multiple vendors, longer than a single sit-down meal
+  if (studioType === "foodStreet") return "60 to 120 mins"; // grazing across multiple vendors, longer than a single sit-down meal
   if (studioType === "free") {
-    if (/palace|slot|castle|museum|exhibition/.test(c)) return "2–3 hours"; // historic interiors, real exhibitions
-    if (/square|plaza|torv|park|garden|viewpoint/.test(c)) return "30–45 mins"; // outdoor public spaces, a look-around not a tour
-    return "1–2 hours";
+    if (/palace|slot|castle|museum|exhibition/.test(c)) return "2 to 3 hours"; // historic interiors, real exhibitions
+    if (/square|plaza|torv|park|garden|viewpoint/.test(c)) return "30 to 45 mins"; // outdoor public spaces, a look-around not a tour
+    return "1 to 2 hours";
   }
   return null; // no confident category mapping for this type — leave the AI's own judgment
 };
