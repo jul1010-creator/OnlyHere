@@ -17,7 +17,7 @@ import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from "./utils/manageGroups";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured } from "./utils/tickets";
-import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy } from "./utils/factCheckRead";
+import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
 import { tracePrices, describePriceTrace, readerText } from "./utils/entryAudit";
 import { isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
@@ -364,6 +364,19 @@ create policy "auth all gemlyx_sources" on gemlyx_sources for all to authenticat
 // `where` is whatever the caller knows about the place: usually a name, and a
 // whole entry where one exists. A source scoped to a town is left OUT when
 // nothing says where the draft is, which is the cheap direction to be wrong in.
+// ── WHAT A FACT-CHECKER IS ACTUALLY BEING ASKED TO VERIFY ──────────
+// The invented-claim check was sent JSON.stringify(t), the whole draft. On the
+// Ribelund entry of 12 Aug that was 2,817 characters, of which 1,006, THIRTY
+// SIX PERCENT, was machine metadata: eight source URLs, three ISO timestamps,
+// a cached hours object and a ticket verdict, all handed over as claims to
+// verify. Same mistake the price trace made this morning and the same fix.
+// Keys are kept, unlike readerText, because the correction is told to empty a
+// FIELD and needs to know what the fields are called.
+const readerFields = (o) =>
+  (o && typeof o === "object")
+    ? Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith("_")))
+    : o;
+
 const researchRules = (type, where) => {
   // The general Danish rule lives in RESEARCH_SOURCE_RULES. This adds the one
   // thing a general rule cannot: the actual other name of the actual place, in
@@ -2235,14 +2248,44 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             const st = await findRealNearestStation(coords.lat, coords.lon);
             const station = st?.name || null;
             const stopKind = st?.kind || null;
+            // ── THE ONE MAJOR STEP WITH NO LINE IN THE LOG ────────
+            // Oliver's Ribelund draft said "Ribe has no train station of its
+            // own". Ribe Station exists, 3 km inside this lookup's own rail
+            // radius. The lookup returned null and the log recorded NOTHING, so
+            // "it searched and found nothing", "the Places call failed" and
+            // "the coordinate it searched from was wrong" were the same blank,
+            // which is the silent-failure shape this codebase keeps finding.
+            // A null here is also what licenses the writer to state an absence,
+            // so it is the one null most worth being able to read back.
+            note("Nearest arrival point", {
+              provider: "google",
+              detail: `Places, then a walking route, from ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`,
+              outcome: station ? "ok" : "empty",
+              got: station
+                ? `${station} (${st.kind})${st.walk ? `, ${st.walk} on foot` : ""}`
+                : "no station, terminal or stop that is both transit and walkable was returned within the search radii",
+              why: station ? "" : "This is not evidence that none exists. It means this lookup found none from this coordinate.",
+              used: !!station,
+            });
             const KIND_WORD = { rail: "railway station", ferry: "ferry terminal", bus: "bus stop", air: "airport", other: "transit stop" };
             const kindWord = KIND_WORD[stopKind] || "transit stop";
             frozenGeo = { lat: coords.lat, lon: coords.lon, station, stopKind };
             frozenFactsText = `VERIFIED LOCATION DATA (from real geocoding + Places + Directions API queries, not a guess): coordinates are ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}.${station
               ? ` The real nearest arrival point is ${station}, and it is a ${kindWord}${st.walk ? `, about ${st.walk} on foot from the centre` : ""}. It was verified to be walkable from here, so it is genuinely the stop that serves this place. ${hasArrivalField(sType) ? "Put ONLY that name in the nearestStation field, with no walking time and no explanation inside it." : "There is deliberately NO nearestStation field on this content type: a town is the destination itself and has as many arrival points as it has edges, so naming one states a fact about a coordinate rather than about the place. This is given to you so the PROSE gets the mode of arrival right, and for nothing else."} Call it a ${kindWord} in the prose and nowhere call it something it is not: ${stopKind === "ferry" ? "this place is reached by boat, so do not write about arriving by train." : stopKind === "bus" ? "there is no railway here, so do not write about a train station." : "describe it as what it is."}`
-              : " No arrival point could be verified nearby, so leave nearestStation EMPTY rather than naming a landmark or a stop on the other side of water. Many Danish islands have no station at all, and an empty field reads honestly as 'we do not know'."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
+              : " This lookup returned no arrival point, so leave nearestStation EMPTY rather than naming a landmark or a stop on the other side of water. AN EMPTY FIELD MEANS THIS SEARCH FOUND NOTHING, AND IT IS NOT EVIDENCE THAT NO STATION OR SERVICE EXISTS. A Ribelund draft turned this exact blank into the sentence 'Ribe has no train station of its own', and Ribe has a station on the Bramming to Tønder line. Do not write that this place has no station, no stop, no bus or no public transport, and do not write that its transport is unmapped or unclear. Say nothing about the arrival point at all, or say plainly that it could not be confirmed here."} This is provided for your context only — the system will use the verified values directly regardless of what you write, so focus your words on the EXPERIENCE and description, not on restating these numbers precisely.`;
           }
-        } catch { /* geocoding/places failed — draft proceeds without this, publishDraft's override step just won't have anything to apply */ }
+        } catch (e) {
+          // Was silent. A thrown geocode or Places call left frozenGeo null and
+          // said nothing, which is indistinguishable in the log from a place
+          // that genuinely has no nearby stop, and both end up as the same
+          // empty field the writer reads as an absence.
+          note("Nearest arrival point", {
+            provider: "google", detail: "geocoding, Places and the walking route",
+            outcome: "failed", used: false,
+            why: String(e?.message || e).slice(0, 160),
+            got: "the location lookup threw, so nothing about this coordinate was verified",
+          });
+        }
       }
       ui(setStudioFrozenGeo, frozenGeo);
 
@@ -3557,8 +3600,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // source material during writing.
       try {
         setStudioStage({ label: "Checking for invented claims", percent: 94 });
+        // ── AND IT GETS TO SEE THE RESEARCH THIS TIME ────────────
+        // rawResearch.slice(0, 3000) closed before `context` began, so the
+        // Tavily results, the founder sources and the scraped official site
+        // were invisible to the check that decides whether the draft invented
+        // things. See researchForCheck in utils/factCheckRead.js.
+        const checkResearch = researchForCheck(rawResearch);
         const inventedCheck = await askPerplexity(
-          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing. If everything in the draft traces back to the research, say so in one short sentence and nothing else. Be concise.\n${researchRules(sType, t)}\n\nResearch it was written from:\n${rawResearch.slice(0, 3000)}\n\nFinished draft:\n${JSON.stringify(t)}`
+          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing.\n${INVENTED_CHECK_FORMAT}\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, t)}\n\nResearch it was written from:\n${checkResearch.text}\n\nFinished draft:\n${JSON.stringify(readerFields(t))}`
         );
         // ── A FAILED LAST GATE LOOKED EXACTLY LIKE A CLEAN PASS ──────
         // Studio audit, 12 Aug, open item 1. askPerplexity NEVER THROWS: it
@@ -3574,17 +3623,56 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // does not BLOCK: the draft is already on screen and refusing to show
         // it would lose work, but "I could not check this" is now something you
         // read rather than something you have to infer from an absence.
+        // ── A VERDICT IS STRUCTURE, NOT A TURN OF PHRASE ─────────
+        // This was /^(everything|no issues|nothing|all claims)/i against the
+        // checker's free prose, and it was wrong in both directions.
+        // "Everything traces back except the 400 kr price" passed, discarding a
+        // real finding. "All of the claims trace back" and "The draft is fully
+        // supported by the research" both flagged, spending a re-research and
+        // an 8192-token rewrite on a draft that was already clean. See
+        // readInventedCheck in utils/factCheckRead.js.
+        const inventedRead = readInventedCheck(inventedCheck.text);
+        const flaggedText = inventedRead.findings.map(f => `${f.label}: ${f.text.replace(/^\s*[-*]?\s*\**\s*(CONTRADICTED|UNVERIFIED)\s*:?\s*/i, "")}`).join("\n");
+        const downgraded = inventedRead.findings.filter(f => f.moved);
         if (inventedCheck.error) {
           note("Invented-claim check", { provider: "perplexity", outcome: "failed", why: String(inventedCheck.error).slice(0, 200), used: false });
           ui(setStudioInventedWarning, inventedWarning = `THE INVENTED-CLAIM CHECK DID NOT RUN. This is the last accuracy gate in the pipeline and it failed rather than passing: ${String(inventedCheck.error).slice(0, 200)}. Nothing below has been compared against its own research, so treat every number and name in this draft as unverified until you check it yourself or redraft.`);
-        } else if (!inventedCheck.text) {
-          note("Invented-claim check", { provider: "perplexity", outcome: "empty", why: "no text came back", used: false });
-          ui(setStudioInventedWarning, inventedWarning = "THE INVENTED-CLAIM CHECK CAME BACK EMPTY. The last accuracy gate returned nothing at all, which is not the same as returning \"everything checks out\". Treat this draft as unchecked.");
-        } else if (/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
-          note("Invented-claim check", { provider: "perplexity", outcome: "ok", got: "every claim traced back to the research", used: true });
+        } else if (inventedRead.verdict === "unreadable") {
+          // NOT treated as a pass and NOT treated as a flag. Guessing "clean"
+          // hides real findings; guessing "flagged" rewrites correct drafts.
+          // "It did not answer" is the honest third outcome and this pipeline
+          // already has a shape for it.
+          note("Invented-claim check", { provider: "perplexity", outcome: "empty", why: inventedRead.why, used: false });
+          ui(setStudioInventedWarning, inventedWarning = `THE INVENTED-CLAIM CHECK DID NOT ANSWER: ${inventedRead.why}. That is not the same as returning "everything checks out", so nothing has been corrected and this draft has not been compared against its own research. What came back, in full:\n\n${String(inventedCheck.text || "").slice(0, 600)}`);
+        } else if (inventedRead.verdict === "clean") {
+          note("Invented-claim check", {
+            provider: "perplexity", outcome: "ok", used: true,
+            got: "every claim traced back to the research",
+            why: checkResearch.truncated ? `checked against ${checkResearch.kept} of ${checkResearch.total} characters of research` : "",
+          });
         }
-        if (!inventedCheck.error && inventedCheck.text && !/^(everything|no issues|nothing|all claims)/i.test(inventedCheck.text.trim())) {
-          note("Invented-claim check", { provider: "perplexity", outcome: "ok", got: "claims flagged", why: inventedCheck.text.slice(0, 160), used: true });
+        if (!inventedCheck.error && inventedRead.verdict === "flagged") {
+          note("Invented-claim check", {
+            provider: "perplexity", outcome: "ok", used: true,
+            got: `${inventedRead.findings.length} claim${inventedRead.findings.length === 1 ? "" : "s"} flagged: ${inventedRead.findings.filter(f => f.label === "CONTRADICTED").length} contradicted, ${inventedRead.findings.filter(f => f.label === "UNVERIFIED").length} unverified`,
+            why: flaggedText.slice(0, 160),
+          });
+          // A finding that calls itself a contradiction while admitting its own
+          // search came up empty is downgraded, by the same relabel the manual
+          // button uses. Said out loud, because a silent downgrade is its own
+          // unaccountable edit.
+          if (downgraded.length) {
+            note("A contradiction that was really a gap", {
+              provider: "perplexity", outcome: "ok", used: true,
+              detail: `${downgraded.length} finding${downgraded.length === 1 ? "" : "s"} downgraded to UNVERIFIED`,
+              got: downgraded.map(f => f.why).join(" "),
+            });
+            decide("fact-check finding", {
+              winner: "the draft", loser: "the fact-check",
+              rule: "I could not find it is not it is wrong. A finding that names no page stating otherwise is a gap, and a gap is not grounds to change a value.",
+              value: downgraded.map(f => f.text.slice(0, 80)).join(" | "),
+            });
+          }
           // AUTO-CORRECTION (Oliver: "The last fact-check was actually pointed
           // out as 'possibly made-up'. So why wasn't it re-researched and
           // changed? Then it would have been fully accurate!") — he's right:
@@ -3600,11 +3688,11 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           setStudioStage({ label: "Re-researching flagged claims", percent: 97 });
           try {
             const reResearch = await askPerplexity(
-              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${researchRules(sType, name)}\n\nFlagged claims:\n${inventedCheck.text}`
+              `Using real, current web search, find the correct, current real facts for ONLY the specific flagged claims below about "${name}" in Denmark. For each claim: state the real verified fact if you can find it, or say plainly that you couldn't verify it. Short facts only, no essay.\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, name)}\n\nFlagged claims:\n${flaggedText}`
             );
             if (!reResearch.error && reResearch.text) {
               const fixResult = await askClaude(
-                `Here is a draft (JSON), a list of claims flagged as possibly invented, and FRESH targeted research with the real facts. Correct ONLY the flagged claims: where the fresh research gives the real fact, replace the wrong value with it; where the research could NOT verify a flagged claim, remove that specific claim from the prose or set that field to an honest empty string — never keep an unverified claim and never invent a replacement. Leave every other field and sentence completely untouched — same structure, same keys, same wording for everything not flagged. Respond with ONLY the complete corrected JSON, valid JSON, nothing else.\n\nFlagged claims:\n${inventedCheck.text}\n\nFresh research (the real facts):\n${reResearch.text}\n\nCurrent draft:\n${JSON.stringify(t)}`,
+                `Here is a draft (JSON), a list of claims flagged as possibly invented, and FRESH targeted research with the real facts. Correct ONLY the flagged claims: where the fresh research gives the real fact, replace the wrong value with it; where the research could NOT verify a flagged claim, remove that specific claim from the prose or set that field to an honest empty string — never keep an unverified claim and never invent a replacement. Leave every other field and sentence completely untouched — same structure, same keys, same wording for everything not flagged. Respond with ONLY the complete corrected JSON, valid JSON, nothing else.\n${FACT_CHECK_SCOPE_RULES}\n\nA finding marked UNVERIFIED means no page states this either way. That is NOT evidence the draft is wrong: leave an UNVERIFIED claim exactly as it is unless the fresh research below actually contradicts it, and add a line to uncertainties instead.\n\nFlagged claims:\n${flaggedText}\n\nFresh research (the real facts):\n${reResearch.text}\n\nCurrent draft:\n${JSON.stringify(readerFields(t))}`,
                 8192
               );
               if (!fixResult.error) {
@@ -3653,12 +3741,12 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
                   }
                   ui(setStudioDraft, merged);
                   ui(setStudioDraftText, JSON.stringify(merged, null, 2));
-                  ui(setStudioInventedWarning, inventedWarning = `AUTO-CORRECTED. These claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${inventedCheck.text}`);
-                } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
-              } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
-            } else ui(setStudioInventedWarning, inventedWarning = inventedCheck.text);
+                  ui(setStudioInventedWarning, inventedWarning = `AUTO-CORRECTED. These claims were flagged as possibly invented, re-researched with fresh web search, and fixed in the draft below (anything still unverifiable was removed rather than guessed). Review before publishing:\n\n${flaggedText}`);
+                } else ui(setStudioInventedWarning, inventedWarning = flaggedText);
+              } else ui(setStudioInventedWarning, inventedWarning = flaggedText);
+            } else ui(setStudioInventedWarning, inventedWarning = flaggedText);
           } catch {
-            ui(setStudioInventedWarning, inventedWarning = inventedCheck.text); // correction failed, fall back to the plain warning, never lose it
+            ui(setStudioInventedWarning, inventedWarning = flaggedText); // correction failed, fall back to the plain warning, never lose it
           }
         }
       } catch { /* final check failed — draft already shown, this just skips silently rather than blocking */ }

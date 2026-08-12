@@ -214,3 +214,109 @@ export const datesConfirmedBy = (siteText, dateStart, dateEnd) => {
     detail: `The official site's own page states ${hits.join(" and ")}, with the year, so the date on this draft is confirmed by the operator. A fact-check that says it could not find these dates is describing its own search, not this entry.`,
   };
 };
+
+// ── THE AUTOMATIC CHECKER HAD NONE OF THE GUARDS THE MANUAL ONE HAS ─
+//
+// Audit of 12 Aug 2026, after Oliver asked me to go through the Perplexity
+// fact-checkers and see if they ruin anything. They do, and the shape of it is
+// that every guard in this file and in FACT_CHECK_SCOPE_RULES was reachable
+// from exactly one place: the manual "Fact-check this draft" button, where he
+// reads the findings and decides. readFactCheck is called once in App.jsx, on
+// that button. FACT_CHECK_SCOPE_RULES appears in one prompt, that button's.
+//
+// The INVENTED-CLAIM CHECK runs on every draft, unattended, and its findings go
+// straight into a re-research and a full rewrite. It had none of them. So the
+// Kalundborg near-miss this file's sibling comment describes, where a checker
+// returned a real sailing time for a different route and would have reverted a
+// corrected entry, was live in the one path with nobody reading it. A
+// correction carries more authority than the original text, and that is most
+// true when no human sees it.
+//
+// ── AND ITS PASS/FAIL WAS A PREFIX MATCH ON PROSE ───────────────────
+// The old test was /^(everything|no issues|nothing|all claims)/i against the
+// checker's free text. Measured against realistic replies:
+//
+//   "Everything traces back except the 400 kr price"  -> PASS. A real finding,
+//                                                       silently discarded.
+//   "All of the claims trace back to the research."   -> FLAGGED. A clean draft
+//                                                       sent for rewrite.
+//   "The draft is fully supported by the research."   -> FLAGGED. Same.
+//
+// A verdict is structure, not a turn of phrase, so it is now asked for as
+// structure and read as structure. Anything unreadable is neither: it becomes
+// "the check did not answer", which the pipeline already knows how to report
+// and which does NOT trigger a rewrite.
+export const INVENTED_CHECK_FORMAT = `ANSWER IN THIS EXACT SHAPE, because it is read by code and not by a person.
+First line, exactly one of:
+VERDICT: CLEAN
+VERDICT: FLAGGED
+Then, only if FLAGGED, one finding per line, each beginning with one of these two words:
+CONTRADICTED: the research states something different from the draft. Quote what the research says.
+UNVERIFIED: the research does not mention this either way. Say which part of the draft it is.
+Nothing else. No preamble, no summary, no closing sentence.`;
+
+// Returns { verdict, findings, why }. verdict is "clean", "flagged" or
+// "unreadable", and the third is deliberately its own answer rather than being
+// folded into either of the others: guessing "clean" hides real findings and
+// guessing "flagged" rewrites correct drafts, and this file's whole job is to
+// stop a non-answer carrying the authority of one.
+export const readInventedCheck = (text) => {
+  const t = String(text || "").trim();
+  if (!t) return { verdict: "unreadable", findings: [], why: "no text came back" };
+  const m = t.match(/^\s*\**\s*VERDICT:\s*(CLEAN|FLAGGED)\b/i);
+  if (!m) {
+    return {
+      verdict: "unreadable",
+      findings: [],
+      why: "the checker did not answer in the shape it was asked for, so neither a pass nor a flag can be read out of it",
+    };
+  }
+  if (m[1].toUpperCase() === "CLEAN") return { verdict: "clean", findings: [], why: "" };
+  // Every finding goes through relabel, so a CONTRADICTED that admits its own
+  // search came up empty is downgraded here exactly as it is on the manual
+  // path. Same rule, same file, now on both.
+  const findings = t.split("\n")
+    .map(l => l.trim())
+    .filter(l => /^\s*[-*]?\s*\**\s*(CONTRADICTED|UNVERIFIED)\b/i.test(l))
+    .map(relabel);
+  if (!findings.length) {
+    return {
+      verdict: "unreadable",
+      findings: [],
+      why: "it said FLAGGED and then listed no finding in the required form, so there is nothing a correction could act on",
+    };
+  }
+  return { verdict: "flagged", findings, why: "" };
+};
+
+// ── THE CHECKER COULD NOT SEE THE RESEARCH IT WAS CHECKING ──────────
+//
+// The invented-claim check was handed rawResearch.slice(0, 3000). rawResearch
+// is assembled as hint, frozen facts, hours, address, tickets, transport,
+// Perplexity, and THEN context, and context is where the Tavily results, the
+// founder sources and the scraped official-site text live. Measured on the
+// Esbjerg run of 12 Aug: the transport block alone is about 1,900 characters
+// once journeyBlock is in it, the Perplexity preamble is 785, and the run log
+// records Perplexity's own answer at 1,475. The window closed before context
+// began, so every fact drawn from the web was invisible and looked invented.
+// Both of that day's drafts ended in "claims flagged" and both were rewritten.
+//
+// A cap is still needed, because rawResearch can run to tens of thousands of
+// characters. What was missing is that a cap must never be able to hide the
+// sources silently. So the head and the TAIL are both kept, and when anything
+// is dropped the checker is told, in the text, that absence is not evidence.
+export const RESEARCH_CHECK_CAP = 20000;
+
+export const researchForCheck = (raw, cap = RESEARCH_CHECK_CAP) => {
+  const t = String(raw || "");
+  if (t.length <= cap) return { text: t, truncated: false, kept: t.length, total: t.length };
+  const head = Math.floor(cap * 0.35);
+  const tail = cap - head;
+  const dropped = t.length - cap;
+  return {
+    total: t.length,
+    kept: cap,
+    truncated: true,
+    text: `${t.slice(0, head)}\n\n[${dropped} characters of the middle of this research are not shown. A CLAIM YOU CANNOT FIND HERE MAY SIMPLY BE IN THE OMITTED PART: do not call anything invented on the strength of it being missing from this text alone.]\n\n${t.slice(-tail)}`,
+  };
+};

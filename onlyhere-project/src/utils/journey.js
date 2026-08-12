@@ -161,6 +161,26 @@ export const journeyDurations = (text) => {
       i++;
       continue;
     }
+    // ── AND THE COMPACT FORM, WHICH IS WHAT THE DRAFTS ACTUALLY WRITE ──
+    // Oliver's Esbjerg run of 12 Aug, with this gate live: "about 2h51 by
+    // train" and "roughly 3h15 by car". No unit after the minutes, so there is
+    // no second token to compose with, and "2h51" read as 2h. That produced
+    // THREE false uncertainties on his draft AND hid the true one: 120 minutes
+    // is nowhere near the 171 the route was measured at, so the door-to-door
+    // conflation this gate exists to catch went unnoticed while it complained
+    // about a figure nobody wrote. My tests used "2h51min", which the drafts
+    // do not write.
+    //
+    // No space allowed before the digits: "2h51" is one figure, and "2h 51" on
+    // its own is ambiguous enough that absorbing it would be a guess.
+    if (isHours(a)) {
+      const after = t.slice(a.at + a.raw.length);
+      const c = after.match(/^(\d{1,2})(?!\w)/);
+      if (c) {
+        out.push({ at: a.at, mins: a.minutes + Number(c[1]), text: t.slice(a.at, a.at + a.raw.length + c[0].length) });
+        continue;
+      }
+    }
     out.push({ at: a.at, mins: a.minutes, text: a.raw.trim() });
   }
   return out;
@@ -169,7 +189,12 @@ export const journeyDurations = (text) => {
 // A word that makes a sentence about being ON something rather than about the
 // whole trip. "Togr" is not a typo: fold() maps ø to o, and Danish prose in
 // this product mixes both spellings.
-const RIDE_WORDS = /\b(train|togr?|rail|lyntog|intercity|bus|coach|ferry|faerge|færge|metro|tram)\b/i;
+// ── AND IN DANISH, INCLUDING THE DEFINITE FORMS ─────────────────────
+// This read /tog r?/ and could not match "toget", which is how a Danish
+// sentence actually says "the train". A gate that silently stops checking half
+// the prose in a Danish travel product is the fold() bug in api/commons-photo.js
+// wearing a timetable. Found by writing the Danish test, not by reading it.
+const RIDE_WORDS = /\b(train|rail|lyntog|intercity|bus(?:sen|ser)?|coach|ferry|metro(?:en)?|tram|tog(?:et|ene)?|f[æa]?erge[nr]?|færge[nr]?|faerge[nr]?)\b/i;
 const DOOR_WORDS = /\b(door to door|door-to-door|all in|in total|altogether|including the walk)\b/i;
 const DIRECT_WORDS = /\b(direct|non-?stop|straight through|without (?:a |any )?chang(?:e|es|ing)|no chang(?:e|es))\b/i;
 const CHANGE_COUNT = /\b(?:(one|two|three|four|\d{1,2}))\s+chang(?:e|es)\b/i;
@@ -187,6 +212,16 @@ const stripDot = (s) => String(s || "").replace(/\.$/, "");
 // Returns a list of problems, each already phrased as the sentence a reader
 // would get in uncertainties. Empty list means the prose agrees with what was
 // measured, which is a real answer and is logged as one.
+// ── AND IT ONLY SPEAKS ABOUT THE JOURNEY IT MEASURED ────────────────
+// Also from the Esbjerg run. gemlyxFind said "Ribe is only about 30 minutes
+// away by train", and this gate reported that 30 minutes "was not measured by
+// anything in this run" and listed the Copenhagen-to-Esbjerg figures beside
+// it. Esbjerg to Ribe is a DIFFERENT JOURNEY. Nothing measured it, so this
+// gate has nothing to say about it, and saying something anyway is the exact
+// failure it was built to stop: a check reporting on its own search as though
+// it were a fact about the entry.
+const ORIGIN_NAMED = /\b(copenhagen|k[oø]benhavn|cph)\b/i;
+
 export const transitProblems = (prose, { parts, drivingMins } = {}) => {
   if (!parts) return [];
   const out = [];
@@ -197,13 +232,15 @@ export const transitProblems = (prose, { parts, drivingMins } = {}) => {
   // the duration and the word "train" have to be in the same claim to be one.
   for (const s of String(prose || "").split(/(?<=[.!?])\s+/)) {
     const ride = RIDE_WORDS.test(s) && !DOOR_WORDS.test(s);
+    // Is this sentence about the journey that was measured, or another one?
+    const ours = ORIGIN_NAMED.test(s);
     for (const d of journeyDurations(s)) {
       // ── THE CONFLATION ────────────────────────────────────────────
       // Only when the two figures actually differ. On a short hop where the
       // ride IS the journey there is nothing to confuse and nothing to flag.
       if (ride && near(d.mins, parts.total) && parts.onBoard > 0 && !near(parts.total, parts.onBoard, 5)) {
         out.push(`"${d.text}" is presented as time on board, and it is the DOOR TO DOOR figure: it includes the walk at both ends and the wait. The measured time actually moving is ${hm(parts.onBoard)}. Say which one the sentence means, or a reader who checks the timetable will read this as wrong.`);
-      } else if (!measured.some(m => near(d.mins, m))) {
+      } else if (ours && !measured.some(m => near(d.mins, m))) {
         out.push(`"${d.text}" was not measured by anything in this run. The figures that were: ${measured.map(hm).join(", ")}. Either name a source for it or take it out.`);
       }
     }
@@ -225,10 +262,10 @@ export const transitProblems = (prose, { parts, drivingMins } = {}) => {
       out.push(`This draft puts a time on the walk between a station and the centre. Nothing measured that: the ${hm(parts.onFoot)} on foot is the walk at BOTH ends of the journey added together, to a geocoded centroid rather than to the town centre. Drop the figure or measure that specific walk.`);
     }
     // ── DIRECT, WHEN IT IS NOT ────────────────────────────────────
-    if (parts.changes > 0 && DIRECT_WORDS.test(s) && RIDE_WORDS.test(s)) {
+    if (ours && parts.changes > 0 && DIRECT_WORDS.test(s) && RIDE_WORDS.test(s)) {
       out.push(`This draft calls the journey direct. The measured route has ${parts.changes} change${parts.changes === 1 ? "" : "s"}${parts.interchanges?.length ? `, at ${parts.interchanges.map(stripDot).join(" and ")}` : ""}.`);
     }
-    const cc = s.match(CHANGE_COUNT);
+    const cc = ours ? s.match(CHANGE_COUNT) : null;
     if (cc) {
       const said = WORD_NUM[String(cc[1]).toLowerCase()] ?? Number(cc[1]);
       if (Number.isFinite(said) && said !== parts.changes) {

@@ -107,7 +107,7 @@ writeFileSync(entry, `
   export { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
-  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
+  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
@@ -4478,6 +4478,22 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("the minutes half of an hour form is not counted twice",
      journeyDurations("2 hours 51 mins").length, 1);
 
+  // ── THE COMPACT FORM, WHICH IS WHAT THE DRAFTS ACTUALLY WRITE ────
+  // Oliver's Esbjerg run with this gate live, 12 Aug: "about 2h51 by train"
+  // and "roughly 3h15 by car". No unit after the minutes, so there is no
+  // second token to compose with and "2h51" read as 2h. That put THREE false
+  // uncertainties on the draft and hid the true one, because 120 minutes is
+  // nowhere near the measured 171. My own tests used "2h51min", which the
+  // drafts do not write. Testing the shape the model emits, not the shape the
+  // parser is comfortable with.
+  is("hours and bare minutes with no unit", journeyDurations("about 2h51 by train").map(d => d.mins), [171]);
+  is("and the driving equivalent", journeyDurations("roughly 3h15 by car").map(d => d.mins), [195]);
+  is("the unit form still works", journeyDurations("2h51min").map(d => d.mins), [171]);
+  is("and is not double counted", journeyDurations("2h51min").length, 1);
+  // A SPACE MAKES IT AMBIGUOUS, so it is left alone rather than guessed at.
+  is("a spaced bare number is not absorbed", journeyDurations("2h 51 people waited").map(d => d.mins), [120]);
+  is("and a following word is not a minute count", journeyDurations("3h20min").map(d => d.mins), [200]);
+
   const esbjerg = journeyParts([
     { mode: "walking", mins: 8 },
     { mode: "transit", vehicle: "HIGH_SPEED_TRAIN", line: "IC", mins: 82, from: "København H", to: "Odense St." },
@@ -4502,6 +4518,44 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The measured driving figure is in the same sentence and must survive.
   ok("the measured drive is not flagged", !found.some(p => /3-hour-15-minute/.test(p)));
 
+  // ── AND IT ONLY SPEAKS ABOUT THE JOURNEY IT MEASURED ─────────────
+  // Same run. gemlyxFind said "Ribe is only about 30 minutes away by train",
+  // and the gate reported that 30 minutes "was not measured by anything in
+  // this run", listing the Copenhagen figures beside it. Esbjerg to Ribe is a
+  // different journey. Nothing measured it, so this gate has nothing to say
+  // about it, which is the discipline it already follows when parts is null.
+  is("a duration about a different journey is not this gate's business",
+     transitProblems("Ribe is only about 30 minutes away by train, an easy add-on.", { parts: esbjerg, drivingMins: 195 }), []);
+  // ── AND IT KNOWS THE ORIGIN'S OTHER NAME ─────────────────────────
+  // Half this product's prose is written about København. An origin matcher
+  // that only knows the English spelling silently stops checking every Danish
+  // sentence, which is the same class of bug as the fold() one in
+  // api/commons-photo.js.
+  ok("a Danish sentence about the same journey is still checked",
+     transitProblems("Fra København tager toget cirka 2h51.", { parts: esbjerg, drivingMins: 195 }).length === 1);
+  // Both halves of that sentence are Danish, and each was its own blind spot:
+  // the origin spelling and the word for train. Asserted separately so a
+  // mutation to either one cannot hide behind the other.
+  // An UNMEASURED figure, not the total: the conflation check is not scoped by
+  // origin (a ride word plus the exact door-to-door figure is inherently about
+  // this journey), so only an unmeasured duration can prove the origin matcher
+  // is doing anything. My first version of this assertion could not tell the
+  // difference and stayed green when the Danish spelling was deleted.
+  ok("the Danish spelling of the origin is recognised",
+     transitProblems("Fra København tager toget cirka 2h05.", { parts: esbjerg, drivingMins: 195 })
+       .some(p => /was not measured/.test(p)));
+  is("and without it the same sentence is none of the gate's business",
+     transitProblems("Fra Aarhus tager toget cirka 2h05.", { parts: esbjerg, drivingMins: 195 }), []);
+  ok("and the Danish word for the train is too",
+     transitProblems("From Copenhagen toget takes about 2h51.", { parts: esbjerg, drivingMins: 195 }).length === 1);
+  // The whole paragraph he shipped: exactly one finding, and it is the real one.
+  const shippedRun2 = transitProblems(
+    "From Copenhagen it's about 2h51 by train with one change at Odense, compared with roughly 3h15 by car. Ribe is only about 30 minutes away by train.",
+    { parts: esbjerg, drivingMins: 195 });
+  is("his shipped paragraph yields one finding, not three", shippedRun2.length, 1);
+  ok("and it is the conflation, not a phantom", /DOOR TO DOOR/.test(shippedRun2[0]));
+  ok("the measured drive is still not flagged", !shippedRun2.some(p => /3h15/.test(p)));
+
   // The same two errors, from the 8 August draft in this file's own header.
   ok("the original Odense walk claim is caught too",
      transitProblems("Odense railway station is about 5 minutes on foot from the city centre.", { parts: esbjerg })
@@ -4514,7 +4568,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      transitProblems("The whole journey is about 2h51min door to door, of which 2h 30min is on the train, with one change in Odense. Driving takes 3h 15min.",
        { parts: esbjerg, drivingMins: 195 }), []);
 
-  const wrong = transitProblems("A direct train runs to Esbjerg. You change trains at Fredericia. There are two changes.", { parts: esbjerg, drivingMins: 195 });
+  // Each sentence names the origin, because the gate only speaks about the
+  // journey it measured. A claim about some other trip is not its business.
+  const wrong = transitProblems("A direct train runs from Copenhagen to Esbjerg. You change trains at Fredericia. From Copenhagen there are two changes.", { parts: esbjerg, drivingMins: 195 });
   ok("a journey called direct that is not", wrong.some(p => /calls the journey direct/.test(p)));
   ok("a change count that contradicts the route", wrong.some(p => /states 2 changes\. The measured route has 1/.test(p)));
   ok("and an interchange that is not on the route", wrong.some(p => /change at Fredericia/.test(p)));
@@ -4588,6 +4644,27 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      codeJ.indexOf("const ac = absenceClaims(readerText(t))") < codeJ.indexOf('gateDraft("first")'));
   ok("and it is logged whether or not it finds anything",
      /note\(`Stated absences\$\{suffix\}`/.test(app6));
+
+  // ── AND THE NULL THAT CAUSED IT IS NOW READABLE ──────────────────
+  // The invented negative was the symptom. The cause is that the nearest-stop
+  // lookup was the one major step in the drafting function with no note(), so
+  // "searched and found nothing", "the Places call failed" and "the coordinate
+  // was wrong" were the same blank. Ribe Station sits 3 km inside this
+  // lookup's own rail radius and the log had nothing to say about it.
+  ok("the nearest arrival point is journalled", /note\("Nearest arrival point"/.test(app6));
+  is("on both the found path and the thrown one",
+     (app6.match(/note\("Nearest arrival point"/g) || []).length, 2);
+  ok("a thrown lookup is reported as failed, not as an absence",
+     /outcome: "failed", used: false,[\s\S]{0,200}the location lookup threw/.test(app6));
+  ok("and an empty result says it is not evidence of an absence",
+     /This is not evidence that none exists/.test(app6));
+  // ── AND THE PROMPT CANNOT LICENSE THE SENTENCE ANY MORE ──────────
+  ok("the writer is told an empty field is not an absence",
+     /AN EMPTY FIELD MEANS THIS SEARCH FOUND NOTHING, AND IT IS NOT EVIDENCE THAT NO STATION OR SERVICE EXISTS/.test(app6));
+  ok("with the sentence it actually produced named as the thing not to write",
+     /Ribe has no train station of its own/.test(app6));
+  ok("and the old wording that primed it is gone",
+     !/Many Danish islands have no station at all/.test(app6));
   ok("including the softer phrasings of it", /"just outside" or "a short walk from"/.test(j));
   ok("a wait is not published as a fact about the service", /never publish it as a fact about the service/.test(j));
   is("the rules carry no em or en dashes", (j.match(/[—–]/g) || []).length, 0);
@@ -9158,10 +9235,148 @@ rmSync(dir, { recursive: true, force: true });
 {
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("a failed check is journalled as failed", /note\("Invented-claim check", \{ provider: "perplexity", outcome: "failed"/.test(app));
-  ok("an empty answer is journalled separately, because it is not a pass", /outcome: "empty", why: "no text came back"/.test(app));
+  // "It did not answer" is its own outcome, and neither a pass nor a flag.
+  // Guessing clean hides real findings; guessing flagged rewrites correct
+  // drafts. The wording moved into readInventedCheck; the branch is what
+  // matters here.
+  ok("an unreadable answer is journalled separately, because it is not a pass",
+     /inventedRead\.verdict === "unreadable"\)[\s\S]{0,600}outcome: "empty", why: inventedRead\.why/.test(app));
+  ok("and it does not reach the auto-correction",
+     app.indexOf('if (!inventedCheck.error && inventedRead.verdict === "flagged")') > 0);
   ok("a genuine pass is journalled too, so the log speaks either way", /got: "every claim traced back to the research"/.test(app));
   ok("and a failure is put in front of him, not only in the log", /THE INVENTED-CLAIM CHECK DID NOT RUN/.test(app));
   ok("naming it as the last gate rather than a detail", /last accuracy gate in the pipeline/.test(app));
+}
+
+// ── THE AUTOMATIC FACT-CHECKER HAD NONE OF THE MANUAL ONE'S GUARDS ──
+//
+// Oliver, 12 Aug 2026: "go through Perplexicity fact-checkers, and see if they
+// ruin anything." They did. Every guard in factCheckRead.js and every line of
+// FACT_CHECK_SCOPE_RULES was reachable from exactly one place, the manual
+// "Fact-check this draft" button, where he reads the findings and decides. The
+// invented-claim check runs on every draft unattended and its findings go
+// straight into a re-research and a full rewrite, and it had none of them.
+{
+  const { readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, CONTRADICTED, UNVERIFIED } = M;
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── A VERDICT IS STRUCTURE, NOT A TURN OF PHRASE ─────────────────
+  // The old test was /^(everything|no issues|nothing|all claims)/i against free
+  // prose. These three are the measured failures it produced.
+  is("a clean bill of health reads as clean",
+     readInventedCheck("VERDICT: CLEAN").verdict, "clean");
+  is("a flag reads as flagged",
+     readInventedCheck("VERDICT: FLAGGED\nUNVERIFIED: the 400 kr price is not in the research.").verdict, "flagged");
+  // The WORD, not the verdict. A finding is free to contain "clean" and that
+  // must not turn a FLAGGED answer into a pass.
+  is("the word clean inside a finding does not make it a pass",
+     readInventedCheck("VERDICT: FLAGGED\nUNVERIFIED: the draft calls the beach clean, which is not in the research.").verdict, "flagged");
+  is("and the verdict has to be on the first line",
+     readInventedCheck("Some preamble first.\nVERDICT: CLEAN").verdict, "unreadable");
+  // THE ONE THAT SILENTLY DISCARDED A REAL FINDING. Under the prefix match,
+  // "Everything traces back except..." started with "everything" and passed.
+  is("an 'everything except' answer is not a pass",
+     readInventedCheck("Everything traces back except the 400 kr ticket price, which appears nowhere.").verdict, "unreadable");
+  // AND THE TWO THAT REWROTE CLEAN DRAFTS.
+  is("nor is a differently worded pass silently treated as a flag",
+     readInventedCheck("All of the claims trace back to the research.").verdict, "unreadable");
+  is("and neither is a fully-supported answer",
+     readInventedCheck("The draft is fully supported by the research.").verdict, "unreadable");
+
+  // ── UNREADABLE IS ITS OWN ANSWER ─────────────────────────────────
+  // Guessing clean hides real findings. Guessing flagged rewrites correct
+  // drafts. This file's whole job is to stop a non-answer carrying the
+  // authority of one, so the third outcome is refused a default.
+  is("nothing at all is unreadable, not clean", readInventedCheck("").verdict, "unreadable");
+  is("and so is FLAGGED with no findings under it",
+     readInventedCheck("VERDICT: FLAGGED\nlooks fine to me").verdict, "unreadable");
+  ok("and it says why, rather than just failing",
+     readInventedCheck("VERDICT: FLAGGED").why.length > 20);
+
+  // ── THE SAME DOWNGRADE THE MANUAL BUTTON GETS ────────────────────
+  // "I could not find it" is not "it is wrong". relabel already enforced that
+  // on the manual path and was never reachable from this one.
+  const gap = readInventedCheck("VERDICT: FLAGGED\nCONTRADICTED: I could not find any page stating the ticket price.");
+  is("a contradiction that admits it found nothing is downgraded", gap.findings[0].label, UNVERIFIED);
+  ok("and the downgrade explains itself", gap.findings[0].moved && gap.findings[0].why.length > 20);
+  const real = readInventedCheck("VERDICT: FLAGGED\nCONTRADICTED: the operator's page states 275 kr, not 400 kr.");
+  is("a contradiction that names a rival figure stands", real.findings[0].label, CONTRADICTED);
+  ok("and is not moved", !real.findings[0].moved);
+
+  // ── THE CHECKER COULD NOT SEE THE RESEARCH IT WAS CHECKING ───────
+  // rawResearch.slice(0, 3000). Measured on the Esbjerg run: the transport
+  // block is about 1,900 characters once journeyBlock is in it, the Perplexity
+  // preamble is 785, and the log records Perplexity's answer at 1,475. The
+  // window closed before `context`, where every web source lives.
+  const small = researchForCheck("short research", 100);
+  is("research that fits is passed through whole", small.text, "short research");
+  ok("and is not called truncated", !small.truncated);
+  const big = researchForCheck("HEAD" + "x".repeat(5000) + "SOURCES-AT-THE-END", 1000);
+  ok("an oversized research blob is truncated", big.truncated);
+  // BOTH ENDS KEPT. The head holds the measured facts, the tail holds the
+  // sources, and the old slice kept only the head.
+  ok("the head is kept", big.text.startsWith("HEAD"));
+  ok("AND SO IS THE TAIL, WHICH IS WHERE THE SOURCES ARE", big.text.endsWith("SOURCES-AT-THE-END"));
+  // ── AND THE MIDDLE IS ACTUALLY DROPPED ───────────────────────────
+  // endsWith alone is not enough, and a mutation proved it: slice(-0) is
+  // slice(0), so an implementation keeping a zero-length tail returns the WHOLE
+  // string and still ends with the right characters. The bound is what proves
+  // anything was cut at all.
+  ok("the result is bounded by the cap", big.text.length < 1000 + 400);
+  is("and it reports what it kept", big.kept, 1000);
+  is("out of what it was given", big.total, 5022);
+  // ── AND A CAP MAY NEVER HIDE THE SOURCES SILENTLY ────────────────
+  // Whatever is dropped, the checker is told that absence is not evidence.
+  ok("truncation says so in the text the checker reads", /are not shown/.test(big.text));
+  ok("and forbids reading absence as invention", /do not call anything invented/i.test(big.text));
+  ok("the real cap is large enough to clear the fixed prefix that caused this",
+     RESEARCH_CHECK_CAP > 3000 * 4);
+
+  // ── WIRED: ALL FOUR, ON THE AUTOMATIC PATH ───────────────────────
+  const codeI = app.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  ok("the check reads the whole research through the window",
+     /const checkResearch = researchForCheck\(rawResearch\);/.test(codeI));
+  ok("and no longer slices it at three thousand characters",
+     !/rawResearch\.slice\(0, 3000\)/.test(codeI));
+  // ── ANCHORED TO EACH PROMPT, NOT COUNTED ─────────────────────────
+  // A count of ">= 3" let a mutation delete the rules from the CHECK prompt and
+  // stay green, because the three other occurrences still totalled three.
+  // WHERE a rule is matters more than how many times it appears.
+  const promptWith = (marker) => {
+    const i = app.indexOf(marker);
+    return i < 0 ? "" : app.slice(Math.max(0, i - 2000), i + 2000);
+  };
+  ok("the scope rules reach the automatic check, not just the button",
+     /\$\{FACT_CHECK_SCOPE_RULES\}/.test(promptWith("Compare this finished draft against the research")));
+  // ── AND THESE TWO ARE ANCHORED ADJACENTLY, NOT BY WINDOW ─────────
+  // The re-research and the rewrite prompts sit close together in the file, so
+  // a window around either one contains the other's copy of the rules and a
+  // mutation deleting one stayed green. Same trap as the two identical guards
+  // in one file from the 12 Aug audit: anchor on what is unique.
+  ok("and the re-research of a flagged claim",
+     /no essay\.\\n\$\{FACT_CHECK_SCOPE_RULES\}\\n\$\{researchRules\(sType, name\)\}/.test(app));
+  ok("and the rewrite that applies it",
+     /nothing else\.\\n\$\{FACT_CHECK_SCOPE_RULES\}/.test(app));
+  ok("the manual button still has them too",
+     /\$\{FACT_CHECK_SCOPE_RULES\}/.test(promptWith("Fact-check this draft travel listing")));
+  ok("the checker is asked for a shape code can read",
+     /\$\{INVENTED_CHECK_FORMAT\}/.test(codeI));
+  ok("the verdict is read structurally",
+     /const inventedRead = readInventedCheck\(inventedCheck\.text\);/.test(codeI));
+  ok("and the prefix match is gone",
+     !/\^\(everything\|no issues\|nothing\|all claims\)/.test(codeI));
+  // ── AND IT IS ASKED TO VERIFY ONLY WHAT A READER SEES ────────────
+  // 36% of the Ribelund payload was source URLs and ISO timestamps.
+  ok("the draft is stripped of machine fields before being checked",
+     /JSON\.stringify\(readerFields\(t\)\)/.test(codeI));
+  is("in both the check and the rewrite",
+     (codeI.match(/JSON\.stringify\(readerFields\(t\)\)/g) || []).length, 2);
+  ok("and the rewriter is handed the relabelled findings, not the raw reply",
+     /Flagged claims:\\n\$\{flaggedText\}/.test(codeI));
+  ok("an UNVERIFIED finding is not licence to change a value",
+     /A finding marked UNVERIFIED means no page states this either way/.test(app));
+  ok("a downgrade is recorded as a decision rather than made quietly",
+     /note\("A contradiction that was really a gap"/.test(codeI));
 }
 
 
