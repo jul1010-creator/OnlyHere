@@ -27,7 +27,7 @@ import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
-import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE } from "./utils/pageScan";
+import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -3217,6 +3217,8 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // Sequential, not Promise.all: these hit the app's own scan endpoint and
         // three parallel scrapes of unrelated sites is a good way to get one of
         // them throttled and lose it silently.
+        // Ticket links seen on any page read below, followed after the loop.
+        const ticketPages = [];
         for (const url of toFetch) {
           try {
             const scanRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
@@ -3292,8 +3294,69 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                 ? `. THE FRONT PAGE OF AN EVENT'S OWN SITE IS NOT A MARKETING PAGE, IT IS THE ANNOUNCEMENT: for the dates of a festival it outranks every inner page, because a programme or archive page routinely still carries last year's edition while the front page is the first thing an organiser updates. If the root of this site states a date and an inner page states a different one, the root wins and the inner page is stale`
                 : ". For a price, an opening hour or a departure time prefer a TIMETABLE or booking page over a marketing front page on the same site"}): ${scanData.text.slice(0, isPlaceType ? 2200 : 3000)}`;
             }
+            // ── AND THE BUTTON THAT SAYS WHERE THE TICKETS ARE ──
+            // Collected here and followed after the loop, rather than inside
+            // it, so a nested fetch cannot make one slow agent hold up the
+            // remaining sources.
+            if (tier !== "old" && Array.isArray(scanData.tickets)) {
+              for (const l of scanData.tickets) {
+                if (!ticketPages.some(x => x.href === l.href) && !toFetch.includes(l.href)) ticketPages.push({ ...l, from: url });
+              }
+            }
           } catch { /* one scan failed — keep going, the draft still gets the others */ }
         }
+
+        // ── FOLLOW THE OPERATOR TO WHOEVER SELLS ITS TICKETS ────────
+        //
+        // Oliver, 13 Aug 2026, going through the sources on his Food Festival
+        // Aarhus draft: "while the official page was indeed found. The live
+        // ticket agent weren't (madbillet.dk)."
+        //
+        // The draft stated 110, 170 and 130 DKK and the trace answered "NOT
+        // FROM THE OFFICIAL SITE". Those were the REAL presale prices. They
+        // live on madbillet.dk, which foodfestival.dk links to with a button
+        // saying Køb billetter, and which nothing in this pipeline had ever
+        // been able to see because stripToText deletes every href.
+        //
+        // TWO PAGES, CAPPED, because this is a page read each and it is his
+        // money. Two is enough for the real shape: the agent, and the
+        // operator's own /billetter page when it links onward rather than
+        // pricing anything itself.
+        //
+        // The result goes into listingSiteText and NOT into the operator's own
+        // string, which is his hierarchy exactly: an agent may price and date
+        // an event and may never be called the official site. The 12 Aug bug
+        // where a volunteer centre reprinting a press release got ranked as the
+        // operator is the reason that distinction is load-bearing.
+        for (const l of ticketPages.slice(0, MAX_TICKET_PAGES)) {
+          try {
+            const tRes = await fetch(`/api/scan-source?url=${encodeURIComponent(l.href)}`);
+            const tData = await tRes.json();
+            const priced = tData.text ? ticketPriceOn(tData.text) : null;
+            note(`Ticket agent: ${domainOf(l.href)}`, {
+              provider: tData.via || "fetch",
+              detail: `followed from ${domainOf(l.from)}, a link reading "${(l.text || "no text").slice(0, 40)}"`,
+              outcome: tData.blocked || !tData.text ? "failed" : priced ? "ok" : "empty",
+              got: !tData.text
+                ? `could not be read (${tData.read || "no reason given"})`
+                : priced
+                  ? (priced.kind === "concession-only"
+                      ? "prices only concessions, so it does not say what general admission costs"
+                      : priced.free ? "says entry is free" : `${priced.lo} ${String(priced.currency).toUpperCase()}${priced.when ? ` ${priced.when}` : ""}`)
+                  : "read, but it states no ticket price",
+              why: tData.text ? "" : "The operator names this as where its tickets are sold, so a failure here is the one page most worth knowing about.",
+              used: !!priced,
+            });
+            if (tData.text) {
+              pagesByUrl[l.href] = tData.text;
+              listingSiteText += ` ${tData.text}`;
+              if (!listingDomains.includes(domainOf(l.href))) listingDomains.push(domainOf(l.href));
+              if (!candidateUrls.includes(l.href)) candidateUrls.push(l.href);
+              context += `\nTHE TICKET AGENT THE OPERATOR LINKS TO (${domainOf(l.href)}), reached from a "${(l.text || "tickets").slice(0, 40)}" link on ${domainOf(l.from)}. This is where the tickets are actually sold, so it is the authority on the PRICE and on what is still buyable. It is NOT the operator and may not be called the official site. Attribute it in uncertainties, never inside a glance field: ${tData.text.slice(0, 2200)}`;
+            }
+          } catch { /* one agent failing is not a reason to lose the draft */ }
+        }
+
         // ── SAY WHAT THE OPERATOR ACTUALLY GAVE US ──────────────────
         // "Prices against the official site" reading `ok` while no operator
         // page was ever read is the exact shape being fixed, so the run log

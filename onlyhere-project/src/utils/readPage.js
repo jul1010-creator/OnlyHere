@@ -16,7 +16,7 @@
 // tested with no network at all. This file is the network and nothing else,
 // which is the split api/tickets.js documents.
 import {
-  stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, FIRECRAWL_URL,
+  stripToText, ticketLinks, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, FIRECRAWL_URL,
 } from "./pageScan.js";
 
 const UA = "Mozilla/5.0 (compatible; GemlyxContentScan/1.0)";
@@ -24,9 +24,16 @@ const UA = "Mozilla/5.0 (compatible; GemlyxContentScan/1.0)";
 export const readPlain = async (url, f = fetch) => {
   try {
     const r = await f(url, { headers: { "User-Agent": UA } });
-    return { status: r.status, text: r.ok ? stripToText(await r.text()) : "", err: "" };
+    if (!r.ok) return { status: r.status, text: "", tickets: [], err: "" };
+    // ── THE HTML IS READ ONCE AND ASKED TWO QUESTIONS ─────────────
+    // stripToText deletes every tag, so the hrefs have to come out here, before
+    // it runs, or they are gone. That deletion is why no draft has ever followed
+    // an operator's "Køb billetter" button to the agent that actually sells
+    // them. See ticketLinks in pageScan.js.
+    const html = await r.text();
+    return { status: r.status, text: stripToText(html), tickets: ticketLinks(html, url).slice(0, 6), err: "" };
   } catch (err) {
-    return { status: 0, text: "", err: String(err) };
+    return { status: 0, text: "", tickets: [], err: String(err) };
   }
 };
 
@@ -61,7 +68,7 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
   const plain = await readPlain(url, fetchImpl);
   const first = pageReadVerdict(plain.status, plain.text, plain.err);
   if (first.usable) {
-    return { text: plain.text, via: "fetch", read: first.reason, blocked: false, credits: 0, sample: "" };
+    return { text: plain.text, via: "fetch", read: first.reason, blocked: false, credits: 0, sample: "", tickets: plain.tickets };
   }
   if (!key || !worthDeepRead(first)) {
     return {
@@ -73,7 +80,10 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
   const deep = await readFirecrawl(url, key, fetchImpl);
   const second = pageReadVerdict(200, deep.text);
   if (deep.ok && second.usable) {
-    return { text: deep.text, via: "firecrawl", read: second.reason, blocked: false, credits: 1, firstTry: first.reason, escalated: true };
+    // Firecrawl returns markdown rather than HTML, so no hrefs come back on this
+    // path. Empty rather than absent, so a caller never has to check which read
+    // it got, and stated here rather than discovered later.
+    return { text: deep.text, via: "firecrawl", read: second.reason, blocked: false, credits: 1, firstTry: first.reason, escalated: true, tickets: [] };
   }
   // Paid for and still nothing. Both halves are reported, because "the wall
   // won" and "the scraper is misconfigured" need different actions from a human.

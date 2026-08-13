@@ -1,4 +1,7 @@
 import { MONTHS } from "./factCheckRead";
+// fold, because a Danish ticket button says "Køb billetter" and JavaScript's \b
+// cannot sit beside ø. See ticketLinks.
+import { fold } from "./danishNames";
 
 // ── WAS THAT A PAGE, OR A WALL? ─────────────────────────────────────
 //
@@ -71,6 +74,56 @@ export const TEXT_CAP = 20000;
 
 // Cheap and dependency free. We do not need pretty text, only enough signal for
 // the model to pull names, dates, prices and hours out of.
+// ── AND THE LINKS, WHICH THIS USED TO THROW AWAY ────────────────────
+//
+// Oliver, 13 Aug 2026, reading the sources on his Food Festival Aarhus draft:
+// "while the official page was indeed found. The live ticket agent weren't
+// (madbillet.dk)."
+//
+// He is right and it is the first line of stripToText that does it:
+// `.replace(/<[^>]+>/g, " ")` deletes every tag, and every href with them. The
+// operator's own "Køb billetter" button is destroyed before anything in this
+// pipeline can see where it points.
+//
+// That is the whole gap. A Danish festival does not sell its own tickets, it
+// links to an agent, and WHICH agent is different every time: madbillet,
+// billetto, billetexpressen, safeticket, ticketbutler, place2book, nemtilmeld,
+// or something nobody has heard of. Enumerating them is a losing game and
+// LISTING_DOMAINS trying to is why madbillet.dk reads as a blog. Following the
+// link is not: the operator always says who sells its tickets, in a href, on
+// the page we already fetched and already paid for.
+//
+// What that cost on his run, exactly. The draft said 110, 170 and 130 DKK and
+// the trace reported "NOT FROM THE OFFICIAL SITE", because those figures live
+// on madbillet.dk. They were the REAL presale prices, accused of being invented
+// because the one page that could confirm them was one unfollowed link away.
+//
+// Kept as {href, text} pairs, because the link TEXT is the strongest signal
+// there is: a button saying "Køb billetter" is the operator telling us in its
+// own words. The host is the weaker second opinion, and the path a third.
+const A_TAG = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s">]+))[^>]*>([\s\S]*?)<\/a>/gi;
+
+export const linksIn = (html, baseUrl = "") => {
+  const out = [];
+  const seen = new Set();
+  A_TAG.lastIndex = 0;
+  let m;
+  while ((m = A_TAG.exec(String(html || ""))) !== null) {
+    const raw = (m[1] ?? m[2] ?? m[3] ?? "").trim();
+    if (!raw || /^(?:#|mailto:|tel:|javascript:)/i.test(raw)) continue;
+    let href = raw;
+    if (baseUrl) { try { href = new URL(raw, baseUrl).toString(); } catch { continue; } }
+    if (!/^https?:\/\//i.test(href)) continue;
+    const text = String(m[4] || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+    const key = href.split("#")[0];
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ href: key, text });
+    if (out.length >= 400) break;   // a nav-heavy page is not worth walking twice
+  }
+  return out;
+};
+
 export const stripToText = (html) =>
   String(html || "")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -182,6 +235,12 @@ export const LISTING_DOMAINS = [
   "ticketmaster.dk", "ticketmaster.com",
   "unitedtickets.dk", "eventim.dk", "safeticket.dk", "ticketbutler.io",
   "place2book.com", "nemtilmeld.dk",
+  // madbillet.dk was missing and it is the one Oliver caught, 13 Aug 2026, on
+  // Food Festival Aarhus. Without it, the agent holding the real price table
+  // ranked as a BLOG, below an encyclopedia, on the one question it is the
+  // authority for. The rest are the Danish agents that turned up beside it.
+  "madbillet.dk", "ticketbutler.dk", "billetexpressen.dk", "billethuset.dk",
+  "tikkio.com", "eventbooking.dk",
   "evently.se", "evently.dk", "musikevent.dk", "livejazz.dk",
   "eventbrite.com", "eventbrite.dk", "songkick.com", "bandsintown.com", "ra.co",
 ];
@@ -305,6 +364,55 @@ const hostOf = (url) => {
 const inList = (host, list) => list.some(d => host === d || host.endsWith(`.${d}`));
 
 export const isReferenceHost = (url) => inList(hostOf(url), REFERENCE_DOMAINS);
+
+// ── WHICH LINK IS THE ONE THAT SELLS THE TICKETS ────────────────────
+// Three signals, deliberately in this order of trust:
+//
+//   the link TEXT      the operator saying "Køb billetter" in its own words
+//   the HOST           a ticket agent already known by name
+//   the PATH           /billetter, /tickets, /shop
+//
+// Text first, because it is the only one that cannot go stale. LISTING_DOMAINS
+// will always be missing somebody's agent, which is exactly how madbillet.dk
+// came to read as a blog, and a path is a convention rather than a statement.
+//
+// FOLDED, because a Danish button says "Køb billetter" and JavaScript's \b
+// cannot sit beside ø. That trap has now bitten this codebase four times.
+const TICKET_LINK_TEXT = /\b(?:kob|koeb|bestil|book|buy)\s+(?:din\s+|dine\s+|your\s+)?(?:billet|billetter|ticket|tickets)\b|\bbillet(?:ter|salg|shop)?\b|\btickets?\b|\bentrebillet\b/;
+const TICKET_PATH = /\/(?:billet|billetter|billetsalg|tickets?|ticket-shop|entre|kob-billet)/i;
+// Never followed, however ticket-shaped the text is. A cookie policy mentioning
+// "billetter" is not where a price lives, and following it costs a page read.
+const NEVER_FOLLOW = /\/(?:cookie|privatliv|privacy|persondata|betingelser|terms|handelsbetingelser|kontakt|contact|om-os|about)/i;
+
+// Ranked best first. CAPPED BY THE CALLER rather than here, because how many
+// pages are worth reading is a money question and belongs where the money is.
+// How many of those links are worth a page read. Two: the agent, and the
+// operator's own /billetter page when it links onward rather than pricing
+// anything itself. It is a page read each and it is his money, so the number
+// lives here beside the picker and the caller slices with it, rather than being
+// a bare 2 buried in a loop where nobody can find it to change.
+export const MAX_TICKET_PAGES = 2;
+
+export const ticketLinks = (html, baseUrl = "") => {
+  const scored = [];
+  for (const l of linksIn(html, baseUrl)) {
+    if (NEVER_FOLLOW.test(l.href)) continue;
+    const said = TICKET_LINK_TEXT.test(fold(l.text));
+    const known = isListingHost(l.href);
+    const pathy = TICKET_PATH.test(l.href);
+    if (!said && !known && !pathy) continue;
+    // A link that BOTH says tickets and points at a known agent is the button.
+    // One matching only the path is a maybe.
+    const score = (said ? 4 : 0) + (known ? 2 : 0) + (pathy ? 1 : 0);
+    scored.push({ href: l.href, text: l.text, score, said, known, pathy, offsite: hostOf(l.href) !== hostOf(baseUrl) });
+  }
+  // Off-site wins ties, because the agent is where the live buyable price is
+  // while the operator's own /billetter page often just links onward to it.
+  // That is the exact shape of the Food Festival case: foodfestival.dk carried a
+  // members-only rate, madbillet.dk carried the real table.
+  scored.sort((a, b) => b.score - a.score || (b.offsite ? 1 : 0) - (a.offsite ? 1 : 0));
+  return scored;
+};
 
 // officialHosts is what the pipeline has already decided is the operator's own
 // site, rather than a guess made here. Passing none is fine: nothing is ranked

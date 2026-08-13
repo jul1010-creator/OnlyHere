@@ -43,7 +43,10 @@ export default async function handler(req, res) {
   const r = await readPage(url, { key });
 
   if (!r.blocked) {
-    return res.status(200).json({ text: r.text, via: r.via, read: r.read, credits: r.credits, ...(r.firstTry ? { firstTry: r.firstTry } : {}) });
+    // tickets: the outbound ticket links this page carries, best first. The draft
+    // pipeline follows the top one or two to reach the agent that actually sells
+    // them, which is where the buyable price lives. See ticketLinks in pageScan.
+    return res.status(200).json({ text: r.text, via: r.via, read: r.read, credits: r.credits, tickets: r.tickets || [], ...(r.firstTry ? { firstTry: r.firstTry } : {}) });
   }
 
   // ── NOTHING READABLE ──────────────────────────────────────────────

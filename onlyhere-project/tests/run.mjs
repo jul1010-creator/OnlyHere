@@ -47,7 +47,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
@@ -11077,9 +11077,18 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("nor the booking fee", ticketPriceOn("Pris for billetgebyr 25 kr"), null);
   is("but the ticket in the same sentence still is", ticketPriceOn("Billetter koster 200 kr, camping ekstra")?.lo, 200);
   // THE LOWEST, because what a reader plans around is what it costs to get in.
-  is("a ticket table reports the cheapest way in", ticketPriceOn("Voksne 200 kr. Børn 75 kr. Studerende 120 kr.")?.lo, 75);
-  is("and keeps the whole table for a caller that wants to say 'from'",
-     ticketPriceOn("Voksne 200 kr. Børn 75 kr. Studerende 120 kr.")?.all.length, 3);
+  // ── THE CHEAPEST ANYONE CAN BUY, NOT THE CHEAPEST ON THE PAGE ────
+  // The first version took the lowest figure outright and reported the child
+  // rate. On Oliver's Food Festival run it did worse: foodfestival.dk prices
+  // "Entré for IDA-medlemmer: 100 kr" and the finder called that the price of
+  // getting in, with the operator's own page as provenance.
+  const table = "Voksne 200 kr. Børn 75 kr. Studerende 120 kr. Partout 350 kr.";
+  is("a ticket table reports the cheapest GENERAL admission", ticketPriceOn(table)?.lo, 200);
+  is("not the child rate", ticketPriceOn(table)?.lo !== 75, true);
+  is("nor the student one", ticketPriceOn(table)?.lo !== 120, true);
+  is("and keeps the whole table for a caller that wants to say 'from'", ticketPriceOn(table)?.all.length, 4);
+  is("with each row marked for what it is",
+     ticketPriceOn(table)?.all.filter(p => p.concession).length, 2);
   // FREE IS AN ANSWER. Most of the small Danish events this app writes about
   // are free, and a finder that only reports numbers reports nothing for them,
   // which reads exactly like having failed.
@@ -11164,7 +11173,11 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // exactly the Danish pages it was written for. Same family as the
   // NFD-before-å bug in fold() and the missing boundary in containsName.
   is("entré with the accent is read", ticketPriceOn("Entré 400 kr")?.lo, 400);
-  is("and børn with the ø", ticketPriceOn("Børn 75 kr")?.lo, 75);
+  // børn is a CONCESSION as well as a Danish word, which is the more useful
+  // thing to assert here: it exercises the ø fold AND the rule that a child
+  // rate is not what a ticket costs.
+  is("and børn with the ø is read, and read as a concession", ticketPriceOn("Børn 75 kr")?.kind, "concession-only");
+  is("while køb billet with the ø is an ordinary price", ticketPriceOn("Køb billet 75 kr")?.lo, 75);
   is("and fri entré is still free", ticketPriceOn("Fri entré til alle")?.kind, "free");
 
   // ── AND IT IS THE OPPOSITE QUESTION TO THE ONE tracePrices ASKS ──
@@ -11195,6 +11208,148 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
      /misses\.forEach\(m => noteToFounder\(m\.detail\)\);/.test(appT));
   ok("and never straight into a published field",
      !/t\.ticketInfo = .*findTicketPrice/.test(appT));
+}
+
+// ── FOLLOWING THE OPERATOR TO WHOEVER SELLS ITS TICKETS ────────────
+//
+// Oliver, 13 Aug 2026, going through the sources on his Food Festival Aarhus
+// draft: "while the official page was indeed found. The live ticket agent
+// weren't (madbillet.dk)."
+{
+  const { linksIn, ticketLinks, isListingHost, MAX_TICKET_PAGES,
+          ticketPriceOn, findTicketPrice, priceMisses } = M;
+
+  // ── THE HREF THAT stripToText DELETED ────────────────────────────
+  // `.replace(/<[^>]+>/g, " ")` is the first thing that runs on every page this
+  // app fetches, and it takes every href with it. So the operator's own "Køb
+  // billetter" button has never once been visible to this pipeline.
+  const page = `<html><nav><a href="/om-os">Om os</a><a href="/cookiepolitik">Cookies</a></nav>
+    <a class="btn" href="https://madbillet.dk/event/food-festival-2026">Køb billetter</a>
+    <a href="/billetter">Billetter og priser</a>
+    <a href="https://facebook.com/foodfestival">Følg os</a>
+    <a href="/handelsbetingelser">Køb af billetter</a>
+    <a href="mailto:info@foodfestival.dk">Skriv til os</a></html>`;
+  const base = "https://www.foodfestival.dk/";
+  ok("links survive the read now", linksIn(page, base).length >= 4);
+  is("a mailto is not a page", linksIn(page, base).filter(l => l.href.startsWith("mailto")).length, 0);
+  is("relative hrefs are made absolute against the page they were on",
+     linksIn(page, base).find(l => l.href.endsWith("/billetter"))?.href, "https://www.foodfestival.dk/billetter");
+  is("and the link's own words are kept, because they are the strongest signal",
+     linksIn(page, base).find(l => l.href.includes("madbillet"))?.text, "Køb billetter");
+
+  const links = ticketLinks(page, base);
+  ok("the agent is found at all", links.some(l => l.href.includes("madbillet.dk")));
+  is("and ranked first, because it both says tickets and is a known agent",
+     links[0]?.href, "https://madbillet.dk/event/food-festival-2026");
+  ok("the operator's own ticket page is kept as the second try",
+     links.some(l => l.href === "https://www.foodfestival.dk/billetter"));
+  // Not a guard on NEVER_FOLLOW, and it should not pretend to be: a cookie link
+  // saying "Cookies" carries no ticket signal, so the scoring excludes it either
+  // way. It is here as the ordinary case, and the terms page below is the one
+  // that actually tests the rule.
+  is("an ordinary nav link is not mistaken for a ticket link", links.filter(l => l.href.includes("cookie")).length, 0);
+  // THIS is the one NEVER_FOLLOW exists for, and getting there took two tries.
+  // A link has to actually SCORE before the never-follow rule can be what stops
+  // it: "Billetbetingelser" is one word so \b never fires inside it, and a
+  // cookie link saying "Cookies" carries no ticket signal at all. Both were
+  // excluded by the scoring and proved nothing. "Køb af billetter" pointing at
+  // /handelsbetingelser scores four, and is still not where a price lives.
+  is("and neither is a terms page, however ticket-shaped its words",
+     links.filter(l => l.href.includes("handelsbetingelser")).length, 0);
+  is("nor an about page", links.filter(l => l.href.includes("om-os")).length, 0);
+  is("and a social link is not a ticket link", links.filter(l => l.href.includes("facebook")).length, 0);
+  // ── THE DANISH BUTTON, FOR THE FIFTH TIME THIS WEEK ──────────────
+  // "Køb billetter" carries ø. The link text is folded before matching for the
+  // same reason TICKET_WORD is: \b cannot sit beside a non-ASCII letter.
+  // SHOUTED, and that is the point. "Køb billetter" contains a lowercase
+  // "billetter" that matches whether or not anything is folded, so it proved
+  // nothing. This one needs the fold for BOTH the case and the ø, which is what
+  // a real Danish button on a real festival site looks like.
+  ok("a Danish ticket button is recognised",
+     ticketLinks(`<a href="https://x.dk/e/1">KØB BILLETTER</a>`, "https://y.dk/").length === 1);
+  ok("and an English one", ticketLinks(`<a href="https://x.dk/e/1">Buy tickets</a>`, "https://y.dk/").length === 1);
+  // An unknown agent with a plain link still gets followed, which is the whole
+  // point: enumerating agents is a losing game and following the link is not.
+  ok("an agent nobody has heard of is still followed when the button says so",
+     ticketLinks(`<a href="https://en-helt-ny-billetshop.dk/e/1">Køb billetter</a>`, "https://y.dk/").length === 1);
+  // madbillet.dk was missing from LISTING_DOMAINS, so the page holding the real
+  // price table ranked as a BLOG, below an encyclopedia, on the one question it
+  // is the authority for.
+  ok("madbillet is a known ticket host now", isListingHost("https://madbillet.dk/event/x"));
+  ok("and so are the others found beside it",
+     isListingHost("https://ticketbutler.dk/x") && isListingHost("https://billetexpressen.dk/venue/y"));
+  ok("the number of pages followed is capped and small", MAX_TICKET_PAGES > 0 && MAX_TICKET_PAGES <= 3);
+
+  // ── THE MEMBERS RATE, WHICH I SHIPPED AN HOUR EARLIER ────────────
+  // 22. What the pages say a ticket costs
+  //     got: 100 DKK, from the operator's own page
+  // Gemini, reading the same page: that is the IDA-members rate. The real table
+  // is 110 day and 170 partout in presale, 140 and 205 at the gate.
+  const officialPage = "Entré for IDA-medlemmer: 100 kr. Læs mere om festivalen her.";
+  is("a page pricing only members does not price a ticket",
+     ticketPriceOn(officialPage)?.kind, "concession-only");
+  is("and it does not report a figure at all", ticketPriceOn(officialPage)?.lo, null);
+  const agentPage = "Dagsbillet voksen 110 kr i forsalg. Ved indgangen koster dagsbilletten 140 kr. Partout 170 kr. Studerende 80 kr.";
+  is("the agent's general-admission price is what answers", ticketPriceOn(agentPage)?.lo, 110);
+  is("not the student rate on the same page", ticketPriceOn(agentPage)?.lo !== 80, true);
+  // Presale and gate are both true and only one is what a reader will pay, so
+  // the condition travels with the figure rather than being dropped.
+  is("the presale condition travels with the figure", ticketPriceOn(agentPage)?.when, "in presale");
+  is("and a gate price says so", ticketPriceOn("Ved indgangen koster billetten 140 kr")?.when, "at the gate");
+  // A qualifier belongs to its own sentence. The 80-character window reaches
+  // back past a full stop, and that made "Gratis for børn. Voksne 200 kr." read
+  // as concession-only: a page pricing a real ticket reporting that it prices
+  // none.
+  is("a concession in the PREVIOUS sentence does not disqualify this price",
+     ticketPriceOn("Gratis for børn. Voksne 200 kr.")?.lo, 200);
+  // But a newline is not a sentence break, because a Danish price table is one
+  // row per line and breaking there strips every label off every figure.
+  is("a price table row keeps its own label", ticketPriceOn("Voksne\n200 kr\nBørn\n75 kr")?.lo, 200);
+
+  // ── AND THE TWO PAGES TOGETHER, WHICH IS THE FIX ─────────────────
+  const answer = findTicketPrice({ siteText: officialPage, listingText: agentPage });
+  is("the agent answers when the operator only prices members", answer?.lo, 110);
+  is("and the tier is stated honestly rather than dressed up", answer?.from, "listing");
+  // HIS HIERARCHY IS UNTOUCHED. The operator still wins on any price they BOTH
+  // state; it stops winning on a price it does not state.
+  is("the operator still wins when it prices a real ticket",
+     findTicketPrice({ siteText: "Entré 90 kr", listingText: agentPage })?.lo, 90);
+  is("and that is reported as the official site", findTicketPrice({ siteText: "Entré 90 kr", listingText: agentPage })?.from, "official-site");
+  // With no agent page reached, the honest answer is the GAP, not the 100.
+  const gap = priceMisses("En madfestival i Aarhus.", { siteText: officialPage });
+  is("a members-only page produces a gap finding", gap.length, 1);
+  ok("which refuses the figure in words", !!gap[0]?.detail.includes("Do not use these figures"));
+  ok("and says where the real one will be", !!gap[0]?.detail.includes("ticket agent the operator links to"));
+  ok("and it is not phrased as a price", !gap[0]?.detail.includes("states a ticket price of"));
+
+  // ── THE WIRING ───────────────────────────────────────────────────
+  const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const rp = readFileSync(join(root, "src/utils/readPage.js"), "utf8");
+  const api = readFileSync(join(root, "api/scan-source.js"), "utf8");
+  ok("the links are taken out BEFORE the tags are stripped",
+     /const html = await r\.text\(\);\s*\n\s*return \{ status: r\.status, text: stripToText\(html\), tickets: ticketLinks\(html, url\)/.test(rp));
+  ok("and the endpoint returns them", /tickets: r\.tickets \|\| \[\]/.test(api));
+  // THE GUARD IS PART OF THE ASSERTION. Matching only the push let a mutation
+  // that replaced the condition with `if (false)` stay green: the unreachable
+  // line was still there to match. That is trap two in this file's own notes,
+  // and it is why the whole condition is written out here.
+  ok("the draft collects them as it reads each source",
+     /if \(!ticketPages\.some\(x => x\.href === l\.href\) && !toFetch\.includes\(l\.href\)\) ticketPages\.push\(\{ \.\.\.l, from: url \}\);/.test(appL));
+  ok("and follows them after the loop, not inside it",
+     appL.indexOf("for (const l of ticketPages.slice(0, MAX_TICKET_PAGES))") > appL.indexOf("const ticketPages = [];"));
+  // An agent is a LISTING. It may price and date an event and may never be
+  // called the official site: that is his own order, and the 12 Aug bug where a
+  // volunteer centre reprinting a press release got ranked as the operator is
+  // why the distinction is load-bearing.
+  ok("what the agent says goes into the listing string, not the operator's",
+     /listingSiteText \+= ` \$\{tData\.text\}`;/.test(appL));
+  ok("and the prompt says it is not the official site",
+     /It is NOT the operator and may not be called the official site/.test(appL));
+  ok("the run log names the agent and the link that led there",
+     /note\(`Ticket agent: \$\{domainOf\(l\.href\)\}`, \{/.test(appL));
+  ok("and treats a blocked agent as the page most worth knowing about",
+     /so a failure here is the one page most worth knowing about/.test(appL));
+  ok("an old page's links are not followed", /if \(tier !== "old" && Array\.isArray\(scanData\.tickets\)\)/.test(appL));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

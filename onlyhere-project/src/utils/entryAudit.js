@@ -571,6 +571,76 @@ const BESIDE_THE_TICKET = /\b(?:camping|parkering|parking|shuttle|shuttlebus|nat
 // later is not attributed to it.
 export const TICKET_WINDOW = 80;
 
+// ── A MEMBERS RATE IS NOT THE PRICE ─────────────────────────────────
+//
+// Oliver's Food Festival Aarhus run, 13 Aug 2026, and this one is a fault in
+// code written an hour earlier. The finder reported:
+//
+//   22. What the pages say a ticket costs
+//       got: 100 DKK, from the operator's own page
+//
+// Gemini, reading the same page: "your internal note mentions the operator's
+// site stating 100 DKK — this is actually the special discounted rate for IDA
+// members." The real table is 110 day and 170 partout in presale, 140 and 205
+// at the gate.
+//
+// So "take the lowest" was wrong, and wrong in the dangerous direction: a
+// confident figure with the best possible provenance, off the operator's own
+// page, that almost nobody can actually pay. The reasoning behind lowest was
+// "what it costs to get in at all", and that is right only among prices ANYONE
+// can buy. A rate you have to be a member, a student, a pensioner or a child to
+// use is a different claim.
+//
+// Danish first again, and folded, for the fourth time this week.
+const CONCESSION = /\b(?:medlem(?:mer|skab)?|ida|foreningsmedlem|studerende|student|elev|pensionist|senior|efterloen|born|barn|child|children|ungdom|unge|youth|handicap|ledsager|gruppe|grupper|group|rabat|discount|klub)\b/;
+
+// Not a discount, a CONDITION on the same ticket, and it changes the number a
+// reader should plan around: presale 110 against 140 at the gate. Carried on
+// the answer rather than filtered out, so a finding can say which one it is
+// instead of quoting a bare figure that is true only until a deadline.
+const WHEN_SOLD = [
+  ["in presale", /\b(?:forsalg|foersalg|presale|pre-sale|online|foraf|indtil)\b/],
+  ["at the gate", /\b(?:ved\s+indgangen|i\s+doren|paa\s+dagen|at\s+the\s+(?:gate|door)|on\s+the\s+day|door\s+price)\b/],
+];
+const whenSold = (folded) => (WHEN_SOLD.find(([, re]) => re.test(folded)) || [""])[0];
+
+// ── AND THE CONDITION CAN SIT ON EITHER SIDE ────────────────────────
+// Danish writes it both ways in the same paragraph: "Ved indgangen koster
+// dagsbilletten 140 kr" puts it BEFORE, "110 kr i forsalg" puts it AFTER. A
+// before-only window read the first and missed the second, so the presale
+// figure travelled with no condition attached and would have been quoted flat.
+//
+// The window after is cut at the first full stop or at the NEXT price, whichever
+// comes first, so "110 kr i forsalg. Ved indgangen 140 kr" cannot lend the gate
+// condition to the presale figure. That is the same discipline priceForNoun
+// already uses to stop one noun stealing the next noun's price.
+const AFTER_WINDOW = 40;
+
+// ── AND THE WINDOW BEFORE IS CUT AT THE SENTENCE, TOO ───────────────
+// Caught by a fixture that already existed: "Gratis for børn. Voksne 200 kr."
+// The 80-character window reaches back past the full stop, finds "børn", and
+// marks the ADULT price as a concession, so a page pricing a real ticket
+// reported that it prices only concessions. A qualifier belongs to its own
+// sentence.
+//
+// Newlines are deliberately NOT a boundary. A Danish price table is one row per
+// line, "Voksne\n200 kr", and breaking there would strip every label off every
+// figure, which is the opposite failure and a worse one.
+const sentenceBefore = (t, at) => {
+  const w = t.slice(Math.max(0, at - TICKET_WINDOW), at);
+  const cut = Math.max(w.lastIndexOf("."), w.lastIndexOf(";"), w.lastIndexOf("!"));
+  return fold(cut >= 0 ? w.slice(cut + 1) : w);
+};
+const conditionAround = (t, at, len, nextAt) => {
+  const before = sentenceBefore(t, at);
+  const from = at + len;
+  const stop = Math.min(from + AFTER_WINDOW, nextAt == null ? Infinity : nextAt, t.length);
+  const tail = t.slice(from, stop);
+  const cut = tail.search(/[.;\n]/);
+  const after = fold(cut >= 0 ? tail.slice(0, cut) : tail);
+  return whenSold(before) || whenSold(after);
+};
+
 // FREE IS AN ANSWER, not an absence, and it is the most common answer for the
 // small Danish events this app exists to write about. A finder that can only
 // report a number reports nothing for a free festival, and nothing reads
@@ -586,21 +656,38 @@ export const ticketPriceOn = (text) => {
   const t = String(text || "");
   if (!t.trim()) return null;
   const found = [];
-  for (const p of pricesIn(t)) {
+  const all = pricesIn(t);
+  for (let i = 0; i < all.length; i++) {
+    const p = all[i];
     if (!p.currency) continue;                       // a bare number is not a price
-    const before = fold(t.slice(Math.max(0, p.at - TICKET_WINDOW), p.at));
+    // The ticket word may sit anywhere in the window: "Billetter til festivalen
+    // koster 400 kr" is one sentence with a long lead-in. The CONCESSION and the
+    // condition are bound to the sentence, because they qualify this figure
+    // rather than introducing it.
+    const window = fold(t.slice(Math.max(0, p.at - TICKET_WINDOW), p.at));
+    const sentence = sentenceBefore(t, p.at);
     TICKET_WORD.lastIndex = 0;
-    if (!TICKET_WORD.test(before)) continue;         // nothing here says this is a ticket
-    if (BESIDE_THE_TICKET.test(before)) continue;    // it is the camping, or the booking fee
-    found.push(p);
+    if (!TICKET_WORD.test(window)) continue;         // nothing here says this is a ticket
+    if (BESIDE_THE_TICKET.test(sentence)) continue;  // it is the camping, or the booking fee
+    const width = String(p.hi === p.lo ? p.lo : p.hi).length + 6;
+    found.push({ ...p, concession: CONCESSION.test(sentence), when: conditionAround(t, p.at, width, all[i + 1]?.at) });
   }
   if (found.length) {
-    // THE LOWEST, and it is a choice rather than an obvious default. A ticket
-    // page lists adult, child, student and multi-day, and what a reader plans
-    // around is what it costs to get in at all. The full set travels alongside
-    // so a caller can say "from".
-    const lo = found.reduce((a, b) => (b.lo < a.lo ? b : a));
-    return { kind: "price", lo: lo.lo, hi: lo.hi, currency: lo.currency, all: found, free: false };
+    // THE LOWEST ANYONE CAN BUY. Lowest overall was the first version and it
+    // reported the IDA-members rate off foodfestival.dk as the price of getting
+    // in. Among general-admission figures the lowest is still right: a ticket
+    // page lists day and multi-day and what a reader plans around is the
+    // cheapest way through the gate. The full set travels alongside either way.
+    const open = found.filter(p => !p.concession);
+    if (open.length) {
+      const lo = open.reduce((a, b) => (b.lo < a.lo ? b : a));
+      return { kind: "price", lo: lo.lo, hi: lo.hi, currency: lo.currency, when: lo.when || "", all: found, free: false };
+    }
+    // EVERY price on the page is a concession rate. That is a real state and it
+    // is NOT "the ticket costs 100": it means the page we read prices members
+    // and students and never says what everyone else pays. Reported as its own
+    // kind so a caller can go and look elsewhere rather than publish it.
+    return { kind: "concession-only", lo: null, hi: null, currency: found[0].currency, when: "", all: found, free: false };
   }
   // Only reached when no price was found, so a page saying "free for children,
   // 200 kr for adults" reports the 200 rather than calling the whole thing free.
@@ -621,13 +708,20 @@ export const ticketPriceOn = (text) => {
 // between `traced` and `listed`, reused rather than reinvented.
 export const findTicketPrice = ({ siteText = "", listingText = "" } = {}) => {
   const site = ticketPriceOn(siteText);
-  if (site) return { ...site, from: "official-site", why: "the operator's own page states it" };
+  if (site && site.kind !== "concession-only") return { ...site, from: "official-site", why: "the operator's own page states it" };
   const listing = ticketPriceOn(listingText);
-  if (listing) return { ...listing, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
+  if (listing && listing.kind !== "concession-only") return { ...listing, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
+  // ── AND THIS IS THE ORDER THAT FIXES THE FOOD FESTIVAL CASE ──────
+  // The operator's page carried ONLY the IDA-members rate, so it no longer wins
+  // outright, and the agent's page carries the table anyone can buy from. His
+  // hierarchy is untouched: the operator still outranks the reseller on any
+  // price they BOTH state. It stops outranking it on a price it does not state.
+  const only = site || listing;
+  if (only) return { ...only, from: site ? "official-site" : "listing", why: "the only prices on the page are concession rates" };
   return null;
 };
 
-const moneyText = (p) => `${p.lo}${p.hi !== p.lo ? ` to ${p.hi}` : ""} ${String(p.currency).toUpperCase()}`;
+const moneyText = (p) => `${p.lo}${p.hi !== p.lo ? ` to ${p.hi}` : ""} ${String(p.currency).toUpperCase()}${p.when ? ` ${p.when}` : ""}`;
 const whoSaid = (from) => (from === "official-site" ? "The operator's own page" : "A ticket shop or calendar");
 
 // ── THE FINDING, WHICH IS THE POINT OF ALL OF THIS ──────────────────
@@ -639,6 +733,17 @@ const whoSaid = (from) => (from === "official-site" ? "The operator's own page" 
 export const priceMisses = (draftText, opts) => {
   const found = findTicketPrice(opts);
   if (!found) return [];
+  // A page that only prices members and students has not told us what a ticket
+  // costs, so this reports the GAP rather than the figure. Publishing 100 DKK
+  // off foodfestival.dk because it was the only number there is precisely the
+  // confident-and-wrong answer this whole file exists to avoid.
+  if (found.kind === "concession-only") {
+    const rates = found.all.map(moneyText).join(", ");
+    return [{
+      severity: "medium", field: "ticketInfo",
+      detail: `${whoSaid(found.from)} prices only concessions (${rates}) and never says what general admission costs. Do not use these figures as the ticket price; the ordinary price is on a page nothing has read yet, usually the ticket agent the operator links to.`,
+    }];
+  }
   const stated = pricesIn(String(draftText || "")).filter(p => p.currency);
   const saysFree = saysFreeIn(draftText);
   if (found.free) {
