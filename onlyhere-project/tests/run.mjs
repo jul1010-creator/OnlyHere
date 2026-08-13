@@ -49,12 +49,13 @@ writeFileSync(entry, `
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
+  export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory, hasFinished, externalHref, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -8886,9 +8887,16 @@ rmSync(dir, { recursive: true, force: true });
   const { getEventDate, stayDurationForCategory } = M;
   const BANNED = /[–—−―]/;
 
-  ok("a multi-day event date carries no banned dash", !BANNED.test(getEventDate("2026-06-23", "2026-06-26")));
-  is("and reads as a range in words", getEventDate("2026-06-23", "2026-06-26"), "23 Jun to 26 Jun");
-  ok("a single-day event is unaffected", !BANNED.test(getEventDate("2026-06-23", "")));
+  // A FIXED `today`, added 12 Aug. These three read the clock through
+  // getEventDate's default and would have started failing on 1 Jan 2027, when
+  // 2026 stops being the current year and the year joins the string. A date
+  // test that only passes during one calendar year is a trap for whoever runs
+  // the suite next, and the fix is the same one utils/eventDates.js already
+  // uses everywhere: pass the day in.
+  const IN_2026 = new Date(2026, 7, 12);
+  ok("a multi-day event date carries no banned dash", !BANNED.test(getEventDate("2026-06-23", "2026-06-26", IN_2026)));
+  is("and reads as a range in words", getEventDate("2026-06-23", "2026-06-26", IN_2026), "23 Jun to 26 Jun");
+  ok("a single-day event is unaffected", !BANNED.test(getEventDate("2026-06-23", "", IN_2026)));
 
   // Every branch, because the one that shipped was not the first one.
   const stays = [
@@ -10267,6 +10275,251 @@ rmSync(dir, { recursive: true, force: true });
      (stripNonCode(app).match(/rememberUrlText\(/g) || []).length, 3);
   ok("and no longer splits the raw name itself",
      !/nameWords = name\.toLowerCase\(\)\.replace/.test(stripNonCode(app)));
+}
+
+// ── runOnce: one request per key, across consumers that cannot see each other ──
+// Found 12 Aug 2026 with the network panel open on the live site: /api/weather
+// was called EXACTLY TWICE for each of the four cities on every homepage load.
+// Both consumers guard with `!weather[key] && weatherLoading !== key`, and both
+// effects run in the SAME React commit, so the second one reads the state as it
+// was before the first one called. Two correct-looking guards, eight requests.
+{
+  const { runOnce } = M;
+
+  // The headline case, written as the requirement rather than as the code: the
+  // homepage asks for all four cities TWICE, once per consumer, in one commit.
+  {
+    const WEATHER_CITIES = ["copenhagen", "aarhus", "odense", "aalborg"];
+    const fetched = [];
+    const set = new Set();
+    const fetchCity = (key) => runOnce(set, key, async () => { fetched.push(key); });
+    // WeatherHeaderStrip's effect.
+    WEATHER_CITIES.forEach(k => fetchCity(k));
+    // WeatherStrip's effect, same commit, no state update in between.
+    WEATHER_CITIES.forEach(k => fetchCity(k));
+    is("the homepage's two weather consumers make four requests, not eight", fetched.length, 4);
+    is("and one per city", fetched.slice().sort(), WEATHER_CITIES.slice().sort());
+  }
+
+  // Skipped calls are distinguishable from calls that started, so a caller can
+  // tell the difference if it ever needs to.
+  {
+    const set = new Set();
+    const first = runOnce(set, "k", async () => "value");
+    const second = runOnce(set, "k", async () => "other");
+    ok("the call that started gets a promise", first && typeof first.then === "function");
+    is("the call that was already in flight gets null", second, null);
+    is("and the one that started still resolves to its own value", await first, "value");
+  }
+
+  // The key is RELEASED on settle, or the first load would be the only load.
+  {
+    const set = new Set();
+    let runs = 0;
+    const work = async () => { runs++; };
+    await runOnce(set, "k", work);
+    await runOnce(set, "k", work);
+    is("once a request settles the same key can be asked for again", runs, 2);
+    is("and nothing is left behind in the set", set.size, 0);
+  }
+
+  // A failed request must be retryable. If a network blip left the key stuck,
+  // that city would be dead for the life of the page.
+  {
+    const set = new Set();
+    let runs = 0;
+    const failing = async () => { runs++; throw new Error("network"); };
+    // Wrapped in Promise.resolve deliberately: a broken runOnce returns null
+    // here, and calling .catch on null would CRASH this file rather than fail
+    // it, which would hide the very thing this block exists to detect.
+    await Promise.resolve(runOnce(set, "k", failing)).catch(() => {});
+    is("a rejected request releases its key", set.size, 0);
+    const retry = runOnce(set, "k", failing);
+    ok("so the city can be asked for again", retry !== null);
+    await Promise.resolve(retry).catch(() => {});
+    is("and the retry actually ran", runs, 2);
+  }
+
+  // Same for work that throws before it ever returns a promise.
+  {
+    const set = new Set();
+    let threw = false;
+    try { runOnce(set, "k", () => { throw new Error("sync"); }); } catch { threw = true; }
+    ok("a synchronous throw propagates", threw);
+    is("and does not strand the key", set.size, 0);
+  }
+
+  // Different keys are independent, which is the whole point of keying it.
+  {
+    const set = new Set();
+    const started = [];
+    runOnce(set, "a", async () => { started.push("a"); });
+    runOnce(set, "b", async () => { started.push("b"); });
+    is("two different cities both start", started, ["a", "b"]);
+  }
+
+  // Wired, and wired to a REF. This is the part a comment cannot satisfy: a
+  // useState set would be a fresh Set on every render and would dedupe nothing.
+  {
+    const app = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    ok("the in-flight set is held in a ref, not in state",
+       /const weatherInFlight = useRef\(new Set\(\)\);/.test(app));
+    ok("and checkWeather goes through runOnce",
+       /const checkWeather = \(key, lat, lon\) => runOnce\(weatherInFlight\.current, key,/.test(app));
+    // The old unconditional clear let the FIRST of four concurrent cities blank
+    // the indicator the other three were still using.
+    ok("the loading indicator is only cleared by the request that owns it",
+       /setWeatherLoading\(prev => \(prev === key \? null : prev\)\)/.test(app));
+  }
+}
+
+// ── Walking the live site, 12 Aug 2026 ──────────────────────────────
+// Oliver: "do a full check up on coding. Look through the website
+// 'www.gemlyxtravel.com' and find anything that looks buggy." Everything in
+// this block is something that was live on the site while he slept.
+{
+  const { getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive } = M;
+  const AUG_12 = new Date(2026, 7, 12);
+
+  // ── THE YEAR ──────────────────────────────────────────────────────
+  // The two entries that made this obvious, side by side on the real site:
+  // Skanderborg finished on 9 Aug 2026, Copenhell happens in June 2027, and
+  // both printed a bare day and month that read as "about now".
+  is("a finished edition names its year", getEventDate("2026-08-02", "2026-08-09", new Date(2027, 0, 5)), "2 Aug 2026 to 9 Aug 2026");
+  is("and next year's edition names its year", getEventDate("2027-06-23", "2027-06-26", AUG_12), "23 Jun 2027 to 26 Jun 2027");
+  // Silent inside the current year, which is the whole reason a bare day and
+  // month was chosen: it is only ambiguous when the year is not this one.
+  is("this year's edition still reads short", getEventDate("2026-06-23", "2026-06-26", AUG_12), "23 Jun to 26 Jun");
+  ok("a single day this year keeps its weekday", /^Tue 23 Jun$|^23 Jun/.test(getEventDate("2026-06-23", "", AUG_12)));
+  is("a single day in another year carries the year", getEventDate("2027-06-23", "", AUG_12), "23 Jun 2027");
+
+  // Row 62, TinderBox, exactly as it sits in the database tonight: the start
+  // was bumped to next year's edition and the end was left on this one, so the
+  // range ran backwards and still read like a sentence.
+  is("a range that ends before it starts prints one date, not a backwards range",
+     getEventDate("2027-06-24", "2026-06-26", AUG_12), "24 Jun 2027");
+  is("an unreadable date says so rather than printing Invalid Date",
+     getEventDate("not a date", "", AUG_12), "Dates not confirmed");
+  is("and an unreadable END falls back to the start alone",
+     getEventDate("2026-06-23", "banana", AUG_12), "Tue 23 Jun");
+
+  // ── FINISHED, WHICH IS NOT THE OPPOSITE OF UPCOMING ───────────────
+  // The distinction the whole block turns on: a festival that opened yesterday
+  // and runs all week is NOT upcoming and has NOT finished, both at once.
+  const running = { date: "2026-08-10", dateEnd: "2026-08-16" };
+  ok("a festival running right now has not finished", !hasFinished(running, AUG_12));
+  ok("and isUpcoming, which only reads the start, says it is not upcoming", !isUpcoming(running.date));
+  ok("so the grid has to ask isCurrentlyLive as well", isCurrentlyLive(running.date, running.dateEnd));
+  ok("a festival that ended three days ago has finished", hasFinished({ date: "2026-08-02", dateEnd: "2026-08-09" }, AUG_12));
+  ok("the LAST day decides, not the first", !hasFinished({ date: "2026-08-02", dateEnd: "2026-08-13" }, AUG_12));
+  ok("an event ending today has not finished", !hasFinished({ date: "2026-08-12", dateEnd: "2026-08-12" }, AUG_12));
+  ok("unannounced dates are not a finished event", !hasFinished({ date: "", dateEnd: "" }, AUG_12));
+  ok("nor is an unreadable one", !hasFinished({ date: "sometime in June" }, AUG_12));
+
+  // ── A BARE DOMAIN IS NOT A LINK ───────────────────────────────────
+  // Seven live festivals. Verified in his browser: the Copenhell button's href
+  // resolved to https://www.gemlyxtravel.com/copenhell.dk.
+  is("a bare domain becomes a real external link", externalHref("copenhell.dk"), "https://copenhell.dk");
+  is("including one written with www", externalHref("www.jellingmusikfestival.dk"), "https://www.jellingmusikfestival.dk");
+  is("and one carrying a path", externalHref("borkvikingehavn.dk/program"), "https://borkvikingehavn.dk/program");
+  is("a proper URL is left exactly alone", externalHref("https://www.smukfest.dk"), "https://www.smukfest.dk");
+  is("http is a scheme too", externalHref("http://example.dk"), "http://example.dk");
+  is("empty gives nothing to render", externalHref(""), null);
+  is("and so does a value that is not a link at all", externalHref("see their Facebook page"), null);
+  is("a scheme we do not recognise is refused rather than prefixed", externalHref("javascript:alert(1)"), null);
+  is("including mailto", externalHref("mailto:hello@gemlyx.com"), null);
+  // AND A WEAKER ASSERTION, LABELLED AS ONE. The two lines above pass with the
+  // scheme guard deleted, because the host test rejects a colon anyway. I
+  // could not mutation-kill that guard and did not invent an input to make it
+  // look killed. It is kept as defence in depth against a later widening of
+  // the host test, so what the suite can honestly check is that it is present.
+  ok("and the scheme guard is still there, ahead of the host test",
+     /if \(\/\^\[a-z\]\[a-z0-9\+\.-\]\*:\/i\.test\(s\)\) return null;/
+       .test(readFileSync(join(root, "src/utils/helpers.js"), "utf8")));
+  is("a hostname with no dot is not a domain", externalHref("copenhell"), null);
+  is("nor is a trailing dot with no TLD", externalHref("copenhell."), null);
+
+  // ── WIRED, at every site that was actually wrong ──────────────────
+  const app = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  const detail = stripNonCode(readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8"));
+  const live = stripNonCode(readFileSync(join(root, "src/utils/liveContent.js"), "utf8"));
+  const mw = stripNonCode(readFileSync(join(root, "middleware.js"), "utf8"));
+
+  ok("the detail page's website button goes through externalHref",
+     /externalHref\(item\.website\) && \(/.test(detail) && /href=\{externalHref\(item\.website\)\}/.test(detail));
+  ok("and it no longer renders item.website straight into href",
+     !/href=\{item\.website\}/.test(detail));
+  ok("the detail page marks a finished edition", /hasFinished\(item\)/.test(detail));
+
+  // The grid a reader browses, which dropped a festival on its opening day.
+  ok("the events grid asks both questions",
+     /const upcomingInTab = eventTabSource\.filter\(e => isCurrentlyLive\(e\.date, e\.dateEnd\) \|\| isUpcoming\(e\.date\)\);/.test(app));
+  // Two call sites had the same one-sided filter. Counting them is what stops
+  // the second being fixed and the first quietly staying broken.
+  is("and no filter anywhere still tests isUpcoming on its own",
+     (app.match(/filter\(e => isUpcoming\(e\.date\)\)/g) || []).length, 0);
+  // RAW source for this one and the four below, not stripNonCode: the thing
+  // being asserted lives INSIDE a string or a template literal, and
+  // stripNonCode blanks string contents by design. The patterns are written
+  // long enough that no comment would satisfy them by accident, which is the
+  // protection stripNonCode would otherwise have given.
+  const appRaw = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("search marks a finished event instead of dressing it as a current one",
+     /_src === "event" && hasFinished\(p\) \? \{ \.\.\.p, _finished: true \}/.test(appRaw));
+  ok("and sorts finished results below live ones", /a\._finished \? 1 : 0\) - \(b\._finished \? 1 : 0\)/.test(app));
+
+  // ── stripDashes, BEFORE it is pointed at published content ────────
+  // Every string below is a real value from a live row tonight. The comma rule
+  // was wrong on all of them, and the price one is why this could not ship as
+  // it was: "495 DKK, 595 DKK" reads as two prices, which is a worse error
+  // than the dash it replaced.
+  const { stripDashes } = M;
+  is("a price range keeps being a range", stripDashes("495 DKK – 595 DKK (Vinyl Room upgrade available)"), "495 DKK to 595 DKK (Vinyl Room upgrade available)");
+  is("a date range too", stripDashes("open the summer season (May 1 – August 31)"), "open the summer season (May 1 to August 31)");
+  is("a month range", stripDashes("Mid-June–Sept"), "Mid-June to Sept");
+  is("a rating range", stripDashes("Moderate–High"), "Moderate to High");
+  is("a route between two towns", stripDashes("the signed Rødekro–Kliplev stage"), "the signed Rødekro to Kliplev stage");
+  is("including one starting with a Danish letter", stripDashes("Ærø–Fyn ferry"), "Ærø to Fyn ferry");
+  is("and one inside a sentence", stripDashes("a Odense–Copenhagen ticket"), "a Odense to Copenhagen ticket");
+  is("45 mins with a unit on one side only", stripDashes("45 mins – 1 hour"), "45 mins to 1 hour");
+  // AND THE OTHER DIRECTION, which is what keeps the rules above honest: an em
+  // dash is punctuation whatever sits either side of it, including numbers.
+  is("an em dash between words is still a comma", stripDashes("a new addition—dedicated to electronic music lovers"), "a new addition, dedicated to electronic music lovers");
+  is("an em dash with numbers on both sides is still a comma", stripDashes("It costs 200 DKK — about 25 euros."), "It costs 200 DKK, about 25 euros.");
+  is("and a SPACED en dash is British punctuation, not a range", stripDashes("serene beaches – a true escape"), "serene beaches, a true escape");
+  // The originals still hold.
+  is("a plain numeric range is untouched by any of this", stripDashes("Open 09:00–17:00"), "Open 09:00 to 17:00");
+  is("and prose with no dash at all comes back identical", stripDashes("nothing to do here"), "nothing to do here");
+
+  // ── robots.txt ────────────────────────────────────────────────────
+  // /robots.txt returned the app's HTML shell with a 200, because the file did
+  // not exist and vercel.json rewrites everything to /. middleware.js has been
+  // serving a real sitemap all along with nothing pointing a crawler at it.
+  {
+    const robotsPath = join(root, "public/robots.txt");
+    ok("robots.txt exists at all", existsSync(robotsPath));
+    const robots = existsSync(robotsPath) ? readFileSync(robotsPath, "utf8") : "";
+    ok("and names the sitemap the middleware serves",
+       /^Sitemap: https:\/\/www\.gemlyxtravel\.com\/sitemap\.xml$/m.test(robots));
+    // The origin is written down once, in src/config.js, precisely so a domain
+    // change cannot leave a stale copy behind. This is a second copy, because
+    // robots.txt is a plain text file that cannot import anything, so the
+    // suite is what keeps the two in step.
+    ok("and that origin is the one config.js calls the site",
+       robots.includes(readFileSync(join(root, "src/config.js"), "utf8").match(/SITE_ORIGIN = "([^"]+)"/)[1]));
+  }
+
+  // Which duplicate row a reader gets could change between two loads.
+  const liveRaw = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  const mwRaw = readFileSync(join(root, "middleware.js"), "utf8");
+  ok("the content loader orders its fetch",
+     /gemlyx_content\?select=\*&published=eq\.true&order=id\.desc/.test(liveRaw));
+  is("and the middleware orders BOTH of its town lookups the same way",
+     (mwRaw.match(/gemlyx_content\?select=payload&type=eq\.town&published=eq\.true&order=id\.desc/g) || []).length, 2);
+  // Every published row is cleaned on the way in, which is what reaches the 55
+  // dashes already live without a redraft.
+  ok("published payloads are cleaned of dashes as they load",
+     /const item = stripDashesDeep\(row\.payload\);/.test(live));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

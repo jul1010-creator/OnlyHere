@@ -50,6 +50,7 @@ import { nightlifeTowns } from "../data/nightlifeTowns";
 import { foodSpots } from "../data/food";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { essentials } from "../data/essentials";
+import { stripDashesDeep } from "./helpers";
 
 const mergedIds = new Set();      // Supabase row ids already folded in
 const mergedKeys = new Set();     // type + normalised name, second net (see below)
@@ -60,7 +61,19 @@ const keyOf = (type, name) => `${type}::${String(name || "").trim().toLowerCase(
 
 const doLoad = async () => {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true`, {
+    // ── order=id.desc IS LOAD-BEARING, NOT TIDINESS ─────────────────
+    // The dedupe below keeps the FIRST row it meets for a given type + name.
+    // Without an explicit order, PostgREST makes no promise about which row
+    // that is, so on the five towns that genuinely have duplicates today
+    // (Ribe, Samsø, Ringkøbing, Dragør, Møgeltønder) WHICH VERSION A READER
+    // SEES COULD CHANGE BETWEEN TWO LOADS OF THE SAME PAGE. Found 12 Aug 2026;
+    // the console has been naming those duplicates for a week and the
+    // nondeterminism underneath them was the part nobody had looked at.
+    //
+    // Newest id wins, because a duplicate is a redraft: the higher row is the
+    // one that was written second. middleware.js orders its own two lookups
+    // the same way, so the share card describes the row the page renders.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?select=*&published=eq.true&order=id.desc`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     });
     const rows = await res.json();
@@ -69,7 +82,19 @@ const doLoad = async () => {
     const dupeNames = [];
     rows.forEach(row => {
       if (mergedIds.has(row.id)) return; // already merged this exact row
-      const item = row.payload;
+      // ── THE DASH BAN FINALLY REACHES PUBLISHED CONTENT ────────────
+      // 55 en and em dashes were live on 12 Aug, in gemlyxFind, ticketInfo,
+      // budgetLevel and prose, on entries drafted before stripDashes existed:
+      // "The EKKO Stage is a new addition—dedicated to electronic music
+      // lovers" was on the Skanderborg page. stripDashesDeep was written for
+      // GUIDES and never ran over content rows, so every one of those entries
+      // would have needed a redraft to clean a character.
+      //
+      // Cleaning on the way IN fixes all 55 without touching the database and
+      // holds for anything published later, including anything published by a
+      // path that forgets. It skips keys beginning with _ by design, so
+      // __lat/__lon and the cached durations arrive untouched.
+      const item = stripDashesDeep(row.payload);
       if (!item || !item.name) return;
       // Second net, deliberately separate from the id guard above: two
       // DIFFERENT rows carrying the same type + name are a genuine duplicate

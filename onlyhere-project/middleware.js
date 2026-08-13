@@ -77,7 +77,7 @@ const townNames = async () => {
   const names = hardcodedTowns.map(t => t?.name).filter(Boolean);
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&type=eq.town&published=eq.true`,
+      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&type=eq.town&published=eq.true&order=id.desc`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) },
     );
     if (res.ok) {
@@ -113,12 +113,18 @@ const cardResponse = (html) => new Response(html, {
   },
 });
 
+// order=id.desc ON BOTH FETCHES IN THIS FILE, AND IT MATTERS HERE MOST.
+// findBySlug returns the FIRST match, and five towns have duplicate published
+// rows today (Ribe, Samsø, Ringkøbing, Dragør, Møgeltønder). Unordered, this
+// lookup and the app's own loader could each land on a different row for the
+// same slug, so the WhatsApp card would describe one version of Ribe and the
+// page it opened would render the other. Both now take the newest id.
 const findTown = async (slug) => {
   const local = findBySlug(hardcodedTowns, slug);
   if (local) return local;
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&type=eq.town&published=eq.true`,
+      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&type=eq.town&published=eq.true&order=id.desc`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) },
     );
     if (!res.ok) return null;

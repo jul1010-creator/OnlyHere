@@ -55,7 +55,23 @@ export const getSeason = () => {
   return "autumn";
 };
 
-export const getEventDate = (dateStr, dateEnd) => {
+// ── THE YEAR IS THE PART THE READER NEEDED ──────────────────────────
+// Found 12 Aug 2026 walking the live site. Two entries, side by side:
+//
+//     Skanderborg Festival    "2 Aug to 9 Aug"     finished three days ago
+//     Copenhell               "23 Jun to 26 Jun"   happens in JUNE 2027
+//
+// Neither string contains a year, so both read to somebody planning a trip
+// today as "this summer, roughly now". One is over and one is eleven months
+// out, and the page gave a reader no way to tell either of those things, or to
+// tell them apart. Skanderborg was even wearing a "Can't Miss Out" badge.
+//
+// A day and a month are enough ONLY while the year is the current one. Any
+// other year has to say so, so the year is printed whenever it is not this
+// one. `today` is a parameter rather than a call to the clock so this can be
+// tested against a fixed calendar, which is the same rule utils/eventDates.js
+// already lives by.
+export const getEventDate = (dateStr, dateEnd, today = new Date()) => {
   // "Dates TBA" read like an abbreviation nobody had explained. It means the
   // entry has no confirmed date: either the organiser has not announced one, or
   // the drafting pipeline stripped a date it could not stand up (a festival date
@@ -63,15 +79,80 @@ export const getEventDate = (dateStr, dateEnd) => {
   // Saying that plainly is also more honest than a three letter acronym.
   if (!dateStr) return "Dates not confirmed";
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "Dates not confirmed";
+  const thisYear = today.getFullYear();
   const opts = { day: "numeric", month: "short" };
+  const show = (date) => date.toLocaleDateString("en-GB",
+    date.getFullYear() === thisYear ? opts : { ...opts, year: "numeric" });
   // THE DASH BAN NEVER SAW THIS ONE (12 Aug, Oliver's Copenhell screenshot,
   // reading "23 Jun – 26 Jun" on the live site). stripDashes exists to clean
   // what a MODEL wrote, and this string is assembled by us, after any cleaning
   // would have run, so it reached the page untouched every time a festival ran
   // for more than one day. Its own rule for a range is the word "to", which is
   // what this now says.
-  if (dateEnd) return d.toLocaleDateString("en-GB", opts) + " to " + new Date(dateEnd).toLocaleDateString("en-GB", opts);
-  return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
+  const end = dateEnd ? new Date(dateEnd) : null;
+  // A RANGE THAT RUNS BACKWARDS IS NOT A RANGE. Row 62, TinderBox, is stored
+  // with date 2027-06-24 and dateEnd 2026-06-26: somebody bumped the start to
+  // next year's edition and left the end on last year's. Printed as a range
+  // that read "24 Jun to 26 Jun", which is a coherent looking sentence about a
+  // festival that ends before it begins. One date is better than a confident
+  // wrong two, so the end is dropped and the start speaks for itself.
+  if (end && !isNaN(end.getTime()) && end.getTime() >= d.getTime()) return show(d) + " to " + show(end);
+  if (d.getFullYear() === thisYear) return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
+  return show(d);
+};
+
+// Finished means the LAST day is behind us, not the first. A festival that
+// opened yesterday and runs all week has not finished, and isUpcoming, which
+// only ever looks at the start, says it is not upcoming either. Both of those
+// can be true at once, which is exactly why this is its own question.
+export const hasFinished = (e, today = new Date()) => {
+  const last = e?.dateEnd || e?.date || e;
+  if (!last) return false;
+  const d = new Date(last);
+  if (isNaN(d.getTime())) return false;
+  return d.getTime() < new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+};
+
+// ── A BARE DOMAIN IS NOT A LINK ─────────────────────────────────────
+// Seven live festivals store `website` with no scheme: "copenhell.dk",
+// "groenkoncert.dk", "randersfestuge.dk" and four more. Rendered straight into
+// href, the browser reads that as a RELATIVE path, so the "Visit website"
+// button on Copenhell resolved to
+//
+//     https://www.gemlyxtravel.com/copenhell.dk
+//
+// which the Vercel rewrite serves as the app shell. The reader pressed the one
+// button on the page that promised to take them to the festival and landed
+// back on the Gemlyx landing screen, with nothing to tell them anything had
+// gone wrong. Verified in his browser on the live site.
+//
+// The scheme is added here, at render, rather than fixed in the rows: it
+// repairs all seven immediately and it holds for the eighth.
+export const externalHref = (value) => {
+  const s = String(value || "").trim();
+  if (!s) return null;
+  // Only ever http(s). javascript:, data: and mailto: have no business in a
+  // field a draft filled in, and a scheme we do not recognise is not something
+  // to guess a prefix onto.
+  if (/^https?:\/\//i.test(s)) return s;
+  // THIS LINE IS DELIBERATELY REDUNDANT AND I AM SAYING SO RATHER THAN
+  // PRETENDING OTHERWISE. Nothing carrying a scheme can survive the host test
+  // below either: a colon cannot appear in `[\w-]+(\.[\w-]+)+` at all. I tried
+  // to mutation-kill this line and could not, because there is no input it
+  // rejects that the host test would accept.
+  //
+  // It stays because the two guards fail in opposite directions. The host test
+  // exists to recognise a domain, and the day somebody widens it to allow a
+  // port, or a colon in a path, is the day "javascript:alert(1)" becomes a
+  // link on a page if this line is gone. A redundant guard against script
+  // injection is worth keeping; the honest thing is to label it as one, so the
+  // next person does not go looking for the test that proves it.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return null;
+  // A host, optionally with a path: at least one dot, a real TLD, no spaces.
+  if (!/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s)) return null;
+  if (!/\.[a-z]{2,}(\/|$)/i.test(s)) return null;
+  return "https://" + s;
 };
 
 // NOTE THE `!d`: an entry with NO date counts as upcoming here, deliberately,
@@ -774,6 +855,30 @@ export const stripDashes = (text) => {
   return text
     // 12–15, 2024–2026, 09:00–17:00: a range, and the word is "to".
     .replace(new RegExp(`(\\d)\\s*[${EN}${EM}${MINUS}${HORIZ}]\\s*(\\d)`, "g"), "$1 to $2")
+    // ── THE TWO RULES BELOW WERE ADDED 12 AUG, FROM THE LIVE ROWS ───
+    // Before wiring stripDashes to published content I ran it over all 72
+    // dashes that were actually live, and the comma rule further down was
+    // wrong on eleven of them. It is right for an em dash and wrong for an en
+    // dash, because those are two different marks doing two different jobs:
+    //
+    //     "495 DKK – 595 DKK"    →  "495 DKK, 595 DKK"      TWO PRICES
+    //     "May 1 – August 31"    →  "May 1, August 31"      two dates
+    //     "Moderate–High"        →  "Moderate, High"        two ratings
+    //     "Mid-June–Sept"        →  "Mid-June, Sept"        two months
+    //     "Rødekro–Kliplev"      →  "Rødekro, Kliplev"      two towns
+    //
+    // Every one is a range or a route, and the price one is the reason this
+    // could not ship as it was: a reader shown "495 DKK, 595 DKK" reads two
+    // prices, which is a worse error than the dash it replaced.
+    //
+    // A range whose ends carry a unit or a month name. EN DASH ONLY, because
+    // with an em dash "200 DKK — about 25 euros" is punctuation and this rule
+    // would turn it into a range.
+    .replace(new RegExp(`(\\d\\s*[A-Za-zÆØÅæøå.%]{0,6})\\s*[${EN}${MINUS}${HORIZ}]\\s*([A-Za-zÆØÅæøå.]{0,9}\\s*\\d)`, "g"), "$1 to $2")
+    // And an UNSPACED en dash between two words, which is a range or a route.
+    // Unspaced only: a SPACED en dash is British punctuation and the comma is
+    // right for it ("serene beaches – a true escape" is on the site too).
+    .replace(new RegExp(`([\\wÆØÅæøåéèü])[${EN}${MINUS}${HORIZ}]([\\wÆØÅæøåéèü])`, "g"), "$1 to $2")
     // Spaced, or hugging a word on both sides: punctuation. A comma carries it.
     .replace(new RegExp(`\\s*[${EN}${EM}${MINUS}${HORIZ}]\\s*`, "g"), ", ")
     // Two clauses now separated by ", ," or a comma landing before another one.

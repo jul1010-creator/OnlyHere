@@ -37,13 +37,14 @@ import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import {
-  getSeason, getEventDate, isUpcoming, isCurrentlyLive, weatherIcon,
+  getSeason, getEventDate, isUpcoming, isCurrentlyLive, hasFinished, externalHref, weatherIcon,
   isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
   getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
   hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep} from "./utils/helpers";
 import { checkNightTransport, geocodePlace, findRealNearestStation } from "./utils/geo";
+import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
 
 import { DetailPage } from "./components/DetailPage";
@@ -668,7 +669,15 @@ function GemlyxApp() {
 
   const [weather, setWeather] = useState({});
   const [weatherLoading, setWeatherLoading] = useState(null);
-  const checkWeather = async (key, lat, lon) => {
+  // The homepage mounts TWO weather consumers at once, the Explore header strip
+  // and the Essentials list, and each one asks for all four cities in its own
+  // effect. Both effects run in the same commit, so neither can see the other's
+  // call in state, and every city was fetched exactly twice on every load. See
+  // src/utils/inFlight.js. The guard belongs here rather than in the callers:
+  // this is the one function all of them go through, so a third consumer added
+  // later cannot reintroduce it.
+  const weatherInFlight = useRef(new Set());
+  const checkWeather = (key, lat, lon) => runOnce(weatherInFlight.current, key, async () => {
     setWeatherLoading(key);
     try {
       const res = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
@@ -677,8 +686,11 @@ function GemlyxApp() {
     } catch {
       setWeather(prev => ({ ...prev, [key]: { error: true } }));
     }
-    setWeatherLoading(null);
-  };
+    // Four of these run at once, so the last one to START owns the indicator.
+    // Clearing unconditionally let the FIRST city to finish blank a label that
+    // three still-loading cities were relying on.
+    setWeatherLoading(prev => (prev === key ? null : prev));
+  });
   const [craftDetail, setCraftDetail] = useState(null);
   const [eventDetail, setEventDetail] = useState(null);
   const [townDetail, setTownDetail] = useState(null);
@@ -5262,7 +5274,10 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     if (updateEventsLoading) return;
     setUpdateEventsLoading(true); setUpdateEventsError(null); setUpdateEventsResults(null); setUpdateEventsProgress(null);
     try {
-      const allUpcoming = [...events, ...majorEvents, ...vikingEvents].filter(e => isUpcoming(e.date));
+      // Same pair as the reader-facing grid: an event that is running RIGHT NOW
+      // is the one whose ticket status and hours are most worth refreshing, and
+      // isUpcoming alone excluded exactly those.
+      const allUpcoming = [...events, ...majorEvents, ...vikingEvents].filter(e => isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date));
       const batch = allUpcoming.slice(0, UPDATE_EVENTS_BATCH_CAP);
       const skipped = allUpcoming.length - batch.length;
       const changed = [];
@@ -8153,6 +8168,18 @@ If the conversation only covers a single day or a few stops with no explicit day
       ...craftItems.map(p => ({ ...p, _src: "craft", _kindLabel: "Workshop", _where: p.location })),
     ];
     const hit = (p) => [p.name, p._where, p.tag, p.type, p.region].some(f => String(f || "").toLowerCase().includes(q));
+    // ── A FINISHED FESTIVAL IS STILL A SEARCH RESULT, AND IT SAYS SO ──
+    // Found 12 Aug 2026: typing "Skanderborg" returned Skanderborg Festival,
+    // which had ended on 9 Aug, presented exactly like a live one. Every
+    // events GRID filters on isUpcoming, and utils/eventDates.js says in its
+    // own comment that a finished entry is therefore "correct and INVISIBLE".
+    // This pool never filtered anything, so that was not true: search was the
+    // one door left open, and it dressed a finished edition as a current one.
+    //
+    // Marked rather than removed. The entry is about a real festival that runs
+    // again, so hiding it strands somebody who searched for it by name, while
+    // a plain word costs nothing and answers the only question they have.
+    const mark = (p) => p._src === "event" && hasFinished(p) ? { ...p, _finished: true } : p;
     // A name match beats a match on the town it happens to sit in: someone typing
     // "Ribe" wants Ribe itself first, not the six entries that mention it.
     const nameFirst = (a, b) => {
@@ -8160,7 +8187,10 @@ If the conversation only covers a single day or a few stops with no explicit day
       const bn = String(b.name || "").toLowerCase().startsWith(q) ? 0 : String(b.name || "").toLowerCase().includes(q) ? 1 : 2;
       return an - bn || byName(a, b);
     };
-    return pools.filter(hit).sort(nameFirst).slice(0, 12);
+    // Finished editions sort below everything still to come, whatever the name
+    // match: somebody typing "Ribe" wants the Ribe they can still go to.
+    const liveFirst = (a, b) => (a._finished ? 1 : 0) - (b._finished ? 1 : 0) || nameFirst(a, b);
+    return pools.filter(hit).map(mark).sort(liveFirst).slice(0, 12);
   })();
 
 
@@ -8633,7 +8663,12 @@ ${profileForPrompt(userProfile)}`;
   // could put on the page and the source list that reached no search. Viking is
   // a kind of event, so it is a type, and the type row already exists.
   const eventTabSource = eventTab === "local" ? events : majorEvents;
-  const upcomingInTab = eventTabSource.filter(e => isUpcoming(e.date));
+  // isCurrentlyLive OR isUpcoming, not isUpcoming alone. isUpcoming only ever
+  // reads the START, so a festival that opened yesterday and runs all week
+  // vanished from this grid on the morning it opened, which is the single day
+  // it is most worth showing. DetailPage.jsx:141 was given this pair on 7 Aug
+  // and this grid, the one a reader actually browses, never got it.
+  const upcomingInTab = eventTabSource.filter(e => isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date));
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const eventMonthOptions = MONTHS.filter(m => upcomingInTab.some(e => new Date(e.date).toLocaleString("en", { month: "short" }) === m));
   // ── SIX PILLS FOR FOUR IDEAS, TWO STARTING WITH "MUSIC" ──────
@@ -12943,7 +12978,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <span style={{ fontSize: 18 }}>{p.emoji || "📍"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: C.muted }}>{p._kindLabel}{p._where ? ` · ${p._where}` : ""}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>
+                    {p._kindLabel}{p._where ? ` · ${p._where}` : ""}
+                    {/* The row still opens, it just stops pretending. */}
+                    {p._finished ? " · this edition has finished" : ""}
+                  </div>
                 </div>
               </div>
             ))}

@@ -1,0 +1,17 @@
+# Gemlyx. Added 12 Aug 2026.
+#
+# There was no robots.txt at all, so /robots.txt fell through vercel.json's
+# catch-all rewrite and every crawler asking for it got the app's HTML shell
+# back with a 200. A crawler reading that finds no rules and no sitemap line,
+# which is the one place a sitemap gets discovered without being submitted by
+# hand. middleware.js has been serving a real /sitemap.xml this whole time and
+# nothing on the site pointed at it.
+
+User-agent: *
+Allow: /
+
+# Studio is the founder's admin surface. It is a hash route on the same page,
+# so it cannot be blocked by path, but the guide builder's scratch URL can be.
+Disallow: /guide/new
+
+Sitemap: https://www.gemlyxtravel.com/sitemap.xml

@@ -1,5 +1,5 @@
 import { C } from "../utils/theme";
-import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow } from "../utils/helpers";
+import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished } from "../utils/helpers";
 import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
 import { ticketBadge } from "../utils/tickets";
 import { AtAGlanceCard } from "./AtAGlanceCard";
@@ -276,7 +276,17 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         {kind === "event" && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>{getEventDate(item.date, item.dateEnd)}</span>
+              {/* A finished edition still has a real page, because the link
+                  can be shared or bookmarked and the entry is genuinely about
+                  a real festival. What it must not do is wear the same live
+                  gold as one happening next week. Skanderborg Festival ended
+                  on 9 Aug and this line was gold on 12 Aug. */}
+              <span style={{ fontSize: 13, color: hasFinished(item) ? C.muted : C.gold, fontWeight: 700 }}>{getEventDate(item.date, item.dateEnd)}</span>
+              {hasFinished(item) && (
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: C.muted, border: `1px solid ${C.border}`, borderRadius: 100, padding: "3px 9px" }}>
+                  This edition has finished
+                </span>
+              )}
               {/* GUARDED, like the other two rating sites (App.jsx 7026 and
                   9561). shapeForLive's festival branch has no `rating` field,
                   and it is the only insert path into gemlyx_content, so
@@ -647,8 +657,13 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           </div>
         )}
 
-        {(kind === "free" || kind === "event") && item.website && (
-          <a href={item.website} target="_blank" rel="noreferrer"
+        {/* externalHref, not item.website: seven live festivals store a bare
+            domain, which a browser resolves against THIS page and turns into a
+            link back to Gemlyx. It returns null for anything that is not a
+            plausible http(s) target, so a junk value now renders no button at
+            all rather than a button that goes nowhere. */}
+        {(kind === "free" || kind === "event") && externalHref(item.website) && (
+          <a href={externalHref(item.website)} target="_blank" rel="noreferrer"
             style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
             🌐 Visit website
           </a>
