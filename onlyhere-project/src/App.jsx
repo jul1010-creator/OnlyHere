@@ -83,6 +83,7 @@ import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
+import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates } from "./utils/eventDates";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
@@ -886,6 +887,77 @@ function GemlyxApp() {
   const [placeDraft, setPlaceDraft] = useState({ placeKind: "", partOf: "", dayTripFrom: "" });
   const [placeSaving, setPlaceSaving] = useState(false);
   const [placeError, setPlaceError] = useState(null);
+
+  // ── EDITING THE BLOG ITSELF ───────────────────────────────────────
+  // Oliver, 13 Aug 2026: "Can you make the studio able to go into the blog
+  // itself and edit? ... that would make it easier for anyone helping me."
+  //
+  // Prose blocks only, and warn rather than block, both his call. See
+  // utils/bodyEdit.js for why the guarantee that structure cannot change is
+  // structural rather than a UI convention.
+  const [bodyEditId, setBodyEditId] = useState(null);
+  const [bodyDraft, setBodyDraft] = useState({});          // block index -> text
+  const [bodyOpenedWith, setBodyOpenedWith] = useState(null); // the body as it was when opened
+  const [bodySaving, setBodySaving] = useState(false);
+  const [bodyError, setBodyError] = useState(null);
+  const [bodyWarnings, setBodyWarnings] = useState([]);
+
+  const openBodyEdit = (row) => {
+    const pl = row.payload || {};
+    if (bodyEditId === row.id) { setBodyEditId(null); return; }
+    setBodyEditId(row.id);
+    setBodyDraft(Object.fromEntries(editableBlocks(pl.blogBody).filter(b => b.editable).map(b => [b.i, b.text])));
+    // Kept so the save can tell "nobody touched this" from "somebody else did".
+    setBodyOpenedWith(pl.blogBody || []);
+    setBodyWarnings([]); setBodyError(null);
+  };
+
+  const saveBodyEdit = async (row) => {
+    const pl = row.payload || {};
+    const next = applyBodyEdits(pl.blogBody, bodyDraft);
+    if (!bodyChanged(pl.blogBody, next)) { setBodyEditId(null); return; }
+    setBodySaving(true); setBodyError(null);
+    try {
+      // ── RE-READ BEFORE WRITING, WHICH savePlaceEdit ONLY WARNS ABOUT ──
+      // Its comment says sending the whole payload back overwrites anything
+      // written between load and save, and that panel is open for seconds. This
+      // one is open for minutes, and the reason it exists is that more than one
+      // person will be using it. One GET is a cheap price for not silently
+      // eating somebody's paragraph.
+      const fresh = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}&select=payload`, { headers: studioAuth() });
+      const rows = await fresh.json().catch(() => null);
+      if (!fresh.ok) { setBodyError(studioErrorMessage("this entry", fresh.status, rows)); setBodySaving(false); return; }
+      const live = rows?.[0]?.payload || {};
+      const clash = bodyConflict(bodyOpenedWith, live.blogBody);
+      if (clash.conflict) {
+        setBodyError(`Not saved: ${clash.why}. Close this and open it again to start from what is there now, or your version will overwrite theirs.`);
+        setBodySaving(false);
+        return;
+      }
+      // Applied to the LIVE payload, not the one this panel loaded, so a
+      // coordinate or a __checked stamp written by a background job while this
+      // was open survives the save.
+      const nextBody = applyBodyEdits(live.blogBody, bodyDraft);
+      const problems = bodyEditProblems(live, nextBody);
+      const merged = stampEdit({ ...live, blogBody: nextBody }, {
+        by: studioSession?.email || "",
+        blocks: changedIndexes(live.blogBody, nextBody),
+        problems,
+      });
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(row.id)}`, {
+        method: "PATCH",
+        headers: { ...studioAuth(), "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ payload: merged }),
+      });
+      const saved = await res.json().catch(() => null);
+      if (!res.ok) { setBodyError(studioErrorMessage("this entry", res.status, saved)); setBodySaving(false); return; }
+      setManageItems(prev => (prev || []).map(r => r.id === row.id ? { ...r, payload: merged } : r));
+      setBodyEditId(null);
+      setToast(`Saved ${changedIndexes(live.blogBody, nextBody).length === 1 ? "one paragraph" : `${changedIndexes(live.blogBody, nextBody).length} paragraphs`} on ${merged.name}. Visitors see it on their next load.`);
+      setTimeout(() => setToast(null), 3500);
+    } catch (e) { setBodyError(String(e.message || e)); }
+    setBodySaving(false);
+  };
 
   const openPlaceEdit = (row) => {
     const pl = row.payload || {};
@@ -9671,6 +9743,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                     ✏️ Edit
                                   </button>
+                                  {/* Separate from "Edit", which loads the whole
+                                      payload as JSON into the draft editor and
+                                      is a founder tool. This one opens the
+                                      PROSE, in the order a reader sees it. */}
+                                  {(row.payload?.blogBody || []).length > 0 && (
+                                    <button onClick={() => openBodyEdit(row)}
+                                      style={{ background: bodyEditId === row.id ? `${C.gold}22` : "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                      📝 Blog text
+                                    </button>
+                                  )}
                                   <button onClick={() => deleteContentItem(row.id)} disabled={deletingId === row.id}
                                     style={{ background: "none", border: "1px solid #E23B4E66", color: "#E57373", borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                     {deletingId === row.id ? "…" : "🗑 Delete"}
@@ -9684,6 +9766,66 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   for why one field could never hold all three,
                                   and utils/placeEdit.js for what counts as a
                                   contradiction. */}
+                              {bodyEditId === row.id && (() => {
+                                const blocks = editableBlocks(row.payload?.blogBody);
+                                const next = applyBodyEdits(row.payload?.blogBody, bodyDraft);
+                                const changed = changedIndexes(row.payload?.blogBody, next);
+                                // Recomputed as he types rather than only on
+                                // save, because a warning that arrives after
+                                // the decision is a report rather than a check.
+                                const warn = changed.length ? bodyEditProblems(row.payload || {}, next) : [];
+                                const rank = { critical: "#FF6B6B", high: "#FFB347", medium: "#FFB347", low: C.muted };
+                                return (
+                                  <div style={{ marginTop: 10, padding: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+                                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 10, lineHeight: 1.55 }}>
+                                      The entry's own text, in the order a reader sees it. Editing changes what is live on the next page load; it does not re-run the research, so a new price or date cannot be checked against anything. Images and their order cannot be changed here.
+                                    </div>
+                                    {blocks.map(b => (
+                                      <div key={b.i} style={{ marginBottom: 9 }}>
+                                        <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: changed.includes(b.i) ? C.gold : C.muted, marginBottom: 3 }}>
+                                          {b.type}{!b.editable ? " · not editable here" : changed.includes(b.i) ? " · changed" : ""}
+                                        </div>
+                                        {b.editable ? (
+                                          <textarea
+                                            value={bodyDraft[b.i] ?? b.text}
+                                            onChange={e => setBodyDraft(d => ({ ...d, [b.i]: e.target.value }))}
+                                            rows={Math.min(12, Math.max(2, Math.ceil((bodyDraft[b.i] ?? b.text).length / 78) + 1))}
+                                            style={{ width: "100%", background: C.surface, border: `1px solid ${changed.includes(b.i) ? `${C.gold}66` : C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", lineHeight: 1.6, resize: "vertical" }} />
+                                        ) : (
+                                          <div style={{ fontSize: 11.5, color: C.muted, fontStyle: "italic", padding: "6px 10px", border: `1px dashed ${C.border}`, borderRadius: 8 }}>
+                                            {b.type === "image" || b.type === "video" ? (b.block?.caption || b.block?.src || "a picture") : b.text || b.type}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                    {warn.length > 0 && (
+                                      <div style={{ marginTop: 10, marginBottom: 6 }}>
+                                        <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#FFB347", marginBottom: 5 }}>Worth knowing before you save</div>
+                                        {warn.map((w, i) => (
+                                          <div key={i} style={{ fontSize: 11.5, color: rank[w.severity] || C.light, lineHeight: 1.55, marginBottom: 5, paddingLeft: 10, borderLeft: `2px solid ${(rank[w.severity] || C.border)}55` }}>{w.detail}</div>
+                                        ))}
+                                        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4 }}>These do not stop you saving. What they said is recorded on the entry.</div>
+                                      </div>
+                                    )}
+                                    {bodyError && <div style={{ fontSize: 11.5, color: "#FFB347", marginTop: 8, lineHeight: 1.5 }}>{bodyError}</div>}
+                                    <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+                                      <button onClick={() => saveBodyEdit(row)} disabled={bodySaving || !changed.length}
+                                        style={{ background: changed.length && !bodySaving ? C.gold : C.surface, border: `1px solid ${C.border}`, color: changed.length && !bodySaving ? "#000" : C.muted, borderRadius: 100, padding: "7px 15px", fontSize: 11.5, fontWeight: 700, cursor: changed.length ? "pointer" : "default" }}>
+                                        {bodySaving ? "Saving…" : changed.length ? `Save ${changed.length === 1 ? "1 change" : `${changed.length} changes`}` : "Nothing changed"}
+                                      </button>
+                                      <button onClick={() => { setBodyEditId(null); setBodyError(null); }} disabled={bodySaving}
+                                        style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "7px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                        Cancel
+                                      </button>
+                                      {(row.payload?.__edited || []).length > 0 && (
+                                        <span style={{ fontSize: 10.5, color: C.muted }}>
+                                          Last edited by hand {String(row.payload.__edited[row.payload.__edited.length - 1].at).slice(0, 10)} by {row.payload.__edited[row.payload.__edited.length - 1].by || "somebody"}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                               {placeEditId === row.id && (() => {
                                 const pl = row.payload || {};
                                 const preview = { name: pl.name, ...placeDraft };

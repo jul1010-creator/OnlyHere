@@ -45,6 +45,40 @@
     <meta name="twitter:description" content="Denmark past the three days everybody spends in Copenhagen. Towns, workshops and nights out, each one checked against the place's own sources before it is printed." />
     <meta name="twitter:image" content="https://www.gemlyxtravel.com/og-default.jpg" />
 
+    <!-- ── PROVING THIS SITE IS HIS, TO TICKETMASTER'S AFFILIATE NETWORK ──
+         Oliver, 13 Aug 2026, halfway through Ticketmaster's application on
+         Impact: "Is this possible? ... It's because the mail won't fking work."
+
+         It was never going to. Impact's first verification method matches the
+         SIGNUP EMAIL'S DOMAIN against the website's domain, and the account is a
+         gmail address while the site is gemlyxtravel.com. Those cannot match, so
+         that route is closed however many times it is retried. This is the
+         second method and the one that fits: a tag in the head of the homepage,
+         which Impact's verifier fetches directly.
+
+         BOTH ATTRIBUTES ON PURPOSE. Impact's own generated snippet uses
+         `value=`, which is not valid on a meta element, while anything reading
+         the page as ordinary HTML looks at `content=`. Carrying both costs
+         nothing and works whichever one their verifier reads.
+
+         Nothing intercepts this page: middleware.js matches only /guide/*,
+         /denmark/* and /sitemap.xml, so a request for the root is served this
+         file straight from Vercel.
+
+         PINNED BY A TEST, because index.html is exactly where a silent
+         regression lives here. The canonical tag on this page pointed at
+         only-here-three.vercel.app for weeks after the domain moved and nothing
+         said so. A verification tag deleted in a later edit would un-verify the
+         partnership the same way, and the first sign would be a commission that
+         stopped arriving. -->
+    <meta name="impact-site-verification" value="87383212-a6cf-40cb-ab5a-d974b44e3187" content="87383212-a6cf-40cb-ab5a-d974b44e3187" />
+    <!-- And the segment exactly as Impact printed it. Their fourth method is
+         "edit content", where a verifier searches the page for the raw string
+         rather than parsing a tag, and a comment is fetched with the HTML while
+         showing a reader nothing. Costs a line and closes the third of the three
+         ways this can be checked.
+         Impact-Site-Verification: 87383212-a6cf-40cb-ab5a-d974b44e3187 -->
+
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { background: #0A0F1E; }

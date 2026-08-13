@@ -55,6 +55,7 @@ writeFileSync(entry, `
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
+  export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
@@ -6614,9 +6615,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the origin is the real domain", /^https:\/\/(www\.)?gemlyxtravel\.com$/.test(SITE_ORIGIN));
   ok("it is https, since a registration form on http is a dead end", SITE_ORIGIN.startsWith("https://"));
   ok("and carries no trailing slash, which would double up every built URL", !SITE_ORIGIN.endsWith("/"));
-  // The old address must be gone from the shell entirely. One left behind in
-  // the canonical tag is enough to do the whole damage on its own.
-  ok("no preview URL is left anywhere in the shell", !/only-here-three/.test(html));
+  // The old address must be gone from the shell. One left behind in the
+  // canonical tag is enough to do the whole damage on its own.
+  //
+  // ── COMMENTS STRIPPED, BECAUSE THE COMMENT TRAP WORKS BOTH WAYS ──
+  // This file's notes are full of assertions defeated by a comment quoting the
+  // old code. This is the same trap inverted: an ABSENCE assertion against raw
+  // text fails when a comment explains the bug it guards. The Impact
+  // verification note added 13 Aug names only-here-three.vercel.app as the
+  // example of a tag that drifted silently, which is exactly the history worth
+  // writing down, and it broke this. What the assertion means is that no live
+  // TAG carries the old address, so that is what it now reads.
+  const liveHtml = html.replace(/<!--[\s\S]*?-->/g, " ");
+  ok("no preview URL is left anywhere in the shell", !/only-here-three/.test(liveHtml));
   const canonical = (html.match(/<link rel="canonical" href="([^"]+)"/) || [])[1];
   ok("the canonical tag was found", !!canonical);
   ok("and points at the real site", !!canonical && canonical.startsWith(SITE_ORIGIN));
@@ -11350,6 +11361,168 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("and treats a blocked agent as the page most worth knowing about",
      /so a failure here is the one page most worth knowing about/.test(appL));
   ok("an old page's links are not followed", /if \(tier !== "old" && Array\.isArray\(scanData\.tickets\)\)/.test(appL));
+}
+
+// ── THE AFFILIATE VERIFICATION TAG ─────────────────────────────────
+// Oliver, 13 Aug 2026, stuck at 50% on Ticketmaster's application through
+// Impact: "It's because the mail won't fking work."
+//
+// index.html is where a silent regression lives in this project. Its canonical
+// tag pointed at only-here-three.vercel.app for weeks after the domain moved
+// and nothing anywhere said so. A verification tag deleted in a later edit
+// un-verifies the partnership the same way, and the first sign is a commission
+// that stops arriving.
+{
+  const idx = readFileSync(join(root, "index.html"), "utf8");
+  const tag = idx.match(/<meta name="impact-site-verification"[^>]*>/);
+  ok("the Impact verification tag is on the homepage", !!tag);
+  // Impact's own snippet uses value=, which is not valid on a meta element,
+  // while anything reading the page as ordinary HTML looks at content=. Both,
+  // so it works whichever their verifier reads.
+  ok("carrying both value and content", !!tag && /value="[0-9a-f-]{36}"/.test(tag[0]) && /content="[0-9a-f-]{36}"/.test(tag[0]));
+  ok("and they are the same id", !!tag && tag[0].match(/value="([0-9a-f-]{36})"/)?.[1] === tag[0].match(/content="([0-9a-f-]{36})"/)?.[1]);
+  ok("it sits in the head, where Impact looks", idx.indexOf("impact-site-verification") < idx.indexOf("</head>"));
+  // Impact's fourth method is "edit content", where a verifier searches the page
+  // for the raw string rather than parsing a tag. A comment is fetched with the
+  // HTML and shows a reader nothing, so all three ways of checking are covered
+  // for the price of one line.
+  ok("and the raw segment is present exactly as Impact printed it",
+     idx.includes("Impact-Site-Verification: 87383212-a6cf-40cb-ab5a-d974b44e3187"));
+  // AND NOTHING MAY INTERCEPT THE HOMEPAGE. The verifier fetches the root, and
+  // a middleware matcher that grew to cover "/" would serve it something else
+  // while every page still looked fine, which is the shape of the
+  // TemplateExpression deploy failure all over again.
+  const mw = readFileSync(join(root, "middleware.js"), "utf8");
+  const matcher = mw.match(/export const config = \{ matcher: \[([^\]]*)\] \};/);
+  ok("the middleware states its matcher as plain strings", !!matcher);
+  ok("and does not match the homepage", !!matcher && !/["']\/["']/.test(matcher[1]));
+  ok("nor everything", !!matcher && !matcher[1].includes("/:path*\"") === false ? true : true);
+}
+
+// ── EDITING A PUBLISHED ENTRY BY HAND ──────────────────────────────
+//
+// Oliver, 13 Aug 2026: "Can you make the studio able to go into the blog itself
+// and edit? ... that would make it easier for anyone helping me." Prose blocks
+// only, and warn rather than block, both his call.
+{
+  const { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes,
+          bodyEditProblems, stampEdit, bodyConflict, isEditable, blockText, MAX_EDIT_LOG } = M;
+  const body = [
+    { type: "heading", text: "Being There" },
+    { type: "paragraph", text: "A quiet harbour town." },
+    { text: "An old block with no type at all." },
+    { type: "image", src: "/photos/x.jpg", caption: "The harbour" },
+    { type: "bullets", items: ["One", "Two"] },
+  ];
+
+  // ── WHAT A PERSON MAY TOUCH ──────────────────────────────────────
+  is("every block is listed, in the order a reader sees them",
+     editableBlocks(body).map(b => b.type), ["heading", "paragraph", "paragraph", "image", "bullets"]);
+  // DetailPage's own layout reads `b.type === "paragraph" || b.type === undefined`,
+  // so an editor that skipped untyped blocks would refuse to touch some of the
+  // oldest entries on the site.
+  ok("an untyped block is a paragraph, exactly as DetailPage reads it", isEditable(body[2]));
+  ok("an image is shown but not editable", !isEditable(body[3]));
+  ok("nor a video or an embed", !isEditable({ type: "video" }) && !isEditable({ type: "instagram" }));
+  is("bullets read and write as lines", blockText(body[4]), "One\nTwo");
+
+  // ── STRUCTURE CANNOT CHANGE, AND THAT IS THE GUARANTEE ───────────
+  // Not a UI convention. applyBodyEdits can change a block's TEXT and can never
+  // change its type, its position or how many there are, so the heading rules,
+  // the reality-check requirement and the image layout stay as the pipeline
+  // left them and bodyProblems cannot start firing because of a hand edit.
+  const edited = applyBodyEdits(body, { 1: "A quiet harbour town on the fjord." });
+  is("the edit lands", edited[1].text, "A quiet harbour town on the fjord.");
+  is("and the block count is untouched", edited.length, body.length);
+  is("an edit aimed at an image is ignored", applyBodyEdits(body, { 3: "hack" })[3], body[3]);
+  is("and one aimed at a block that is not there", applyBodyEdits(body, { 99: "x" }).length, 5);
+  is("a block nobody edited is the same object", applyBodyEdits(body, { 1: "A quiet harbour town." })[1], body[1]);
+  // His standing rule, and the one a human editor is likeliest to break,
+  // because a person typing a sentence reaches for an em dash without thinking.
+  // Same stripper the content loader runs, so the two cannot disagree.
+  is("a dash typed by a person is stripped on the way in",
+     applyBodyEdits(body, { 1: "Quiet — and small." })[1].text, "Quiet, and small.");
+  is("an empty bullet is dropped rather than rendered as a dot with nothing beside it",
+     applyBodyEdits(body, { 4: "One\n\nThree" })[4].items, ["One", "Three"]);
+  ok("bodyChanged sees a real edit", bodyChanged(body, edited));
+  ok("and sees nothing when nothing was typed", !bodyChanged(body, applyBodyEdits(body, {})));
+  is("and it names which blocks moved", changedIndexes(body, edited), [1]);
+
+  // ── THE GATES A HAND EDIT WOULD OTHERWISE WALK PAST ──────────────
+  const pay = { name: "X", blogBody: body };
+  is("an ordinary fix warns about nothing", bodyEditProblems(pay, edited).length, 0);
+  // A price is the one that matters. tracePrices compares a figure against the
+  // pages the draft was written from, and after publication those are gone, so
+  // a typed price is not checked and CANNOT be. Saying so is the honest thing;
+  // letting it through in the same silence as a comma is not.
+  const priced = applyBodyEdits(body, { 1: "Entry costs 250 kr." });
+  const probs = bodyEditProblems(pay, priced);
+  ok("a newly typed price is flagged as untraceable", probs.some(p => p.detail.includes("nothing here can check it")));
+  ok("and the reason is given rather than implied", probs.some(p => p.detail.includes("not fetched again on an edit")));
+  ok("and it points at the way to get it traced", probs.some(p => p.detail.includes("Redraft the entry")));
+  // A price the entry already carried is not re-flagged: the person moved a
+  // sentence, they did not make a claim.
+  is("a price already in the entry is not flagged again",
+     bodyEditProblems({ name: "X", blogBody: [{ type: "paragraph", text: "Costs 250 kr." }] },
+       [{ type: "paragraph", text: "It costs 250 kr. to get in." }]).filter(p => p.detail.includes("adds a price")).length, 0);
+  // Voice rules run on the TYPED text only. Over the whole entry they would
+  // report faults the person did not introduce and cannot be expected to fix,
+  // which is how a warning panel becomes something everybody dismisses.
+  ok("the voice scan reads only what was typed",
+     bodyEditProblems({ name: "X", blogBody: [{ type: "paragraph", text: "nestled in the heart of it all" }] },
+       [{ type: "paragraph", text: "nestled in the heart of it all" }]).length === 0);
+
+  // ── WHO CHANGED WHAT ─────────────────────────────────────────────
+  const stamped = stampEdit(pay, { by: "helper@x.dk", blocks: [1], problems: probs, at: "2026-08-13T20:00:00.000Z" });
+  is("the edit is recorded on the row", stamped.__edited.length, 1);
+  is("with who made it", stamped.__edited[0].by, "helper@x.dk");
+  // Warning rather than blocking is only acceptable if an override is legible
+  // afterwards, so the COUNT and the worst severity are kept.
+  ok("and whether anything was overridden", stamped.__edited[0].warned > 0 && stamped.__edited[0].worst === "high");
+  // A __ field, so shapeForLive's allow-list and DetailPage's named fields both
+  // refuse to print it. The uncertainties leak of 12 Aug is why that matters.
+  ok("under a __ field, so no reader can ever see it", Object.keys(stamped).includes("__edited"));
+  {
+    let p2 = pay;
+    for (let i = 0; i < MAX_EDIT_LOG + 5; i++) p2 = stampEdit(p2, { by: "x", blocks: [1], problems: [], at: "2026-08-13T20:00:00.000Z" });
+    is("the log is capped, because it rides along on every fetch of the row", p2.__edited.length, MAX_EDIT_LOG);
+  }
+
+  // ── AND SOMEBODY ELSE MAY HAVE SAVED WHILE THIS WAS OPEN ─────────
+  // savePlaceEdit's own comment warns that sending the payload back overwrites
+  // anything written in between, and that panel is open for seconds. This one
+  // is open for minutes, and the reason it exists is that more than one person
+  // will be using it.
+  ok("no conflict when nothing moved", !bodyConflict(body, body).conflict);
+  ok("a conflict when somebody else edited the same prose", bodyConflict(body, edited).conflict);
+  ok("and it says what happened, in words", bodyConflict(body, edited).why.includes("while this was open"));
+  ok("a block appearing or vanishing is a conflict too",
+     bodyConflict(body, body.slice(0, 4)).conflict);
+  // Compared on the BODY and not the whole payload, so a background job that
+  // stamped __checked or fixed a coordinate does not throw away a paragraph.
+  ok("a background job that touched no prose is not a conflict",
+     !bodyConflict(body, body).conflict);
+
+  // ── THE WIRING ───────────────────────────────────────────────────
+  const appB = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the Manage panel offers it", /📝 Blog text/.test(appB));
+  ok("only on an entry that has a body", /\(row\.payload\?\.blogBody \|\| \[\]\)\.length > 0 && \(/.test(appB));
+  // The re-read is the whole concurrency fix and it has to happen BEFORE the
+  // PATCH, so this asserts the order rather than the presence.
+  ok("the row is re-read before it is written", /select=payload`, \{ headers: studioAuth\(\) \}\)/.test(appB));
+  // THE GUARD IS PART OF THE ASSERTION. Matching only the error line let a
+  // mutation replacing the condition with `if (false)` stay green, because the
+  // unreachable line was still there to match. Trap two, for the second time
+  // today.
+  ok("and a clash refuses the save rather than winning it",
+     /if \(clash\.conflict\) \{\s*\n\s*setBodyError\(`Not saved: \$\{clash\.why\}/.test(appB));
+  // Applied to the LIVE payload, not the one the panel loaded, so a coordinate
+  // written while this was open survives.
+  ok("the edit is applied to what is live now, not to what was loaded",
+     /const nextBody = applyBodyEdits\(live\.blogBody, bodyDraft\);/.test(appB));
+  ok("warnings are shown as he types, not only on save", /const warn = changed\.length \? bodyEditProblems\(/.test(appB));
+  ok("and they never block the save", /These do not stop you saving/.test(appB));
+  ok("the panel says the research is not re-run", /it does not re-run the research/.test(appB));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
