@@ -1,4 +1,7 @@
 import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE } from "../config";
+// hostOf, not a fourth copy of it. See pageScan.js, and see the four other
+// functions this codebase has already found existing twice.
+import { hostOf } from "./pageScan";
 
 // ── WHERE TO STAY LINKS (Oliver, 7 Aug: "on accommodation, put booking.com
 // and AirBnB as affiliate links for me") ─────────────────────────────
@@ -74,10 +77,6 @@ export const affiliateActive = () => !!BOOKING_AFFILIATE_ID;
 // links appear on Danish event pages; if his approval does not include it, take
 // it out rather than hoping.
 const TICKETMASTER_HOSTS = ["ticketmaster.dk", "ticketmaster.com", "ticketmaster.eu", "livenation.dk", "livenation.com"];
-
-const hostOf = (url) => {
-  try { return new URL(String(url)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
-};
 
 export const isTicketmasterUrl = (url) => {
   const h = hostOf(url);

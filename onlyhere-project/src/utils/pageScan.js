@@ -358,7 +358,12 @@ export const REFERENCE_DOMAINS = [
   "danmarkshistorien.dk", "natmus.dk", "arkiv.dk",
 ];
 
-const hostOf = (url) => {
+// Exported because utils/affiliates.js needs the same answer to decide whether
+// a link is Ticketmaster's, and a second copy would have made this the FOURTH
+// declaration of hostOf in the codebase. resolveLegMode, lookupRealPlace, the
+// two heading lists and studioTypes.js are all the same story: two copies agree
+// on the day they are written and drift the first time one is touched.
+export const hostOf = (url) => {
   try { return new URL(String(url)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
 };
 const inList = (host, list) => list.some(d => host === d || host.endsWith(`.${d}`));

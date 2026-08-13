@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { C } from "../utils/theme";
+import { stripDashes } from "../utils/helpers";
 
 // ── THE TRAVELER'S ASSISTANT ─────────────────────────────────────────
 // Oliver, 7 Aug 2026: "There is a studio/admin assistant and a paid subscriber
@@ -53,7 +54,24 @@ export const AskGemlyx = ({ session, item, kind, onSignIn }) => {
   // for a general trip question is Gemlyx Detour, which already exists.
   if (!item) return null;
 
-  const say = (role, text, extra = {}) => setLog(l => [...l, { role, text, ...extra }]);
+  // ── THE ONE AI SURFACE THAT SPOKE TO A READER UNSTRIPPED ────────────
+  // Found 13 Aug 2026 while scouting. Every other path from a model to a reader
+  // runs stripDashes: liveContent strips each published row as it loads, the
+  // plan builder strips its own output, the hand editor strips what is typed.
+  // This one did not, and it is the only surface where a model talks to a
+  // paying visitor live.
+  //
+  // api/ask.js does say "Never use an em dash or an en dash" in both prompts,
+  // and that is the whole problem. App.jsx already wrote the lesson down, one
+  // screen away from here: A RULE THE MODEL CAN FORGET IS NOT A FILTER. It was
+  // the filter that was missing, not the instruction.
+  //
+  // On the answer only, and on the way IN rather than at render, so what is
+  // held in state is what was shown. The traveler's own question is left
+  // exactly as they typed it: this is his rule about generated text, and
+  // rewriting somebody's own words back at them is a different thing entirely.
+  const say = (role, text, extra = {}) =>
+    setLog(l => [...l, { role, text: role === "you" ? text : stripDashes(String(text ?? "")), ...extra }]);
 
   const send = async () => {
     const question = input.trim();

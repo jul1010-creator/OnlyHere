@@ -2095,6 +2095,35 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const { SITE_ORIGIN } = M;
   const html = readFileSync(join(root, "index.html"), "utf8");
   const img = /property="og:image" content="([^"]+)"/.exec(html)?.[1];
+  // ── NO DASHES, INCLUDING IN THE ONE STRING EVERYBODY SEES ────────
+  // Found 13 Aug 2026 while scouting the live site. His rule is absolute:
+  // "NEVER use dashes, anywhere: not in replies to him, not in generated
+  // content, not from any AI." The suite enforces it in thirty-two places and
+  // not one of them looked at index.html, where the TITLE read
+  //
+  //   Gemlyx — It exists nowhere else.        U+2014, EM DASH
+  //
+  // in the browser tab, in every Google result and on every share card, plus
+  // og:title and twitter:title carrying the same character. The most visible
+  // string on the whole site was the one place the rule was never checked.
+  //
+  // Comments are stripped first: the note above this tag quotes an em dash to
+  // explain the fix, and an absence assertion against raw text would fail on
+  // its own explanation. That trap has now bitten this file twice today.
+  {
+    const liveTags = html.replace(/<!--[\s\S]*?-->/g, " ");
+    const dashed = (liveTags.match(/[\u2013\u2014]/g) || []).length;
+    is("no en or em dash survives in any tag index.html serves", dashed, 0);
+    const title = (html.match(/<title>([^<]*)<\/title>/) || [])[1] || "";
+    ok("the title exists", !!title);
+    ok("and carries no dash", !/[\u2013\u2014]/.test(title));
+    // og and twitter carry the same sentence, so a fix applied to one and not
+    // the others would leave the dash on every share card while the tab looked
+    // clean. That is exactly how the canonical drifted for weeks.
+    const og = (html.match(/property="og:title" content="([^"]*)"/) || [])[1] || "";
+    const tw = (html.match(/name="twitter:title" content="([^"]*)"/) || [])[1] || "";
+    is("and the share cards say the same thing as the tab", [og, tw], [title, title]);
+  }
   ok("index.html has an og:image at all", !!img);
   ok("index.html's og:image matches SITE_ORIGIN", !!img && img.startsWith(SITE_ORIGIN + "/"));
   // existsSync on a DIRECTORY is true, so a deleted og:image tag made img
@@ -3503,6 +3532,69 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ], AUG9);
   is("his own five split two away", split.dropped.length, 2);
   is("and the three still ahead survive", split.kept.map(c => c.name), ["Copenhagen Pride Week", "Kalundborg Rocker", "Fyn rundt"]);
+
+  // ── THE MONTH TABLE THAT DROPPED EVERY DANISH CHRISTMAS MARKET ───
+  // Found 13 Aug 2026. The table was English names matched on three letters
+  // with an open tail, so `jul[a-z]*` matched "julemarked" and `mar[a-z]*`
+  // matched "marked", which are Danish for Christmas market and market. Not one
+  // of the assertions above went red for any of this, because they were all
+  // written in English.
+  const AUG13 = new Date(2026, 7, 13);
+  // Read through null rather than off it. Every one of these assertions is
+  // about a regression that returns null or the wrong month, and reaching
+  // .getMonth() on null throws, which ABORTS THE FILE: a crash is not a
+  // failure, and the run that proved these go red the first time reported one
+  // stack trace and hid the fourteen assertions underneath it.
+  const monthOf = (t) => { const d = M.lastDateInText(t); return d ? d.getMonth() : null; };
+  const dayOf = (t) => { const d = M.lastDateInText(t); return d ? d.getDate() : null; };
+
+  // The headline case. The sentence says December in its own words.
+  is("a julemarked in december is read as december, not july",
+    monthOf("Et af Danmarks største julemarkeder, december 2026"), 11);
+  ok("so a Christmas market is not dropped in August",
+    !M.looksFinished("Et af Danmarks største julemarkeder, december 2026", AUG13));
+  ok("and jul on its own is not a month at all, it is Christmas",
+    M.lastDateInText("Julemarked i Den Gamle By, 2026") === null);
+  ok("nor is julefrokost", M.lastDateInText("Julefrokost 2026") === null);
+  // The one that needs the lookahead rather than the word boundary. "Jul" here
+  // is a whole word, so `\bjul\b` matches it and every other assertion above
+  // still passes: dropping the carve-out turned NOTHING red until this line
+  // existed, and "Jul i Tivoli" is a real event that would have gone with it.
+  ok("and Jul standing alone is Christmas too", M.lastDateInText("Jul i Tivoli, 2026") === null);
+  // But the real abbreviation still is one, because the full stop marks it.
+  // The cost is that a bare English "16-Jul-2026" is not read, which leaves the
+  // candidate on the screen rather than removing it: the safe direction.
+  is("jul. with its full stop is still July", monthOf("Holdes 4. jul. 2026"), 6);
+
+  // marked is Danish for market and market is English for market.
+  ok("Marked is not March", M.lastDateInText("Københavns Historiske Marked 2026") === null);
+  ok("neither is an English market", M.lastDateInText("A great little market running through 2026") === null);
+  // A boundary is required at the END too, which is what a prefix match lacked.
+  ok("and Augustenborg is a town, not August", M.lastDateInText("Augustenborg Slotspark, 2026") === null);
+
+  // The two Danish months the three-letter trick never reached.
+  is("maj is a month", monthOf("Afholdes 20. maj 2026"), 4);
+  is("oktober is a month", monthOf("Afholdes i oktober 2026"), 9);
+  ok("and a May event is correctly finished by August", M.looksFinished("Afholdes 20. maj 2026", AUG13));
+
+  // The month is chosen by where it sits in the TEXT. `.find` over an array in
+  // calendar order meant the earlier month won whichever one carried the dates.
+  is("the first month in the text wins, not the first in the year",
+    monthOf("Holdes 12. december 2026, billetter fra april"), 11);
+
+  // A four-digit year must not donate a day. "2026" was handing over its 26.
+  is("a year before the month name is not a date in it",
+    dayOf("Copenhell 2026, august"), 31);
+
+  const xmas = M.splitFinishedCandidates([
+    { name: "Julemarked i Tivoli", hook: "Et af Danmarks største julemarkeder, december 2026." },
+    { name: "Københavns Historiske Marked", hook: "Middelalderligt marked, 2026." },
+  ], AUG13);
+  is("so neither Danish candidate is dropped", xmas.dropped.length, 0);
+
+  const evd = readFileSync(join(root, "src/utils/eventDates.js"), "utf8");
+  ok("and no month is matched by a prefix with an open tail again",
+    !/\[a-z\]\*/.test(evd.replace(/\/\/[^\n]*/g, "")));
 
   const app13 = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("discovery drops them in code, not only in a prompt", /splitFinishedCandidates\(fresh, new Date\(\)\)/.test(app13));
@@ -10656,6 +10748,25 @@ rmSync(dir, { recursive: true, force: true });
   // dashes already live without a redraft.
   ok("published payloads are cleaned of dashes as they load",
      /const item = stripDashesDeep\(row\.payload\);/.test(live));
+
+  // ── AND THE ONE SURFACE THAT WAS NOT ─────────────────────────────
+  // Found 13 Aug 2026. Every model-to-reader path runs stripDashes except Ask
+  // Gemlyx, which is the only one where a model talks to a paying visitor live.
+  // api/ask.js instructs the model twice, in both prompts, and an instruction
+  // is not a filter: App.jsx says so in its own words a screen away.
+  const askUi = readFileSync(join(root, "src/components/AskGemlyx.jsx"), "utf8");
+  ok("the traveler's assistant strips dashes off the answer",
+     /stripDashes\(String\(text \?\? ""\)\)/.test(askUi));
+  ok("and imports the same one everything else uses, not a copy",
+     /import \{ stripDashes \} from "\.\.\/utils\/helpers"/.test(askUi));
+  // The reader's OWN words are not rewritten. His rule is about generated text.
+  ok("but never rewrites what the traveler typed",
+     /role === "you" \? text :/.test(askUi));
+  // The server still asks, because a filter and an instruction are cheaper
+  // together than either is alone.
+  const askApi = readFileSync(join(root, "api/ask.js"), "utf8");
+  is("and the prompt still says so too, in both branches",
+     (askApi.match(/Never use an em dash or an en dash/g) || []).length, 2);
 }
 
 // ── REGIONS: THE TIER BETWEEN A TOWN AND A LANDMASS ────────────────
@@ -11639,6 +11750,18 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // Booking id beside it has been empty since 5 Aug for the same reason and
   // carries a standing rule never to remove it.
   const cfg = readFileSync(join(root, "src/config.js"), "utf8");
+  // ── AND IT DOES NOT CARRY ITS OWN COPY OF hostOf ─────────────────
+  // Found 13 Aug 2026 by scanning for functions declared in more than one file,
+  // which is this codebase's most repeated defect: resolveLegMode,
+  // lookupRealPlace, the two heading lists and studioTypes.js were all the same
+  // story. affiliates.js had just become the FOURTH declaration of hostOf.
+  {
+    const utils = readdirSync(join(root, "src/utils")).filter(f => f.endsWith(".js"));
+    const owners = utils.filter(f => /^(export )?const hostOf = \(/m.test(readFileSync(join(root, "src/utils", f), "utf8")));
+    is("hostOf is declared in exactly one util", owners, ["pageScan.js"]);
+    ok("and affiliates imports it rather than repeating it",
+       /import \{ hostOf \} from "\.\/pageScan";/.test(readFileSync(join(root, "src/utils/affiliates.js"), "utf8")));
+  }
   ok("the template constant exists", /export const TICKETMASTER_AFFILIATE_TEMPLATE = /.test(cfg));
   ok("and ships empty", /export const TICKETMASTER_AFFILIATE_TEMPLATE = "";/.test(cfg));
   ok("with the placeholder documented, so he knows what to paste", /\{url\}/.test(cfg));

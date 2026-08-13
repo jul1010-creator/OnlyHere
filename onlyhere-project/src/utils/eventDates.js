@@ -128,22 +128,88 @@ export const staleEvents = (rows, today) =>
 // dropped is a real event he never hears about. A candidate wrongly kept is one
 // line on a screen he is already reading. So an unparseable hook is KEPT, and
 // nothing is dropped without a month and a year.
-const MONTHS = ["january","february","march","april","may","june","july","august","september","october","november","december"];
-const MONTH_RE = MONTHS.map((m, i) => [new RegExp(`\\b${m.slice(0, 3)}[a-z]*\\b`, "i"), i]);
+// ── AND THE MONTH TABLE THAT DROPPED EVERY DANISH CHRISTMAS MARKET ──
+// Found 13 Aug 2026 while scouting for bugs, not reported by anyone, because
+// this failure removes a line from a list and nothing is left behind to look at.
+//
+// The table was twelve ENGLISH month names matched on their first three letters
+// with an open tail, `\bjul[a-z]*\b`. That was a trick to read Danish pages for
+// free and ten of the twelve do fall out by accident: "jan" catches "januar",
+// "feb" catches "februar", "aug" catches "august". Only maj and oktober are
+// missed, and a miss is the harmless direction here.
+//
+// What is not harmless is what an open tail matches BESIDES a month:
+//
+//     jul[a-z]*   ->  julemarked, julemarkeder, julefrokost, juletraesfest
+//     mar[a-z]*   ->  marked, markedet, and English "market" too
+//
+// "Jul" is Danish for Christmas and "marked" is Danish for market, so on a
+// Danish travel site those two prefixes match the name of an entire category of
+// event. And the month was picked with `.find` over an array in CALENDAR order,
+// so whenever a string named two months the earlier one won regardless of which
+// one the sentence was about:
+//
+//     "Et af Danmarks stoerste julemarkeder, december 2026"
+//        julemarkeder matched july; july beat december because july is
+//        earlier in the array; no day number, so "the whole of July, over
+//        on the 31st"  ->  DROPPED as an event that already happened
+//
+// A Christmas market, stating December in its own sentence, silently removed
+// from the tab he uses to find events. The comment above says why that is the
+// expensive direction: a candidate wrongly dropped is a real event he never
+// hears about.
+//
+// So EXACT names now, Danish and English, never a prefix with an open tail.
+// Exactness alone also fixes "Augustenborg" reading as August and "Marked"
+// reading as March, because a boundary is required at the END as well.
+//
+// ONE CARVE-OUT, and it is the whole reason this bug existed: bare "jul" is not
+// accepted as July, because in Danish it is Christmas and "Jul i Tivoli" is a
+// real event. "juli", "july" and the abbreviation "jul." are all still read as
+// the month, since a full stop is what marks it as an abbreviation.
+//
+// factCheckRead.js keeps a month table of its own and that is deliberate rather
+// than the duplication defect this codebase keeps hitting. This one carries
+// abbreviations and is zero-based for Date(); that one is 1-based and must stay
+// strict, because there a loose match CONFIRMS a date rather than hiding a
+// candidate. Same words, opposite risk, so they must not be merged.
+const MONTH_WORDS = [
+  "januar|january|jan",
+  "februar|february|feb",
+  "marts|march|mar",
+  "april|apr",
+  "maj|may",
+  "juni|june|jun",
+  "juli|july|jul(?=\\.)",
+  "august|aug",
+  "september|sept|sep",
+  "oktober|october|okt|oct",
+  "november|nov",
+  "december|dec",
+];
+// Longest spelling first in each alternation, so the full name is tried before
+// its own abbreviation.
+const MONTH_RE = MONTH_WORDS.map((alts, i) => [new RegExp(`\\b(?:${alts})\\b`, "i"), i]);
 
 // The LAST day the text mentions for that month, because a festival is over when
 // it ends. "8-16 August 2026" is not finished on the 9th.
 export const lastDateInText = (text) => {
   const t = String(text || "");
-  const monthHit = MONTH_RE.find(([re]) => re.test(t));
-  if (!monthHit) return null;
-  const [re, monthIndex] = monthHit;
-  const at = t.search(re);
+  // The month that appears FIRST IN THE TEXT, not the earliest in the calendar.
+  let best = null;
+  for (const [re, monthIndex] of MONTH_RE) {
+    const at = t.search(re);
+    if (at >= 0 && (best === null || at < best.at)) best = { at, re, monthIndex };
+  }
+  if (!best) return null;
+  const { at, re, monthIndex } = best;
   const year = (t.slice(at).match(/\b(20\d{2})\b/) || t.match(/\b(20\d{2})\b/) || [])[1];
   if (!year) return null;
   // Any day numbers immediately before the month name, which is how both
-  // "27-28 June" and "8 June" are written.
-  const before = t.slice(Math.max(0, at - 14), at);
+  // "27-28 June" and "8 June" are written. A four-digit run is blanked first:
+  // "Copenhell 2026, august" was reading the 26 out of the year and calling it
+  // the 26th, which is a day this event may already be past.
+  const before = t.slice(Math.max(0, at - 14), at).replace(/\d{4}/g, " ");
   const days = (before.match(/\d{1,2}/g) || []).map(Number).filter(d => d >= 1 && d <= 31);
   // No day at all means the whole month, which is only finished once it is over.
   if (!days.length) return new Date(Number(year), monthIndex + 1, 0);
