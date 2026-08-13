@@ -8,7 +8,7 @@ import { InstagramEmbed } from "./InstagramEmbed";
 import { ReviewsSection } from "./ReviewsSection";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
-import { bookingUrl, airbnbUrl, STAY_DISCLOSURE } from "../utils/affiliates";
+import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure } from "../utils/affiliates";
 import { HowWeKnow } from "./HowWeKnow";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { freeEntrance } from "../data/freeEntrance";
@@ -662,12 +662,40 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             link back to Gemlyx. It returns null for anything that is not a
             plausible http(s) target, so a junk value now renders no button at
             all rather than a button that goes nowhere. */}
-        {(kind === "free" || kind === "event") && externalHref(item.website) && (
-          <a href={externalHref(item.website)} target="_blank" rel="noreferrer"
-            style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
-            🌐 Visit website
-          </a>
-        )}
+        {/* ── AND IF IT IS A TICKETMASTER LINK, IT IS TRACKED ────────
+            Oliver, 13 Aug 2026: "let's finish the ticketmaster affiliate."
+
+            ticketmasterUrl returns the ORIGINAL url untouched for every other
+            host, which is most of them: Gemlyx links out to madbillet,
+            billetto, billetexpressen, kultunaut and whichever agent an operator
+            uses, and wrapping one of those in a Ticketmaster tracking URL would
+            send a reader somewhere they did not choose and bill a network for a
+            click it did not earn.
+
+            The disclosure is empty for those same links rather than being a
+            blanket sentence, because "this may earn us a commission" printed
+            over a link that earns nothing is a false statement about money.
+
+            rel gains sponsored and nofollow when it IS tracked. That is what
+            Google asks for on a paid link, and it is the difference between an
+            affiliate programme and something that reads as an undisclosed ad. */}
+        {(kind === "free" || kind === "event") && externalHref(item.website) && (() => {
+          const dest = externalHref(item.website);
+          const href = ticketmasterUrl(dest) || dest;
+          const paid = href !== dest;
+          const note = ticketDisclosure(dest);
+          return (
+            <div style={{ marginBottom: 10 }}>
+              <a href={href} target="_blank" rel={paid ? "noreferrer sponsored nofollow" : "noreferrer"}
+                style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
+                🌐 Visit website
+              </a>
+              {note && (
+                <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{note}</div>
+              )}
+            </div>
+          );
+        })()}
 
         <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.mapHint || `${item.name} ${item.city || item.location || ""} Denmark`)}`} target="_blank" rel="noreferrer"
           style={{ display: "block", textAlign: "center", background: color, color: "#fff", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 700, textDecoration: "none" }}>

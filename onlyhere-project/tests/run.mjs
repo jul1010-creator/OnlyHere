@@ -55,6 +55,7 @@ writeFileSync(entry, `
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
+  export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
@@ -10559,10 +10560,30 @@ rmSync(dir, { recursive: true, force: true });
   const live = stripNonCode(readFileSync(join(root, "src/utils/liveContent.js"), "utf8"));
   const mw = stripNonCode(readFileSync(join(root, "middleware.js"), "utf8"));
 
+  // The href is built in two steps now: externalHref adds the missing scheme
+  // (seven live festivals store a bare domain), then ticketmasterUrl wraps it if
+  // and only if it points at Ticketmaster. Both steps are asserted, because
+  // either one going missing is silent: without the first the button lands back
+  // on Gemlyx, without the second the affiliate programme earns nothing and
+  // nobody notices for a month.
   ok("the detail page's website button goes through externalHref",
-     /externalHref\(item\.website\) && \(/.test(detail) && /href=\{externalHref\(item\.website\)\}/.test(detail));
+     /externalHref\(item\.website\) && \(\(\) => \{/.test(detail) && /const dest = externalHref\(item\.website\);/.test(detail));
   ok("and it no longer renders item.website straight into href",
      !/href=\{item\.website\}/.test(detail));
+  ok("a Ticketmaster destination is tracked", /const href = ticketmasterUrl\(dest\) \|\| dest;/.test(detail));
+  // RAW SOURCE, not stripNonCode. It blanks string CONTENTS as well as comments
+  // and JSX bodies, so a pattern quoting "noreferrer sponsored nofollow" matches
+  // against an empty string and passes whatever the file says. This file's own
+  // notes name that trap; it caught me on the first run of this very assertion.
+  {
+    const detailRaw = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+    ok("and a paid link is marked sponsored, which is what Google asks for",
+       /rel=\{paid \? "noreferrer sponsored nofollow" : "noreferrer"\}/.test(detailRaw));
+    ok("while an ordinary link is not, because it is not paid",
+       /: "noreferrer"\}/.test(detailRaw));
+    ok("and the disclosure is only rendered when there is one",
+       /\{note && \(/.test(detailRaw));
+  }
   ok("the detail page marks a finished edition", /hasFinished\(item\)/.test(detail));
 
   // The grid a reader browses, which dropped a festival on its opening day.
@@ -11523,6 +11544,70 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("warnings are shown as he types, not only on save", /const warn = changed\.length \? bodyEditProblems\(/.test(appB));
   ok("and they never block the save", /These do not stop you saving/.test(appB));
   ok("the panel says the research is not re-run", /it does not re-run the research/.test(appB));
+}
+
+// ── THE TICKETMASTER AFFILIATE LINK ────────────────────────────────
+//
+// Oliver, 13 Aug 2026: "let's finish the ticketmaster affiliate."
+{
+  const { ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } = M;
+  const TM = "https://www.ticketmaster.dk/event/12345?utm=x&y=2";
+  const NOT = "https://madbillet.dk/event/food-festival-2026";
+
+  ok("a Ticketmaster URL is recognised", isTicketmasterUrl(TM));
+  ok("and the .com storefront", isTicketmasterUrl("https://ticketmaster.com/e/1"));
+  // ── AND NOTHING ELSE IS ─────────────────────────────────────────
+  // This is the whole safety of the feature. Gemlyx links out to madbillet,
+  // billetto, billetexpressen and whichever agent an operator uses, and wrapping
+  // one of those in a Ticketmaster tracking URL sends a reader somewhere they
+  // did not choose AND bills a network for a click it did not earn, which gets
+  // an account closed rather than a commission paid.
+  ok("madbillet is not Ticketmaster", !isTicketmasterUrl(NOT));
+  ok("nor billetto", !isTicketmasterUrl("https://billetto.dk/e/1"));
+  ok("nor a lookalike domain", !isTicketmasterUrl("https://ticketmaster.dk.evil.com/e/1"));
+  ok("nor a bare string", !isTicketmasterUrl("ticketmaster.dk"));
+
+  // UNAPPROVED IS THE STATE THIS SHIPS IN, and it must be the safe one: every
+  // link still works and earns nothing, rather than the button disappearing.
+  // A reader needs to reach the tickets whether or not anybody is paid for it.
+  ok("nothing is active until he pastes the template", !ticketmasterActive());
+  is("so a Ticketmaster link is passed through untouched", ticketmasterUrl(TM), TM);
+  is("and so is everything else", ticketmasterUrl(NOT), NOT);
+  is("a link with no scheme is refused rather than wrapped", ticketmasterUrl("ticketmaster.dk/e/1"), null);
+  is("and so is nothing at all", ticketmasterUrl(""), null);
+  is("the disclosure says nothing when nothing is earned", ticketDisclosure(TM), "");
+
+  // ── AND THE STATE HE WILL ACTUALLY BE IN, ONCE APPROVED ─────────
+  // The template is passed in rather than read from config, because the config
+  // value ships empty and will stay empty until Impact approves him. Without
+  // this the only reachable branch was "no programme, pass everything through",
+  // and the host guard had no test that could ever exercise it. A mutation
+  // proved it: deleting the guard left the suite green.
+  const tpl = "https://ticketmaster.evyy.net/c/1234567/890123/4567?u={url}";
+  is("a live programme wraps a Ticketmaster link", ticketmasterUrl(TM, tpl),
+     "https://ticketmaster.evyy.net/c/1234567/890123/4567?u=" + encodeURIComponent(TM));
+  // THE ONE THAT MATTERS. Wrapping madbillet in a Ticketmaster tracking URL
+  // sends a reader somewhere they did not choose AND bills a network for a click
+  // it did not earn, which closes an account rather than paying a commission.
+  is("and never wraps anything else, even when the programme is live", ticketmasterUrl(NOT, tpl), NOT);
+  is("nor a lookalike domain, live", ticketmasterUrl("https://ticketmaster.dk.evil.com/e/1", tpl), "https://ticketmaster.dk.evil.com/e/1");
+  is("the destination is encoded, so its own query survives",
+     ticketmasterUrl(TM, tpl).endsWith(encodeURIComponent(TM)), true);
+  ok("which is the point: a raw destination would truncate at the first ampersand",
+     encodeURIComponent(TM).includes("%26") && TM.includes("&"));
+  // A template with no placeholder is the programme's landing page rather than
+  // this event. It still tracks, so it is used rather than thrown away.
+  is("a template with no placeholder is still used", ticketmasterUrl(TM, "https://tm.evyy.net/c/1/2/3"), "https://tm.evyy.net/c/1/2/3");
+  is("and the disclosure appears once a programme is live", ticketDisclosure(TM, tpl).includes("may earn Gemlyx"), true);
+  is("but not on a link that earns nothing", ticketDisclosure(NOT, tpl), "");
+
+  // The config constant exists and is empty, which is the shipped state. The
+  // Booking id beside it has been empty since 5 Aug for the same reason and
+  // carries a standing rule never to remove it.
+  const cfg = readFileSync(join(root, "src/config.js"), "utf8");
+  ok("the template constant exists", /export const TICKETMASTER_AFFILIATE_TEMPLATE = /.test(cfg));
+  ok("and ships empty", /export const TICKETMASTER_AFFILIATE_TEMPLATE = "";/.test(cfg));
+  ok("with the placeholder documented, so he knows what to paste", /\{url\}/.test(cfg));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

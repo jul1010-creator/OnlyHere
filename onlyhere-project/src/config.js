@@ -32,3 +32,28 @@ export const SITE_ORIGIN = "https://www.gemlyxtravel.com";
 // links that use it — accommodation/booking links are a permanent feature and
 // the app's planned revenue path, per Oliver directly (Aug 5 2026).
 export const BOOKING_AFFILIATE_ID = "";
+
+// ── TICKETMASTER, THROUGH IMPACT ────────────────────────────────────
+//
+// Oliver, 13 Aug 2026, halfway through Ticketmaster's application: "let's
+// finish the ticketmaster affiliate."
+//
+// A TEMPLATE rather than an id, and that is the design decision worth writing
+// down. Booking.com takes one number on a query parameter, so a constant works.
+// Impact hands out a whole tracking URL whose shape differs by programme and
+// has changed more than once: some are ticketmaster.evyy.net/c/<a>/<b>/<c>,
+// newer ones sit on an impact.com or .pxf.io host, and the destination rides in
+// a `u=` parameter. Guessing which he will be given and hardcoding it would
+// mean a code change on the day he is approved, which is the worst day to need
+// one.
+//
+// So he pastes the link Impact gives him with {url} where the destination goes,
+// and nothing else changes:
+//
+//   "https://ticketmaster.evyy.net/c/1234567/890123/4567?u={url}"
+//
+// EMPTY UNTIL APPROVED, exactly like the Booking id above. Empty means every
+// Ticketmaster link stays an ordinary link that earns nothing. It does NOT mean
+// the link disappears: a reader still has to be able to reach the tickets, and
+// the revenue is the second reason that button exists, not the first.
+export const TICKETMASTER_AFFILIATE_TEMPLATE = "";

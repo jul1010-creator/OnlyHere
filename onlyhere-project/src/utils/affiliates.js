@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID } from "../config";
+import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE } from "../config";
 
 // ── WHERE TO STAY LINKS (Oliver, 7 Aug: "on accommodation, put booking.com
 // and AirBnB as affiliate links for me") ─────────────────────────────
@@ -54,3 +54,81 @@ export const STAY_DISCLOSURE = BOOKING_AFFILIATE_ID
   : "These are plain search links. Gemlyx earns nothing from them yet.";
 
 export const affiliateActive = () => !!BOOKING_AFFILIATE_ID;
+
+// ── TICKETMASTER, AND ONLY TICKETMASTER ─────────────────────────────
+//
+// Oliver, 13 Aug 2026: "let's finish the ticketmaster affiliate."
+//
+// The hosts an Impact/Ticketmaster link is allowed to wrap. This is the whole
+// safety of the feature and it is a short list on purpose.
+//
+// Gemlyx links out to madbillet, billetto, billetexpressen, kultunaut and
+// whichever agent an operator happens to use, and wrapping ANY of those in a
+// Ticketmaster tracking URL would be two separate wrongs at once: the reader
+// lands somewhere they did not choose, and the affiliate network is sent a
+// click it did not earn, which is the kind of thing that gets an account closed
+// rather than a commission paid.
+//
+// ticketmaster.dk and .com are the Danish and international storefronts.
+// livenation is here because Ticketmaster's own programme covers it and its
+// links appear on Danish event pages; if his approval does not include it, take
+// it out rather than hoping.
+const TICKETMASTER_HOSTS = ["ticketmaster.dk", "ticketmaster.com", "ticketmaster.eu", "livenation.dk", "livenation.com"];
+
+const hostOf = (url) => {
+  try { return new URL(String(url)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
+};
+
+export const isTicketmasterUrl = (url) => {
+  const h = hostOf(url);
+  return !!h && TICKETMASTER_HOSTS.some(d => h === d || h.endsWith(`.${d}`));
+};
+
+// Returns the tracked link, or the ORIGINAL url, or null when there is nothing
+// worth linking to. Never returns a tracking URL wrapped around a destination
+// that is not Ticketmaster's, and never invents a template.
+//
+// THE DESTINATION IS ENCODED, because it rides inside a query parameter and a
+// Ticketmaster event URL routinely carries its own ?query. Leaving it raw would
+// truncate the deep link at the first ampersand and drop the reader on a
+// homepage, which is the shape of bug that pays nothing AND annoys somebody.
+// ── THE TEMPLATE IS A PARAMETER, SO THE LIVE STATE CAN BE TESTED ────
+// It defaults to the config value, so every caller stays a one-argument call.
+// It exists because the constant ships EMPTY and will do until he is approved,
+// which meant the only reachable branch was "no programme, pass everything
+// through" and the host guard, the single thing standing between a reader and a
+// wrongly-wrapped link, had no test that could ever exercise it.
+//
+// A mutation caught that: deleting `!isTicketmasterUrl(raw)` left the suite
+// green, because the empty template short-circuited before the guard was
+// reached. The behaviour that matters most was the behaviour nothing checked.
+export const ticketmasterUrl = (url, template = TICKETMASTER_AFFILIATE_TEMPLATE) => {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  if (!template || !isTicketmasterUrl(raw)) return raw;
+  // ── ONE BRANCH, BECAUSE THE OTHER ONE WAS THE SAME BRANCH ─────────
+  // This was `template.includes("{url}") ? replace(...) : template`, and a
+  // mutation showed the two arms are indistinguishable: String.replace is a
+  // no-op when the placeholder is absent, so both return the template
+  // unchanged. A conditional whose arms agree is a place to be wrong later for
+  // no benefit now.
+  //
+  // The behaviour it was spelling out is still true and still worth knowing: a
+  // template with no {url} is a link to the programme's landing page rather
+  // than to this event. It tracks, so it is used rather than discarded, and it
+  // is not dressed up as a deep link.
+  return template.replace("{url}", encodeURIComponent(raw));
+};
+
+export const ticketmasterActive = () => !!TICKETMASTER_AFFILIATE_TEMPLATE;
+
+// ── WHAT A READER IS TOLD, AND ONLY WHEN IT IS TRUE ─────────────────
+// Same rule as STAY_DISCLOSURE above and the same reason: a blanket "these are
+// affiliate links" on a page where nothing pays is a false statement about
+// money, and the identity of this whole app is not saying things that are not
+// so. Returns "" when this particular link earns nothing, so a caller that
+// renders it unconditionally still prints nothing.
+export const ticketDisclosure = (url, template = TICKETMASTER_AFFILIATE_TEMPLATE) =>
+  !!template && isTicketmasterUrl(url)
+    ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
+    : "";
