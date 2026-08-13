@@ -18,7 +18,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } fro
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
@@ -76,8 +76,8 @@ import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems } from "./utils/journey";
 import { correctEntry, keepMeasured, MEASURED_FIELDS } from "./utils/correction";
-import { sourceRulesBlock, directSourceSearches, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
-import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn } from "./utils/regions";
+import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
+import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
@@ -2175,8 +2175,94 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // about, which is his own "include, not restrict" rule: a village with no
       // page on visitdenmark.dk is the normal case, the general search above
       // already ran, and nothing here changes what the writer is allowed to say.
+
+      // ── SECOND CHANCE AT PLACING IT, NOW THAT SOMETHING WAS READ ──────
+      //
+      // Oliver's Græskarfestival run, 13 Aug 2026, first three steps:
+      //
+      //    1. Where this place is  [fetch · empty]
+      //       got: nothing placed "Græskarfestival", so no region is known and
+      //            every place-scoped source will be left out
+      //    8. Location lookup      [fetch · empty]
+      //    9. Opening hours and address  [google · FAILED]
+      //       why: Places answered but refused: No matching place found
+      //
+      // So the draft ran with no region, no coordinate and no nearest stop. And
+      // the absence gate then made it WORSE for the reader, correctly: the
+      // writer had put "There's no train station in Skælskør itself; the
+      // nearest are Slagelse or Korsør" into the prose, nothing had measured
+      // that absence, so it was cut. The reader ends up told nothing at all
+      // about getting there, when a real answer exists.
+      //
+      // THE TOWN WAS NEVER UNKNOWN. That same draft's own mapHint reads
+      // "Havnepladsen, 4230 Skælskør, Denmark". The writer worked it out from
+      // the research, which means it was in text this pipeline had already paid
+      // for, several steps before anything needed it.
+      //
+      // A Danish postal address is four digits and a town, which is a shape code
+      // can read exactly. danishAddressIn takes the most frequently repeated one
+      // rather than the first, because a research blob also contains the ticket
+      // vendor's registered office and the tourist board's own address, and each
+      // of those appears once while the venue's is on the listing, the official
+      // site and the roundup.
+      //
+      // ── AND IT RUNS HERE, NOT LATER, ON PURPOSE ──────────────────────
+      // Before the founder sources are chosen, so a region found this way still
+      // scopes them, and well before the frozen facts, so the nearest stop gets
+      // looked up from a real coordinate. Placing it after the draft would have
+      // been easier and would have fixed nothing that matters.
+      if (!placed) {
+        try {
+          const found = danishAddressIn(context);
+          if (found) {
+            // The town first, because a venue geocoded WITH its town is a real
+            // coordinate, and the bare postcode is only ever the town centre.
+            let coords = await geocodePlace(`${name}, ${found.town}`);
+            // Named fromVenue rather than `precise` because the first attempt
+            // above already has a `precise` in its own block, and the suite's
+            // use-before-declare scan reads ORDER across the whole function: two
+            // same-named locals in two sibling blocks look to it exactly like
+            // the draftTown bug it exists to catch. A checker that cries wolf
+            // gets switched off, so the variable moves rather than the checker.
+            let fromVenue = !!coords;
+            let foundVia = coords ? `Nominatim, on "${name}, ${found.town}", with the town read from the research` : "";
+            if (!coords) {
+              coords = await geocodePlace(found.address);
+              foundVia = `the centre of ${found.town}, read from "${found.address}" in the research`;
+              fromVenue = false;
+            }
+            if (coords) {
+              draftTown = draftTown || found.town;
+              placed = { ...coords, precise: fromVenue, via: foundVia, region: regionAt(coords.lat, coords.lon), kommune: kommuneNameAt(coords.lat, coords.lon) };
+            }
+          }
+          note("Where this place is, second attempt", {
+            provider: "fetch",
+            detail: "a Danish postal address read out of the research already gathered",
+            outcome: placed ? "ok" : "empty",
+            got: placed
+              ? `${found.address} appeared ${found.mentions === 1 ? "once" : `${found.mentions} times`} in the research, giving ${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)} — ${describeRegion(placed.lat, placed.lon, placed.precise)}`
+              : found
+                ? `found "${found.address}" in the research but nothing geocoded from it`
+                : "no Danish postal address anywhere in the research, so this draft stays unplaced",
+            why: placed ? "" : "Without a coordinate there is no region, no nearest stop, and no place-scoped source.",
+            used: !!placed,
+          });
+          ui(setStudioPlaced, placed);
+        } catch (e) {
+          note("Where this place is, second attempt", {
+            provider: "fetch", detail: "reading an address out of the research", outcome: "failed", used: false,
+            why: String(e?.message || e).slice(0, 160),
+            got: "the second lookup threw, so the draft stays unplaced",
+          });
+        }
+      }
+
       const founderUrls = [];
       const sourceHits = [];
+      // Declared out here so the overflow search at the end of the block can be
+      // scoped by the same context the four dedicated searches were.
+      let sourceCtx = null;
       {
         // `text` is the research gathered so far. A place-scoped source cannot
         // match an EVENT by name alone (Copenhell is not Copenhagen), and the
@@ -2244,7 +2330,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         // from that same coordinate by regions.regionAt, so a Rømø festival is
         // in Sønderjylland whether or not anybody has ever typed the word.
         const partHere = placed ? partOfCountry({ __lat: placed.lat, __lon: placed.lon }) : (known ? partOfCountry(known) : "");
-        const searches = directSourceSearches(founderSources, sType, {
+        // ── ONE DESCRIPTION OF WHERE THIS IS, NOT TWO ────────────────
+        // Named rather than built inline, because the overflow search below has
+        // to be scoped by the SAME context. Two inline object literals would
+        // agree on the day they were written and drift the first time one
+        // gained a field, which is how this codebase came by four separate
+        // copies of the perishable list.
+        sourceCtx = {
           name,
           text: context,
           town: draftTown,
@@ -2252,7 +2344,8 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           dayTripFrom: known?.dayTripFrom || "",
           part: partHere || "",
           region: placed?.region || (known ? regionOf(known) : ""),
-        });
+        };
+        const searches = directSourceSearches(founderSources, sType, sourceCtx);
         // ── WHICH SOURCES WERE CHOSEN, AND FROM WHAT ──────────────────
         // sourceHits already recorded the answer to "was kultunaut.dk searched"
         // on every draft and nothing wrote it down, which is why the providers
@@ -2330,7 +2423,63 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             sourceHits.push({ domain, count: 0, ok: false });
           }
         }
-        if (searches.length) ui(setSourceSearch, sourceHits);
+        // ── AND EVERYTHING THE CAP CUT, IN ONE CALL ──────────────────
+        // Oliver's Græskarfestival log, 13 Aug 2026: "4 of 18". The four were
+        // his four festival-scoped ticketing domains, and the one that had the
+        // answer, billetexpressen.dk, was the fifth. Its URL is in the finished
+        // draft's own __sources because the GENERAL web pass tripped over it,
+        // which is the whole story: the source he vouched for was cut, and the
+        // unscoped search found it by luck.
+        //
+        // include_domains takes a list, so the rest cost one call rather than
+        // fourteen. See overflowSourceSearch for why the top four keep their own.
+        const rest = overflowSourceSearch(founderSources, sType, sourceCtx);
+        if (rest) {
+          try {
+            const runRest = async (q) => {
+              const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&domains=${encodeURIComponent(rest.domains.join(","))}&n=12`);
+              const d = await r.json();
+              return { r, d, urls: r.ok && !d.error ? (d.results || []).map(x => x.url).filter(Boolean) : [] };
+            };
+            let { r: rRes, d: rData, urls: rUrls } = await runRest(rest.query);
+            if (rRes.ok && !rData.error && !rUrls.length && rest.fallbackQuery !== rest.query) {
+              const second = await runRest(rest.fallbackQuery);
+              if (second.urls.length) ({ r: rRes, d: rData, urls: rUrls } = second);
+            }
+            rememberUrlText(rData.results);
+            founderUrls.push(...rUrls);
+            const hitHosts = [...new Set(rUrls.map(u => domainOf(u)))];
+            note("Founder sources past the cap", {
+              provider: "tavily",
+              detail: `one search across the ${rest.covers.length} the four-source cap would otherwise have cut: ${rest.covers.join(", ")}`,
+              outcome: !(rRes.ok && !rData.error) ? "failed" : rUrls.length ? "ok" : "empty",
+              got: rUrls.length
+                ? `${rUrls.length} pages, from ${hitHosts.join(", ")}`
+                : "none of them had a page about this",
+              // NO SILENT CAPS. Tavily takes 300 domains and eleven variants per
+              // source means about twenty-seven before it bites, but if it ever
+              // does he is told which ones fell off rather than reading a total
+              // that looks complete.
+              why: rest.dropped.length ? `${rest.dropped.length} domain variants were past Tavily's 300 limit and were not searched` : "",
+              used: rUrls.length > 0,
+            });
+            // labelled(), not a bare join. The suite bans the anonymous
+            // `.map(r => r.snippet).join(" ")` shape by name because it is what
+            // stripped the host off every snippet and left the source hierarchy
+            // ranking a blob it could not see inside. Writing one here to test
+            // for emptiness would have put the banned string back in the file.
+            const restText = labelled(rData.results, 6);
+            if (rData.answer || restText) {
+              context += `\nSOURCES THE FOUNDER VOUCHES FOR (${rest.covers.join(", ")}), searched together for this place:\n${rData.answer ? `[the founder's vouched sites, synthesised across them] ${rData.answer}\n` : ""}${restText}`;
+            }
+          } catch {
+            note("Founder sources past the cap", {
+              provider: "tavily", detail: `${rest.covers.length} sources past the cap`, outcome: "failed", used: false,
+              got: "the combined search threw, so those sources were not read on this draft",
+            });
+          }
+        }
+        if (searches.length || rest) ui(setSourceSearch, sourceHits);
       }
 
       // Automatic Perplexity pre-check, BEFORE anything is written. A second,
@@ -3781,6 +3930,37 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           got: describePriceTrace(pt) || "the draft states no price",
           used: pt.checked && !pt.untraced.length,
         });
+        // ── AND THE OTHER DIRECTION, WHICH NOTHING ASKED ────────
+        // The trace above can only tell us whether a price the writer STATED is
+        // supported. "the draft states no price" reads as a clean pass, and on
+        // Ribelund and on Græskarfestival it was covering a page that stated one.
+        // This asks the opposite question: does anything we fetched say what a
+        // ticket costs, and did the draft say it.
+        //
+        // It appends to the same gate rather than living beside it, so it runs
+        // AGAIN after the auto-correction. The fifth standing rule: checking a
+        // draft does not check what replaced it.
+        const misses = priceMisses(readerText(t), { siteText: scrapedSiteText, listingText: listingSiteText });
+        const wanted = findTicketPrice({ siteText: scrapedSiteText, listingText: listingSiteText });
+        note(`What the pages say a ticket costs${suffix}`, {
+          provider: "fetch",
+          detail: "the operator's own page first, then a ticket shop or calendar, per the source order",
+          outcome: !wanted ? "empty" : misses.length ? "empty" : "ok",
+          got: wanted
+            ? (wanted.free
+                ? `${wanted.from === "official-site" ? "the operator's own page" : "a ticket shop or calendar"} says entry is free`
+                : `${wanted.lo}${wanted.hi !== wanted.lo ? ` to ${wanted.hi}` : ""} ${String(wanted.currency).toUpperCase()}, from ${wanted.from === "official-site" ? "the operator's own page" : "a ticket shop or calendar"}`)
+            : "no page we read states a ticket price, which is a real answer and not a failure",
+          why: misses.length ? misses[0].detail : "",
+          used: !!wanted && !misses.length,
+        });
+        // noteToFounder, not uncertainties: __notes is a __ field and
+        // shapeForLive is an ALLOW-LIST, so a note cannot leak to a reader,
+        // whereas uncertainties is published and rendered by HowWeKnow. This is
+        // a message to him about a gap in the draft, not a caveat for a
+        // traveller. It also dedupes by line, so running the gate twice on a
+        // draft the correction did not change does not read as two problems.
+        misses.forEach(m => noteToFounder(m.detail));
         // ── AND THE PAGE IT CAME FROM, RECORDED ─────────────────
         // Oliver: "Then write the page it got it from.. it got it from a very
         // very reliable source." The fact stays in the field; the page goes
@@ -4808,6 +4988,25 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // which is what actually reaches past the tourist canon. See
       // utils/discovery.js.
       const discoverAim = framingForTarget(discoverTarget, manageItems || [], { typeLabel, town: discoverTown });
+      // ── "I MEAN THE 'DISCOVER NEW EVENTS' TAB" ─────────────────────
+      // Oliver, 13 Aug 2026, pointing at exactly this function. His eighteen
+      // vouched domains have never been searched by it: five queries are
+      // planned, five plain web searches run, and one of the five slots is
+      // briefed as "one at local/regional tourism sources", so the planner has
+      // been asked to GUESS at the list he already wrote down.
+      //
+      // That is the wrong way round for this job more than for any other. A
+      // Danish festival's first appearance anywhere is a line on a tourist
+      // board's what's-on page or a kultunaut listing. Discovery is the one
+      // step where those sites are not a cross-check, they are the primary
+      // index, and it was the one step that never opened them.
+      //
+      // The town is the only place context discovery has, and it is often
+      // blank, which is correct and strict: a place-scoped source stays out
+      // when nothing says where we are.
+      const discoverCtx = discoverTown ? { name: discoverTown, town: discoverTown } : null;
+      const discoverHunt = discoverSourceSearch(founderSources, type, discoverCtx);
+      const discoverNote = discoverSourceNote(founderSources, type, discoverCtx);
 
       // BUG FIX: this was capped at 500 and, on a plain failure, threw immediately
       // with no retry — the same "Empty response from OpenAI" cause as Stage 1's
@@ -4818,7 +5017,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // in generateArea(), instead of a single try dying on one flaky response.
       const planResult = await withRetry(
         () => askOpenAI(
-          `You're helping a Danish travel guide find genuinely new candidates to research next: ${typeLabel}. Generate 5 diverse, SPECIFIC search queries (not generic categories) that would actually surface real, named candidates — vary the angle: one aimed at forum/Reddit-style discussion, one at "hidden gem" or "underrated" roundup articles, one at local/regional tourism sources, one at recent listings, one broad. ${extraFraming || ""}\n\n${discoverAim}\n\nRespond with ONLY a JSON array of 5 search query strings, nothing else.`,
+          `You're helping a Danish travel guide find genuinely new candidates to research next: ${typeLabel}. Generate 5 diverse, SPECIFIC search queries (not generic categories) that would actually surface real, named candidates — vary the angle: one aimed at forum/Reddit-style discussion, one at "hidden gem" or "underrated" roundup articles, one at local/regional tourism sources, one at recent listings, one broad. ${extraFraming || ""}${discoverNote}\n\n${discoverAim}\n\nRespond with ONLY a JSON array of 5 search query strings, nothing else.`,
           1400
         ),
         r => !!r.error,
@@ -4834,6 +5033,30 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       const searchResults = await Promise.all(queries.map(q =>
         fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => null)
       ));
+      // ONE call across every vouched domain, not one per domain. Discovery
+      // wants NAMES it has not seen, so breadth across the list beats depth on
+      // any one site: eight results spread over six tourist boards is a better
+      // candidate list than eight pages of the same board. n=16 because these
+      // are listing pages and a listing page is worth more here than anywhere
+      // else in the app.
+      let hunted = null;
+      if (discoverHunt) {
+        try {
+          const hRes = await fetch(`/api/search?q=${encodeURIComponent(discoverHunt.query)}&domains=${encodeURIComponent(discoverHunt.domains.join(","))}&n=16`);
+          const hData = await hRes.json();
+          hunted = hRes.ok && !hData.error ? hData : null;
+        } catch { hunted = null; }
+        note("The founder's own sources, searched for candidates", {
+          provider: "tavily",
+          detail: `${discoverHunt.covers.length} vouched sites in one call: ${discoverHunt.covers.join(", ")}`,
+          outcome: hunted ? ((hunted.results || []).length ? "ok" : "empty") : "failed",
+          got: hunted
+            ? `${(hunted.results || []).length} listing pages from ${[...new Set((hunted.results || []).map(r => domainOf(r.url)))].join(", ") || "nothing"}`
+            : "the combined search failed, so this run saw only the five open web queries",
+          why: discoverHunt.dropped.length ? `${discoverHunt.dropped.length} domain variants were past Tavily's 300 limit and were not searched` : "",
+          used: !!(hunted && (hunted.results || []).length),
+        });
+      }
       const combinedText = searchResults.map((r, i) => {
         if (!r) return "";
         // Use BOTH the short synthesized answer AND the individual result snippets —
@@ -4844,7 +5067,13 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
         return body ? `Search: "${queries[i]}"\n${body}` : "";
       }).filter(Boolean).join("\n\n");
 
-      if (!combinedText.trim()) throw new Error("Tavily returned nothing usable for these queries");
+      const huntedText = hunted
+        ? [`Search: the founder's own vouched sources (${discoverHunt.covers.join(", ")})`,
+           hunted.answer,
+           (hunted.results || []).map(x => `${x.title}: ${x.snippet || ""}`).join("\n")].filter(Boolean).join("\n")
+        : "";
+      const allText = [combinedText, huntedText].filter(t => t && t.trim()).join("\n\n");
+      if (!allText.trim()) throw new Error("Tavily returned nothing usable for these queries");
 
       const existingList = existing.length ? existing.join("; ") : "(nothing yet)";
       const synthResult = await withRetry(
@@ -4859,7 +5088,7 @@ For each real candidate found, give its exact name, the town/region it's in (emp
 
 Respond with ONLY a JSON array: [{"name": "...", "region": "...", "hook": "..."}]
 
-TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n${combinedText.slice(0, 14000)}`,
+TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n${allText.slice(0, 16000)}`,
           2200
         ),
         r => !!r.error,
@@ -5118,7 +5347,14 @@ TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n$
   const [sourceBusy, setSourceBusy] = useState(false);
   const [newSourceDomain, setNewSourceDomain] = useState("");
   const [newSourceNote, setNewSourceNote] = useState("");
-  const [newSourceType, setNewSourceType] = useState("");
+  // ── "IT NEEDS TO BE ON BOTH.. BUT I CAN ONLY PUT IT ON ONE" ──────
+  // Oliver, 13 Aug 2026, about billetexpressen.dk, which sells for festivals
+  // AND for the museums and workshops that take bookings. A LIST of types now,
+  // serialised comma-separated into the same applies_to column, so every row
+  // already in his database keeps working untouched and an empty list still
+  // means every type.
+  const [newSourceTypes, setNewSourceTypes] = useState([]);
+  const newSourceType = serialiseTypes(newSourceTypes);
   const [newSourcePlace, setNewSourcePlace] = useState("");
 
   // ── THE SAME HONEST MESSAGE THE FACTS PANEL NOW HAS ─────────────
@@ -5175,8 +5411,12 @@ TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n$
     const domain = normaliseDomain(newSourceDomain);
     if (!domain) { setSourceError(`"${newSourceDomain.trim()}" is not a domain I can use. Paste the address of the site, like visitdenmark.dk or a link to one of its pages.`); return; }
     // A duplicate is not an error worth a message, it is a no-op with a reason.
-    if (sourceRows.some(r => normaliseDomain(r.domain) === domain && (r.applies_to || "") === newSourceType && cleanPlace(r.applies_place) === cleanPlace(newSourcePlace))) {
-      setSourceError(`${domain} is already on the list for ${TYPE_LABEL[newSourceType] || newSourceType}${newSourcePlace ? ` in ${cleanPlace(newSourcePlace)}` : ""}.`);
+    // serialiseTypes on BOTH sides, so a stored "free,festival" and a freshly
+    // ticked "festival,free" are recognised as the same row rather than added
+    // twice under two spellings of one scope.
+    if (sourceRows.some(r => normaliseDomain(r.domain) === domain && serialiseTypes(r.applies_to || "") === newSourceType && cleanPlace(r.applies_place) === cleanPlace(newSourcePlace))) {
+      const label = newSourceTypes.length ? parseTypes(newSourceType).map(t => TYPE_LABEL[t] || t).join(" and ") : TYPE_LABEL[""];
+      setSourceError(`${domain} is already on the list for ${label}${newSourcePlace ? ` in ${cleanPlace(newSourcePlace)}` : ""}.`);
       return;
     }
     setSourceBusy(true); setSourceError(null);
@@ -5188,7 +5428,7 @@ TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n$
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) { setSourceError(sourcesErrorFor(res.status, body)); setSourceBusy(false); return; }
-      setNewSourceDomain(""); setNewSourceNote(""); setNewSourcePlace("");
+      setNewSourceDomain(""); setNewSourceNote(""); setNewSourcePlace(""); setNewSourceTypes([]);
       await loadSources();
       refreshSources();
       // ── DOES THIS DOMAIN EXIST AT ALL ───────────────────────────
@@ -9051,7 +9291,9 @@ ${profileForPrompt(userProfile)}`;
                                 one city's tourist office, and that difference is
                                 the whole point. */}
                             <span style={{ fontSize: 10, fontWeight: 700, color: row.applies_to ? C.gold : C.muted, background: row.applies_to ? `${C.gold}18` : "none", border: `1px solid ${row.applies_to ? `${C.gold}44` : C.border}`, borderRadius: 100, padding: "2px 9px", flexShrink: 0 }}>
-                              {TYPE_LABEL[row.applies_to || ""] || row.applies_to}
+                              {parseTypes(row.applies_to).length
+                                ? parseTypes(row.applies_to).map(t => TYPE_LABEL[t] || t).join(" + ")
+                                : TYPE_LABEL[""]}
                             </span>
                             {/* ── AND WHICH TIER IT WAS UNDERSTOOD AS ────────
                                 A scope reading "Sønderjylland" looks identical
@@ -9093,10 +9335,26 @@ ${profileForPrompt(userProfile)}`;
                           onKeyDown={e => { if (e.key === "Enter") addSource(); }}
                           placeholder="what it is good for (optional)"
                           style={{ flex: 1, minWidth: 180, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
-                        <select value={newSourceType} onChange={e => setNewSourceType(e.target.value)}
-                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif", cursor: "pointer" }}>
-                          {["", ...CONTENT_TYPES].map(t => <option key={t || "all"} value={t}>{TYPE_LABEL[t] || t}</option>)}
-                        </select>
+                        {/* Chips rather than a <select multiple>, which on a
+                            desktop browser is a scroll box needing ctrl-click
+                            and is the reason nobody discovers multi-select. The
+                            "Everything" chip is the empty list, so it clears
+                            rather than ticking all nine: a source scoped to all
+                            nine and a source scoped to everything behave the
+                            same today and would stop behaving the same the day
+                            a tenth type is added. */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                          {["", ...CONTENT_TYPES].map(t => {
+                            const on = t === "" ? newSourceTypes.length === 0 : newSourceTypes.includes(t);
+                            return (
+                              <button key={t || "all"} type="button"
+                                onClick={() => setNewSourceTypes(prev => t === "" ? [] : prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])}
+                                style={{ background: on ? `${C.gold}22` : C.bg, border: `1px solid ${on ? `${C.gold}66` : C.border}`, color: on ? C.gold : C.muted, borderRadius: 100, padding: "5px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                {TYPE_LABEL[t] || t}
+                              </button>
+                            );
+                          })}
+                        </div>
                         <input value={newSourcePlace} onChange={e => setNewSourcePlace(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") addSource(); }}
                           list="gemlyx-source-places" placeholder="only for… (a region, a town, or Jutland)"

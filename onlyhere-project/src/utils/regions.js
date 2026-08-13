@@ -228,6 +228,77 @@ export const regionsPresent = (entries) => {
   return REGION_NAMES.filter(r => found.has(r));
 };
 
+// ── READING A DANISH ADDRESS OUT OF WHAT WAS ALREADY PAID FOR ───────
+//
+// Oliver's Græskarfestival run, 13 Aug 2026. The whole draft ran blind:
+//
+//    1. Where this place is  [fetch · empty]
+//       got: nothing placed "Græskarfestival", so no region is known
+//    8. Location lookup      [fetch · empty]
+//    9. Opening hours and address [google · FAILED]
+//       why: Places answered but refused: No matching place found
+//
+// So no region, no coordinate, no nearest stop. And then the absence gate did
+// its job and made it WORSE for the reader: the draft had written "There's no
+// train station in Skælskør itself; the nearest are Slagelse or Korsør", which
+// is an absence nothing had measured, so it was correctly cut. The reader ends
+// up told nothing at all about how to get there, when the real answer exists:
+// train to Slagelse, then the 470R bus to Havnepladsen.
+//
+// THE TOWN WAS NEVER ACTUALLY UNKNOWN. The finished draft's own mapHint reads
+// "Havnepladsen, 4230 Skælskør, Denmark". The writer worked it out from the
+// research, which means it was sitting in text the pipeline had already bought,
+// three steps before anything needed it.
+//
+// ── A DANISH POSTAL ADDRESS IS A REGULAR SHAPE ──────────────────────
+// Four digits, a space, a town. 1000 to 9999, which is the whole range Denmark
+// uses. A kultunaut listing prints it, a tourist board's practical-information
+// box prints it, and the venue's own footer prints it. That is a thing code can
+// read exactly, which beats asking a model where somewhere is.
+//
+// MOST FREQUENT WINS, not first. A research blob also contains the ticket
+// vendor's registered office and the tourist board's own address, and those
+// appear once. The venue's address is the one repeated across the listing, the
+// official site and the roundup. A tie goes to the earliest, which is the
+// closest thing to "the page was about this" that position can tell us.
+const DK_POSTCODE = /\b([1-9]\d{3})\s+([A@-ZÆØÅ][a-zA-ZÆØÅæøåéèü.\-]*(?:\s+[A-ZÆØÅa-z][a-zA-ZÆØÅæøåéèü.\-]*){0,2})/g;
+
+// Words that follow a postcode without being a town: a Danish address block runs
+// "4230 Skælskør, Danmark" and a sentence can run "4230 og 4220". Kept short and
+// literal rather than clever, because a wrong town here sends the whole draft to
+// the wrong place and a missed one just leaves things as they already are.
+const NOT_A_TOWN = new Set(["danmark", "denmark", "og", "eller", "kr", "dkk", "ca", "og", "the", "and"]);
+
+export const danishAddressIn = (text) => {
+  const t = String(text || "");
+  const counts = new Map();
+  let m;
+  DK_POSTCODE.lastIndex = 0;
+  while ((m = DK_POSTCODE.exec(t)) !== null) {
+    const code = m[1];
+    // The town is the first word after the code, plus up to two more only when
+    // they are capitalised, so "4230 Skælskør" and "2100 København Ø" both work
+    // and "4230 Skælskør er en" stops at the town.
+    const words = m[2].split(/\s+/).filter(Boolean);
+    const kept = [];
+    for (const w of words) {
+      if (NOT_A_TOWN.has(fold(w))) break;
+      if (kept.length && !/^[A-ZÆØÅ]/.test(w)) break;
+      kept.push(w.replace(/[.,;:]+$/, ""));
+      if (kept.length === 3) break;
+    }
+    const town = kept.join(" ").trim();
+    if (!town || town.length < 2) continue;
+    const key = `${code} ${town}`;
+    const prev = counts.get(key);
+    if (prev) prev.n += 1;
+    else counts.set(key, { code, town, n: 1, at: m.index });
+  }
+  if (!counts.size) return null;
+  const best = [...counts.values()].sort((a, b) => b.n - a.n || a.at - b.at)[0];
+  return { postcode: best.code, town: best.town, mentions: best.n, address: `${best.code} ${best.town}` };
+};
+
 // One line for a run log or the Studio panel: what we decided and from what.
 // A region derived from a coordinate that was itself a town-centre fallback is
 // a different quality of answer from one derived from a real geocode, and the

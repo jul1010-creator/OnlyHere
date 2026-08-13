@@ -269,3 +269,289 @@ place is"**, and it should name the region before a single search has run.
   glance-leak gate not knowing the shape "check copenhell.dk", food row 36
   Hyttefadet with no `desc`, TinderBox row 62's backwards date range, and the
   five towns with duplicate published rows.
+
+---
+
+# Part two — reaching every source you added
+
+> *"When it searches on the web for events, towns, attractions, etc. include the
+> research sources I have implemented. Perhaps they'll help."*
+>
+> *"I mean the 'discover new events' tab."*
+>
+> *"billetexpressen.dk needs to be on both attractions and events.. but I can
+> only put it on one."*
+
+    Suite      3567 passing, 0 failing   (was 3501)
+    Mutations  16 more run, every one red before its commit
+    Build      vite build clean
+
+## 5. Your own run log measured the problem
+
+From the Græskarfestival draft you sent:
+
+    2. Founder sources chosen  [tavily · ok]
+       got: 4 of 18: billet.unitedtickets.dk, billetlugen.dk, billetto.dk,
+            kultunaut.dk
+
+**Four of eighteen.** All four are ticketing, because the specificity sort puts
+festival-scoped sources first and you have four of those. So
+`billetexpressen.dk` never ran a search — and Billetexpressen is where that
+festival's tickets are sold. Its URL is sitting in the finished draft's own
+`__sources` because the **general** web pass tripped over it, and Gemini named
+it too. The one source that had the answer was the one the cap cut.
+
+`include_domains` takes a list of up to 300, so everything past the cap now fits
+in **one** call. Cost per draft goes from four searches to five.
+
+The top four keep their own dedicated searches rather than being folded in, and
+that split is the point: results from a combined query are ranked across the
+whole set, so a site with thousands of pages crowds out the parish council's one
+relevant PDF. A source with its own call is guaranteed its own results. The
+overflow call cannot promise that and does not need to — its job is that nothing
+on your list is unreachable.
+
+## 6. The discover tab
+
+It plans five queries and runs five plain web searches. **Not one of your
+eighteen domains has ever been searched by it**, and one of the five slots is
+briefed as *"one at local/regional tourism sources"* — so the planner has been
+asked to guess at the list you already wrote down.
+
+That is the wrong way round here more than anywhere else. A Danish festival's
+first appearance anywhere is a line on a tourist board's what's-on page or a
+kultunaut listing. Discovery is the one step where those sites are not a
+cross-check, they are the primary index, and it was the one step that never
+opened them.
+
+One combined call across every in-scope source, and the planner is now told
+which sites are already covered so it spends its five on forums, blogs, local
+news and roundups instead. A discovery query is shaped like a listing page
+(`kalender hvad sker der arrangementer`), not like the draft-side queries which
+assume you already know the name.
+
+## 7. billetexpressen.dk on both
+
+`applies_to` held one type. It holds a comma list now, stored in the same column,
+so every row already in your database keeps working with no migration and blank
+still means every type. The picker is chips rather than a dropdown, because a
+`<select multiple>` needs ctrl-click and nobody ever discovers it.
+
+One thing the change had to be careful about: you *could* have added the domain
+twice, once per type, and the duplicate check would have allowed it. But
+`sourcesFor` dedupes **by domain**, so those two rows only stayed separate
+because the type filter happens to run first. Anyone reordering those two lines
+would have silently dropped one of them.
+
+Sort order changed with it: "has a type" stopped being specific enough once a
+source can carry several. A domain scoped to Events alone was chosen *for*
+events; one scoped to Events + Attractions + Workshops is a general ticketing
+site. Fewer types now sorts first.
+
+## 8. The issue in your file: the draft ran blind
+
+    1. Where this place is  [fetch · empty]
+       got: nothing placed "Græskarfestival", so no region is known
+    8. Location lookup      [fetch · empty]
+    9. Opening hours and address  [google · FAILED]
+       why: Places answered but refused: No matching place found
+
+No region, no coordinate, no nearest stop. And then the absence gate did its job
+and made it **worse for the reader**: the writer had put *"There's no train
+station in Skælskør itself; the nearest are Slagelse or Korsør"* into the prose,
+nothing had measured that absence, so it was correctly cut. The reader ends up
+told nothing at all about getting there — when Gemini found the real answer
+(train to Slagelse, then the 470R bus to Havnepladsen, 1h55 from København H).
+
+**The town was never actually unknown.** That same draft's own `mapHint` reads
+`"Havnepladsen, 4230 Skælskør, Denmark"`. The writer worked it out from the
+research, which means it was sitting in text the pipeline had already paid for,
+several steps before anything needed it.
+
+A Danish postal address is four digits and a town — a shape code can read
+exactly. `danishAddressIn` now reads it out of the research and retries the
+location lookup. **Most repeated wins, not first**: a research blob also
+contains the ticket vendor's registered office and the tourist board's own
+address, and each of those appears once while the venue's is on the listing, the
+official site and the roundup. In your Græskarfestival text, `4230 Skælskør`
+appears three times and `8000 Aarhus C` once.
+
+It runs **after** the research (that is where the address is) and **before** the
+sources are chosen (otherwise the region it finds scopes nothing). Putting it
+after the draft would have been easier and would have fixed nothing that matters.
+
+What that would have changed on your run: a coordinate in Skælskør, region
+Midt- og Vestsjælland, a real nearest-stop lookup, and the region in every
+research prompt.
+
+## 9. What the suite caught me doing
+
+Worth recording, because it is the same class of bug this project keeps finding:
+
+- I wrote `.map(r => r.snippet).join(" ")` in the overflow search. That exact
+  anonymous join is **banned by name** in the suite, because it is what stripped
+  the host off every snippet and left the source hierarchy ranking a blob it
+  could not see inside. Caught immediately.
+- My first fold in `normaliseDomain` stripped spaces, which put it in front of
+  the `includes(" ")` guard and would have accepted `hello world.dk` as a
+  domain. Caught by the assertion that nothing previously refused is accepted.
+- Two of my own new assertions passed for the wrong reason: fixtures where
+  alphabetical order and specificity order happened to agree, and where the
+  venue's address was also the first one in the text. Both rewritten so the two
+  rules disagree.
+- A pre-existing assertion indexed `[0]` on a possibly-empty array, so one of my
+  mutations **crashed** the suite instead of failing it and sixty later
+  assertions went silent. Guarded, along with five of my own.
+
+## Files, part two
+
+    src/utils/sourcePolicy.js      multi-type sources, overflow search, discover search
+    src/utils/regions.js           danishAddressIn
+    src/App.jsx                    second location attempt, overflow wiring,
+                                   discover wiring, the multi-type picker
+    tests/run.mjs                  3567 assertions
+
+## Try it
+
+Add `billetexpressen.dk` and tick **Events** and **Attractions**. The row should
+read `Events + Attractions`.
+
+Redraft Græskarfestival. The log should now show **"Where this place is, second
+attempt"** naming `4230 Skælskør`, and **"Founder sources past the cap"** naming
+the fourteen it used to cut — billetexpressen among them.
+
+---
+
+# Part three — tickets, starting with the price
+
+> *"We just need to focus on getting tickets right until then."*
+
+    Suite      3623 passing, 0 failing   (was 3567)
+    Mutations  12 more run, every one red before its commit
+    Build      vite build clean
+
+## 10. Rejseplanen, since you asked first
+
+Short version, and you corrected me on the important word: **the static GTFS is
+free but you still have to apply** — a contact form, not a download link. It is
+CC BY 4.0 and *"du må gerne bruge vores statiske data i kommerciel sammenhæng"*,
+so a commercial product may use it. Updated roughly every 14 days, minimum two
+months forward.
+
+The **live API is different**: the 50K calls/month free tier is
+non-commercial only, and *"Rejseplanens API må kun bruges i kommerciel
+sammenhæng, når der er indgået en aftale"* — Gemlyx would need an agreement.
+
+Worth knowing for later: most of what has bitten us does not need journey
+planning. "Does Skælskør have a station", "what serves this stop", "is there a
+470R" are stop and route lookups. Only a full Copenhagen-to-Møgeltønder
+itinerary needs the API.
+
+## 11. Four findings on tickets, and the last one is the sharpest
+
+- **`"billetto"` is in `MEASURED_SOURCES` and there is no Billetto integration
+  anywhere in the codebase.** A status value nothing can ever produce — the same
+  dead-enum shape `tickets.js` already documents about two of its four badges.
+- **`"official-site"` is NOT in `MEASURED_SOURCES`.** So the festival's own
+  ticket page can never produce a measured status while Ticketmaster can, which
+  directly contradicts your own rule: *"the tickets on the official website HAS
+  TO BE PRIORITISED."*
+- **Ticketmaster can almost never fire.** `tickets.js` says so itself: Danish
+  festivals "sell through Billetto, Ticketbutler, or a form on their own site".
+- **Your Græskarfestival run had the answer in hand.**
+  `billetexpressen.dk/venue/graeskarfestival` — a venue page for that exact
+  festival — was sitting in `__sources`. The ticket step never looked at it and
+  reported `verdict: "no-match"`, `source: "writer"`.
+
+## 12. Nothing ever went looking for a price
+
+`tracePrices` is a good gate and it can only answer one question: **is the price
+the writer stated supported.** When the writer states nothing it returns an
+empty list and reports nothing, which reads as a pass. Both of your runs ended
+exactly there:
+
+    Ribelund, 12 Aug      "Pris: Entré: 400 kr." sat in a kultunaut snippet the
+                          pipeline had already fetched, and the entry shipped
+                          with no price
+    Græskarfestival,      16. Prices against the official site [google · ok]
+    13 Aug                    got: the draft states no price
+
+A clean verdict on a missing answer. This is your own universal diagnosis in its
+worst form: not *"the pipeline measures and lets prose describe the
+measurement"*, but **the pipeline never measured and let silence stand.**
+
+`ticketPriceOn` reads what a page says a ticket costs. **Finding is stricter
+than checking**, which is the opposite asymmetry to the one `tracePrices`
+documents, for the same underlying reason: a figure invented here goes into a
+field a reader plans around, a figure missed here leaves things as they already
+are. Three conditions, all required — a currency token, a ticket word within 80
+characters before it, and that word not being one of the things sold *beside*
+the ticket (camping, parking, booking fee).
+
+**Free is an answer**, not an absence. Most of the small Danish events this app
+writes about are free, and a finder that only reports numbers reports nothing
+for them — which reads identically to having failed. A price on the same page
+wins over the word free, because "gratis for børn, voksne 200 kr" is a paid
+event with a concession.
+
+**Your order, enforced**: the operator's own page first, a ticket shop or
+calendar second, and the tier travels with the answer. A price from the operator
+can be stated flatly; one from a reseller has to say where it came from.
+
+The finding goes to `__notes`, not `uncertainties` — `shapeForLive` is an
+allow-list so a `__` field cannot leak to a reader, and this is a message to you
+about a gap in the draft, not a caveat for a traveller. That leak has happened
+once already. And the number is never written straight into a published field:
+it goes back through the writer and every gate a written price already passes.
+
+It lives inside `gateDraft`, so it **runs again after the auto-correction**.
+Fifth standing rule.
+
+## 13. What the suite caught, again
+
+**The Danish letters bit for the fourth time this week.** The first
+`TICKET_WORD` pattern ended in `\b` after "entré". JavaScript defines a word
+boundary on `[A-Za-z0-9_]`, so **é is a non-word character**: non-word beside
+non-word is no boundary, and the pattern could never match.
+`ticketPriceOn("Entré 400 kr")` returned null — the finder was dead on exactly
+the Danish pages it was written for. Same family as the NFD-before-å bug in
+`fold()` and the missing boundary in `containsName`. The fix is the one this
+codebase already settled on: fold the text, keep the pattern ASCII.
+
+Three of my own assertions passed for the wrong reason and were rewritten:
+
+- `ticketPriceOn("Camping 200 kr")` never reached the ancillary check at all,
+  because no ticket word preceded the figure either. It passed whether or not
+  the rule existed. Now `"Billetter til camping koster 200 kr"`.
+- The no-price finding and the wrong-price finding produced indistinguishable
+  assertions — same count, same severity, both quoting the page's figure — so
+  deleting the no-price branch left everything green.
+- The window test built its filler as `TICKET_WINDOW + 40` characters, so
+  widening the window widened the test with it. This file's own notes name that
+  trap: *a test written relative to a constant cannot catch that constant being
+  wrong.*
+
+And two more `[0]`-on-empty-array crashes, mine this time.
+
+## Files, part three
+
+    src/utils/entryAudit.js    ticketPriceOn, findTicketPrice, priceMisses
+    src/App.jsx                wired into gateDraft, so it runs twice
+    tests/run.mjs              3623 assertions
+
+## Try it
+
+Redraft Græskarfestival. The log gains **"What the pages say a ticket costs"**,
+and if any page you fetched states one, a draft without it now carries a note
+saying so instead of passing clean.
+
+## Still open on tickets
+
+- **Billetto is declared measured and connected to nothing.** Either build it or
+  take it off the list — a source that can never speak makes the enum look
+  covered.
+- **The status half.** You chose price first; on sale / sold out / free is still
+  almost always the writer's guess, and two of the four badges remain values
+  nothing can produce.
+- **`official-site` still is not in `MEASURED_SOURCES`.** The price now respects
+  your hierarchy. The status does not yet.

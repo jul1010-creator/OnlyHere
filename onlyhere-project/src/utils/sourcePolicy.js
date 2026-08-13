@@ -209,15 +209,62 @@ export const placeMatches = (place, ctx) => {
   return same(c.name, want) || same(c.town, want) || same(c.partOf, want) || same(c.dayTripFrom, want);
 };
 
+// ── "IT NEEDS TO BE ON BOTH.. BUT I CAN ONLY PUT IT ON ONE" ─────────
+//
+// Oliver, 13 Aug 2026, about billetexpressen.dk. He is right, and the case is
+// not unusual: a Danish ticket shop sells for festivals AND for the museums and
+// workshops that take bookings, so "which single type is this" has no answer.
+//
+// He could have added the domain twice, once per type, and the duplicate check
+// would have allowed it. That is a workaround rather than a fix, and it has a
+// trap in it: sourcesFor and sourcesToSearch dedupe BY DOMAIN, so the two rows
+// only stay separate because the type filter runs first. Anyone reordering
+// those two lines would silently drop one of his rows.
+//
+// So applies_to holds a LIST. Stored comma-separated in the same text column,
+// which is why parseTypes accepts a bare single value unchanged: every row
+// already in his database keeps working with no migration, and "" still means
+// every type.
+export const parseTypes = (v) => {
+  const raw = Array.isArray(v) ? v : String(v == null ? "" : v).split(",");
+  const out = [];
+  for (const t of raw) {
+    const s = clean(t);
+    // An unknown type is DROPPED rather than kept as a scope nothing matches.
+    // A row scoped to a type the Studio does not draft is a source that looks
+    // configured and never once fires, which is the silent shape this file has
+    // spent the most comments on.
+    if (CONTENT_TYPES.includes(s) && !out.includes(s)) out.push(s);
+  }
+  return out;
+};
+
+// The stored form, so what goes into the column is what parseTypes will read
+// back. Order follows CONTENT_TYPES rather than what he clicked, so two rows
+// covering the same pair are the same string and the duplicate check works.
+export const serialiseTypes = (v) => CONTENT_TYPES.filter(t => parseTypes(v).includes(t)).join(",");
+
+// "" (no types listed) means EVERY type, which is what a national tourist board
+// is. Kept as the empty list rather than as all nine, so the panel can tell
+// "everything" apart from "he happened to tick all nine".
+export const typeMatches = (appliesTo, type) => {
+  const list = parseTypes(appliesTo);
+  return list.length === 0 || list.includes(type);
+};
+
 export const cleanSource = (row) => {
   const domain = normaliseDomain(row?.domain);
   if (!domain) return null;
-  const appliesTo = clean(row?.applies_to ?? row?.appliesTo);
+  const types = parseTypes(row?.applies_to ?? row?.appliesTo);
   return {
     id: row?.id,
     domain,
     note: cleanNote(row?.note),
-    appliesTo: CONTENT_TYPES.includes(appliesTo) ? appliesTo : "",
+    types,
+    // Kept as the joined string, because it is what every existing reader of
+    // this shape prints and compares. A single type serialises to itself, so
+    // nothing that worked before reads differently.
+    appliesTo: types.join(","),
     appliesPlace: cleanPlace(row?.applies_place ?? row?.appliesPlace),
     enabled: row?.enabled !== false,
   };
@@ -232,7 +279,7 @@ export const sourcesFor = (rows, type, ctx) => {
   for (const raw of Array.isArray(rows) ? rows : []) {
     const s = cleanSource(raw);
     if (!s || !s.enabled) continue;
-    if (s.appliesTo && s.appliesTo !== type) continue;
+    if (!typeMatches(s.appliesTo, type)) continue;
     if (!placeMatches(s.appliesPlace, ctx)) continue;
     // BY DOMAIN, and only after filtering. Keying on the scope as well let the
     // same site be listed TWICE in one prompt: visitfyn.dk scoped to Odense and
@@ -256,7 +303,8 @@ export const sourceRulesBlock = (rows, type, ctx) => {
   const list = sourcesFor(rows, type, ctx);
   if (!list.length) return "";
   const scope = (s) => {
-    const bits = [s.appliesTo ? TYPE_LABEL[s.appliesTo] || s.appliesTo : "", s.appliesPlace].filter(Boolean);
+    const label = s.types.length ? s.types.map(t => TYPE_LABEL[t] || t).join(" and ") : "";
+    const bits = [label, s.appliesPlace].filter(Boolean);
     return bits.length ? ` (for ${bits.join(" in ")} specifically)` : "";
   };
   const lines = list.map(s => `- ${s.domain}${s.note ? ` — ${s.note}` : ""}${scope(s)}`);
@@ -412,7 +460,7 @@ export const sourcesToSearch = (rows, type, ctx) => {
   for (const raw of Array.isArray(rows) ? rows : []) {
     const s = cleanSource(raw);
     if (!s || !s.enabled) continue;
-    if (s.appliesTo && s.appliesTo !== type) continue;
+    if (!typeMatches(s.appliesTo, type)) continue;
     if (!placeMightMatch(s.appliesPlace, ctx, type)) continue;
     if (seen.has(s.domain)) continue;
     seen.add(s.domain);
@@ -439,7 +487,14 @@ export const sourcesToSearch = (rows, type, ctx) => {
   // A source scoped to this exact type is the one he chose FOR this type, so it
   // goes first. The universal ones still reach the draft through
   // sourceRulesBlock, so nothing is lost. They just stop eating the budget.
-  return out.sort((a, b) => (a.appliesTo === b.appliesTo ? a.domain.localeCompare(b.domain) : a.appliesTo ? -1 : 1));
+  //
+  // ── AND FEWER TYPES IS MORE SPECIFIC ─────────────────────────────
+  // Once a source can carry several types, "has a type" stops being a good
+  // enough sort key: a domain scoped to Events alone was chosen FOR events,
+  // and one scoped to Events and Attractions and Workshops is a general
+  // ticketing site. Universal stays last, which is what the 0 is doing here.
+  const rank = (s) => (s.types.length === 0 ? Infinity : s.types.length);
+  return out.sort((a, b) => rank(a) - rank(b) || a.domain.localeCompare(b.domain));
 };
 
 // ── "IF I PUT IN TICKETMASTER.DK, DOES IT GO THROUGH ALL OF
@@ -512,6 +567,131 @@ export const directSourceSearches = (rows, type, ctx) => {
       query: names,
       fallbackQuery: `${names} ${words}`,
     }));
+};
+
+// ── EVERYTHING PAST THE CAP, IN ONE CALL ────────────────────────────
+//
+// Oliver, 13 Aug 2026: "When it searches on the web for events, towns,
+// attractions, etc. include the research sources I have implemented. Perhaps
+// they'll help."
+//
+// They would have. His own run log for the Græskarfestival draft, the same day:
+//
+//   2. Founder sources chosen [tavily · ok]
+//      got: 4 of 18: billet.unitedtickets.dk, billetlugen.dk, billetto.dk,
+//           kultunaut.dk
+//
+// FOUR OF EIGHTEEN. And the four are all ticketing, because the specificity
+// sort puts festival-scoped sources first and he has four of those. So
+// billetexpressen.dk never ran a search, and Billetexpressen is where that
+// festival's tickets are sold: the URL is sitting in the finished draft's own
+// __sources, found by the general web pass, and Gemini's read of the same
+// festival names it as the ticket vendor. The one source that had the answer
+// was the one the cap cut.
+//
+// ── WHY THE CAP STAYS, AND WHY THIS IS NOT SIMPLY A BIGGER ONE ──────
+// Raising MAX_DIRECT_SEARCHES to eighteen would be eighteen searches per draft,
+// growing every time he finds a page. That is the cost problem he has raised in
+// almost every conversation.
+//
+// include_domains takes a LIST, up to three hundred entries, and api/search has
+// accepted a comma-separated `domains` this whole time. So everything past the
+// cap fits in ONE call. Total cost per draft goes from four to five.
+//
+// The top four keep their own searches rather than being folded in, and that is
+// the point of the split: results from a combined query are ranked across the
+// whole set, so a site with thousands of pages crowds out the parish council's
+// one relevant PDF. A source with its own call is guaranteed its own results.
+// The overflow call cannot make that promise and does not need to: its job is
+// that nothing on his list is unreachable, which today is the failure.
+export const MAX_INCLUDE_DOMAINS = 300;
+
+export const overflowSourceSearch = (rows, type, ctx) => {
+  const name = clean(typeof ctx === "string" ? ctx : ctx?.name);
+  if (!name) return null;
+  const rest = sourcesToSearch(rows, type, ctx).slice(MAX_DIRECT_SEARCHES);
+  if (!rest.length) return null;
+  const words = QUERY_WORDS[type] || "praktisk information åbningstider opening hours";
+  const other = otherNameFor(name, { includeSights: true });
+  const names = other ? `${name} ${other}` : name;
+  // Full variants, so a ticket shop past the cap can still be found at its
+  // billet.<site> subdomain, which is where Rock Under Broen's prices were and
+  // is the reason domainVariants exists at all.
+  const all = [];
+  for (const s of rest) for (const d of domainVariants(s.domain)) if (!all.includes(d)) all.push(d);
+  // NO SILENT CAPS. Three hundred is Tavily's documented ceiling and eleven
+  // variants per domain means about twenty-seven sources before it bites, which
+  // is more than he has. If it ever does bite, the caller says which domains
+  // were dropped rather than reporting a search that quietly covered less.
+  const dropped = all.length > MAX_INCLUDE_DOMAINS ? all.slice(MAX_INCLUDE_DOMAINS) : [];
+  return {
+    covers: rest.map(s => s.domain),
+    domains: all.slice(0, MAX_INCLUDE_DOMAINS),
+    dropped,
+    query: names,
+    fallbackQuery: `${names} ${words}`,
+  };
+};
+
+// ── AND THE DISCOVER TAB, WHICH NEVER SAW THE LIST AT ALL ───────────
+//
+// Oliver, 13 Aug 2026, clarifying which searches he meant: "I mean the 'discover
+// new events' tab."
+//
+// That tab plans five queries with OpenAI and runs five plain web searches. Not
+// one of his eighteen domains has ever been searched by it, and one of the five
+// query slots is literally briefed as "one at local/regional tourism sources",
+// so the planner has been asked to GUESS at the thing he has already written
+// down. A Danish festival's first appearance anywhere is a line on a tourist
+// board's what's-on page or a kultunaut listing, which is exactly the list.
+//
+// ── A DISCOVERY QUERY IS NOT A RESEARCH QUERY ───────────────────────
+// The draft-side words above ask about a place already known by name:
+// "billetter datoer program". Discovery does not have a name yet, it is looking
+// for one, so the query has to be the shape of a LISTING page: what is on, this
+// season, in this part of the country. Danish first for the same reason as
+// everywhere else, since these are Danish sites and their listing pages are
+// filed under Danish words.
+const DISCOVER_WORDS = {
+  town: "byer seværdigheder oplevelser besøg små byer towns to visit",
+  festival: "kalender hvad sker der arrangementer festival 2026 2027 what's on events calendar",
+  free: "gratis seværdigheder oplevelser attraktioner free attractions things to do",
+  food: "restauranter spisesteder anbefalinger restaurants where to eat",
+  foodStreet: "madmarked street food boder market halls",
+  night: "natteliv barer klubber nightlife bars",
+  nightTown: "natteliv udeliv nightlife towns",
+  booking: "værksteder kurser oplevelser workshops courses experiences",
+  essential: "praktisk information turist gældende priser practical visitor information",
+};
+
+// ONE call, not one per domain, and that is deliberate rather than a saving.
+// Discovery wants NAMES it has not seen, so breadth across the whole list beats
+// depth on any one site: a combined query returning eight results spread over
+// six tourist boards is a better candidate list than eight pages of the same
+// board. The opposite of the draft-side reasoning, for the opposite job.
+export const discoverSourceSearch = (rows, type, ctx) => {
+  const list = sourcesToSearch(rows, type, ctx);
+  if (!list.length) return null;
+  const all = [];
+  for (const s of list) for (const d of domainVariants(s.domain)) if (!all.includes(d)) all.push(d);
+  const where = clean(typeof ctx === "string" ? ctx : ctx?.name || ctx?.town);
+  const words = DISCOVER_WORDS[type] || "oplevelser seværdigheder things to do";
+  return {
+    covers: list.map(s => s.domain),
+    domains: all.slice(0, MAX_INCLUDE_DOMAINS),
+    dropped: all.length > MAX_INCLUDE_DOMAINS ? all.slice(MAX_INCLUDE_DOMAINS) : [],
+    query: where ? `${where} ${words}` : `Danmark ${words}`,
+  };
+};
+
+// What the planner is told, so it stops inventing a query aimed at "local
+// tourism sources" and spends that slot on an angle these domains do not cover.
+// Returns "" when there is nothing to name, because an empty heading in every
+// prompt teaches the model the section is noise.
+export const discoverSourceNote = (rows, type, ctx) => {
+  const list = sourcesToSearch(rows, type, ctx);
+  if (!list.length) return "";
+  return `\n\nTHESE SITES ARE ALREADY BEING SEARCHED SEPARATELY, so do not spend one of your five queries aiming at them: ${list.map(s => s.domain).join(", ")}. They are the founder's own vouched tourism and listing sources and a dedicated search runs across all of them alongside yours. Use your five for angles they will NOT cover: forum and Reddit discussion, personal blogs, local news, niche roundups, and anything written by somebody who lives there rather than by a tourist board.`;
 };
 
 // ── WHAT THE LIST COSTS ─────────────────────────────────────────────

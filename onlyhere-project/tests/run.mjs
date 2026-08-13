@@ -53,9 +53,9 @@ writeFileSync(entry, `
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
+  export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
-  export { scopeTier } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory, hasFinished, externalHref, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -113,7 +113,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -4224,8 +4224,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      cph.every(x => !/åbningstider/.test(x.query)));
   ok("the fallback still carries both names too", cph.every(x => /Copenhagen/.test(x.fallbackQuery) && /København/.test(x.fallbackQuery)));
   ok("and the two queries genuinely differ", cph.every(x => x.query !== x.fallbackQuery));
+  // ?., because [0] on an empty array makes a MUTATION CRASH the suite rather
+  // than fail it, and every assertion after this line then never runs. Found on
+  // 13 Aug when a mutation to parseTypes emptied this list: sixty later
+  // assertions went silent and the suite reported a TypeError instead of a
+  // failure. The trap is already in this file's notes; this is a live instance.
   is("a name with one spelling is not doubled up",
-     (M.directSourceSearches(rows, "town", { name: "Odense" })[0].query.match(/Odense/g) || []).length, 1);
+     (M.directSourceSearches(rows, "town", { name: "Odense" })[0]?.query.match(/Odense/g) || []).length, 1);
   // The scoping still holds: this is a second consumer of sourcesFor, not a
   // bypass of it. An Aarhus draft must not search visitcopenhagen.
   is("scoping applies to the searches too", M.directSourceSearches(rows, "town", { name: "Aarhus" }).map(x => x.domain).sort(),
@@ -4244,7 +4249,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app5 = readFileSync(join(root, "src/App.jsx"), "utf8");
   // The wiring, asserted on the file, because the whole defect was a function
   // that existed and was never called from the half that matters.
-  ok("the draft pipeline actually runs them", /directSourceSearches\(founderSources, sType, \{\s*\n\s*name,\s*\n\s*text: context,/.test(app5));
+  // ── THE CONTEXT IS NAMED NOW, AND BOTH SEARCHES SHARE IT ─────────
+  // It used to be an object literal inline in this call, which this asserted by
+  // matching its first two lines. The overflow search added on 13 Aug has to be
+  // scoped by the SAME context, and two inline literals would agree on the day
+  // they were written and drift the first time one gained a field. So the
+  // assertion moves to what actually matters: one context, both callers.
+  ok("the draft pipeline actually runs them", /const searches = directSourceSearches\(founderSources, sType, sourceCtx\);/.test(app5));
+  ok("built once, from the name and the research", /sourceCtx = \{\s*\n\s*name,\s*\n\s*text: context,/.test(app5));
+  ok("and the overflow search is scoped by that same context",
+     /overflowSourceSearch\(founderSources, sType, sourceCtx\)/.test(app5));
   // ── AND HANDS OVER WHAT THE DRAFT KNOWS ABOUT WHERE IT IS ─────────
   // "So now VisitCopenhagen.dk won't talk about Aarhus?" Correct, and that is
   // the fix. The same rule also cut Dragør off from VisitCopenhagen, and Dragør
@@ -10355,11 +10369,13 @@ rmSync(dir, { recursive: true, force: true });
      /const nameMatched = usable\.filter\(u => hostNames\(u\) \|\| pageNames\(u\)\);/.test(stripNonCode(app)));
   ok("and the title and snippet are kept rather than dropped",
      /const rememberUrlText = \(results\) =>/.test(stripNonCode(app)));
-  // Three call sites: the main Tavily search, the official-site search, and the
-  // discovery candidates. The declaration reads "rememberUrlText = (" so it does
-  // not match, which is what makes this a count of CALLS rather than of mentions.
+  // FOUR call sites since 13 Aug: the main Tavily search, the official-site
+  // search, the discovery candidates, and the one combined search across every
+  // vouched source past the four-source cap. The declaration reads
+  // "rememberUrlText = (" so it does not match, which is what makes this a count
+  // of CALLS rather than of mentions.
   is("every place that fills candidateUrls from search results also keeps their text",
-     (stripNonCode(app).match(/rememberUrlText\(/g) || []).length, 3);
+     (stripNonCode(app).match(/rememberUrlText\(/g) || []).length, 4);
   ok("and no longer splits the raw name itself",
      !/nameWords = name\.toLowerCase\(\)\.replace/.test(stripNonCode(app)));
 }
@@ -10846,6 +10862,339 @@ rmSync(dir, { recursive: true, force: true });
   ok("the picker offers the regions", /\{REGION_NAMES\.map\(x => <option key=\{x\} value=\{x\}>region/.test(appR));
   ok("and the row says which tier it was understood as", /const tier = scopeTier\(row\.applies_place\);/.test(appR));
   ok("and names the kommuner behind a region", /kommunerIn\(row\.applies_place\)/.test(appR));
+}
+
+// ── REACHING EVERY SOURCE HE HAS ADDED ─────────────────────────────
+//
+// Oliver, 13 Aug 2026: "When it searches on the web for events, towns,
+// attractions, etc. include the research sources I have implemented. Perhaps
+// they'll help." Then, pointing at the specific one: "I mean the 'discover new
+// events' tab." And: "billetexpressen.dk needs to be on both attractions and
+// events.. but I can only put it on one."
+{
+  const { parseTypes, serialiseTypes, typeMatches, directSourceSearches, overflowSourceSearch,
+          discoverSourceSearch, discoverSourceNote, sourcesFor, sourceRulesBlock,
+          MAX_DIRECT_SEARCHES, MAX_INCLUDE_DOMAINS, danishAddressIn, regionAt } = M;
+
+  // ── ONE SOURCE, SEVERAL TYPES ────────────────────────────────────
+  is("a comma list of types parses", parseTypes("festival,free"), ["festival", "free"]);
+  is("a single type still parses, so no stored row needs migrating", parseTypes("festival"), ["festival"]);
+  is("blank is the empty list, which means every type", parseTypes(""), []);
+  // A type the Studio does not draft is DROPPED rather than kept. Keeping it
+  // would be a scope that matches nothing: a source that looks configured in the
+  // panel and never once fires, which is the failure shape this file is built
+  // around.
+  is("an unknown type is dropped rather than kept as a dead scope", parseTypes("festival,nonsense"), ["festival"]);
+  is("stored in CONTENT_TYPES order, so one scope has one spelling", serialiseTypes("free,festival"), "festival,free");
+  is("and the other way round gives the same string", serialiseTypes("festival,free"), "festival,free");
+  ok("billetexpressen reaches events", typeMatches("festival,free", "festival"));
+  ok("and attractions, which is what he asked for", typeMatches("festival,free", "free"));
+  ok("and not food", !typeMatches("festival,free", "food"));
+  ok("blank still reaches everything", typeMatches("", "food"));
+  ok("a single-type row behaves exactly as it did", typeMatches("festival", "festival") && !typeMatches("festival", "town"));
+  // The prompt has to name BOTH, or he reads a scope that is not the one running.
+  {
+    const rows = [{ id: 1, domain: "billetexpressen.dk", applies_to: "festival,free", applies_place: "", enabled: true }];
+    ok("the prompt names every type a source is scoped to",
+       sourceRulesBlock(rows, "free", { name: "X" }).includes("Events and Attractions"));
+    is("and the source is in scope for both", sourcesFor(rows, "free", { name: "X" }).length + sourcesFor(rows, "festival", { name: "X" }).length, 2);
+    is("but not for a third", sourcesFor(rows, "food", { name: "X" }).length, 0);
+  }
+
+  // ── "4 OF 18", FROM HIS OWN RUN LOG ──────────────────────────────
+  // The Græskarfestival draft chose billet.unitedtickets.dk, billetlugen.dk,
+  // billetto.dk and kultunaut.dk. billetexpressen.dk was fifth and is where that
+  // festival's tickets are sold: its URL is in the finished draft's __sources
+  // because the GENERAL web pass tripped over it. The source he vouched for was
+  // cut and the unscoped search found it by luck.
+  const eighteen = [];
+  for (let i = 0; i < 4; i++) eighteen.push({ id: i, domain: `ticket${i}.dk`, applies_to: "festival", applies_place: "", enabled: true });
+  eighteen.push({ id: 90, domain: "billetexpressen.dk", applies_to: "festival,free", applies_place: "", enabled: true });
+  for (let i = 0; i < 13; i++) eighteen.push({ id: 10 + i, domain: `board${i}.dk`, applies_to: "", applies_place: "", enabled: true });
+  const gk = { name: "Græskarfestival" };
+  const chosen = directSourceSearches(eighteen, "festival", gk).map(s => s.domain);
+  is("the four dedicated searches are still four", chosen.length, MAX_DIRECT_SEARCHES);
+  const rest = overflowSourceSearch(eighteen, "festival", gk);
+  is("and one call covers every one the cap cut", rest?.covers.length ?? 0, eighteen.length - MAX_DIRECT_SEARCHES);
+  // ?. on every read of `rest`, not just the first. Guarding one of five and
+  // leaving the rest is the same crash one line later, which is exactly what
+  // happened on the first pass here.
+  ok("billetexpressen is reached now", !!rest?.covers.includes("billetexpressen.dk"));
+  ok("nothing is searched twice", !rest?.covers.some(d => chosen.includes(d)));
+  // NO SILENT CAPS. Tavily takes 300 and eleven variants per source is about
+  // twenty-seven before it bites, but a truncation he cannot see would read as a
+  // search that covered everything.
+  is("no domain variant is dropped at his list size", rest?.dropped.length ?? 0, 0);
+  ok("and the include list stays inside Tavily's limit", (rest?.domains.length ?? 0) <= MAX_INCLUDE_DOMAINS);
+  ok("a ticket shop past the cap keeps its billet. subdomain",
+     !!rest?.domains.includes("billet.billetexpressen.dk"));
+  is("a list that fits under the cap has no overflow at all", overflowSourceSearch(eighteen.slice(0, 3), "festival", gk), null);
+  is("and neither does an empty list", overflowSourceSearch([], "festival", gk), null);
+  is("nor a draft with no name to search for", overflowSourceSearch(eighteen, "festival", {}), null);
+  // ── FEWER TYPES IS MORE SPECIFIC ─────────────────────────────────
+  // "has a type" stopped being a good enough sort key the moment a source could
+  // carry several: one scoped to Events alone was chosen FOR events, and one
+  // scoped to Events and Attractions and Workshops is a general ticketing site.
+  {
+    // NAMED SO ALPHABETICAL ORDER DISAGREES WITH SPECIFICITY. The first version
+    // used one.dk and three.dk, which sort into the right answer by accident, so
+    // flattening the rank function left it green. A fixture that passes for the
+    // wrong reason is worse than no fixture, because it reads as coverage.
+    const mix = [
+      { id: 1, domain: "a-universal.dk", applies_to: "", applies_place: "", enabled: true },
+      { id: 2, domain: "b-three-types.dk", applies_to: "festival,free,booking", applies_place: "", enabled: true },
+      { id: 3, domain: "c-one-type.dk", applies_to: "festival", applies_place: "", enabled: true },
+    ];
+    is("the most specific source is searched first",
+       directSourceSearches(mix, "festival", gk).map(s => s.domain), ["c-one-type.dk", "b-three-types.dk", "a-universal.dk"]);
+  }
+
+  // ── THE DISCOVER TAB ─────────────────────────────────────────────
+  const hunt = discoverSourceSearch(eighteen, "festival", null);
+  is("every in-scope source, in one call", hunt?.covers.length ?? 0, eighteen.length);
+  ok("and the query is shaped like a listing page, not like a known name",
+     !!hunt?.query.includes("hvad sker der") && !!hunt?.query.includes("kalender"));
+  ok("Danish first, because these are Danish sites", (hunt?.query.indexOf("kalender") ?? -1) < (hunt?.query.indexOf("what's on") ?? -1));
+  is("nothing to search means nothing is claimed", discoverSourceSearch([], "festival", null), null);
+  // A place-scoped source stays OUT when nothing says where we are, which is the
+  // same strict rule every other scope follows.
+  {
+    const scoped = [{ id: 1, domain: "visitsonderjylland.dk", applies_to: "", applies_place: "Sønderjylland", enabled: true }];
+    is("a region-scoped source is left out of an unplaced discover run", discoverSourceSearch(scoped, "festival", null), null);
+    ok("and a town-scoped one is included when he named the town",
+       (discoverSourceSearch([{ id: 2, domain: "visitodense.dk", applies_to: "", applies_place: "Odense", enabled: true }], "festival", { name: "Odense", town: "Odense" }) || {}).covers?.includes("visitodense.dk"));
+  }
+  ok("the planner is told not to spend a query on them",
+     discoverSourceNote(eighteen, "festival", null).includes("do not spend one of your five queries"));
+  ok("and told what to spend them on instead",
+     /forum and Reddit discussion, personal blogs, local news/.test(discoverSourceNote(eighteen, "festival", null)));
+  is("and it says nothing at all when he has no sources", discoverSourceNote([], "festival", null), "");
+
+  // ── READING SKÆLSKØR OUT OF RESEARCH HE HAD ALREADY PAID FOR ─────
+  // "Where this place is [fetch · empty] — nothing placed Græskarfestival". The
+  // draft then ran with no region, no coordinate and no nearest stop, and the
+  // absence gate correctly cut "there's no train station in Skælskør" and left
+  // the reader with nothing. The town was in the research the whole time: the
+  // finished draft's own mapHint reads "Havnepladsen, 4230 Skælskør, Denmark".
+  // THE VENDOR'S ADDRESS COMES FIRST ON PURPOSE. The first version of this
+  // fixture put Skælskør first as well as most often, so "take the earliest" and
+  // "take the most repeated" both answered Skælskør and removing the frequency
+  // rule left the test green. This is also the realistic order: a listing page
+  // names the ticket seller in its header long before it gets to the venue.
+  const research = `Billetter sælges af Billetexpressen, Nørregade 3, 8000 Aarhus C.
+Græskarfestival 2026 afholdes i Skælskør. Hvor: Havnepladsen, 4230 Skælskør ; Hvornår: 12. oktober 2026.
+Læs mere, Havnepladsen 1, 4230 Skælskør, Danmark.
+Kontakt: Havnepladsen, 4230 Skælskør.`;
+  const addr = danishAddressIn(research);
+  // MOST FREQUENT, NOT FIRST. The ticket vendor's registered office is a real
+  // Danish address in this text and it is not where the festival is.
+  is("the venue's town wins over the ticket vendor's", addr && addr.town, "Skælskør");
+  is("and its postcode comes with it", addr && addr.postcode, "4230");
+  is("counted, so the reason it won is legible", addr && addr.mentions, 3);
+  is("Aarhus appears once and loses", danishAddressIn("Nørregade 3, 8000 Aarhus C. Havnepladsen, 4230 Skælskør. 4230 Skælskør.").town, "Skælskør");
+  // A postcode is four digits and so is a price and so is a year. None of these
+  // may become a town, because a wrong town sends the whole draft somewhere else.
+  is("a price is not an address", danishAddressIn("billetten koster 4230 kr"), null);
+  is("a year is not an address", danishAddressIn("mellem 2026 og 2027"), null);
+  is("a postcode with no town is not an address", danishAddressIn("postnr. 4230"), null);
+  is("and Danmark is not a town", danishAddressIn("4230 Danmark"), null);
+  is("nor is a leading zero, which Denmark does not use", danishAddressIn("0230 Skælskør"), null);
+  is("København Ø keeps the letter that distinguishes it", danishAddressIn("2100 København Ø").town, "København Ø");
+  is("and a lower-case word after the town is not part of it", danishAddressIn("4230 Skælskør er en by").town, "Skælskør");
+  is("no address at all is null rather than a guess", danishAddressIn("nothing here"), null);
+  is("and so is empty input", danishAddressIn(""), null);
+  // The whole point: that address resolves to a real region, so the sources
+  // scope and the writer is told where it is.
+  is("and Skælskør's coordinate lands in a real region", regionAt(55.25, 11.30), "Midt- og Vestsjælland");
+
+  // ── THE WIRING ───────────────────────────────────────────────────
+  const appO = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const iResearch = appO.indexOf("const founderUrls = [];");
+  const iSecond = appO.indexOf("danishAddressIn(context)");
+  const iChosen = appO.indexOf("const searches = directSourceSearches(founderSources, sType, sourceCtx);");
+  ok("the second location attempt exists", iSecond > 0);
+  // AFTER the research, because that is where the address is, and BEFORE the
+  // sources are chosen, because otherwise the region it finds scopes nothing.
+  // Placing it after the draft would have been easier and fixed nothing.
+  ok("and runs before the founder sources are chosen", iSecond < iChosen);
+  ok("only when the first attempt failed", /if \(!placed\) \{\s*\n\s*try \{\s*\n\s*const found = danishAddressIn\(context\);/.test(appO));
+  ok("a town-centre answer from a postcode is not called precise",
+     /fromVenue = false;/.test(appO));
+  ok("the run log names the address and how often it appeared",
+     /appeared \$\{found\.mentions === 1 \? "once" : `\$\{found\.mentions\} times`\}/.test(appO));
+  ok("the overflow search is wired into the draft", /overflowSourceSearch\(founderSources, sType, sourceCtx\)/.test(appO));
+  ok("and sends every domain in one call", /domains=\$\{encodeURIComponent\(rest\.domains\.join\(","\)\)\}/.test(appO));
+  ok("it says which sources the cap would have cut",
+     /one search across the \$\{rest\.covers\.length\} the four-source cap would otherwise have cut/.test(appO));
+  ok("and never truncates silently", /domain variants were past Tavily's 300 limit and were not searched/.test(appO));
+  ok("the discover tab searches them too", /discoverSourceSearch\(founderSources, type, discoverCtx\)/.test(appO));
+  ok("in one call rather than one per domain", /domains=\$\{encodeURIComponent\(discoverHunt\.domains\.join\(","\)\)\}/.test(appO));
+  ok("and what it finds reaches the synthesiser", /const allText = \[combinedText, huntedText\]/.test(appO));
+  ok("rather than being fetched and dropped", /\$\{allText\.slice\(0, 16000\)\}/.test(appO));
+  ok("the planner is handed the note", /\$\{extraFraming \|\| ""\}\$\{discoverNote\}/.test(appO));
+  ok("the panel lets him tick more than one type", /setNewSourceTypes\(prev => t === "" \?/.test(appO));
+  ok("and the row names every type it carries", /\.map\(t => TYPE_LABEL\[t\] \|\| t\)\.join\(" \+ "\)/.test(appO));
+}
+
+// ── FINDING A TICKET PRICE, NOT ONLY CHECKING ONE ──────────────────
+//
+// Oliver, 13 Aug 2026: "We just need to focus on getting tickets right", and
+// asked which half first, he chose the price. What may count as measured: the
+// festival's own ticket page, "And websites such as Ticketmaster where some
+// tickets are put in."
+{
+  const { ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW, tracePrices } = M;
+
+  // ── THE TWO REAL PAGES THIS EXISTS FOR ───────────────────────────
+  // Ribelund, from his 12 Aug run: the pipeline had already fetched this exact
+  // sentence and the entry shipped with no price at all.
+  const kultunaut = "Hvor: Ribelund Festivalplads, Pile Alle 2, Ribe ; Hvornår: Ons. d. 19. august 2026, kl. 10.30-19. ; Pris: Entré: 400 kr.";
+  is("the 400 kr that got away is found", ticketPriceOn(kultunaut)?.lo, 400);
+  is("and it is in kroner", ticketPriceOn(kultunaut)?.currency, "dkk");
+  // The other half of that same string is the trap: an address and a date, full
+  // of numbers. The 12 Aug log had pricesIn reporting "6760, 33, 400 DKK, 7".
+  is("the house number is not a price", ticketPriceOn("Pile Alle 2, Ribe")?.lo, undefined);
+  is("nor the postcode", ticketPriceOn("6760 Ribe")?.lo, undefined);
+  is("nor the date", ticketPriceOn("Ons. d. 19. august 2026, kl. 10.30-19.")?.lo, undefined);
+
+  // ── A CURRENCY, A TICKET WORD, AND NEITHER ONE ALONE ─────────────
+  is("a bare number beside a ticket word is not a price", ticketPriceOn("Billetter 400"), null);
+  is("and a price with no ticket word is not a ticket price", ticketPriceOn("frokost 400 kr"), null);
+  is("Danish entré works", ticketPriceOn("Entré 150 kr")?.lo, 150);
+  is("so does koster", ticketPriceOn("Billetten koster 250 kr.")?.lo, 250);
+  is("and voksne", ticketPriceOn("Voksne 180 kr")?.lo, 180);
+  is("English too", ticketPriceOn("Admission 120 DKK")?.lo, 120);
+  // ── WHAT IS SOLD BESIDE THE TICKET IS NOT THE TICKET ─────────────
+  // The same distinction isAncillaryListing draws for a whole listing title,
+  // applied to a word standing next to a figure.
+  // EACH OF THESE CARRIES A TICKET WORD TOO, on purpose. "Camping 200 kr" alone
+  // is refused by the no-ticket-word rule and never reaches the ancillary check,
+  // so a fixture like that passes whether or not the ancillary rule exists. The
+  // real page shape is the one that needs both: a ticket sentence that happens
+  // to be about the camping.
+  is("camping is not admission", ticketPriceOn("Billetter til camping koster 200 kr"), null);
+  is("nor is parking", ticketPriceOn("Billet til parkering 50 kr"), null);
+  is("nor the booking fee", ticketPriceOn("Pris for billetgebyr 25 kr"), null);
+  is("but the ticket in the same sentence still is", ticketPriceOn("Billetter koster 200 kr, camping ekstra")?.lo, 200);
+  // THE LOWEST, because what a reader plans around is what it costs to get in.
+  is("a ticket table reports the cheapest way in", ticketPriceOn("Voksne 200 kr. Børn 75 kr. Studerende 120 kr.")?.lo, 75);
+  is("and keeps the whole table for a caller that wants to say 'from'",
+     ticketPriceOn("Voksne 200 kr. Børn 75 kr. Studerende 120 kr.")?.all.length, 3);
+  // FREE IS AN ANSWER. Most of the small Danish events this app writes about
+  // are free, and a finder that only reports numbers reports nothing for them,
+  // which reads exactly like having failed.
+  is("gratis adgang is free", ticketPriceOn("Gratis adgang til hele havnen")?.kind, "free");
+  is("fri entré too", ticketPriceOn("Fri entré")?.kind, "free");
+  is("and free entry in English", ticketPriceOn("Free entry all week")?.kind, "free");
+  // A price WINS over the word free on the same page, because "free for
+  // children, 200 for adults" is a paid event with a concession.
+  is("a page with both reports the price, not free", ticketPriceOn("Gratis for børn. Voksne 200 kr.")?.kind, "price");
+  is("and it is the adult figure", ticketPriceOn("Gratis for børn. Voksne 200 kr.")?.lo, 200);
+  is("a page saying nothing says nothing", ticketPriceOn("En hyggelig dag ved havnen."), null);
+  is("and empty text is null rather than free", ticketPriceOn(""), null);
+  // The window is what stops a price four sentences later being attributed to a
+  // ticket word, and it is asserted rather than left as a magic number.
+  // ── A FIXED GAP, NOT ONE MEASURED FROM THE CONSTANT ──────────────
+  // The first version built its filler as TICKET_WINDOW + 40 characters, so
+  // widening the window widened the test with it and the assertion could never
+  // go red. This file's own notes already name that trap: a test written
+  // relative to a constant cannot catch that constant being wrong.
+  ok("a ticket word two hundred characters away is not attached to the figure",
+     ticketPriceOn(`Billetter. ${"x ".repeat(100)} 400 kr`) === null);
+  ok("and near enough is still found", ticketPriceOn("Billetter koster 400 kr") !== null);
+  ok("the window is a sane reading distance, not a whole page", TICKET_WINDOW > 20 && TICKET_WINDOW < 200);
+
+  // ── HIS ORDER: THE OPERATOR FIRST, THE SHOP SECOND ───────────────
+  // "the tickets on the official website HAS TO BE PRIORITISED."
+  const both = { siteText: "Entré 150 kr", listingText: "Pris: Entré: 400 kr." };
+  is("the operator's own page wins", findTicketPrice(both)?.lo, 150);
+  is("and says so", findTicketPrice(both)?.from, "official-site");
+  is("a shop answers when the operator does not",
+     findTicketPrice({ siteText: "Velkommen til festivalen", listingText: "Pris: Entré: 400 kr." })?.from, "listing");
+  is("and nothing answers when neither says", findTicketPrice({ siteText: "hej", listingText: "hej" }), null);
+  is("no pages at all is null, not zero", findTicketPrice({}), null);
+
+  // ── THE MISS, WHICH IS THE WHOLE POINT ───────────────────────────
+  // "the draft states no price" was a PASS on both of his runs while a page in
+  // the same run stated one.
+  const draftNoPrice = "En hyggelig græskarfestival ved havnen i Skælskør.";
+  is("a draft with no price beside a page with one is a finding",
+     priceMisses(draftNoPrice, both).length, 1);
+  is("and it is high, because it is the field readers come for",
+     priceMisses(draftNoPrice, both)[0]?.severity, "high");
+  ok("the finding names the figure the page states",
+     !!priceMisses(draftNoPrice, both)[0]?.detail.includes("150 DKK"));
+  ok("and says whose page said it", !!priceMisses(draftNoPrice, both)[0]?.detail.includes("The operator's own page"));
+  // ── AND SAYS WHICH OF THE TWO CASES IT IS ────────────────────────
+  // "the draft states none" and "the draft states a different figure" are
+  // different findings and were producing indistinguishable assertions: same
+  // count, same severity, both quoting the page's figure. Deleting the
+  // no-price branch entirely left every one of them green. This is the sentence
+  // only that branch writes.
+  ok("a draft with NO price is told so in those words",
+     !!priceMisses(draftNoPrice, both)[0]?.detail.includes("this draft states none"));
+  ok("and a draft with a wrong one is told the other thing",
+     !!priceMisses("Billetter koster 999 kr.", both)[0]?.detail.includes("this draft states 999 DKK"));
+  is("a draft that states the same figure is not a finding",
+     priceMisses("Billetter koster 150 kr.", both).length, 0);
+  is("and a draft stating a DIFFERENT figure is",
+     priceMisses("Billetter koster 999 kr.", both).length, 1);
+  is("nothing to compare against is not a finding",
+     priceMisses(draftNoPrice, { siteText: "hej", listingText: "" }).length, 0);
+  // Free is reported as a miss too, for the same reason it is an answer.
+  is("a free event the draft does not call free is a finding",
+     priceMisses(draftNoPrice, { siteText: "Gratis adgang" }).length, 1);
+  is("and it is medium, not high, because nobody is overcharged by it",
+     priceMisses(draftNoPrice, { siteText: "Gratis adgang" })[0]?.severity, "medium");
+  is("a draft that already says free is fine",
+     priceMisses("Der er gratis adgang hele ugen.", { siteText: "Gratis adgang" }).length, 0);
+  // A shop-sourced figure is a softer finding than the operator's own, per his
+  // own hierarchy: it is worth checking rather than worth obeying.
+  // ?. because [0] on an empty array CRASHES the suite instead of failing it,
+  // and this exact line did on the first run: the fold bug below made
+  // findTicketPrice return null, so the array was empty and sixty later
+  // assertions never ran.
+  is("a shop-only price is medium when the draft disagrees",
+     priceMisses("Billetter koster 999 kr.", { siteText: "hej", listingText: "Entré 400 kr" })[0]?.severity, "medium");
+  // ── THE DANISH LETTERS, ONE MORE TIME ────────────────────────────
+  // The first TICKET_WORD pattern ended in \b after "entré", and JavaScript
+  // defines a word boundary on [A-Za-z0-9_], so é is a NON-word character:
+  // non-word beside non-word is no boundary and the pattern could never match.
+  // ticketPriceOn("Entré 400 kr") returned null and the finder was dead on
+  // exactly the Danish pages it was written for. Same family as the
+  // NFD-before-å bug in fold() and the missing boundary in containsName.
+  is("entré with the accent is read", ticketPriceOn("Entré 400 kr")?.lo, 400);
+  is("and børn with the ø", ticketPriceOn("Børn 75 kr")?.lo, 75);
+  is("and fri entré is still free", ticketPriceOn("Fri entré til alle")?.kind, "free");
+
+  // ── AND IT IS THE OPPOSITE QUESTION TO THE ONE tracePrices ASKS ──
+  // Both run, and they cover each other: the trace catches a figure the pages
+  // do not support, the finder catches a figure the pages have and the draft
+  // does not. Asserted together, because the whole defect was that only one of
+  // the two directions existed.
+  is("the trace still passes a draft with no price", tracePrices(draftNoPrice, "Entré 150 kr").draft.length, 0);
+  ok("which is exactly why the finder has to exist", priceMisses(draftNoPrice, both).length > 0);
+
+  // ── THE WIRING ───────────────────────────────────────────────────
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the finder runs inside the same gate as the trace",
+     /const misses = priceMisses\(readerText\(t\), \{ siteText: scrapedSiteText, listingText: listingSiteText \}\);/.test(appT));
+  // Inside gateDraft, so it runs AGAIN after the auto-correction. Fifth standing
+  // rule: checking a draft does not check what replaced it.
+  ok("and therefore again after the correction",
+     appT.indexOf("const misses = priceMisses(") > appT.indexOf("const gateDraft = (pass) => {")
+     && appT.indexOf("const misses = priceMisses(") < appT.indexOf("// ── AND THE JOURNEY, AGAINST THE ONE THING THAT MEASURED IT ──"));
+  ok("the run log says what the pages said a ticket costs",
+     /note\(`What the pages say a ticket costs\$\{suffix\}`, \{/.test(appT));
+  ok("and calls a silent page a real answer rather than a failure",
+     /no page we read states a ticket price, which is a real answer and not a failure/.test(appT));
+  // __notes, not uncertainties. shapeForLive is an allow-list so a __ field
+  // cannot leak to a reader, and this is a message to him about a gap rather
+  // than a caveat for a traveller. That leak has happened once already.
+  ok("the finding goes to him, not to the reader",
+     /misses\.forEach\(m => noteToFounder\(m\.detail\)\);/.test(appT));
+  ok("and never straight into a published field",
+     !/t\.ticketInfo = .*findTicketPrice/.test(appT));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

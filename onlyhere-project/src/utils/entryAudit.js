@@ -25,6 +25,9 @@ import { claimConflicts, implausibleWalks } from "./claimCheck";
 // publish gate and this audit have to agree about what counts as wrong, and two
 // copies of a threshold is the failure this codebase repeats most.
 import { coordProblems } from "./coordCheck";
+// fold, because a Danish word ending in é, ø, æ or å cannot carry a \b word
+// boundary in JavaScript. See TICKET_WORD.
+import { fold } from "./danishNames";
 
 // Claims that a place has no public transport. Same pattern as the live
 // pipeline guard, kept in sync deliberately: an entry published before that
@@ -500,6 +503,162 @@ export const tracePrices = (draftText, siteText, listingText = "") => {
     listed: draft.filter(p => !onSite(p) && seenOnListing.has(priceKey(p))),
     untraced: draft.filter(p => !onSite(p) && !seenOnListing.has(priceKey(p))),
   };
+};
+
+// ── AND NOTHING EVER WENT LOOKING FOR ONE ───────────────────────────
+//
+// Oliver, 13 Aug 2026: "We just need to focus on getting tickets right." Asked
+// which half mattered first, he chose the PRICE.
+//
+// tracePrices above is a good gate and it can only ever answer one question: is
+// the price the writer stated supported. When the writer states NOTHING it
+// returns an empty draft list and reports nothing at all, which reads as a
+// pass. Two of his runs ended exactly there:
+//
+//   Ribelund, 12 Aug     "Pris: Entré: 400 kr." sat in a kultunaut snippet the
+//                        pipeline had already fetched, and the entry shipped
+//                        with no price
+//   Græskarfestival,     16. Prices against the official site [google · ok]
+//   13 Aug                   got: the draft states no price
+//
+// A clean verdict on a missing answer. This is his own universal diagnosis in
+// its worst form: not "the pipeline measures and lets prose describe the
+// measurement", but "the pipeline never measured and let silence stand".
+//
+// ── WHY THIS CANNOT JUST BE pricesIn ON THE PAGE ────────────────────
+// pricesIn accepts a bare number on purpose, because it was written for the
+// cost FIELDS where a figure beside a priced noun is a price. Turned loose on a
+// whole scraped page it reads postcodes, house numbers and days of the month:
+// the 12 Aug run log has it reporting "6760, 33, 400 DKK, 7" and only one of
+// those is money.
+//
+// So FINDING is stricter than CHECKING, which is the opposite asymmetry to the
+// one tracePrices documents, for the same underlying reason. A figure invented
+// here goes into a field a reader plans around. A figure missed here leaves
+// things exactly as they already are.
+//
+// Three conditions, all required:
+//   a currency token, so "400" on its own is never a price
+//   a ticket word within TICKET_WINDOW characters before it
+//   that word not being one of the things sold BESIDE the ticket
+//
+// Danish first, because a Danish venue writes "Entré" and its English page is
+// usually the stale translation of one that has since been updated.
+// ── AND THIS IS MATCHED AGAINST FOLDED TEXT, WHICH IS NOT COSMETIC ──
+// The first version wrote the Danish letters into the pattern and ended it with
+// \b, and it could never match. JavaScript defines a word boundary on
+// [A-Za-z0-9_], so "é" is a NON-word character: after "entré" the next
+// character is a space, non-word beside non-word, and \b fails. So
+// ticketPriceOn("Entré 400 kr") returned null and the whole finder was dead on
+// exactly the Danish pages it was written for.
+//
+// Same family as the NFD-before-å bug in fold() and the missing word boundary
+// in containsName. The answer is the one this codebase already settled on: fold
+// the text first and keep the pattern ASCII. fold turns é into e, ø into o, æ
+// into ae and å into aa, so one spelling reaches one pattern. It is only ever
+// used for a BOOLEAN test here, never for an index, which matters because
+// folding æ and å changes the string's length.
+const TICKET_WORD = /\b(?:billet(?:ter|priser|pris|salg)?|entrepris|entre|adgangsbillet|adgang|priser|pris|koster|voksne|voksen|born|studerende|tickets|ticket|admission|entry|adults?|child(?:ren)?|concession)\b/g;
+
+// Sold alongside the ticket and priced separately. ANCILLARY above does this for
+// a whole listing TITLE; this does it for a word standing next to a price. The
+// two lists are deliberately not shared, because matching a title and matching
+// inside a sentence want different words.
+const BESIDE_THE_TICKET = /\b(?:camping|parkering|parking|shuttle|shuttlebus|natbus|garderobe|cloakroom|merch(?:andise)?|billetgebyr|gebyr|fee|forsikring|insurance|leje|rental|depositum|deposit)\b/;
+
+// How far before a figure the ticket word may sit. Wide enough for "Billetter
+// til festivalen koster 400 kr." and narrow enough that a price four sentences
+// later is not attributed to it.
+export const TICKET_WINDOW = 80;
+
+// FREE IS AN ANSWER, not an absence, and it is the most common answer for the
+// small Danish events this app exists to write about. A finder that can only
+// report a number reports nothing for a free festival, and nothing reads
+// identically to having failed.
+// Folded before matching, for the same reason and with the same trap: "fri
+// entré" ends in a non-word character, so a trailing \b would refuse it.
+const FREE_PHRASE = /\b(?:gratis(?:\s+adgang|\s+entre)?|fri\s+entre|fri\s+adgang|gratis\s+at\s+deltage|free\s+(?:entry|admission|to\s+attend)|no\s+ticket\s+required)\b/;
+const saysFreeIn = (text) => FREE_PHRASE.test(fold(text));
+
+// What a PAGE says a ticket costs. null when it does not say, which is a real
+// and common answer and is never dressed up as zero.
+export const ticketPriceOn = (text) => {
+  const t = String(text || "");
+  if (!t.trim()) return null;
+  const found = [];
+  for (const p of pricesIn(t)) {
+    if (!p.currency) continue;                       // a bare number is not a price
+    const before = fold(t.slice(Math.max(0, p.at - TICKET_WINDOW), p.at));
+    TICKET_WORD.lastIndex = 0;
+    if (!TICKET_WORD.test(before)) continue;         // nothing here says this is a ticket
+    if (BESIDE_THE_TICKET.test(before)) continue;    // it is the camping, or the booking fee
+    found.push(p);
+  }
+  if (found.length) {
+    // THE LOWEST, and it is a choice rather than an obvious default. A ticket
+    // page lists adult, child, student and multi-day, and what a reader plans
+    // around is what it costs to get in at all. The full set travels alongside
+    // so a caller can say "from".
+    const lo = found.reduce((a, b) => (b.lo < a.lo ? b : a));
+    return { kind: "price", lo: lo.lo, hi: lo.hi, currency: lo.currency, all: found, free: false };
+  }
+  // Only reached when no price was found, so a page saying "free for children,
+  // 200 kr for adults" reports the 200 rather than calling the whole thing free.
+  if (saysFreeIn(t)) return { kind: "free", lo: 0, hi: 0, currency: null, all: [], free: true };
+  return null;
+};
+
+// ── WHOSE PAGE SAID IT, WHICH IS THE REST OF THE ANSWER ─────────────
+// Oliver, 12 Aug 2026: "I want to make it clear that the tickets on the official
+// website HAS TO BE PRIORITISED. Otherwise Tavily and Perplexity might take some
+// 2024 blog and put in their ticket prices." And 13 Aug, choosing what may count
+// as measured: the festival's own ticket page, "And websites such as
+// Ticketmaster where some tickets are put in."
+//
+// Two tiers, in his order, and the tier is part of the answer rather than a
+// footnote: a price from the operator can be stated flatly, a price from a
+// reseller has to say where it came from. Same split tracePrices already draws
+// between `traced` and `listed`, reused rather than reinvented.
+export const findTicketPrice = ({ siteText = "", listingText = "" } = {}) => {
+  const site = ticketPriceOn(siteText);
+  if (site) return { ...site, from: "official-site", why: "the operator's own page states it" };
+  const listing = ticketPriceOn(listingText);
+  if (listing) return { ...listing, from: "listing", why: "a ticket shop or calendar states it and the operator's own page does not" };
+  return null;
+};
+
+const moneyText = (p) => `${p.lo}${p.hi !== p.lo ? ` to ${p.hi}` : ""} ${String(p.currency).toUpperCase()}`;
+const whoSaid = (from) => (from === "official-site" ? "The operator's own page" : "A ticket shop or calendar");
+
+// ── THE FINDING, WHICH IS THE POINT OF ALL OF THIS ──────────────────
+// A draft with no price beside a page that states one is the case that used to
+// pass silently. It is reported as a MISS rather than written into the entry
+// here: the figure goes back through the writer and through every gate a
+// written price already passes, so nothing in this file becomes a second,
+// unchecked way into a published field.
+export const priceMisses = (draftText, opts) => {
+  const found = findTicketPrice(opts);
+  if (!found) return [];
+  const stated = pricesIn(String(draftText || "")).filter(p => p.currency);
+  const saysFree = saysFreeIn(draftText);
+  if (found.free) {
+    return saysFree || stated.length ? [] : [{
+      severity: "medium", field: "ticketInfo",
+      detail: `${whoSaid(found.from)} says entry is free and this draft does not say so. Free is an answer a reader plans around, and leaving it out reads as unknown.`,
+    }];
+  }
+  if (stated.some(p => p.lo === found.lo && p.hi === found.hi)) return [];
+  if (!stated.length) {
+    return [{
+      severity: "high", field: "ticketInfo",
+      detail: `${whoSaid(found.from)} states a ticket price of ${moneyText(found)} and this draft states none. Nothing in this run had gone looking for a price before, so a missing one has always read as a clean pass.`,
+    }];
+  }
+  return [{
+    severity: found.from === "official-site" ? "high" : "medium",
+    field: "ticketInfo",
+    detail: `${whoSaid(found.from)} states ${moneyText(found)} and this draft states ${stated.map(moneyText).join(", ")}. ${found.from === "official-site" ? "The operator's own page outranks everything else on its own price." : "Worth checking which edition, or which ticket type, each figure is for."}`,
+  }];
 };
 
 // The formatter that already exists a hundred lines above, reused. It reads a
