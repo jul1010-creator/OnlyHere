@@ -348,7 +348,8 @@ export const sourceOrderBlock = (ranked) => {
 ${lines.join("\n")}
 
 WHEN TWO OF THESE DISAGREE, THE HIGHER ONE WINS AND THE LOWER ONE IS NOT MENTIONED. Not in the prose, not in uncertainties, not as "some sources say". A disagreement you can settle by this order is settled, and reporting it anyway hands the reader a decision that was already made for them.
-The order is: the place's own website, then a ticket site or calendar, then an encyclopedia or history page, then a blog. A source from before ${STALE_BEFORE_YEAR} sits below every current source for anything that changes, so an old page may still carry history and may not carry a price, a date, an opening hour or a phone number.
+The order is: the place's own website, then a ticket site or calendar, then an encyclopedia or history page, then a blog. A source from before ${STALE_BEFORE_YEAR} sits below every current source for anything that changes, so an old page may still carry history and may not carry ${perishableSentence()}.
+${EXISTENCE_RULE}
 Only say sources disagree when they are at the SAME level and you cannot separate them by date.
 
 EVERY SNIPPET IN THE RESEARCH BELOW CARRIES THE HOST IT CAME FROM, in square brackets at the start of the line, like "[kultunaut.dk] Pris: Entré: 400 kr." Look the host up in the order above before you use the sentence. A line marked [tavily, ...] or [openai, ...] is a SYNTHESISED answer with no single page behind it: it ranks below every named host here, and it may not be the only thing supporting a price, a date or a policy.
@@ -373,8 +374,63 @@ A LINE WHOSE HOST IS MARKED OLD ABOVE MAY NOT PRICE OR TIME ANYTHING, however co
 // months against a date rather than in years against a year.
 export const MAX_FACT_AGE_MONTHS = 6;
 
-// Facts that go off. Everything else on a page is history and has no shelf life.
-export const PERISHABLE = ["price", "date", "opening hours", "phone number", "booking", "transport", "timetable"];
+// ── AND "STILL BEING THERE" IS A FACT THAT GOES OFF ─────────────────
+//
+// Oliver, 13 Aug 2026: "I noticed a source about Esbjerg was taken from 2017.
+// Now, while I assume it only talked about history and experiences, I need to
+// point out that this is 10 years ago. If such a source starts talking about a
+// restaurant that no longer exists, then that can become an issue."
+//
+// He has found the hole in the split above, and it is a real one. The rule was
+// PERISHABLE against HISTORY, and the line that used to sit here said everything
+// not on the list "is history and has no shelf life". A restaurant existing is
+// not on the list. So a 2017 page saying the harbour has three fish restaurants
+// was treated as a permanent fact, reached the draft unchallenged, and the
+// reader walks to a closed door.
+//
+// The distinction the old rule was missing is not old against new. It is A FACT
+// ABOUT THE PAST against A FACT ABOUT THE PRESENT THAT HAPPENS TO BE WRITTEN IN
+// THE PAST. "Founded in 1868" was true in 2017 and is true now. "The harbour
+// has three fish restaurants" was a claim about 2017 the whole time, and it
+// only reads as timeless because of the shape of the sentence. That second kind
+// is the dangerous one precisely because none of it looks like a number.
+//
+// ── AND THIS LIST HAD FOUR COPIES, ALREADY DRIFTING ─────────────────
+// PERISHABLE was exported and read by NOTHING: a written-and-never-wired list,
+// the same shape as geocodeOne and unplaced and tripCharacter. The rule it
+// describes was restated in prose three other times, in sourceOrderBlock below,
+// in the scraped-page label in App.jsx, and in the run-log line beside it. Three
+// hand-written sentences, and they had already disagreed: this list carries
+// booking, transport and timetable, and sourceOrderBlock named none of them.
+//
+// So this is the list, perishableSentence is how it is said out loud, and every
+// prose site says it by calling that. A rule the writer is never told is not a
+// rule, so a test asserts the sentence reaches all three prompts.
+export const PERISHABLE = ["price", "date", "opening hours", "phone number", "booking", "transport", "timetable", "existence"];
+
+// One phrase per entry, keyed rather than positional, so adding to PERISHABLE
+// and forgetting the phrase fails a test instead of producing a silently
+// shorter sentence. That is this codebase's most repeated bug in miniature: the
+// list grew and the thing reading it did not.
+const PERISHABLE_PHRASE = {
+  price: "a price",
+  date: "a date",
+  "opening hours": "an opening hour",
+  "phone number": "a phone number",
+  booking: "a booking detail",
+  transport: "a transport claim",
+  timetable: "a timetable",
+  existence: "a named business, shop, café or restaurant still being there",
+};
+
+export const perishableSentence = () =>
+  PERISHABLE.map(p => PERISHABLE_PHRASE[p] || p).join(", ").replace(/, ([^,]*)$/, " or $1");
+
+// The existence half is worth saying twice and at length, because it is the one
+// that does not look like a fact. Everything else on the list is a number or a
+// time, which a model recognises as something that changes. A venue name reads
+// as scenery.
+export const EXISTENCE_RULE = `AND A PLACE STILL BEING THERE IS A FACT THAT EXPIRES TOO. This is the one that reads as history and is not. A page from 2017 describing the three fish restaurants along the harbour is describing 2017, and one of them has closed since. Naming a restaurant, café, shop, bar, hotel or venue as somewhere the reader can GO is a claim about today, and an old page is not evidence for it however confidently it is written. What the place IS stays fine: its history, its landscape, its architecture, what happened there, what it was built for. Who is trading there now does not. If an old page is the only thing naming a business, either leave the name out or say plainly that it was open as of that page's date.`;
 
 const MONTH_NAMES = Object.keys(MONTHS).join("|");
 // A full date, either order, Danish or English: "19. august 2026" and

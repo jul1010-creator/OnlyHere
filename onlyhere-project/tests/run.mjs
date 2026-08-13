@@ -47,12 +47,15 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
+  export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
+  export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
+  export { scopeTier } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory, hasFinished, externalHref, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -3368,11 +3371,35 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("and all seven go through researchRules", (app3.match(/\$\{researchRules\(/g) || []).length, 7);
   // FIVE of the seven know where the draft is and say so. The other two are the
   // traveller-facing guide pipeline, which covers several towns at once, so it
-  // deliberately carries only the national sources. Written as an exact count so
-  // a call site that quietly stops passing its place fails here.
-  is("five of them pass the place they know", (app3.match(/\$\{researchRules\([a-zA-Z"]+, [a-zA-Z]+\)\}/g) || []).length, 5);
+  // deliberately carries only the national sources.
+  //
+  // ── AND A COUNT WAS THE WEAK VERSION OF THIS ─────────────────────
+  // It used to count call sites shaped `researchRules(x, y)`. That number stays
+  // right when a site is handed the BARE NAME, and a bare name is exactly the
+  // regression worth catching: placeMatches reads a string as `{ name }`, so
+  // every other field is undefined and neither the town nor the region can
+  // scope anything. Three of the five were doing that until 13 Aug 2026, which
+  // is why the maps lookup could not reach the prompts it was built for.
+  ok("no research prompt is handed the bare name",
+     !/\$\{researchRules\((?:sType|studioType), name\)\}/.test(app3));
+  is("the ones that know where they are pass the measured region",
+     (app3.match(/researchWhere\(\)/g) || []).length, 3);
+  ok("and the verify path derives it rather than reading the row's free text",
+     /rules: researchRules\(studioType, \{ \.\.\.entry, region: regionOf\(entry\)/.test(app3));
   is("and two deliberately carry only the universal ones", (app3.match(/\$\{researchRules\(\)\}/g) || []).length, 2);
-  ok("which is where the founder's list is folded in", /return `\$\{RESEARCH_SOURCE_RULES\}\$\{both\}\$\{sourceRulesBlock\(founderSources, type, where\)\}`;/.test(app3));
+  ok("which is where the founder's list is folded in", /return `\$\{RESEARCH_SOURCE_RULES\}\$\{both\}\$\{area\}\$\{sourceRulesBlock\(founderSources, type, where\)\}`;/.test(app3));
+  // ── AND THE AREA REACHES THE MODEL, NOT ONLY THE SOURCE LIST ─────
+  // "make maps be one of the first things to be searched, so tavily/perplexity
+  // will know which area to search." The source list is half of that. This is
+  // the other half: the search models are told which corner of Denmark this is
+  // BEFORE they start, so a same-named place elsewhere is a wrong page rather
+  // than a plausible answer. Asserted on the sentence a model actually reads,
+  // because a block built and never interpolated is this codebase's most
+  // repeated bug.
+  ok("the measured area is stated to the search models",
+     /WHERE THIS IS, ALREADY MEASURED: \$\{\[region, kommune/.test(app3));
+  ok("and it is named as a measurement rather than a fact to repeat",
+     /treat it as settled and use it to NARROW what you look at/.test(app3));
   // The guide pipeline runs for visitors, where no Studio state exists, so the
   // list is loaded app-wide rather than threaded through React state.
   ok("the list is loaded on mount, not only in Studio", /ensureSourcesLoaded\(\)/.test(app3));
@@ -4228,8 +4255,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("matched by real place name, not a string compare", /samePlaceName\(r\?\.payload\?\.name, name\)/.test(app5));
   ok("and passes the base-town relationship", /dayTripFrom: known\?\.dayTripFrom \|\| ""/.test(app5));
   ok("and containment", /partOf: known\?\.partOf \|\| ""/.test(app5));
-  ok("and the part of the country, computed not typed",
-     /part: known \? partOfCountry\(known\) : \(draftTown \? partOfCountry\(\{ town: draftTown \}\) : ""\)/.test(app5));
+  // ── THE PART, FROM A COORDINATE, AND THE DEAD BRANCH IS GONE ─────
+  // This line used to read
+  //   part: known ? partOfCountry(known) : (draftTown ? partOfCountry({ town: draftTown }) : "")
+  // and partOfCountry reads __lat/__lon, which `{ town: draftTown }` does not
+  // carry. So the second branch returned null every single time and a
+  // part-scoped source could never match a first-time draft. Both halves are
+  // asserted: that the coordinate is what answers now, and that the branch
+  // which could only ever return null has not come back.
+  ok("and the part of the country, from the coordinate that was measured",
+     /const partHere = placed \? partOfCountry\(\{ __lat: placed\.lat, __lon: placed\.lon \}\)/.test(app5));
+  // stripNonCode, because the comment three lines above the fix QUOTES the old
+  // line to explain why it went. Asserting its absence against the raw file
+  // matches that quotation and can never go red, which is the comment trap this
+  // suite has now been bitten by four separate times.
+  ok("the branch that could only ever return null is gone",
+     !/partOfCountry\(\{ town: draftTown \}\)/.test(stripNonCode(app5)));
+  ok("and the region goes with it, which is the scope he asked for",
+     /region: placed\?\.region \|\| \(known \? regionOf\(known\) : ""\)/.test(app5));
 
   // ── AND FOR A PLACE WITH NO PUBLISHED ROW AT ALL ─────────────────
   // Found 12 Aug from a real run on "Ribelund Festival 2026", a genuine
@@ -4238,14 +4281,22 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // partOf: "" and part: "". The Studio exists to make first drafts, and the
   // first draft of a place was the one handed no context at all.
   ok("a first draft falls back past the row it does not have",
-     /draftTown = known\?\.town \|\| known\?\.city \|\| known\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| "";/.test(app5));
+     /draftTown = knownRow\?\.town \|\| knownRow\?\.city \|\| knownRow\?\.location \|\| hint\?\.town \|\| townKeyFor\(name\) \|\| "";/.test(app5));
   // ── AND IT IS DECLARED WHERE THE GEOCODER CAN SEE IT ─────────────
   // It was `const draftTown` INSIDE the founder-source block, which closes
   // about two hundred lines before the geocode fallback that reads it. Oliver's
   // run log, 12 Aug: "Nearest arrival point [google · FAILED] ... why:
   // draftTown is not defined." A ReferenceError on every festival draft.
   ok("declared at the function's level, not inside the source block",
-     /^      let draftTown = "";$/m.test(app5));
+     /^    let draftTown = "";$/m.test(app5));
+  // ── AND BEFORE THE LOOKUP THAT NEEDS IT ──────────────────────────
+  // The location lookup runs first now and geocodes "name, town" as its second
+  // attempt, so the declaration has to come before it as well as before the
+  // source block. An ORDER assertion rather than another indent regex, because
+  // the failure being guarded is order.
+  ok("and before the location lookup that geocodes with it",
+     app5.indexOf('let draftTown = "";') < app5.indexOf("let placed = null;")
+     && app5.indexOf("let placed = null;") > 0);
   ok("and the geocode fallback that reads it is still there",
      /coords = await geocodePlace\(`\$\{name\}, \$\{draftTown\}`\);/.test(app5));
   ok("and that is what the scoping is given", /town: draftTown,/.test(app5));
@@ -4270,7 +4321,8 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // searched that found nothing.
   ok("the chosen sources are journalled before the loop", /note\("Founder sources chosen", \{/.test(app5));
   ok("naming them, and how many were dropped", /\$\{searches\.length\} of \$\{founderSources\.length\}: \$\{searches\.map\(s => s\.domain\)\.join\(", "\)\}/.test(app5));
-  ok("and saying whether a town was known to scope by", /no town known for this place, so nothing could be scoped out/.test(app5));
+  ok("and saying whether a town was known to scope by", /nothing placed this draft, so every place-scoped source was left out/.test(app5));
+  ok("and naming the region, which is the scope that is new", /placed\?\.region && `in \$\{placed\.region\}`/.test(app5));
   ok("each source reports its own outcome", /note\(`Founder source: \$\{domain\}`, \{/.test(app5));
   ok("distinguishing a refusal from an empty result",
      /outcome: !\(fRes\.ok && !fData\.error\) \? "failed" : urls\.length \? "ok" : "empty"/.test(app5));
@@ -4925,7 +4977,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and no longer asks Claude to apply findings wholesale", !/Rewrite ONLY the specific parts that are actually flagged as wrong/.test(app8));
   // The verifier gets the standing rules, or it repeats the checker's mistake
   // and calls the repetition confirmation.
-  ok("the verifier carries the standing research rules", /rules: researchRules\(studioType, entry\)/.test(app8));
+  ok("the verifier carries the standing research rules", /rules: researchRules\(studioType, \{ \.\.\.entry,/.test(app8));
   // Every finding's fate is shown, so a rejected one reads as rejected rather
   // than as nothing having happened.
   ok("each finding's verdict is rendered", /c\.verdict === "confirmed" \? "✅"/.test(app8));
@@ -9687,10 +9739,20 @@ rmSync(dir, { recursive: true, force: true });
   // RESEARCH_SOURCE_RULES names a year in prose. This constant enforces it. If
   // one moves without the other, the pipeline asks for one thing and enforces
   // another, which is exactly the class of bug this rule exists to close.
+  //
+  // ── AND "THEY AGREE" BECAME "THERE IS ONLY ONE" ──────────────────
+  // This used to read the literal year out of the prompt with a regex and
+  // compare the two numbers, which is the weaker form of the same idea and had
+  // a second problem: a miss made `rule` null and `rule[1]` threw, so a failure
+  // here CRASHED the suite instead of failing it, and every assertion after
+  // this line stopped running. That is the mutation trap this file already
+  // documents. The prompt now interpolates the constant, so there is nothing
+  // left to disagree.
   const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
-  const rule = appS.match(/Anything priced or timed from before (\d{4}) should be treated as stale/);
-  ok("the prompt states a year", !!rule);
-  is("and the gate enforces that same year", Number(rule[1]), STALE_BEFORE_YEAR);
+  ok("the prompt interpolates the year rather than restating it",
+     /Anything priced or timed from before \$\{STALE_BEFORE_YEAR\} should be treated as stale/.test(appS));
+  ok("and no hardcoded year is left in that sentence",
+     !/Anything priced or timed from before \d{4}/.test(appS));
 
   // ── THE ROUTING IS A VALUE, NOT A BRANCH ─────────────────────────
   // This was asserted by regex over the if/else in App.jsx, and a mutation
@@ -9784,8 +9846,33 @@ rmSync(dir, { recursive: true, force: true });
   const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("an old page is labelled history only rather than discarded",
      /HISTORY ONLY, NOT CURRENT/.test(appA));
-  ok("with the perishable things named", /no price, no date, no opening hour, no phone number, no booking detail, no transport or timetable claim/.test(appA));
+  // ── NAMED FROM THE LIST, NOT TYPED OUT BESIDE IT ─────────────────
+  // These were three hand-written sentences restating PERISHABLE, and they had
+  // already drifted: the list carries booking, transport and timetable, and
+  // sourceOrderBlock named none of the three. PERISHABLE itself was exported and
+  // read by nothing, so the list nobody used was the only place that was right.
+  ok("with the perishable things named from the list itself",
+     /Anything that CHANGES is off limits here, which means \$\{perishableSentence\(\)\}/.test(appA));
   ok("and history explicitly allowed", /What the place IS, and what it has been, are fine/.test(appA));
+  // ── THE 2017 ESBJERG SOURCE ──────────────────────────────────────
+  // "If such a source starts talking about a restaurant that no longer exists,
+  // then that can become an issue." A business still trading is a claim about
+  // TODAY that reads as scenery, so it was the one thing an old page could say
+  // freely. Asserted at all three prompts, because a rule the writer is never
+  // told is not a rule, and the sentence lives in one constant so it cannot be
+  // half-updated.
+  ok("existence is on the perishable list", M.PERISHABLE.includes("existence"));
+  ok("every perishable thing has a phrase in the sentence",
+     M.PERISHABLE.every(p => M.perishableSentence().includes(p === "existence" ? "still being there" : p.split(" ")[0])));
+  ok("the scraped-page label carries the existence rule", /\$\{EXISTENCE_RULE\}`/.test(appA));
+  ok("and so do the standing research rules",
+     /treated as stale, not current\. \$\{EXISTENCE_RULE\}/.test(appA));
+  ok("and the source order block the writer reads",
+     M.sourceOrderBlock([{ url: "https://x.dk/a", text: "2017" }]).includes("A PLACE STILL BEING THERE IS A FACT THAT EXPIRES TOO"));
+  ok("the rule names what stays fine, so it cannot be read as deleting history",
+     M.EXISTENCE_RULE.includes("its history, its landscape"));
+  ok("and gives the way out rather than only a ban",
+     M.EXISTENCE_RULE.includes("was open as of that page's date"));
   ok("the months are one constant, not a number typed twice",
      /Nothing older than \$\{MAX_FACT_AGE_MONTHS\} months may price or time anything/.test(appA));
   ok("the tier is asked with a clock", /scrapeTier\(url, scanData\.text, Date\.now\(\)\)/.test(appA));
@@ -10142,7 +10229,7 @@ rmSync(dir, { recursive: true, force: true });
   // mutation deleting one stayed green. Same trap as the two identical guards
   // in one file from the 12 Aug audit: anchor on what is unique.
   ok("and the re-research of a flagged claim",
-     /no essay\.\\n\$\{FACT_CHECK_SCOPE_RULES\}\\n\$\{researchRules\(sType, name\)\}/.test(app));
+     /no essay\.\\n\$\{FACT_CHECK_SCOPE_RULES\}\\n\$\{researchRules\(sType, researchWhere\(\)\)\}/.test(app));
   ok("and the rewrite that applies it",
      /nothing else\.\\n\$\{FACT_CHECK_SCOPE_RULES\}/.test(app));
   ok("the manual button still has them too",
@@ -10520,6 +10607,245 @@ rmSync(dir, { recursive: true, force: true });
   // dashes already live without a redraft.
   ok("published payloads are cleaned of dashes as they load",
      /const item = stripDashesDeep\(row\.payload\);/.test(live));
+}
+
+// ── REGIONS: THE TIER BETWEEN A TOWN AND A LANDMASS ────────────────
+//
+// Oliver, 13 Aug 2026: "We need to have regions of Denmark in 'specific'
+// regions. So I can put 'visitsønderjylland.dk' as a source for Sønderjylland."
+{
+  const { KOMMUNER, K, REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart,
+          kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, sameRegion,
+          regionsPresent, describeRegion, partOfCountry, scopeTier, cleanPlace,
+          placeMatches, placeMightMatch, normaliseDomain, PARTS_OF_COUNTRY } = M;
+
+  // ── THE DATA IS THE STATE'S, NOT MINE ────────────────────────────
+  // Every number in data/kommuner.js came from api.dataforsyningen.dk, the
+  // Danish address register. These assert the SHAPE of it, because a row that
+  // lost a column reads as a region of "" and silently stops matching.
+  is("every kommune has all ten columns", KOMMUNER.filter(r => r.length !== Object.keys(K).length).length, 0);
+  is("and the column map names every one of them", Object.keys(K).length, 10);
+  ok("and there are the ninety-odd of them there should be", KOMMUNER.length >= 98 && KOMMUNER.length <= 100);
+  is("no kommune is listed twice", new Set(KOMMUNER.map(r => r[K.kode])).size, KOMMUNER.length);
+  // A bbox that does not contain its own visuelt center is a transcription
+  // error, and the register guarantees that point is inside the kommune. This
+  // is the one check that catches a swapped lat/lon, which would otherwise put
+  // half of Denmark in the Indian Ocean and still look like plausible numbers.
+  is("every centre sits inside its own box", KOMMUNER.filter(r =>
+    !(r[K.lat] >= r[K.south] && r[K.lat] <= r[K.north] && r[K.lon] >= r[K.west] && r[K.lon] <= r[K.east])).length, 0);
+  is("and every coordinate is in Denmark's window", KOMMUNER.filter(r =>
+    !(r[K.lat] > 54.4 && r[K.lat] < 57.9 && r[K.lon] > 8.0 && r[K.lon] < 15.3)).length, 0);
+  // Every region named on a kommune must be one this file knows, or the source
+  // scope silently matches nothing: the failure that looks exactly like working.
+  is("no kommune claims a region that does not exist",
+     KOMMUNER.filter(r => r[K.region] && !REGION_NAMES.includes(r[K.region])).length, 0);
+  is("and every region has kommuner in it", REGION_NAMES.filter(r => kommunerIn(r).length === 0).length, 0);
+  is("every region declares which landmass it is on", REGION_NAMES.filter(r => !REGION_PART[r]).length, 0);
+  ok("and only Jutland and Zealand are subdivided",
+     new Set(REGION_NAMES.map(r => REGION_PART[r])).size === 2);
+
+  // ── THE ANSWER FOR REAL PLACES ───────────────────────────────────
+  // Checked by hand against the map before they were written down. Sønderjylland
+  // is his own example and gets the whole spread of it, including Rømø, which is
+  // the case one-row-per-town would have missed.
+  const at = (la, lo) => regionAt(la, lo);
+  is("Tønder is in Sønderjylland", at(54.933, 8.864), "Sønderjylland");
+  is("and so is Rømø, which no town scope would have caught", at(55.13, 8.55), "Sønderjylland");
+  is("and Møgeltønder", at(54.938, 8.806), "Sønderjylland");
+  is("and Sønderborg", at(54.909, 9.792), "Sønderjylland");
+  is("and Aabenraa", at(55.044, 9.418), "Sønderjylland");
+  is("and Haderslev", at(55.249, 9.489), "Sønderjylland");
+  // ── THE BORDER, WHICH IS WHY THE BBOX IS THERE ───────────────────
+  // Christiansfeld is 12 km north of Haderslev and in Kolding Kommune. Nearest
+  // visuelt centre on its own, with no bbox filter, answers Haderslev and files
+  // it under the wrong tourist board. This is the assertion that fails if the
+  // bbox filter is removed and only this one.
+  is("Christiansfeld is in Kolding Kommune, not Haderslev", kommuneNameAt(55.357, 9.484), "Kolding");
+  is("so it is Sydøstjylland, not Sønderjylland", at(55.357, 9.484), "Sydøstjylland");
+  is("Ribe belongs to Esbjerg Kommune", kommuneNameAt(55.328, 8.765), "Esbjerg");
+  is("Skagen is Nordjylland", at(57.720, 10.590), "Nordjylland");
+  is("Ebeltoft is Djursland, not Østjylland", at(56.195, 10.679), "Djursland");
+  is("Anholt, forty km offshore, is still Djursland", at(56.716, 11.556), "Djursland");
+  is("Møns Klint is Sydsjælland og Møn", at(54.968, 12.548), "Sydsjælland og Møn");
+  is("Dragør is Storkøbenhavn", at(55.593, 12.669), "Storkøbenhavn");
+  is("Gilleleje is Nordsjælland", at(56.126, 12.310), "Nordsjælland");
+
+  // ── AND "" IS AN ANSWER, NOT A MISS ──────────────────────────────
+  // Funen, Lolland-Falster and Bornholm have no sub-regions on purpose: the
+  // landmass covers them and VisitFyn covers the whole island. A region here
+  // would be a filter offering an empty room, which the towns page shipped once.
+  is("Odense has no region, because Funen is not subdivided", at(55.396, 10.389), "");
+  is("nor Ærøskøbing", at(54.888, 10.411), "");
+  is("nor Gudhjem on Bornholm", at(55.214, 14.972), "");
+  ok("but they are still placed in a kommune", !!kommuneAt(55.396, 10.389) && !!kommuneAt(55.214, 14.972));
+
+  // NULL IS NOT A BUCKET, the rule partOfCountry already follows.
+  is("Berlin is not in a Danish kommune", kommuneAt(52.52, 13.40), null);
+  is("nor is the middle of the North Sea", kommuneAt(56.0, 5.0), null);
+  // ── MALMÖ, WHICH THE COARSE VERSION GETS WRONG ───────────────────
+  // geography.js records Malmö coming back "Zealand" as a known limit and
+  // leaves it, which is right for a filter pill. Here it would decide which
+  // tourist board gets searched and paid for, so the tolerance is sized for a
+  // rounding error past a box edge rather than inherited from a cap built for
+  // five coarse outlines.
+  is("and Malmö is not in Storkøbenhavn", kommuneAt(55.605, 13.003), null);
+  is("but the Øresund bridge still is", kommuneAt(55.57, 12.85) === null, false);
+  is("no coordinate at all is not a region", regionOf({}), "");
+  is("and a null coordinate is not the Gulf of Guinea", regionOf({ __lat: null, __lon: null }), "");
+  is("regionOf reads __lat, which is what every payload actually stores",
+     regionOf({ __lat: 54.933, __lon: 8.864 }), "Sønderjylland");
+  is("and falls back to lat for a row that has not been through shapeForLive",
+     regionOf({ lat: 54.933, lon: 8.864 }), "Sønderjylland");
+
+  // ── SPELLINGS ────────────────────────────────────────────────────
+  is("South Jutland is Sønderjylland", canonicalRegion("South Jutland"), "Sønderjylland");
+  // Written with the ø AND in the wrong case on purpose. "sonderjylland" in
+  // plain lowercase is already exactly the key the index is built with, so an
+  // assertion using it stays green even if the fold is removed entirely: it
+  // tests a value that needs no folding. This one cannot.
+  is("and so does the ø, shouted", canonicalRegion("SØNDERJYLLAND"), "Sønderjylland");
+  is("and the plain-letter spelling anyone would type", canonicalRegion("sonderjylland"), "Sønderjylland");
+  is("Nordslesvig too, which is what the older sources call it", canonicalRegion("Nordslesvig"), "Sønderjylland");
+  is("a town is not a region", canonicalRegion("Odense"), "");
+  ok("and neither is a landmass", !isRegion("Jutland") && !isRegion("Funen"));
+  ok("sameRegion sees through the spelling", sameRegion("South Jutland", "Sønderjylland"));
+  ok("and still separates two real regions", !sameRegion("Sønderjylland", "Nordjylland"));
+  // Vendsyssel is INSIDE Nordjylland and deliberately not an alias for it:
+  // aliasing a sub-area silently widens a scope across the whole north.
+  is("a sub-area is not aliased to the region containing it", canonicalRegion("Vendsyssel"), "");
+
+  // ── WHICH TIER A TYPED SCOPE LANDS IN ────────────────────────────
+  is("the scope is stored canonical, so the matcher can find it", cleanPlace("South Jutland"), "Sønderjylland");
+  is("a landmass still wins over a region", cleanPlace("Jylland"), "Jutland");
+  is("and a town is left exactly as typed", cleanPlace("Tønder"), "Tønder");
+  is("Sønderjylland is understood as a region", scopeTier("Sønderjylland"), "region");
+  is("Jutland as a part of the country", scopeTier("Jutland"), "part");
+  is("Tønder as a town", scopeTier("Tønder"), "town");
+  is("and blank as everywhere", scopeTier(""), "everywhere");
+
+  // ── WHAT A SØNDERJYLLAND SOURCE ACTUALLY FIRES ON ────────────────
+  const romo = { name: "Rømø Sandskulptur", region: "Sønderjylland", part: "Jutland" };
+  const skagen = { name: "Skagen Festival", region: "Nordjylland", part: "Jutland" };
+  ok("visitsonderjylland reaches a Rømø draft", placeMatches("Sønderjylland", romo));
+  ok("and stays off a Skagen draft three hundred km away", !placeMatches("Sønderjylland", skagen));
+  ok("and off a draft nothing could place", !placeMatches("Sønderjylland", { name: "Somewhere" }));
+  // ── THE HALF THAT WOULD HAVE BROKEN QUIETLY ──────────────────────
+  // A wider scope contains a narrower one. Without this, adding regions turns
+  // OFF every part-scoped source the moment a draft learns its region: nothing
+  // errors, the drafts just start finding less, which is the worst shape a
+  // change can have.
+  ok("a Jutland source still reaches a Sønderjylland draft", placeMatches("Jutland", romo));
+  ok("even when the region is all it knows", placeMatches("Jutland", { region: "Sønderjylland" }));
+  ok("and a Funen source does not", !placeMatches("Funen", romo));
+  ok("a universal source still reaches everything", placeMatches("", romo));
+  // A published row's free-text `region` is the field the towns page had to stop
+  // using, because it held twelve spellings of five places. It cannot unlock a
+  // region scope by accident.
+  ok("free text in the region field matches nothing",
+     !placeMatches("Sønderjylland", { name: "X", region: "Langeland, Region Syddanmark" }));
+  // The loose test spends money, so a draft that knows where it is must stop the
+  // research text guessing for it. This is the 10 Aug Odense bug, one tier up.
+  ok("a placed draft's research text may not unlock another region's source",
+     !placeMightMatch("Copenhagen", { name: "Rømø Festival", region: "Sønderjylland", text: "two hours from Copenhagen" }, "festival"));
+  ok("but an unplaced event still gets the fallback it was built for",
+     placeMightMatch("Copenhagen", { name: "Copenhell", text: "held at Refshaleøen in Copenhagen" }, "festival"));
+
+  // ── THE DOMAIN HE WAS ABOUT TO TYPE ──────────────────────────────
+  // He named "visitsønderjylland.dk" in his own words. The shape test allowed
+  // [a-z0-9-], so the panel would have refused a site that exists: Danish sites
+  // register in plain letters because ø reaches DNS only through punycode.
+  is("visitsønderjylland.dk resolves to the real address", normaliseDomain("visitsønderjylland.dk"), "visitsonderjylland.dk");
+  is("and so does a full link to one of its pages", normaliseDomain("https://www.visitsønderjylland.dk/om/"), "visitsonderjylland.dk");
+  is("Århus folds the same way it does everywhere else", normaliseDomain("VisitÅrhus.dk"), "visitaarhus.dk");
+  is("a plain domain is untouched", normaliseDomain("bornholm.info"), "bornholm.info");
+  ok("and nothing that was refused before is accepted now",
+     !normaliseDomain("not a domain") && !normaliseDomain("æøå") && !normaliseDomain("dk") && !normaliseDomain("hello world.dk"));
+
+  // ── THE REGION AND THE LANDMASS MUST NOT DISAGREE ────────────────
+  // Two instruments answering "where is this" is how resolveLegMode and
+  // lookupRealPlace each ended up existing twice with different rules. A
+  // kommune's declared landmass and the one partOfCountry derives from the same
+  // point should agree; the coarse outlines lose a few offshore islands, which
+  // is a known and stated limit rather than a disagreement worth having.
+  const disagree = KOMMUNER.filter(r => {
+    if (!r[K.region]) return false;
+    const coarse = partOfCountry({ __lat: r[K.lat], __lon: r[K.lon] });
+    return coarse && coarse !== REGION_PART[r[K.region]];
+  }).map(r => `${r[K.name]}: region says ${REGION_PART[r[K.region]]}, shapes say ${partOfCountry({ __lat: r[K.lat], __lon: r[K.lon] })}`);
+  is("no kommune's region contradicts the landmass it declares", disagree.join(" | "), "");
+  is("every kommune declares a landmass", KOMMUNER.filter(r => !PARTS_OF_COUNTRY.includes(r[K.part])).length, 0);
+
+  // ── THE TWO BUGS THIS TEST FOUND, WHICH WERE ALREADY LIVE ────────
+  // Both are the same thing: five coarse outlines asked which landmass an
+  // offshore island belongs to, which is not a question about distance.
+  //
+  // Samsø answered differently depending on where on it you stood, so the towns
+  // page filed it under Funen. Asserted at three points twenty-six km apart,
+  // because ONE point passing is what the old code did.
+  is("Samsø's north tip is in Jutland", partOfCountry({ __lat: 56.00, __lon: 10.62 }), "Jutland");
+  is("and so is its centre, which used to say Funen", partOfCountry({ __lat: 55.803, __lon: 10.586 }), "Jutland");
+  is("and its south tip, which used to say Funen too", partOfCountry({ __lat: 55.77, __lon: 10.60 }), "Jutland");
+  // MAX_OFFSHORE_KM was sized from a comment estimating Anholt at "around 40 km"
+  // from Jutland. It is 49.7, so Anholt fell past the cap and had no landmass at
+  // all: invisible in every geography filter and counted among the unplaced.
+  is("Anholt has a landmass, which it did not before", partOfCountry({ __lat: 56.716, __lon: 11.556 }), "Jutland");
+  is("and so it is no longer counted as unplaced",
+     M.unplaced([{ name: "Anholt", __lat: 56.716, __lon: 11.556 }]).length, 0);
+  // The islands that were already right must stay right, which is the half a
+  // fix like this quietly breaks.
+  is("Ærø is still Funen", partOfCountry({ __lat: 54.888, __lon: 10.411 }), "Funen");
+  is("Fanø is still Jutland", partOfCountry({ __lat: 55.337, __lon: 8.474 }), "Jutland");
+  is("Bornholm is still Bornholm", partOfCountry({ __lat: 55.214, __lon: 14.972 }), "Bornholm");
+  is("Lolland is still Lolland-Falster", partOfCountry({ __lat: 54.777, __lon: 11.500 }), "Lolland-Falster");
+  is("Dragør is still Zealand", partOfCountry({ __lat: 55.593, __lon: 12.669 }), "Zealand");
+  // And nothing outside Denmark got placed on the way past. The kommune boxes
+  // answer first now, so this is the guard that they did not widen the country.
+  is("Berlin still has no landmass", partOfCountry({ __lat: 52.52, __lon: 13.40 }), null);
+  is("and a missing coordinate still returns null rather than a bucket",
+     partOfCountry({ __lat: null, __lon: null }), null);
+  // The outlines are the fallback, not dead code: a point in Danish coastal
+  // water outside every kommune box is still placed by them.
+  ok("the shapes still answer when the kommune boxes do not",
+     partOfCountry({ __lat: 55.90, __lon: 11.10 }) !== null);
+
+  is("regionsPresent offers no empty rooms", regionsPresent([{ __lat: 54.933, __lon: 8.864 }, { __lat: 55.396, __lon: 10.389 }]), ["Sønderjylland"]);
+  ok("describeRegion names the kommune, because a border is not a guess",
+     describeRegion(55.13, 8.55, true) === "Sønderjylland (Tønder Kommune)");
+  ok("and says when the coordinate was only approximate",
+     describeRegion(55.13, 8.55, false).includes("from an approximate coordinate"));
+  ok("and says plainly when there is nothing to name",
+     describeRegion(52.52, 13.40, true).includes("no coordinate near Denmark"));
+
+  // ── MAPS FIRST, WHICH IS THE ORDER HE ASKED FOR ──────────────────
+  // "make maps be one of the first things to be searched, so tavily/perplexity
+  // will know which area to search." The sources were chosen roughly 250 lines
+  // BEFORE the geocode and 600 before the Places recovery, so every draft picked
+  // which tourist board to pay for while still blind. An ORDER assertion,
+  // because the defect is order.
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const iPlaced = appR.indexOf("let placed = null;");
+  const iSources = appR.indexOf("const searches = directSourceSearches(");
+  const iResearch = appR.indexOf("Planning research for a Danish travel guide entry");
+  ok("the location lookup exists", iPlaced > 0);
+  ok("and runs before the founder sources are chosen", iPlaced < iSources);
+  ok("and before the research is even planned", iPlaced < iResearch);
+  ok("the region it found is what scopes the sources", /region: placed\?\.region/.test(appR));
+  ok("the Places text search is the fallback, for the case Nominatim cannot answer",
+     /if \(!coords\) \{[\s\S]{0,400}api\/places-locate/.test(appR));
+  ok("and it is a separate route, so the enterprise hours SKU is not charged for a latitude",
+     !/places\.regularOpeningHours/.test(readFileSync(join(root, "api/places-locate.js"), "utf8")));
+  ok("the coordinate is reused rather than geocoded twice",
+     /let coords = placed \? \{ lat: placed\.lat, lon: placed\.lon \} : null;/.test(appR));
+  ok("and a town-centre answer still travels as imprecise",
+     /let coordIsTownCentre = placed \? placed\.precise === false : false;/.test(appR));
+  ok("the run log says where it decided this was", /note\("Where this place is", \{/.test(appR));
+  ok("and says plainly when it could not place it, and what that costs",
+     /every place-scoped source will be left out/.test(appR));
+
+  // The panel, because a scope he cannot check is a scope he has to trust.
+  ok("the picker offers the regions", /\{REGION_NAMES\.map\(x => <option key=\{x\} value=\{x\}>region/.test(appR));
+  ok("and the row says which tier it was understood as", /const tier = scopeTier\(row\.applies_place\);/.test(appR));
+  ok("and names the kommuner behind a region", /kommunerIn\(row\.applies_place\)/.test(appR));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

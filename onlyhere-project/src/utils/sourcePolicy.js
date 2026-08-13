@@ -35,8 +35,35 @@
 // time on. The block below says so out loud, every time.
 
 import { samePlaceName, otherNameFor, variantsOf, fold, containsName } from "./danishNames";
+import { canonicalRegion, isRegion, regionPart, REGION_NAMES } from "./regions";
 
 const clean = (v) => String(v == null ? "" : v).trim();
+
+// ── "visitsønderjylland.dk" IS NOT A DOMAIN, AND HE WAS ABOUT TO TYPE IT ──
+// Oliver named that exact address on 13 Aug 2026 as the source he wanted to
+// add. The shape test below allows `[a-z0-9-]`, ø is not in it, and the panel
+// would have answered "is not a domain I can use" about a site that exists.
+//
+// The real address is visitsonderjylland.dk in plain letters, which is how
+// nearly every Danish site is registered: ø, æ and å reach DNS only through
+// punycode and the tourist boards did not bother. So the Danish spelling is
+// not a typo, it is what the place is CALLED, typed by somebody who knows it,
+// and folding it is what this app already does with Danish letters everywhere
+// else. fold() also settles Århus against Aarhus, the same problem in a
+// hostname, which has already bitten the search index once.
+//
+// The fold runs BEFORE the shape test, so the test refuses everything it
+// refused before. Nothing here gets looser except which letters count.
+//
+// AND IT MUST NOT SWALLOW SPACES. The first version stripped whitespace as
+// well, which put it in front of the `includes(" ")` guard on the next line and
+// quietly turned "hello world.dk" into a domain this app would then search
+// forever. Caught by the assertion that nothing previously refused is accepted
+// now, which is the shape of test worth writing whenever a validator is
+// loosened at all: the interesting question is never what it accepts.
+// fold() already collapses runs of whitespace and trims, so a real space
+// survives to be refused.
+const asciiHost = (s) => fold(s);
 
 // Accepts whatever gets pasted: a full URL, a bare host, a host with www, a
 // trailing slash. Returns the bare host, or "" when it is not a domain at all.
@@ -49,6 +76,7 @@ export const normaliseDomain = (input) => {
   s = s.split(/[/?#]/)[0];                        // path, query, fragment
   s = s.replace(/^www\./, "").replace(/\.+$/, "");
   s = s.split("@").pop();                          // somebody pasting an email
+  s = asciiHost(s);
   if (s.includes(" ") || s.length < 4 || s.length > 100) return "";
   // A real host: at least one dot, sane characters, and a TLD of letters.
   if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,24}$/.test(s)) return "";
@@ -101,17 +129,50 @@ export const TYPE_LABEL = {
 // wrong-city answer this exists to prevent.
 export const PARTS_OF_COUNTRY = ["Jutland", "Funen", "Zealand", "Lolland-Falster", "Bornholm"];
 
-// Canonicalises a part of the country to the spelling the rest of the app uses,
-// across languages: typing "Jylland" stores "Jutland", so it lands in the
-// PARTS_OF_COUNTRY branch of placeMatches instead of being treated as a town
-// nobody has an entry for. A town name is stored exactly as typed, because it is
-// shown back to him in the panel and matched across variants anyway.
+// ── AND A THIRD TIER, BECAUSE NEITHER OF THE OTHER TWO IS THE ANSWER ──
+// Oliver, 13 Aug 2026: "We need to have regions of Denmark in 'specific'
+// regions. So I can put 'visitsønderjylland.dk' as a source for Sønderjylland."
+//
+// He is describing the gap between the two scopes above. Jutland sends
+// VisitSønderjylland to Skagen. Tønder sends it to Tønder and nowhere else, so
+// Sønderborg, Aabenraa, Haderslev, Rømø and Møgeltønder each need their own row
+// and the next place he publishes down there needs one too.
+//
+// utils/regions.js holds the twelve, each defined as the kommuner it contains
+// rather than as an outline anybody drew. The scope field takes all three
+// granularities now and the order below is what decides which one a typed word
+// means: part, then region, then anything left is a town.
+//
+// PART BEFORE REGION IS DELIBERATE. "Jylland" is a part and "Vestjylland" is a
+// region, and samePlaceName knows the Jutland/Jylland pair, so a check made in
+// the other order would still be correct here only by luck. Stating the
+// precedence is cheaper than relying on none of the twelve ever colliding.
 export const cleanPlace = (v) => {
   const t = clean(v);
   if (!t) return "";
   const part = PARTS_OF_COUNTRY.find(p => samePlaceName(p, t));
-  return part || t;
+  if (part) return part;
+  // Stored canonical, so "South Jutland" and "sønderjylland" both become
+  // "Sønderjylland" in the database and land in the region branch of the
+  // matcher rather than being filed as a town nobody has an entry for. That
+  // failure is the silent one: the row looks right in the panel and matches
+  // nothing forever.
+  return canonicalRegion(t) || t;
 };
+
+// Which tier a stored scope belongs to. Exported because the Studio panel shows
+// it on the row: a scope that reads "Sønderjylland" tells him nothing about
+// whether the app understood it as a region or filed it as a town, and those
+// two behave completely differently on every draft.
+export const scopeTier = (place) => {
+  const p = cleanPlace(place);
+  if (!p) return "everywhere";
+  if (PARTS_OF_COUNTRY.includes(p)) return "part";
+  if (isRegion(p)) return "region";
+  return "town";
+};
+
+export { REGION_NAMES };
 
 // ── "I TYPE COPENHAGEN, BUT IN DANISH IT IS KØBENHAVN" ──────────────
 // Oliver, 8 Aug 2026. Straight string equality made the scoping quietly wrong in
@@ -130,7 +191,18 @@ export const placeMatches = (place, ctx) => {
   if (!want) return true;                       // universal
   if (!ctx) return false;                       // nothing to match on: leave it out
   const c = typeof ctx === "string" ? { name: ctx } : ctx;
-  if (PARTS_OF_COUNTRY.includes(want)) return same(c.part, want);
+  // ── THE WIDER SCOPE CONTAINS THE NARROWER ONE ───────────────────
+  // A draft that knows it is in Sønderjylland also knows it is in Jutland, and
+  // a source scoped to Jutland must still reach it. Without the second half of
+  // this line, adding regions would QUIETLY TURN OFF every part-scoped source
+  // the moment a draft learned its region, which is the worst shape a change
+  // can have: nothing breaks, the drafts just start finding less.
+  if (PARTS_OF_COUNTRY.includes(want)) return same(c.part, want) || same(regionPart(c.region), want);
+  // Only the region field answers a region scope. Not the town, not the
+  // research text: the region is derived from a coordinate by
+  // regions.regionAt, so if it is absent nothing has placed this draft yet and
+  // the strict rule below applies for the same reason it always has.
+  if (isRegion(want)) return canonicalRegion(c.region) === canonicalRegion(want);
   // A town source applies to that town, to anywhere inside it, and to anywhere
   // that uses it as a base: a Dragør entry with dayTripFrom Copenhagen is a
   // Copenhagen trip, and VisitCopenhagen is the right place to look.
@@ -303,7 +375,15 @@ const knowsItsOwnPlace = (ctx, type) => {
   if (type === "town" || type === "nightTown") return !!clean(ctx.name);
   // For everything else only a real place field counts, because a festival's
   // name does not locate it, which is the whole reason the fallback exists.
-  return !!(clean(ctx.town) || clean(ctx.partOf) || clean(ctx.dayTripFrom) || clean(ctx.part));
+  //
+  // A REGION COUNTS, AND IT IS THE STRONGEST OF THESE. It comes from a
+  // coordinate rather than from a field somebody typed, and once the maps
+  // lookup runs before the sources are chosen it is the thing a festival draft
+  // knows FIRST. A draft holding a region does not need the research text to
+  // guess where it is, and letting the text speak anyway is the 10 Aug bug:
+  // "1 hour 15 from Copenhagen" unlocking visitcopenhagen.com on an Odense
+  // draft, four searches deep, crowding visitodense.com off the end.
+  return !!(clean(ctx.region) || clean(ctx.town) || clean(ctx.partOf) || clean(ctx.dayTripFrom) || clean(ctx.part));
 };
 
 export const placeMightMatch = (place, ctx, type) => {

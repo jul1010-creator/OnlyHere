@@ -18,4 +18,11 @@ export const WEATHER_CITIES = [
   { key: "odense", label: "Odense", lat: 55.4038, lon: 10.4024 },
 ];
 
-
+// ── THE PROJECTION THESE SHAPES ARE DRAWN IN ────────────────────────
+// Kilometres per degree at Danish latitudes. Lives beside the shapes rather
+// than in one of the two files that measure against them, because BOTH do:
+// geography.js for the five landmasses and regions.js for the kommune boxes.
+// A second copy of these two numbers would be a third instrument quietly
+// answering "how far is that" slightly differently, which is how resolveLegMode
+// and lookupRealPlace each came to exist twice with different rules.
+export const KM_LAT = 111.32, KM_LON = 62.06;

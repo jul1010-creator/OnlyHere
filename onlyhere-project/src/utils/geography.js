@@ -34,7 +34,8 @@ import { fold, variantsOf } from "./danishNames";
 // CONTAINING" below for why the anchor is matched by distance rather than by
 // containment, and what the test actually asserts.
 
-import { DK_SHAPES } from "../data/mapShapes";
+import { DK_SHAPES, KM_LAT, KM_LON } from "../data/mapShapes";
+import { kommuneAt, K as KCOL } from "./regions";
 
 // Ordered as a traveller would think about the country, west to east, with the
 // island that is its own trip last.
@@ -61,7 +62,11 @@ export const pointInPoly = (lat, lon, poly) => {
 // The same flat projection dkProject uses, so distances here agree with the map
 // the shapes are drawn on rather than being a second, slightly different idea of
 // where things are.
-const KM_LAT = 111.32, KM_LON = 62.06;
+// Lives in data/mapShapes.js, beside the shapes it projects, because regions.js
+// measures kommune distances with the same numbers and importing them from here
+// would make geography and regions import each other. Re-exported so every
+// existing caller keeps working.
+export { KM_LAT, KM_LON };
 const kmToSegment = (lat, lon, a, b) => {
   const py = (lat - a[0]) * KM_LAT, px = (lon - a[1]) * KM_LON;
   const vy = (b[0] - a[0]) * KM_LAT, vx = (b[1] - a[1]) * KM_LON;
@@ -144,6 +149,35 @@ export const partOfCountry = (entry) => {
   // answer through five polygon-distance computations on a coordinate that does
   // not exist is not the same as saying so.
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  // ── THE KOMMUNE ANSWERS FIRST, BECAUSE IT KNOWS ──────────────────
+  // Added 13 Aug 2026 after a test asserting the region and the landmass could
+  // not disagree found that they did, twice, and both were already live.
+  //
+  // SAMSØ GAVE A DIFFERENT ANSWER DEPENDING ON WHERE ON IT YOU STOOD: its north
+  // tip is 23.0 km from the Jutland outline, its centre 26.2 km from the FUNEN
+  // one, its south tip 23.7 km from Funen. One island, three points twenty-six
+  // kilometres apart, two answers, and the towns page was filing Samsø under
+  // Funen. Samsø Kommune is in Region Midtjylland and its ferry leaves from Hou
+  // in Jutland.
+  //
+  // ANHOLT CAME BACK null. The comment on MAX_OFFSHORE_KM above says Anholt
+  // "sits around 40 km from the Jutland coast", and the cap was sized at 45 on
+  // the strength of it. It measures 49.7. So the island fell past a cap set from
+  // an estimate that was ten kilometres short, and was invisible in every
+  // geography filter and counted among the unplaced, with nothing saying so.
+  //
+  // Neither is a bug in the outlines. It is a bug in ASKING THEM: five coarse
+  // shapes cannot say which landmass an island twenty-five kilometres offshore
+  // belongs to, and no redrawing fixes that, because the answer is not about
+  // distance. Samsø is Jutland's because of its ferry and its kommune, not
+  // because of which coast is nearest. The kommune map is not coarse and every
+  // Danish island is in a kommune, so the kommune says.
+  //
+  // The outlines stay as the fallback rather than being deleted: they cover the
+  // country continuously, so a point just off a coast that falls outside every
+  // kommune box is still placed by them exactly as before.
+  const k = kommuneAt(lat, lon);
+  if (k) return k[KCOL.part];
   for (const m of LANDMASSES) if (pointInPoly(lat, lon, m.poly)) return m.name;
   let best = null, bestKm = Infinity;
   for (const m of LANDMASSES) {
