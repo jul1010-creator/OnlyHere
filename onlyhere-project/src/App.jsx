@@ -4552,7 +4552,17 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           note("Invented-claim check", {
             provider: "perplexity", outcome: "ok", used: true,
             got: `${inventedRead.findings.length} claim${inventedRead.findings.length === 1 ? "" : "s"} flagged: ${inventedRead.findings.filter(f => f.label === "CONTRADICTED").length} contradicted, ${inventedRead.findings.filter(f => f.label === "UNVERIFIED").length} unverified`,
-            why: flaggedText.slice(0, 160),
+            // ── AND SAY IT HERE, WHICH IS THE BRANCH THAT MATTERS ────
+            // The clean branch above already reports a truncated check. This one
+            // did not, and this is the one that goes on to re-research and
+            // rewrite: a claim can be flagged UNVERIFIED for the single reason
+            // that the part of the research carrying it was the part not shown.
+            // Measured on this codebase's own caps, five scraped pages and two
+            // ticket pages put rawResearch over the 20000 cap before a search
+            // snippet is counted, and the middle is where the Tavily results and
+            // the founder-vouched sources sit. So the founder gets told which of
+            // the two it might be, in the branch where it changes what he does.
+            why: `${checkResearch.truncated ? `CHECKED AGAINST ${checkResearch.kept} OF ${checkResearch.total} CHARACTERS OF RESEARCH: the middle was not shown to the checker, so a claim can be flagged here purely for sitting in the part it could not see. ` : ""}${flaggedText.slice(0, 160)}`,
           });
           // A finding that calls itself a contradiction while admitting its own
           // search came up empty is downgraded, by the same relabel the manual

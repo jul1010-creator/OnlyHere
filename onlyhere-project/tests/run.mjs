@@ -10332,6 +10332,24 @@ rmSync(dir, { recursive: true, force: true });
      /const checkResearch = researchForCheck\(rawResearch\);/.test(codeI));
   ok("and no longer slices it at three thousand characters",
      !/rawResearch\.slice\(0, 3000\)/.test(codeI));
+
+  // ── AND IT SAYS SO IN THE BRANCH THAT ACTS ON IT ─────────────────
+  // Found 13 Aug 2026. The truncation was reported on the CLEAN branch and
+  // nowhere else, so the one outcome where it could have CAUSED the result was
+  // the one outcome that never mentioned it. A flagged finding goes on to a
+  // fresh re-research and a rewrite that deletes prose, and "the part of the
+  // research carrying this claim was not shown to the checker" is the single
+  // most useful thing to know before reading that list.
+  //
+  // Scoped to the branch rather than searched for anywhere in the file: the
+  // clean branch already contains the same identifier, so a file-wide test
+  // would have passed before the fix and proved nothing.
+  const flaggedBranch = codeI.slice(codeI.indexOf('inventedRead.verdict === "flagged"'));
+  const flaggedNote = flaggedBranch.slice(0, flaggedBranch.indexOf("});") + 3);
+  ok("a flagged verdict says whether the checker saw all the research",
+     /checkResearch\.truncated/.test(flaggedNote));
+  ok("and the clean branch still does too",
+     /outcome: "ok", used: true,\s*got: "every claim traced back to the research",\s*why: checkResearch\.truncated/.test(codeI));
   // ── ANCHORED TO EACH PROMPT, NOT COUNTED ─────────────────────────
   // A count of ">= 3" let a mutation delete the rules from the CHECK prompt and
   // stay green, because the three other occurrences still totalled three.
