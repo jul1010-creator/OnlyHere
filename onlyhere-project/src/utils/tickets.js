@@ -447,6 +447,70 @@ export const reconcileTickets = (onFile, match) => {
   return { ...base, verdict: "confirmed", detail: `${st.detail} ${match.why}`, findings };
 };
 
+// ── ASKING OUTRIGHT WHERE THE TICKETS ARE SOLD ──────────────────────
+//
+// Oliver, 13 Aug 2026: "Is it possible to get to perplexity to actively seek
+// out the ticket agents? Like DEMAND that it finds it?"
+//
+// Yes, and the shape is the whole safety of it. A model returning a URL that is
+// then believed moves surface INTO the stochastic column, which is the opposite
+// of the lever: the pipeline has 14 deterministic gates and 7 stochastic steps
+// and every complaint this month came from the right-hand column.
+//
+// So this asks for a LEAD and never for a fact. The answer is a list of URLs;
+// the caller fetches them, ticketPriceOn reads them, and a page that does not
+// price this event is discarded with a line in the log. What can reach a draft
+// is a figure read off a page the pipeline opened. The model finds the door, the
+// code checks it opens. App.jsx already says this about aggregators in its own
+// words: treated as a lead, not as truth.
+//
+// AND IT IS AN ESCALATION, not a step. It runs only when the operator's own
+// ticket link, the founder's vouched sources and Ticketmaster have all failed to
+// produce a page that prices the event, which after the link-following fix
+// should be the minority. readPage escalates to Firecrawl on exactly this
+// reasoning: paying to re-read nothing is quiet waste.
+//
+// The other reason to escalate rather than always ask is that it keeps the run
+// log honest. "Perplexity was asked" then MEANS the cheap paths failed on this
+// event, which is a measurement worth having as the source list grows. Ask every
+// time and that signal disappears.
+export const TICKET_HUNT_PROMPT = (name, town) =>
+  `Using real, current web search, find WHERE TICKETS ARE SOLD for the Danish event "${name}"${town ? ` in ${town}` : ""}.
+
+I do not want a price and I do not want a description. I want the URLs of the pages where a person can actually buy a ticket, or where the ticket price is stated.
+
+Look for the event's own ticket page and for whichever Danish ticket agent it uses. Danish events sell through many different ones: Billetto, Billetlugen, Billetexpressen, Madbillet, Ticketmaster, Safeticket, Ticketbutler, Place2Book, NemTilmeld, or a shop on the organiser's own domain. Do not assume it is any particular one.
+
+RULES:
+- Only URLs you have actually seen in your search results. Do not construct a URL from a pattern, and do not guess an event id. A made-up link is worse than no link, because somebody will follow it.
+- The page must be for THIS event, not the venue's front page and not last year's edition.
+- If you cannot find one, say NONE. That is a real and useful answer and it is a normal outcome for a small Danish event.
+
+Answer with ONLY a JSON array of URL strings, best first, at most 4. No other text. If there are none, answer exactly: []`;
+
+// Perplexity is asked for JSON and does not always give it. The citations come
+// back on every call regardless, so they are the fallback: a URL it cited is a
+// page it actually saw, which is a stronger guarantee than one it typed into
+// prose. Deduped by URL without the fragment, and capped by the caller.
+export const ticketHuntUrls = (result) => {
+  const out = [];
+  const add = (u) => {
+    const s = String(u || "").trim().split("#")[0];
+    if (!/^https?:\/\//i.test(s)) return;
+    if (!out.includes(s)) out.push(s);
+  };
+  const text = String(result?.text || "").trim();
+  try {
+    const m = text.match(/\[[\s\S]*\]/);
+    if (m) { const arr = JSON.parse(m[0]); if (Array.isArray(arr)) arr.forEach(add); }
+  } catch { /* not JSON: the citations below are the fallback, not an error */ }
+  // Only if it gave nothing usable. A citation list is every page it read,
+  // including the ones it read and rejected, so it is a wider and weaker net
+  // than the answer and is used as such.
+  if (!out.length) (Array.isArray(result?.citations) ? result.citations : []).forEach(add);
+  return out;
+};
+
 // ── A REAL PRICE, OR NOTHING ────────────────────────────────────────
 // The festival prompt has to carry the words "never invent prices" because
 // there was no source for one. There is now, and an absent priceRanges returns

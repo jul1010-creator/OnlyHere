@@ -261,7 +261,34 @@ export const regionsPresent = (entries) => {
 // appear once. The venue's address is the one repeated across the listing, the
 // official site and the roundup. A tie goes to the earliest, which is the
 // closest thing to "the page was about this" that position can tell us.
-const DK_POSTCODE = /\b([1-9]\d{3})\s+([A@-ZÆØÅ][a-zA-ZÆØÅæøåéèü.\-]*(?:\s+[A-ZÆØÅa-z][a-zA-ZÆØÅæøåéèü.\-]*){0,2})/g;
+const DK_POSTCODE = /\b([1-9]\d{3})\s+([A-ZÆØÅ][a-zA-ZÆØÅæøåéèü.\-]*(?:\s+[A-ZÆØÅa-z][a-zA-ZÆØÅæøåéèü.\-]*){0,1})/g;
+
+// ── A YEAR IS NOT A POSTCODE ────────────────────────────────────────
+//
+// Oliver's Græskarfestival run, 13 Aug 2026, on code shipped hours earlier:
+//
+//   2. Where this place is, second attempt  [fetch · empty]
+//      got: found "2026 DANMARKS STØRSTE GRÆSKARFESTIVAL" in the research
+//
+// It read a HEADLINE as an address. "2026" is four digits starting non-zero,
+// capitalised words follow it, and the pattern took them. In a research blob
+// about a 2026 festival that year is on almost every page, so the one number
+// guaranteed to appear was the one guaranteed to be wrong.
+//
+// The fix is a fact rather than a heuristic. DANISH POSTCODES JUMP FROM 2000
+// (Frederiksberg) STRAIGHT TO 2100 (København Ø): 2100 N, 2200 S, 2300, 2400,
+// 2450, 2500, 2600 and upward. There is NOTHING between 2001 and 2099, so a
+// four-digit number in that band cannot be a postcode and every year anybody
+// writes about this decade lands in it.
+//
+// 2000 itself stays valid, because Frederiksberg is real and "2000" as a year
+// does not appear in a Danish festival's programme.
+//
+// 1990 to 1999 are left alone on purpose even though they are also years: they
+// ARE real postcodes (Frederiksberg C), and a source about a 2026 event
+// mentioning 1997 is rare where one mentioning 2026 is certain. Refusing them
+// would cost a real address to guard against an unlikely one.
+const YEAR_NOT_POSTCODE = (n) => n >= 2001 && n <= 2099;
 
 // Words that follow a postcode without being a town: a Danish address block runs
 // "4230 Skælskør, Danmark" and a sentence can run "4230 og 4220". Kept short and
@@ -276,6 +303,7 @@ export const danishAddressIn = (text) => {
   DK_POSTCODE.lastIndex = 0;
   while ((m = DK_POSTCODE.exec(t)) !== null) {
     const code = m[1];
+    if (YEAR_NOT_POSTCODE(Number(code))) continue;
     // The town is the first word after the code, plus up to two more only when
     // they are capitalised, so "4230 Skælskør" and "2100 København Ø" both work
     // and "4230 Skælskør er en" stops at the town.
@@ -285,7 +313,19 @@ export const danishAddressIn = (text) => {
       if (NOT_A_TOWN.has(fold(w))) break;
       if (kept.length && !/^[A-ZÆØÅ]/.test(w)) break;
       kept.push(w.replace(/[.,;:]+$/, ""));
-      if (kept.length === 3) break;
+      // ── AND THE NAME STOPS AT THE SENTENCE, TOO ──────────────
+      // "Kontakt: 4230 Skælskør. Kontakt" ran straight past the full stop and
+      // produced the town "Skælskør Kontakt", which is not the same key as the
+      // plain "Skælskør" a line above it. So one address counted as two, the
+      // tally split, and a town mentioned once beat a town mentioned twice.
+      // Every window in this file has now needed this bound.
+      if (/[.,;:]$/.test(w)) break;
+      // No length check here: the pattern itself captures at most two words, so
+      // a cap in this loop can never fire. A mutation proved it, by changing the
+      // number and leaving the suite green. TWO is the rule and it lives in
+      // DK_POSTCODE, because a Danish postal town is one word or two: København
+      // Ø, Brøndby Strand, Kongens Lyngby, Nykøbing F. Three was what let
+      // "DANMARKS STØRSTE GRÆSKARFESTIVAL" through as a place name.
     }
     const town = kept.join(" ").trim();
     if (!town || town.length < 2) continue;

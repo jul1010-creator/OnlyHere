@@ -16,7 +16,7 @@ import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from "./utils/manageGroups";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
-import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured } from "./utils/tickets";
+import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
 import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
@@ -3427,6 +3427,92 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               context += `\nTHE TICKET AGENT THE OPERATOR LINKS TO (${domainOf(l.href)}), reached from a "${(l.text || "tickets").slice(0, 40)}" link on ${domainOf(l.from)}. This is where the tickets are actually sold, so it is the authority on the PRICE and on what is still buyable. It is NOT the operator and may not be called the official site. Attribute it in uncertainties, never inside a glance field: ${tData.text.slice(0, 2200)}`;
             }
           } catch { /* one agent failing is not a reason to lose the draft */ }
+        }
+
+        // ── AND IF NONE OF THAT PRICED IT, ASK OUTRIGHT ─────────────
+        //
+        // Oliver, 13 Aug 2026: "Is it possible to get to perplexity to actively
+        // seek out the ticket agents? Like DEMAND that it finds it?"
+        //
+        // AN ESCALATION, NOT A STEP. It runs only when the operator's own ticket
+        // link, the vouched sources and everything else read so far have failed
+        // to produce a page that prices this event. readPage escalates to
+        // Firecrawl on the same reasoning: paying to re-read nothing is quiet
+        // waste, and after the link-following fix most festivals are answered by
+        // the operator's own button.
+        //
+        // It also keeps the log honest. "The ticket agent, asked for directly"
+        // appearing at all now MEANS the cheap paths failed on this event, which
+        // is a measurement worth having as the source list grows. Asking every
+        // time would destroy that signal.
+        //
+        // A LEAD, NEVER A FACT. Perplexity returns URLs; they are fetched, and
+        // ticketPriceOn reads the page. A page that does not price this event is
+        // discarded with a line saying so. Nothing a model TYPED can reach the
+        // draft as a price: the model finds the door, the code checks it opens.
+        {
+          const priced = findTicketPrice({ siteText: scrapedSiteText, listingText: listingSiteText });
+          const needHunt = sType === "festival" && (!priced || priced.kind === "concession-only");
+          if (needHunt) {
+            try {
+              const hunt = await askPerplexity(TICKET_HUNT_PROMPT(name, draftTown));
+              // Named huntUrls rather than urls because the founder-source
+              // loop above already has a local called urls, and the suite's
+              // use-before-declare scan reads ORDER across the whole function:
+              // two same-named locals in sibling blocks look to it exactly like
+              // the draftTown bug it exists to catch. A checker that cries wolf
+              // gets switched off, so the variable moves.
+              const huntUrls = hunt?.error ? [] : ticketHuntUrls(hunt);
+              note("The ticket agent, asked for directly", {
+                provider: "perplexity",
+                detail: "run only because nothing read so far prices this event",
+                outcome: hunt?.error ? "failed" : huntUrls.length ? "ok" : "empty",
+                why: hunt?.error ? String(hunt.error).slice(0, 160) : "",
+                got: huntUrls.length
+                  ? `${huntUrls.length} candidate page${huntUrls.length === 1 ? "" : "s"}: ${huntUrls.map(u => domainOf(u)).join(", ")}`
+                  : "it found no page selling tickets for this event, which is a normal answer for a small Danish event",
+                used: huntUrls.length > 0,
+              });
+              for (const u of huntUrls.slice(0, MAX_TICKET_PAGES)) {
+                if (pagesByUrl[u]) continue;                 // already read on this run
+                try {
+                  const hRes = await fetch(`/api/scan-source?url=${encodeURIComponent(u)}`);
+                  const hData = await hRes.json();
+                  const found = hData.text ? ticketPriceOn(hData.text) : null;
+                  const real = found && found.kind !== "concession-only";
+                  note(`Ticket page from Perplexity: ${domainOf(u)}`, {
+                    provider: hData.via || "fetch",
+                    detail: u.slice(0, 120),
+                    outcome: !hData.text ? "failed" : real ? "ok" : "empty",
+                    got: !hData.text
+                      ? `could not be read (${hData.read || "no reason given"})`
+                      : real
+                        ? (found.free ? "says entry is free" : `${found.lo} ${String(found.currency).toUpperCase()}${found.when ? ` ${found.when}` : ""}`)
+                        : "read, and it does not price this event, so it was discarded",
+                    // THE DISCARD IS THE POINT. A page a model named and the
+                    // code could not stand up must leave no trace in the draft,
+                    // and must leave a trace in the log.
+                    why: hData.text && !real ? "A page a model named is a lead. It only counts once something here has read a price off it." : "",
+                    used: !!real,
+                  });
+                  if (hData.text && real) {
+                    pagesByUrl[u] = hData.text;
+                    listingSiteText += ` ${hData.text}`;
+                    if (!listingDomains.includes(domainOf(u))) listingDomains.push(domainOf(u));
+                    if (!candidateUrls.includes(u)) candidateUrls.push(u);
+                    context += `\nA TICKET PAGE FOUND BY ASKING WHERE THIS EVENT'S TICKETS ARE SOLD (${domainOf(u)}). Its price was read by this pipeline off the page itself, not stated by a model. It is a ticket shop and NOT the operator, so it may price and date this event and may never be called the official site: ${hData.text.slice(0, 2200)}`;
+                  }
+                } catch { /* one candidate failing is not a reason to lose the draft */ }
+              }
+            } catch (e) {
+              note("The ticket agent, asked for directly", {
+                provider: "perplexity", detail: "the escalation after nothing else priced it",
+                outcome: "failed", used: false,
+                why: String(e?.message || e).slice(0, 160),
+                got: "the request threw, so this draft has no price from anywhere",
+              });
+            }
+          }
         }
 
         // ── SAY WHAT THE OPERATOR ACTUALLY GAVE US ──────────────────

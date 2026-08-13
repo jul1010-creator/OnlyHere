@@ -55,6 +55,7 @@ writeFileSync(entry, `
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
+  export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
@@ -11026,6 +11027,39 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("Aarhus appears once and loses", danishAddressIn("Nørregade 3, 8000 Aarhus C. Havnepladsen, 4230 Skælskør. 4230 Skælskør.").town, "Skælskør");
   // A postcode is four digits and so is a price and so is a year. None of these
   // may become a town, because a wrong town sends the whole draft somewhere else.
+  // ── THE HEADLINE THAT GOT THROUGH ON THE FIRST VERSION ───────────
+  // Oliver's Græskarfestival run, hours after this shipped:
+  //   2. Where this place is, second attempt [fetch · empty]
+  //      got: found "2026 DANMARKS STØRSTE GRÆSKARFESTIVAL" in the research
+  // A year is four digits starting non-zero, capitalised words followed it, and
+  // the pattern took them. In a blob about a 2026 festival that year is on
+  // almost every page, so the one number guaranteed to appear was the one
+  // guaranteed to be wrong.
+  //
+  // The fix is a fact, not a heuristic: Danish postcodes jump from 2000
+  // (Frederiksberg) straight to 2100 (København Ø), so nothing in 2001 to 2099
+  // is a postcode and every year of this decade lands in that gap.
+  is("a headline is not an address", danishAddressIn("2026 DANMARKS STØRSTE GRÆSKARFESTIVAL"), null);
+  is("nor is any year of this decade",
+     ["2024", "2025", "2026", "2027", "2030"].map(y => danishAddressIn(`${y} Danmarks Bedste Festival`)), [null, null, null, null, null]);
+  is("but 2000 is Frederiksberg and stays", danishAddressIn("Falkoner Alle 1, 2000 Frederiksberg")?.town, "Frederiksberg");
+  is("and 2100 is København Ø", danishAddressIn("2100 København Ø")?.town, "København Ø");
+  // TWO words, not three: a Danish postal town is København Ø, Brøndby Strand,
+  // Kongens Lyngby. Three is what let the headline through.
+  is("a two-word postal town works", danishAddressIn("2660 Brøndby Strand")?.town, "Brøndby Strand");
+  // Stated as what it actually proves. Three separate mutations left this green
+  // (the regex word count, the loop cap, the capital-letter rule) because
+  // "Aarhus C er en by" is stopped by whichever of them runs first, so it
+  // guards no single rule. It is here as the ordinary case; the headline
+  // assertion above is what guards the bound.
+  is("and prose after a town is not part of the town", danishAddressIn("8000 Aarhus C er en by")?.town, "Aarhus C");
+  // And the name stops at the sentence. "4230 Skælskør. Kontakt" produced the
+  // town "Skælskør Kontakt", a different key from the plain "Skælskør" a line
+  // above, so one address counted as two and the tally split.
+  is("the town stops at a full stop", danishAddressIn("4230 Skælskør. Kontakt os")?.town, "Skælskør");
+  is("so the same address counts as the same address",
+     danishAddressIn("Nørregade 3, 8000 Aarhus C. Havnepladsen, 4230 Skælskør. Kontakt: 4230 Skælskør.")?.town, "Skælskør");
+  is("twice", danishAddressIn("Nørregade 3, 8000 Aarhus C. Havnepladsen, 4230 Skælskør. Kontakt: 4230 Skælskør.")?.mentions, 2);
   is("a price is not an address", danishAddressIn("billetten koster 4230 kr"), null);
   is("a year is not an address", danishAddressIn("mellem 2026 og 2027"), null);
   is("a postcode with no town is not an address", danishAddressIn("postnr. 4230"), null);
@@ -11608,6 +11642,71 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("the template constant exists", /export const TICKETMASTER_AFFILIATE_TEMPLATE = /.test(cfg));
   ok("and ships empty", /export const TICKETMASTER_AFFILIATE_TEMPLATE = "";/.test(cfg));
   ok("with the placeholder documented, so he knows what to paste", /\{url\}/.test(cfg));
+}
+
+// ── DEMANDING THE TICKET AGENT ─────────────────────────────────────
+//
+// Oliver, 13 Aug 2026: "Is it possible to get to perplexity to actively seek out
+// the ticket agents? Like DEMAND that it finds it?"
+{
+  const { TICKET_HUNT_PROMPT, ticketHuntUrls } = M;
+  const p = TICKET_HUNT_PROMPT("Ribelund Festival", "Ribe");
+  ok("the prompt names the event and its town", p.includes("Ribelund Festival") && p.includes("Ribe"));
+  // It asks for a PLACE TO BUY, not a price. The price is read off the page by
+  // ticketPriceOn afterwards, so asking for one here would invite a figure with
+  // no page behind it.
+  ok("it asks for URLs rather than for a price", p.includes("I do not want a price"));
+  // Danish events sell through many different agents and assuming one is how
+  // madbillet.dk got missed in the first place.
+  ok("it names several agents so it does not assume one",
+     ["Billetto", "Madbillet", "Ticketmaster", "Safeticket"].every(x => p.includes(x)));
+  ok("and says not to assume it is any of them", p.includes("Do not assume it is any particular one"));
+  // A made-up link is worse than no link, because somebody follows it.
+  ok("it forbids constructing a URL from a pattern", p.includes("Do not construct a URL from a pattern"));
+  ok("and makes NONE an acceptable answer", p.includes("That is a real and useful answer"));
+
+  // ── WHAT COMES BACK IS A LEAD ────────────────────────────────────
+  is("a clean JSON answer is read",
+     ticketHuntUrls({ text: '["https://madbillet.dk/e/1","https://billetto.dk/e/2"]' }),
+     ["https://madbillet.dk/e/1", "https://billetto.dk/e/2"]);
+  is("JSON wrapped in prose is still read",
+     ticketHuntUrls({ text: 'Here you go:\n["https://madbillet.dk/e/1"]\nHope that helps.' }),
+     ["https://madbillet.dk/e/1"]);
+  is("an explicit empty answer is empty", ticketHuntUrls({ text: "[]" }), []);
+  is("and so is NONE", ticketHuntUrls({ text: "NONE" }), []);
+  is("anything that is not a link is dropped",
+     ticketHuntUrls({ text: '["madbillet.dk","mailto:x@y.dk","https://ok.dk/e/1"]' }), ["https://ok.dk/e/1"]);
+  is("duplicates and fragments collapse",
+     ticketHuntUrls({ text: '["https://a.dk/e/1#buy","https://a.dk/e/1"]' }), ["https://a.dk/e/1"]);
+  // Citations are the FALLBACK, not the answer: a citation list is every page it
+  // read including the ones it rejected, so it is a wider and weaker net.
+  is("citations answer when the text gave nothing usable",
+     ticketHuntUrls({ text: "I could not find it.", citations: ["https://billetto.dk/e/9"] }), ["https://billetto.dk/e/9"]);
+  is("but never override a real answer",
+     ticketHuntUrls({ text: '["https://madbillet.dk/e/1"]', citations: ["https://wrong.dk/x"] }), ["https://madbillet.dk/e/1"]);
+  is("an errored call yields nothing", ticketHuntUrls({}), []);
+
+  // ── AN ESCALATION, NOT A STEP ────────────────────────────────────
+  const appH = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("it runs only when nothing read so far priced the event",
+     /const needHunt = sType === "festival" && \(!priced \|\| priced\.kind === "concession-only"\);/.test(appH));
+  // After the operator's own ticket link has been followed, so the cheap path
+  // gets first refusal. readPage escalates to Firecrawl on the same reasoning.
+  ok("and after the operator's own ticket link was followed",
+     appH.indexOf("const needHunt =") > appH.indexOf("for (const l of ticketPages.slice(0, MAX_TICKET_PAGES))"));
+  ok("the candidate pages are fetched, not believed",
+     /const found = hData\.text \? ticketPriceOn\(hData\.text\) : null;/.test(appH));
+  ok("and one that does not price this event is discarded",
+     /read, and it does not price this event, so it was discarded/.test(appH));
+  ok("with the reason stated rather than left blank",
+     /A page a model named is a lead\. It only counts once something here has read a price off it\./.test(appH));
+  // A ticket shop is a LISTING. It may price and date an event and may never be
+  // called the official site, which is his own order.
+  ok("what survives goes into the listing string, not the operator's",
+     /if \(hData\.text && real\) \{[\s\S]{0,200}listingSiteText \+= ` \$\{hData\.text\}`;/.test(appH));
+  ok("and the prompt says it is not the operator",
+     /It is a ticket shop and NOT the operator/.test(appH));
+  ok("the same page is never read twice in one run", /if \(pagesByUrl\[u\]\) continue;/.test(appH));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
