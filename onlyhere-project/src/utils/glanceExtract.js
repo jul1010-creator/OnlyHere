@@ -54,9 +54,39 @@ export const NEVER_EXTRACT = [...MEASURED_FIELDS, "ticketStatus", "lat", "lon"];
 // writing Gemlyx's card for it.
 export const EDITORIAL_GLANCE = ["tag", "highlight", "crowd", "gemlyxFind"];
 
+// ── AND A THIRD KIND, WHICH I MISSED FIRST TIME ─────────────────────
+//
+// Found reviewing my own file on 14 Aug, before it had run on these types.
+// Two of the sixteen fields the derivation produced are CLOSED VOCABULARIES and
+// one has a composed shape, and an extractor returns none of those. It returns
+// what a page says.
+//
+//   bookingType   'online' or 'contact', and nothing else. The prompt asks for
+//                 "'online' ONLY if you can book/buy tickets on a website".
+//                 That is a determination about a website, not a phrase lying
+//                 on one, and an extractor handed it returns "Book online at
+//                 billetto" or "kontakt os". The UI FILTERS on this field.
+//   budgetLevel   'Budget', 'Mid-range' or 'Splurge', and the prompt says it in
+//                 as many words: "YOUR HONEST READ given the real price info".
+//                 A judgement derived from prices. No page states it, so an
+//                 extractor either returns nothing or invents one, and
+//                 numbersTraceable cannot catch an invented WORD.
+//   location      "Neighbourhood, City". A shape assembled from two facts, not
+//                 a string to be found. An address lands here otherwise, and
+//                 the town matching and travel labels read this field.
+//
+// This is the same wound the 12 August audit already recorded, where "Local
+// Favourite" was an offered answer the UI rendered as its near-opposite and
+// which matched no filter anywhere. A closed vocabulary filled from free text
+// stops being closed, and nothing downstream is built to notice.
+//
+// They go back to the writer, which is where a judgement belongs.
+export const CLOSED_OR_DERIVED = ["bookingType", "budgetLevel", "location"];
+
 export const EXTRACTABLE_GLANCE = GLANCE_FIELDS
   .filter(f => !NEVER_EXTRACT.includes(f))
-  .filter(f => !EDITORIAL_GLANCE.includes(f));
+  .filter(f => !EDITORIAL_GLANCE.includes(f))
+  .filter(f => !CLOSED_OR_DERIVED.includes(f));
 
 // Only what this draft actually carries. `undefined` means the type has no such
 // field and asking for it invites an answer to a question nobody asked.

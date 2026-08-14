@@ -39,6 +39,64 @@ export const geocodePlace = async (query) => {
   } catch { return null; }
 };
 
+// ── A POSTCODE IS NOT A SEARCH TERM ─────────────────────────────────
+//
+// My own bug, shipped 14 Aug 2026 and caught by Oliver's very next run.
+//
+// I added a fallback that geocoded a bare Danish postcode when the word printed
+// beside it was not a town, and wrote in the comment that "a Danish postcode
+// names exactly one postal town, so the code is trustworthy". The claim about
+// POSTCODES is true. The claim about GEOCODERS was not, and I never checked it.
+//
+// It called geocodePlace("4230, Denmark"), which appends its own country, so
+// Nominatim was asked for the free text "4230, Denmark, Denmark". A bare four
+// digit number in a free text query is not read as a postcode: it competes with
+// house numbers, road numbers and anything else numeric. It came back
+// 55.6887, 11.7060, which is HOLBAEK. 4230 is Skaelskoer, ninety minutes south.
+//
+// Everything downstream then worked perfectly on a wrong coordinate. The
+// nearest stop was Holbaek Havn ferry, correctly. The journey was measured to
+// Holbaek, correctly, 1h45 with one change. arrivalStop named Soendervang,
+// correctly, because that IS where that route ends. A whole chain of measured,
+// mutually consistent, verifiable facts about the wrong town.
+//
+// TWO THINGS, AND THE SECOND IS THE ONE THAT MATTERS.
+//
+// Structured rather than free text: Nominatim takes `postalcode` as its own
+// parameter, where a number cannot be mistaken for a house number.
+//
+// AND THEN THE ANSWER IS CHECKED AGAINST THE QUESTION. addressdetails returns
+// the postcode of whatever was found, and if that is not the postcode asked
+// for, the answer is REFUSED rather than returned. A lookup that cannot prove
+// it found the right place returns nothing, and nothing is a state this
+// pipeline already handles everywhere. That check is what makes this safe in a
+// way my last version was not: it does not need me to be right about how a
+// geocoder behaves.
+//
+// The town comes back too, because it is in the same response and it is the
+// value the draft was missing. 4230 answers "Skaelskoer", which is worth rather
+// more than the "Kontaktperson" the text parser produced.
+export const geocodePostcode = async (code) => {
+  const pc = String(code || "").trim();
+  // Danish postcodes are four digits and never begin with zero. Anything else
+  // is not a postcode and must not be sent as one.
+  if (!/^[1-9]\d{3}$/.test(pc)) return null;
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${pc}&country=Denmark&format=json&limit=1&addressdetails=1&countrycodes=dk`);
+    const data = await r.json();
+    const hit = data?.[0];
+    if (!hit) return null;
+    const lat = parseFloat(hit.lat), lon = parseFloat(hit.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    // THE CHECK. A result carrying a different postcode is a different place,
+    // whatever else it has going for it.
+    const got = String(hit.address?.postcode || "").trim();
+    if (got && got !== pc) return null;
+    const a = hit.address || {};
+    return { lat, lon, town: String(a.town || a.village || a.city || a.municipality || "").trim(), postcode: got || pc };
+  } catch { return null; }
+};
+
 // ── THE NEAREST STOP, NOT THE NEAREST STATION ───────────────────────
 // Two complaints, one day apart, and they turn out to be the same bug.
 //

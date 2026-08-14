@@ -43,7 +43,7 @@ import {
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
   hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep} from "./utils/helpers";
-import { checkNightTransport, geocodePlace, findRealNearestStation } from "./utils/geo";
+import { checkNightTransport, geocodePlace, findRealNearestStation, geocodePostcode } from "./utils/geo";
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
 
@@ -2368,13 +2368,25 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // three: it lands on the town, not the venue. The town is the
             // difference between a draft that knows where it is and one that
             // does not.
+            // STRUCTURED, AND CHECKED. See geocodePostcode: my first version of
+            // this asked a free-text geocoder for "4230, Denmark" and was
+            // answered with Holbaek, ninety minutes from the 4230 it asked
+            // about. The lookup now proves the postcode it found is the
+            // postcode it wanted, and returns nothing when it cannot.
+            let byCode = null;
             if (!coords && found.postcode) {
-              coords = await geocodePlace(`${found.postcode}, Denmark`);
-              foundVia = `the postcode ${found.postcode} alone, because "${found.address}" did not geocode. A Danish postcode names exactly one postal town, so the code is trustworthy even when the word printed beside it is not`;
-              fromVenue = false;
+              byCode = await geocodePostcode(found.postcode);
+              if (byCode) {
+                coords = { lat: byCode.lat, lon: byCode.lon };
+                foundVia = `the postcode ${found.postcode} on its own, because "${found.address}" did not geocode. The lookup returned ${byCode.town || "that postal district"} and confirmed it carries postcode ${byCode.postcode}`;
+                fromVenue = false;
+              }
             }
             if (coords) {
-              draftTown = draftTown || found.town;
+              // The postal district's real name beats the word standing next to the
+              // code in a sentence. 4230 answers Skaelskoer; the parser said
+              // Kontaktperson.
+              draftTown = draftTown || byCode?.town || found.town;
               placed = { ...coords, precise: fromVenue, via: foundVia, region: regionAt(coords.lat, coords.lon), kommune: kommuneNameAt(coords.lat, coords.lon) };
             }
           }
@@ -4211,29 +4223,30 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // helper serves both override sites so the two cannot drift.
       const measuredStop = arrivalStop(transitParts);
 
-      if (frozenGeo || measuredStop) {
-        if (frozenGeo && typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
-        if (frozenGeo && typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
-        const stop = measuredStop || frozenGeo?.station;
-        if (stop && typeof t.nearestStation !== "undefined") {
-          const was = t.nearestStation;
-          t.nearestStation = stop;
-          if (measuredStop && frozenGeo?.station && frozenGeo.station !== measuredStop) {
-            decide("nearestStation", {
-              winner: `the measured journey ("${measuredStop}")`,
-              loser: `the nearest transit point by distance ("${frozenGeo.station}")`,
-              rule: "The arrival point is where the route actually ends, not the closest thing on the map carrying a transit type. A ferry slip can win a radius search and no itinerary uses it.",
-              value: stop,
-            });
-          }
-          if (measuredStop && was && was !== stop) {
-            note("Nearest arrival point", {
-              provider: "google", detail: "the last transit leg of the measured journey",
-              outcome: "ok", used: true,
-              got: `${stop}, where the ${transitParts?.legs?.[transitParts.legs.length - 1]?.vehicle || "service"} from ${transitParts?.legs?.[transitParts.legs.length - 1]?.from || "the interchange"} actually sets a traveller down`,
-            });
-          }
-        }
+      // ── THE COORDINATE AND THE STOP ARE TWO QUESTIONS ────────────
+      //
+      // Found reviewing my own change, 14 Aug, before it ever ran. My first
+      // version widened this to `if (frozenGeo || measuredStop)`, which put the
+      // arrival stop and the coordinate override behind ONE condition and left
+      // the coordinate-clearing `else` reachable only when BOTH were absent.
+      //
+      // It cannot misfire today, because transitParts only exists when the
+      // journey block ran and the journey block requires frozenGeo. That is an
+      // invariant holding across thirteen hundred lines and stated nowhere, and
+      // an unstated invariant is exactly what produced the four-versus-eight
+      // type lists, the three copies of one array and the journey that was
+      // measured and thrown away.
+      //
+      // It also breaks the moment the late re-measurement in LOGISTICS_DIG is
+      // built, which is a change I recommended myself: a journey measured after
+      // the address is known gives a measuredStop with no frozenGeo, and a
+      // model's hallucinated lat/lon would then sail past the clearing branch
+      // and publish. My own next suggestion would have armed it.
+      //
+      // So they are two questions again, asked separately.
+      if (frozenGeo) {
+        if (typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
+        if (typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
       } else if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(sType) && (t.lat || t.lon)) {
         // Geocoding failed, so nothing will override at publish either, and any
         // number sitting in lat/lon right now is the model's own. That is the one
@@ -4241,6 +4254,27 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // than trusted, and said out loud in the place the human actually reads.
         t.lat = null; t.lon = null;
         t.uncertainties = [...(t.uncertainties || []), "Coordinates could not be verified by geocoding, so they were cleared rather than guessed. Set the map pin manually before publishing."];
+      }
+
+      const stop = measuredStop || frozenGeo?.station;
+      if (stop && typeof t.nearestStation !== "undefined") {
+        const was = t.nearestStation;
+        t.nearestStation = stop;
+        if (measuredStop && frozenGeo?.station && frozenGeo.station !== measuredStop) {
+          decide("nearestStation", {
+            winner: `the measured journey ("${measuredStop}")`,
+            loser: `the nearest transit point by distance ("${frozenGeo.station}")`,
+            rule: "The arrival point is where the route actually ends, not the closest thing on the map carrying a transit type. A ferry slip can win a radius search and no itinerary uses it.",
+            value: stop,
+          });
+        }
+        if (measuredStop && was && was !== stop) {
+          note("Nearest arrival point", {
+            provider: "google", detail: "the last transit leg of the measured journey",
+            outcome: "ok", used: true,
+            got: `${stop}, where the ${transitParts?.legs?.[transitParts.legs.length - 1]?.vehicle || "service"} from ${transitParts?.legs?.[transitParts.legs.length - 1]?.from || "the interchange"} actually sets a traveller down`,
+          });
+        }
       }
 
       // ── TICKET STATUS, MEASURED WHERE IT CAN BE AND MARKED WHERE IT
@@ -4607,9 +4641,27 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // separator silently dropped the minutes ("5 hours 53 mins" became
           // "5h"), which caught in testing and would otherwise have shipped a
           // travelTime an hour short of the truth.
+          // ── THE MINUTES ARE A NUMBER, SO STOP READING THEM OUT OF PROSE ──
+          //
+          // Found reviewing this on 14 Aug. The comment above says a previous
+          // regex here turned "5 hours 53 mins" into "5h", and the fix was two
+          // independent matches instead of one. Same class, one step further:
+          // Google can answer "1 day 3 hours" on a long or broken itinerary,
+          // and /(\d+)\s*hour/ reads 3 out of it. A twenty-seven hour journey
+          // publishes as "3h", which is worse than either earlier version of
+          // this bug, and no test could have caught it because the parse is
+          // correct for every string anybody thought to try.
+          //
+          // The exact integer has been sitting one line away the whole time.
+          // journeyParts is handed durationMinutes straight from Google, so
+          // transitParts.total IS the number, and no format can misread it.
+          // The text parse stays as the fallback for the case where there are
+          // no steps to build parts from.
+          const exact = Number(transitParts?.total);
           const hm = realTransport.transit.match(/(\d+)\s*hour/);
           const mmm = realTransport.transit.match(/(\d+)\s*min/);
-          const h = hm ? Number(hm[1]) : 0, mm = mmm ? Number(mmm[1]) : 0;
+          const h = Number.isFinite(exact) && exact > 0 ? Math.floor(exact / 60) : (hm ? Number(hm[1]) : 0);
+          const mm = Number.isFinite(exact) && exact > 0 ? exact % 60 : (mmm ? Number(mmm[1]) : 0);
           const modelSaid = t.travelTime;
           if (h || mm) {
             t.travelTime = `${h ? `${h}h ` : ""}${mm ? `${mm}min` : ""}`.trim() + " 🚂";

@@ -73,7 +73,7 @@ writeFileSync(entry, `
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
-  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
+  export { looksLikeTransit, kindFromName, findRealNearestStop, hasTransitType, geocodePostcode } from ${JSON.stringify(join(root, "src/utils/geo.js"))};
   export { licenseIsUsable, distinctiveToken, mentionsSubject, looksHistorical, pickDescription, bestCaption } from ${JSON.stringify(join(root, "api/commons-photo.js"))};
   export { testTravelerLine } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode, coordFitsTown, townPointFor, townFallbackFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -116,7 +116,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
@@ -1233,6 +1233,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("an unmeasured travelTime is still recorded as written, not measured",
        /rule: "Neither mode returned a usable duration, so no measured figure existed\. This number is WRITTEN, not measured\."/.test(appSrc3));
     ok("and the measured case names what it overruled", /rule: "A measured duration always replaces a written one/.test(appSrc3));
+    // ── AND THE MINUTES ARE READ AS A NUMBER, NOT OUT OF PROSE ────
+    // Third time this class has bitten. The first regex made "5 hours 53 mins"
+    // into "5h"; the fix was two independent matches. Google can also answer
+    // "1 day 3 hours", and /(\d+)\s*hour/ reads 3 out of that, publishing a
+    // twenty-seven hour journey as "3h". No string test catches it, because the
+    // parse is correct for every format anybody thinks to try.
+    ok("the duration comes from the measured integer",
+       /const exact = Number\(transitParts\?\.total\);/.test(appSrc3));
+    ok("with hours and minutes derived from it, not from the sentence",
+       /Math\.floor\(exact \/ 60\)[\s\S]{0,200}exact % 60/.test(appSrc3));
+    // The text parse stays for the case with no steps to build parts from.
+    ok("and the prose parse survives only as the fallback",
+       /\(hm \? Number\(hm\[1\]\) : 0\)/.test(appSrc3));
     // Google finding no transit is NOT evidence that no transit exists. The
     // codebase already knows this (entryAudit's NO_TRANSPORT check exists
     // because that claim "has been wrong every time it was checked").
@@ -11971,7 +11984,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 // Then: "let OpenAI use all the data to setup the 'at a glance' section. And
 // then Claude writes everything else."
 {
-  const { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, glanceFieldsFor,
+  const { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor,
           GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, GLANCE_FIELDS } = M;
 
   // ── THE THREE TIERS, AND THE TOP ONE IS UNTOUCHABLE ──────────────
@@ -11987,6 +12000,24 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // And the middle tier is not empty, which a filter bug could quietly make it.
   ["ticketInfo", "price", "timeNeeded", "accessibility", "camping", "typicalCosts"].forEach(f =>
     ok(`${f} is a value on a page, so it is extracted`, EXTRACTABLE_GLANCE.includes(f)));
+  // ── AND A THIRD KIND, MISSED ON THE FIRST PASS ──────────────────
+  // A closed vocabulary filled from free text stops being closed, and nothing
+  // downstream is built to notice. The 12 Aug audit already recorded this wound
+  // once: "Local Favourite" was an offered answer the UI rendered as its near
+  // opposite and which matched no filter anywhere.
+  ok("bookingType is an enum the UI filters on, so it is not extracted",
+     !EXTRACTABLE_GLANCE.includes("bookingType"));
+  // "your honest read given the real price info" in the prompt's own words. No
+  // page states it, and numbersTraceable cannot catch an invented WORD.
+  ok("budgetLevel is a judgement derived from prices, not a value on a page",
+     !EXTRACTABLE_GLANCE.includes("budgetLevel"));
+  // "Neighbourhood, City": a shape assembled from two facts. An address lands
+  // here otherwise, and the town matching reads this field.
+  ok("location is a composed shape, not a string to be found",
+     !EXTRACTABLE_GLANCE.includes("location"));
+  is("and all three are named rather than quietly absent", CLOSED_OR_DERIVED.sort(),
+     ["bookingType", "budgetLevel", "location"]);
+
   // Derived, never a second hand-written list. Three lists that had to agree
   // drifted apart in this codebase in one night.
   ok("the extractable set is derived from GLANCE_FIELDS",
@@ -12093,15 +12124,19 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("and the composed address is still offered first", found?.address === "4230 Kontaktperson");
 
   const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the draft falls back to the bare postcode",
-     /coords = await geocodePlace\(`\$\{found\.postcode\}, Denmark`\);/.test(appP));
+  // STRUCTURED now, and checked. The first version of this asked a free-text
+  // geocoder for "4230, Denmark" and was answered with Holbaek. See
+  // geocodePostcode.
+  ok("the draft falls back to the postcode, structurally",
+     /byCode = await geocodePostcode\(found\.postcode\);/.test(appP));
   // LAST of the three, because it lands on the town rather than the venue.
   // Ordering is the whole value: a venue coordinate beats a town centre.
   const iVenue = appP.indexOf("geocodePlace(`${name}, ${found.town}`)");
   const iAddr = appP.indexOf("geocodePlace(found.address)");
-  const iCode = appP.indexOf("geocodePlace(`${found.postcode}, Denmark`)");
+  const iCode = appP.indexOf("geocodePostcode(found.postcode)");
   ok("tried after the venue and after the full address", iVenue < iAddr && iAddr < iCode);
-  ok("and the run log says which of the three answered", /the postcode \$\{found\.postcode\} alone/.test(appP));
+  ok("and the run log says which of the three answered, and what it confirmed",
+     /the postcode \$\{found\.postcode\} on its own[\s\S]{0,200}confirmed it carries postcode/.test(appP));
 }
 
 // ── THE ARRIVAL POINT IS WHERE THE JOURNEY ENDS ────────────────────
@@ -12199,6 +12234,69 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const appV = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the draft checks the extraction against the research it read",
      /mergeGlance\(t, gRead\.values, glanceFields, rawResearch\)/.test(appV));
+}
+
+// ── A POSTCODE IS NOT A SEARCH TERM ────────────────────────────────
+// My own bug, shipped 14 Aug and caught by the very next run. The fallback
+// asked a free-text geocoder for "4230, Denmark" (and geocodePlace appends its
+// own country, so the query was "4230, Denmark, Denmark"). A bare four-digit
+// number competes with house numbers and road numbers, and the answer was
+// 55.6887, 11.7060: HOLBAEK. 4230 is Skaelskoer, ninety minutes south.
+//
+// Everything downstream then worked perfectly on a wrong coordinate: nearest
+// stop Holbaek Havn ferry, journey measured to Holbaek, arrivalStop naming
+// Soendervang. All correct, all about the wrong town.
+{
+  const { geocodePostcode } = M;
+  const realFetch = globalThis.fetch;
+  const stub = (rows) => { globalThis.fetch = async () => ({ json: async () => rows }); };
+
+  // A bare number that is not a Danish postcode is never sent as one.
+  for (const bad of ["", "abc", "0123", "423", "42305", null]) {
+    stub([{ lat: "55", lon: "11", address: { postcode: "4230" } }]);
+    ok(`"${bad}" is not asked about at all`, (await geocodePostcode(bad)) === null);
+  }
+
+  // The shape guard is not redundant with the postcode check below, and a
+  // mutation proved it: when Nominatim returns no address block there is
+  // nothing to compare against, so a non-postcode would sail through on an
+  // empty comparison. The guard is what stops it ever being asked.
+  stub([{ lat: "55", lon: "11" }]);
+  ok("a non-postcode is refused even when the answer has no postcode to compare",
+     (await geocodePostcode("abc")) === null);
+  ok("and so is a three-digit number", (await geocodePostcode("423")) === null);
+
+  // THE CHECK THAT MAKES THIS SAFE. The answer must carry the postcode the
+  // question asked about, whatever else it has going for it. This is the exact
+  // Holbaek shape: a real place, real coordinates, wrong postcode.
+  stub([{ lat: "55.6887", lon: "11.7060", address: { postcode: "4300", town: "Holbaek" } }]);
+  is("an answer carrying a different postcode is refused", await geocodePostcode("4230"), null);
+
+  stub([{ lat: "55.2531", lon: "11.2912", address: { postcode: "4230", town: "Skaelskoer" } }]);
+  const good = await geocodePostcode("4230");
+  is("a matching postcode is accepted", [good?.lat, good?.lon], [55.2531, 11.2912]);
+  // The town is the value the draft was missing: 4230 answers Skaelskoer, where
+  // the text parser said Kontaktperson.
+  is("and it hands back the postal town's real name", good?.town, "Skaelskoer");
+
+  // Nominatim does not always return an address block. Absent is not wrong, so
+  // it is accepted; only a CONTRADICTING postcode is refused.
+  stub([{ lat: "55.2531", lon: "11.2912" }]);
+  ok("a result with no address block is still usable", (await geocodePostcode("4230"))?.lat === 55.2531);
+  stub([{ lat: "not a number", lon: "11.29", address: { postcode: "4230" } }]);
+  is("an unparseable coordinate is refused", await geocodePostcode("4230"), null);
+  stub([]);
+  is("and no result is null, never a guess", await geocodePostcode("4230"), null);
+  globalThis.fetch = async () => { throw new Error("network"); };
+  is("a thrown lookup is null too", await geocodePostcode("4230"), null);
+  globalThis.fetch = realFetch;
+
+  const appPc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the draft uses the structured lookup", /byCode = await geocodePostcode\(found\.postcode\);/.test(appPc));
+  ok("and never the free-text one for a postcode",
+     !/geocodePlace\(`\$\{found\.postcode\}, Denmark`\)/.test(appPc));
+  ok("with the postal town preferred over the parsed word",
+     /draftTown = draftTown \|\| byCode\?\.town \|\| found\.town;/.test(appPc));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
