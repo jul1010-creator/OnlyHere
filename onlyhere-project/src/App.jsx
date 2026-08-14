@@ -1092,6 +1092,33 @@ function GemlyxApp() {
     } catch { setManageItems([]); }
     setManageLoading(false);
   };
+  // Same job editItem does for a published row, for a payload that is not in
+  // the table: parse, populate, and let the panel treat it as the current
+  // draft. editingId is deliberately NOT set, so Publish creates rather than
+  // overwrites; a pasted payload has no row to update and silently adopting
+  // one would be the worst possible guess.
+  const loadPastedDraft = () => {
+    const raw = draftPasteText.trim();
+    if (!raw) { setDraftPasteError("Nothing to load yet."); return; }
+    let payload;
+    try { payload = JSON.parse(raw); }
+    catch (e) { setDraftPasteError(`That is not valid JSON: ${String(e?.message || e).slice(0, 120)}`); return; }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      setDraftPasteError("That parsed, but it is not a draft object."); return;
+    }
+    if (!payload.name) { setDraftPasteError("A draft needs a name field. This one has none, so it would fail every check downstream."); return; }
+    setStudioDraft(payload);
+    setStudioDraftText(JSON.stringify(payload, null, 2));
+    setStudioResult(`// Loaded from pasted JSON, not from a research run.\n// Nothing here was measured by this session: the gates below run on what you pasted.`);
+    setStudioPhotoName(payload.photo ? String(payload.photo).split("/").pop() : `${slugify(payload.name)}.jpg`);
+    setDraftEditError(null);
+    setDraftPasteError("");
+    setPublishStatus(null);
+    setPublishErrorDetail(null);
+    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
+    setStudioInventedWarning(null);
+  };
+
   const editItem = (row) => {
     setStudioType(row.type);
     setEditingId(row.id);
@@ -1457,6 +1484,21 @@ function GemlyxApp() {
   const [rephraseSuggestions, setRephraseSuggestions] = useState({}); // flag index -> { original, suggestion }
   const [rephraseLoadingIdx, setRephraseLoadingIdx] = useState(null);
   const [draftEditError, setDraftEditError] = useState(null);
+  // ── A DRAFT YOU ALREADY HAVE, PUT BACK ──────────────────────────────
+  // Oliver, 14 Aug 2026, having deleted a good draft and been handed a fixed
+  // copy of it: "Well, I can't put it in anywhere.."
+  //
+  // He was right and it was a gap rather than a mistake. The JSON editor,
+  // every gate, the assistant and Publish all live inside {studioResult && (,
+  // so with no draft on screen there is no way to get one IN. A draft is a
+  // plain payload and the panel is happy to work on any of them: the only
+  // thing missing was a door.
+  //
+  // This is also the paste-in checker. Anything loaded here runs the same
+  // gates a fresh draft runs, so a payload from a run log, from a colleague,
+  // or fixed by hand can be checked without spending a research pass.
+  const [draftPasteText, setDraftPasteText] = useState("");
+  const [draftPasteError, setDraftPasteError] = useState("");
   const [verifyResults, setVerifyResults] = useState(null);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyError, setVerifyError] = useState(null);
@@ -11262,6 +11304,29 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       );
                     })()}
                     {studioError && <div style={{ fontSize: 12, color: "#FFB347", marginBottom: 8 }}>{studioError}</div>}
+                    {/* ── A DRAFT YOU ALREADY HAVE, PUT BACK ────────────────
+                        The editor, the gates and Publish all live inside the
+                        block below, so with nothing on screen there was no way
+                        to get a payload IN. Also the paste-in checker: anything
+                        loaded here meets the same gates a fresh draft meets,
+                        without spending a research pass to find out. */}
+                    {studioSession && !studioResult && (
+                      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginTop: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: C.text, marginBottom: 4 }}>Load a draft you already have</div>
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 8, lineHeight: 1.5 }}>
+                          Paste a draft payload to edit, check or publish it without running the research again. Every gate runs on it exactly as it would on a fresh draft.
+                        </div>
+                        <textarea value={draftPasteText}
+                          onChange={e => { setDraftPasteText(e.target.value); setDraftPasteError(""); }}
+                          rows={6} placeholder='{ "name": "...", "desc": "..." }'
+                          style={{ width: "100%", background: C.bg, border: `1px solid ${draftPasteError ? "#E23B4E" : C.border}`, borderRadius: 10, padding: "10px", fontSize: 11, color: C.light, lineHeight: 1.6, fontFamily: "monospace", boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} />
+                        {draftPasteError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8 }}>{draftPasteError}</div>}
+                        <button onClick={loadPastedDraft}
+                          style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 12, fontWeight: 800, color: "#0A0F1E", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                          Load into the editor
+                        </button>
+                      </div>
+                    )}
                     {studioResult && (
                       <>
                         {(() => {

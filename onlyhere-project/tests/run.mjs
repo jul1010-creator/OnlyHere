@@ -12368,5 +12368,45 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
      }).length === 0);
 }
 
+// ── A DRAFT YOU ALREADY HAVE, PUT BACK ─────────────────────────────
+// Oliver, 14 Aug 2026, having deleted a good draft and been handed a fixed copy
+// of it: "Well, I can't put it in anywhere.." He was right. The JSON editor,
+// every gate, the assistant and Publish all render inside {studioResult && (,
+// so with nothing on screen there was no way to get a payload IN.
+{
+  const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code = stripNonCode(appL);
+  ok("Studio can load a pasted draft", /const loadPastedDraft = \(\) => \{/.test(code));
+  ok("and the box only shows when there is no draft on screen",
+     /\{studioSession && !studioResult && \(/.test(appL));
+  // It must populate BOTH, because the panel reads studioDraftText for the
+  // editor and studioDraft for everything that takes an object.
+  ok("it populates the object and the editable text together",
+     /setStudioDraft\(payload\);[\s\S]{0,120}setStudioDraftText\(JSON\.stringify\(payload, null, 2\)\)/.test(code));
+  // ── AND IT NEVER ADOPTS A ROW ID ───────────────────────────────
+  // editItem sets editingId because it was handed a row that exists. A pasted
+  // payload has no row, and silently adopting one would make Publish overwrite
+  // a different entry. That is the worst available guess, so it is not made.
+  const fn = code.slice(code.indexOf("const loadPastedDraft"), code.indexOf("const editItem"));
+  ok("a pasted draft never adopts an existing row id", !/setEditingId\(/.test(fn));
+  // The messages live in STRING LITERALS, which stripNonCode blanks by design,
+  // so they are read from the raw source. Asserting them against the stripped
+  // copy failed at baseline and would have failed forever: a test that can
+  // never pass is worse than no test, because it teaches you to ignore a red.
+  const rawFn = appL.slice(appL.indexOf("const loadPastedDraft"), appL.indexOf("const editItem"));
+  // Refusals, because a parse failure that silently does nothing is the same
+  // screen as a load that worked.
+  ok("unparseable JSON is reported", /that is not valid JSON/i.test(rawFn));
+  ok("a non-object is refused", /not a draft object/i.test(rawFn));
+  ok("and a payload with no name is refused, since every check downstream needs one",
+     /A draft needs a name field/.test(rawFn));
+  // Stale state from a previous draft must not survive onto a new one.
+  ok("it clears the previous draft's warnings", /setStudioInventedWarning\(null\)/.test(fn));
+  ok("and the previous verification results", /setVerifyResults\(null\)/.test(fn));
+  // The run log must not claim this was measured.
+  ok("and it says plainly that nothing here was measured this session",
+     /Nothing here was measured by this session/.test(appL));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }
