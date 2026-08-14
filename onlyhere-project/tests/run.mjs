@@ -12177,6 +12177,12 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
      /const restoreStop = arrivalStop\(transitParts\) \|\| frozenGeo\?\.station;/.test(appA));
   ok("with the disagreement recorded rather than silent",
      /loser: `the nearest transit point by distance/.test(appA));
+  // Oliver's 17:22 draft carried nearestStation "Skaelskoer Busterminal" AND a
+  // note saying the nearest stop could not be named. Both were true when
+  // written; the second stopped being true four hundred lines later. A note
+  // that contradicts the field beside it is worse than no note.
+  ok("and the note saying it could not be named is dropped once it is",
+     /t\.__notes = \(t\.__notes \|\| \[\]\)\.filter\(n => !\/The nearest stop could not be named\/\.test\(String\(n\)\)\);/.test(appA));
 }
 
 // ── EXTRACTION IS CHECKED, NOT REQUESTED ───────────────────────────

@@ -4260,6 +4260,21 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       if (stop && typeof t.nearestStation !== "undefined") {
         const was = t.nearestStation;
         t.nearestStation = stop;
+        // ── AND THE NOTE SAYING IT COULD NOT BE NAMED IS NOW FALSE ──
+        //
+        // Found in Oliver's 17:22 draft, 14 Aug. It carried
+        // nearestStation "Skaelskoer Busterminal" AND a __note reading "the
+        // nearest stop could not be named, so that field was left empty".
+        // Both were true when written and the second stopped being true four
+        // hundred lines later, when the measured arrival point filled the field
+        // the sanitiser had cleared.
+        //
+        // A note to the founder that contradicts the field beside it is worse
+        // than no note: it is the pipeline reporting on a state it has since
+        // fixed, and the next person to read it wastes their time checking.
+        // The sanitiser's own reason for existing survives, because the note is
+        // only dropped when something real replaced the value.
+        t.__notes = (t.__notes || []).filter(n => !/The nearest stop could not be named/.test(String(n)));
         if (measuredStop && frozenGeo?.station && frozenGeo.station !== measuredStop) {
           decide("nearestStation", {
             winner: `the measured journey ("${measuredStop}")`,
