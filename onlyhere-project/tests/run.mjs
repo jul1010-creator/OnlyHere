@@ -12063,5 +12063,37 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("repairGlance still runs afterwards", /repairGlance\(/.test(appG));
 }
 
+// ── 4230 IS SKAELSKOER, AND THE WORD BESIDE IT IS NOT ───────────────
+// Oliver's Graeskarfestival run, 14 Aug 2026, step 2: found "4230
+// Kontaktperson" in the research but nothing geocoded from it. The pipeline had
+// the right postcode and threw it away because of the noun standing next to it,
+// and the whole draft lost its location: no region, no frozenGeo, so the
+// journey was never measured, travelTime and nearestStation empty, and a
+// Reality Check denying a rail connection Google will route.
+{
+  const { danishAddressIn } = M;
+  const research = "Kontakt: Havnevej 10, 4230 Kontaktperson kan traeffes paa telefon.";
+  const found = danishAddressIn(research);
+  // The extractor still reads the wrong word, and that is ACCEPTED. A blacklist
+  // of every Danish noun that can follow a postcode has no end, and each entry
+  // gets written after a draft has already shipped wrong.
+  ok("the word beside the code can still be wrong", found?.town === "Kontaktperson");
+  // What matters is that the reliable half survives alongside it, so a caller
+  // has something to fall back to.
+  is("but the postcode is carried separately", found?.postcode, "4230");
+  ok("and the composed address is still offered first", found?.address === "4230 Kontaktperson");
+
+  const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the draft falls back to the bare postcode",
+     /coords = await geocodePlace\(`\$\{found\.postcode\}, Denmark`\);/.test(appP));
+  // LAST of the three, because it lands on the town rather than the venue.
+  // Ordering is the whole value: a venue coordinate beats a town centre.
+  const iVenue = appP.indexOf("geocodePlace(`${name}, ${found.town}`)");
+  const iAddr = appP.indexOf("geocodePlace(found.address)");
+  const iCode = appP.indexOf("geocodePlace(`${found.postcode}, Denmark`)");
+  ok("tried after the venue and after the full address", iVenue < iAddr && iAddr < iCode);
+  ok("and the run log says which of the three answered", /the postcode \$\{found\.postcode\} alone/.test(appP));
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

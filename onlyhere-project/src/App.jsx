@@ -2339,6 +2339,40 @@ Say which answer came from which source, so a fact from a vouched page and a fac
               foundVia = `the centre of ${found.town}, read from "${found.address}" in the research`;
               fromVenue = false;
             }
+            // ── AND IF THE WORD BESIDE THE CODE WAS NOT A TOWN ────────
+            //
+            // Oliver's Græskarfestival run, 14 Aug 2026, step 2:
+            //
+            //   found "4230 Kontaktperson" in the research but nothing
+            //   geocoded from it
+            //
+            // 4230 IS Skælskør. The pipeline had the right postcode and threw
+            // it away because of the word standing next to it. "Kontaktperson"
+            // is capitalised and is not in NOT_A_TOWN, so danishAddressIn
+            // accepted it, and "4230 Kontaktperson, Denmark" geocodes to
+            // nothing. That single failure cost the whole draft its location,
+            // and everything downstream of a location: no region, so every
+            // place-scoped source was left out; no frozenGeo, so the journey
+            // was never measured at all; travelTime and nearestStation empty;
+            // and a Reality Check telling a reader there is no confirmed rail
+            // connection to a town Google will happily route them to.
+            //
+            // The lesson is not a longer NOT_A_TOWN list. A blacklist of every
+            // Danish noun that can follow a postcode has no end, and each new
+            // entry is written after another draft has already shipped wrong.
+            //
+            // THE POSTCODE IS THE RELIABLE TOKEN AND THE WORD IS THE GUESS.
+            // Danish postcodes map one to one onto postal towns, so the bare
+            // code resolves on its own and cannot be poisoned by the noun
+            // beside it. Tried LAST, because it is the least precise of the
+            // three: it lands on the town, not the venue. The town is the
+            // difference between a draft that knows where it is and one that
+            // does not.
+            if (!coords && found.postcode) {
+              coords = await geocodePlace(`${found.postcode}, Denmark`);
+              foundVia = `the postcode ${found.postcode} alone, because "${found.address}" did not geocode. A Danish postcode names exactly one postal town, so the code is trustworthy even when the word printed beside it is not`;
+              fromVenue = false;
+            }
             if (coords) {
               draftTown = draftTown || found.town;
               placed = { ...coords, precise: fromVenue, via: foundVia, region: regionAt(coords.lat, coords.lon), kommune: kommuneNameAt(coords.lat, coords.lon) };
