@@ -116,7 +116,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, glanceFieldsFor, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
@@ -12064,7 +12064,9 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // Extraction is a small output over a large input, the opposite shape to
   // everything else here, so there is no reason to pay the compression.
   ok("on the full research, not the compressed notes", !/GLANCE_EXTRACT_PROMPT\(name, sType, glanceFields, userContent\)/.test(appG));
-  ok("and the result is merged, never assigned wholesale", /const merged = mergeGlance\(t, gRead\.values, glanceFields\);/.test(appG));
+  // The research is passed in as the fourth argument so the extraction is
+  // VERIFIED rather than trusted. See numbersTraceable.
+  ok("and the result is merged, never assigned wholesale", /const merged = mergeGlance\(t, gRead\.values, glanceFields, rawResearch\);/.test(appG));
   // The old repair machinery stays. A net you no longer need is cheap and one
   // you removed early is not.
   ok("repairGlance still runs afterwards", /repairGlance\(/.test(appG));
@@ -12140,6 +12142,63 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
      /const restoreStop = arrivalStop\(transitParts\) \|\| frozenGeo\?\.station;/.test(appA));
   ok("with the disagreement recorded rather than silent",
      /loser: `the nearest transit point by distance/.test(appA));
+}
+
+// ── EXTRACTION IS CHECKED, NOT REQUESTED ───────────────────────────
+// The prompt tells the model it is extracting rather than writing, and that is
+// a REQUEST. A request has a failure rate while code does not, so the claim is
+// verified against the research.
+//
+// NOT by string equality, which would be wrong on purpose: the research is
+// Danish and the entry is English, so "gratis adgang" SHOULD become "free
+// entry" and a character-for-character rule would reject the correct answer on
+// every Danish source. What cannot change in translation is the numbers.
+{
+  const { numbersTraceable, mergeGlance, describeGlance } = M;
+  const research = "Entre: 180 kr. for voksne. Varighed ca. 2-3 timer. Parkering 1.500 pladser.";
+
+  ok("a figure on the page traces", numbersTraceable("180 DKK", research).ok);
+  ok("a range whose ends are both on the page traces", numbersTraceable("2 to 3 hours", research).ok);
+  // The whole point of not comparing characters: this is a translation, not an
+  // invention, and it must survive.
+  ok("a translated value with no figures is not refused", numbersTraceable("free entry", research).ok);
+  // And the failure it exists to catch.
+  is("a composed figure is caught", numbersTraceable("240 DKK", research).missing, ["240"]);
+  is("and half a composed range is too", numbersTraceable("2 to 9 hours", research).missing, ["9"]);
+  // EVERY number, not most of them. Asserting only on `missing` left this open:
+  // a rule of "some traced" keeps a half-invented range, and the invented half
+  // is the half a reader plans around. A mutation proved it by staying green.
+  ok("one traceable number does not carry an untraceable one",
+     !numbersTraceable("2 to 9 hours", research).ok);
+  ok("nor does a whole sentence of good ones",
+     !numbersTraceable("180 kr, 2-3 timer, and 999 extra", research).ok);
+  // A Danish page writes 1.500 and an English field writes 1,500 or 1500.
+  // Three spellings of one number must not read as an invention.
+  ok("thousands separators do not matter", numbersTraceable("1,500 spaces", research).ok);
+  ok("nor does their absence", numbersTraceable("1500 spaces", research).ok);
+
+  // Wired into the merge, where it decides what publishes.
+  const kept = mergeGlance({ ticketInfo: "around 200 kr" }, { ticketInfo: "240 DKK" }, ["ticketInfo"], research);
+  is("a refused value never reaches the field", kept.patched.ticketInfo, "around 200 kr");
+  // The same at the merge, because that is where it decides what publishes.
+  is("and a half-traceable value is refused there too",
+     mergeGlance({ timeNeeded: "about 2 hours" }, { timeNeeded: "2 to 9 hours" }, ["timeNeeded"], research).patched.timeNeeded,
+     "about 2 hours");
+  // Read THROUGH the array, not off it. Bypassing the check leaves `rejected`
+  // empty, and [0].missing on empty throws, which ABORTS THE FILE: a crash is
+  // not a failure and it hides every assertion under it. Third time tonight.
+  is("and the refusal is reported with the missing figure", kept.rejected[0]?.missing ?? null, ["240"]);
+  ok("in the log line too", /REFUSED|refused/.test(describeGlance(kept)));
+  const okd = mergeGlance({ ticketInfo: "" }, { ticketInfo: "180 DKK" }, ["ticketInfo"], research);
+  is("a traceable value still lands", okd.patched.ticketInfo, "180 DKK");
+  // With nothing to check against, refusing everything would be accusing an
+  // extraction of something unknowable. Same discipline as tracePrices.
+  is("with no research nothing is refused",
+     mergeGlance({ ticketInfo: "" }, { ticketInfo: "240 DKK" }, ["ticketInfo"], "").patched.ticketInfo, "240 DKK");
+
+  const appV = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the draft checks the extraction against the research it read",
+     /mergeGlance\(t, gRead\.values, glanceFields, rawResearch\)/.test(appV));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

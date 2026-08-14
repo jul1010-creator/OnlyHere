@@ -138,20 +138,62 @@ export const readGlanceExtract = (text, fields) => {
 // Returns what changed as well as the payload, so a run log can say which
 // fields an extractor took over and a person can see it happening rather than
 // inferring it from a diff.
-export const mergeGlance = (draft, values, fields) => {
+// ── AND EXTRACTION IS CHECKED, NOT REQUESTED ────────────────────────
+//
+// The prompt above tells the model it is extracting rather than writing. That
+// is a REQUEST, and this codebase's own rule is that a request has a failure
+// rate while code does not. So the claim is verified.
+//
+// Not by string equality, which would be wrong here on purpose. The research is
+// in Danish and the entry is in English: a page saying "gratis adgang" should
+// absolutely become "free entry", and a rule demanding the characters match
+// would reject the correct answer on every Danish source. Translation IS
+// extraction.
+//
+// WHAT CANNOT CHANGE IN TRANSLATION IS THE NUMBERS. 180 kr is 180 DKK in any
+// language, "2-3 timer" is "2 to 3 hours", and a figure the research does not
+// contain was not found, it was composed. That is the failure worth catching
+// and it is the only one a reader plans around.
+//
+// Digits are compared with separators removed, because a Danish page writes
+// 1.500 kr for one thousand five hundred and an English field writes 1,500 or
+// 1500. Three spellings of one number must not read as an invention.
+const digitsOf = (s) => (String(s || "").match(/\d[\d.,]*/g) || [])
+  .map(n => n.replace(/[.,](?=\d{3}\b)/g, "").replace(/[.,]$/, ""))
+  .filter(Boolean);
+
+export const numbersTraceable = (value, research) => {
+  const want = digitsOf(value);
+  if (!want.length) return { ok: true, missing: [] };
+  const have = new Set(digitsOf(research));
+  const missing = want.filter(n => !have.has(n));
+  return { ok: missing.length === 0, missing };
+};
+
+export const mergeGlance = (draft, values, fields, research = "") => {
   const before = draft || {};
   const out = { ...before };
-  const changed = [], kept = [], blocked = [];
+  const changed = [], kept = [], blocked = [], rejected = [];
   for (const f of fields) {
     if (NEVER_EXTRACT.includes(f)) { blocked.push(f); continue; }
     const next = String(values?.[f] ?? "").trim();
     const prev = String(before[f] ?? "").trim();
     if (!next) { if (prev) kept.push(f); continue; }
     if (next === prev) continue;
+    // Only when there is research to check AGAINST. With none, refusing every
+    // value would be accusing an extraction of something unknowable, which is
+    // the same discipline tracePrices and coordProblems already follow.
+    if (research) {
+      const trace = numbersTraceable(next, research);
+      if (!trace.ok) {
+        rejected.push({ field: f, value: next, missing: trace.missing });
+        continue;
+      }
+    }
     out[f] = next;
     changed.push({ field: f, was: prev, now: next });
   }
-  return { patched: out, changed, kept, blocked };
+  return { patched: out, changed, kept, blocked, rejected };
 };
 
 // One line for the run log. Says what it took over and what it left alone,
@@ -162,5 +204,9 @@ export const describeGlance = (r) => {
   const parts = [];
   if (r.changed?.length) parts.push(`${r.changed.length} field${r.changed.length === 1 ? "" : "s"} taken from the research: ${r.changed.map(c => c.field).join(", ")}`);
   if (r.kept?.length) parts.push(`${r.kept.length} left as the writer had ${r.kept.length === 1 ? "it" : "them"}, because the extraction came back empty: ${r.kept.join(", ")}`);
+  // Said out loud rather than swallowed. A refused extraction means a figure
+  // was composed rather than found, and that is the single most useful thing
+  // this stage can report about itself.
+  if (r.rejected?.length) parts.push(`${r.rejected.length} refused, because ${r.rejected.length === 1 ? "a figure in it is" : "figures in them are"} not in the research at all: ${r.rejected.map(x => `${x.field} (${x.missing.join(", ")})`).join(", ")}`);
   return parts.join(". ") || "nothing to change";
 };

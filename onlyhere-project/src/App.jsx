@@ -4159,15 +4159,22 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           const gRes = await askOpenAI(GLANCE_EXTRACT_PROMPT(name, sType, glanceFields, rawResearch), 1200);
           const gRead = gRes?.error ? { ok: false, values: {}, why: gRes.error } : readGlanceExtract(gRes?.text, glanceFields);
           if (gRead.ok) {
-            const merged = mergeGlance(t, gRead.values, glanceFields);
+            const merged = mergeGlance(t, gRead.values, glanceFields, rawResearch);
             t = merged.patched;
             note("At a Glance from the research", {
               provider: "openai", detail: `extracted, not written: ${glanceFields.join(", ")}`,
               outcome: merged.changed.length ? "ok" : "empty",
               got: describeGlance(merged),
-              why: merged.changed.length
-                ? merged.changed.map(c => `${c.field}: ${c.was ? `"${c.was}" -> ` : ""}"${c.now}"`).join(" | ").slice(0, 300)
-                : "the research stated none of these, so the writer's own values stand",
+              why: [
+                merged.changed.length
+                  ? merged.changed.map(c => `${c.field}: ${c.was ? `"${c.was}" -> ` : ""}"${c.now}"`).join(" | ")
+                  : "the research stated none of these, so the writer's own values stand",
+                // A refused value is the one thing here worth interrupting for:
+                // the extractor composed a figure instead of finding one.
+                merged.rejected.length
+                  ? `REFUSED, a figure not in the research at all: ${merged.rejected.map(x => `${x.field} said "${x.value}" and ${x.missing.join(", ")} appears nowhere`).join("; ")}`
+                  : "",
+              ].filter(Boolean).join(". ").slice(0, 400),
               used: merged.changed.length > 0,
             });
             merged.changed.forEach(c => decide(c.field, {
