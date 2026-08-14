@@ -117,7 +117,7 @@ writeFileSync(entry, `
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
-  export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { costContradictions, bareOccurrence, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
 // This spawned node_modules/.bin/esbuild, located with existsSync. That works
@@ -12303,6 +12303,69 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
      !/geocodePlace\(`\$\{found\.postcode\}, Denmark`\)/.test(appPc));
   ok("with the postal town preferred over the parsed word",
      /draftTown = draftTown \|\| byCode\?\.town \|\| found\.town;/.test(appPc));
+}
+
+// ── A CLAIM AND ITS RETRACTION, PUBLISHED TOGETHER ─────────────────
+// Oliver's Graeskarfestival draft, 14 Aug 2026. desc stated flatly "Denmark's
+// largest pumpkin festival" and the uncertainties said it was the festival's
+// own description and not independently verified. selfContradictions exists for
+// exactly that pair and returned nothing: QUOTED pulled the claim out fine, and
+// RETRACTS simply had no phrase for it. It carried the single word "unverified"
+// while the draft wrote "was not independently VERIFIED".
+{
+  const { selfContradictions, bareOccurrence } = M;
+  const note = '"Denmarks largest pumpkin festival" is the festivals own description and was not independently verified against other pumpkin events.';
+
+  ok("his real retraction wording is recognised",
+     selfContradictions({ desc: "Denmarks largest pumpkin festival fills the harbour streets for a week.", uncertainties: [note] }).length === 1);
+  // A model retracts by naming WHO said it at least as often as by naming what
+  // is missing, and the old list only knew the second shape.
+  ["is the organisers own claim", "self-described as the biggest", "not verified anywhere",
+   "was not checked against other events"].forEach(phrase =>
+    ok(`"${phrase}" reads as a retraction`,
+       selfContradictions({ desc: "the big orange festival of the north fills the town", uncertainties: [`"the big orange festival of the north" ${phrase}.`] }).length === 1));
+
+  // ── AND ATTRIBUTION IS THE FIX, SO IT MUST NOT BE THE FAULT ──────
+  // "Billed as X" is the correct repair and still contains X. A gate that fires
+  // on its own fix teaches the pipeline to write worse in order to pass, which
+  // is what the price trace was doing this morning.
+  is("attributing the claim is clean, because that is the repair",
+     selfContradictions({ desc: "Billed as Denmarks largest pumpkin festival, it fills the harbour streets.", uncertainties: [note] }), []);
+  // But attributing it once does not license stating it flat later.
+  ok("attributed once and stated flat later is still caught",
+     selfContradictions({
+       desc: "Billed as Denmarks largest pumpkin festival, it fills the harbour.",
+       atmosphere: "Denmarks largest pumpkin festival takes over the town.",
+       uncertainties: [note],
+     }).length === 1);
+
+  ok("a bare claim is bare", bareOccurrence("the town runs the biggest pumpkin festival", "the biggest pumpkin festival"));
+  ok("an attributed one is not", !bareOccurrence("it is billed as the biggest pumpkin festival", "the biggest pumpkin festival"));
+  // The window is short on purpose: a marker four sentences back governs nothing.
+  ok("and an attribution far upstream does not cover it",
+     bareOccurrence("billed as something else entirely, and then a whole clause of other words appear here before we reach the biggest pumpkin festival", "the biggest pumpkin festival"));
+  ok("a claim that is not in the prose at all is not an occurrence",
+     !bareOccurrence("nothing like it here", "the biggest pumpkin festival"));
+
+  // ── TYPOGRAPHY IS NOT MEANING ────────────────────────────────────
+  // The whole check was turning on which apostrophe the model happened to emit.
+  // An uncertainty quoting a straight "Denmark's" never matched prose written
+  // with a curly one, and the case that passed did so by luck. Both spellings
+  // are one string now, both directions.
+  const curly = "\u2019", straight = "'";
+  [[curly, straight], [straight, curly], [curly, curly], [straight, straight]].forEach(([inProse, inNote]) => {
+    ok(`a claim quoted with ${inNote === curly ? "a curly" : "a straight"} apostrophe matches prose using ${inProse === curly ? "a curly" : "a straight"} one`,
+      selfContradictions({
+        desc: `Denmark${inProse}s largest pumpkin festival fills the harbour streets.`,
+        uncertainties: [`"Denmark${inNote}s largest pumpkin festival" is the festival${inNote}s own description and was not verified.`],
+      }).length === 1);
+  });
+  // And the attributed repair stays clean across the same four spellings.
+  ok("while the attributed repair stays clean whichever apostrophe is used",
+     selfContradictions({
+       desc: `Billed by its organisers as Denmark${curly}s largest pumpkin festival, it fills the harbour.`,
+       uncertainties: [`"Denmark${straight}s largest pumpkin festival" is the festival${straight}s own description and was not verified.`],
+     }).length === 0);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

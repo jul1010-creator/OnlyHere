@@ -1103,7 +1103,25 @@ export const curatedFindProblems = (payload) => {
 //
 // So this is the enforcement, not the request. A quoted claim that the draft's
 // own uncertainties call unsupported must not still be sitting in its prose.
-const RETRACTS = /\b(?:not stated in the research|could not be confirmed|not supported|unverified|no source|nothing (?:states|supports)|was not found)\b/i;
+// ── AND THE WORDS A DRAFT ACTUALLY RETRACTS IN ──────────────────────
+//
+// Oliver's Graeskarfestival draft, 14 Aug 2026. desc said flatly "Denmark's
+// largest pumpkin festival" and the uncertainties said:
+//
+//   "Denmark's largest pumpkin festival" is the festival's own description and
+//   was not independently verified against other pumpkin events in the country.
+//
+// Which is the exact pair this function exists to catch, and it returned
+// nothing. QUOTED pulled the claim out correctly; the list below simply had no
+// phrase for it. It carried the single word "unverified" and the draft wrote
+// "was not independently VERIFIED", which \bunverified\b cannot match, and it
+// had nothing at all for a claim attributed to its own subject.
+//
+// That is the second time today a check missed for its vocabulary rather than
+// its logic, and both were mine to widen. The phrasings below are the ones his
+// real drafts have actually used, not ones I invented: a model retracts by
+// naming who said it at least as often as by naming what is missing.
+const RETRACTS = /\b(?:not stated in the research|could not be confirmed|not supported|unverified|not (?:independently |fully |otherwise )?verified|self-described|self-declared|own (?:description|claim|claims|words|account|label)|no source|nothing (?:states|supports)|was not found|not checked against)\b/i;
 // Findings quote the claim they are about, and the checker's output arrives
 // with markdown emphasis around it. Both shapes, and the quotes themselves are
 // not part of the claim.
@@ -1111,7 +1129,47 @@ const QUOTED = /[""]([^""]{4,200})[""]|\*\*([^*]{4,200})\*\*/g;
 
 export const PROSE_FIELDS = ["atmosphere", "whoItsFor", "realityCheck", "desc", "special", "whoFor", "afterDark", "beforeDark", "bestTime", "howItsMade", "vibeLocation", "characterAndFit", "whatToDo", "gettingThereReality", "highlight"];
 
-const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").replace(/[*"""]/g, "").trim();
+// Saying who said it. Kept to phrases that name a SOURCE for the claim, not to
+// general hedges: "probably the largest" is still the entry asserting it, badly.
+// The verb and its "as" can have the source in between, and a real draft puts
+// it there: "billed BY ITS ORGANISERS as". My first version listed "billed as"
+// only, and the very first attributed sentence written to test the repair was
+// flagged by it. A list of attribution phrasings missing the natural ones sends
+// a writer straight back to the flat assertion this rule exists to stop.
+const ATTRIBUTED = /\b(?:(?:billed|described|advertised|marketed|promoted|sold)(?:\s+[\w'\u2019]+){0,4}\s+as|describes itself as|calls itself|calls it|self-described|self-declared|its own|their own|the organiser'?\u2019?s?|the festival'?\u2019?s? own|organisers? (?:call|say|describe)|says? it is|claims? to be|according to|by its own)\b[^.]{0,40}$/i;
+
+// Is there an occurrence of `claim` in `prose` with no attribution in front of
+// it. Every occurrence is checked, because a draft that attributes it once and
+// then states it flat later has done the thing this rule is about.
+export const bareOccurrence = (prose, claim) => {
+  const hay = String(prose || ""), needle = String(claim || "");
+  if (!needle || !hay.includes(needle)) return false;
+  let at = hay.indexOf(needle);
+  while (at !== -1) {
+    // The window is short on purpose. An attribution governs the clause it
+    // opens, and a marker four sentences earlier governs nothing.
+    if (!ATTRIBUTED.test(hay.slice(Math.max(0, at - 60), at))) return true;
+    at = hay.indexOf(needle, at + 1);
+  }
+  return false;
+};
+
+// ── AND TYPOGRAPHY IS NOT MEANING ──────────────────────────────────
+// Found while testing the repair, 14 Aug. An uncertainty quoting "Denmark's
+// largest pumpkin festival" with a straight apostrophe never matched the same
+// words in prose written with a curly one, so this whole check turned on which
+// character a model happened to emit that run. It had been passing by luck.
+//
+// Curly quotes and apostrophes fold to their ASCII forms before anything is
+// compared, which is the same folding danishNames does for letters and for the
+// same reason: two spellings of one string are one string.
+const norm = (s) => String(s || "")
+  .toLowerCase()
+  .replace(/[\u2018\u2019\u201B\u02BC]/g, "'")
+  .replace(/[\u201C\u201D\u201F]/g, '"')
+  .replace(/\s+/g, " ")
+  .replace(/[*"]/g, "")
+  .trim();
 
 export const selfContradictions = (payload) => {
   const notes = Array.isArray(payload?.uncertainties) ? payload.uncertainties : [];
@@ -1126,6 +1184,25 @@ export const selfContradictions = (payload) => {
       const claim = norm(m[1] || m[2]);
       // Short fragments match by accident; a claim worth deleting is a clause.
       if (claim.length < 12 || !prose.includes(claim)) continue;
+      // ── AND ATTRIBUTION IS THE FIX, SO IT MUST NOT BE THE FAULT ────
+      //
+      // Caught the moment this widening started working. "Denmark's largest
+      // pumpkin festival" stated flat is the bug. "BILLED AS Denmark's largest
+      // pumpkin festival" is the correct repair, and it still contains the
+      // claim, so a naive substring test flags the fixed draft as loudly as the
+      // broken one.
+      //
+      // A gate that fires on its own fix teaches the pipeline to write worse in
+      // order to pass, which is the same fault the price trace had this morning
+      // when it called a span read off a ticket agent a blog rumour. So an
+      // occurrence carrying an attribution in front of it is not a fault, and
+      // only a BARE occurrence is: the entry may repeat what the organiser says
+      // as long as it says who said it.
+      //
+      // Every occurrence is checked, not the first. A draft that attributes it
+      // once in the intro and then states it flat two paragraphs later has done
+      // the thing this rule is about.
+      if (!bareOccurrence(prose, claim)) continue;
       out.push(`This draft states "${claim.slice(0, 120)}" in its prose AND says in its own uncertainties that it is unsupported. One of the two has to go, and it is the sentence: an unsourced line in prose is an invention rather than a doubt, so delete it rather than publishing the claim and the retraction together.`);
     }
   }
