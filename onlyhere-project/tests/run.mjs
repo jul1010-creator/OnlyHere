@@ -116,6 +116,7 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, glanceFieldsFor, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { costContradictions, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
@@ -1207,8 +1208,30 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // transit itinerary, nothing is written and the MODEL's own string survives
     // into the stored payload. It is the one path by which an unmeasured travel
     // time reaches a published page, and it was completely silent.
-    ok("an unmeasured travelTime is now recorded as written, not measured",
-       /rule: "Google returned no transit itinerary, so no measured figure existed\. This number is WRITTEN, not measured\."/.test(appSrc3));
+    // ── AND THEN THERE WAS SOMETHING TO MEASURE AGAINST ───────────
+    // Oliver, 13 Aug 2026: "'at a glance' is important data."
+    //
+    // The branch above said "there is nothing measured to overwrite it with",
+    // and that was wrong on its own terms: the ONLY way to reach it is
+    // realTransport.driving being truthy, so a measured road duration was in
+    // the same object, unused, while the model's guess was kept.
+    //
+    // And travelTime is in MEASURED_FIELDS, so keepMeasured restores it and the
+    // correction prompt tells the model not to second-guess it. A number nobody
+    // measured was inheriting the protection of one that was, from the name of
+    // the field it sat in.
+    ok("a road route is written as the measured travel time",
+       /winner: "Google Directions \(measured, by road\)"/.test(appSrc3));
+    ok("marked as the car, since that is the mode that was measured",
+       /\.trim\(\) \+ " 🚗"/.test(appSrc3));
+    // NO TRANSIT ITINERARY IS NOT NO TRANSIT, and the reader is told which is
+    // which rather than being left to read a car time as a verdict.
+    ok("and the reader is told transport was not confirmed, not that it is absent",
+       /a fact about the routing feed and not about the place/.test(appSrc3));
+    // Still reachable when driving came back with no usable duration, and still
+    // recorded as written rather than quietly promoted.
+    ok("an unmeasured travelTime is still recorded as written, not measured",
+       /rule: "Neither mode returned a usable duration, so no measured figure existed\. This number is WRITTEN, not measured\."/.test(appSrc3));
     ok("and the measured case names what it overruled", /rule: "A measured duration always replaces a written one/.test(appSrc3));
     // Google finding no transit is NOT evidence that no transit exists. The
     // codebase already knows this (entryAudit's NO_TRANSPORT check exists
@@ -11932,6 +11955,112 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("and the prompt says it is not the operator",
      /It is a ticket shop and NOT the operator/.test(appH));
   ok("the same page is never read twice in one run", /if \(pagesByUrl\[u\]\) continue;/.test(appH));
+}
+
+// ── AT A GLANCE IS DATA, SO IT IS EXTRACTED RATHER THAN WRITTEN ─────
+//
+// Oliver, 13 Aug 2026: "in the 'at a glance' section, there is not requirement
+// for Claude to write it all friendly.. 'at a glance' is important data."
+// Then: "let OpenAI use all the data to setup the 'at a glance' section. And
+// then Claude writes everything else."
+{
+  const { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, glanceFieldsFor,
+          GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, GLANCE_FIELDS } = M;
+
+  // ── THE THREE TIERS, AND THE TOP ONE IS UNTOUCHABLE ──────────────
+  // Handing a measured field to an extractor is a step BACKWARDS from what the
+  // pipeline already does in code, so the exclusion is asserted rather than
+  // trusted to a reading of the list.
+  ["travelTime", "nearestStation", "ticketStatus", "lat", "lon", "website"].forEach(f =>
+    ok(`${f} is measured and never extracted`, !EXTRACTABLE_GLANCE.includes(f)));
+  // Judgement, not data. An extractor handed "tag" returns whatever noun phrase
+  // the page used about itself, which is a tourism board writing Gemlyx's card.
+  ["tag", "highlight", "crowd", "gemlyxFind"].forEach(f =>
+    ok(`${f} is the entry's voice and stays with the writer`, !EXTRACTABLE_GLANCE.includes(f)));
+  // And the middle tier is not empty, which a filter bug could quietly make it.
+  ["ticketInfo", "price", "timeNeeded", "accessibility", "camping", "typicalCosts"].forEach(f =>
+    ok(`${f} is a value on a page, so it is extracted`, EXTRACTABLE_GLANCE.includes(f)));
+  // Derived, never a second hand-written list. Three lists that had to agree
+  // drifted apart in this codebase in one night.
+  ok("the extractable set is derived from GLANCE_FIELDS",
+     EXTRACTABLE_GLANCE.every(f => GLANCE_FIELDS.includes(f)));
+
+  // Only what the draft actually has. A type with no camping field is never
+  // asked about camping, and an answer to a question nobody asked is invention.
+  is("only the fields this draft carries are asked for",
+     glanceFieldsFor({ ticketInfo: "", camping: "", desc: "x", travelTime: "2h" }),
+     ["ticketInfo", "camping"]);
+  is("a draft with no glance fields asks nothing", glanceFieldsFor({ desc: "x" }), []);
+  is("and neither does nothing at all", glanceFieldsFor(null), []);
+
+  // ── THE PROMPT SAYS THE ONE THING THAT MATTERS MOST ──────────────
+  // The failure that produced glanceLeak was a model filling a box because the
+  // box was there, so the permission to return nothing is stated first.
+  const gp = GLANCE_EXTRACT_PROMPT("Ribe", "town", ["typicalCosts"], "some research");
+  ok("empty is named as a correct answer", /RETURN AN EMPTY STRING FOR IT/.test(gp));
+  ok("and a search report is banned from a value field",
+     /Never write "not found"/.test(gp));
+  ok("prices keep the page's own wording", /never round it, never convert it/.test(gp));
+  // The concession bug, in the prompt this time. A members' rate is not the price.
+  ok("and a conditional rate is not the price", /the ORDINARY adult price/.test(gp));
+  ok("the research is actually in it", /some research/.test(gp));
+
+  // ── READING IT BACK ──────────────────────────────────────────────
+  const fields = ["ticketInfo", "timeNeeded"];
+  const good = readGlanceExtract('{"ticketInfo":"180 DKK","timeNeeded":"2 hours"}', fields);
+  is("a clean reply is read", [good.ok, good.values.ticketInfo], [true, "180 DKK"]);
+  ok("a markdown fence does not defeat it",
+     readGlanceExtract('```json\n{"ticketInfo":"180 DKK","timeNeeded":""}\n```', fields).values.ticketInfo === "180 DKK");
+  ok("prose around the object does not either",
+     readGlanceExtract('Here you go:\n{"ticketInfo":"180 DKK","timeNeeded":""}\nHope that helps', fields).values.ticketInfo === "180 DKK");
+  // A number is a legitimate answer to a price.
+  is("a numeric price is kept, not dropped",
+     readGlanceExtract('{"ticketInfo":180,"timeNeeded":""}', fields).values.ticketInfo, "180");
+  // A key nobody asked for is a field nobody has. This codebase has been eaten
+  // four times by a value that existed in one place and nowhere else.
+  is("a key that was not asked for is dropped",
+     Object.keys(readGlanceExtract('{"ticketInfo":"180 DKK","timeNeeded":"","invented":"x"}', fields).values).sort(),
+     ["ticketInfo", "timeNeeded"]);
+  ok("unparseable is a failure, not an empty pass", !readGlanceExtract("sorry, I could not", fields).ok);
+  ok("and so is nothing at all", !readGlanceExtract("", fields).ok);
+
+  // ── AND WHAT IS ALLOWED TO CHANGE ────────────────────────────────
+  const draft = { ticketInfo: "around 200 kr", timeNeeded: "a couple of hours", travelTime: "2h 30min 🚂", nearestStation: "Ribe St" };
+  const m1 = mergeGlance(draft, { ticketInfo: "180 DKK", timeNeeded: "", travelTime: "9h", nearestStation: "Somewhere Else" },
+                         ["ticketInfo", "timeNeeded", "travelTime", "nearestStation"]);
+  // 3. For a value that is on the page, finding it beats phrasing it.
+  is("a stated value replaces a written one", m1.patched.ticketInfo, "180 DKK");
+  // 2. THE RULE THAT MAKES THIS SAFE TO TURN ON. The extractor read the same
+  // research the writer read, so its silence is a fact about this call.
+  is("an empty extraction never blanks a field", m1.patched.timeNeeded, "a couple of hours");
+  // 1. Measured is measured, whatever any model says about it.
+  is("a measured travelTime is untouchable", m1.patched.travelTime, "2h 30min 🚂");
+  is("and so is a measured station", m1.patched.nearestStation, "Ribe St");
+  is("the measured ones are reported as blocked", m1.blocked.sort(), ["nearestStation", "travelTime"]);
+  is("what it took over is named", m1.changed.map(c => c.field), ["ticketInfo"]);
+  is("and what it left alone", m1.kept, ["timeNeeded"]);
+  ok("with the old value kept for the log", m1.changed[0]?.was === "around 200 kr");
+  // Filling an empty field is the common case and must not be reported as a
+  // replacement of something.
+  const m2 = mergeGlance({ ticketInfo: "" }, { ticketInfo: "180 DKK" }, ["ticketInfo"]);
+  is("an empty field is filled", m2.patched.ticketInfo, "180 DKK");
+  is("and nothing was overruled", m2.changed[0].was, "");
+  // An identical value is not a change, so a run log does not report six
+  // rewrites that rewrote nothing.
+  is("the same value is not a change", mergeGlance({ ticketInfo: "180 DKK" }, { ticketInfo: "180 DKK" }, ["ticketInfo"]).changed, []);
+  ok("and the log line says both halves", /taken from the research/.test(describeGlance(m1)) && /left as the writer had/.test(describeGlance(m1)));
+
+  // ── WIRED, WHICH IS THIS CODEBASE'S USUAL FAILURE ────────────────
+  const appG = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the draft runs the extraction", /const gRes = await askOpenAI\(GLANCE_EXTRACT_PROMPT\(name, sType, glanceFields, rawResearch\)/.test(appG));
+  // On the FULL research, not the organised notes and not the truncated window.
+  // Extraction is a small output over a large input, the opposite shape to
+  // everything else here, so there is no reason to pay the compression.
+  ok("on the full research, not the compressed notes", !/GLANCE_EXTRACT_PROMPT\(name, sType, glanceFields, userContent\)/.test(appG));
+  ok("and the result is merged, never assigned wholesale", /const merged = mergeGlance\(t, gRead\.values, glanceFields\);/.test(appG));
+  // The old repair machinery stays. A net you no longer need is cheap and one
+  // you removed early is not.
+  ok("repairGlance still runs afterwards", /repairGlance\(/.test(appG));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

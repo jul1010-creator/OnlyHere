@@ -76,6 +76,7 @@ import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems } from "./utils/journey";
 import { correctEntry, keepMeasured, MEASURED_FIELDS } from "./utils/correction";
+import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance } from "./utils/glanceExtract";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
@@ -4094,6 +4095,61 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // HowWeKnow renders this under a heading promising how we know, so a
       // wrong list there is worse than no list.
 
+      // ── AT A GLANCE, EXTRACTED RATHER THAN WRITTEN ───────────────
+      //
+      // Oliver, 13 Aug 2026: "'at a glance' is important data... Perhaps let
+      // OpenAI use all the data to setup the 'at a glance' section. And then
+      // Claude writes everything else."
+      //
+      // Runs on the FULL rawResearch, not on the organised notes and not on the
+      // truncated window the invented check gets. Extraction is the one job
+      // where more source is strictly better and there is no reason to pay the
+      // compression: this is a small output over a large input, which is the
+      // opposite shape to everything else in the pipeline.
+      //
+      // AFTER the measured overrides on purpose. mergeGlance refuses to touch a
+      // measured field anyway, and belt and braces on the three values a reader
+      // plans a journey around is the correct amount of paranoia.
+      //
+      // BEFORE the gates, so tracePrices, glanceLeak and repairGlance run on
+      // what will actually publish. That ordering is the whole reason the old
+      // repair machinery stays: a net you no longer need is cheap, and one you
+      // removed early is not.
+      //
+      // NON FATAL. A failed extraction leaves the writer's own values in place,
+      // which is exactly where they were before this stage existed.
+      const glanceFields = glanceFieldsFor(t);
+      if (glanceFields.length && rawResearch) {
+        try {
+          setStudioStage({ label: "Reading the At a Glance values out of the research", percent: 88 });
+          const gRes = await askOpenAI(GLANCE_EXTRACT_PROMPT(name, sType, glanceFields, rawResearch), 1200);
+          const gRead = gRes?.error ? { ok: false, values: {}, why: gRes.error } : readGlanceExtract(gRes?.text, glanceFields);
+          if (gRead.ok) {
+            const merged = mergeGlance(t, gRead.values, glanceFields);
+            t = merged.patched;
+            note("At a Glance from the research", {
+              provider: "openai", detail: `extracted, not written: ${glanceFields.join(", ")}`,
+              outcome: merged.changed.length ? "ok" : "empty",
+              got: describeGlance(merged),
+              why: merged.changed.length
+                ? merged.changed.map(c => `${c.field}: ${c.was ? `"${c.was}" -> ` : ""}"${c.now}"`).join(" | ").slice(0, 300)
+                : "the research stated none of these, so the writer's own values stand",
+              used: merged.changed.length > 0,
+            });
+            merged.changed.forEach(c => decide(c.field, {
+              winner: "the research (extracted)", loser: c.was ? `the writer ("${c.was}")` : "an empty field",
+              rule: "At a Glance is data. A value stated on a page beats one composed by a writer, and a value nobody stated stays empty.",
+              value: c.now,
+            }));
+          } else {
+            note("At a Glance from the research", {
+              provider: "openai", detail: "extraction", outcome: "failed", used: false,
+              why: `${gRead.why}. The writer's own At a Glance values stand, exactly as they did before this stage existed.`,
+            });
+          }
+        } catch { /* the draft is worth more than this stage */ }
+      }
+
       if (typeof t.website !== "undefined" && !String(t.website || "").trim()) {
         const forced = placesWebsite || officialSiteFromCandidates(candidateUrls, name);
         if (forced) {
@@ -4497,26 +4553,69 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               value: t.travelTime,
             });
           }
-        } else if (typeof t.travelTime !== "undefined" && t.travelTime) {
-          // ── THE GAP HE IS DESCRIBING AS "BACK AND FORTH FIGHTING" ─
-          // The override above requires realTransport.transit. The outer `if`
-          // passes on driving ALONE, so when Google returns a car route and no
-          // transit itinerary, nothing is written and THE MODEL'S OWN STRING
-          // SURVIVES INTO THE STORED PAYLOAD. It is the one path by which an
-          // unmeasured travel time reaches a published page, and it is silent.
+        } else if (typeof t.travelTime !== "undefined" && Number.isFinite(Number(drivingMins)) && Number(drivingMins) > 0) {
+          // ── AND THERE WAS SOMETHING TO MEASURE AGAINST ALL ALONG ──
           //
-          // Not overwritten here, because there is nothing measured to
-          // overwrite it with. Recorded instead, so the draft says plainly that
-          // this figure was written rather than measured.
+          // Oliver, 13 Aug 2026: "'at a glance' is important data."
+          //
+          // He is right, and this branch was the clearest case of it not being
+          // treated as data. The comment that used to sit here said "not
+          // overwritten, because there is nothing measured to overwrite it
+          // with", and that was wrong on its own terms. THE ONLY WAY TO REACH
+          // THIS BRANCH IS realTransport.driving BEING TRUTHY. A measured
+          // duration from Google was sitting in the same object, unused, while
+          // a model's guess was kept and a note was written explaining that the
+          // guess was a guess.
+          //
+          // Worse than kept. LAUNDERED. travelTime is in MEASURED_FIELDS, so
+          // isPipelineOwned covers it, keepMeasured restores it if a correction
+          // pass touches it, and the invented-check prompt says in capitals
+          // that a measured field is not to be second-guessed. A number nobody
+          // measured was inheriting the protection of one that was, purely from
+          // the name of the field it happened to sit in.
+          //
+          // So the car time goes in, marked as the car. Icon.jsx already maps
+          // the marker, GuidePage already uses it for a driving leg, and a
+          // measured 3h20 by road beats a written 2h30 by imagined train in
+          // every direction that matters.
+          //
+          // NO TRANSIT ITINERARY IS NOT NO TRANSIT. That rule is absolute here
+          // and this does not break it: the figure says which mode was
+          // measured, the uncertainty below says what was not, and the
+          // NO_TRANSPORT check further down still refuses any prose claiming
+          // public transport does not exist.
+          const modelSaid = t.travelTime;
+          const dh = Math.floor(Number(drivingMins) / 60), dm = Number(drivingMins) % 60;
+          t.travelTime = `${dh ? `${dh}h ` : ""}${dm ? `${dm}min` : ""}`.trim() + " 🚗";
+          decide("travelTime", {
+            winner: "Google Directions (measured, by road)",
+            loser: modelSaid ? `the model ("${modelSaid}")` : "an empty field",
+            rule: "Google returned no transit itinerary but did return a road route. A measured duration always replaces a written one, and the marker says which mode was measured.",
+            value: t.travelTime,
+          });
+          note("travelTime measured by road", {
+            provider: "google", detail: "Directions, driving mode, from Copenhagen",
+            outcome: "ok", used: true,
+            got: `${t.travelTime}${modelSaid ? `, replacing the model's "${modelSaid}"` : ""}`,
+            why: "no transit itinerary came back for this route. That is not evidence that no public transport exists, and nothing in the entry may say it is.",
+          });
+          t.uncertainties = [
+            ...(t.uncertainties || []),
+            "The travel time shown is by road. Google returned no public transport itinerary for this route, which is a fact about the routing feed and not about the place: check rejseplanen.dk for the real connection.",
+          ];
+        } else if (typeof t.travelTime !== "undefined" && t.travelTime) {
+          // Still reachable: driving came back with no usable duration. Now the
+          // old comment is true, there genuinely is nothing to measure against,
+          // so the figure is recorded as written rather than quietly promoted.
           decide("travelTime", {
             winner: `the model ("${t.travelTime}")`, loser: "nobody, there was nothing to measure against",
-            rule: "Google returned no transit itinerary, so no measured figure existed. This number is WRITTEN, not measured.",
+            rule: "Neither mode returned a usable duration, so no measured figure existed. This number is WRITTEN, not measured.",
             value: t.travelTime,
           });
           note("travelTime is unmeasured", {
             provider: "claude", detail: "the model's own travelTime string",
             outcome: "ok", used: true,
-            got: `${t.travelTime} — no measured transit figure existed to replace it`,
+            got: `${t.travelTime}, and no measured figure of either kind existed to replace it`,
           });
         }
         // Deterministic contradiction check. These are phrasings that have really

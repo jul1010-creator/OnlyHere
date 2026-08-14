@@ -1,0 +1,166 @@
+// ── AT A GLANCE IS DATA, SO IT IS EXTRACTED RATHER THAN WRITTEN ─────
+//
+// Oliver, 13 Aug 2026: "in the 'at a glance' section, there is not requirement
+// for Claude to write it all friendly.. 'at a glance' is important data."
+// And then: "Perhaps let OpenAI use all the data to setup the 'at a glance'
+// section. And then Claude writes everything else."
+//
+// He is right, and the cost of the old split is measurable. entryAudit.js
+// carries about eleven thousand characters of machinery whose entire job is
+// cleaning up after a prose model writing into data fields: glanceLeak,
+// cleanGlance, repairGlance, glanceProblems and the SEARCH_REPORT patterns.
+// Sentences leak in because a writer writes sentences. "not found on the
+// official site". "at the time of writing". "check rejseplanen".
+//
+// An extractor does not write sentences. It returns the value that is on the
+// page, or it returns nothing. Most of those leak classes stop being POSSIBLE
+// rather than being repaired afterwards.
+//
+// ── THREE TIERS, NOT TWO, AND THIS FILE IS THE MIDDLE ONE ───────────
+//
+//   MEASURED    travelTime, nearestStation, lat, lon, ticketStatus, the
+//               journey, the hours. Code writes these. No model of any kind
+//               touches them, and handing them to an extractor would be a step
+//               BACKWARDS from what the pipeline already does. Never in here.
+//
+//   EXTRACTED   a value that already exists verbatim in the research and needs
+//               FINDING, not composing. A price, a duration, an accessibility
+//               note. This file.
+//
+//   WRITTEN     the three paragraphs, desc, and gemlyxFind. Claude.
+//
+// gemlyxFind sits inside the At a Glance block and is deliberately NOT here.
+// "ONE specific curated recommendation only Gemlyx would flag" is judgement,
+// not data, and an extractor would return the first thing on the page. Same for
+// tag and highlight: those are the entry's voice in three words.
+
+// ── THE FIELD LIST IS DERIVED, NOT WRITTEN DOWN TWICE ───────────────
+// Every list in this codebase that was written down twice has drifted, three of
+// them found in one night. So the extractable set is GLANCE_FIELDS minus the
+// two exclusions, computed once, and the fields asked for on any given draft
+// are the intersection with the keys the draft ACTUALLY HAS. A type that gains
+// a glance field gets it extracted with no edit here, and a type that never had
+// one is never asked about it.
+import { GLANCE_FIELDS } from "./entryAudit";
+import { MEASURED_FIELDS } from "./correction";
+
+// Measured elsewhere, by code, from an API. Listed beyond MEASURED_FIELDS
+// because ticketStatus and the coordinates are owned the same way even though
+// they are not glance fields on every type.
+export const NEVER_EXTRACT = [...MEASURED_FIELDS, "ticketStatus", "lat", "lon"];
+
+// The entry's voice rather than its data. An extractor handed "tag" returns
+// whatever noun phrase the page used about itself, which is a tourism board
+// writing Gemlyx's card for it.
+export const EDITORIAL_GLANCE = ["tag", "highlight", "crowd", "gemlyxFind"];
+
+export const EXTRACTABLE_GLANCE = GLANCE_FIELDS
+  .filter(f => !NEVER_EXTRACT.includes(f))
+  .filter(f => !EDITORIAL_GLANCE.includes(f));
+
+// Only what this draft actually carries. `undefined` means the type has no such
+// field and asking for it invites an answer to a question nobody asked.
+export const glanceFieldsFor = (draft) =>
+  EXTRACTABLE_GLANCE.filter(f => typeof (draft || {})[f] !== "undefined");
+
+// ── THE PROMPT ──────────────────────────────────────────────────────
+// Short on purpose, and that is the point of the whole change. The writing
+// brief is four thousand words because prose needs a voice, a structure and a
+// list of things not to say. Extraction needs none of that. It needs the
+// research, the field names, and one rule about silence.
+//
+// EMPTY IS A RESULT. Every field this returns is one a reader plans around, and
+// the failure that produced glanceLeak in the first place was a model filling a
+// box because the box was there. So the instruction that carries the most
+// weight here is the permission to return nothing, said first and said plainly.
+export const GLANCE_EXTRACT_PROMPT = (name, type, fields, research) =>
+  `Read the research below about "${name}" in Denmark and pull out the At a Glance values for a ${type} entry.
+
+You are EXTRACTING, not writing. Every value must already be stated in the research. Do not compose, do not summarise across sources, do not infer, and never smooth two different figures into one.
+
+IF THE RESEARCH DOES NOT STATE A FIELD, RETURN AN EMPTY STRING FOR IT. That is a correct and expected answer, not a failure, and it is always better than a plausible guess. A reader plans around these values.
+
+Each value is a VALUE, not a sentence about a search. Never write "not found", "not listed", "could not be confirmed", "at the time of writing", "see website" or "check rejseplanen". If you would write any of those, return an empty string instead.
+
+Keep the wording the source used for numbers and units. A price stays the price the page charges: never round it, never convert it, never turn a list of ticket tiers into an average. If the page states a range across tiers, give the range.
+
+Where a figure is conditional (a members' rate, a child ticket, an early-bird), the value is the ORDINARY adult price, and the condition belongs in the same string only if it cannot be separated.
+
+Respond with ONLY strict JSON, no markdown fence and no commentary, with exactly these keys:
+${JSON.stringify(Object.fromEntries(fields.map(f => [f, ""])), null, 0)}
+
+Research:
+${research}`;
+
+// ── READING IT BACK ─────────────────────────────────────────────────
+// Strict about shape and forgiving about wrapping, because the failure mode
+// that matters is a value reaching a field, not a fence reaching a parser.
+//
+// A key that was not asked for is DROPPED rather than kept. A model that
+// invents a field name has invented a field, and this pipeline has been eaten
+// four times by a value that existed in one place and nowhere else.
+export const readGlanceExtract = (text, fields) => {
+  const t = String(text || "").trim();
+  if (!t) return { ok: false, values: {}, why: "no text came back" };
+  const fenced = t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  const start = fenced.indexOf("{"), end = fenced.lastIndexOf("}");
+  if (start < 0 || end <= start) return { ok: false, values: {}, why: "no JSON object in the reply" };
+  let obj;
+  try { obj = JSON.parse(fenced.slice(start, end + 1)); }
+  catch { return { ok: false, values: {}, why: "the reply was not valid JSON" }; }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+    return { ok: false, values: {}, why: "the reply was not an object" };
+  }
+  const values = {};
+  for (const f of fields) {
+    const v = obj[f];
+    // A number is a legitimate answer to a price and it must not be coerced
+    // into "45" and then read back as a string that happens to look numeric.
+    if (typeof v === "string") values[f] = v.trim();
+    else if (typeof v === "number" && Number.isFinite(v)) values[f] = String(v);
+    else values[f] = "";
+  }
+  return { ok: true, values, why: "" };
+};
+
+// ── AND WHAT IS ALLOWED TO CHANGE ───────────────────────────────────
+//
+// Three rules, and the second is the one that keeps this safe to turn on.
+//
+//   1. A MEASURED FIELD IS NEVER TOUCHED. Not by this and not by anything.
+//      The list is imported rather than retyped.
+//   2. AN EMPTY EXTRACTION NEVER BLANKS A FIELD. The extractor reads the same
+//      research the writer read, so "I did not find it" is a statement about
+//      this call and not about the research. Silence loses to anything.
+//   3. Otherwise the extraction wins, because that is the entire point: for a
+//      value that is on the page, finding it beats phrasing it.
+//
+// Returns what changed as well as the payload, so a run log can say which
+// fields an extractor took over and a person can see it happening rather than
+// inferring it from a diff.
+export const mergeGlance = (draft, values, fields) => {
+  const before = draft || {};
+  const out = { ...before };
+  const changed = [], kept = [], blocked = [];
+  for (const f of fields) {
+    if (NEVER_EXTRACT.includes(f)) { blocked.push(f); continue; }
+    const next = String(values?.[f] ?? "").trim();
+    const prev = String(before[f] ?? "").trim();
+    if (!next) { if (prev) kept.push(f); continue; }
+    if (next === prev) continue;
+    out[f] = next;
+    changed.push({ field: f, was: prev, now: next });
+  }
+  return { patched: out, changed, kept, blocked };
+};
+
+// One line for the run log. Says what it took over and what it left alone,
+// because a stage that silently rewrites six fields is the kind of thing that
+// is discovered a month later by somebody reading a diff.
+export const describeGlance = (r) => {
+  if (!r) return "";
+  const parts = [];
+  if (r.changed?.length) parts.push(`${r.changed.length} field${r.changed.length === 1 ? "" : "s"} taken from the research: ${r.changed.map(c => c.field).join(", ")}`);
+  if (r.kept?.length) parts.push(`${r.kept.length} left as the writer had ${r.kept.length === 1 ? "it" : "them"}, because the extraction came back empty: ${r.kept.join(", ")}`);
+  return parts.join(". ") || "nothing to change";
+};
