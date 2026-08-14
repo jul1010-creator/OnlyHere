@@ -118,7 +118,35 @@ const NOT_A_PRICE_AFTER = /^\s*(?:min\b|mins\b|minutes?\b|hours?\b|hrs?\b|km\b|m
 // separate 0, which is the kind of quiet arithmetic error that would have put a
 // contradiction finding on entries that do not have one.
 const NUM = "(\\d[\\d.,]*\\d|\\d)";
-const PRICE_RE = new RegExp(`${NUM}\\s*(?:(?:–|—|-|to)\\s*${NUM})?\\s*(eur\\b|euros?\\b|€|dkk\\b|kroner\\b|kr\\.?)?`, "gi");
+// ── AND THE CURRENCY CAN COME FIRST ─────────────────────────────────
+//
+// Found by a third reviewer, 14 Aug 2026, and it is the first-order bug behind
+// the whole Roskilde price problem. This pattern read a currency only AFTER the
+// number, so the operator's own English page:
+//
+//     "eight instalments of DKK 327, plus a DKK 100 ticket fee.
+//      The total price is DKK 2,720."
+//
+// produced three figures all carrying `currency: null`, ticketPriceOn returned
+// null, and priceMisses passed in silence. Every gate downstream of pricesIn
+// inherits that blindness, so on a page written this way the entire price layer
+// is switched off and reports nothing at all.
+//
+// Neither of the two outside proposals found this. One said the model
+// hallucinated the price and the other said the parser found it and refused to
+// use it. It never found it.
+//
+// "DKK 2,720" and "kr. 150" are how English pages and many Danish ones write
+// it, so the token is allowed on either side. Only ONE side is read into the
+// result: a prefix currency wins when there is no suffix, which cannot produce
+// a figure carrying two different currencies.
+const CUR = "(eur\\b|euros?\\b|€|dkk\\b|kroner\\b|kr\\.?)";
+// The whitespace belongs INSIDE the optional prefix. Written as `${CUR}?\\s*`
+// the group matches empty and `\\s*` then eats the space in front of the
+// number, so every `at` shifted one character left and priceForNoun, which
+// compares a price position against a noun position, started handing the water
+// the hot dog's price. Caught by a fixture that predates today.
+const PRICE_RE = new RegExp(`(?:${CUR}\\s*)?${NUM}\\s*(?:(?:–|—|-|to)\\s*${NUM})?\\s*${CUR}?`, "gi");
 
 // Danish writes a decimal comma and a full-stop thousands separator, English
 // does the opposite, and Gemlyx entries contain both because the sources do.
@@ -144,12 +172,21 @@ export const pricesIn = (text) => {
     if (m[0].trim() === "") { PRICE_RE.lastIndex++; continue; }
     const rest = t.slice(m.index + m[0].length);
     if (NOT_A_PRICE_AFTER.test(rest)) continue;
-    const lo = toNumber(m[1]);
-    const hi = m[2] ? toNumber(m[2]) : lo;
+    const lo = toNumber(m[2]);
+    const hi = m[3] ? toNumber(m[3]) : lo;
     if (lo == null || hi == null) continue;
+    // Suffix first, because "DKK 150 kr" is not a real shape and if it ever
+    // appears the trailing token is the one a Danish reader trusts.
+    const cur = normCurrency(m[4]) || normCurrency(m[1]);
     // A bare four-digit number in living memory is a year, not a price.
-    if (!m[3] && lo >= 1000 && lo <= 2100 && !m[2]) continue;
-    out.push({ at: m.index, lo: Math.min(lo, hi), hi: Math.max(lo, hi), currency: normCurrency(m[3]) });
+    if (!cur && lo >= 1000 && lo <= 2100 && !m[3]) continue;
+    // ── AND HOW LONG THE MATCH WAS ────────────────────────────────
+    // The after-windows used to start at `at + String(lo).length + 6`, a guess
+    // at how far the number and its currency token ran. On "400 kr. Billetgebyr
+    // 30 kr" that guess overshoots the full stop, so the window opens INSIDE
+    // the next sentence and the fee word there is read as belonging to the 400.
+    // The real length is right here in the match and never needed guessing.
+    out.push({ at: m.index, len: m[0].length, lo: Math.min(lo, hi), hi: Math.max(lo, hi), currency: cur });
   }
   return out;
 };
@@ -680,13 +717,52 @@ const sentenceBefore = (t, at) => {
   const cut = Math.max(w.lastIndexOf("."), w.lastIndexOf(";"), w.lastIndexOf("!"));
   return fold(cut >= 0 ? w.slice(cut + 1) : w);
 };
-const conditionAround = (t, at, len, nextAt) => {
-  const before = sentenceBefore(t, at);
+// ── AND SO CAN THE THING BEING PRICED ───────────────────────────────
+//
+// Found by a third reviewer, 14 Aug 2026, on the operator's own page for
+// Roskilde. BESIDE_THE_TICKET was tested against the sentence BEFORE a figure
+// only, so "100 kr i billetgebyr" walks straight through: the fee word sits
+// after the number. The lowest-open-price rule then picked it, and the pipeline
+// reported that the operator's own page states a ticket price of 100 DKK for
+// Roskilde Festival.
+//
+// WHEN_SOLD was given an after-window on 13 August for exactly this reason,
+// stated one screen above: "the condition can sit on either side". A fee is the
+// same shape of fact and did not get the same treatment. Same window, same
+// boundaries, so a fee cannot be lent to the next figure any more than a
+// presale condition can.
+// ── AND THE MATCH ITSELF CAN SWALLOW THE FULL STOP ──────────────────
+// `kr\.?` means "400 kr." matches WITH its trailing period, so `at + len`
+// lands past the sentence end and the window opens inside the NEXT sentence.
+// That read "Billetgebyr" from the following sentence as a fee attached to the
+// 400, and rejected a perfectly good ticket price. Caught by a probe against
+// fixtures that were already passing before today.
+//
+// So a match that ends in a sentence boundary has no "after" at all, and
+// everything that reads forward from a figure goes through here.
+const afterWindow = (t, at, len, nextAt) => {
+  if (/[.;!\n]\s*$/.test(t.slice(at, at + len))) return "";
   const from = at + len;
   const stop = Math.min(from + AFTER_WINDOW, nextAt == null ? Infinity : nextAt, t.length);
   const tail = t.slice(from, stop);
-  const cut = tail.search(/[.;\n]/);
-  const after = fold(cut >= 0 ? tail.slice(0, cut) : tail);
+  // The comma is a boundary here and is NOT one in sentenceBefore, deliberately.
+  // "Billetter koster 200 kr, camping ekstra" prices a ticket and then mentions
+  // camping as a separate thing; reading across the comma called that a camping
+  // fee and threw the ticket price away. Before a figure a comma is usually
+  // still the same clause ("Billetter til festivalen, 400 kr"), so only the
+  // forward window stops there.
+  const cut = tail.search(/[.,;\n]/);
+  return fold(cut >= 0 ? tail.slice(0, cut) : tail);
+};
+
+const ancillaryAround = (t, at, len, nextAt) =>
+  BESIDE_THE_TICKET.test(sentenceBefore(t, at)) || BESIDE_THE_TICKET.test(afterWindow(t, at, len, nextAt));
+
+const conditionAround = (t, at, len, nextAt) => {
+  const before = sentenceBefore(t, at);
+  // Same window, same swallowed-full-stop problem, which was latent here only
+  // because presale wording is rarer than fee wording. See afterWindow.
+  const after = afterWindow(t, at, len, nextAt);
   return whenSold(before) || whenSold(after);
 };
 
@@ -717,8 +793,10 @@ export const ticketPriceOn = (text) => {
     const sentence = sentenceBefore(t, p.at);
     TICKET_WORD.lastIndex = 0;
     if (!TICKET_WORD.test(window)) continue;         // nothing here says this is a ticket
-    if (BESIDE_THE_TICKET.test(sentence)) continue;  // it is the camping, or the booking fee
-    const width = String(p.hi === p.lo ? p.lo : p.hi).length + 6;
+    // Either side. See ancillaryAround: a fee word after the figure is how the
+    // booking fee got reported as the price of Roskilde Festival.
+    const width = p.len ?? (String(p.hi === p.lo ? p.lo : p.hi).length + 6);
+    if (ancillaryAround(t, p.at, width, all[i + 1]?.at)) continue;
     found.push({ ...p, concession: CONCESSION.test(sentence), when: conditionAround(t, p.at, width, all[i + 1]?.at) });
   }
   if (found.length) {

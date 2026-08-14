@@ -2933,7 +2933,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The rule that made the Copenhagen case readable at all: a price belongs to
   // the noun before it, and the next noun ends its reach.
   is("water takes its own price, not the hot dog's",
-     priceForNoun("water 1.20 to 1.50 EUR and hotdog 7", /\bwater\b/gi), { at: 6, lo: 1.2, hi: 1.5, currency: "eur" });
+     // `len` was added 14 Aug so the forward windows stop guessing how far a
+     // figure runs. Values unchanged; the shape gained a field.
+     priceForNoun("water 1.20 to 1.50 EUR and hotdog 7", /\bwater\b/gi), { at: 6, len: 16, lo: 1.2, hi: 1.5, currency: "eur" });
   is("and the hot dog takes the one after it",
      priceForNoun("water 1.20 to 1.50 EUR and hotdog 7", /\bhotdog\b/gi).lo, 7);
   is("a price written before its noun still lands", priceForNoun("7 EUR for a hot dog", /\bhot\s?dog\b/gi).lo, 7);
@@ -5149,7 +5151,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Anything else clearing a doubt on a model's say-so would be the bug.
   is("only one place clears an uncertainty automatically",
      (app7.match(/uncertainties = \(t\.uncertainties \|\| \[\]\)\.filter/g) || []).length, 1);
-  ok("and it is the website lookup, which either happened or did not", /official \(festival\\\/event \)\?website\|website url was found\|no official/.test(app7));
+  // The group used to be the literal "festival/event ", copied from the way the
+  // schema writes that field, and Oliver's Roskilde draft wrote "festival". One
+  // slash, and a caveat saying the website was empty survived beside a website.
+  // Pinned on WHAT it is about rather than on its exact characters, so widening
+  // the middle word does not read as the rule disappearing.
+  ok("and it is the website lookup, which either happened or did not",
+     /official \(\?:\[\\w\/\]\+ \)\?website\|website url was found\|no official/.test(app7));
   // The human path exists, goes through studioDraftText (what Publish reads),
   // and says out loud that a confirmation does not do this by itself.
   ok("an uncertainty can be marked settled by hand", /const resolveUncertainty = \(idx\) =>/.test(app7));
@@ -12388,7 +12396,18 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // payload has no row, and silently adopting one would make Publish overwrite
   // a different entry. That is the worst available guess, so it is not made.
   const fn = code.slice(code.indexOf("const loadPastedDraft"), code.indexOf("const editItem"));
-  ok("a pasted draft never adopts an existing row id", !/setEditingId\(/.test(fn));
+  // ── THIS ASSERTION USED TO ENFORCE THE BUG ──────────────────────
+  // It read `!/setEditingId\(/.test(fn)`, asserting the ABSENCE of any call.
+  // Not setting is not clearing: open a published row (editItem sets
+  // editingId), click a type chip (nulls studioResult, leaves editingId), paste
+  // a draft, and Publish PATCHes the row that was open. The correct fix,
+  // setEditingId(null), turned the old assertion RED. A test that can only fail
+  // once the code is right is worse than a test that can never fail.
+  ok("a pasted draft CLEARS any row id it inherited", /setEditingId\(null\)/.test(fn));
+  // stripNonCode blanks string literals, so setStudioInstagramUrl("") reads as
+  // setStudioInstagramUrl() in `fn`. Third time tonight; read the raw source.
+  ok("and the previously edited row's instagram embed with it",
+     /setStudioInstagramUrl\(""\)/.test(appL.slice(appL.indexOf("const loadPastedDraft"), appL.indexOf("const editItem"))));
   // The messages live in STRING LITERALS, which stripNonCode blanks by design,
   // so they are read from the raw source. Asserting them against the stripped
   // copy failed at baseline and would have failed forever: a test that can
@@ -12414,6 +12433,115 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // pasted draft was inheriting another entry's coordinate and station.
   ok("a pasted draft does not inherit the last run's coordinate", /setStudioFrozenGeo\(null\)/.test(fn));
   ok("nor the last run's placement", /setStudioPlaced\(null\)/.test(fn));
+}
+
+// ── A FIELD AND THE CAVEAT BESIDE IT MUST NOT DISAGREE ─────────────
+// Oliver's Roskilde draft, 14 Aug 2026. website held the real festival URL and
+// the uncertainties still said "Official festival website URL was not present
+// in the research notes, so it's left empty." The filter that should have
+// removed it could not: its group was the literal "festival/event ", copied
+// from the way the schema writes that field, and the model wrote "festival".
+{
+  const appW = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const m = appW.match(/t\.uncertainties = \(t\.uncertainties \|\| \[\]\)\.filter\(u => !(\/[^\n]+?\/i)\.test\(String\(u\)\)\);/);
+  ok("the website caveat filter is still wired", !!m);
+  // Rebuilt from the SOURCE rather than retyped, so this tests the regex that
+  // actually ships. A copy in the test is a second list that can drift.
+  const re = m ? eval(m[1]) : /$^/;
+  // The exact sentence his draft produced.
+  ok("his real wording is cleared", re.test("Official festival website URL was not present in the research notes, so it's left empty."));
+  // The model picks its own word there and will keep doing so.
+  ["Official event website was not found.", "Official venue website could not be located.",
+   "Official festival/event website not present.", "No official website was found."].forEach(u =>
+    ok(`"${u.slice(0, 34)}..." is cleared`, re.test(u)));
+  // And it must not swallow caveats about anything else. The filter runs only
+  // where a website WAS found, but a caveat about a price is not about a URL.
+  ["Ticket prices on the official site could not be confirmed.",
+   "The venue address was not verified.",
+   "Opening hours were not stated anywhere that was read."].forEach(u =>
+    ok(`"${u.slice(0, 34)}..." survives`, !re.test(u)));
+}
+
+// ── THE ARRIVAL POINT MUST SURVIVE PUBLISH ─────────────────────────
+// Found by a third reviewer, 14 Aug 2026: the draft set nearestStation to the
+// stop the measured journey ends at, recorded a DECISIONS entry saying the
+// measured route beat the radius search, and publishDraft then wrote
+// studioFrozenGeo.station over the top. The run log said the busterminal won
+// and the row shipped the ferry slip.
+//
+// The old suite greped the DRAFT wiring only, so it stayed green while the
+// published value was the loser of its own recorded decision.
+{
+  const appP2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const code2 = stripNonCode(appP2);
+  ok("publish reads the arrival point out of the stored journey",
+     /const measuredAtPublish = arrivalStop\(shaped\.__journey\);/.test(code2));
+  ok("and prefers it over the radius search",
+     /const stopToStore = measuredAtPublish \|\| studioFrozenGeo\.station;/.test(code2));
+  // The radius stop stays as the fallback for a row whose journey was never
+  // measured, which is the only thing it was ever good for.
+  ok("with the radius stop kept as the fallback, not deleted",
+     /studioFrozenGeo\.station/.test(code2));
+  // The old line assigned unconditionally. If it comes back, the fix is gone.
+  ok("and never writes the radius stop unconditionally again",
+     !/if \("nearestStation" in shaped && studioFrozenGeo\.station\) shaped\.nearestStation = studioFrozenGeo\.station;/.test(code2));
+  // ONE rule, read from the same data in both places, rather than a third copy
+  // of it. arrivalStop is the only thing that decides this, anywhere.
+  is("exactly two call sites decide the arrival point, and both call one helper",
+     (code2.match(/arrivalStop\(/g) || []).length, 3);
+}
+
+// ── THE PRICE LAYER WAS BLIND TO HALF THE PAGES IT READS ───────────
+// Found by a third reviewer, 14 Aug 2026, and it is the first-order bug behind
+// the Roskilde price problem that two outside proposals both misdiagnosed. One
+// said the model hallucinated the price; the other said the parser found it and
+// refused to use it. It never found it: PRICE_RE read a currency only AFTER the
+// number, so the operator's own English page produced three figures all
+// carrying currency: null and every gate downstream passed in silence.
+{
+  const { pricesIn, ticketPriceOn } = M;
+  const officialEnglish = "Pay for your full festival ticket in eight instalments of DKK 327, plus a DKK 100 ticket fee. The total price is DKK 2,720.";
+
+  is("a currency written before the number is read",
+     pricesIn("The total price is DKK 2,720.").map(p => [p.lo, p.currency]), [[2720, "dkk"]]);
+  is("and after it, as always", pricesIn("Entre 150 kr").map(p => [p.lo, p.currency]), [[150, "dkk"]]);
+  is("Danish writes it either way", pricesIn("Entre kr. 150").map(p => [p.lo, p.currency]), [[150, "dkk"]]);
+  is("a prefixed range keeps both ends", pricesIn("DKK 15 to 135").map(p => [p.lo, p.hi]), [[15, 135]]);
+  // The year rule has to keep working now that a prefix can supply the currency.
+  is("a bare year is still not a price", pricesIn("the church dates to 1840").length, 0);
+  is("but a prefixed one is", pricesIn("DKK 1840").map(p => p.lo), [1840]);
+  // The match must not start on the space in front of the number. Written as
+  // `CUR?\s*NUM` the empty group let \s* eat it, every `at` shifted one left,
+  // and priceForNoun handed the water the hot dog's price.
+  is("a price starts at its own first character",
+     pricesIn("water 1.20 EUR")[0].at, 6);
+
+  // ── AND THE FEE AFTER THE FIGURE ─────────────────────────────────
+  // BESIDE_THE_TICKET was tested against the sentence BEFORE a figure only, so
+  // "100 kr i billetgebyr" walked through and the lowest-open-price rule picked
+  // it: the pipeline reported that Roskilde Festival costs 100 DKK.
+  is("the official page now answers, and answers the ticket",
+     ticketPriceOn(officialEnglish)?.lo, 327);
+  is("a fee AFTER the figure is not the price",
+     ticketPriceOn("Billetter koster 327 kr pr. rate, plus 100 kr i billetgebyr.")?.lo, 327);
+  is("a fee BEFORE it still is not, as before", ticketPriceOn("Pris for billetgebyr 25 kr"), null);
+  // ── AND THE WINDOW MUST NOT LEAVE THE SENTENCE OR THE CLAUSE ─────
+  // `kr\.?` matches the trailing full stop, so at+len lands past the sentence
+  // end and the window opened inside the NEXT one, reading a fee that belonged
+  // to a different figure and throwing a good ticket price away.
+  is("a fee in the next sentence does not touch this figure",
+     ticketPriceOn("Billetter 400 kr. Billetgebyr 30 kr.")?.lo, 400);
+  is("nor does camping in the next sentence",
+     ticketPriceOn("Entre 150 kr. Camping 250 kr.")?.lo, 150);
+  // And a comma ends the clause going forward, which is what keeps the fixture
+  // above it green: the ticket is priced, camping is mentioned as a separate
+  // thing, and reading across the comma called the whole thing a camping fee.
+  is("nor camping named after a comma",
+     ticketPriceOn("Billetter koster 200 kr, camping ekstra")?.lo, 200);
+  // The rules that were already right must still be right.
+  is("a members rate is still not the price", ticketPriceOn("Entre 400 kr. IDA-medlemmer 100 kr.")?.lo, 400);
+  is("a presale condition still travels with its figure",
+     ticketPriceOn("Billetter 110 kr i forsalg. Ved indgangen 140 kr.")?.lo, 110);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

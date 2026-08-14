@@ -1136,6 +1136,23 @@ function GemlyxApp() {
     // that came from somewhere else entirely.
     setStudioFrozenGeo(null);
     setStudioPlaced(null);
+    // ── NOT SETTING IS NOT CLEARING ──────────────────────────────────
+    //
+    // Found by a third reviewer, 14 Aug 2026. The comment above this function
+    // said editingId is "deliberately NOT set, so Publish creates rather than
+    // overwrites". That is true of a fresh session and false of the path that
+    // matters: open a published row with editItem, which SETS editingId, click
+    // any type chip, which nulls studioResult and makes the paste box appear
+    // but leaves editingId alone, then load a pasted draft. Publish takes the
+    // isEditing branch and PATCHes the row that was open, with the pasted
+    // payload, skipping shapeForLive entirely.
+    //
+    // The queue path learned this exact lesson and clears it, in writing.
+    // This one repeated the pre-fix mistake, and studioInstagramUrl rides the
+    // same path, so the pasted entry could publish carrying the previously
+    // edited row's reel.
+    setEditingId(null);
+    setStudioInstagramUrl("");
   };
 
   const editItem = (row) => {
@@ -4268,7 +4285,24 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const forced = placesWebsite || officialSiteFromCandidates(candidateUrls, name);
         if (forced) {
           t.website = forced;
-          t.uncertainties = (t.uncertainties || []).filter(u => !/official (festival\/event )?website|website url was found|no official/i.test(String(u)));
+          // ── THE WORD BETWEEN "OFFICIAL" AND "WEBSITE" IS NOT FIXED ──
+          //
+          // Oliver's Roskilde draft, 14 Aug 2026. website held
+          // https://www.roskilde-festival.dk and the uncertainties still said
+          // "Official festival website URL was not present in the research
+          // notes, so it's left empty." The field and the caveat beside it
+          // disagreed, in front of a reader.
+          //
+          // This filter is what should have removed it, and it could not: the
+          // group was the literal "festival/event ", copied from the way the
+          // schema writes that field, and the model wrote "festival". One slash.
+          //
+          // Any single word between the two is allowed now, because the model
+          // will keep choosing its own: festival, event, venue, museum. The
+          // filter only ever runs in the branch where a real website WAS found
+          // and written, so widening it can only remove a caveat that has just
+          // been made untrue, which is exactly its job.
+          t.uncertainties = (t.uncertainties || []).filter(u => !/official (?:[\w/]+ )?website|website url was found|no official/i.test(String(u)));
         }
       } else if (typeof t.website === "string" && t.website.trim() && placesWebsite
                  && !hostMatchesName(t.website, name) && hostMatchesName(placesWebsite, name)) {
@@ -6493,7 +6527,29 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // just an instruction the model could ignore. Only applies to a fresh draft;
       // an edit of an older published row has no matching studioFrozenGeo to apply.
       if (!isEditing && studioFrozenGeo) {
-        if ("nearestStation" in shaped && studioFrozenGeo.station) shaped.nearestStation = studioFrozenGeo.station;
+        // ── AND THE ARRIVAL POINT, FROM THE ROUTE, NOT THE RADIUS ──
+        //
+        // Found by a third reviewer, 14 Aug 2026, and it is my own fix undone
+        // four thousand lines after I made it. The draft sets nearestStation to
+        // the stop the measured journey ENDS at, records a DECISIONS entry
+        // saying the measured route beat the radius search, and then this line
+        // wrote studioFrozenGeo.station over the top on every fresh publish.
+        // The run log said the busterminal won and the row shipped the ferry
+        // slip. Exactly the complaint the second-opinion note holds up as an
+        // example of code overwriting a correct value.
+        //
+        // Fixed from the DATA rather than by threading more state through:
+        // __journey is on the shaped payload by this point, so the same helper
+        // the draft used reads the same legs and reaches the same answer here.
+        // Two sites, one rule, no third copy of it to drift.
+        //
+        // The radius stop remains the fallback, for a row whose journey was
+        // never measured. That is what it was always good for.
+        if ("nearestStation" in shaped) {
+          const measuredAtPublish = arrivalStop(shaped.__journey);
+          const stopToStore = measuredAtPublish || studioFrozenGeo.station;
+          if (stopToStore) shaped.nearestStation = stopToStore;
+        }
         // ── OPEN FINDING 4, FIXED AT THE SOURCE ────────────────────
         // These two lines used to read `if ("__lat" in shaped)`, and only the
         // TOWN shape declares those keys, so every festival, attraction, food
