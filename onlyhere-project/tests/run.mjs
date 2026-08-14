@@ -12406,6 +12406,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // The run log must not claim this was measured.
   ok("and it says plainly that nothing here was measured this session",
      /Nothing here was measured by this session/.test(appL));
+  // ── AND THE CODE MAKES THAT TRUE RATHER THAN ASSERTING IT ───────
+  // Oliver, minutes after this shipped: "Not published, because the map pin
+  // would be wrong. Stored at 0.000, 0.000." publishDraft stamps
+  // studioFrozenGeo onto the payload for EVERY type, on purpose, so a festival
+  // gets a pin at all. That state is left over from whatever ran last, so a
+  // pasted draft was inheriting another entry's coordinate and station.
+  ok("a pasted draft does not inherit the last run's coordinate", /setStudioFrozenGeo\(null\)/.test(fn));
+  ok("nor the last run's placement", /setStudioPlaced\(null\)/.test(fn));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

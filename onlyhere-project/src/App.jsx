@@ -1117,6 +1117,25 @@ function GemlyxApp() {
     setPublishErrorDetail(null);
     setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     setStudioInventedWarning(null);
+    // ── AND THE MEASUREMENTS FROM WHATEVER RAN BEFORE THIS ────────────
+    //
+    // Oliver, 14 Aug 2026, minutes after this feature shipped: "Not published,
+    // because the map pin would be wrong. Stored at 0.000, 0.000."
+    //
+    // My bug, and the same class as every other one tonight. publishDraft
+    // stamps studioFrozenGeo onto the payload for EVERY type, deliberately, so
+    // that festivals and food spots get a map pin at all. studioFrozenGeo is
+    // React state left over from whatever draft ran last, and loadPastedDraft
+    // was not clearing it, so a pasted payload inherited a previous run's
+    // coordinate and its station.
+    //
+    // The banner this function writes says "nothing here was measured by this
+    // session". The code has to make that true rather than assert it. A pasted
+    // draft carries its own values or it carries none, and the coordinate gate
+    // at publish then does its job honestly instead of blocking on a number
+    // that came from somewhere else entirely.
+    setStudioFrozenGeo(null);
+    setStudioPlaced(null);
   };
 
   const editItem = (row) => {
