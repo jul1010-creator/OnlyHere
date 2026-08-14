@@ -74,7 +74,7 @@ import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems } from "./utils/journey";
+import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, arrivalStop } from "./utils/journey";
 import { correctEntry, keepMeasured, MEASURED_FIELDS } from "./utils/correction";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance } from "./utils/glanceExtract";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
@@ -4198,10 +4198,35 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         t.website = placesWebsite;
       }
 
-      if (frozenGeo) {
-        if (typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
-        if (typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
-        if (frozenGeo.station && typeof t.nearestStation !== "undefined") t.nearestStation = frozenGeo.station;
+      // ── THE ARRIVAL POINT IS WHERE THE JOURNEY ENDS ──────────────
+      // See arrivalStop in utils/journey.js for the Agersø ferry slip that
+      // prompted this. The measured route beats a radius search, and one
+      // helper serves both override sites so the two cannot drift.
+      const measuredStop = arrivalStop(transitParts);
+
+      if (frozenGeo || measuredStop) {
+        if (frozenGeo && typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
+        if (frozenGeo && typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
+        const stop = measuredStop || frozenGeo?.station;
+        if (stop && typeof t.nearestStation !== "undefined") {
+          const was = t.nearestStation;
+          t.nearestStation = stop;
+          if (measuredStop && frozenGeo?.station && frozenGeo.station !== measuredStop) {
+            decide("nearestStation", {
+              winner: `the measured journey ("${measuredStop}")`,
+              loser: `the nearest transit point by distance ("${frozenGeo.station}")`,
+              rule: "The arrival point is where the route actually ends, not the closest thing on the map carrying a transit type. A ferry slip can win a radius search and no itinerary uses it.",
+              value: stop,
+            });
+          }
+          if (measuredStop && was && was !== stop) {
+            note("Nearest arrival point", {
+              provider: "google", detail: "the last transit leg of the measured journey",
+              outcome: "ok", used: true,
+              got: `${stop}, where the ${transitParts?.legs?.[transitParts.legs.length - 1]?.vehicle || "service"} from ${transitParts?.legs?.[transitParts.legs.length - 1]?.from || "the interchange"} actually sets a traveller down`,
+            });
+          }
+        }
       } else if (["town", "festival", "free", "booking", "food", "foodStreet"].includes(sType) && (t.lat || t.lon)) {
         // Geocoding failed, so nothing will override at publish either, and any
         // number sitting in lat/lon right now is the model's own. That is the one
@@ -4857,13 +4882,14 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   // before the last writer overrides nothing. Same lesson as
                   // gateDraft itself, applied to the values rather than the
                   // checks.
-                  if (frozenGeo?.station && typeof t.nearestStation !== "undefined" && t.nearestStation !== frozenGeo.station) {
+                  const restoreStop = arrivalStop(transitParts) || frozenGeo?.station;
+                  if (restoreStop && typeof t.nearestStation !== "undefined" && t.nearestStation !== restoreStop) {
                     note("A measured field was rewritten", {
                       provider: "claude", detail: "nearestStation, after the correction pass",
                       outcome: "failed", used: false,
-                      why: `the rewrite made it "${String(t.nearestStation).slice(0, 80)}"; the measurement says "${frozenGeo.station}", and that is what it is set back to`,
+                      why: `the rewrite made it "${String(t.nearestStation).slice(0, 80)}"; the measurement says "${restoreStop}", and that is what it is set back to`,
                     });
-                    t.nearestStation = frozenGeo.station;
+                    t.nearestStation = restoreStop;
                   }
                   if (frozenGeo && typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
                   if (frozenGeo && typeof t.lon !== "undefined") t.lon = frozenGeo.lon;

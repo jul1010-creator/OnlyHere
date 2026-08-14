@@ -40,7 +40,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { journeyParts, journeyBlock, vehicleWord, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
@@ -5094,8 +5094,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the nearest arrival point is journalled", /note\("Nearest arrival point"/.test(app6));
   // Three now: the name-based lookup, the one re-derived from Google's own
   // address for the business, and the thrown case.
+  // FOUR now. The fourth is the measured journey's own arrival stop overruling
+  // the radius search, added 14 Aug after a car ferry slip to Agerso won that
+  // search for a festival in the middle of Skaelskoer.
   is("on every path that could produce or fail to produce one",
-     (app6.match(/note\("Nearest arrival point"/g) || []).length, 3);
+     (app6.match(/note\("Nearest arrival point"/g) || []).length, 4);
   ok("a thrown lookup is reported as failed, not as an absence",
      /outcome: "failed", used: false,[\s\S]{0,200}the location lookup threw/.test(app6));
   ok("and an empty result says it is not evidence of an absence",
@@ -9778,8 +9781,12 @@ rmSync(dir, { recursive: true, force: true });
   // measured field only when the rewrite CHANGED it, so a rewrite that
   // DECORATES one can drift: "Ribe Station (regional trains via Bramming)"
   // where the measurement says "Ribe Station".
+  // Same intent, new source of truth: the measured ARRIVAL STOP, falling back to
+  // the radius search only when no journey was measured. Restoring frozenGeo
+  // .station here would have brought the Agerso ferry slip straight back after
+  // every correction pass.
   ok("nearestStation is set back to the measurement after the correction",
-     /t\.nearestStation !== frozenGeo\.station\) \{[\s\S]{0,600}t\.nearestStation = frozenGeo\.station;/.test(appG));
+     /t\.nearestStation !== restoreStop\) \{[\s\S]{0,600}t\.nearestStation = restoreStop;/.test(appG));
   ok("and the drift is journalled rather than silently undone",
      /note\("A measured field was rewritten"/.test(appG));
   ok("and the log names the page", /note\("Where the price came from"/.test(appG));
@@ -12093,6 +12100,46 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const iCode = appP.indexOf("geocodePlace(`${found.postcode}, Denmark`)");
   ok("tried after the venue and after the full address", iVenue < iAddr && iAddr < iCode);
   ok("and the run log says which of the three answered", /the postcode \$\{found\.postcode\} alone/.test(appP));
+}
+
+// ── THE ARRIVAL POINT IS WHERE THE JOURNEY ENDS ────────────────────
+// Oliver's Graeskarfestival draft, 14 Aug 2026: "nearestStation": "Agerso Omo
+// Faergerne", a car ferry slip to two islands in the Great Belt, for a festival
+// in the middle of Skaelskoer. nearestStationName was not broken: ferry_terminal
+// is a transit type and the slip genuinely IS the nearest one. "Nearest transit
+// infrastructure by distance" is simply not the question a traveller has.
+//
+// The answer was in the same payload three times: Google named the stop in the
+// route it measured, the model wrote it into the field and had it stripped for
+// carrying advice, and the last leg of __journey ends there.
+{
+  const { arrivalStop } = M;
+  const real = { legs: [
+    { vehicle: "train", line: "IC", from: "Kobenhavn H", to: "Slagelse", mins: 50 },
+    { vehicle: "bus", line: "470R", from: "Slagelse St. (Ndr.Stationsvej)", to: "Skaelskoer Busterminal (Stationsvej)", mins: 34 },
+  ] };
+  is("the arrival point is the LAST leg's stop, not the first", arrivalStop(real), "Skaelskoer Busterminal");
+  // Google's feed disambiguates a stop by its street. A field that wants a name
+  // does not want the street, and nothing is lost: __journey keeps the full form.
+  is("a trailing street qualifier is dropped", arrivalStop({ legs: [{ to: "Norreport St. (Metro)" }] }), "Norreport St.");
+  // But a name that is ENTIRELY bracketed keeps it rather than becoming empty.
+  is("a wholly bracketed name is kept", arrivalStop({ legs: [{ to: "(Havnen)" }] }), "(Havnen)");
+  is("one leg is still an arrival", arrivalStop({ legs: [{ to: "Ribe St." }] }), "Ribe St.");
+  is("no legs is no answer, never a guess", arrivalStop({ legs: [] }), "");
+  is("and neither is nothing", arrivalStop(null), "");
+  // A leg with no stop name must not win by being last.
+  is("a nameless last leg falls back to the last NAMED one",
+     arrivalStop({ legs: [{ to: "Slagelse" }, { to: "" }] }), "Slagelse");
+
+  const appA = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the draft prefers the measured arrival point", /const measuredStop = arrivalStop\(transitParts\);/.test(appA));
+  ok("over the nearest transit point by distance", /const stop = measuredStop \|\| frozenGeo\?\.station;/.test(appA));
+  // The correction pass restores this field. If it restored the OLD answer the
+  // ferry slip would come straight back, so both sites read one helper.
+  ok("and the post-correction restore reads the same helper",
+     /const restoreStop = arrivalStop\(transitParts\) \|\| frozenGeo\?\.station;/.test(appA));
+  ok("with the disagreement recorded rather than silent",
+     /loser: `the nearest transit point by distance/.test(appA));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

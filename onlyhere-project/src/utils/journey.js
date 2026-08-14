@@ -113,6 +113,53 @@ const hm = (n) => {
   return h ? `${h}h${m ? ` ${m}min` : ""}` : `${m}min`;
 };
 
+// ── WHERE THE JOURNEY PUTS YOU DOWN ─────────────────────────────────
+//
+// Oliver's Græskarfestival draft, 14 Aug 2026:
+//
+//   "nearestStation": "Agersø Omø Færgerne"
+//
+// which is a car ferry slip to two islands in the Great Belt. A reader sent
+// there to reach a pumpkin festival in the middle of Skælskør has been sent to
+// the wrong side of the water for the wrong reason.
+//
+// AND NOTHING IN THAT DRAFT WAS BROKEN EXCEPT THE QUESTION BEING ASKED.
+// nearestStationName does exactly what it says: the closest place carrying a
+// transit type. ferry_terminal is a transit type, correctly, and the slip is
+// genuinely the nearest one to Havnevej. The function is right. "Nearest
+// transit infrastructure by distance" is simply not the question a traveller
+// has, and it never was: a freight siding, a park and ride nobody uses and an
+// island ferry all win it, and none of them is where you get off.
+//
+// THE ANSWER WAS ALREADY IN THE SAME PAYLOAD, THREE TIMES OVER. The draft's own
+// __journey ends:
+//
+//   { vehicle: "bus", line: "470R",
+//     from: "Slagelse St. (Ndr.Stationsvej)",
+//     to:   "Skælskør Busterminal (Stationsvej)", mins: 34 }
+//
+// The model independently wrote "Skælskør Busterminal" into the field and had
+// it stripped for carrying advice alongside it. And Google named the stop in
+// the route it measured.
+//
+// So the nearest arrival point is not a radius search. IT IS WHERE THE MEASURED
+// JOURNEY ENDS, which is measured, is the stop a person actually stands on, and
+// cannot be won by a ferry slip that no itinerary uses.
+//
+// The trailing parenthetical is Google's transit feed disambiguating a stop by
+// its street, so it is dropped for a field that wants a name. Nothing is lost:
+// the full form stays in __journey where it was measured.
+export const arrivalStop = (parts) => {
+  const legs = Array.isArray(parts?.legs) ? parts.legs.filter(l => l && l.to) : [];
+  if (!legs.length) return "";
+  const last = String(legs[legs.length - 1].to || "").trim();
+  // Only a TRAILING parenthetical, and only when something is left in front of
+  // it. "Nørreport St. (Metro)" becomes "Nørreport St."; a stop whose whole
+  // name is bracketed keeps it rather than becoming an empty string.
+  const bare = last.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  return bare || last;
+};
+
 // The block handed to the writer. Every figure carries the name of what it
 // measures, which is the whole fix.
 export const journeyBlock = (parts) => {
