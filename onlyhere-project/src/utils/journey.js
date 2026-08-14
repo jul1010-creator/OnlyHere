@@ -84,6 +84,25 @@ export const journeyParts = (steps, totalMinutes) => {
     // rides[i].to and onto ride i+1 there.
     interchanges: rides.slice(0, -1).map(s => s.to || "").filter(Boolean),
     longest: longest ? { mins: mins(longest), vehicle: vehicleWord(longest.vehicle), line: longest.line || "", from: longest.from || "", to: longest.to || "" } : null,
+    // ── AND EVERY LEG, IN ORDER, WHICH IS THE ACTUAL GUIDE ──────────
+    //
+    // Oliver, 13 Aug 2026: "Why it is that our drafts refuse to give the reader
+    // a proper guide for transport."
+    //
+    // Part of the answer is right here. Everything above this line is a
+    // SUMMARY: how long, how many changes, where you change, and the single
+    // longest ride. A reader does not want the longest ride. They want the
+    // sequence: this train to there, then that bus to there, then the walk.
+    // Google returns exactly that, and it was being reduced to a maximum.
+    //
+    // Ordered, whole and unsummarised, so whatever renders it can say the thing
+    // a person actually needs and nothing has to infer a leg it was never
+    // given. Same reason `interchanges` was added on 12 August: the names were
+    // in the response the whole time.
+    legs: rides.map(s => ({
+      vehicle: vehicleWord(s.vehicle), line: s.line || "",
+      from: s.from || "", to: s.to || "", mins: mins(s),
+    })),
     vehicles: [...new Set(rides.map(s => vehicleWord(s.vehicle)).filter(Boolean))],
   };
 };

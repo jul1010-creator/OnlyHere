@@ -1175,6 +1175,29 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     ok("the draft opens a log", /startLog\("Studio draft"/.test(appSrc3));
     ok("and closes it", /endLog\(\);/.test(appSrc3));
     ok("the one measured journey is recorded", /note\("Measure the journey from Copenhagen"/.test(appSrc3));
+
+    // ── AND IT RUNS FOR EVERY TYPE THAT HAS A JOURNEY ─────────────
+    // Oliver, 13 Aug 2026, holding a Google Maps transit link from København H
+    // to Skælskør: "Why is my draft unable to generate that???"
+    //
+    // Because the Directions call was gated on a list of FOUR types while the
+    // nearest-station lookup was gated on a list of EIGHT. Two lists that must
+    // agree, written out twice, drifted apart, and a restaurant or a bar got its
+    // arrival point looked up and its journey never measured.
+    //
+    // Asserted on the LIST rather than on the call sites, and then on the call
+    // sites using the list, because the defect was never one gate being wrong.
+    // It was two gates disagreeing.
+    const journeyTypes = (appSrc3.match(/const PLACE_TYPES_WITH_A_JOURNEY = \[([^\]]*)\]/) || [])[1] || "";
+    ["town", "festival", "free", "booking", "food", "foodStreet", "night", "nightTown"].forEach(t =>
+      ok(`a ${t} entry gets its journey measured`, journeyTypes.includes(`"${t}"`)));
+    // Not a place, so not a journey. This one is deliberate and stays out.
+    ok("an essential is not a place and gets no journey", !journeyTypes.includes('"essential"'));
+    // THREE gates, not two. The third was the journey research search, and this
+    // assertion is what found it: it was written expecting two and went red.
+    is("all three gates read the one list", (appSrc3.match(/PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\)/g) || []).length, 3);
+    ok("and none keeps a hand-written copy of it",
+       !/\["town", "festival", "free", "booking"\]\.includes\(sType\)/.test(appSrc3));
     ok("and Studio can read the trace back", /const logs = recentLogs\(\);/.test(appSrc3));
     ok("with a way to get it out of the browser", /Copy the full trace/.test(appSrc3));
 
@@ -4647,6 +4670,31 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // getting the right answer from a guess is not the same as knowing.
   is("and the interchange is named, not just counted", twoLeg.interchanges, ["Fredericia"]);
   is("one ride changes nowhere", p1.interchanges, []);
+
+  // ── AND EVERY LEG, IN ORDER, WHICH IS THE ACTUAL GUIDE ───────────
+  // Oliver, 13 Aug 2026: "Why it is that our drafts refuse to give the reader a
+  // proper guide for transport." Everything above is a SUMMARY, and the only
+  // ride kept whole was the longest. A reader does not want the longest ride,
+  // they want the sequence, and Google returned it all along.
+  is("every ride is kept, in order",
+     (twoLeg.legs || []).map(l => `${l.vehicle} ${l.line} ${l.from} to ${l.to} ${l.mins}`),
+     ["train IC København H to Fredericia 70", "bus 4 Fredericia to Somewhere 25"]);
+  // The walk is not a leg here. It is already counted in onFoot, and listing it
+  // as a service with an empty line name is how a rendered guide grows a step
+  // that says "board the  at ".
+  is("and the walking is not one of them", (twoLeg.legs || []).length, 2);
+  is("a single ride is still a list of one", (p1.legs || []).length, 1);
+
+  // ── AND IT REACHES THE ROW, WHICH IS WHERE FOUR FEATURES DIED ────
+  // studioContent's own comment: this allow-list has eaten a feature four
+  // times, so a new __ field is added to it in the same edit that creates it.
+  const sc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  const appJ = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the draft keeps the measured journey", /t\.__journey = \{/.test(appJ));
+  ok("and the allow-list lets it through", /if \(journey\) out = \{ \.\.\.out, __journey: journey \};/.test(sc));
+  ok("with the legs, not just the summary", /legs: \(Array\.isArray\(jp\.legs\)/.test(sc));
+  // Dated, for the same reason __hours is. A timetable ages.
+  ok("and dated, because a timetable ages", /at: String\(jp\.at \|\| ""\)/.test(sc));
   is("and the arrival is never listed as an interchange",
      journeyParts([
        { mode: "transit", vehicle: "HEAVY_RAIL", mins: 70, from: "A", to: "B" },
@@ -9303,6 +9351,42 @@ rmSync(dir, { recursive: true, force: true });
 
   // Ranges survive, because Danish tickets are tiered and a range is one claim.
   is("a range is one claim, not two", tracePrices("tickets 155-800 DKK", "tickets 155-800 kr").untraced.length, 0);
+
+  // ── A SPAN IS NOT A POINT ────────────────────────────────────────
+  // Oliver, 13 Aug 2026, on a trace reading "NOT FROM THE OFFICIAL SITE: 15 to
+  // 135 DKK": "it shouldn't consider that an error. It was perfectly correct,
+  // because it was taken from the ticket agent."
+  //
+  // The comparison was string equality on "lo-hi", so a ticket page listing its
+  // tiers one per line produced no key equal to "15-135" and a draft summarising
+  // them as a span was called untraceable. Summarising a tier list as a span is
+  // the CORRECT writing, so the gate was teaching the pipeline to write worse in
+  // order to pass.
+  const tiers = "Dagsbillet fredag: 135 kr. Dagsbillet lørdag: 95 kr. Børnebillet: 15 kr. Partoutbillet: 275 kr.";
+  const span = tracePrices("Entré koster 15 to 135 DKK afhængigt af dag.", "", tiers);
+  is("a span written out of a tier list is not untraceable", span.untraced.length, 0);
+  is("and it is a real listed price, not a doubt", span.listed.map(p => `${p.lo}-${p.hi}`), ["15-135"]);
+  ok("so the warning does not accuse it of coming from a blog",
+     !/a search result or a blog/.test(describePriceTrace(span)));
+  ok("and it is written as a real current price", /THAT IS A REAL, CURRENT PRICE/.test(describePriceTrace(span)));
+  // The same defect from the other end: one real tier quoted off a page that
+  // states the span. Both directions, because it is one bug.
+  is("one tier quoted off a page stating the range is traced too",
+     tracePrices("adults 155 DKK", "tickets 155 to 800 kr").untraced.length, 0);
+
+  // ── AND AN INVENTED FIGURE IS STILL CAUGHT ───────────────────────
+  // The loosening is bounded: every number the draft names must be a number the
+  // source names. Half a range is not enough, which is what stops this becoming
+  // a gate that passes anything with a plausible digit in it.
+  is("a figure on no page at all is still flagged",
+     tracePrices("Entré koster 999 DKK.", "", tiers).untraced.map(p => p.lo), [999]);
+  is("a span with one invented end is still flagged",
+     tracePrices("Entré koster 15 to 999 DKK.", "", tiers).untraced.map(p => `${p.lo}-${p.hi}`), ["15-999"]);
+  is("and a span with both ends invented",
+     tracePrices("Entré koster 800 to 999 DKK.", "", tiers).untraced.map(p => `${p.lo}-${p.hi}`), ["800-999"]);
+  // The operator's own page still outranks the ticket agent.
+  is("a span on the operator's own page is traced, not merely listed",
+     tracePrices("Entré koster 15 to 135 DKK.", tiers, "").traced.map(p => `${p.lo}-${p.hi}`), ["15-135"]);
 
   // ── AND IT MUST NOT ACCUSE WHAT IT CANNOT CHECK ─────────────────
   // With no site text there is nothing to trace AGAINST, and flagging every

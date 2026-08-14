@@ -161,6 +161,35 @@ If you cannot confirm the crossing duration from the operator, leave it out enti
 // unhelpful: a correction carries more authority than the original text, so a
 // mismatched one gets applied. The rules below are about SCOPE, not accuracy.
 // The checker was accurate. It was answering the wrong question.
+// ── THE TYPES A TRAVELER HAS TO PHYSICALLY GET TO ───────────────────
+//
+// Oliver, 13 Aug 2026, holding a Google Maps link for København H to
+// Havnepladsen in Skælskør, by transit, that Google produced without
+// difficulty: "Why is my draft unable to generate that??? That's ridiculous."
+//
+// He is right, and the reason is not the Directions API. api/directions.js
+// already asks for transit, already reads Google's step list, already names the
+// lines, the operators, the boarding stops and the ferries. Every capability
+// that link demonstrates is wired and working.
+//
+// The reason is that the call was gated on a list of four content types while
+// the nearest-station lookup two hundred lines above it was gated on a list of
+// EIGHT. So food, foodStreet, night and nightTown had their arrival point
+// looked up and their journey never measured, and a restaurant or a bar
+// therefore had to describe getting there from search snippets: the exact
+// instrument the comment at that call site says is the wrong one.
+//
+// Two lists that must agree, written out twice, drifting apart silently. This
+// codebase's most repeated defect, in the place where it costs a reader the
+// practical fact they came for.
+//
+// One list now, and it is the honest test rather than a historical accretion:
+// is this entry somewhere a person has to travel to. A town, a festival, a free
+// attraction, a bookable thing, a restaurant, a food street, a bar, a nightlife
+// town: yes, all of them. `essential` is deliberately absent and stays absent,
+// because buying a SIM card is not a place and has no journey.
+const PLACE_TYPES_WITH_A_JOURNEY = ["town", "festival", "free", "booking", "food", "foodStreet", "night", "nightTown"];
+
 const FACT_CHECK_SCOPE_RULES = `SCOPE, AND THIS OVERRIDES EVERYTHING ELSE HERE: only report a correction that is about the EXACT same thing the draft is about. A real fact about a similar-but-different thing is not a correction, and offering it as one is worse than staying silent, because a correction gets trusted and applied.
 This has already caused a real, confirmed near-miss: a draft about one specific ferry route was "corrected" using the sailing time of a DIFFERENT route to the same island. Both durations were genuinely real. Applying the correction would have reverted an entry that had already been fixed.
 So, before reporting any correction, check that it matches on the specific variant the draft names: the exact route and pair of ports, the exact venue rather than another branch of the same chain, the exact ticket type, the exact season or vessel. If a source gives you a figure for a DIFFERENT variant, you may mention it, but you must label it plainly as a different one ("the Hou to Sælvig route is 60 minutes, which is a different crossing") and you must NOT present it as an error in the draft.
@@ -2175,7 +2204,13 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // way that produced the Hou-instead-of-Kalundborg error, so the framing
       // below tells the writer to name the operator's own page and Rejseplanen
       // for the reader rather than presenting a scraped timetable as fact.
-      if (["town", "festival", "free", "booking"].includes(sType)) {
+      // ── AND THE THIRD COPY OF THE SAME LIST ──────────────────────
+      // Found by the assertion written for the other two, which is the whole
+      // argument for asserting on a list rather than on a call site. Same fix,
+      // same reason: a bar in a town with no station is exactly the entry where
+      // naming the real bus line matters most, and it was the one type of entry
+      // that never ran this search.
+      if (PLACE_TYPES_WITH_A_JOURNEY.includes(sType)) {
         try {
           const tq = `how to get to ${name} Denmark from Copenhagen by public transport train bus ferry which line rejseplanen`;
           const tRes = await fetch(`/api/search?q=${encodeURIComponent(tq)}`);
@@ -2717,7 +2752,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // Nightlife added: a bar has an address like everything else here, and
       // leaving it off the list was the reason a venue page could never show
       // where it is. nightTown is a town by another name.
-      if (["town", "festival", "free", "booking", "food", "foodStreet", "night", "nightTown"].includes(sType)) {
+      if (PLACE_TYPES_WITH_A_JOURNEY.includes(sType)) {
         try {
           // ── ONE ATTEMPT, ON THE BARE NAME, AND SILENCE IF IT MISSED ──
           // Oliver, 12 Aug 2026, on a Ribelund draft: "nearestStation": "".
@@ -2849,7 +2884,9 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // gateDraft compares the prose against it. See utils/journey.js.
       let transitParts = null;
       let drivingMins = null;
-      if (["town", "festival", "free", "booking"].includes(sType) && frozenGeo) {
+      // ── AND THE SAME LIST HERE, WHICH IS THE FIX ─────────────────
+      // This was its own four-entry list. See PLACE_TYPES_WITH_A_JOURNEY.
+      if (PLACE_TYPES_WITH_A_JOURNEY.includes(sType) && frozenGeo) {
         try {
           const CPH = "55.6761,12.5683";
           const dest = `${frozenGeo.lat},${frozenGeo.lon}`;
@@ -4017,6 +4054,32 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // which is the failure the FROZEN TRANSPORT FACT stamps were changed to
       // avoid ("checked 10 Aug 2026" rather than "verified").
       if (placesHours) t.__hours = placesHours;
+      // ── THE JOURNEY, KEPT INSTEAD OF DISCARDED ───────────────────
+      //
+      // Oliver, 13 Aug 2026: "Why it is that our drafts refuse to give the
+      // reader a proper guide for transport."
+      //
+      // Because until this line the guide was measured and then deleted.
+      // transitParts holds the real shape of the trip, every leg in order with
+      // its line and its two stops, the interchange names, the walking and the
+      // waiting. It went into ONE prompt and ONE gate and then out of scope,
+      // and the only transport that survived to a reader was travelTime, which
+      // is a single string, and nearestStation, which is a single name.
+      //
+      // So the one measurement in this pipeline is now on the row, on the same
+      // terms as __hours: dated, allow-listed in shapeForLive in the same edit
+      // that created it, and reader-facing only when something chooses to
+      // render it. Storing is the half that cannot wait. A row published
+      // without its journey has lost it short of a full redraft, so this earns
+      // its keep on every draft from tonight even before anything displays it.
+      if (transitParts) {
+        t.__journey = {
+          ...transitParts,
+          drivingMins,
+          from: "Copenhagen",
+          at: new Date().toISOString().slice(0, 10),
+        };
+      }
       t.__sources = [...new Set([...founderUrls, ...candidateUrls])].filter(u => {
         try {
           const h = new URL(u).hostname.replace(/^www\./, "");

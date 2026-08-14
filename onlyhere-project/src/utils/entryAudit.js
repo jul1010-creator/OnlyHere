@@ -451,6 +451,49 @@ export const readerText = (payload) => {
 // insisting the token match would flag it as invented.
 const priceKey = (p) => `${p.lo}-${p.hi}`;
 
+// ── AND A SPAN IS NOT A POINT ───────────────────────────────────────
+//
+// Oliver, 13 Aug 2026, on a trace that read "NOT FROM THE OFFICIAL SITE: 15 to
+// 135 DKK": "it shouldn't consider that an error. It was perfectly correct,
+// because it was taken from the ticket agent."
+//
+// He is right and the trace was comparing the wrong shapes. priceKey turns a
+// price into "lo-hi" and the comparison was string equality on that key, so a
+// ticket page listing its tiers one per line:
+//
+//     Dagsbillet fredag  135 kr        ->  135-135
+//     Børnebillet         15 kr        ->   15-15
+//
+// produces no key that equals "15-135", and a draft that summarises those tiers
+// as a span was reported as coming "from a search result or a blog rather than
+// from whoever charges it". Both of its numbers were read off the ticket page
+// this pipeline fetched itself.
+//
+// And summarising a tier list as a span IS THE CORRECT WRITING. A reader wants
+// to know what a day costs and what the range is, not four lines of Danish
+// ticket categories. So the gate was punishing the writer for doing the right
+// thing, which is the worst kind of gate: it teaches the pipeline to write
+// worse in order to pass.
+//
+// The rule that fixes it, in both directions, because this is one defect and
+// not two: A PRICE IS SUPPORTED WHEN EVERY NUMBER IT NAMES IS A NUMBER THE
+// SOURCE NAMES. "15 to 135" needs a 15 and a 135 somewhere on the page. "135"
+// on its own needs a 135, which is also satisfied by a page that says "15 to
+// 135", and that is the same bug seen from the other end: a draft quoting one
+// real tier off a page that states a range was untraceable too.
+//
+// Endpoint membership, deliberately, rather than "is the draft's span inside
+// the page's span". A page listing a 275 kr partout beside a 15 to 135 kr day
+// ticket is not evidence that "15 to 135" is wrong, because those are different
+// products. Whether a range COVERS everything sold is a real and separate
+// question, and it is not this one.
+const priceNumbers = (list) => {
+  const out = new Set();
+  (list || []).forEach(p => { out.add(p.lo); out.add(p.hi); });
+  return out;
+};
+const numbersPresent = (nums, p) => nums.has(p.lo) && nums.has(p.hi);
+
 // ── A NUMBER IS NOT A PRICE UNTIL IT NAMES A CURRENCY ───────────────
 // Second correction to my own work, from Oliver's run log of 12 Aug. After the
 // trace stopped reading __sources it still reported this:
@@ -492,16 +535,22 @@ export const tracePrices = (draftText, siteText, listingText = "") => {
   if (!official && !listing) {
     return { checked: false, why: "the official site's text was not available", draft, traced: [], listed: [], untraced: [] };
   }
+  // Both forms kept. The exact key still matches first, because a page and a
+  // draft stating the same span is the strongest agreement there is; the number
+  // sets are what catch a span written out of a tier list. See priceNumbers.
   const site = new Set(pricesIn(official).map(priceKey));
   const seenOnListing = new Set(pricesIn(listing).map(priceKey));
-  const onSite = (p) => site.has(priceKey(p));
+  const siteNums = priceNumbers(pricesIn(official));
+  const listingNums = priceNumbers(pricesIn(listing));
+  const onSite = (p) => site.has(priceKey(p)) || numbersPresent(siteNums, p);
+  const onListing = (p) => seenOnListing.has(priceKey(p)) || numbersPresent(listingNums, p);
   return {
     checked: true, why: "", draft,
     traced: draft.filter(onSite),
     // The operator's own page wins outright. A figure that appears on BOTH is
     // traced, not listed, because the better provenance is the true one.
-    listed: draft.filter(p => !onSite(p) && seenOnListing.has(priceKey(p))),
-    untraced: draft.filter(p => !onSite(p) && !seenOnListing.has(priceKey(p))),
+    listed: draft.filter(p => !onSite(p) && onListing(p)),
+    untraced: draft.filter(p => !onSite(p) && !onListing(p)),
   };
 };
 

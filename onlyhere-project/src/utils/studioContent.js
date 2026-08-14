@@ -238,6 +238,47 @@ export const shapeForLive = (type, t) => {
   // every claim deliberately parked as unresolved for the next reviewer was
   // deleted rather than parked. HowWeKnow reads both fields on the live page,
   // so the reader got an entry that looked like nobody had ever checked it.
+  // ── AND THE ONE MEASUREMENT IN THE WHOLE PIPELINE, WHICH WAS BEING
+  //    THROWN AWAY ENTIRELY ──────────────────────────────────────────
+  //
+  // Oliver, 13 Aug 2026: "Why it is that our drafts refuse to give the reader a
+  // proper guide for transport."
+  //
+  // Because the guide is measured and then deleted. journeyParts turns Google's
+  // step list into the real shape of the trip: door to door, how much of it is
+  // moving, how many changes, THE NAMED INTERCHANGE STATIONS, the longest leg
+  // with its line and its two stops, the walking, the waiting. App.jsx computes
+  // it, puts it in one prompt, hands it to one gate, and drops it on the floor.
+  //
+  // Nothing survives to the reader except travelTime, which is one string, and
+  // nearestStation, which is one name. The change at Slagelse and the 901 bus
+  // were measured, used to grade the prose, and never shown to anybody.
+  //
+  // Stored here on the same terms as __hours and __ticket, and STORED IS THE
+  // HALF THAT CANNOT WAIT: a row published without its journey has lost it for
+  // good short of a full redraft, so every entry drafted from now carries the
+  // measurement whether or not anything renders it yet.
+  //
+  // The date is on it for the same reason __hours carries one. A timetable ages.
+  const jp = t?.__journey;
+  const journey = jp && Number.isFinite(Number(jp.total))
+    ? {
+        total: Number(jp.total),
+        onBoard: Number(jp.onBoard) || 0,
+        onFoot: Number(jp.onFoot) || 0,
+        waiting: Number(jp.waiting) || 0,
+        changes: Number(jp.changes) || 0,
+        interchanges: (Array.isArray(jp.interchanges) ? jp.interchanges : []).slice(0, 6).map(String),
+        legs: (Array.isArray(jp.legs) ? jp.legs : []).slice(0, 8).map(l => ({
+          vehicle: String(l?.vehicle || ""), line: String(l?.line || ""),
+          from: String(l?.from || ""), to: String(l?.to || ""), mins: Number(l?.mins) || 0,
+        })),
+        drivingMins: Number.isFinite(Number(jp.drivingMins)) ? Number(jp.drivingMins) : null,
+        from: String(jp.from || "Copenhagen"),
+        at: String(jp.at || ""),
+      }
+    : null;
+
   const corrections = (Array.isArray(t?.__corrections) ? t.__corrections : [])
     .filter(c => c && typeof c === "object" && c.field)
     .slice(-20)
@@ -260,6 +301,7 @@ export const shapeForLive = (type, t) => {
   if (hours) out = { ...out, __hours: hours };
   if (ticket) out = { ...out, __ticket: ticket };
   if (dateSource) out = { ...out, __dateSource: dateSource };
+  if (journey) out = { ...out, __journey: journey };
   if (corrections.length) out = { ...out, __corrections: corrections };
   return readerFacing.length ? { ...out, uncertainties: readerFacing } : out;
 };
