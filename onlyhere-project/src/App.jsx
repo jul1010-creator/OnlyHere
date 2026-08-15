@@ -89,7 +89,8 @@ import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, 
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate } from "./utils/eventDates";
+import { languageBarrier } from "./utils/languageBarrier";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
@@ -3225,6 +3226,9 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       let placesHours = null;
       // The official site's own words, separate from the merged research blob.
       let scrapedSiteText = "";
+      // What language the EVENT runs in, measured off those same words. See
+      // utils/languageBarrier.js. Declared here so it survives to the stamp.
+      let entryLanguage = { level: "unknown", note: "", why: "the operator's own site was not read, so nothing here is measured" };
       // ── AND THE CALENDARS AND RESELLERS, KEPT APART FROM IT ──────
       // A KultuNaut or Billetto page carries the price and is worth reading.
       // It is not the operator, so its text may never enter the string the log
@@ -3758,6 +3762,33 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           why: staleSkipped.length ? `held back as too old to price or date anything: ${staleSkipped.join(", ")}` : "",
           used: !!(scrapedSiteText.trim() || listingSiteText.trim()),
         });
+        // ── WHAT LANGUAGE THIS THING RUNS IN ────────────────────────
+        // Oliver, 15 Aug 2026: "I wonder if we should make people aware that an
+        // event might have a great language barrier."
+        //
+        // The twin of the Danish-in-a-reader-field bug and its opposite in
+        // spirit. Gemlyx writing Danish at a reader is a defect and is fixed in
+        // glanceExtract. The EVENT being Danish is a fact about the event, and
+        // smoothing it over is the dishonest fix: somebody flying in for a
+        // harbour festival in Skødstrup should know before they buy a
+        // partoutbillet.
+        //
+        // Measured off the operator's own pages, which have just been read for
+        // exactly this reason, and never inferred from the town, the scale or
+        // the name. No operator page means no claim. See utils/languageBarrier.js.
+        const lang = languageBarrier({ siteText: scrapedSiteText, siteUrls: Object.keys(pagesByUrl || {}) });
+        note("What language this runs in", {
+          provider: "fetch",
+          detail: "the operator's own pages, read for a language and for an English version of themselves",
+          outcome: lang.level === "unknown" ? "empty" : "ok",
+          got: lang.level === "danish-only"
+            ? "the organiser publishes in Danish only, so the reader is told to expect Danish"
+            : lang.level === "has-english"
+              ? "the organiser publishes an English version, so nothing is said"
+              : lang.why,
+          used: lang.level === "danish-only",
+        });
+        entryLanguage = lang;
         // ── AND A SILENT ONE IS THE WHOLE COMPLAINT ─────────────────
         //
         // Oliver, 15 Aug 2026, on Farfar's Bodega: "This wouldn't have been a
@@ -4034,10 +4065,37 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // A festival "date" already in the past is almost certainly a guess, not a real
       // finding — the model should have left it empty. Don't trust its own honesty here;
       // check mechanically and strip it so a wrong date can't slip through unnoticed.
+      //
+      // ── AND IT STRIPPED A FESTIVAL THAT WAS RUNNING THAT WEEKEND ──
+      // Oliver, 15 Aug 2026, on the Kaløvig Havnefestival draft: "Why is some
+      // written in Danish and dates are left out? An event must NEVER be
+      // published without a date." The festival was on that same weekend, and
+      // this is what emptied both fields.
+      //
+      // Two faults in one comparison, and this file already owns the correct
+      // rule twice over in utils/eventDates.js.
+      //
+      //   IT READ dateStart. A three day festival that began on Friday is not
+      //   over on Saturday, and line 4041 deleted dateEnd as well, so the field
+      //   that proves it is still running was thrown out by the check that
+      //   should have consulted it. eventDates.js:96 says the end date is what
+      //   decides whether a multi-day festival is done.
+      //
+      //   IT COMPARED AGAINST NOW. `new Date("2026-08-15")` is midnight UTC, so
+      //   a festival starting TODAY tested as past from about two in the
+      //   morning Danish time. isPastDate compares against the start of today
+      //   for exactly this reason, and its own comment says so: "The END of the
+      //   day it names, so an event happening today is not past."
+      //
+      // The cascade is why it was silent. With the dates gone before the gates
+      // ran, the operator-site date confirmation was skipped (it only fires
+      // when a date already exists), so nothing read the site that states them,
+      // and the Ticketmaster match could only reach weak-match, which is the
+      // `verdict: "weak-match"` on the draft. The strip disabled every
+      // mechanism that could have rescued the date it deleted.
       if (sType === "festival" && t.dateStart) {
-        const d = new Date(t.dateStart);
-        if (!isNaN(d) && d < new Date()) {
-          console.warn("Studio: dropped a festival date that was already in the past —", t.name, t.dateStart);
+        if (isPastDate(t.dateEnd || t.dateStart, new Date())) {
+          console.warn("Studio: dropped a festival date that was already in the past —", t.name, t.dateStart, t.dateEnd);
           t.dateStart = ""; t.dateEnd = "";
           t._dateWasStripped = true;
         }
@@ -4804,7 +4862,32 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             rule: "A ticketing system's own record of its own listing beats a written guess. Only ever applied on a confirmed name AND date match.",
             value: `${rec.status}${rec.verdict === "off-sale" ? " (off sale, which is NOT sold out)" : ""}`,
           });
-        } else if (rec.verdict === "no-match" || rec.verdict === "weak-match") {
+        }
+        // ── A LISTING THAT KNOWS ITS OWN DATE, ON A DRAFT WITH NONE ──
+        // The loop this closes: the draft had no date, so the match could only
+        // ever be weak, so nothing was written from it, and the run log printed
+        // "Ticketmaster's nearest listing is 'Kaløvig Havnefestival 2026 -
+        // Dagsbillet' on 2026-08-16" and moved on. A source that states the
+        // date is exactly what a dateless draft needs, and refusing it because
+        // the draft has no date to check it against is circular.
+        //
+        // Held to what a weak match is worth: this only fires on an EMPTY date
+        // field, it never overwrites one, the status is still not written from
+        // it, and where it came from is stamped on the row so the founder can
+        // see the date is a ticket vendor's rather than the operator's.
+        if (!String(t.dateStart || "").trim() && match?.dateOffer?.start) {
+          const off = match.dateOffer;
+          t.dateStart = off.start;
+          if (off.end) t.dateEnd = off.end;
+          t.__dateSource = { source: "ticketmaster", listings: off.listings, name: match.event?.name || "", at: new Date().toISOString() };
+          decide("dateStart", {
+            winner: `Ticketmaster's own listing${off.listings > 1 ? `s (${off.listings} of them)` : ""}`,
+            loser: "an empty date field",
+            rule: "A draft with no date takes an upcoming listing's date rather than publishing dateless. It never overwrites a date already on file, and it does not make the ticket status measured.",
+            value: `${off.start}${off.end ? ` to ${off.end}` : ""}, from "${match.event?.name || "the listing"}"`,
+          });
+        }
+        if (rec.verdict === "no-match" || rec.verdict === "weak-match") {
           // The honest half, and the common one. Without this line a guessed
           // status is indistinguishable from a measured one in the run log.
           decide("ticketStatus", {
@@ -4826,6 +4909,15 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // written on the row rather than shown once in the run log, because the
         // run log is gone by the time anybody reads the published page.
         t = stampTicketSource(t, rec);
+        // ── AND WHAT LANGUAGE IT RUNS IN, STORED WITH IT ───────────
+        // Measured at step 17 off the operator's own pages. On the row rather
+        // than only in the run log, for the same reason the ticket source is:
+        // the run log is gone by the time anybody reads the published page.
+        // Only written when it was measured, so an absent field means nobody
+        // knows rather than "no barrier".
+        if (entryLanguage.level !== "unknown") {
+          t.__language = { level: entryLanguage.level, note: entryLanguage.note, at: new Date().toISOString() };
+        }
         // Critical and high findings go where a person actually reads them,
         // above whatever the model wrote about itself. A cancelled event is the
         // one finding in this whole pipeline that should stop a publish.
@@ -5366,6 +5458,32 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
       queueBusyRef.current = false;
     }
   };
+  // ── "BUG.. WON'T CLICK OPEN" ──────────────────────────────────────
+  // Oliver, 15 Aug 2026, with a screenshot of a finished Cirkus Arena draft, an
+  // Open button beside it, and the queue 85 percent through Kaløvig
+  // Havnefestival. Mine, from this morning, and wrong three separate ways.
+  //
+  // THE RULE WAS TOO BROAD. `studioLoading` is true for two different runs, and
+  // only one of them can hurt the editor. A MANUAL draft writes its results
+  // straight into the editor, so opening something else mid-run genuinely lets
+  // the run land on top of it: that is the editingId catastrophe. A QUEUED
+  // draft cannot, and the code says so out loud twelve lines above this, where
+  // it passes `queued: true` with the comment "this is what keeps this run out
+  // of the editor". Blocking Open during a queue run guards against a collision
+  // that was already designed out.
+  //
+  // queueDrafting is set for exactly the length of a queued run and null during
+  // a manual one, so it is the flag that tells the two apart.
+  //
+  // THE OTHER TWO FAULTS WERE PRESENTATION, and they are why this reads as a
+  // dead button rather than a refusal. The disabled button kept full gold and
+  // `cursor: pointer`, so it looked live and did nothing, and the only
+  // explanation lived in a `title`, which needs a hover and never appears on a
+  // touch screen. Meanwhile the note underneath it said "Open loads a finished
+  // draft into the editor. It does not start any research", which is true and
+  // reads as a promise that clicking is safe. The screen and the button were
+  // telling him opposite things.
+  const manualDraftRunning = studioLoading && !queueDrafting;
   // ── FACT GENERATOR (Oliver, Aug 5: "Having 7 guide facts is boring. We need
   // a lot. Put into studio a random fact generator or something with an (upload
   // image) next to it.") ────────────────────────────────────────────
@@ -6787,6 +6905,40 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         }
         console.warn("Publishing an edit with a coordinate that fails the map check:", why);
       }
+      // ── THE DATE GATE ───────────────────────────────────────────
+      // Oliver, 15 Aug 2026, holding a festival draft whose dateStart and
+      // dateEnd were both empty strings: "An event must NEVER be published
+      // without a date."
+      //
+      // Nothing stopped it. `_dateWasStripped` was written onto the draft by
+      // the past-date guard and read by nothing in the entire repo, so the
+      // pipeline recorded that it had deleted the dates and then published
+      // anyway. The editor does show a red warning card, and it sits above a
+      // working Publish button, and its text is wrong for this case besides: it
+      // says a dateless event "never appears in the events list", while
+      // isUpcoming is `!d || …`, which deliberately counts a dateless event as
+      // upcoming. So the row publishes, shows to readers with no date, and
+      // because no sweep checks dates either, it is never flagged again.
+      //
+      // Placed beside the coordinate gate because it is the same kind of rule:
+      // a fact the row cannot be right without, checked at the last point
+      // before the insert, on what would actually be stored.
+      //
+      // AND IT BLOCKS AN EDIT TOO, unlike the coordinate gate. A wrong pin on a
+      // live row is a thing you are stuck with and a gate that refuses the fix
+      // makes it worse. An empty date is not that: the fix IS the date, it is
+      // one field in the JSON above, and saving an edit that leaves it empty is
+      // publishing a dateless event by another door.
+      if (studioType === "festival" && !String(shaped.date || "").trim()) {
+        setPublishStatus(null);
+        setDraftEditError(
+          `Not published, because an event with no date is not an event. Fill "dateStart" in the draft above${shaped.dateEnd ? "" : ` (and "dateEnd" if it runs more than one day)`} and publish again.` +
+          (draft?._dateWasStripped
+            ? ` This draft HAD a date and the past-date check removed it, which it does when the run has already finished. If the festival is still to come, the date the writer found was wrong; if it is running now, put the real dates in and it will publish.`
+            : ` Nothing in the research stated one. The operator's own site and the ticket listings are the two places worth looking.`)
+        );
+        return;
+      }
       // Same enforcement for stay duration — never let the model's guess survive
       // when a reliable category-based real duration exists. Free-entrance items
       // never get a shaped.category field (shapeForLive puts their category text
@@ -7999,6 +8151,26 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       const chosenEventsBlock = chosenEvents.length
         ? `\n\nEVENTS THE TRAVELER HAS ALREADY CHOSEN, which are fixed points and not suggestions. Every one MUST appear as a stop, on the day its own dates fall on, and that day's other stops must be near it rather than across the country:\n${chosenEvents.map(e => `- ${e.name} in ${e.town || "Denmark"} (${getEventDate(e.date, e.dateEnd)})`).join("\n")}`
         : "";
+      // ── AND THE PLACES THEY ADDED BACK ──────────────────────────
+      // Oliver, 15 Aug 2026, on a preview that offered five attractions and two
+      // restaurants to somebody whose only stated interest was festivals and
+      // live events: "have an empty attractions and eat places. And then like a
+      // 'add' attractions, next to it."
+      //
+      // The preview now leaves those sections empty and offers them. Anything
+      // ticked there was chosen deliberately, against a screen that had already
+      // said Gemlyx would leave it out, so it is a stronger signal than
+      // anything inferred from the brief and it belongs with the fixed points.
+      //
+      // Same journey as the events above: matched by NAME against the live
+      // arrays, because the preview's rows are a render-time copy. No date, so
+      // no day is forced; the planner places them where they fit.
+      const chosenExtras = Array.isArray(pickedExtras) && pickedExtras.length
+        ? [...freeEntrance, ...craftItemsFallback, ...foodSpots, ...nightlifeSpots].filter(p => pickedExtras.includes(p.name))
+        : [];
+      const chosenExtrasBlock = chosenExtras.length
+        ? `\n\nPLACES THE TRAVELER ADDED THEMSELVES, after being shown that these were left out of their brief. They asked for these specifically, so every one MUST appear as a stop:\n${chosenExtras.map(p => `- ${p.name}${p.city || p.town ? ` in ${p.city || p.town}` : ""}`).join("\n")}`
+        : "";
       // FULL ACCURACY PIPELINE (Oliver's spec, Aug 2026): ChatGPT plans/structures
       // (never writes prose) -> Tavily + Maps research -> Perplexity fact-check ->
       // Claude writes -> ChatGPT scans the finished writing for poor/generic prose
@@ -8021,7 +8193,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}${chosenExtrasBlock}\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -8161,7 +8333,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are genuinely different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${chosenEventsBlock}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${chosenEventsBlock}${chosenExtrasBlock}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -8772,6 +8944,11 @@ If the conversation only covers a single day or a few stops with no explicit day
   // event at all. Collapsing the two would silently re-add a festival somebody
   // had just removed.
   const [pickedEvents, setPickedEvents] = useState(null);
+  // Places the traveller added back from a section their brief did not ask for.
+  // Empty array rather than null: unlike events, there are no starting ticks to
+  // distinguish from an untouched list, because the whole point is that Gemlyx
+  // picked none of these. See wantedCategories in utils/previewMatch.js.
+  const [pickedExtras, setPickedExtras] = useState([]);
   // TEST-PIPELINE TRANSPARENCY (Oliver: "Can you in the test pipeline also
   // show me what the plan was? I want to see what recommendations is given to
   // the different types of people"): the Random-guide button stores its
@@ -10587,8 +10764,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             reachable by interleaving rather than by sequence,
                             and "not reachable by the path I thought of" is how
                             every one of those leaks got in. */}
-                        <button onClick={() => editItem(row)} disabled={studioLoading}
-                          title={studioLoading ? "A draft is running. Let it finish first, or this row gets its draft." : ""}
+                        <button onClick={() => editItem(row)} disabled={manualDraftRunning}
+                          title={manualDraftRunning ? "A draft you started by hand is running. Let it finish first, or this row gets its draft." : ""}
                                     style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                     ✏️ Edit
                                   </button>
@@ -11239,8 +11416,9 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <div key={`r${i}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 3 }}>
                             <span style={{ color: r.ok ? C.gold : "#FFB347" }}>{r.ok ? "◆" : "✕"} {r.name}</span>
                             {r.ok ? (
-                              <button onClick={() => loadQueueResult(r)} disabled={studioLoading} title={studioLoading ? "A draft is running. Opening this now would let the run overwrite it." : "Loads this finished draft into the editor. It does not start any research."}
-                                style={{ background: "none", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "3px 10px", fontSize: 10.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                              <button onClick={() => loadQueueResult(r)} disabled={manualDraftRunning}
+                                title={manualDraftRunning ? "A draft you started by hand is running. Opening this now would let that run overwrite it." : "Loads this finished draft into the editor. It does not start any research."}
+                                style={{ background: "none", border: `1px solid ${manualDraftRunning ? C.border : `${C.gold}55`}`, borderRadius: 100, padding: "3px 10px", fontSize: 10.5, fontWeight: 700, color: manualDraftRunning ? C.muted : C.gold, cursor: manualDraftRunning ? "not-allowed" : "pointer", opacity: manualDraftRunning ? 0.55 : 1, fontFamily: "'Inter', sans-serif" }}>
                                 Open
                               </button>
                             ) : (
@@ -11251,7 +11429,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {queueResults.length > 0 && (
                           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
                             Open loads a finished draft into the editor. It does not start any research.
-                            {queueDrafting ? ` The queue is separately still working on ${queueDrafting}, which is why the progress bar keeps moving.` : ""}
+                            {queueDrafting ? ` The queue is separately still working on ${queueDrafting}, which is why the progress bar keeps moving. That run stays out of the editor, so opening this now is safe.` : ""}
+                            {/* THE REFUSAL BELONGS ON THE SCREEN. It lived in a
+                                title attribute, which needs a hover and never
+                                appears on a touch screen, so the button simply
+                                did nothing while the line above it said Open
+                                was harmless. */}
+                            {manualDraftRunning ? " Open is held while a draft you started by hand is running, because that run writes into the editor and would land on top of this one." : ""}
                           </div>
                         )}
                       </div>
@@ -14934,6 +15118,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           intakeInterest={intakeInterest}
           pickedEvents={pickedEvents}
           setPickedEvents={setPickedEvents}
+          pickedExtras={pickedExtras}
+          setPickedExtras={setPickedExtras}
+          session={userSession}
+          onSignIn={() => setAuthOpen(true)}
         />
       )}
       {/* PREVIEW CHAT — floating Ask Gemlyx corner launcher + panel ON TOP of

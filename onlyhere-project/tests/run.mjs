@@ -103,6 +103,7 @@ writeFileSync(entry, `
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { wantedCategories, groupKeyOf } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -123,6 +124,8 @@ writeFileSync(entry, `
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
+  export { datesFromListings } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { costContradictions, bareOccurrence, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
@@ -6110,6 +6113,90 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     foodSpots: [{ name: "Restaurant Domestic", location: "Mejlgade 35, Aarhus" }],
   })).map(p => p.name);
   ok("a food row in another town is still left out", !other.includes("Restaurant Domestic"));
+
+  // ── "THEY ARE ONLY ASKING FOR EVENTS" ───────────────────────────
+  // Oliver, 15 Aug 2026, on the preview for this brief:
+  //
+  //   7 days, arriving 12 September, just me, we land at Copenhagen airport
+  //   late in the evening, we are renting a car, we would rather stay in one
+  //   place and take day trips, INTO FESTIVALS AND LIVE EVENTS, tight budget
+  //
+  // which came back holding Københavns Museum, Ny Carlsberg Glyptotek,
+  // Amalienborg Slot, Farfar's bodega and Hooked. "These people do NOT sound
+  // like the people who would visit Amalienborg Slot."
+  const { wantedCategories, groupKeyOf } = M;
+  const EVENTY = "user: I'm planning 7 days in Denmark. It is just me. We are renting a car. We like festivals and live events. We are on a tight budget.";
+  const w = wantedCategories(EVENTY);
+  ok("a brief about events wants events", w.has("event"));
+  // His explicit call: "I get the nightlife.. nightlife always have events
+  // somehow." A bar with a lineup is the same interest in another content type.
+  ok("and nightlife rides along with them", w.has("nightlife"));
+  ok("but not attractions", !w.has("free"));
+  ok("and not places to eat", !w.has("food"));
+  is("museums and history want attractions and nothing else",
+    [...wantedCategories("We are into museums and history")].sort(), ["free"]);
+  is("a night out wants nightlife and nothing else",
+    [...wantedCategories("We want a proper night out, bars and clubs")].sort(), ["nightlife"]);
+  // ── AND A BRIEF THAT NAMES NOTHING NARROWS NOTHING ──────────────
+  // null, not an empty set: "they said nothing" and "they wanted nothing" are
+  // opposite instructions, and an empty set would empty every section on the
+  // screen for somebody who has not said what they are into yet.
+  is("a brief with no interests narrows nothing",
+    wantedCategories("Four days in Copenhagen with my brother, mid range budget."), null);
+  is("and neither does an empty one", wantedCategories(""), null);
+  // The intake form's own answers count as stated interests too.
+  ok("the intake form's interests are read as well",
+    wantedCategories("Four days in Copenhagen.", ["Museums and galleries"]).has("free"));
+
+  // WHOLE WORDS, and this is the trap that matters: "start" contains "art" and
+  // "great" contains "eat". Every previous matcher in this file has been broken
+  // by exactly this and every one was found on a screenshot.
+  is("a brief that starts somewhere is not asking for art",
+    wantedCategories("We start in Copenhagen and the hotel looks great."), null);
+  is("and a shower is not a show", wantedCategories("The room has a shower."), null);
+
+  // ── THE ROWS ARE NOT DELETED, THEY ARE OFFERED ──────────────────
+  // Deleting them would make Gemlyx look like it holds nothing in Copenhagen.
+  // Filling them makes it look like it was not listening. They travel to the
+  // screen carrying `_notAsked` so the section can stand empty and say what it
+  // could put there.
+  const eventyPools = previewPools({
+    towns: [{ name: "Copenhagen", isMajorCity: true }],
+    freeEntrance: [{ name: "Amalienborg Slot", city: "Copenhagen" }, { name: "Kobenhavns Museum", city: "Copenhagen" }],
+    foodSpots: [{ name: "Farfar's Bodega", location: "Copenhagen" }],
+    nightlifeSpots: [{ name: "Culture Box", location: "Kronprinsessegade 54, Copenhagen" }],
+    events: [{ name: "Copenhagen Light Festival", town: "Copenhagen" }],
+    majorEvents: [], craftItemsFallback: [],
+  });
+  const rows = matchedPlaces(`${EVENTY} We are going to Copenhagen.`, eventyPools, { wanted: wantedCategories(EVENTY) });
+  const byName = Object.fromEntries(rows.map(p => [p.name, p]));
+  ok("the palace is still on the screen", !!byName["Amalienborg Slot"]);
+  // Optional chaining is not neatness here: without it, a change that DROPS the
+  // row instead of offering it crashes this file and takes every assertion
+  // below it down with it, which reads as a pass.
+  ok("but it is offered rather than shown", byName["Amalienborg Slot"]?._notAsked === true);
+  ok("and so is the city museum", byName["Kobenhavns Museum"]?._notAsked === true);
+  ok("and the bodega", byName["Farfar's Bodega"]?._notAsked === true);
+  ok("the bar is shown, because nightlife rides with events", !byName["Culture Box"]?._notAsked);
+  ok("the event is shown", !byName["Copenhagen Light Festival"]?._notAsked);
+  ok("and the town itself is never held back", !byName["Copenhagen"]?._notAsked);
+  // WITH NO STATED INTEREST, NOTHING IS HELD BACK. This is the behaviour the
+  // screen has always had and the half that makes the above a rule rather than
+  // a blanket narrowing.
+  const openRows = matchedPlaces(`${EVENTY} We are going to Copenhagen.`, eventyPools, { wanted: null });
+  ok("an unnarrowed brief holds nothing back", openRows.every(p => !p._notAsked));
+
+  // ── AND A PLACE THEY NAMED IS NEVER "NOT ASKED FOR" ─────────────
+  // The first pass is somebody typing a name. Whatever category it lands in,
+  // they asked for it, and offering it back to them would be absurd.
+  const named = matchedPlaces("user: Seven days of festivals and live events in Copenhagen, and we want to see Amalienborg Slot.", eventyPools, { wanted: wantedCategories("festivals and live events") });
+  ok("a palace they typed is shown, not offered",
+    !named.find(p => p.name === "Amalienborg Slot")?._notAsked);
+
+  // Craft shows under Attractions but keeps its own _src for click routing, and
+  // the matcher has to use the DISPLAY grouping to decide what was asked for.
+  is("craft is grouped as an attraction", groupKeyOf({ _src: "craft" }), "free");
+  is("and everything else is itself", groupKeyOf({ _src: "food" }), "food");
 
   // AND THE ITALIC LINE AT THE TOP READS THE SAME LIST. Raw source, because
   // what is being checked is a prompt string and stripNonCode blanks those.
@@ -13574,8 +13661,24 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // A5: Edit and Open were live during a run, so a row could be opened mid-draft
   // and then PATCHed with a different place's research.
   const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("Edit is not live while a draft is running", /editItem\(row\)\} disabled=\{studioLoading\}/.test(appF));
-  ok("nor is opening a queued draft", /loadQueueResult\(r\)\} disabled=\{studioLoading\}/.test(appF));
+  // ── AND THE GUARD HAS TO KNOW WHICH RUN IT IS GUARDING AGAINST ──
+  // Oliver, 15 Aug 2026: "Bug.. won't click open", on a finished draft sitting
+  // next to a queue 85 percent through the next item. studioLoading is true for
+  // BOTH kinds of run, and only one of them can hurt the editor: a manual draft
+  // writes its results there, a queued one passes `queued: true` specifically so
+  // it cannot. Guarding against the queue blocks a click that was already safe.
+  ok("Edit is not live while a draft you started is running", /editItem\(row\)\} disabled=\{manualDraftRunning\}/.test(appF));
+  ok("nor is opening a queued draft", /loadQueueResult\(r\)\} disabled=\{manualDraftRunning\}/.test(appF));
+  ok("but the queue's own run does not count as one", /const manualDraftRunning = studioLoading && !queueDrafting;/.test(appF));
+  // A DISABLED BUTTON HAS TO LOOK DISABLED. It kept full gold and cursor
+  // pointer, so it read as live and did nothing, which is the whole report.
+  ok("and a held button says so by looking held",
+    /cursor: manualDraftRunning \? "not-allowed" : "pointer", opacity: manualDraftRunning \? 0\.55 : 1/.test(appF));
+  // THE REASON GOES ON THE SCREEN. It lived in a title, which needs a hover and
+  // never appears on touch, under a visible line promising Open was harmless.
+  ok("the reason is visible rather than hovered",
+    /manualDraftRunning \? " Open is held while a draft you started by hand is running/.test(appF));
+  ok("and the note stops contradicting the button", /That run stays out of the editor, so opening this now is safe\./.test(appF));
   // C: the sweep's finally said "done: all of them" after a throw.
   ok("a crashed sweep reports how far it got", /crashed \? Math\.min\(accepted\.length, written \+ unchanged \+ failed\.length\)/.test(appF));
   // The operator-site failure is on the draft now, not only in the log.
@@ -13832,7 +13935,65 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("a departure row is labelled", /Where you start/.test(preview));
   ok("and a region row says which region", /In \{place\._viaRegion\}/.test(preview));
   ok("and a town says what is inside it", /place\._holds > 0/.test(preview));
-  ok("the trip's own length reaches the matcher", /\{ days: win\?\.days \?\? null \}/.test(preview));
+  ok("the trip's own length reaches the matcher", /days: win\?\.days \?\? null/.test(preview));
+  ok("and so does what they said they were into", /wanted \}\);/.test(preview) && /const wanted = wantedCategories\(saidByTraveller, intakeInterest\)/.test(preview));
+  // ── AND THE INTEREST IS THEIRS, NOT GEMLYX'S ────────────────────
+  // convoText carries the assistant's turns too, and Gemlyx suggests things.
+  // One reply reading "Copenhagen has excellent museums" would put `free` in
+  // the wanted set and undo the narrowing, using the app's own suggestion as
+  // evidence that the traveller asked for it. Place names still read the whole
+  // conversation; an interest may not.
+  ok("the interest is read from the traveller's turns only",
+    /const saidByTraveller = aiMessages\.slice\(1\)\.filter\(m => m\.role === "user"\)/.test(preview));
+  ok("and the place matcher still reads the whole conversation",
+    /matchedPlaces\(convoText, previewPools\(/.test(preview));
+
+  // ── THE SECTION NOBODY ASKED FOR ────────────────────────────────
+  // "Have an empty attractions and eat places. And then like a 'add'
+  // attractions, next to it." An empty section with a door, not a deletion.
+  ok("a section splits what was asked for from what was not", /offered: mine\.filter\(p => p\._notAsked\)/.test(preview));
+  ok("and survives with nothing in it", /cat\.items\.length > 0 \|\| cat\.offered\.length > 0/.test(preview));
+  ok("the offered count is stated rather than implied", /It holds \{cat\.offered\.length\}/.test(preview));
+  ok("there is a door", /ADD_LABEL\[cat\.src\]/.test(preview));
+  ok("named per category, so it does not read 'Add food & drink'", /Add places to eat/.test(preview) && /Add attractions/.test(preview));
+  ok("what is behind the door can be ticked", /toggleExtra\(place\.name\)/.test(preview));
+  // ── AND THE EMPTY STATE MUST NOT FIRE OVER A FULL DOOR ──────────
+  // A screen with nine attractions behind an Add button is not empty, and
+  // "nothing here yet" would both be false and hide the button saying so.
+  ok("offered rows count towards the screen having content",
+    /n \+ cat\.items\.length \+ cat\.offered\.length/.test(preview));
+
+  // ── ASK GEMLYX, INSIDE THE PREVIEW ──────────────────────────────
+  // "So if they want to add that on, then make Gemlyx AI prepared to answer
+  // them questions on that. INSIDE the preview."
+  ok("every offered card can be asked about", /setAskItem\(place\)/.test(preview));
+  ok("and the panel is mounted on this screen", /<AskGemlyx key=\{askItem\.name\} item=\{askItem\}/.test(preview));
+  // Keyed by name: changing `item` on a mounted panel would carry the previous
+  // place's log into a question about a different one.
+  ok("keyed so one place's answers never open under another", /key=\{askItem\.name\}/.test(preview));
+  // It opens on the tap that asked for it, rather than putting a second
+  // floating button on a screen that already has one.
+  ok("it opens on the tap that asked for it", /startOpen onClose=\{\(\) => setAskItem\(null\)\}/.test(preview));
+  // The overlay closes on a backdrop tap and the panel sits inside it.
+  // Scoped to the panel's own wrapper. The bare string appears elsewhere on
+  // this screen, so an unanchored test would stay green with the wrapper gone.
+  ok("and a tap inside the panel does not close the preview",
+    /onClick=\{e => e\.stopPropagation\(\)\}>\s*\n\s*<AskGemlyx/.test(preview));
+  const askSrc = readFileSync(join(root, "src/components/AskGemlyx.jsx"), "utf8");
+  ok("both new props default to the old behaviour", /startOpen = false, onClose = null/.test(askSrc));
+  ok("and the × still closes itself when nobody is listening", /onClose \? onClose\(\) : setOpen\(false\)/.test(askSrc));
+
+  // ── WHAT THEY ADDED REACHES THE PLANNER, NOT THE WRITER ─────────
+  // Same journey as the ticked events, and for the same reason: the structure
+  // decides which day a place lands on, and a model told about it afterwards
+  // is being asked to notice a constraint the structure already broke.
+  const exApp = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the preview is handed the added places", /pickedExtras=\{pickedExtras\}/.test(exApp));
+  ok("and Gemlyx's own session, so Ask can answer", /session=\{userSession\}\n\s*onSignIn=/.test(exApp));
+  ok("they are matched by name against the live arrays", /pickedExtras\.includes\(p\.name\)/.test(exApp));
+  ok("and reach BOTH prompts", (exApp.match(/\$\{chosenExtrasBlock\}/g) || []).length === 2);
+  ok("stated as something they chose against a screen that said otherwise",
+    /PLACES THE TRAVELER ADDED THEMSELVES, after being shown that these were left out of their brief/.test(exApp));
 
   // ── AND THE LINE ABOVE AN EMPTY LIST ────────────────────────────
   // Oliver's seven day ferry run: the list said "Nothing here yet, and that is
@@ -14159,6 +14320,181 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("a members rate is still not the price", ticketPriceOn("Entre 400 kr. IDA-medlemmer 100 kr.")?.lo, 400);
   is("a presale condition still travels with its figure",
      ticketPriceOn("Billetter 110 kr i forsalg. Ved indgangen 140 kr.")?.lo, 110);
+}
+
+// ── THE KALØVIG HAVNEFESTIVAL DRAFT ─────────────────────────────────
+// Oliver, 15 Aug 2026, holding a finished festival draft and its run log:
+// "Why is some written in Danish and dates are left out? An event must NEVER be
+// published without a date." The festival was running that same weekend.
+{
+  const { isPastDate, datesFromListings, matchEvent, mergeGlance,
+          danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier,
+          GLANCE_EXTRACT_PROMPT } = M;
+  const appK = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── 1. WHY THE DATES WENT ────────────────────────────────────────
+  // The past-date guard read `new Date(t.dateStart) < new Date()`. Two faults.
+  // It tested the START, so a three day festival that began on Friday was past
+  // on Saturday, and the same branch deleted dateEnd, the one field that proves
+  // it is still running. And it compared against NOW, while new Date("2026-08-15")
+  // is midnight UTC, so a festival starting today tested as past from about two
+  // in the morning Danish time.
+  const sat = new Date(2026, 7, 15, 14, 0);                 // Saturday afternoon
+  ok("a festival that started yesterday and ends tomorrow is not over",
+    !isPastDate("2026-08-16", sat));
+  ok("nor is one that ends today", !isPastDate("2026-08-15", sat));
+  ok("nor is one that starts today", !isPastDate("2026-08-15", new Date(2026, 7, 15, 23, 59)));
+  ok("one that ended yesterday is over", isPastDate("2026-08-14", sat));
+  // AND THE GUARD ASKS THE RIGHT FIELD. Source-level, because the bug was which
+  // value went in, not what the comparison did with it.
+  ok("the strip reads the END of the run", /isPastDate\(t\.dateEnd \|\| t\.dateStart, new Date\(\)\)/.test(appK));
+  ok("and no longer compares a start against the current instant",
+    !/const d = new Date\(t\.dateStart\);\s*\n\s*if \(!isNaN\(d\) && d < new Date\(\)\)/.test(appK));
+
+  // ── 2. AN EVENT MUST NEVER BE PUBLISHED WITHOUT A DATE ───────────
+  // His rule, verbatim. `_dateWasStripped` was written onto the draft and read
+  // by nothing in the whole repo: the pipeline recorded that it had deleted the
+  // dates and published anyway.
+  ok("publishing a dateless festival is refused",
+    /if \(studioType === "festival" && !String\(shaped\.date \|\| ""\)\.trim\(\)\) \{/.test(appK));
+  ok("and the refusal names the field to fill", /Fill "dateStart" in the draft above/.test(appK));
+  // It blocks an EDIT too, unlike the coordinate gate, and the reason is in the
+  // comment: a wrong pin on a live row is a thing you are stuck with, an empty
+  // date is one field away from fixed.
+  const gate = (appK.match(/if \(studioType === "festival" && !String\(shaped\.date[\s\S]{0,1400}?\n      \}/) || [""])[0];
+  ok("the date gate is findable", gate.length > 100);
+  ok("and it does not exempt an edit the way the coordinate gate does", !/isEditing/.test(gate));
+  // A stripped draft is told a different thing from one that never had a date,
+  // because those are different problems with different fixes.
+  ok("a stripped draft is told its date was removed", /This draft HAD a date and the past-date check removed it/.test(gate));
+  ok("and one that never had a date is told where to look", /The operator's own site and the ticket listings are the two places worth looking/.test(gate));
+
+  // ── 3. THE LOOP THAT PRINTED THE ANSWER AND THREW IT AWAY ────────
+  // The run log said: match weak, "there is no date on file to confirm this is
+  // the same edition", and then, in the same breath, "Ticketmaster's nearest
+  // listing is 'Kaløvig Havnefestival 2026 - Dagsbillet' on 2026-08-16". The
+  // pipeline had deleted the date itself and then used the absence it created
+  // as the reason to reject the source that would have restored it.
+  const today = new Date(2026, 7, 15);
+  const tmListings = [
+    { name: "Kaløvig Havnefestival 2026 - Dagsbillet", dates: { start: { localDate: "2026-08-14" } } },
+    { name: "Kaløvig Havnefestival 2026 - Dagsbillet", dates: { start: { localDate: "2026-08-16" } } },
+    { name: "Kaløvig Havnefestival 2026 - Partoutbillet", dates: { start: { localDate: "2026-08-15" } } },
+  ];
+  const m = matchEvent({ name: "Kaløvig Havnefestival", date: "", today }, tmListings);
+  is("a dateless draft still gets no confirmed edition", m.confidence, "weak");
+  ok("but the listings' own dates are offered", !!m.dateOffer);
+  // The 14th is YESTERDAY relative to `today`, and it is still the start: he was
+  // reading this on the Saturday of a run that began on the Friday. Dropping
+  // every past day would offer a Saturday start for a festival that starts
+  // Friday, which is a wrong date rather than a missing one.
+  is("a run already in progress keeps its real start", m.dateOffer?.start, "2026-08-14");
+  is("latest is the end, so a three day run reads as three days", m.dateOffer?.end, "2026-08-16");
+  // Optional chaining throughout: without it, a change that stops offering a
+  // date crashes this file and takes every assertion below it down with it.
+  is("and it says how many listings that came from", m.dateOffer?.listings, 3);
+  // ONE DAY IS ONE DAY, not a range of zero length: dateEnd means "and it runs
+  // until", so repeating the start there would state something false.
+  is("a single listing gives a start and no end",
+    datesFromListings([{ e: { localDate: "2026-08-16" } }], today)?.end, "");
+  // LAST YEAR'S EDITION IS WORSE THAN NO DATE. It would publish, and then read
+  // as a festival that has already happened.
+  is("a past listing is not offered",
+    datesFromListings([{ e: { localDate: "2025-08-16" } }], today), null);
+  ok("and a past one is dropped while an upcoming one stands",
+    datesFromListings([{ e: { localDate: "2025-08-16" } }, { e: { localDate: "2026-08-16" } }], today)?.start === "2026-08-16");
+  // A DRAFT THAT HAS A DATE IS NEVER OVERWRITTEN by an unconfirmed listing.
+  ok("a draft with a date gets no offer",
+    !matchEvent({ name: "Kaløvig Havnefestival", date: "2026-08-15", today }, tmListings).dateOffer);
+  // And the caller only ever fills an empty field, and stamps where it came from.
+  ok("the offer is only taken on an empty field",
+    /if \(!String\(t\.dateStart \|\| ""\)\.trim\(\) && match\?\.dateOffer\?\.start\)/.test(appK));
+  ok("and the row records that the date is a vendor's", /__dateSource = \{ source: "ticketmaster"/.test(appK));
+
+  // ── 4. WHY SOME OF IT WAS IN DANISH ──────────────────────────────
+  // ticketInfo read "Dagsbillet 395.00,- DKK; Partoutbillet 695.00,- DKK.
+  // Priser er eks. gebyrer." and the log called it a success: "believed the
+  // research (extracted), overruled the writer". The writer's own English
+  // version was thrown away for being written rather than found.
+  //
+  // The extractor's prompt had no language instruction at all, and mergeGlance
+  // checked digits and nothing else, so an untranslated value passed the only
+  // test there was.
+  ok("the extractor is told the entry is read in English", /WRITE EVERY VALUE IN ENGLISH/.test(GLANCE_EXTRACT_PROMPT("X", "festival", ["ticketInfo"], "research")));
+  ok("and told that proper nouns stay as they are", /Danish proper nouns stay exactly as they are spelled/.test(GLANCE_EXTRACT_PROMPT("X", "festival", ["ticketInfo"], "research")));
+  const danish = "Dagsbillet 395.00,- DKK; Partoutbillet 695.00,- DKK. Priser er eks. gebyrer.";
+  ok("the exact value he pasted reads as untranslated", looksUntranslated(danish));
+  ok("and names the words that gave it away", danishWordsIn(danish).includes("priser"));
+  const english = "Day tickets 395 DKK, festival pass 695 DKK, both excluding booking fees.";
+  ok("the writer's English version passes", !looksUntranslated(english));
+  // THE HALF THAT DECIDES WHETHER THIS SURVIVES. A Danish proper noun in an
+  // English sentence is correct and always will be, which is why the rule is
+  // keyed on function words rather than on æ, ø and å.
+  ok("a Danish hotel name in an English field is fine", !looksUntranslated("Kaløvig Badehotel"));
+  ok("and a Danish street address is fine", !looksUntranslated("Åstrup Strandvej 68D, 8541 Skødstrup"));
+  ok("and a town called Skødstrup is fine", !looksUntranslated("Three days by the water at Skødstrup"));
+  // The Danish money form is worth a word on its own: no English price is
+  // written 395.00,- and this is what the value he pasted actually looked like.
+  ok("the Danish money notation counts on its own", looksUntranslated("395.00,- DKK"));
+
+  // AND THE MERGE REFUSES IT rather than letting it beat the writer.
+  const merged = mergeGlance(
+    { ticketInfo: english },
+    { ticketInfo: danish },
+    ["ticketInfo"],
+    "Dagsbillet 395.00,- DKK Partoutbillet 695.00,- DKK",
+  );
+  is("an untranslated extraction does not reach the field", merged.patched.ticketInfo, english);
+  ok("and it is reported as rejected, not silently dropped",
+    merged.rejected.some(r => r.field === "ticketInfo" && Array.isArray(r.untranslated) && r.untranslated.length));
+  // A correct English extraction still wins, which is the whole point of the
+  // stage: for a value that is on the page, finding it beats phrasing it.
+  is("a translated extraction still overrules the writer",
+    mergeGlance({ ticketInfo: "Around 400 DKK" }, { ticketInfo: "Day ticket 395 DKK" }, ["ticketInfo"], "395 kr").patched.ticketInfo,
+    "Day ticket 395 DKK");
+
+  // ── 5. "MAKE PEOPLE AWARE OF A LANGUAGE BARRIER" ─────────────────
+  // His, unprompted, in the same breath. The opposite of the bug above:
+  // Gemlyx writing Danish at a reader is a defect, the EVENT being Danish is a
+  // fact about the event and translating it away would be the dishonest fix.
+  const danishPage = ("Kaløvig Havnefestival afholdes fredag lørdag og søndag. Billetter og priser: dagsbillet 395 kr, " +
+    "partoutbillet 695 kr, priserne er eks. gebyrer. Børn under 12 år har gratis adgang. Åbent fra kl. 15. " +
+    "Musikpladsen åbner hver dag og lukker sent. Se programmet for alle dage og timer her på siden. ").repeat(3);
+  is("a Danish organiser page with no English version is reported",
+    languageBarrier({ siteText: danishPage }).level, "danish-only");
+  ok("and the reader is told what to expect rather than warned off",
+    /expect the programme, the signage and the announcements in Danish/.test(languageBarrier({ siteText: danishPage }).note));
+  // AN ENGLISH SWITCH SETTLES IT THE OTHER WAY, and settles it strongly: a
+  // Danish festival that publishes an English page has decided visitors are
+  // welcome. The word test only runs on a page already judged Danish, which is
+  // what makes it safe.
+  is("a Danish page with an English switch says nothing",
+    languageBarrier({ siteText: `${danishPage} English` }).level, "has-english");
+  is("and so does one with an /en/ page read",
+    languageBarrier({ siteText: danishPage, siteUrls: ["https://x.dk/", "https://x.dk/en/tickets"] }).level, "has-english");
+  // NO OPERATOR PAGE MEANS NO CLAIM. Same discipline as coordFitsTown: it
+  // refuses to judge when it has nothing to judge against, and the row simply
+  // carries no language line.
+  is("nothing read means nothing said", languageBarrier({}).level, "unknown");
+  is("and an English page is not a finding either",
+    languageBarrier({ siteText: "The harbour festival runs across three days with music, seafood and wine by the water in Denmark. Tickets are sold on the organiser's own website and children under twelve enter free of charge every day of the weekend." }).level, "unknown");
+  // Proportion, not presence: a long English page quoting a Danish ticket tier
+  // is an English page.
+  ok("one Danish word in an English page is not a Danish page",
+    !looksDanishPage("The festival sells a dagsbillet and a weekend pass. " + "Everything else about this page is written in ordinary English prose for a visitor who is planning a trip to the coast and wants to know what the weekend involves. ".repeat(4)));
+  is("and too little text to judge says nothing", looksDanishPage("Billetter og priser"), false);
+  ok("an hreflang is an English version", hasEnglishVersion({ html: '<link rel="alternate" hreflang="en" href="/en/">' }));
+
+  // AND IT REACHES THE READER. Measured, stamped, stored, shown.
+  ok("the language is measured off the operator's own pages",
+    /languageBarrier\(\{ siteText: scrapedSiteText, siteUrls: Object\.keys\(pagesByUrl \|\| \{\}\) \}\)/.test(appK));
+  ok("and stamped on the row like the ticket source is", /t\.__language = \{ level: entryLanguage\.level/.test(appK));
+  const shapeK = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("it survives to what gets stored", /__language: \{ level: t\.__language\.level/.test(shapeK));
+  ok("but only when it was measured", /t\.__language\.level !== "unknown"/.test(shapeK));
+  const detailK = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("and an event page shows it", /icon: "🗣", label: "Language", value: item\.__language\.note/.test(detailK));
+  ok("absent unless there is a barrier to report", /item\.__language\?\.level === "danish-only" && item\.__language\?\.note/.test(detailK));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

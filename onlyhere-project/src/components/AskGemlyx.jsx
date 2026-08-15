@@ -37,8 +37,15 @@ const bubble = (role) => ({
   wordBreak: "break-word",
 });
 
-export const AskGemlyx = ({ session, item, kind, onSignIn }) => {
-  const [open, setOpen] = useState(false);
+// startOpen / onClose exist for ONE caller: the preview screen, where the
+// traveller has already tapped "Ask" on a specific card, so a floating "Ask
+// about this place" button asking them to tap again is a step that answers
+// nothing. onClose hands the × back to the host, because there the panel's
+// lifetime is the host's `askItem` and a panel that hid itself while the host
+// still held the item could never be reopened. Both default to the behaviour
+// every other caller has always had.
+export const AskGemlyx = ({ session, item, kind, onSignIn, startOpen = false, onClose = null }) => {
+  const [open, setOpen] = useState(!!startOpen);
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -126,7 +133,7 @@ export const AskGemlyx = ({ session, item, kind, onSignIn }) => {
             About {item.name}{left != null ? ` · ${left} question${left === 1 ? "" : "s"} left today` : ""}
           </div>
         </div>
-        <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
+        <button onClick={() => (onClose ? onClose() : setOpen(false))} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>×</button>
       </div>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>

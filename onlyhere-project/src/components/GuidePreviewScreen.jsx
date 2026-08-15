@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { C } from "../utils/theme";
 import { testTravelerLine, getEventDate } from "../utils/helpers";
-import { matchedPlaces, previewPools, mentionsPlace } from "../utils/previewMatch";
+import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf } from "../utils/previewMatch";
 import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
+import { AskGemlyx } from "./AskGemlyx";
 
 // ── "Here's what's coming up" preview screen ────────────────────────
 // PASS 27 EXTRACTION (App.jsx file-split, per Oliver: "you gotta start
@@ -80,7 +81,13 @@ const CATEGORY_SECTIONS = [
   { src: "food", label: "Food & Drink" },
   { src: "nightlife", label: "Nightlife" },
 ];
-const groupKey = (p) => (p._src === "craft" ? "free" : p._src);
+// groupKeyOf lives in utils/previewMatch.js now, because the MATCHER has to
+// reason about categories too (see wantedCategories) and two copies of "craft
+// shows under Attractions" would drift the first time one of them moved.
+const groupKey = groupKeyOf;
+// What an empty section is called when the brief did not ask for it. The label
+// is a category name; this is the invitation.
+const ADD_LABEL = { free: "Add attractions", food: "Add places to eat", nightlife: "Add nightlife" };
 // Per-section cap, not one shared cap across everything — a real conversation
 // covering several towns and several attractions should be able to show all
 // of them without one category silently crowding another out of the shared
@@ -113,7 +120,23 @@ export const GuidePreviewScreen = ({
   intakeInterest = [],
   pickedEvents = null,
   setPickedEvents = () => {},
+  // The places the traveller added back from a section their brief did not ask
+  // for. Same shape and same journey as pickedEvents: names, held by App.jsx,
+  // handed to the PLANNER as fixed points rather than to the writer.
+  pickedExtras = [],
+  setPickedExtras = () => {},
+  // Ask Gemlyx, inside this overlay. Oliver, 15 Aug 2026: "So if they want to
+  // add that on, then make Gemlyx AI prepared to answer them questions on that
+  // INSIDE the preview." Nobody should have to close a screen they are still
+  // deciding on to find out what a place is.
+  session = null,
+  onSignIn = () => {},
 }) => {
+  // Which offered sections the traveller has opened, and which card they are
+  // asking about. Both local: neither survives closing the preview, and neither
+  // should.
+  const [openedExtras, setOpenedExtras] = useState([]);
+  const [askItem, setAskItem] = useState(null);
   const convoText = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
   // The name matcher and both matching passes live in utils/previewMatch.js
   // now, together with the four bugs they have carried (a raw substring test,
@@ -138,14 +161,43 @@ export const GuidePreviewScreen = ({
   // Computed here rather than inside, so the events and the towns read the same
   // window and cannot disagree about how long somebody is here.
   const win = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText });
-  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null });
+  // ── "THEY ARE ONLY ASKING FOR EVENTS" ─────────────────────────────
+  // What the brief is into, read off the intake form and THE TRAVELLER'S OWN
+  // TURNS. null means they named nothing, and then nothing is held back. See
+  // wantedCategories in utils/previewMatch.js for the whole story, including
+  // why nightlife rides along with events.
+  //
+  // NOT convoText, which is what every other read on this screen uses. That
+  // string carries Gemlyx's replies too, and Gemlyx suggests things: one
+  // sentence back from it reading "Copenhagen has excellent museums" would put
+  // `free` in the wanted set and quietly undo the whole narrowing, using the
+  // app's own suggestion as evidence that the traveller asked for it. Place
+  // NAMES are a different question and still read from the whole conversation,
+  // because a place Gemlyx named and the traveller kept talking about is a
+  // place in this trip. An interest has to be theirs.
+  const saidByTraveller = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
+  const wanted = wantedCategories(saidByTraveller, intakeInterest);
+  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted });
   // Group into the fixed category order above, each capped independently.
   // Two sections ("Major Cities"/"Towns") now share src:"town" and are
   // told apart by their own `match` predicate — apply it on top of the
   // groupKey match, not instead of it.
+  //
+  // `offered` is the second half of that: rows Gemlyx holds in these towns that
+  // the brief did not ask about. They are not items and they are not gone. The
+  // section renders with nothing in it and says what it could put there.
   const sections = CATEGORY_SECTIONS
-    .map(cat => ({ ...cat, items: matched.filter(p => groupKey(p) === cat.src && (!cat.match || cat.match(p))).slice(0, MAX_PER_SECTION) }))
-    .filter(cat => cat.items.length > 0);
+    .map(cat => {
+      const mine = matched.filter(p => groupKey(p) === cat.src && (!cat.match || cat.match(p)));
+      return {
+        ...cat,
+        items: mine.filter(p => !p._notAsked).slice(0, MAX_PER_SECTION),
+        offered: mine.filter(p => p._notAsked).slice(0, MAX_PER_SECTION),
+      };
+    })
+    .filter(cat => cat.items.length > 0 || cat.offered.length > 0);
+  const toggleExtra = (name) =>
+    setPickedExtras(prev => (prev || []).includes(name) ? (prev || []).filter(n => n !== name) : [...(prev || []), name]);
   // ── THE EVENTS, DATE TESTED AND TICKABLE ──────────────────────────
   // `named` is the first pass's own answer rather than a second guess at it:
   // an event is named exactly when the traveller wrote it, which is the same
@@ -173,7 +225,10 @@ export const GuidePreviewScreen = ({
       return [...list, name];
     });
   };
-  const totalShown = sections.reduce((n, cat) => n + cat.items.length, 0) + eventPlan.rows.length;
+  // Offered rows count. A screen with an empty Attractions section and nine
+  // attractions behind an Add button has plenty to show; telling that traveller
+  // "nothing matched yet" would be false and would hide the button saying so.
+  const totalShown = sections.reduce((n, cat) => n + cat.items.length + cat.offered.length, 0) + eventPlan.rows.length;
   // PASS 27: closing without continuing (backdrop tap or ✕) needs to unwind
   // the random-guide test state too, not just the modal — else
   // pendingRandomGuideMode and the fabricated brief pushed into aiMessages
@@ -284,6 +339,60 @@ export const GuidePreviewScreen = ({
                 </div>
               ))}
             </div>
+            {/* ── THE SECTION NOBODY ASKED FOR ──────────────────────
+                Oliver, 15 Aug 2026, on a brief whose only stated interest was
+                festivals and live events, which came back holding Københavns
+                Museum, the Glyptotek, Amalienborg Slot, Farfar's bodega and
+                Hooked: "these people do NOT sound like the people who would
+                visit Amalienborg Slot."
+
+                Empty is the answer, and empty with a door is the right empty.
+                Deleting the rows would make Gemlyx look like it knows nothing
+                in Copenhagen; filling them makes it look like it was not
+                listening. So the count is stated, the invitation is there, and
+                the traveller decides. */}
+            {cat.offered.length > 0 && !openedExtras.includes(cat.label) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 14, padding: "14px 14px" }}>
+                <div style={{ flex: 1, minWidth: 180, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                  You did not ask for these, so Gemlyx left them out. It holds {cat.offered.length} {cat.offered.length === 1 ? "place" : "places"} here if you want {cat.offered.length === 1 ? "it" : "some"}.
+                </div>
+                <button onClick={() => setOpenedExtras(prev => [...prev, cat.label])}
+                  style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                  {ADD_LABEL[cat.src] || `Add ${cat.label.toLowerCase()}`}
+                </button>
+              </div>
+            )}
+            {cat.offered.length > 0 && openedExtras.includes(cat.label) && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                  Tick what you want in the trip. Ask about any of them without leaving this screen.
+                </div>
+                {cat.offered.map(place => {
+                  const on = (pickedExtras || []).includes(place.name);
+                  return (
+                    <div key={`x-${place._src}-${place.id}`} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>
+                      <button onClick={() => toggleExtra(place.name)}
+                        aria-label={on ? `Remove ${place.name} from the trip` : `Add ${place.name} to the trip`}
+                        style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 8, cursor: "pointer", background: on ? C.gold : "transparent", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.muted, fontSize: 13, fontWeight: 800, lineHeight: 1, fontFamily: "'Inter', sans-serif" }}>
+                        {on ? "✓" : ""}
+                      </button>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
+                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{(place.desc || "").slice(0, 100)}{(place.desc || "").length > 100 ? "…" : ""}</div>
+                      </div>
+                      <button onClick={() => setAskItem(place)}
+                        style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        Ask
+                      </button>
+                      <button onClick={() => openStopDetail(place)}
+                        style={{ flexShrink: 0, background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        Read more
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ))}
         {/* ── EVENTS: THE ONE SECTION THE TRAVELLER DECIDES ────────────
@@ -391,6 +500,21 @@ export const GuidePreviewScreen = ({
           Looks good — continue →
         </button>
       </div>
+      {/* ── ASK GEMLYX, WITHOUT LEAVING THE DECISION ──────────────────
+          Oliver, 15 Aug 2026: "So if they want to add that on, then make
+          Gemlyx AI prepared to answer them questions on that. INSIDE the
+          preview."
+
+          One panel, not one per card: `askItem` is whichever card was tapped,
+          and the key remounts it so a question about the Glyptotek never opens
+          onto a log about Amalienborg. stopPropagation because this overlay
+          closes on a backdrop tap and the panel sits inside it. */}
+      {askItem && (
+        <div onClick={e => e.stopPropagation()}>
+          <AskGemlyx key={askItem.name} item={askItem} session={session} onSignIn={onSignIn}
+            startOpen onClose={() => setAskItem(null)} />
+        </div>
+      )}
     </div>
   );
 };

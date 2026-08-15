@@ -310,6 +310,55 @@ export const SAME_EDITION_DAYS = 14;
 // about the same thing.
 export const MIN_NAME_OVERLAP = 0.6;
 
+// ── WHAT A LISTING'S OWN DATES ARE WORTH ────────────────────────────
+// Only reached when the draft has NO date, which is the one case where an
+// unconfirmed date beats an empty field. Three things have to hold:
+//
+//   1. THE LISTING MUST BE UPCOMING. Ticketmaster keeps last year's editions,
+//      and a 2025 date written onto a 2026 draft is worse than no date: it
+//      would publish, and then read as a festival that has already happened.
+//   2. THE RANGE COMES FROM THE LISTINGS THEMSELVES. A festival sells a day
+//      ticket per day, so several listings under one name ARE the run. Earliest
+//      to latest is the festival's dates, which is how "Kaløvig Havnefestival
+//      2026 - Dagsbillet" on the 14th, 15th and 16th describes a three day
+//      festival that the draft's own prose already called three days.
+//   3. ONE DAY IS ONE DAY. A single listing gives a start and no end, rather
+//      than a range of zero length, because the row's dateEnd means "and it
+//      runs until", not "and here is the start again".
+//
+// It returns null rather than a guess when none of that holds, and the caller
+// treats null the way it treats every other absence.
+const DAY = 86400000;
+const asDay = (d) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ""));
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() : null;
+};
+
+export const datesFromListings = (named, today = new Date()) => {
+  const floor = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const all = [...new Set((Array.isArray(named) ? named : [])
+    .map(x => String(x?.e?.localDate || "").slice(0, 10))
+    .filter(d => asDay(d) != null))].sort();
+  if (!all.length) return null;
+  // The edition has to be a coming one. Ticketmaster keeps last year's, and a
+  // 2025 date written onto a 2026 draft would publish and then read as a
+  // festival that has already happened.
+  const upcoming = all.filter(d => asDay(d) >= floor);
+  if (!upcoming.length) return null;
+  // ── BUT A FESTIVAL IN PROGRESS STARTED YESTERDAY ─────────────────
+  // Anchored rather than filtered, and this is the Kaløvig case exactly: he was
+  // reading it on the Saturday of a run that began on the Friday. Dropping every
+  // past day would have offered a start of Saturday for a festival that starts
+  // Friday, which is a wrong date rather than a missing one. So the earliest
+  // COMING day anchors the edition, and every listing within a fortnight of it
+  // belongs to that edition, in either direction. Last year's listing is three
+  // hundred and sixty five days out and cannot reach.
+  const anchor = asDay(upcoming[0]);
+  const run = all.filter(d => Math.abs(asDay(d) - anchor) <= SAME_EDITION_DAYS * DAY);
+  const start = run[0], end = run[run.length - 1];
+  return { start, end: end === start ? "" : end, listings: run.length };
+};
+
 export const matchEvent = (onFile, candidates) => {
   const list = (Array.isArray(candidates) ? candidates : []).map(readTicketmasterEvent).filter(Boolean);
   if (!list.length) return { event: null, confidence: "none", why: "Ticketmaster returned no events for this search." };
@@ -335,6 +384,7 @@ export const matchEvent = (onFile, candidates) => {
     };
   }
 
+  const today = onFile?.today instanceof Date ? onFile.today : new Date();
   const onFileDate = String(onFile?.date || "").slice(0, 10);
   if (!onFileDate) {
     // A name match with nothing to confirm the edition against. Real, useful to
@@ -343,6 +393,26 @@ export const matchEvent = (onFile, candidates) => {
     return {
       event: best.e, confidence: "weak",
       why: "The name matches, but there is no date on file to confirm this is the same edition, so nothing was written from it.",
+      // ── BUT THE LISTING KNOWS WHEN IT IS ────────────────────────
+      // Oliver, 15 Aug 2026, holding the run log for Kaløvig Havnefestival:
+      // "dates are left out... An event must NEVER be published without a
+      // date." The log printed the answer and threw it away. Step 19 read
+      // "match: weak · The name matches, but there is no date on file to
+      // confirm this is the same edition", and the decision line underneath it
+      // said: Ticketmaster's nearest listing is "Kaløvig Havnefestival 2026 -
+      // Dagsbillet" on 2026-08-16 and it reads on sale.
+      //
+      // The pipeline had deleted the date itself minutes earlier, then used the
+      // absence it had created as the reason to reject the source that would
+      // have restored it. A loop that can only ever confirm a date it already
+      // has is no use to the one draft that needs a date.
+      //
+      // So the no-date branch now OFFERS what the listing says, and offering is
+      // the whole of it: confidence stays weak, ticketStatus is still not
+      // written from a weak match, and the caller decides whether an offered
+      // date is better than an empty field. See datesFromListings for the three
+      // things that have to hold before a listing is worth offering.
+      dateOffer: datesFromListings(named, today),
     };
   }
 

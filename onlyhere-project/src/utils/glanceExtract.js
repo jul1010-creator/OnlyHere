@@ -43,6 +43,7 @@
 // one is never asked about it.
 import { GLANCE_FIELDS } from "./entryAudit";
 import { MEASURED_FIELDS } from "./correction";
+import { looksUntranslated, danishWordsIn } from "./languageBarrier";
 
 // Measured elsewhere, by code, from an API. Listed beyond MEASURED_FIELDS
 // because ticketStatus and the coordinates are owned the same way even though
@@ -111,6 +112,8 @@ You are EXTRACTING, not writing. Every value must already be stated in the resea
 IF THE RESEARCH DOES NOT STATE A FIELD, RETURN AN EMPTY STRING FOR IT. That is a correct and expected answer, not a failure, and it is always better than a plausible guess. A reader plans around these values.
 
 Each value is a VALUE, not a sentence about a search. Never write "not found", "not listed", "could not be confirmed", "at the time of writing", "see website" or "check rejseplanen". If you would write any of those, return an empty string instead.
+
+WRITE EVERY VALUE IN ENGLISH. The research is usually in Danish and the entry is read in English, so translating is part of extracting, not a liberty you are taking: "Dagsbillet 395 kr" is "Day ticket 395 DKK", "gratis adgang" is "free entry", "2-3 timer" is "2 to 3 hours", "priser er eks. gebyrer" is "prices exclude booking fees". Danish proper nouns stay exactly as they are spelled, because a hotel, a street or a stage is called what it is called. A value left in Danish is a value that was not finished and it will be refused.
 
 Keep the wording the source used for numbers and units. A price stays the price the page charges: never round it, never convert it, never turn a list of ticket tiers into an average. If the page states a range across tiers, give the range.
 
@@ -213,6 +216,28 @@ export const mergeGlance = (draft, values, fields, research = "") => {
     // Only when there is research to check AGAINST. With none, refusing every
     // value would be accusing an extraction of something unknowable, which is
     // the same discipline tracePrices and coordProblems already follow.
+    // ── AND ENGLISH IS CHECKED, NOT REQUESTED EITHER ─────────────
+    // Oliver, 15 Aug 2026: "Why is some written in Danish?" ticketInfo read
+    // "Dagsbillet 395.00,- DKK; Partoutbillet 695.00,- DKK. Priser er eks.
+    // gebyrer." on a festival card, and the run log presented it as a success:
+    // "believed the research (extracted), overruled the writer", whose own
+    // English version, "Day tickets 395 DKK (Fri/Sat/Sun), festival pass 695
+    // DKK, all excluding booking fees. Under-12s enter free", was thrown away.
+    //
+    // The comment forty lines above already said translation IS extraction and
+    // that only the numbers are checked. Both halves were true and together
+    // they are the bug: a value that skipped the translation passed the only
+    // test there was, and beat a correct English sentence on the strength of
+    // being "extracted".
+    //
+    // Refused rather than translated here. This is a merge, not a writer, and
+    // the writer's value is still sitting in `prev` having been written in
+    // English by a model that read the same research. Falling back to it is
+    // both the safer answer and the better one.
+    if (looksUntranslated(next)) {
+      rejected.push({ field: f, value: next, untranslated: danishWordsIn(next) });
+      continue;
+    }
     if (research) {
       const trace = numbersTraceable(next, research);
       if (!trace.ok) {

@@ -315,6 +315,16 @@ export const shapeForLive = (type, t) => {
   if (hours) out = { ...out, __hours: hours };
   if (ticket) out = { ...out, __ticket: ticket };
   if (dateSource) out = { ...out, __dateSource: dateSource };
+  // ── WHAT LANGUAGE THE THING ITSELF RUNS IN ────────────────────────
+  // Oliver, 15 Aug 2026: "I wonder if we should make people aware that an event
+  // might have a great language barrier." Carried on the same terms as __hours
+  // and __ticket: measured, stamped, and stored so the page can say it long
+  // after the run log is gone. Only present when it was measured off the
+  // operator's own pages, so an absent field means nobody looked rather than
+  // "no barrier". See utils/languageBarrier.js.
+  if (t?.__language?.level && t.__language.level !== "unknown") {
+    out = { ...out, __language: { level: t.__language.level, note: t.__language.note || "", at: t.__language.at || "" } };
+  }
   if (journey) out = { ...out, __journey: journey };
   if (corrections.length) out = { ...out, __corrections: corrections };
   return readerFacing.length ? { ...out, uncertainties: readerFacing } : out;

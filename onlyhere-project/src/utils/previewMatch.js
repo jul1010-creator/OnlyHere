@@ -57,6 +57,86 @@ export const previewPools = ({ towns = [], freeEntrance = [], foodSpots = [], ni
   ...majorEvents.map(p => ({ ...p, _src: "event" })),
 ];
 
+// Craft is DISPLAYED under Attractions but keeps its own _src for click
+// routing, so the display grouping is a second, separate question. It lived in
+// the component and the matcher could not see it, which meant the matcher could
+// not reason about categories at all. One function, both files.
+export const groupKeyOf = (p) => (p?._src === "craft" ? "free" : p?._src);
+
+// ── "THEY ARE ONLY ASKING FOR EVENTS" ───────────────────────────────
+// Oliver, 15 Aug 2026, on a preview built from this brief:
+//
+//   7 days, arriving 12 September, just me, we land at Copenhagen airport late
+//   in the evening, we are renting a car, we would rather stay in one place and
+//   take day trips, INTO FESTIVALS AND LIVE EVENTS, we are on a tight budget
+//
+// and it came back with Københavns Museum, Ny Carlsberg Glyptotek, Amalienborg
+// Slot, Farfar's bodega and Hooked. His words: "these people do NOT sound like
+// the people who would visit Amalienborg Slot."
+//
+// The second pass adds EVERY row whose town points at a town they named. That
+// is the right rule for proving Gemlyx knows the ground and the wrong rule for
+// a screen headed "Here's what's coming up", because it turns one stated
+// interest into a full default itinerary of things nobody asked about.
+//
+// So: when a brief names interests, a category outside them is not FILLED. It
+// is not deleted either, which is the part that matters. The rows are still
+// matched and still travel to the screen carrying `_notAsked`, so the section
+// can stand there empty with an honest count and an invitation to add them.
+// A traveller who says "surprise us" gets to choose the surprise.
+//
+// NIGHTLIFE RIDES WITH EVENTS, on his explicit call: "I get the nightlife..
+// nightlife always have events somehow." A bar with a lineup is the same
+// interest wearing a different content type.
+//
+// AND A BRIEF THAT NAMES NOTHING NARROWS NOTHING. wantedCategories returns null
+// there, and null means fill everything, which is the behaviour this screen has
+// always had for somebody who has not said what they are into yet.
+const CATEGORY_WORDS = {
+  event: ["festival", "festivals", "event", "events", "live event", "live events", "concert", "concerts",
+    "gig", "gigs", "live music", "music", "show", "shows", "lineup", "line-up", "dj", "rave", "carnival"],
+  nightlife: ["nightlife", "night out", "nights out", "bar", "bars", "pub", "pubs", "club", "clubs",
+    "clubbing", "party", "parties", "partying", "drink", "drinks", "drinking", "beer", "beers",
+    "cocktail", "cocktails", "wine", "brewery", "breweries", "karaoke"],
+  food: ["food", "eat", "eating", "restaurant", "restaurants", "dining", "dine", "cuisine", "foodie",
+    "cafe", "cafes", "café", "cafés", "coffee", "bakery", "bakeries", "meal", "meals", "lunch",
+    "dinner", "breakfast", "brunch", "street food", "smorrebrod", "seafood"],
+  free: ["museum", "museums", "gallery", "galleries", "art", "history", "historic", "historical",
+    "castle", "castles", "palace", "palaces", "attraction", "attractions", "sightseeing", "sights",
+    "viking", "vikings", "architecture", "church", "churches", "cathedral", "old town", "landmark",
+    "landmarks", "monument", "monuments", "exhibition", "exhibitions", "craft", "crafts", "ceramics",
+    "pottery", "design", "workshop", "workshops", "garden", "gardens", "park", "parks", "culture"],
+};
+
+// Whole words, folded, so "art" does not fire on "Aarhus" and "bar" does not
+// fire on "Barcelona". Same discipline as every other matcher in this file: a
+// bare .includes() on a topic word is how "Vejlebrovej" became Vejle.
+const saysWord = (hay, word) => {
+  const w = fold(word);
+  if (!w) return false;
+  let from = 0;
+  for (;;) {
+    const i = hay.indexOf(w, from);
+    if (i < 0) return false;
+    const before = hay[i - 1], after = hay[i + w.length];
+    if (!/[a-z0-9]/.test(before || " ") && !/[a-z0-9]/.test(after || " ")) return true;
+    from = i + 1;
+  }
+};
+
+export const wantedCategories = (convoText, interests = []) => {
+  const hay = fold([String(convoText || ""), ...(Array.isArray(interests) ? interests : [])].join(" "));
+  if (!hay.trim()) return null;
+  const want = new Set();
+  for (const [cat, words] of Object.entries(CATEGORY_WORDS)) {
+    if (words.some(w => saysWord(hay, w))) want.add(cat);
+  }
+  // Nothing stated is not the same as nothing wanted.
+  if (!want.size) return null;
+  if (want.has("event")) want.add("nightlife");
+  return want;
+};
+
 // ── "WHY DOES IT ONLY SHOW COPENHAGEN" ────────────────────────────
 // Oliver, 9 Aug 2026, looking at a preview with one city on it.
 //
@@ -259,7 +339,7 @@ export const regionPickLimit = (days) => {
 // twice. A traveller who is already nearby finds it by browsing.
 const TOO_WEAK_FOR_A_REGION_PICK = "nearby";
 
-export const matchedPlaces = (convoText, pools, { days = null } = {}) => {
+export const matchedPlaces = (convoText, pools, { days = null, wanted = null } = {}) => {
   const text = String(convoText || "");
   const seen = new Set();
   const matched = [];
@@ -378,7 +458,16 @@ export const matchedPlaces = (convoText, pools, { days = null } = {}) => {
       if (!parent) continue;
       // samePlaceName, not equality: a row can store "Kobenhavn" while the
       // town row is called "Copenhagen", and they are one place.
-      if ([...matchedTowns].some(t => samePlaceName(parent, t))) { seen.add(key); matched.push(p); }
+      if (![...matchedTowns].some(t => samePlaceName(parent, t))) continue;
+      seen.add(key);
+      // `_notAsked` rather than dropped, and the difference is the whole point.
+      // These rows still travel to the screen, so the section can say "Gemlyx
+      // holds 9 attractions in Copenhagen" and offer them, instead of being
+      // absent and looking like Gemlyx knows nothing there. See
+      // wantedCategories: null means the brief named no interests, and then
+      // nothing is held back.
+      const asked = !wanted || wanted.has(groupKeyOf(p));
+      matched.push(asked ? p : { ...p, _notAsked: true });
     }
   }
   return matched;

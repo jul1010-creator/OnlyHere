@@ -302,6 +302,23 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
           <AtAGlanceCard rows={[
             arrivalRow(item.nearestStation),
             { icon: "🎟️", label: "Tickets", value: item.ticketInfo },
+            // ── "MAKE PEOPLE AWARE" ──────────────────────────────────
+            // Oliver, 15 Aug 2026, off a draft with Danish in a reader field:
+            // "I wonder if we should make people aware that an event might have
+            // a great language barrier."
+            //
+            // Gemlyx writing Danish at a reader is a defect and is fixed in the
+            // pipeline. The EVENT running in Danish is a fact about the event,
+            // and smoothing it over would be the dishonest fix. It sits in At a
+            // Glance rather than in prose because it is measured, off the
+            // organiser's own pages, and because it is what somebody scans for
+            // before booking a flight.
+            //
+            // Absent unless it was measured: no operator page read means no
+            // row, not a reassuring one.
+            ...(item.__language?.level === "danish-only" && item.__language?.note
+              ? [{ icon: "🗣", label: "Language", value: item.__language.note }]
+              : []),
             { icon: "⛺", label: "Camping", value: item.camping },
             { icon: "🏡", label: "Accommodation", value: item.accommodationTip },
           ]} />
