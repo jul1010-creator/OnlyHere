@@ -41,24 +41,62 @@
 // US dollars per million tokens, or per request where a service bills that way.
 // Change them here and every figure in the app follows, because there is one
 // table and it is read rather than copied.
+//
+// ── FILLED IN 15 AUG 2026 ───────────────────────────────────────────
+// Oliver: "Can you give me an estimate on how much it costs to generate a post?
+// Because I feel like I am really paying alot of money."
+//
+// Every rate here was null, so the panel printed "no rates set" and the meter
+// he already had could not answer the one question it was built for. These come
+// off the providers' own published pages on 15 Aug 2026, listed per line, and
+// they are still INPUTS: a published list price is not his invoice. Discounts,
+// batch, caching and the free monthly allowances below all move it. When he
+// checks a dashboard, the real number replaces the number here and every figure
+// in the app follows.
+//
+// ── AND THE FREE TIERS ARE WHY GOOGLE IS NOT THE PROBLEM ────────────
+// Maps Platform gives a monthly allowance per SKU: 10,000 Routes Essentials,
+// 5,000 Text Search Pro, 1,000 Place Details Enterprise, 10,000 Geocoding. At
+// tens of drafts a month every Google call is inside it, so the list prices
+// below OVERSTATE what those lines actually cost him. Deliberately not modelled:
+// a meter that tracks a monthly allowance has to know the month, the account and
+// what else spent it, and a number that pretends to know is worse than a ceiling
+// that says so. Treat the Google lines as an upper bound.
 export const PRICES = {
   // Per million tokens, {in, out}. Null means "we do not have a rate for this",
   // which sends the call to unpriced rather than silently costing it at zero.
+  // `perCall` is a flat fee charged on TOP of the tokens, which is not an edge
+  // case: it is most of what Perplexity costs, and leaving it out would have
+  // made the cheapest-looking line on the bill the second most expensive one.
   models: {
-    "claude-sonnet-5": { in: null, out: null },
-    "claude-opus-5": { in: null, out: null },
-    "gpt-5.6-sol": { in: null, out: null },
-    perplexity: { in: null, out: null },
+    // platform.claude.com/docs/en/about-claude/pricing, 15 Aug 2026
+    "claude-sonnet-5": { in: 2, out: 10 },
+    "claude-opus-5": { in: 5, out: 25 },
+    // developers.openai.com/api/docs/models/gpt-5.6-sol, 15 Aug 2026
+    "gpt-5.6-sol": { in: 5, out: 30 },
+    // docs.perplexity.ai/docs/getting-started/pricing, 15 Aug 2026. api/perplexity.js
+    // sends model "sonar", which is $1/$1 per million PLUS a search fee of $5 to
+    // $12 per 1000 requests depending on context size. Medium taken here, and it
+    // dwarfs the tokens: a sonar call is roughly 90% fee and 10% tokens.
+    perplexity: { in: 1, out: 1, perCall: 0.008 },
   },
   // Per request, in dollars. Same rule: null means unpriced, never free.
   perRequest: {
-    tavily: null,
-    directions: null,
-    places: null,
-    placesHours: null,
-    weather: null,
-    geocode: 0,        // Nominatim is free and that is a fact, not a guess
-    commonsPhoto: 0,   // Wikimedia is free
+    // Tavily basic search is 1 credit (api/search.js sends search_depth "basic"),
+    // and pay as you go is $0.008 a credit. A paid plan is cheaper, down to
+    // $0.005 on Growth, so this is the ceiling.
+    tavily: 0.008,
+    // Google Maps Platform list prices, developers.google.com/maps/billing-and-pricing/pricing,
+    // 15 Aug 2026. Free allowance per month noted; not modelled, see above.
+    directions: 0.005,      // Routes Compute Routes Essentials, $5/1000, 10k free
+    places: 0.032,          // Nearby Search Pro, $32/1000, 5k free
+    placesLocate: 0.032,    // Text Search Pro, $32/1000, 5k free
+    placesHours: 0.020,     // Place Details Enterprise, $20/1000, 1k free
+    weather: 0,             // MET Norway, free, and that is a fact not a guess
+    tickets: 0,             // Ticketmaster Discovery, free tier
+    scanSource: 0,          // our own fetch, no third party bills for it
+    geocode: 0,             // Nominatim is free and that is a fact, not a guess
+    commonsPhoto: 0,        // Wikimedia is free
   },
 };
 
@@ -95,10 +133,15 @@ export const endRun = () => {
   return run;
 };
 
+// ── A FLAT FEE ON TOP OF THE TOKENS IS STILL THE BILL ───────────────
+// Perplexity charges $1 per million each way and then $5 to $12 per THOUSAND
+// requests for the search itself. Pricing sonar on tokens alone reports about a
+// tenth of what it costs, and it would have reported it as `measured`, which is
+// this file's word for "this is a fact". A rate with no perCall is unaffected.
 const priceTokens = (model, tokensIn, tokensOut) => {
   const rate = PRICES.models[model];
   if (!rate || rate.in == null || rate.out == null) return null;
-  return (tokensIn / 1e6) * rate.in + (tokensOut / 1e6) * rate.out;
+  return (tokensIn / 1e6) * rate.in + (tokensOut / 1e6) * rate.out + (rate.perCall || 0);
 };
 
 // ── RECORDING A CALL ────────────────────────────────────────────────

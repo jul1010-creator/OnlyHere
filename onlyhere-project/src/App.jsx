@@ -17,7 +17,7 @@ import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } 
 import { fetchProfile, profileForPrompt, isBlank as profileIsBlank } from "./utils/profile";
 import { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, NUDGE_KEY, PROFILE_NUDGE_KEY } from "./utils/accountNudge";
 import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
-import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from "./utils/manageGroups";
+import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows } from "./utils/manageGroups";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
@@ -64,6 +64,7 @@ import { GemlyxLogo, GemlyxMark, GemlyxWordmark, GemlyxLoader, GemlyxIntro } fro
 import { TypewriterText } from "./components/TypewriterText";
 import { GuidePreviewScreen } from "./components/GuidePreviewScreen";
 import { EventMatchCard } from "./components/EventMatchCard";
+import { FilterBar } from "./components/FilterBar";
 import { DK_PATHS, dkProject } from "./data/mapShapes";
 import { PageHero } from "./components/PageHero";
 import { LiveEventsHeaderStrip } from "./components/LiveEventsHeaderStrip";
@@ -74,7 +75,7 @@ import { GuidePage } from "./pages/GuidePage";
 import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
 import { studioPrompts } from "./utils/studioPrompts";
-import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
+import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop } from "./utils/journey";
@@ -89,7 +90,7 @@ import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, 
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, isUndated, UNDATED } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
@@ -1077,6 +1078,15 @@ function GemlyxApp() {
   // rows once they load, so the ones with something wrong open themselves and
   // the clean ones stay shut. See utils/manageGroups.js.
   const [openGroups, setOpenGroups] = useState(() => new Set());
+  // ── "HAVING TO SEARCH FOR 'AARHUS FESTUGE' ALL THE TIME IS ANNOYING" ─
+  // Oliver, 15 Aug 2026. Grouping made ninety rows a library and did nothing
+  // for the other half of the job, which is getting straight back to the one
+  // row he was on twenty minutes ago: work out its category, open that group,
+  // scroll. Deliberately held OUT of the manage panel's own lifetime, so
+  // closing the panel to look at the draft and reopening it puts him back on
+  // the same filtered view rather than at the top of ninety rows again. Rules
+  // in utils/manageGroups.js, so the Danish folding can be tested.
+  const [manageQuery, setManageQuery] = useState("");
   const [redraftOpen, setRedraftOpen] = useState(false);
   const [manageItems, setManageItems] = useState(null);
   const [manageLoading, setManageLoading] = useState(false);
@@ -7036,10 +7046,37 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           }
         }
         if (isEditing) {
-          // Simplest correct way to reflect an in-place field change everywhere it's
-          // already been merged into the app's shared arrays — same approach Delete uses.
-          setToast("💾 Saved — refreshing");
-          setTimeout(() => window.location.reload(), 900);
+          // ── SAVING NO LONGER THROWS THE PAGE AWAY ─────────────────
+          // Oliver, 15 Aug 2026: "clicking 'save' just to be put all the way
+          // back to the front page is also very annoying."
+          //
+          // This was window.location.reload(), and the comment defending it was
+          // right that refreshLiveContent cannot do the job: it keeps mergedIds
+          // on purpose, so a row already folded into the shared arrays is
+          // skipped on the way back through. Publishing something NEW has had a
+          // no-reload path since it was written. Editing never did, so every
+          // save threw away the Studio panel, the open group, the scroll
+          // position and the search, to change one field.
+          //
+          // applyEditedRow is the operation that was missing: replace a row
+          // that is already merged, at its own index, in the same module
+          // singletons the loader pushes into. bumpLiveContent then repaints
+          // exactly as the publish path does.
+          //
+          // AND IT STILL RELOADS WHEN IT CANNOT. A row that was never merged
+          // (skipped as a duplicate, or a type nothing registers) is not in any
+          // array to replace, and leaving him looking at the old text with a
+          // tick next to it would be worse than the annoyance being fixed.
+          const applied = applyEditedRow(editingId, studioType, shaped);
+          if (applied) {
+            setManageItems(items => (items || []).map(r => r.id === editingId ? { ...r, payload: shaped } : r));
+            bumpLiveContent(v => v + 1);
+            setToast("💾 Saved");
+            setTimeout(() => setToast(null), 2200);
+          } else {
+            setToast("💾 Saved, refreshing to pick it up");
+            setTimeout(() => window.location.reload(), 900);
+          }
         } else {
           // Explicit re-fetch (the loader caches its promise, so ensureLiveContentLoaded
           // alone would be a no-op here). refreshLiveContent keeps the merged-id guard,
@@ -10218,7 +10255,20 @@ ${profileForPrompt(userProfile)}`;
   // and this grid, the one a reader actually browses, never got it.
   const upcomingInTab = eventTabSource.filter(e => isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date));
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const eventMonthOptions = MONTHS.filter(m => upcomingInTab.some(e => new Date(e.date).toLocaleString("en", { month: "short" }) === m));
+  // ── AND THE CHIPS HAVE TO ADD UP ────────────────────────────
+  // Oliver's screenshot, 15 Aug: All 14, Jun 1, Jul 1, Aug 2, Sep 4, Oct 1.
+  // Nine. Five events were in no bucket at all, because new Date() cannot parse
+  // their date, and nothing on the screen said where they went. A filter whose
+  // parts do not sum to its whole tells the reader the list is smaller than it
+  // is. Undated gets its own chip, and only when there is one, so it is a
+  // finding rather than a permanent empty option. Those rows should not exist
+  // (publishDraft blocks a dateless event), so seeing the chip at all is the
+  // signal that some predate the gate.
+  const eventMonthOptions = [
+    ...MONTHS.filter(m => upcomingInTab.some(e => eventMonthShort(e.date) === m)),
+    ...(upcomingInTab.some(e => isUndated(e.date)) ? [UNDATED] : []),
+  ];
+  const inEventMonth = (e, m) => (m === UNDATED ? isUndated(e.date) : eventMonthShort(e.date) === m);
   // ── SIX PILLS FOR FOUR IDEAS, TWO STARTING WITH "MUSIC" ──────
   // This row read `[...new Set(upcomingInTab.map(e => e.type))]` off a free-text
   // field, so the live table's eight different spellings became eight pills:
@@ -10234,14 +10284,55 @@ ${profileForPrompt(userProfile)}`;
   ];
   const eventTypeLabelFor = (t) => EVENT_TYPE_LABEL[t] || t;
 
-  const filteredEvents = upcomingInTab
-    .filter(e => {
-      const em = new Date(e.date).toLocaleString("en", { month: "short" });
-      return (!eventMonth || em === eventMonth) && (!eventType || hasEventType(e, eventType) || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)));
-    })
+  // ── "THE FILTER GOTTA BE MADE LIKE THIS FILTER ON MAGASIN" ───
+  // Oliver, 15 Aug 2026. Three labelled rows of pills, thirteen of them, for
+  // fourteen events, became a Filter button, two dropdowns, the count and the
+  // sort. See components/FilterBar.jsx for the shape and why the sort sits on
+  // the other side of the line from the filters.
+  //
+  // A FACET IS DECLARED ONCE AND READ BY EVERYTHING. The count on an option,
+  // the applied chip, the clear button and the filter itself all come off this
+  // one object, which is what utils/listControls.js was built for. The old code
+  // wrote the month test three times, once for the list and once inside each
+  // count, and they were already drifting: the type count used the raw
+  // new Date() month while the list used the same broken expression separately.
+  const eventFacets = [
+    {
+      key: "month", label: "Date",
+      options: [{ value: "All", label: "All" }, ...eventMonthOptions.map(m => ({ value: m, label: m }))],
+      test: (e, v) => inEventMonth(e, v),
+    },
+    {
+      key: "type", label: "Type",
+      options: [{ value: "All", label: "All" }, ...eventTypeOptions.map(t => ({ value: t, label: eventTypeLabelFor(t) }))],
+      test: (e, v) => (v === "North Zealand" ? NORTH_ZEALAND_TOWNS.includes(e.town) : hasEventType(e, v)),
+    },
+  ];
+  // The two existing pieces of state, presented as one object because that is
+  // what listControls reads. Kept as two so nothing else that touches
+  // eventMonth or eventType has to change.
+  const eventFacetState = { ...(eventMonth ? { month: eventMonth } : {}), ...(eventType ? { type: eventType } : {}) };
+  const setEventFacets = (next) => { setEventMonth(next.month || null); setEventType(next.type || null); };
+  const EVENT_SORTS = [{ value: "soonest", label: "Date" }, { value: "az", label: "Name" }];
+
+  // ── ONE TEST, AND applyFacets IS THE ONLY CALLER ─────────────
+  // This used to re-implement both facet predicates inline, which meant the
+  // month rule existed three times (here, and once inside each pill's count)
+  // and the type rule twice. They had already drifted. Now the facet declares
+  // its `test` once, applyFacets runs it for the list, and facetCounts runs the
+  // same function for the counts, so a count and the filter it applies cannot
+  // disagree by construction rather than by an assertion watching two copies.
+  const filteredEvents = applyFacets(upcomingInTab, eventFacets, eventFacetState)
     // Soonest first stays the default, because for an event the date IS the
     // point. A to Z is there for when you know the name and want to find it.
-    .sort(eventSort === "az" ? byName : (a, b) => new Date(a.date) - new Date(b.date));
+    //
+    // byEventDate, NOT `new Date(a.date) - new Date(b.date)`. That subtraction
+    // returns NaN the moment either row has a date new Date() cannot read, a
+    // comparator that returns NaN is inconsistent, and the order V8 then
+    // produces is arbitrary rather than merely slightly wrong. Five of his
+    // fourteen events were unparseable, which is why the page showed October
+    // above August under a control that said "by date". See utils/eventDates.js.
+    .sort(eventSort === "az" ? byName : byEventDate);
 
   const aiHelperBlock = () => (
     <div id="ai-helper-anchor" style={{ marginTop: 8 }}>
@@ -10666,25 +10757,62 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               the work and nothing else. Rules in
                               utils/manageGroups.js, which decides the order and
                               the counts; this only draws them. */}
+                          {/* ── THE SEARCH BOX ──────────────────────────
+                              Oliver, 15 Aug 2026: "Having to search for 'Aarhus
+                              festuge' all the time is annoying."
+                              Every word has to land somewhere in the row, so
+                              "aarhus fest" works, which is how somebody types
+                              when they already know what they want. Folded, so
+                              Århus finds Aarhus and Ærøskøbing is reachable
+                              from a keyboard that has no Æ on it. */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                            <input value={manageQuery} onChange={e => setManageQuery(e.target.value)}
+                              placeholder="Search published entries…"
+                              aria-label="Search published entries"
+                              style={{ flex: 1, minWidth: 0, background: C.surface, border: `1px solid ${manageQuery ? `${C.gold}66` : C.border}`, borderRadius: 9, padding: "7px 11px", fontSize: 12, color: C.text, fontFamily: "'Inter', sans-serif", outline: "none" }} />
+                            {manageQuery && (
+                              <button onClick={() => setManageQuery("")}
+                                style={{ flexShrink: 0, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "6px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                Clear
+                              </button>
+                            )}
+                          </div>
                           {(() => {
                             const problemsFor = (r) => [
                               ...bodyProblems(r.payload),
                               ...coordProblems(r.payload, r.type),
                               ...(sweep?.rows || []).filter(x => x.id === r.id).flatMap(x => x.findings),
                             ];
-                            const groups = groupRows(manageItems, problemsFor);
-                            const missing = emptyTypes(groups);
+                            // The health line above counts the WHOLE library on
+                            // purpose. Only the list below narrows, because "3
+                            // things to look at" quietly meaning "3 within your
+                            // current search" is a number that lies the moment
+                            // you forget you were searching.
+                            const shown = filterRows(manageItems, manageQuery);
+                            const groups = groupRows(shown, problemsFor);
+                            const missing = emptyTypes(groupRows(manageItems, problemsFor));
+                            const searching = !!manageQuery.trim();
                             return (
                               <>
                                 <div style={{ fontSize: 10.5, color: C.muted, padding: "2px 0 8px", lineHeight: 1.6 }}>
-                                  {describeGroups(groups)}
+                                  {searching
+                                    ? (shown.length === 0
+                                        ? `Nothing matches "${manageQuery}". It may be published under a different name, or not published yet.`
+                                        : `${shown.length} ${shown.length === 1 ? "entry matches" : "entries match"} "${manageQuery}".`)
+                                    : describeGroups(groups)}
                                   {/* A registered type with nothing published
                                       looks identical to a type missing from the
-                                      picker, which is a bug this app has had. */}
-                                  {missing.length > 0 && <span> Nothing published yet under: {missing.map(t => TYPE_LABEL[t] || t).join(", ")}.</span>}
+                                      picker, which is a bug this app has had.
+                                      Counted against the whole library, never
+                                      against a search, or every search would
+                                      claim eight types are empty. */}
+                                  {!searching && missing.length > 0 && <span> Nothing published yet under: {missing.map(t => TYPE_LABEL[t] || t).join(", ")}.</span>}
                                 </div>
                                 {groups.map(g => {
-                                  const open = openGroups.has(g.type);
+                                  // A search that returns collapsed headers has
+                                  // answered nothing. While one is typed, every
+                                  // group holding a match is open.
+                                  const open = searching || openGroups.has(g.type);
                                   return (
                                     <div key={g.type} style={{ marginBottom: 4 }}>
                                       <button onClick={() => setOpenGroups(prev => { const n = new Set(prev); if (n.has(g.type)) n.delete(g.type); else n.add(g.type); return n; })}
@@ -13162,36 +13290,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   </button>
                 ))}
               </div>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Date</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", marginBottom: 12 }}>
-                  {["All", ...eventMonthOptions].map(m => {
-                    // Counted against the TYPE filter only, never against the
-                    // month filter itself: counting a facet with itself applied
-                    // gives every other month a zero, which reads as "nothing in
-                    // August" when it means "you picked July".
-                    const n = m === "All" ? upcomingInTab.length : upcomingInTab.filter(e =>
-                      new Date(e.date).toLocaleString("en", { month: "short" }) === m
-                      && (!eventType || hasEventType(e, eventType) || (eventType === "North Zealand" && NORTH_ZEALAND_TOWNS.includes(e.town)))).length;
-                    return <Pill key={m} label={`${m} ${n}`} active={(m === "All" && !eventMonth) || eventMonth === m} onClick={() => setEventMonth(m === "All" ? null : (eventMonth === m ? null : m))} />;
-                  })}
-                </div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Type</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", marginBottom: 12 }}>
-                  {["All", ...eventTypeOptions].map(f => {
-                    const inMonth = upcomingInTab.filter(e => !eventMonth || new Date(e.date).toLocaleString("en", { month: "short" }) === eventMonth);
-                    const n = f === "All" ? inMonth.length
-                      : f === "North Zealand" ? inMonth.filter(e => NORTH_ZEALAND_TOWNS.includes(e.town)).length
-                      : inMonth.filter(e => hasEventType(e, f)).length;
-                    return <Pill key={f} label={`${eventTypeLabelFor(f)} ${n}`} active={(f === "All" && !eventType) || eventType === f} onClick={() => setEventType(f === "All" ? null : (eventType === f ? null : f))} />;
-                  })}
-                </div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Order</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch" }}>
-                  <Pill label="By date" active={eventSort === "soonest"} onClick={() => setEventSort("soonest")} />
-                  <Pill label="By name" active={eventSort === "az"} onClick={() => setEventSort("az")} />
-                </div>
-              </div>
+              <FilterBar
+                items={upcomingInTab}
+                shown={filteredEvents.length}
+                noun="events"
+                facets={eventFacets}
+                state={eventFacetState}
+                onChange={setEventFacets}
+                sort={eventSort}
+                sortOptions={EVENT_SORTS}
+                onSort={setEventSort}
+              />
               {filteredEvents.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>No upcoming events — try a different filter</div>
               ) : (
@@ -15122,6 +15231,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           setPickedExtras={setPickedExtras}
           session={userSession}
           onSignIn={() => setAuthOpen(true)}
+          // Oliver, 15 Aug 2026: "If the person has an account, then Gemlyx and
+          // the cards should be able to recommend even easier." The typed
+          // profile already reaches every PROMPT (profileForPrompt, in the
+          // guide brief below). This is the first screen that gets to use it
+          // with no model call at all. Null for a signed out traveller, and the
+          // ranking then runs on stated interest and editorial tier alone.
+          userProfile={userProfile}
+          // "or ask Gemlyx", from inside a section that is holding something
+          // back. Opens the SAME floating Detour panel rendered just below,
+          // with the question already typed, because a door that opens onto an
+          // empty composer hands the work back to the traveller.
+          askGemlyx={(seed) => { if (seed) setPreviewChatInput(seed); setPreviewChatOpen(true); }}
         />
       )}
       {/* PREVIEW CHAT — floating Ask Gemlyx corner launcher + panel ON TOP of

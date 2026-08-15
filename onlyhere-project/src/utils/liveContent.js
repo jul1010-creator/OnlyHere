@@ -181,3 +181,88 @@ export const refreshLiveContent = async (onBookingRow) => {
   loadPromise = null;
   return ensureLiveContentLoaded(onBookingRow);
 };
+
+// ── AND THE ROW THAT IS ALREADY IN THERE ────────────────────────────
+//
+// Oliver, 15 Aug 2026: "clicking 'save' just to be put all the way back to the
+// front page is also very annoying."
+//
+// Saving an edit called window.location.reload(). The comment above it said
+// "simplest correct way to reflect an in-place field change", and it was
+// correct, because refreshLiveContent CANNOT do it: it keeps mergedIds on
+// purpose, so a row already folded in is skipped on the way back through, and
+// the paragraph above says as much. Publishing something new had a no-reload
+// path since the day it was written. Editing never got one, so every save threw
+// away the Studio panel, the open group, the scroll position and the search, to
+// change one field.
+//
+// So this is the missing operation: replace a row that is already merged. It
+// touches the same module singletons doLoad pushes into, at the SAME INDEX, so
+// nothing reorders on a browse page just because a description was fixed.
+//
+// RETURNS FALSE RATHER THAN GUESSING. A row that was never merged (skipped as a
+// duplicate, or a type nothing registers) is not in any array to replace, and
+// pretending otherwise would leave the reader looking at the old text with no
+// sign anything failed. The caller reloads on false, which is exactly the old
+// behaviour, so the worst case is today.
+const ARRAY_FOR = {
+  town: towns,
+  free: freeEntrance,
+  food: foodSpots,
+  foodStreet: foodSpots,
+  night: nightlifeSpots,
+  nightStreet: nightlifeStreets,
+  nightTown: nightlifeTowns,
+  essential: essentials,
+};
+
+export const LIVE_ID_OFFSET = 100000;
+
+export const applyEditedRow = (rowId, type, payload) => {
+  const id = LIVE_ID_OFFSET + Number(rowId);
+  if (!Number.isFinite(id)) return false;
+  // Same clean on the way in as doLoad, for the same reason. An edit is a
+  // second door into the arrays and a dash typed by hand in the Studio editor
+  // must not walk through it.
+  const item = stripDashesDeep(payload);
+  if (!item || !item.name) return false;
+
+  // Booking lives in two places by design (see the note in doLoad), and a
+  // festival can change which of the two event arrays it belongs in, because
+  // __scale is an editable field.
+  const homes = type === "festival" ? [events, majorEvents]
+    : type === "booking" ? [craftItemsFallback, bookingRowsCache]
+    : ARRAY_FOR[type] ? [ARRAY_FOR[type]] : [];
+  if (!homes.length) return false;
+
+  const wanted = type === "festival" ? (item.__scale === "Major" ? majorEvents : events) : null;
+  let oldName = null;
+  for (const list of homes) {
+    const i = list.findIndex(x => x?.id === id);
+    if (i < 0) continue;
+    if (oldName === null) oldName = String(list[i]?.name || "");
+    // A festival promoted to Major, or demoted, leaves the array it was in.
+    if (wanted && list !== wanted) { list.splice(i, 1); continue; }
+    list[i] = { id, ...item };
+  }
+  if (oldName === null) return false;
+  if (wanted && !wanted.some(x => x?.id === id)) wanted.push({ id, ...item });
+
+  // ── AND THE TWO REGISTRIES THAT OUTLIVE THE ROW ──────────────────
+  // mergedKeys is type + name, so a RENAME leaves the old name claimed
+  // forever. Publish a new entry under that name afterwards and the loader
+  // silently skips it as a duplicate of a row that no longer has that name,
+  // which is this project's signature bug: in the database, rendering nowhere.
+  if (oldName && oldName !== item.name) {
+    mergedKeys.delete(keyOf(type, oldName));
+    mergedKeys.add(keyOf(type, item.name));
+  }
+  // A town coordinate is the reference frame every other entry in that town is
+  // measured against (see coordCheck.js), so a corrected one has to land here
+  // too or the map keeps the old point until the next full load.
+  if (type === "town") {
+    if (oldName && oldName !== item.name) delete TOWN_COORDS[oldName];
+    if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
+  }
+  return true;
+};

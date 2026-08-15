@@ -22,7 +22,23 @@
 // exporting THEMES beside it. Two files one letter apart exporting the same
 // symbol is a collision that esbuild caught immediately and a human reviewer
 // would not have, so neither the filename nor the export is ambiguous now.
-export const PLACE_THEMES = ["nature", "coast", "history", "food", "nightlife", "art", "family"];
+// ── AND SEVEN COULD NOT SAY WHAT THIS TRAVELLER ASKED FOR ───────────
+// Oliver, 15 Aug 2026, on a preview built from "We like markets and modern
+// design", which came back holding Amalienborg Slot, Københavns Museum and the
+// Ny Carlsberg Glyptotek: "Don't put up a bunch of random attractions just to
+// have something."
+//
+// The narrowing is meant to stop exactly that and it could not, because the
+// vocabulary had no word for either thing he asked for. "market" appeared
+// nowhere in the app at all, and "design" was folded into `art`, whose label
+// was literally "Art & design", so a classical sculpture gallery and a design
+// shop carried the same tag and were therefore the same recommendation.
+//
+// Two values added, and the cap above is still the rule that governs: each one
+// is here because a real brief named it and this list could not answer. `art`
+// keeps every row already tagged with it and loses only the half of its label
+// that now has a value of its own.
+export const PLACE_THEMES = ["nature", "coast", "history", "food", "nightlife", "art", "design", "market", "family"];
 
 export const THEME_LABEL = {
   nature: "Nature",
@@ -30,12 +46,14 @@ export const THEME_LABEL = {
   history: "History",
   food: "Food",
   nightlife: "Nightlife",
-  art: "Art & design",
+  art: "Art",
+  design: "Design",
+  market: "Markets",
   family: "Family",
 };
 
 export const THEME_EMOJI = {
-  nature: "🌿", coast: "🌊", history: "🏛", food: "🍽", nightlife: "🍺", art: "🎨", family: "🧸",
+  nature: "🌿", coast: "🌊", history: "🏛", food: "🍽", nightlife: "🍺", art: "🎨", design: "🪑", market: "🧺", family: "🧸",
 };
 
 // Three is the cap, and it is a real limit rather than a display truncation.

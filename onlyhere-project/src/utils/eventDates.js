@@ -28,6 +28,10 @@
 //                   normal case for a June festival
 //   in code         refuse to let a past date reach publish quietly
 
+// daCompare, not localeCompare: Æ, Ø and Å sort after Z in Danish, and the name
+// tie-break below is on a page about Denmark.
+import { daCompare } from "./helpers";
+
 const clean = (v) => String(v == null ? "" : v).trim();
 
 // Tolerant on purpose: drafts store "2026-06-17", "17 June 2026", "June 2026".
@@ -39,6 +43,68 @@ export const parseEventDate = (v) => {
   const d = new Date(t);
   return Number.isFinite(d.getTime()) ? d : null;
 };
+
+// ── "HOW IS THIS 'BY NAME'" ─────────────────────────────────────────
+//
+// Oliver, 15 Aug 2026, on the Events tab with the order set and the list in no
+// order at all: October above August, June below September.
+//
+// The list was sorted with `new Date(a.date) - new Date(b.date)`, and the
+// evidence was already in his own screenshot before anybody read a line of
+// code. The month chips said: All 14, Jun 1, Jul 1, Aug 2, Sep 4, Oct 1. Those
+// add up to NINE. Five of the fourteen events are in no month at all, which
+// means new Date() cannot parse their date field.
+//
+// AND ONE OF THOSE BREAKS THE WHOLE LIST, not just its own position. Subtracting
+// two Invalid Dates gives NaN, a comparator that returns NaN is inconsistent,
+// and V8 does not respond to that by leaving one row out of place: the ordering
+// it produces is arbitrary. Measured on fourteen rows with five unparseable:
+//
+//   as shipped   Aug19 Sep04 UNDATED Jun06 Jul03 Aug30 Sep05 ... Oct12 UNDATED…
+//   fixed        Jun06 Jul03 Aug19 Aug30 Sep04 Sep05 Sep12 Sep19 Oct12 UNDATED…
+//
+// So one dateless row scrambles thirteen good ones. That is why the page can
+// look unsorted under a control that says it is sorted, and why "by date" and
+// "by name" both looked wrong: the date sort was not producing an order to
+// disagree with.
+//
+// parseEventDate has returned null for an unparseable date since it was
+// written, three functions up, and this comparator never called it. Same shape
+// as the four holes in previewMatch: the helper existed, the site that needed
+// it did not use it.
+export const eventTime = (v) => {
+  const d = parseEventDate(v);
+  return d ? d.getTime() : null;
+};
+
+// Undated LAST and never NaN. Last rather than first because a row with no date
+// is a row nobody can plan around, and by the project's own publish gate it
+// should not exist at all: "An event must NEVER be published without a date."
+// It stays visible so it can be found and fixed rather than hidden.
+export const byEventDate = (a, b) => {
+  const x = eventTime(a?.date), y = eventTime(b?.date);
+  if (x === null && y === null) return daCompare(a?.name, b?.name);
+  if (x === null) return 1;
+  if (y === null) return -1;
+  // Danish name as the tie-break, so two events on one day do not swap places
+  // between renders. An order that reshuffles is not an order.
+  return x - y || daCompare(a?.name, b?.name);
+};
+
+// ── AND THE MONTH CHIPS HAVE TO ADD UP ──────────────────────────────
+// The same five rows fall out of every month bucket, so "All 14" sat above
+// chips totalling 9 and nothing said where the other five went. A filter whose
+// parts do not sum to its whole is telling the reader the list is smaller than
+// it is. Returns "" for an unparseable date, and the caller gives those their
+// own chip rather than dropping them.
+export const UNDATED = "Undated";
+
+export const eventMonthShort = (v) => {
+  const d = parseEventDate(v);
+  return d ? d.toLocaleString("en", { month: "short" }) : "";
+};
+
+export const isUndated = (v) => parseEventDate(v) === null;
 
 // `today` is always passed in. A date helper that reads the clock cannot be
 // tested against a fixed calendar, and this one has to be: the whole point is

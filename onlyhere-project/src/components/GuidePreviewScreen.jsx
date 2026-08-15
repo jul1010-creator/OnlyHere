@@ -3,6 +3,9 @@ import { C } from "../utils/theme";
 import { testTravelerLine, getEventDate } from "../utils/helpers";
 import { matchedPlaces, previewPools, mentionsPlace, wantedCategories, groupKeyOf } from "../utils/previewMatch";
 import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
+import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/interestFit";
+import { cardLine } from "../utils/cardLine";
+import { buildPreviewReport, downloadReport, reportFilename } from "../utils/previewReport";
 import { AskGemlyx } from "./AskGemlyx";
 
 // ── "Here's what's coming up" preview screen ────────────────────────
@@ -88,6 +91,18 @@ const groupKey = groupKeyOf;
 // What an empty section is called when the brief did not ask for it. The label
 // is a category name; this is the invitation.
 const ADD_LABEL = { free: "Add attractions", food: "Add places to eat", nightlife: "Add nightlife" };
+// ── AND THE OTHER DOOR, WHICH IS THE ONE HE ASKED FOR ───────────────
+// Oliver, 15 Aug 2026: "Make them able to 'ask Gemlyx'." A door that opens
+// onto an empty composer hands the traveller the job of working out the
+// question, which is the same overwhelm wearing a different shape. This types
+// the question for them, into the real Detour conversation the preview was
+// built from, so the answer already knows the trip.
+const ASK_SEED = {
+  free: "What is worth seeing on this trip that I have not asked about?",
+  food: "Where should I eat on this trip?",
+  nightlife: "What nightlife would suit this trip?",
+};
+const askSeed = (cat) => ASK_SEED[cat?.src] || `What ${String(cat?.label || "").toLowerCase()} would suit this trip?`;
 // Per-section cap, not one shared cap across everything — a real conversation
 // covering several towns and several attractions should be able to show all
 // of them without one category silently crowding another out of the shared
@@ -131,6 +146,15 @@ export const GuidePreviewScreen = ({
   // deciding on to find out what a place is.
   session = null,
   onSignIn = () => {},
+  // What the traveller typed about themselves, if they have an account. Read
+  // ONLY to order what is offered behind a door, never to filter and never to
+  // put a word on screen about the person. See profilePull in interestFit.js.
+  userProfile = null,
+  // Opens the floating Detour panel App.jsx already renders on top of this
+  // overlay, optionally with a question typed in. This is the "or ask Gemlyx"
+  // half of every door on this screen, and it is the REAL conversation the
+  // preview was built from rather than a second one.
+  askGemlyx = null,
 }) => {
   // Which offered sections the traveller has opened, and which card they are
   // asking about. Both local: neither survives closing the preview, and neither
@@ -177,7 +201,21 @@ export const GuidePreviewScreen = ({
   // place in this trip. An interest has to be theirs.
   const saidByTraveller = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
   const wanted = wantedCategories(saidByTraveller, intakeInterest);
-  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted });
+  // ── AND WHICH ATTRACTIONS, WHICH IS A SECOND QUESTION ─────────────
+  // Oliver, 15 Aug 2026, on a brief that said markets and modern design and
+  // came back holding a palace, a city museum and a classical sculpture
+  // gallery: "Don't put up a bunch of random attractions just to have
+  // something."
+  //
+  // `wanted` answers whether they asked for attractions AT ALL. It cannot
+  // answer which ones, because it is a gate on the content type: "design" put
+  // `free` in the set and then every `free` row in the town qualified. `themes`
+  // is the row level question, read off the same closed vocabulary the sweep
+  // already stamps on every entry. Read from the traveller's own turns for the
+  // same reason `wanted` is, and never from Gemlyx's replies: the app
+  // suggesting a museum must not become evidence that they asked for one.
+  const themes = briefThemes(saidByTraveller, intakeInterest);
+  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes });
   // Group into the fixed category order above, each capped independently.
   // Two sections ("Major Cities"/"Towns") now share src:"town" and are
   // told apart by their own `match` predicate — apply it on top of the
@@ -189,10 +227,24 @@ export const GuidePreviewScreen = ({
   const sections = CATEGORY_SECTIONS
     .map(cat => {
       const mine = matched.filter(p => groupKey(p) === cat.src && (!cat.match || cat.match(p)));
+      // ── THE OFFERED ROWS ARE RANKED NOW, AND CUT TO THREE ─────
+      // Oliver, 15 Aug 2026, on the door opening onto six tickable cards:
+      // "having a list of things you can click is overwhelming. AI is there to
+      // help for a reason. You can have 'recommendations' to add. But not a
+      // massive overwhelming list." And then the shape he wanted: "3 shown that
+      // 'most likely' fits the person."
+      //
+      // `offered` stays whole because the count in the door's own sentence has
+      // to be honest about how many Gemlyx is holding. `picks` is the three
+      // that render. Nothing is hidden that the line above it does not admit
+      // to.
+      const offered = mine.filter(p => p._notAsked);
       return {
         ...cat,
         items: mine.filter(p => !p._notAsked).slice(0, MAX_PER_SECTION),
-        offered: mine.filter(p => p._notAsked).slice(0, MAX_PER_SECTION),
+        offered,
+        picks: rankOffers(offered, { want: themes, profile: userProfile, limit: OFFER_LIMIT })
+          .map(entry => ({ ...entry, reason: offerReason(entry) })),
       };
     })
     .filter(cat => cat.items.length > 0 || cat.offered.length > 0);
@@ -273,6 +325,42 @@ export const GuidePreviewScreen = ({
               <div style={{ color: C.muted, fontStyle: "italic", marginTop: 6, paddingLeft: 10, borderLeft: `2px solid ${C.gold}44` }}>{testProfile.brief}</div>
             )}
             <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>The planner's full day-by-day breakdown and whether events made it in show on the finished guide.</div>
+            {/* ── THE REPORT ─────────────────────────────────────
+                Oliver, 15 Aug 2026: "If you want, you can make 'preview' able
+                to have a link as a report for you. If reports make things
+                better for you.."
+
+                Every fault found on this screen so far arrived as a
+                screenshot, and a screenshot shows the output while the
+                question is always about the reason: which pass put that row
+                there, whether the category gate opened, what the row is
+                tagged, where its line was cut. That has been reconstructed by
+                reading the matcher, which is a guess, and the misses ship a
+                fix for a bug that was not there.
+
+                A file rather than a link, because a link needs an endpoint and
+                an endpoint needs a deploy. See utils/previewReport.js for what
+                is on it and for the two fields deliberately kept off it.
+
+                ONLY ON THE PIPELINE TEST PATH. testProfile is null for every
+                real traveller, so nobody's own brief can be written to disk by
+                a button they did not know was there. */}
+            <button onClick={() => {
+                const at = new Date().toISOString();
+                const report = buildPreviewReport({
+                  at, convoText, saidByTraveller, testProfile,
+                  intake: { arrival: intakeArrival, departure: intakeDeparture, interest: intakeInterest },
+                  wanted, themes, window: win, sections, eventPlan, picked,
+                  pickedExtras: pickedExtras || [],
+                  matched,
+                  namedNames: matched.filter(p => mentions(p.name)).map(p => p.name),
+                  profile: userProfile,
+                });
+                downloadReport(report, reportFilename(at));
+              }}
+              style={{ marginTop: 8, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "5px 12px", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+              ⬇ Download run report
+            </button>
           </div>
         )}
         {/* Personal "why this fits you" line (Oliver's ask) — written by
@@ -330,7 +418,16 @@ export const GuidePreviewScreen = ({
                         <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase" }}>{place._holds} {place._holds === 1 ? "place" : "places"} inside</span>
                       )}
                     </div>
-                    <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{(place.desc || "").slice(0, 100)}{(place.desc || "").length > 100 ? "…" : ""}</div>
+                  {/* ── NOT desc.slice(0, 100) ──────────────────────
+                      Oliver, 15 Aug 2026, on four town cards that each opened
+                      with a founding date: "where is the description of
+                      history? I don't see the person wrote that?"
+                      The town prompt asks for that anchor first and the
+                      hundred character cut never reached the half of the
+                      paragraph that says who the town suits. cardLine asks the
+                      entry for that sentence instead. utils/cardLine.js has
+                      the whole story and falls back to this exact clip. */}
+                  <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place)}</div>
                   </div>
                   <button onClick={() => openStopDetail(place)}
                     style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -354,20 +451,48 @@ export const GuidePreviewScreen = ({
             {cat.offered.length > 0 && !openedExtras.includes(cat.label) && (
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 14, padding: "14px 14px" }}>
                 <div style={{ flex: 1, minWidth: 180, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-                  You did not ask for these, so Gemlyx left them out. It holds {cat.offered.length} {cat.offered.length === 1 ? "place" : "places"} here if you want {cat.offered.length === 1 ? "it" : "some"}.
+                  {cat.items.length > 0
+                    ? `Gemlyx holds ${cat.offered.length} more here that ${cat.offered.length === 1 ? "does" : "do"} not match what you asked for.`
+                    : `You did not ask for these, so Gemlyx left them out. It holds ${cat.offered.length} ${cat.offered.length === 1 ? "place" : "places"} here if you want ${cat.offered.length === 1 ? "it" : "some"}.`}
                 </div>
                 <button onClick={() => setOpenedExtras(prev => [...prev, cat.label])}
                   style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "8px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                   {ADD_LABEL[cat.src] || `Add ${cat.label.toLowerCase()}`}
                 </button>
+                {askGemlyx && (
+                  <button onClick={() => askGemlyx(askSeed(cat))}
+                    style={{ flexShrink: 0, background: "none", border: "none", padding: "8px 2px", color: C.muted, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>
+                    or ask Gemlyx
+                  </button>
+                )}
               </div>
             )}
             {cat.offered.length > 0 && openedExtras.includes(cat.label) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* ── THREE, CHOSEN, WITH THE REASON ON EACH ────────
+                    This block used to render cat.offered, which was every row
+                    the second pass had collected in the town, in database
+                    order, capped at six for no reason beyond where the cap
+                    sat. Oliver, 15 Aug 2026: "having a list of things you can
+                    click is overwhelming. AI is there to help for a reason.
+                    You can have 'recommendations' to add. But not a massive
+                    overwhelming list."
+
+                    So it renders cat.picks: three, ranked on what they said
+                    they were into, then on their own profile if they have an
+                    account, then on Gemlyx's editorial tier. The count it is
+                    holding back is stated rather than quietly dropped, because
+                    a silent cap reads as "this is everything" when it is not.
+                    See rankOffers in utils/interestFit.js. */}
                 <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-                  Tick what you want in the trip. Ask about any of them without leaving this screen.
+                  {cat.picks.length === 1
+                    ? "The one Gemlyx thinks fits this trip best."
+                    : `The ${cat.picks.length} Gemlyx thinks fit this trip best.`}
+                  {cat.offered.length > cat.picks.length
+                    ? ` ${cat.offered.length - cat.picks.length} more are not shown. Ask Gemlyx if none of these are right.`
+                    : ""}
                 </div>
-                {cat.offered.map(place => {
+                {cat.picks.map(({ place, reason }) => {
                   const on = (pickedExtras || []).includes(place.name);
                   return (
                     <div key={`x-${place._src}-${place.id}`} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${on ? `${C.gold}66` : C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>
@@ -378,7 +503,15 @@ export const GuidePreviewScreen = ({
                       </button>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
-                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{(place.desc || "").slice(0, 100)}{(place.desc || "").length > 100 ? "…" : ""}</div>
+                        {/* WHY THIS ONE AND NOT THE OTHER SIX. The reason is
+                            always about the PLACE. profile.js promises the
+                            stored fields are never repeated back at somebody
+                            as a discovery, so a profile that changed the order
+                            never puts a word about the person on screen. */}
+                        {reason && (
+                          <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.3, marginTop: 3 }}>{reason}</div>
+                        )}
+                        <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{cardLine(place)}</div>
                       </div>
                       <button onClick={() => setAskItem(place)}
                         style={{ flexShrink: 0, background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
@@ -391,6 +524,12 @@ export const GuidePreviewScreen = ({
                     </div>
                   );
                 })}
+                {askGemlyx && (
+                  <button onClick={() => askGemlyx(askSeed(cat))}
+                    style={{ alignSelf: "flex-start", background: "none", border: "none", padding: "2px 0 0", color: C.gold, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>
+                    Ask Gemlyx for something else
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -497,7 +636,12 @@ export const GuidePreviewScreen = ({
             }
           }}
           style={{ width: "100%", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, border: "none", borderRadius: 100, padding: "14px", fontSize: 14, fontWeight: 700, color: "#1A1206", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-          Looks good — continue →
+          {/* THE ONE RULE HE HAS RAISED MORE THAN ANY OTHER, BROKEN ON THE
+              BIGGEST BUTTON ON THE SCREEN. Every path from a model to a reader
+              in this codebase runs stripDashes; this string was typed by hand
+              into JSX, so it never went near one. Nothing catches a hand
+              written dash in a component, which is why the suite now does. */}
+          Looks good, continue →
         </button>
       </div>
       {/* ── ASK GEMLYX, WITHOUT LEAVING THE DECISION ──────────────────

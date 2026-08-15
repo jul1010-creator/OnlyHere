@@ -29,6 +29,50 @@
 // order every time. The panel renders what this returns and decides nothing.
 
 import { CONTENT_TYPES, TYPE_LABEL } from "./sourcePolicy";
+import { fold } from "./danishNames";
+
+// ── "HAVING TO SEARCH FOR 'AARHUS FESTUGE' ALL THE TIME IS ANNOYING" ─
+//
+// Oliver, 15 Aug 2026. Grouping fixed the ninety row list as a LIBRARY and did
+// nothing for the other half of the job, which is going straight back to the
+// one row he was working on twenty minutes ago. Today that is: work out which
+// category it is, open that group, scroll it.
+//
+// EVERY WORD HAS TO LAND, anywhere in the row. That is what makes "aarhus fest"
+// work, which is how somebody actually types when they know what they want, and
+// it is why this is not a substring test on the whole query.
+//
+// FOLDED, because this is Denmark. "Aarhus" and "Århus" are one town, and a
+// search box that cannot find Ærøskøbing unless you own the keyboard for it is
+// the same bug the preview matcher had four times. fold maps æøå the way the
+// whole codebase does.
+const HAYSTACK = ["name", "town", "city", "location", "type"];
+
+export const rowHaystack = (row) => {
+  const p = row?.payload || {};
+  return fold([...HAYSTACK.map(f => p[f]), row?.type, groupLabel(row?.type)]
+    .filter(Boolean).map(String).join(" "));
+};
+
+// NAMED rowMatchesQuery, NOT matchesQuery. utils/listControls.js next door
+// already exports a matchesQuery, for the public browse filters, and two
+// exports one word apart answering different questions is the collision
+// placeThemes.js documents having already had once with THEMES. esbuild caught
+// this one the same way.
+export const rowMatchesQuery = (row, query) => {
+  const words = fold(String(query || "")).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = rowHaystack(row);
+  return words.every(w => hay.includes(w));
+};
+
+// Returns the rows unchanged for an empty query, deliberately the same object
+// rather than a copy, so "no search" costs nothing on every render.
+export const filterRows = (rows, query) => {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!String(query || "").trim()) return list;
+  return list.filter(r => rowMatchesQuery(r, query));
+};
 
 // ── THE ORDER, AND WHY IT IS NOT ALPHABETICAL ───────────────────────
 // Most consequential first. A wrong town coordinate replaces the reference

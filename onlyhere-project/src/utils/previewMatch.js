@@ -3,6 +3,12 @@ import { townOfLocation } from "./nightlife";
 import { canonicalRegion, regionPart, regionOf, REGION_NAMES } from "./regions";
 import { tierOf } from "./placeThemes";
 import { PARTS_OF_COUNTRY } from "./sourcePolicy";
+// The whole word test and the row level fit test both live in interestFit.js.
+// saysWord was defined in this file and is imported now for one reason: this
+// file and that one both have to agree on what "the traveller said this word"
+// means, and two copies of a word boundary check drift the first time either
+// one of them is touched.
+import { saysWord, fitsBrief } from "./interestFit";
 
 // ── WHAT THE PREVIEW SCREEN ACTUALLY HOLDS ON A CONVERSATION ────────
 //
@@ -110,19 +116,9 @@ const CATEGORY_WORDS = {
 
 // Whole words, folded, so "art" does not fire on "Aarhus" and "bar" does not
 // fire on "Barcelona". Same discipline as every other matcher in this file: a
-// bare .includes() on a topic word is how "Vejlebrovej" became Vejle.
-const saysWord = (hay, word) => {
-  const w = fold(word);
-  if (!w) return false;
-  let from = 0;
-  for (;;) {
-    const i = hay.indexOf(w, from);
-    if (i < 0) return false;
-    const before = hay[i - 1], after = hay[i + w.length];
-    if (!/[a-z0-9]/.test(before || " ") && !/[a-z0-9]/.test(after || " ")) return true;
-    from = i + 1;
-  }
-};
+// bare .includes() on a topic word is how "Vejlebrovej" became Vejle. The
+// function itself now lives in interestFit.js and is imported at the top,
+// because that file asks the same question of the same string.
 
 export const wantedCategories = (convoText, interests = []) => {
   const hay = fold([String(convoText || ""), ...(Array.isArray(interests) ? interests : [])].join(" "));
@@ -339,7 +335,14 @@ export const regionPickLimit = (days) => {
 // twice. A traveller who is already nearby finds it by browsing.
 const TOO_WEAK_FOR_A_REGION_PICK = "nearby";
 
-export const matchedPlaces = (convoText, pools, { days = null, wanted = null } = {}) => {
+// `themes` is the second half of `wanted` and arrives beside it rather than
+// being derived here, for the same reason the trip window is computed by the
+// screen: the italic line, the cards and the report all have to be describing
+// one answer, and two callers each deriving their own is how the line at the
+// top of this screen ended up describing a different trip from the list under
+// it. See interestFit.js for what a theme is and why a category gate on its
+// own put a palace in front of somebody who asked for markets.
+export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null } = {}) => {
   const text = String(convoText || "");
   const seen = new Set();
   const matched = [];
@@ -383,16 +386,29 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null } =
     // junction is not "Can't miss". Then what they said they were into, read
     // off the town's own words. Then name, so two runs of the same brief give
     // the same screen.
-    const wanted = String(text).toLowerCase();
+    // RENAMED from `wanted`, which is the name of this function's own option
+    // three lines up. The inner one shadowed the outer one completely, and it
+    // only ever worked because nothing in this block read the option. Adding
+    // one line that did would have read the lowercased conversation as a Set
+    // of categories, silently, with no error anywhere.
+    const briefText = String(text).toLowerCase();
     const interestHit = (p) => {
+      // ── A TOWN IS RANKED BY INTEREST AND NEVER FILTERED BY IT ─────
+      // This is the difference between a town and everything under it, and it
+      // is deliberate. A traveller who wants markets still has to sleep
+      // somewhere, so a town that matches nothing they said is a worse
+      // suggestion rather than a wrong one. An ATTRACTION that matches nothing
+      // they said is just the wrong attraction, and that one is filtered, in
+      // the second pass below.
+      const fit = fitsBrief(p, themes);
+      let n = fit.why.length * 2;
       // `topics`, not `hay`: a plain substring test is exactly right for a
       // topic word and exactly wrong for a place name, and the suite guards the
       // NAME matcher against `hay.includes(` by that name. Different question,
       // different variable, so the guard keeps meaning what it means.
       const topics = [p.highlight, p.desc, p.region, ...(Array.isArray(p.tags) ? p.tags : [])].join(" ").toLowerCase();
-      let n = 0;
       for (const w of ["history", "historic", "walk", "walks", "quiet", "beach", "coast", "art", "museum", "food", "hike", "nature", "castle", "viking", "old town"]) {
-        if (wanted.includes(w) && topics.includes(w)) n++;
+        if (briefText.includes(w) && topics.includes(w)) n++;
       }
       return n;
     };
@@ -466,8 +482,28 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null } =
       // absent and looking like Gemlyx knows nothing there. See
       // wantedCategories: null means the brief named no interests, and then
       // nothing is held back.
-      const asked = !wanted || wanted.has(groupKeyOf(p));
-      matched.push(asked ? p : { ...p, _notAsked: true });
+      const askedCategory = !wanted || wanted.has(groupKeyOf(p));
+      // ── AND THE CATEGORY BEING RIGHT IS NOT THE ROW BEING RIGHT ───
+      // Oliver, 15 Aug 2026, on a brief that said markets and modern design and
+      // got Amalienborg Slot, Københavns Museum and the Glyptotek: "Don't put
+      // up a bunch of random attractions just to have something."
+      //
+      // Every one of those three passed the category gate, because "design" is
+      // in wantedCategories' `free` word list next to "castle" and "viking".
+      // Once `free` was wanted this loop took every `free` row in the town, in
+      // database order, and the first six won. Nothing asked what the row was
+      // about. interestFit.js asks, off the closed vocabulary already stamped
+      // on the row by the sweep.
+      //
+      // Same treatment as a category nobody asked for, on purpose: it is
+      // offered, not deleted. Behind the door it is ranked and cut to three
+      // (see rankOffers), because the door was the other half of the same
+      // complaint.
+      const fit = fitsBrief(p, themes);
+      const held = !askedCategory || !fit.fits;
+      matched.push(held
+        ? { ...p, _notAsked: true, _held: askedCategory ? "fit" : "category", _fit: fit }
+        : { ...p, _fit: fit });
     }
   }
   return matched;

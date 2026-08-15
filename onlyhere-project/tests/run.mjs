@@ -47,6 +47,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, isUndated, UNDATED } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -87,9 +88,13 @@ writeFileSync(entry, `
   export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
+  export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
+  export { applyEditedRow, LIVE_ID_OFFSET } from ${JSON.stringify(join(root, "src/utils/liveContent.js"))};
+  export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
+  export { towns } from ${JSON.stringify(join(root, "src/data/towns.js"))};
+  export { events, majorEvents } from ${JSON.stringify(join(root, "src/data/events.js"))};
   export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
   export { TOWN_COORDS } from ${JSON.stringify(join(root, "src/data/towns.js"))};
-  export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
@@ -104,6 +109,9 @@ writeFileSync(entry, `
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
+  export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -4000,8 +4008,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app8 = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the events row is built from the vocabulary", /eventTypesPresent\(upcomingInTab\)/.test(app8));
   ok("and never again from a Set over free text", !/^\s*\.\.\.\[\.\.\.new Set\(upcomingInTab/m.test(app8));
-  is("the predicate and the count helper agree about matching a type",
-     (app8.match(/\(!eventType \|\| hasEventType\(e, eventType\)/g) || []).length, 2);
+  // ── ONE TEST, NOT ONE PER READER ─────────────────────────────────
+  // This used to assert the type predicate appeared TWICE, once for the list
+  // and once for the count, and that the two copies matched. Two copies of a
+  // rule that have to match is the drift this codebase names as its own most
+  // repeated failure, and they had already drifted next door: the month test
+  // was written three times and one copy used a different expression.
+  //
+  // The Magasin rebuild removed the duplication rather than guarding it. A
+  // facet declares its `test` once and facetCounts calls that same function, so
+  // the count on an option and the filter it applies cannot disagree by
+  // construction. The assertion follows the rule, not the old shape of it.
+  is("the type test is written exactly once",
+     (app8.match(/hasEventType\(e, v\)/g) || []).length, 1);
+  ok("and the counts are computed from the facet's own test",
+     /facetCounts\(items, facets, state, facet\.key\)/.test(readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8")));
 
   // ── "REMOVE THE VIKING SECTION AND MAKE IT A FILTER INSTEAD" ─────
   // It was worse than redundant. data/events.js says in its own comment that
@@ -4013,14 +4034,59 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the tab source no longer reads the dead array", !/eventTab === "viking" \? vikingEvents/.test(app8));
   ok("Viking survives as a type", M.EVENT_TYPES.includes("viking"));
 
-  // ── COUNTS ON EVERY PILL ─────────────────────────────────────────
-  ok("the month pills carry their count", /label=\{`\$\{m\} \$\{n\}`\}/.test(app8));
-  ok("the type pills carry theirs", /label=\{`\$\{eventTypeLabelFor\(f\)\} \$\{n\}`\}/.test(app8));
+  // ── COUNTS ON EVERY OPTION ───────────────────────────────────────
+  // Was two assertions on two hand written pill labels. One row renders every
+  // option in every facet now, so the count is structural: an option cannot be
+  // drawn without one.
+  const fbar = readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8");
+  ok("every option carries its count", /<span style=\{\{ fontSize: 11, color: C\.muted, fontWeight: 500 \}\}>\{count\}<\/span>/.test(fbar));
+  ok("and an option that would empty the list is disabled, not hidden",
+     /disabled=\{o\.value !== "All" && \(counts\[o\.value\] \?\? 0\) === 0\}/.test(fbar));
+  // "All" is the way back out of a filter that emptied the list. Disabling it
+  // strands somebody in a list they cannot widen, which is the exact failure
+  // listControls.js warns about in its header.
+  ok("but All never is", /o\.value !== "All" && /.test(fbar));
 
   // "Soonest is so awkward English." It is, and it did not even rhyme with its
   // own pair: a superlative next to an adjective. Both say what it is ordered BY.
-  ok("the sort says what it orders by", /label="By date"/.test(app8) && /label="By name"/.test(app8));
-  ok("and the awkward one is gone", !/label="Soonest"/.test(app8));
+  // The labels moved into EVENT_SORTS when the row became a Sort by dropdown,
+  // and the prefix now carries the "by" that the pill labels used to.
+  ok("the sort says what it orders by", /\{ value: "soonest", label: "Date" \}/.test(app8) && /\{ value: "az", label: "Name" \}/.test(app8));
+  ok("and the awkward one is gone", !/label: "Soonest"/.test(app8) && !/label="Soonest"/.test(app8));
+  ok("with the prefix that makes it a sentence", /Sort by:/.test(fbar));
+
+  // ── AND A SORT IS NOT A FILTER ───────────────────────────────────
+  // listControls.js says this in its own words on clearAllFacets, and the old
+  // ORDER row sat directly under TYPE looking exactly like one more filter.
+  // Magasin puts it on the opposite side of the line, and so does this.
+  // Anchored on the count-and-sort row specifically. Unanchored this matched an
+  // earlier space-between seven thousand characters away, on an option row, and
+  // passed for a reason that had nothing to do with the sort.
+  ok("the sort sits opposite the count, not among the filters",
+     /shown === items\.length[\s\S]{0,900}Sort by:/.test(fbar));
+  ok("and clearing the filters leaves it alone", /clearAllFacets\(facets, state\)/.test(fbar));
+
+  // ── WHAT IS APPLIED, WHERE IT CAN BE READ AND REMOVED ────────────
+  // Baymard's ninth mobile practice, the one 66% of sites miss, quoted in
+  // listControls.js when appliedChips was written and then not rendered
+  // anywhere for six days. Without it somebody who has scrolled past the
+  // controls cannot tell why the list is short, so they reopen the panel just
+  // to look, or decide the site is empty.
+  //
+  // This assertion did not exist until mutation testing went looking for it:
+  // deleting the whole chips row left the suite green.
+  // ANCHORED ON THE OPENING BRACE, like the preview's offered count. Unanchored,
+  // `{false && chips.length > 0 && (` is a switched off rule that a regex can
+  // still see, and mutation testing walked straight through it. Third time
+  // today that a source guard was fooled by something sitting in front of the
+  // thing it was reading.
+  ok("what is applied can be read and removed",
+     /\{chips\.length > 0 && \(/.test(fbar) && /\{chips\.map\(c => \(/.test(fbar));
+  ok("and each chip clears only its own facet", /onChange\(clearFacet\(state, c\.key\)\)/.test(fbar));
+  // One chip is not a set to clear, so the button only appears when there are
+  // two. A "clear all" next to a single chip is a second button doing the same
+  // thing as the first.
+  ok("with a clear all once there is more than one", /\{chips\.length > 1 && \(/.test(fbar));
 }
 
 // ── "WHY IS THAT 'OFF THE USUAL ROUTE' AND 'CAN'T MISS OUT'?" ────
@@ -7240,9 +7306,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // ── AN UNPRICED MODEL IS NOT A FREE MODEL ─────────────────────────
   // Real usage, no rate set. The tokens are a fact and the money is not, so
   // the tokens are kept and the run stays incomplete.
+  //
+  // A MODEL NAME THAT IS NOT IN THE TABLE, on purpose. This block used to use
+  // claude-sonnet-5, which worked only while every rate in PRICES was null.
+  // Filling the table in on 15 Aug turned six assertions red at once, and they
+  // were right to go red: they were testing the state of the table, not the
+  // rule. A model nobody has priced is the rule, and it stays true whatever the
+  // table says next.
   __reset();
   startRun("guide");
-  recordModelCall("claude", "claude-sonnet-5", { input_tokens: 5000, output_tokens: 900 });
+  recordModelCall("claude", "a-model-nobody-has-priced", { input_tokens: 5000, output_tokens: 900 });
   let s2 = summarise(endRun());
   is("real token counts are kept", [s2.tokensIn, s2.tokensOut], [5000, 900]);
   is("with no price set, nothing is claimed", s2.measured, 0);
@@ -7270,11 +7343,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   startRun("guide");
   recordRequestCall("geocode");       // known free
   recordRequestCall("geocode");
-  recordRequestCall("directions");    // no rate set
+  recordRequestCall("aServiceNobodyHasPriced");   // no rate set, and never will have
   let s4 = summarise(endRun());
   is("free calls are still calls", s4.calls, 3);
   is("a known-free service costs nothing and says so", s4.byService.geocode.unpriced, 0);
-  is("an unpriced service is not treated as free", s4.byService.directions.unpriced, 1);
+  is("an unpriced service is not treated as free", s4.byService.aServiceNobodyHasPriced.unpriced, 1);
   ok("so the run is incomplete", !s4.complete);
   // A service nobody has ever priced must not default to zero.
   __reset();
@@ -7288,7 +7361,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   __reset();
   startRun("guide");
   recordRequestCall("geocode");
-  recordRequestCall("directions");
+  recordRequestCall("aServiceNobodyHasPriced");
   const partial = summarise(endRun());
   ok("a partial total says at least", /^at least /.test(describe(partial)));
   ok("and says how many calls are unpriced", /1 of them have no price set/.test(describe(partial)));
@@ -7303,7 +7376,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // The figure most likely to be said out loud in the meeting.
   __reset();
   startRun("guide"); recordRequestCall("geocode"); endRun();              // complete
-  startRun("guide"); recordRequestCall("directions"); endRun();           // not
+  startRun("guide"); recordRequestCall("aServiceNobodyHasPriced"); endRun();  // not
   const avg = averageFor("guide");
   is("both runs are in the average", avg.runs, 2);
   is("and it knows only one of them was complete", avg.completeRuns, 1);
@@ -7325,6 +7398,40 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app = readFileSync(join(root, "src/App.jsx"), "utf8");
   const ai = readFileSync(join(root, "src/utils/aiClient.js"), "utf8");
   const cost = readFileSync(join(root, "src/utils/apiCost.js"), "utf8");
+
+  // ── THE RATES, FILLED IN 15 AUG 2026 ──────────────────────────────
+  // Oliver: "Can you give me an estimate on how much it costs to generate a
+  // post? Because I feel like I am really paying alot of money."
+  //
+  // Every rate was null, so the meter he already had printed "no rates set" and
+  // could not answer the one question it exists for. These assertions are not
+  // about the FIGURES, which are inputs and will drift. They are about the two
+  // rules the figures can break.
+  ok("every model the app actually calls has a rate",
+    ["claude-sonnet-5", "claude-opus-5", "gpt-5.6-sol", "perplexity"]
+      .every(m => PRICES.models[m]?.in != null && PRICES.models[m]?.out != null));
+  ok("and every endpoint the fetch meter can name has one",
+    ["tavily", "directions", "places", "placesLocate", "placesHours", "weather", "geocode", "commonsPhoto"]
+      .every(k => PRICES.perRequest[k] != null));
+  // ── A FLAT FEE ON TOP OF THE TOKENS IS STILL THE BILL ─────────────
+  // Perplexity is $1 per million each way and then $5 to $12 per THOUSAND
+  // requests for the search itself. Priced on tokens alone a sonar call reports
+  // about a tenth of what it costs, and it reports it as `measured`, which is
+  // this file's word for "this is a fact". Roughly 90% of a sonar call is fee.
+  __reset();
+  startRun("draft");
+  recordModelCall("perplexity", "perplexity", { input_tokens: 2000, output_tokens: 800 });
+  const sonar = summarise(endRun());
+  ok("a per-call fee is charged as well as the tokens", sonar.measured > 0.008);
+  ok("and the fee is the larger half of it", sonar.measured - 0.0028 > (sonar.measured / 2));
+  is("and it is still a fact, not a floor", sonar.complete, true);
+  // A model with no perCall is unaffected, or adding the field would have
+  // quietly moved every other line on the bill.
+  __reset();
+  startRun("draft");
+  recordModelCall("claude", "claude-sonnet-5", { input_tokens: 1e6, output_tokens: 0 });
+  is("a model with no flat fee pays only for tokens", Number(summarise(endRun()).measured.toFixed(6)), 2);
+  __reset();
 
   ok("a guide build is a run", /startRun\("guide"\)/.test(app));
   ok("a Studio draft is a run", /startRun\("draft"\)/.test(app));
@@ -9392,12 +9499,177 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // ── WIRED ────────────────────────────────────────────────────────
   const app8 = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the panel groups the rows", /const groups = groupRows\(manageItems, problemsFor\)/.test(app8));
+  // `shown` rather than manageItems since 15 Aug: the list narrows to the
+  // search and the counts above it do not. Anchored on the assignment so a
+  // groupRows call somewhere else in the file cannot answer for this one.
+  ok("the panel groups the rows", /const groups = groupRows\(shown, problemsFor\)/.test(app8));
+  ok("and what it groups is what the search left", /const shown = filterRows\(manageItems, manageQuery\)/.test(app8));
   // Anchored on the toggle: a header that cannot collapse is a heading, not a group.
   ok("a group can be opened and shut", /setOpenGroups\(prev => \{ const n = new Set\(prev\); if \(n\.has\(g\.type\)\)/.test(app8));
   ok("and the rows only render when it is open", /\{open && g\.rows\.map\(row => \(/.test(app8));
   // Seeded once on load, not per render, or a group he opens closes itself again.
   ok("which groups start open is decided at load", /setOpenGroups\(initiallyOpen\(groupRows\(list/.test(app8));
+
+  // ── "HAVING TO SEARCH FOR 'AARHUS FESTUGE' ALL THE TIME IS
+  //     ANNOYING" ─────────────────────────────────────────────────
+  // Oliver, 15 Aug 2026. Grouping made ninety rows a library and did nothing
+  // for the other half of the job, which is getting back to the one row he was
+  // on twenty minutes ago.
+  const { filterRows, rowMatchesQuery, rowHaystack } = M;
+  const LIB = [
+    { id: 1, type: "festival", payload: { name: "Aarhus Festuge", town: "Aarhus" } },
+    { id: 2, type: "town", payload: { name: "Aarhus" } },
+    { id: 3, type: "town", payload: { name: "Ærøskøbing" } },
+    { id: 4, type: "food", payload: { name: "Hærværk", location: "Aarhus" } },
+    { id: 5, type: "town", payload: { name: "Ribe" } },
+  ];
+  is("the thing he types finds the thing he wants",
+    filterRows(LIB, "aarhus festuge").map(r => r.payload.name), ["Aarhus Festuge"]);
+  // Every word has to land somewhere, which is what makes a half typed search
+  // useful. A substring test on the whole query would find nothing here.
+  is("and half of it does too", filterRows(LIB, "aarhus fest").map(r => r.payload.name), ["Aarhus Festuge"]);
+  is("words in any order", filterRows(LIB, "festuge aarhus").map(r => r.payload.name), ["Aarhus Festuge"]);
+  // ── AND THE WORDS DO NOT HAVE TO BE NEXT TO EACH OTHER ──────────
+  // The line above is green against a plain substring test, because a row's
+  // name is followed by its town in the haystack, so "festuge aarhus" happens
+  // to appear literally. Mutation testing caught that. Here the two words sit at
+  // opposite ends of the haystack in the opposite order, which only a per word
+  // test can answer.
+  is("even when they are at opposite ends of the row",
+    filterRows(LIB, "aarhus haervaerk").map(r => r.payload.name), ["Hærværk"]);
+  // ── FOLDED, BECAUSE THIS IS DENMARK ─────────────────────────────
+  // Same rule as every other matcher in this codebase, and the same failure
+  // every time it was missing: a box that cannot find Ærøskøbing unless you own
+  // the keyboard for it.
+  is("Århus finds Aarhus", filterRows(LIB, "århus").map(r => r.payload.name).sort(),
+    ["Aarhus", "Aarhus Festuge", "Hærværk"]);
+  is("and aeroskobing finds the real one", filterRows(LIB, "aeroskobing").map(r => r.payload.name), ["Ærøskøbing"]);
+  // A row is findable by where it is, not only by what it is called. Hærværk is
+  // a restaurant nobody would search for by name to fix its Aarhus data.
+  ok("a row is findable by its town", filterRows(LIB, "aarhus").some(r => r.payload.name === "Hærværk"));
+  ok("and by its type", filterRows(LIB, "town").length === 3);
+  // An empty query is not a filter. Same array back, so no search costs nothing.
+  is("an empty search hides nothing", filterRows(LIB, "").length, LIB.length);
+  is("and neither does whitespace", filterRows(LIB, "   ").length, LIB.length);
+  is("a search that matches nothing says nothing, not everything", filterRows(LIB, "zzzz").length, 0);
+  // A row with no payload is a real shape here: Manage Published lists whatever
+  // the table returns, and a half written row is exactly the thing somebody
+  // opens this panel to find.
+  ok("a row with no payload does not match and does not throw", rowMatchesQuery({ id: 9 }, "aarhus") === false);
+  ok("and neither does no row at all", typeof rowHaystack(null) === "string" && rowMatchesQuery(null, "aarhus") === false);
+  ok("while an untyped row is still findable", rowMatchesQuery({ id: 9, payload: { name: "Ribe" } }, "ribe"));
+  // ── WIRED, AND THE GROUPS HAVE TO OPEN ──────────────────────────
+  // A search that returns collapsed headers has answered nothing.
+  ok("there is a box to type in", /placeholder="Search published entries/.test(app8));
+  ok("and every group holding a match opens", /const open = searching \|\| openGroups\.has\(g\.type\)/.test(app8));
+  // The health line counts the WHOLE library on purpose. "3 things to look at"
+  // quietly meaning "3 within your current search" is a number that lies the
+  // moment you forget you were searching.
+  ok("the empty-type list is counted against the library, not the search",
+    /const missing = emptyTypes\(groupRows\(manageItems, problemsFor\)\)/.test(app8));
+  // Held outside the panel's own lifetime, so closing it to look at the draft
+  // and reopening it returns to the same filtered view.
+  ok("the search survives the panel being shut", /const \[manageQuery, setManageQuery\] = useState\(""\)/.test(app8));
+}
+
+// ── "CLICKING 'SAVE' JUST TO BE PUT ALL THE WAY BACK TO THE FRONT
+//     PAGE IS ALSO VERY ANNOYING" ──────────────────────────────────────
+// Oliver, 15 Aug 2026.
+//
+// Saving an edit called window.location.reload(). The comment defending it was
+// right that refreshLiveContent cannot do the job: it keeps mergedIds on
+// purpose, so a row already folded into the shared arrays is skipped on the way
+// back through, and liveContent.js says so in its own words. Publishing
+// something NEW has had a no-reload path since it was written. Editing never
+// did, so every save threw away the Studio panel, the open group, the scroll
+// position and the search, to change one field.
+{
+  const { applyEditedRow, LIVE_ID_OFFSET, towns, events, majorEvents, TOWN_COORDS } = M;
+  const id = LIVE_ID_OFFSET + 4242;
+  towns.push({ id, name: "Testby", desc: "before", __lat: 55.1, __lon: 10.1 });
+  TOWN_COORDS["Testby"] = [55.1, 10.1];
+
+  // A SECOND ROW AFTER IT, on purpose. The first version of this pushed the test
+  // row and then asserted it was still last, which is green for a row that was
+  // spliced out and appended. Mutation testing caught it.
+  const tailId = LIVE_ID_OFFSET + 4244;
+  towns.push({ id: tailId, name: "Efterby" });
+  const wasAt = towns.findIndex(t => t.id === id);
+
+  ok("an edit reaches the array the whole app reads", applyEditedRow(4242, "town", { name: "Testby", desc: "after" }));
+  is("and the row says the new thing", towns.find(t => t.id === id)?.desc, "after");
+  is("without a second copy appearing", towns.filter(t => t.id === id).length, 1);
+  // At the same index, so fixing a description does not silently reorder a
+  // browse page underneath a reader.
+  is("and at the position it was already in", towns.findIndex(t => t.id === id), wasAt);
+  is("with the row after it undisturbed", towns[wasAt + 1]?.id, tailId);
+
+  // ── A DASH TYPED BY HAND IS STILL A DASH ────────────────────────
+  // doLoad strips every published row on the way in. An edit is a SECOND door
+  // into the same arrays and the rule has to hold at both, or the one path that
+  // bypasses the filter is the one a founder uses fifty times a day.
+  applyEditedRow(4242, "town", { name: "Testby", desc: "a—b" });
+  ok("the second door into the arrays strips too", !/[—–]/.test(towns.find(t => t.id === id)?.desc || ""));
+
+  // A corrected town coordinate is the reference frame every other entry in
+  // that town is measured against, so it has to land here or the map keeps the
+  // old point until the next full load.
+  applyEditedRow(4242, "town", { name: "Testby", __lat: 56.9, __lon: 9.9 });
+  is("a corrected coordinate lands too", TOWN_COORDS["Testby"]?.[0], 56.9);
+  // A rename leaves the old name claimed in mergedKeys forever, and publishing
+  // a new entry under it afterwards is then silently skipped as a duplicate of
+  // a row that no longer has that name. In the database, rendering nowhere.
+  applyEditedRow(4242, "town", { name: "Nytby", __lat: 56.9, __lon: 9.9 });
+  ok("and a rename does not leave the old coordinate behind", !TOWN_COORDS["Testby"]);
+  is("under its new name", TOWN_COORDS["Nytby"]?.[0], 56.9);
+  // ── AND THE REGISTRY THAT OUTLIVES THE NAME ─────────────────────
+  // mergedKeys is type + name and it is module private, so this is a SOURCE
+  // assertion rather than a behavioural one: observing it from outside would
+  // need the loader's fetch mocked, and adding a getter to a hot module to
+  // satisfy a test is worse than saying plainly what this can and cannot see.
+  // The rule it guards is real: a rename that leaves the old name claimed means
+  // a later publish under that name is silently skipped as a duplicate of a row
+  // that no longer has it. In the database, rendering nowhere, which is this
+  // project's signature bug shape.
+  const liveSrc = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  ok("a rename releases the old name for anything published later",
+    /mergedKeys\.delete\(keyOf\(type, oldName\)\);\s*\n\s*mergedKeys\.add\(keyOf\(type, item\.name\)\);/.test(liveSrc));
+
+  // ── A FESTIVAL CAN CHANGE WHICH ARRAY IT BELONGS IN ─────────────
+  // __scale is an editable field and it decides events vs majorEvents, so an
+  // edit that promotes one has to move it rather than leaving two.
+  const fid = LIVE_ID_OFFSET + 4343;
+  events.push({ id: fid, name: "Testfest" });
+  applyEditedRow(4343, "festival", { name: "Testfest", __scale: "Major" });
+  is("a promoted festival leaves the small list", events.filter(e => e.id === fid).length, 0);
+  is("and joins the big one exactly once", majorEvents.filter(e => e.id === fid).length, 1);
+
+  // ── AND IT SAYS NO RATHER THAN GUESSING ─────────────────────────
+  // A row that was never merged (skipped as a duplicate, or a type nothing
+  // registers) is not in any array to replace. Returning true there would leave
+  // the reader on the old text with a tick next to it, which is worse than the
+  // annoyance being fixed. The caller reloads on false, which IS the old
+  // behaviour, so the worst case is today.
+  ok("a row that was never merged says so", !applyEditedRow(999999, "town", { name: "Ghost" }));
+  ok("and a type nothing registers says so", !applyEditedRow(4242, "notAType", { name: "Nytby" }));
+  ok("and a payload with no name says so", !applyEditedRow(4242, "town", { desc: "no name" }));
+
+  // Clean up, so a later block reading these singletons is not looking at test
+  // rows. The suite shares module state by design and this one writes to it.
+  [towns, events, majorEvents].forEach(list => {
+    for (let i = list.length - 1; i >= 0; i--) if ([id, fid, tailId].includes(list[i]?.id)) list.splice(i, 1);
+  });
+  delete TOWN_COORDS["Nytby"];
+
+  // ── WIRED ────────────────────────────────────────────────────────
+  const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("saving an edit updates the arrays instead of reloading",
+    /const applied = applyEditedRow\(editingId, studioType, shaped\)/.test(appS));
+  ok("and repaints the way the publish path already did", /if \(applied\) \{[\s\S]{0,400}bumpLiveContent\(v => v \+ 1\)/.test(appS));
+  // The fallback has to still be there. This is the assertion that stops the
+  // fix from becoming a silent stale-content bug on a duplicate row.
+  ok("and still reloads when it could not apply",
+    /\} else \{\s*\n\s*setToast\("💾 Saved, refreshing to pick it up"\);\s*\n\s*setTimeout\(\(\) => window\.location\.reload\(\), 900\);/.test(appS));
 }
 
 // ── HOW MUCH OF A RUN NOBODY WROTE DOWN ────────────────────────────
@@ -13936,7 +14208,17 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("and a region row says which region", /In \{place\._viaRegion\}/.test(preview));
   ok("and a town says what is inside it", /place\._holds > 0/.test(preview));
   ok("the trip's own length reaches the matcher", /days: win\?\.days \?\? null/.test(preview));
-  ok("and so does what they said they were into", /wanted \}\);/.test(preview) && /const wanted = wantedCategories\(saidByTraveller, intakeInterest\)/.test(preview));
+  ok("and so does what they said they were into", /wanted, themes \}\);/.test(preview) && /const wanted = wantedCategories\(saidByTraveller, intakeInterest\)/.test(preview));
+  // ── AND WHICH ONES, WHICH IS THE SECOND HALF ────────────────────
+  // Oliver, 15 Aug 2026, on a brief that said markets and modern design and
+  // came back with a palace, a city museum and a classical sculpture gallery:
+  // "Don't put up a bunch of random attractions just to have something."
+  // `wanted` is a gate on the CONTENT TYPE and it opened correctly, because
+  // "design" is in its `free` word list. Only `themes` can say which rows in
+  // that type were meant, and it has to be read off the traveller's own turns
+  // for the same reason `wanted` is.
+  ok("and the row level interest is read too",
+    /const themes = briefThemes\(saidByTraveller, intakeInterest\)/.test(preview));
   // ── AND THE INTEREST IS THEIRS, NOT GEMLYX'S ────────────────────
   // convoText carries the assistant's turns too, and Gemlyx suggests things.
   // One reply reading "Copenhagen has excellent museums" would put `free` in
@@ -13951,12 +14233,36 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // ── THE SECTION NOBODY ASKED FOR ────────────────────────────────
   // "Have an empty attractions and eat places. And then like a 'add'
   // attractions, next to it." An empty section with a door, not a deletion.
-  ok("a section splits what was asked for from what was not", /offered: mine\.filter\(p => p\._notAsked\)/.test(preview));
+  ok("a section splits what was asked for from what was not", /const offered = mine\.filter\(p => p\._notAsked\)/.test(preview));
   ok("and survives with nothing in it", /cat\.items\.length > 0 \|\| cat\.offered\.length > 0/.test(preview));
-  ok("the offered count is stated rather than implied", /It holds \{cat\.offered\.length\}/.test(preview));
+  ok("the offered count is stated rather than implied", /It holds \$\{cat\.offered\.length\}/.test(preview));
   ok("there is a door", /ADD_LABEL\[cat\.src\]/.test(preview));
   ok("named per category, so it does not read 'Add food & drink'", /Add places to eat/.test(preview) && /Add attractions/.test(preview));
   ok("what is behind the door can be ticked", /toggleExtra\(place\.name\)/.test(preview));
+  // ── AND BEHIND IT IS THREE, NOT THE QUERY RESULT ────────────────
+  // Oliver, 15 Aug 2026: "having a list of things you can click is
+  // overwhelming. AI is there to help for a reason. You can have
+  // 'recommendations' to add. But not a massive overwhelming list." And the
+  // shape: "3 shown that 'most likely' fits the person."
+  //
+  // The door used to render cat.offered, which is whatever the second pass
+  // collected, in database order. It renders cat.picks now.
+  ok("the door renders the ranked picks, not the whole result",
+    /cat\.picks\.map\(/.test(preview) && !/cat\.offered\.map\(/.test(preview));
+  ok("and each pick says why it is the one shown", /\{reason\}/.test(preview));
+  // A cap that says nothing reads as "this is everything". His own rule about
+  // silent truncation, applied to the one screen that truncates most.
+  // ANCHORED ON THE OPENING BRACE. Unanchored, this stayed green against
+  // `{false && cat.offered.length > cat.picks.length}`, which is a switched off
+  // rule the regex could still see. Mutation testing found it.
+  ok("and what is not shown is admitted to",
+    /\{cat\.offered\.length > cat\.picks\.length/.test(preview));
+  // ── "MAKE THEM ABLE TO 'ASK GEMLYX'" ────────────────────────────
+  // His answer for a section with nothing that fits. The seed matters as much
+  // as the door: an empty composer hands the traveller the job of working out
+  // the question, which is the same overwhelm in a different shape.
+  ok("a section holding something back can be asked about", /askGemlyx\(askSeed\(cat\)\)/.test(preview));
+  ok("and the question is already typed", /const askSeed = \(cat\) =>/.test(preview));
   // ── AND THE EMPTY STATE MUST NOT FIRE OVER A FULL DOOR ──────────
   // A screen with nine attractions behind an Add button is not empty, and
   // "nothing here yet" would both be false and hide the button saying so.
@@ -14007,6 +14313,310 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     /THE SCREEN THIS SENTENCE SITS ON IS EMPTY/.test(appE));
   ok("and it may not name a place over one", /name no place at all/.test(appE));
   ok("with the island promise named as the worst case", /at least one island visit/.test(appE));
+}
+
+// ── "WHERE IS THE DESCRIPTION OF HISTORY? I DON'T SEE THE PERSON
+//     WROTE THAT?" ────────────────────────────────────────────────────
+// Oliver, 15 Aug 2026, on a preview built for "We like markets and modern
+// design", whose four town cards read, in order:
+//
+//   Copenhagen has held city rights since 1254 and became Denmark's capital…
+//   Aarhus began as a Viking-age trading settlement called Aros at the mouth…
+//   Ribe was already a trading settlement by around 705 AD according to tree…
+//   Aalborg's name shows up on coins minted around 1040, and the town got…
+//
+// The fixtures below are those four lines, because a rule about real prose
+// tested only against invented prose is a rule about the invention. The cause
+// is in studioPrompts.js: paragraph 1 of the town draft must open with "a real
+// concrete anchor (founding date, a defining physical feature, its region)",
+// founding date is first on that list, and a model takes the first option. The
+// half after it, "who this town actually suits and who it doesn't", is on
+// every row and never survived desc.slice(0, 100).
+{
+  const { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } = M;
+
+  const COPENHAGEN = "Copenhagen has held city rights since 1254 and became Denmark's capital in 1443, grown out of a fishing village on the Øresund. It suits anyone who wants a capital they can cross on foot, and it is poor value for a traveller chasing quiet.";
+  const AARHUS = "Aarhus began as a Viking-age trading settlement called Aros at the mouth of the Aarhus River in the 700s. Good for a student city with an art museum on the roofline, less good if you came for silence.";
+  const RIBE = "Ribe was already a trading settlement by around 705 AD according to tree-ring dating on its oldest timbers. The whole old town is walkable in an afternoon.";
+
+  ok("the founding sentence is recognised for what it is", isOriginSentence(sentencesOf(COPENHAGEN)[0]));
+  ok("and so is a Viking one", isOriginSentence(sentencesOf(AARHUS)[0]));
+  ok("and one dated by its own timbers", isOriginSentence(sentencesOf(RIBE)[0]));
+  // BOTH HALVES REQUIRED, and this is the whole safety of the rule. A year on
+  // its own turns up in "busiest in July 2026" and an origin word on its own in
+  // "the oldest bar on the street". Either alone would eat a sentence a
+  // traveller wanted.
+  ok("a year alone is not a founding date", !isOriginSentence("The harbour is busiest in July 2026 and the queues show it."));
+  ok("and an origin word alone is not either", !isOriginSentence("It is the oldest bar on the street and it looks it."));
+
+  ok("the card leads with who the town suits", cardLine({ desc: COPENHAGEN, _src: "town" }).startsWith("It suits anyone"));
+  ok("and never with the year", !/1254/.test(cardLine({ desc: COPENHAGEN, _src: "town" })));
+  ok("a 'good for' sentence counts as one", cardLine({ desc: AARHUS, _src: "town" }).startsWith("Good for a student city"));
+  // ── AND LEVEL 1 HAS TO BE THE ONE ANSWERING ─────────────────────
+  // Every fixture above is green with the fit rule switched off, because level
+  // 2 drops their founding sentence and the fit sentence happens to be the next
+  // one. Mutation testing caught that: the assertions were passing for a reason
+  // unrelated to the rule they were named after. This fixture has a middle
+  // sentence between the two, so the two levels give different answers and only
+  // the fit rule gives the right one.
+  const MIDDLE = "Odense was a bishop's seat by 1020 and the cathedral still marks the centre. The river path runs the length of the town and takes about an hour. It suits anybody travelling with children, and it is thin if you came for a night out.";
+  ok("the fit sentence wins over merely dropping the founding one",
+    cardLine({ desc: MIDDLE, _src: "town" }).startsWith("It suits anybody travelling with children"));
+  ok("and the river path is not what the card leads with",
+    !cardLine({ desc: MIDDLE, _src: "town" }).startsWith("The river path"));
+  // No fit sentence anywhere in Ribe's, so level 2: drop the founding claim and
+  // keep what is left, which is the part that answers a traveller.
+  is("with no fit sentence it drops the founding claim instead",
+    cardLine({ desc: RIBE, _src: "town" }), "The whole old town is walkable in an afternoon.");
+  is("and says which rule answered", cardLineSource({ desc: RIBE, _src: "town" }), "afterOrigin");
+  is("and which one answered for Copenhagen", cardLineSource({ desc: COPENHAGEN, _src: "town" }), "fit");
+
+  // ── AND THE FALLBACK IS EXACTLY TODAY ───────────────────────────
+  // Every rule here can be wrong about a sentence, so the cost of being wrong
+  // has to be a worse line and never a missing one.
+  const ONE = "Giant glass domes housing four climate zones and free-flying butterflies.";
+  is("a single sentence is used whole", cardLine({ desc: ONE }), ONE);
+  is("an empty desc is still empty", cardLine({ desc: "" }), "");
+  is("and a missing one does not throw", cardLine(null), "");
+  // A founding sentence with nothing useful after it keeps the founding
+  // sentence, because trading a date for four words is not an improvement.
+  ok("a stub after the origin claim is not worth the trade",
+    cardLine({ desc: "Mariager was chartered in 1592 as a market town. It is small." }).startsWith("Mariager was chartered"));
+  // Break on a word. This is the real line off his screenshot, and the old
+  // hundred character slice cut it at "a restored building on Stormga…". There
+  // was no reason for that beyond nobody having looked at it.
+  const MUSEUM = "Copenhagen's own city museum packs 14,000 years of local history into a restored building on Stormgade, five minutes from the town hall square, and it is open every day of the week.";
+  // At 100, which is what the card used, this cut at "on Stormga…". That exact
+  // string is in his screenshot, so it is the fixture.
+  ok("a clipped line does not cut a word in half", !/Stormga…/.test(cardLine({ desc: MUSEUM }, 100)));
+  const clipped = cardLine({ desc: MUSEUM });
+  const body = clipped.replace(/…$/, "");
+  const lastWord = body.trim().split(/\s+/).pop();
+  ok("and its last word is a whole word from the source",
+    new RegExp(`(^|\\s)${lastWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([\\s,.]|$)`).test(MUSEUM));
+  ok("and it stays within the cap", clipped.length <= CARD_LINE_MAX + 1);
+}
+
+// ── "DON'T PUT UP A BUNCH OF RANDOM ATTRACTIONS JUST TO HAVE
+//     SOMETHING" ───────────────────────────────────────────────────────
+// Oliver, 15 Aug 2026, on the ATTRACTIONS section of a preview built from "We
+// like markets and modern design", which returned Amalienborg Slot, Københavns
+// Museum and the Ny Carlsberg Glyptotek.
+//
+// wantedCategories was working exactly as written. "design" is in its `free`
+// word list, next to "castle" and "viking", so the category gate opened, and
+// then the second pass took every `free` row in Copenhagen in database order.
+// Nothing anywhere asked what the ROW was about, and the field that says so has
+// been stamped on every entry by the sweep since 8 August.
+{
+  const { briefThemes, fitsBrief, rankOffers, offerReason, profilePull, saysWord, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT } = M;
+  const BRIEF = "I'm planning 6 days in Denmark. It is just me. We like markets and modern design. Mid range, we do not mind paying for one or two good meals.";
+
+  const want = briefThemes(BRIEF);
+  ok("markets are a thing somebody can ask for now", want.has("market"));
+  ok("and so is design", want.has("design"));
+  ok("and a good meal still asks for food", want.has("food"));
+  ok("but nobody asked about castles", !want.has("history"));
+  // Same contract as wantedCategories, deliberately: null and empty are
+  // opposite instructions and a different empty value in each is how one of
+  // them gets forgotten.
+  is("a brief that names no interest narrows nothing", briefThemes("Four days in Odense with my brother."), null);
+  is("and an empty one does not either", briefThemes(""), null);
+  // Whole words. "start" contains "art", "great" contains "eat", and
+  // "designated" contains "design". Every matcher in this codebase has been
+  // broken by exactly this and every one was found on a screenshot.
+  is("a designated driver has not asked for design", briefThemes("We have a designated driver each night."), null);
+  ok("and saysWord is the reason", !saysWord("we have a designated driver", "design"));
+  // A value in the vocabulary that no brief can reach is a filter that excludes
+  // in silence.
+  is("every theme is reachable from something a person would write", THEMES_WITHOUT_WORDS(), []);
+
+  const PALACE = { name: "Amalienborg Slot", themes: ["history"], desc: "The square, gardens and the four palace façades are free to walk around any time." };
+  const HALL = { name: "Torvehallerne", themes: ["market", "food"], desc: "Two glass market halls with sixty stalls between them." };
+  ok("the palace does not fit a brief about markets", !fitsBrief(PALACE, want).fits);
+  ok("the market hall does", fitsBrief(HALL, want).fits);
+  is("and it says which interest kept it", fitsBrief(HALL, want).why.sort(), ["food", "market"]);
+  // ── AND A ROW WITH NO TAGS IS NOT A ROW THAT DOES NOT FIT ───────
+  // `market` and `design` were added to the vocabulary the same day this
+  // shipped, so no published row carries either yet. A pure theme test would
+  // have sent every attraction in the country behind the door for the exact
+  // brief that prompted the change. An untagged row is missing data, and
+  // answering "does not fit" for missing data is a guess dressed as a decision.
+  const UNTAGGED = { name: "Designmuseum Danmark", desc: "Danish design from 1900 to now, in a rococo hospital building." };
+  ok("an untagged row is read on its own words instead", fitsBrief(UNTAGGED, want).fits);
+  is("and the report can see it was the fallback", fitsBrief(UNTAGGED, want).via, "words");
+  is("while a tagged row says so too", fitsBrief(HALL, want).via, "themes");
+  ok("an untagged row about nothing they said still does not fit",
+    !fitsBrief({ name: "Rundetaarn", desc: "A seventeenth century tower with a spiral ramp." }, want).fits);
+  // Nothing stated holds nothing back, on either path.
+  ok("and with no stated interest everything fits", fitsBrief(PALACE, null).fits);
+
+  // ── THREE, RANKED, WITH THE PROFILE ONLY EVER SORTING ───────────
+  // Oliver, 15 Aug 2026: "I think you should be able to have 3 shown that 'most
+  // likely' fits the person. Like if the person is 18, then it probably
+  // shouldn't be a bar for elderly."
+  // NAMED SO THE ALPHABET GIVES THE WRONG ANSWER. Mutation testing killed the
+  // first version of this: with the age rule switched off, ranking falls
+  // through to the name tie-break, and "Culture Box" sorted above "Farfar's
+  // Bodega" anyway, so the assertion was green with the rule gone. The bodega
+  // is called Andersens here for exactly that reason.
+  const BODEGA = { name: "Andersens Bodega", desc: "A quiet old-school bodega with a traditional crowd and candlelit tables." };
+  const DIVE = { name: "Culture Box", desc: "Late-night club with a dance floor and student prices, loud until it closes." };
+  const MID = { name: "Ved Stranden 10", desc: "A wine bar by the canal." };
+  const young = rankOffers([BODEGA, DIVE, MID], { profile: { ageBand: "Under 25" } });
+  is("an eighteen year old is not offered the bodega first", young[0].place.name, "Culture Box");
+  const old = rankOffers([BODEGA, DIVE, MID], { profile: { ageBand: "65+" } });
+  is("and somebody over 65 is not offered the club first", old[0].place.name, "Andersens Bodega");
+  // The order has to MOVE. Two age bands landing on the same list is the shape
+  // the profile being ignored takes, and no single first-place assertion can
+  // see it.
+  ok("and the two age bands do not get the same list",
+    young.map(e => e.place.name).join("|") !== old.map(e => e.place.name).join("|"));
+  is("three is the limit", rankOffers([BODEGA, DIVE, MID, PALACE, HALL], {}).length, OFFER_LIMIT);
+  // A recommendation that reshuffles on reload is not a recommendation.
+  is("and two runs of one brief give the same three",
+    rankOffers([BODEGA, DIVE, MID, PALACE, HALL], { want }).map(e => e.place.name).join("|"),
+    rankOffers([PALACE, MID, HALL, DIVE, BODEGA], { want }).map(e => e.place.name).join("|"));
+  ok("a signed out traveller still gets an order", rankOffers([BODEGA, DIVE], {}).length === 2);
+  // ── AND THE REASON IS ABOUT THE PLACE, NEVER THE PERSON ─────────
+  // profile.js promises a stored field is never repeated back at somebody as
+  // though it were a discovery. The profile changes the ORDER; the words on
+  // screen describe the venue.
+  const reason = offerReason(rankOffers([HALL], { want })[0]);
+  ok("the reason names the interest, not the traveller", /markets/i.test(reason));
+  for (const r of [BODEGA, DIVE, MID].map(p => offerReason(rankOffers([p], { profile: { ageBand: "Under 25" } })[0]))) {
+    ok("and never mentions their age band", !/\b(under 25|25-34|35-49|50-64|65\+|young|old|elderly|age)\b/i.test(r));
+  }
+  // Sex is on the profile row and is not read here. profile.js says plainly
+  // that almost nothing in a Danish travel guide turns on it, and a venue
+  // ranked by it would be the app inventing a claim about somebody from a field
+  // they were told was optional.
+  // WITH AN AGE BAND SET, on purpose. profilePull returns 0 immediately for a
+  // profile carrying nothing it reads, so a fixture with only `sex` on it never
+  // reaches the body and could not see the field being added. Mutation testing
+  // found that: a `sex` rule inserted into the function left this green.
+  is("sex does not move a single recommendation",
+    profilePull(DIVE, { ageBand: "25-34", sex: "Woman" }), profilePull(DIVE, { ageBand: "25-34", sex: "Man" }));
+  is("nor does it for a bodega", profilePull(BODEGA, { ageBand: "65+", sex: "Woman" }), profilePull(BODEGA, { ageBand: "65+", sex: "Man" }));
+  is("and a blank profile pulls nothing at all", profilePull(DIVE, {}), 0);
+
+  // The words a brief is written in and the words a row is tagged with are two
+  // vocabularies that meet in one place. If a theme loses its words the fit test
+  // silently stops being able to answer for it.
+  ok("markets have their own words", (THEME_WORDS.market || []).includes("flea market"));
+  ok("and design is not just art", !(THEME_WORDS.art || []).includes("furniture"));
+
+  // ── AND THE MATCHER HAS TO ACTUALLY ASK ─────────────────────────
+  // Everything above tests the fit rule in isolation, and a rule that is
+  // correct and never called is the exact failure this codebase keeps finding:
+  // "a helper that exists, and a site that matters where it was never called",
+  // written into previewMatch.js four separate times. This is the call site.
+  const { matchedPlaces, previewPools } = M;
+  const pools = previewPools({
+    towns: [{ name: "Copenhagen", isMajorCity: true }],
+    freeEntrance: [
+      { name: "Amalienborg Slot", city: "Copenhagen", themes: ["history"] },
+      { name: "Torvehallerne", city: "Copenhagen", themes: ["market", "food"] },
+    ],
+  });
+  const asked = new Set(["free"]);
+  const withFit = matchedPlaces("user: four days in Copenhagen, we like markets and modern design", pools,
+    { wanted: asked, themes: briefThemes("we like markets and modern design") });
+  const seen = Object.fromEntries(withFit.map(p => [p.name, p]));
+  // Optional chaining because a change that DROPS a row instead of offering it
+  // would otherwise crash this file and take every assertion under it with it,
+  // which reads as a pass.
+  ok("the market hall is shown", !seen["Torvehallerne"]?._notAsked);
+  ok("and the palace is offered instead of shown", seen["Amalienborg Slot"]?._notAsked === true);
+  is("held by the fit test, not the category gate", seen["Amalienborg Slot"]?._held, "fit");
+  // The category gate and the fit test are separate failures and the report has
+  // to be able to tell them apart, which it cannot if one is missing.
+  const noAttractions = matchedPlaces("user: four days in Copenhagen, we like markets", pools,
+    { wanted: new Set(["food"]), themes: briefThemes("we like markets") });
+  is("a category nobody asked for says so",
+    noAttractions.find(p => p.name === "Torvehallerne")?._held, "category");
+  // AND THE OLD BEHAVIOUR SURVIVES UNTOUCHED for a brief with no stated
+  // interest, which is most of them.
+  const open = matchedPlaces("user: four days in Copenhagen", pools, { wanted: null, themes: null });
+  ok("an unnarrowed brief still holds nothing back", open.every(p => !p._notAsked));
+}
+
+// ── A SCREENSHOT SHOWS THE OUTPUT, NOT THE REASON ──────────────────
+// Oliver, 15 Aug 2026: "If you want, you can make 'preview' able to have a link
+// as a report for you. If reports make things better for you.."
+{
+  const { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } = M;
+  const row = { name: "Amalienborg Slot", _src: "free", city: "Copenhagen", themes: ["history"],
+    _notAsked: true, _held: "fit", _fit: { fits: false, why: [], via: "" },
+    desc: "The square, gardens and the four palace façades are free to walk around any time, and the daily changing of the guard happens at noon whatever the weather is doing." };
+  const r = rowReport(row);
+  // The clip is the thing under suspicion, so the report carries what it was
+  // clipping FROM. A report that stores the same hundred characters the card
+  // showed could never have found the founding-date bug.
+  is("the report carries the full desc, not the card's clip", r.desc, row.desc);
+  ok("and the clip beside it", r.cardLine.length <= r.desc.length);
+  ok("and which rule produced it", !!r.cardLineFrom);
+  // Two gates, kept apart. "category" is the brief never asking for attractions
+  // at all; "fit" is the brief asking and this row not being one they meant.
+  // Collapsing them into one boolean is how the second went unnoticed for a day.
+  is("a held row says which gate closed it", r.heldBy, "fit");
+  is("and which pass had put it there", r.pass, "inNamedTown");
+  is("a named place says so", passOf({ name: "Copenhagen" }, true), "named");
+  is("and a region pick says so", passOf({ _viaRegion: "Jutland" }, false), "region");
+
+  const report = buildPreviewReport({
+    at: "2026-08-15T14:10:00.000Z",
+    convoText: "user: markets and modern design",
+    matched: [row],
+    profile: { ageBand: "Under 25", company: "Solo", pace: "Balanced", name: "Oliver", description: "I hate queues" },
+  });
+  is("the report is stamped with what it is", report.kind, REPORT_KIND);
+  // ── AND TWO FIELDS ARE DELIBERATELY NOT ON IT ───────────────────
+  // The bands change what gets recommended and belong in a report about why
+  // something was recommended. The sentence somebody wrote about themselves does
+  // not, and a debug file is exactly where personal text ends up living forever.
+  is("the profile's bands are on it", report.read.profile.ageBand, "Under 25");
+  ok("their name is not", !JSON.stringify(report).includes("Oliver"));
+  ok("and neither is what they wrote about themselves", !JSON.stringify(report).includes("I hate queues"));
+  ok("that they wrote something is recorded", report.read.profile.hasDescription === true);
+  ok("a filename says which run it was", /2026-08-15/.test(reportFilename("2026-08-15T14:10:00.000Z")));
+  ok("and it is json", reportFilename("2026-08-15T14:10:00.000Z").endsWith(".json"));
+}
+
+// ── THE RULE HE HAS RAISED MORE THAN ANY OTHER, ON THE BIGGEST
+//     BUTTON ON THE SCREEN ──────────────────────────────────────────────
+// "Looks good — continue →" shipped, and it was in his own screenshot on 15
+// August. Every path from a MODEL to a reader runs stripDashes; this string was
+// typed by hand into JSX and never went near one. Nothing in this codebase
+// could catch a hand written dash in a component, so this does.
+//
+// Comments are left alone on purpose. This reads what is left once every
+// comment is gone, which is JSX text and string literals, which is the only
+// part a reader ever sees. Comments in this codebase are full of them and
+// rewriting eleven thousand lines of history to satisfy a regex would be the
+// wrong trade.
+//
+// The stripper runs on the WHOLE file rather than line by line, because the
+// three dashes this first caught were all continuation lines inside a
+// {/* multi line JSX comment */}, which no per-line test can recognise: the
+// line itself starts with an ordinary word.
+{
+  const stripComments = (s) => s
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  const FILES = ["src/components/GuidePreviewScreen.jsx", "src/components/EventMatchCard.jsx", "src/components/AtAGlanceCard.jsx"];
+  for (const f of FILES) {
+    const code = stripComments(readFileSync(join(root, f), "utf8"));
+    const offenders = code.split("\n")
+      .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+      .filter(x => /[—–]/.test(x.line))
+      .map(x => `${f}:${x.n} ${x.line.slice(0, 60)}`);
+    is(`no reader-facing dash in ${f.split("/").pop()}`, offenders, []);
+  }
+  // And the guard has to be able to fail, or it is a comment with a green tick
+  // next to it. The suite has been bitten by this exact shape before.
+  const fake = stripComments(`const a = 1; // fine —\nreturn <div>Looks good — continue</div>;`);
+  ok("the dash guard can still see one", /[—–]/.test(fake));
 }
 
 // ── COPENHAGEN, THEN GOTHERSGADE, THEN THE BARS ────────────────────
@@ -14495,6 +15105,104 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const detailK = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("and an event page shows it", /icon: "🗣", label: "Language", value: item\.__language\.note/.test(detailK));
   ok("absent unless there is a barrier to report", /item\.__language\?\.level === "danish-only" && item\.__language\?\.note/.test(detailK));
+}
+
+
+// ── "HOW IS THIS 'BY NAME'" ────────────────────────────────────────
+// Oliver, 15 Aug 2026, on the Events tab: October above August, June below
+// September, under a control that said the list was ordered.
+//
+// The evidence was in his own screenshot before anybody read a line of code.
+// The month chips said All 14, Jun 1, Jul 1, Aug 2, Sep 4, Oct 1. Those add up
+// to NINE, so five of the fourteen events were in no month at all, which means
+// new Date() could not parse their date. The list was sorted with
+// `new Date(a.date) - new Date(b.date)`, that subtraction is NaN for any
+// unparseable row, a comparator returning NaN is inconsistent, and the order V8
+// produces from one is arbitrary rather than slightly wrong.
+{
+  const { byEventDate, eventTime, eventMonthShort, isUndated, UNDATED, parseEventDate } = M;
+
+  // The real strings off his cards. "4 Sept to 20 Sept" is what a range row
+  // stores and it is not a date any parser was ever going to read.
+  is("an ISO date is a time", typeof eventTime("2026-10-12"), "number");
+  is("a written date is too", typeof eventTime("12 Oct 2026"), "number");
+  is("a range is not a date", eventTime("4 Sept to 20 Sept"), null);
+  is("and neither is an empty one", eventTime(""), null);
+  is("nor a promise of one", eventTime("TBA"), null);
+
+  // ── ONE BAD ROW USED TO SCRAMBLE THIRTEEN GOOD ONES ─────────────
+  // This is the assertion that matters. Not "the undated row is in the wrong
+  // place", which is what it looks like: the DATED rows lose their order too.
+  const rows = [
+    { name: "Aug19", date: "2026-08-19" }, { name: "Sep04", date: "2026-09-04" },
+    { name: "Undated A", date: "" }, { name: "Oct12", date: "2026-10-12" },
+    { name: "Jun06", date: "2026-06-06" }, { name: "Jul03", date: "2026-07-03" },
+    { name: "Sep19", date: "2026-09-19" }, { name: "Sep05", date: "2026-09-05" },
+    { name: "Undated B", date: "TBA" }, { name: "Aug30", date: "2026-08-30" },
+    { name: "Sep12", date: "2026-09-12" }, { name: "Undated C", date: "" },
+    { name: "Undated D", date: "4 Sept to 20 Sept" }, { name: "Undated E", date: null },
+  ];
+  const sorted = rows.slice().sort(byEventDate);
+  const dated = sorted.filter(r => !isUndated(r.date)).map(r => r.name);
+  is("every dated row is in date order", dated,
+    ["Jun06", "Jul03", "Aug19", "Aug30", "Sep04", "Sep05", "Sep12", "Sep19", "Oct12"]);
+  // The nine dated rows come first, then the five that cannot be placed.
+  is("and the dated ones all come before the undated ones",
+    sorted.slice(0, 9).every(r => !isUndated(r.date)), true);
+  // Last rather than first, because a row nobody can plan around should not lead
+  // a list. It is still shown, because publishDraft blocks a dateless event and
+  // one on screen means it predates that gate and needs finding.
+  is("an undated row is last, not hidden", sorted.length, 14);
+  // ── AND IT NEVER RETURNS NaN ────────────────────────────────────
+  // The single property that makes the sort an order at all. Asserted directly
+  // rather than inferred from the output, because an inconsistent comparator can
+  // produce a correct-looking list on a small fixture by luck.
+  const pairs = [["2026-01-01", ""], ["", "2026-01-01"], ["", ""], ["TBA", "TBA"], [null, undefined]];
+  ok("the comparator is never NaN, whatever it is given",
+    pairs.every(([x, y]) => Number.isFinite(byEventDate({ name: "a", date: x }, { name: "b", date: y }))));
+  ok("and the old one was", Number.isNaN(new Date("") - new Date("2026-01-01")));
+  // Two events on one day must not swap places between renders.
+  // AND "AARHUS" GOES LAST, which is the whole reason daCompare exists rather
+  // than localeCompare. Aa is the older spelling of Å, the Danish collator knows
+  // it, and Å is the last letter of the alphabet. My own first version of this
+  // assertion expected Aarhus first and the code was right.
+  const sameDay = [{ name: "Ørsted", date: "2026-07-01" }, { name: "Aarhus", date: "2026-07-01" }, { name: "Æblefest", date: "2026-07-01" }];
+  is("a tie is broken by Danish name", sameDay.slice().sort(byEventDate).map(r => r.name), ["Æblefest", "Ørsted", "Aarhus"]);
+  is("and two undated rows are ordered too", [{ name: "B", date: "" }, { name: "A", date: "" }].sort(byEventDate).map(r => r.name), ["A", "B"]);
+
+  // ── THE CHIPS HAVE TO ADD UP ────────────────────────────────────
+  is("a parseable date has a month", eventMonthShort("2026-10-12"), "Oct");
+  is("an unparseable one has none", eventMonthShort("4 Sept to 20 Sept"), "");
+  ok("and it is findable under its own heading", isUndated("4 Sept to 20 Sept") && UNDATED === "Undated");
+  // His numbers: 14 rows, 9 in a month. Every row lands in exactly one bucket
+  // now, which is the property, not the figure.
+  const buckets = rows.map(r => (isUndated(r.date) ? UNDATED : eventMonthShort(r.date)));
+  is("every row lands in exactly one bucket", buckets.filter(Boolean).length, rows.length);
+  is("and the chips sum to the whole", new Set(buckets).size, 6);
+
+  // ── WIRED ────────────────────────────────────────────────────────
+  const appEv = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the events list uses the safe comparator",
+    /\.sort\(eventSort === "az" \? byName : byEventDate\)/.test(appEv));
+  // COMMENTS STRIPPED FIRST. The paragraph above the call site quotes the broken
+  // line to say what it used to be, and an unanchored test cannot tell an
+  // explanation from a regression. Second time today a source guard was fooled
+  // by a comment; the dash guard was the first.
+  const appEvCode = appEv.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  ok("and nothing subtracts two raw Dates on this page",
+    !/new Date\([ab]\.date\) - new Date\([ab]\.date\)/.test(appEvCode));
+  ok("an undated chip appears only when there is something under it",
+    /upcomingInTab\.some\(e => isUndated\(e\.date\)\) \? \[UNDATED\] : \[\]/.test(appEv));
+  // One month test, read by the chip count and by the filter, or the count says
+  // one thing and the list does another.
+  // ONCE. It was three copies before the Magasin rebuild, one for the list and
+  // one inside each count, and they had already drifted. The facet's own `test`
+  // is the only caller now, and facetCounts runs that same function, so the
+  // count on a month and the filter it applies cannot disagree.
+  is("the month test is written exactly once",
+    (appEv.match(/inEventMonth\(e, /g) || []).length, 1);
+  ok("and the list runs the facets rather than its own copy of them",
+    /const filteredEvents = applyFacets\(upcomingInTab, eventFacets, eventFacetState\)/.test(appEv));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
