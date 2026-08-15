@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { C } from "../utils/theme";
-import { testTravelerLine } from "../utils/helpers";
-import { fold, variantsOf, samePlaceName, containsName } from "../utils/danishNames";
+import { testTravelerLine, getEventDate } from "../utils/helpers";
+import { matchedPlaces, previewPools, mentionsPlace } from "../utils/previewMatch";
+import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
 
 // ── "Here's what's coming up" preview screen ────────────────────────
 // PASS 27 EXTRACTION (App.jsx file-split, per Oliver: "you gotta start
@@ -54,13 +56,29 @@ import { fold, variantsOf, samePlaceName, containsName } from "../utils/danishNa
 // openStopDetail's routing is untouched), just split into two labeled
 // groups by the isMajorCity flag instead of one. `match` is an optional
 // extra predicate applied on top of the _src/groupKey match below.
+// ── EVENTS LEFT THIS LIST ON PURPOSE ────────────────────────────────
+// Oliver, 14 Aug 2026: "every single event is for some reason shown in the
+// preview instead of just the one that the visitor will explore".
+//
+// The cause is the second matching pass below, which adds every row whose own
+// town field points at a town the traveller named. For a standing place that
+// is the entire reason this screen exists. For an event it is a category
+// error, because an event is a place plus a date and this pass only ever read
+// the place half. Measured on the real matcher: "Four days in Copenhagen in
+// March, we want the Copenhagen Light Festival" returned six events, five of
+// them never mentioned, four in the wrong season and one already finished,
+// every one presented exactly like the festival he had asked for.
+//
+// Events are now built by utils/tripEvents.js and rendered by their own block
+// further down, because they need three things a generic card cannot do: a
+// date test against the real trip, a tick so the traveller chooses, and a
+// limit that comes from how long they are here.
 const CATEGORY_SECTIONS = [
   { src: "town", label: "Major Cities", match: p => p.isMajorCity },
   { src: "town", label: "Towns", match: p => !p.isMajorCity },
   { src: "free", label: "Attractions" },
   { src: "food", label: "Food & Drink" },
   { src: "nightlife", label: "Nightlife" },
-  { src: "event", label: "Events" },
 ];
 const groupKey = (p) => (p._src === "craft" ? "free" : p._src);
 // Per-section cap, not one shared cap across everything — a real conversation
@@ -86,94 +104,36 @@ export const GuidePreviewScreen = ({
   setAiMessages,
   setGuideModal,
   generateGuide,
+  // The traveller's own dates and interests, straight off the intake form.
+  // EventMatchCard has read these since PASS 26 to decide whether ONE event is
+  // on while they are there; this screen was making the same decision without
+  // them, which is why it could not make it at all.
+  intakeArrival = "",
+  intakeDeparture = "",
+  intakeInterest = [],
+  pickedEvents = null,
+  setPickedEvents = () => {},
 }) => {
   const convoText = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
-  // ── "WHY DOES IT ONLY SHOW COPENHAGEN" ────────────────────────────
-  // Oliver, 9 Aug 2026, looking at a preview with one city on it.
-  //
-  // The matcher was `convoText.toLowerCase().includes(place.name.toLowerCase())`,
-  // and it has two holes that both hit Denmark specifically.
-  //
-  // 1. IT IS A RAW SUBSTRING TEST, SO SPELLING IS THE MATCH. He raised this
-  //    himself a few hours earlier about a different screen: "I type
-  //    copenhagen, but Copenhagen on Danish is Kobenhavn." Same problem here,
-  //    and worse, because the Danish letters break it even when the traveler is
-  //    writing the Danish name correctly: "Aeroskobing" never matches
-  //    "Ærøskøbing", "Odense" is fine but "Møn" is three characters and was
-  //    being skipped by the length guard anyway.
-  //
-  //    utils/danishNames.js exists for exactly this and was not being used
-  //    here. That is the same failure as the last several: a helper that
-  //    exists, and a site that matters where it was never called.
-  //
-  // 2. IT ONLY EVER SHOWS PLACES HE TYPED. Somebody who writes "four days in
-  //    Copenhagen" has named one place, so this screen showed one card, and
-  //    the screen's whole job is to prove Gemlyx knows the ground. Gemlyx knows
-  //    dozens of things IN Copenhagen. Those are not a guess, they are rows
-  //    with a `city`/`town` field pointing at a town he did name.
-  // 3. AND THE FIX FOR 1 BROUGHT ITS OWN HOLE. `hay` was built with a space on
-  //    each side, which is exactly the right idea, and then never used as one:
-  //    the test was a bare `hay.includes(f)`, so the padding did nothing and any
-  //    fold that appeared ANYWHERE inside the conversation counted.
-  //
-  //    Danish place names are short, so that is not a rare accident:
-  //
-  //      "we would ALSO like a beach"     -> Als
-  //      "not much MONey to spend"        -> Møn
-  //      "arriving MONday"                -> Møn
-  //      "somewhere with a COMMON room"   -> Møn
-  //
-  //    Each one puts a card for an island the traveller never mentioned onto a
-  //    screen whose only job is to prove Gemlyx knows the ground. The 3-char
-  //    minimum was standing in for a boundary check and cannot do that job:
-  //    "Als" and "Møn" are three characters, so the guard let precisely the
-  //    worst offenders through while blocking nothing.
-  //
-  //    containsName does the padding properly and treats punctuation as a gap,
-  //    so "Copenhagen." and "Aarhus," still match. Shared with discovery.js so
-  //    the two cannot drift.
-  const mentions = (name) => variantsOf(name, { includeSights: true }).some(v => containsName(convoText, v));
-  const parentOf = (p) => String(p.city || p.town || "").trim();
-  const pools = [
-    ...towns.map(p => ({ ...p, _src: "town" })),
-    ...freeEntrance.map(p => ({ ...p, _src: "free" })),
-    ...foodSpots.map(p => ({ ...p, _src: "food" })),
-    ...nightlifeSpots.map(p => ({ ...p, _src: "nightlife" })),
-    ...craftItemsFallback.map(p => ({ ...p, _src: "craft" })),
-    ...events.map(p => ({ ...p, _src: "event" })),
-    ...majorEvents.map(p => ({ ...p, _src: "event" })),
-  ];
-  const seen = new Set();
-  const matched = [];
-  // The length guard is now on the FOLDED variant inside mentions(), not on the
-  // raw name, because it was throwing away real Danish towns: "Mon" and "Aro"
-  // are three characters and are places, while the thing the guard was actually
-  // protecting against is a two-letter fragment matching inside a longer word.
-  pools.forEach(p => {
-    if (!p.name) return;
-    const key = fold(p.name);
-    if (!key || seen.has(key)) return;
-    if (mentions(p.name)) { seen.add(key); matched.push(p); }
-  });
-  // ── AND WHAT IS INSIDE THE PLACES HE DID NAME ─────────────────────
-  // Second pass, and deliberately second: anything whose own city/town field
-  // points at a town already matched above. Not a guess and not a search, just
-  // the rows that say where they are. This is the difference between "you said
-  // Copenhagen" and "here is what we hold on Copenhagen", which is the only
-  // reason this screen exists.
-  const matchedTowns = new Set(matched.filter(p => p._src === "town").map(p => fold(p.name)));
-  if (matchedTowns.size) {
-    pools.forEach(p => {
-      if (!p.name || p._src === "town") return;
-      const key = fold(p.name);
-      if (!key || seen.has(key)) return;
-      const parent = parentOf(p);
-      if (!parent) return;
-      // samePlaceName, not equality: a row can store "Kobenhavn" while the town
-      // row is called "Copenhagen", and they are one place.
-      if ([...matchedTowns].some(t => samePlaceName(parent, t))) { seen.add(key); matched.push(p); }
-    });
-  }
+  // The name matcher and both matching passes live in utils/previewMatch.js
+  // now, together with the four bugs they have carried (a raw substring test,
+  // an unused padding, a length guard standing in for a boundary check, and a
+  // town field read under the wrong name). Every one was found by Oliver on a
+  // screenshot, because a matcher inside a render can only be run by rendering
+  // it. It can be tested from there.
+  const mentions = (name) => mentionsPlace(convoText, name);
+  // ── "SAME ATTRACTION AND SAME TOWN THAT ARE ALWAYS SHOWN" ─────────
+  // Oliver, 15 Aug 2026, on a preview for a family who said markets, cycling
+  // and one or two meals out, which came back as Copenhagen plus a palace, a
+  // city museum and an art gallery, with no Food & Drink or Nightlife section
+  // at all. Not thin content: food, nightlife and craft rows keep their town
+  // in `location` while this screen only read `city` and `town`, so they were
+  // permanently ineligible. Both passes now live in utils/previewMatch.js,
+  // which carries the full story and, unlike a matcher inside a render, can be
+  // tested. App.jsx's previewWhy effect reads the same function, so the italic
+  // line at the top of this screen can no longer describe a different trip
+  // from the list underneath it.
+  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }));
   // Group into the fixed category order above, each capped independently.
   // Two sections ("Major Cities"/"Towns") now share src:"town" and are
   // told apart by their own `match` predicate — apply it on top of the
@@ -181,7 +141,35 @@ export const GuidePreviewScreen = ({
   const sections = CATEGORY_SECTIONS
     .map(cat => ({ ...cat, items: matched.filter(p => groupKey(p) === cat.src && (!cat.match || cat.match(p))).slice(0, MAX_PER_SECTION) }))
     .filter(cat => cat.items.length > 0);
-  const totalShown = sections.reduce((n, cat) => n + cat.items.length, 0);
+  // ── THE EVENTS, DATE TESTED AND TICKABLE ──────────────────────────
+  // `named` is the first pass's own answer rather than a second guess at it:
+  // an event is named exactly when the traveller wrote it, which is the same
+  // question mentions() already answered above.
+  const win = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText });
+  const eventPlan = tripEvents(matched.filter(p => p._src === "event"), {
+    window: win,
+    interests: intakeInterest,
+    named: e => mentions(e.name),
+  });
+  // Gemlyx's own picks are the starting ticks, so somebody who taps straight
+  // through still gets the event that was running that week. Written once,
+  // then it is the traveller's list: `pickedEvents` null means untouched.
+  useEffect(() => {
+    if (pickedEvents === null) setPickedEvents(eventPlan.picks);
+    // eventPlan.picks is derived from props that cannot change while this
+    // overlay is open, so its identity changing per render is not a signal.
+  }, [pickedEvents === null, eventPlan.picks.join("|")]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const picked = pickedEvents === null ? eventPlan.picks : pickedEvents;
+  const atLimit = picked.length >= eventPlan.limit;
+  const toggleEvent = (name) => {
+    setPickedEvents(prev => {
+      const list = prev === null ? eventPlan.picks : prev;
+      if (list.includes(name)) return list.filter(n => n !== name);
+      if (list.length >= eventPlan.limit) return list;
+      return [...list, name];
+    });
+  };
+  const totalShown = sections.reduce((n, cat) => n + cat.items.length, 0) + eventPlan.rows.length;
   // PASS 27: closing without continuing (backdrop tap or ✕) needs to unwind
   // the random-guide test state too, not just the modal — else
   // pendingRandomGuideMode and the fabricated brief pushed into aiMessages
@@ -214,7 +202,7 @@ export const GuidePreviewScreen = ({
             the events-included line follow on the finished guide page. */}
         {testProfile && (
           <div style={{ background: `${C.gold}0D`, border: `1px dashed ${C.gold}66`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 12.5, lineHeight: 1.7 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 }}>◈ Pipeline test — the traveler that was picked</div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 }}>◈ Pipeline test: the traveler that was picked</div>
             {/* "based around , into coastal views and local food" is what this
                 line used to say, with nothing between "around" and the comma,
                 because the brief stopped naming towns and this screen was not
@@ -269,6 +257,74 @@ export const GuidePreviewScreen = ({
             </div>
           </div>
         ))}
+        {/* ── EVENTS: THE ONE SECTION THE TRAVELLER DECIDES ────────────
+            Every other section on this screen is Gemlyx showing what it holds.
+            This one asks a question, because an event costs a day and only the
+            person going knows whether they want to spend one. The limit is
+            Oliver's: "If the person has chosen like 4 days, then obviously he
+            should be limited to only one. If the person is there for 10 on the
+            other hand.. then he can easily make 3 or 4."
+
+            A row that cannot be ticked still renders, with its dates and the
+            reason. Hiding a festival somebody asked for by name because it
+            runs three weeks after they leave is how they find that out at the
+            gate instead of here. */}
+        {eventPlan.rows.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 }}>Events</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
+              {eventPlan.dated
+                ? describePicks(eventPlan.limit, picked.length)
+                : "Add an event and the plan is built around its dates. Tell Gemlyx your travel dates in chat and it can check what else is on that week."}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {eventPlan.rows.map(row => {
+                const place = row.event;
+                const on = picked.includes(place.name);
+                const blocked = !row.tickable || (!on && atLimit);
+                return (
+                  <div key={`event-${place.id}`}
+                    style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${on ? `${C.gold}88` : C.border}`, borderRadius: 14, padding: 12, alignItems: "center", opacity: row.tickable ? 1 : 0.62 }}>
+                    <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg, #16233F 0%, #0A0F1E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {place.photo ? (
+                        <img src={place.photo} alt={place.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <span style={{ fontSize: 22, opacity: 0.4 }}>{place.emoji || "◆"}</span>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
+                        {row.recommended && (
+                          <span style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "2px 7px" }}>Recommended</span>
+                        )}
+                      </div>
+                      {/* THE DATES, WHICH THIS CARD NEVER SHOWED. A card with a
+                          name and a description reads as "this is on", and for
+                          four of the six events it used to list, it was not. */}
+                      <div style={{ fontSize: 12, color: row.tickable ? C.light : C.muted, marginTop: 3 }}>
+                        {getEventDate(place.date, place.dateEnd)}{place.town ? ` · ${place.town}` : ""}
+                        {row.note ? ` · ${row.note}` : ""}
+                      </div>
+                      <button onClick={() => openStopDetail(place)}
+                        style={{ background: "none", border: "none", padding: 0, marginTop: 5, color: C.gold, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                        Read more
+                      </button>
+                    </div>
+                    <button onClick={() => { if (!blocked || on) toggleEvent(place.name); }}
+                      disabled={blocked && !on}
+                      aria-pressed={on}
+                      aria-label={on ? `Remove ${place.name} from the trip` : `Add ${place.name} to the trip`}
+                      title={!row.tickable ? row.note : (blocked ? `You have already added ${eventPlan.limit}` : "")}
+                      style={{ flexShrink: 0, background: on ? C.gold : "none", border: `1px solid ${blocked && !on ? `${C.border}` : `${C.gold}55`}`, color: on ? "#1A1206" : blocked ? C.muted : C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: blocked && !on ? "not-allowed" : "pointer", fontFamily: "'Inter', sans-serif" }}>
+                      {on ? "✓ Added" : row.tickable ? "Add" : "Can't add"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {/* ── AN EMPTY LIST IS NOT A BROKEN SCREEN ──────────────────
             Oliver's screenshots: one preview with a single Copenhagen card for
             a five day coastal trip, and one with nothing on it at all.

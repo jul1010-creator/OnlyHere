@@ -28,7 +28,7 @@
 // version too, because `townList` and `nightlifeTowns.find` both existed in it.
 // This can be given spots and towns and asked what it returns.
 
-import { samePlaceName, variantsOf, fold } from "./danishNames";
+import { samePlaceName, variantsOf, fold, containsName } from "./danishNames";
 
 // The cities a venue's free-text location is matched against, ahead of the
 // comma-splitting fallback, because "Copenhagen city centre" has no comma.
@@ -85,4 +85,102 @@ export const nightlifeTownList = (spots, townPages, cities = NIGHTLIFE_CITIES) =
     ...(Array.isArray(townPages) ? townPages : []).map(p => p?.name).filter(Boolean),
   ];
   return all.filter((t, i, a) => a.findIndex(x => samePlaceName(x, t)) === i);
+};
+
+// ── COPENHAGEN, THEN GOTHERSGADE, THEN THE BARS ─────────────────────
+//
+// Oliver, 15 Aug 2026: "I don't know how to recommend Gothersgade. Because it's
+// technically in Copenhagen.. but it's a bar street with bars.. same with
+// Jomfru Ane Gade." And then the shape he wanted, exactly: "So Copenhagen ->
+// Gothersgade -> List of bars.. like that."
+//
+// A street sits between a town and its venues, and the venues are NOT stored on
+// it. Each bar keeps its own published row with its own location, and the match
+// happens here, at render time. That way publishing one more bar on Gothersgade
+// needs no edit to the street entry, and deleting a bar cannot leave a name
+// behind on a list that nothing would ever correct.
+//
+// The match is the street's own name inside the venue's location, boundary
+// aware and Danish-letter aware, because "Gothersgade 8B, Copenhagen" and
+// "Gothersgade" are the same street written two ways and neither is wrong.
+
+// LONGEST NAME FIRST, and this is the whole subtlety. "Store Kongensgade" and
+// "Kongensgade" are two different streets in the same country, and a venue on
+// the first contains the name of the second. Testing the longer name first
+// means a bar is claimed by the most specific street that fits it, which is
+// the only answer that can be right for both.
+const byLengthDesc = (a, b) => String(b?.name || "").length - String(a?.name || "").length;
+
+// ── "Noerregade 40" AND "Nørregade" ARE THE SAME STREET ─────────────
+// fold() maps ø to o, so "Nørregade" becomes norregade, while the ASCII
+// transliteration people and scraped pages actually write, "Noerregade",
+// becomes noerregade. Neither contains the other and the bar falls off its own
+// street in silence, which is the exact shape of miss this project keeps
+// finding on a screenshot weeks later.
+//
+// Deliberately NOT a change to fold(). A lossier global fold would make every
+// comparison in the app slightly more willing to say yes, and the streets are
+// not worth that. This spells the ONE name a few ways and asks containsName
+// about each, which loosens nothing anybody else relies on.
+const SWAPS = [["ø", "oe"], ["æ", "ae"], ["å", "aa"]];
+export const spellingVariants = (name) => {
+  const base = String(name || "").trim();
+  if (!base) return [];
+  const out = new Set([base]);
+  for (const [danish, ascii] of SWAPS) {
+    for (const v of [...out]) {
+      if (v.toLowerCase().includes(danish)) out.add(v.replace(new RegExp(danish, "gi"), ascii));
+      if (v.toLowerCase().includes(ascii)) out.add(v.replace(new RegExp(ascii, "gi"), danish));
+    }
+  }
+  return [...out];
+};
+const nameIsIn = (haystack, name) => spellingVariants(name).some(v => containsName(haystack, v));
+
+export const streetForSpot = (spot, streets, cities = NIGHTLIFE_CITIES) => {
+  const where = String(spot?.location || "").trim();
+  if (!where) return null;
+  const town = townOfLocation(where, cities);
+  const list = (Array.isArray(streets) ? streets : []).filter(s => s?.name).slice().sort(byLengthDesc);
+  for (const st of list) {
+    // A street in another town with the same name is a different street.
+    // Nørregade exists in a dozen Danish towns.
+    const stTown = String(st.town || "").trim() || townOfLocation(st.location, cities);
+    if (stTown && town && !samePlaceName(stTown, town)) continue;
+    if (nameIsIn(where, st.name)) return st;
+  }
+  return null;
+};
+
+export const barsOnStreet = (street, spots, cities = NIGHTLIFE_CITIES) =>
+  (Array.isArray(spots) ? spots : []).filter(s => streetForSpot(s, [street], cities));
+
+// The town page, as one answer rather than three lookups that can disagree.
+// `streets` carries each street with the venues on it, `loose` is everything in
+// that town on no published street, and a street with nothing on it is still
+// returned: it has its own writing and its own page, and hiding it the moment
+// its bars are unpublished would make it flicker in and out of existence.
+export const nightlifeForTown = (town, spots, streets, cities = NIGHTLIFE_CITIES) => {
+  const inTown = (Array.isArray(spots) ? spots : []).filter(s => {
+    const t = townOfLocation(s?.location, cities);
+    return t && town && samePlaceName(t, town);
+  });
+  const townStreets = (Array.isArray(streets) ? streets : []).filter(st => {
+    const t = String(st?.town || "").trim() || townOfLocation(st?.location, cities);
+    return t && town && samePlaceName(t, town);
+  }).slice().sort(byLengthDesc);
+  const claimed = new Set();
+  const withBars = townStreets.map(st => {
+    const bars = inTown.filter(s => {
+      if (claimed.has(s)) return false;
+      // Asked against the FULL street list, not just this one, so a bar on
+      // Store Kongensgade is claimed by Store Kongensgade even while the
+      // shorter street is the one being filled.
+      const owner = streetForSpot(s, townStreets, cities);
+      return owner === st;
+    });
+    bars.forEach(b => claimed.add(b));
+    return { street: st, bars };
+  });
+  return { streets: withBars, loose: inTown.filter(s => !claimed.has(s)) };
 };

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Routes, Route, useNavigate, useParams } from "react-router-dom";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
+import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } from "./utils/checkScope";
 import { denmarkFacts } from "./data/denmarkFacts";
 import { shuffledOrder, identityOrder, advancePos, factAt } from "./utils/factRotation";
 import { events, majorEvents, vikingEvents } from "./data/events";
@@ -9,6 +10,7 @@ import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
 import { nightlifeSpots } from "./data/nightlife";
 import { nightlifeTowns } from "./data/nightlifeTowns";
+import { nightlifeStreets } from "./data/nightlifeStreets";
 import { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit } from "./utils/publishedRepair";
 import { blockingCoordProblems, coordProblems, coordAudit, describeCoordAudit } from "./utils/coordCheck";
 import { fetchProfile, profileForPrompt, isBlank as profileIsBlank } from "./utils/profile";
@@ -77,10 +79,11 @@ import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liv
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, arrivalStop } from "./utils/journey";
 import { correctEntry, keepMeasured, MEASURED_FIELDS } from "./utils/correction";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance } from "./utils/glanceExtract";
-import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from "./utils/sourcePolicy";
+import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
-import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from "./utils/nightlife";
+import { matchedPlaces, previewPools } from "./utils/previewMatch";
+import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
@@ -698,6 +701,12 @@ function GemlyxApp() {
   const [foodKind, setFoodKind] = useState("All"); // "All" | "Restaurants" | "Food Streets"
   const [nightlifeTab, setNightlifeTab] = useState("Local");
   const [nightlifeTownView, setNightlifeTownView] = useState(null); // null = showing towns; a town name = showing that town's venues
+  // ── THE LEVEL BETWEEN A TOWN AND A BAR ────────────────────────────
+  // Oliver, 15 Aug 2026: "So Copenhagen -> Gothersgade -> List of bars.. like
+  // that." Holds the published street entry itself rather than its name,
+  // because two towns can have a Nørregade and the name alone cannot say which
+  // one is open.
+  const [nightlifeStreetView, setNightlifeStreetView] = useState(null);
   const [craftModal, setCraftModal] = useState(null);
   const [expandedPlan, setExpandedPlan] = useState(null);
   const [liveInfo, setLiveInfo] = useState({});
@@ -1097,6 +1106,72 @@ function GemlyxApp() {
   // draft. editingId is deliberately NOT set, so Publish creates rather than
   // overwrites; a pasted payload has no row to update and silently adopting
   // one would be the worst possible guess.
+  // ── ONE DOOR'S WORTH OF CLEARING, FOR ALL FOUR DOORS ──────────────
+  //
+  // Oliver, 15 Aug 2026: "I'd like you to walk through bugs, and the entire
+  // studio of navigations. So I don't need to waste money having to constantly
+  // call out bugs."
+  //
+  // Four different paths put an entry into the Studio editor: a fresh research
+  // run (generateArea), opening a published row (editItem), pasting JSON
+  // (loadPastedDraft) and opening a finished background draft
+  // (loadQueueResult). Each one cleared its own hand-picked subset of the
+  // previous entry's state, and no two subsets matched. Laid side by side, the
+  // gaps were these, and every one of them is a real report waiting to happen:
+  //
+  //   editingId        not cleared by generateArea. Research a new place while
+  //                    a published row is open and Publish reads "Save
+  //                    changes": it PATCHes the OLD row with the new draft,
+  //                    unshaped, no blogBody, coordinate gate downgraded to a
+  //                    console warning. The old payload is gone, and this table
+  //                    has no undo.
+  //   scanHint         cleared by NOTHING. It is injected into research as
+  //                    "trust this over a weaker fresh search": town and dates.
+  //                    Tap one scan chip and every manual draft for the rest of
+  //                    the session is told it is in that festival's town.
+  //   factCheck*       not cleared by loadQueueResult. Open a queue draft with
+  //                    a fact-check open and "Apply to draft" pastes the
+  //                    PREVIOUS entry's corrected JSON into this one.
+  //   aiTellFlags      never cleared. Each flag holds an absolute character
+  //   rephrase         offset into the text it was scanned from, and Rephrase
+  //                    slices the CURRENT text at that offset.
+  //   checkSites       never cleared. Entry A's remembered sources are handed
+  //                    to Perplexity as the pages to open first for entry B.
+  //   manualPrice      keyed by field name, so a price typed for A pre-fills
+  //                    the same empty field on B.
+  //   studioPlaced     not cleared by editItem or loadQueueResult.
+  //   studioFrozenGeo  not cleared by editItem. Inert only because publish gates
+  //                    it behind !isEditing, and editingId is exactly the flag
+  //                    the first line of this list shows cannot be trusted.
+  //
+  // So it is one function now. A fifth door cannot get a different subset right
+  // because there is no subset left to choose. Call it FIRST, then set whatever
+  // this particular door genuinely carries: the later setState wins.
+  //
+  // `apply` exists for the queued path. A background draft must not touch
+  // shared UI state at all, and generateArea already has a `ui` wrapper that
+  // no-ops when queued; it passes it straight in.
+  const clearPreviousEntry = (apply) => {
+    const set = typeof apply === "function" ? apply : ((setter, value) => setter(value));
+    set(setEditingId, null);
+    set(setDraftEditError, null);
+    set(setPublishStatus, null);
+    set(setPublishErrorDetail, null);
+    set(setStudioIdentityWarning, null);
+    set(setStudioInventedWarning, null);
+    set(setVerifyResults, null); set(setVerifyError, null);
+    set(setGoogleCheckResult, null); set(setGoogleCheckError, null); set(setGooglePrecheckRan, false);
+    set(setFactCheckClaims, null); set(setFactCheckFixPreview, null); set(setFactCheckFixError, null);
+    set(setStudioInstagramUrl, "");
+    set(setStudioFrozenGeo, null);
+    set(setStudioPlaced, null);
+    set(setScanHint, null);
+    set(setCheckSites, "");
+    set(setAiTellFlags, []);
+    set(setRephraseSuggestions, {});
+    set(setManualPriceInputs, {});
+  };
+
   const loadPastedDraft = () => {
     const raw = draftPasteText.trim();
     if (!raw) { setDraftPasteError("Nothing to load yet."); return; }
@@ -1107,66 +1182,33 @@ function GemlyxApp() {
       setDraftPasteError("That parsed, but it is not a draft object."); return;
     }
     if (!payload.name) { setDraftPasteError("A draft needs a name field. This one has none, so it would fail every check downstream."); return; }
+    clearPreviousEntry();
     setStudioDraft(payload);
     setStudioDraftText(JSON.stringify(payload, null, 2));
     setStudioResult(`// Loaded from pasted JSON, not from a research run.\n// Nothing here was measured by this session: the gates below run on what you pasted.`);
     setStudioPhotoName(payload.photo ? String(payload.photo).split("/").pop() : `${slugify(payload.name)}.jpg`);
-    setDraftEditError(null);
     setDraftPasteError("");
-    setPublishStatus(null);
-    setPublishErrorDetail(null);
-    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
-    setStudioInventedWarning(null);
-    // ── AND THE MEASUREMENTS FROM WHATEVER RAN BEFORE THIS ────────────
-    //
-    // Oliver, 14 Aug 2026, minutes after this feature shipped: "Not published,
-    // because the map pin would be wrong. Stored at 0.000, 0.000."
-    //
-    // My bug, and the same class as every other one tonight. publishDraft
-    // stamps studioFrozenGeo onto the payload for EVERY type, deliberately, so
-    // that festivals and food spots get a map pin at all. studioFrozenGeo is
-    // React state left over from whatever draft ran last, and loadPastedDraft
-    // was not clearing it, so a pasted payload inherited a previous run's
-    // coordinate and its station.
-    //
-    // The banner this function writes says "nothing here was measured by this
-    // session". The code has to make that true rather than assert it. A pasted
-    // draft carries its own values or it carries none, and the coordinate gate
-    // at publish then does its job honestly instead of blocking on a number
-    // that came from somewhere else entirely.
-    setStudioFrozenGeo(null);
-    setStudioPlaced(null);
-    // ── NOT SETTING IS NOT CLEARING ──────────────────────────────────
-    //
-    // Found by a third reviewer, 14 Aug 2026. The comment above this function
-    // said editingId is "deliberately NOT set, so Publish creates rather than
-    // overwrites". That is true of a fresh session and false of the path that
-    // matters: open a published row with editItem, which SETS editingId, click
-    // any type chip, which nulls studioResult and makes the paste box appear
-    // but leaves editingId alone, then load a pasted draft. Publish takes the
-    // isEditing branch and PATCHes the row that was open, with the pasted
-    // payload, skipping shapeForLive entirely.
-    //
-    // The queue path learned this exact lesson and clears it, in writing.
-    // This one repeated the pre-fix mistake, and studioInstagramUrl rides the
-    // same path, so the pasted entry could publish carrying the previously
-    // edited row's reel.
-    setEditingId(null);
-    setStudioInstagramUrl("");
+    // The two bugs this function was carrying, studioFrozenGeo inheriting the
+    // previous run's coordinate ("Stored at 0.000, 0.000") and editingId
+    // turning a pasted draft into a PATCH of whatever row was open, are both
+    // in clearPreviousEntry above now, with the rest of the family. The banner
+    // this function writes says nothing here was measured by this session; one
+    // call on line one is what makes that true rather than asserted.
   };
 
   const editItem = (row) => {
+    clearPreviousEntry();
     setStudioType(row.type);
+    // The town box drives "Draft it" and sat holding an unrelated name while a
+    // published row was open, so pressing Enter in it started a research run
+    // for a different place than the one on screen. It says what is open now.
+    setStudioTown(row.payload?.name || "");
     setEditingId(row.id);
     setStudioDraft(row.payload);
     setStudioDraftText(JSON.stringify(row.payload, null, 2));
     setStudioResult("// Editing an existing published entry — Save changes below updates it in place.\n// (No manual-paste code needed for edits — this goes straight to Supabase.)");
     setStudioPhotoName(row.payload?.photo ? row.payload.photo.split("/").pop() : "");
     setStudioInstagramUrl(row.payload?.blogBody?.find(b => b.type === "instagram")?.url || "");
-    setDraftEditError(null);
-    setPublishStatus(null);
-    setPublishErrorDetail(null);
-    setVerifyResults(null); setVerifyError(null); setGoogleCheckResult(null); setGoogleCheckError(null); setGooglePrecheckRan(false);
     setManageOpen(false);
   };
 
@@ -1355,7 +1397,23 @@ function GemlyxApp() {
     // so "no credit" and "credit we forgot to fill in" stay distinguishable.
     const any = clean.photographer || clean.source || clean.sourceUrl || clean.license;
     blocks[blockIdx] = any ? { ...blocks[blockIdx], credit: clean } : (() => { const { credit: _drop, ...rest } = blocks[blockIdx]; return rest; })();
-    await patchContentPayload(row, { ...p, blogBody: blocks });
+    // ── A SAVE WITH NO OUTCOME IS A DEAD BUTTON ───────────────────────
+    // This was a bare await with no try, no busy flag and no toast, and its
+    // caller neither awaited nor caught it. patchContentPayload throws on a
+    // non-ok response, so an expired Studio token or a missing UPDATE policy
+    // produced exactly nothing on screen: no error, no spinner, no change,
+    // just an unhandled rejection in a console nobody has open on a phone.
+    // A working save looked identical to a failed one, which is the same
+    // report useCommonsPhoto already fixed a few hundred lines up: "from the
+    // outside that is indistinguishable from a dead button".
+    setMediaBusy(true); setMediaError(null);
+    try {
+      await patchContentPayload(row, { ...p, blogBody: blocks });
+      setToast("💾 Credit saved");
+    } catch (e) {
+      setMediaError(`Credit not saved: ${String(e?.message || e)}`);
+    }
+    setMediaBusy(false);
   };
 
   const uploadMediaFiles = async (row, fileList) => {
@@ -1873,9 +1931,10 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // The journal, alongside the cost meter's own run. One run, two questions:
     // what did it cost, and what did it actually do. See utils/runLog.js.
     startLog("Studio draft", `${name} (${sType})`);
-    setStudioLoading(true); studioLoadingRef.current = true; ui(setStudioResult, null); ui(setStudioError, null); ui(setStudioIdentityWarning, null); ui(setStudioInventedWarning, null);
-    ui(setVerifyResults, null); ui(setVerifyError, null); ui(setGoogleCheckResult, null); ui(setGoogleCheckError, null); ui(setGooglePrecheckRan, false);
-    ui(setStudioInstagramUrl, ""); ui(setStudioFrozenGeo, null);
+    setStudioLoading(true); studioLoadingRef.current = true; ui(setStudioResult, null); ui(setStudioError, null);
+    // `hint` was read on the line above, so clearing scanHint here spends it on
+    // THIS draft and denies it to the next one, which is the whole fix.
+    clearPreviousEntry(ui);
     setStudioStage({ label: "Finding out where this place is", percent: 3 });
     let draftOutcome = { ok: false, error: null };
     // ── DECLARED OUT HERE, AND THAT IS THE BUG THIS ALREADY FIXED ────
@@ -2060,6 +2119,10 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         food: { queries: [`${name} Denmark what to order menu prices history`, `${name} Denmark best time to visit busy hours local tips address`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
         foodStreet: { queries: [`${name} Denmark food street market vendors stalls what's there`, `${name} Denmark food market opening hours best time to visit how to get there`, `${name} reddit r/Denmark r/food worth it locals think`, `${name} quora google reviews honest opinion`] },
         night: { queries: [`${name} Denmark bar club atmosphere crowd prices reviews`, `${name} Denmark opening hours when busy entry local tips address`, `${name} reddit r/Denmark vibe crowd locals tourists`, `${name} quora google reviews honest opinion`] },
+        // A STREET'S QUESTIONS ARE NOT A BAR'S. Which nights it is alive,
+        // what a night along it costs, and what it is like when it empties out,
+        // which is the half most pages leave out.
+        nightStreet: { queries: [`${name} Denmark bar street bars clubs guide`, `${name} best night to go busy quiet which end`, `${name} reddit honest opinion tourist trap or worth it`, `${name} nightlife safety closing time reputation`] },
         nightTown: { queries: [`${name} Denmark nightlife scene bars clubs overview`, `${name} nightlife student population crowd reddit r/Denmark`, `${name} nightlife when does it get busy best areas`, `${name} nightlife quora google reviews honest opinion`] },
         essential: { queries: [`${name} Denmark 2026 how it works price official`, `${name} Danmark priser regler gældende 2026 turist`, `${name} Denmark discontinued replaced changed 2026 what to use instead`, `${name} Denmark reddit r/Denmark tourist visitor does it work without CPR`] },
         booking: { queries: [`${name} Denmark craft workshop what to expect prices booking`, `${name} Denmark reviews how to book opening hours`, `${name} reddit r/Denmark experience worth the money`, `${name} quora google reviews honest opinion`] },
@@ -2083,6 +2146,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         essential: "priser regler gældende hvordan virker det turist",
         foodStreet: "boder madmarked åbningstider",
         night: "åbningstider entré natteliv anmeldelse",
+        nightStreet: "gade barer natteliv udeliv bytur",
         nightTown: "natteliv barer udeliv studerende",
         booking: "værksted booking priser åbningstider",
       }[sType] || "praktisk information åbningstider";
@@ -4019,6 +4083,9 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       } else if (sType === "booking") {
         const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, timeNeeded: ${J(t.timeNeeded)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
+      } else if (sType === "nightStreet") {
+        const nextId = Math.max(0, ...nightlifeStreets.map(x => x.id)) + 1;
+        code = `// 1) Ctrl+F for \`const nightlifeStreets = [\` in src/data/nightlifeStreets.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isStreet: true, town: ${J(t.town)}, location: ${J(t.location)}, emoji: ${J(t.emoji || "🍻")}, category: ${J(t.category || "Bar street")}, crowd: ${J(t.crowd)}, priceNote: ${J(t.priceNote)}, photo: "/nightlife-streets/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-streets/${slug}.jpg (or remove the photo field)\n// 3) The bars ON this street are NOT listed here. They are matched from their own published rows by town + street name, so publishing one more bar needs no edit to this entry.`;
       } else if (sType === "nightTown") {
         const nextId = Math.max(0, ...nightlifeTowns.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
@@ -4038,7 +4105,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       } else {
         const nextId = Math.max(0, ...nightlifeSpots.map(x => x.id)) + 1;
         const isClub = !!t.isClub;
-        code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]] : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
+        code = `// 1) Ctrl+F for \`const nightlifeSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, crowd: ${J(t.crowd)}, emoji: ${J(t.emoji || "🍺")}, category: ${J(t.category)}, priceNote: ${J(t.priceNote)}, location: ${J(t.location)}, isClub: ${isClub ? "true" : "false"}, desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]] : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY address, crowd and that it still exists before committing.`;
       }
       ui(setStudioResult, code);
       ui(setScanHint, null);
@@ -4164,13 +4231,30 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       //
       // containsName, not a substring test, for the same reason as everywhere
       // else: a source scoped to Als must not match "also". See danishNames.js.
+      // ── AND A NAME THAT IS AN ORDINARY WORD PROVES NOTHING ───────
+      // Oliver, 15 Aug 2026, on an Aarhus concert hall called Train: three of
+      // its eight sources were about railways, one of them an article titled
+      // "the trainwreck called Quora". This test used to be "does the snippet
+      // say the name", and every page about Danish rail travel says train in
+      // its first sentence. Boundary checking does not help: it really is the
+      // whole word on those pages.
+      //
+      // sourceIsAboutPlace asks for corroboration instead, and only from names
+      // that need it. "Ny Carlsberg Glyptotek" still identifies itself.
       const mentionsThisPlace = (u) => {
         if (placesWebsite && u === placesWebsite) return true;
-        const said = urlSaidWhat.get(u);
         // No snippet at all means we never saw what the page says, and we do not
         // conclude a fact from a failed lookup. It is not a source.
-        if (!said) return false;
-        return variantsOf(name, { includeSights: true }).some(v => containsName(said, v));
+        // The town, from wherever this type keeps it. A night row has no `town`
+        // field at all: its town is inside `location` ("Toldbodgade, Aarhus C,
+        // Denmark"), which is the same field-name split that made every bar
+        // invisible to the preview screen this morning.
+        return sourceIsAboutPlace(urlSaidWhat.get(u), {
+          name,
+          town: (t && (t.town || t.city)) || townOfLocation(t && t.location) || studioTown || "",
+          url: u,
+          ownHost: placesWebsite || (t && t.website) || "",
+        });
       };
       // ── HOURS: KEPT, DATED, NEVER RENDERED ────────────────────────
       // Attached beside __sources because it is the same kind of thing: not
@@ -4893,8 +4977,24 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // were invisible to the check that decides whether the draft invented
         // things. See researchForCheck in utils/factCheckRead.js.
         const checkResearch = researchForCheck(rawResearch);
+        // ── AND THE NOTES THE WRITER ACTUALLY READ ───────────────
+        // The comment above this block said the check compares the draft
+        // against "the SAME research it was written from". It did not. The
+        // writer is handed OpenAI's organised NOTES (userContent is REPLACED
+        // by them, not added to), and the checker was handed the raw research
+        // the writer never saw. Two different bodies of text, and the checker
+        // could not tell "the writer invented this" from "the organiser's notes
+        // said it and the writer copied it faithfully", which are different
+        // bugs with different fixes.
+        const notesForCheck = structureResult?.text
+          ? `\n\nAND THE ORGANISED NOTES THE WRITER ACTUALLY READ. The writer never saw the raw research above; it saw only this compression of it. A claim that is in these notes was NOT invented by the writer even if the raw research does not obviously support it: say so plainly, because the fix for that is a different one.\n${String(structureResult.text).slice(0, 12000)}`
+          : "";
+        // Two groups, because a judgement and a report are not checked the same
+        // way. See utils/checkScope.js for the fourteen-flag draft that made
+        // this necessary.
+        const checkSplit = splitForCheck(writtenFields(t));
         const inventedCheck = await askPerplexity(
-          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing.\n${INVENTED_CHECK_FORMAT}\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, { ...researchWhere(), name: t?.name || name })}\n\nResearch it was written from:\n${checkResearch.text}\n\nFinished draft:\n${JSON.stringify(writtenFields(t))}`
+          `Compare this finished draft against the research it was supposedly written from. Flag ONLY specific claims in the draft (a number, name, date, or detail) that do NOT appear to be supported by the research below — genuine signs of invention, not just paraphrasing.\n${INVENTED_CHECK_FORMAT}\n${CHECK_SCOPE_BLOCK}\n${FACT_CHECK_SCOPE_RULES}\n${researchRules(sType, { ...researchWhere(), name: t?.name || name })}\n\nResearch it was written from:\n${checkResearch.text}${notesForCheck}\n\nFinished draft, REPORTED FIELDS (check these as normal):\n${JSON.stringify(checkSplit.report)}\n\nFinished draft, CHARACTERISATION FIELDS (CONTRADICTED only, never UNVERIFIED unless you are quoting a specific figure inside one):\n${JSON.stringify(checkSplit.characterisation)}`
         );
         // ── A FAILED LAST GATE LOOKED EXACTLY LIKE A CLEAN PASS ──────
         // Studio audit, 12 Aug, open item 1. askPerplexity NEVER THROWS: it
@@ -4919,6 +5019,35 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // an 8192-token rewrite on a draft that was already clean. See
         // readInventedCheck in utils/factCheckRead.js.
         const inventedRead = readInventedCheck(inventedCheck.text);
+        // ── AND THE BELT TO THE PROMPT'S BRACES ──────────────────
+        // The block above TELLS the checker never to write UNVERIFIED about a
+        // characterisation field. A request has a failure rate while code does
+        // not, so an UNVERIFIED against an atmosphere field is dropped here
+        // whatever the model decided, unless it quotes a real figure. On the
+        // Old Irish Pub draft that is nine or ten of fourteen findings, every
+        // one of them a sentence the brief had asked the writer to write.
+        //
+        // Dropped, not downgraded: the correction pass that runs on these
+        // deletes what it cannot verify, so a finding that survives here
+        // becomes a deletion, and "the sources do not support this crowd
+        // breakdown" is not a reason to delete the crowd.
+        const outOfScope = inventedRead.findings.filter(f => !admissible(f));
+        inventedRead.findings = inventedRead.findings.filter(f => admissible(f));
+        // A verdict of flagged with every finding dropped is a clean draft, and
+        // saying "flagged" over an empty list is the same lie in the other
+        // direction. Written as "not clean" on purpose: the flagged branch
+        // below is found by its own condition, and a second copy of that
+        // string up here would move an assertion's anchor onto this line.
+        if (!inventedRead.findings.length && inventedRead.verdict !== "clean") inventedRead.verdict = "clean";
+        if (outOfScope.length) {
+          note("Findings about the writing rather than the facts", {
+            provider: "perplexity",
+            detail: `${outOfScope.length} of ${outOfScope.length + inventedRead.findings.length} findings were UNVERIFIED against a field the brief asks the writer to characterise`,
+            got: outOfScope.map(f => `${fieldIn(f.text) || "unknown field"}: ${f.text.slice(0, 90)}`).join(" | "),
+            outcome: "ok",
+            used: false,
+          });
+        }
         const flaggedText = inventedRead.findings.map(f => `${f.label}: ${f.text.replace(/^\s*[-*]?\s*\**\s*(CONTRADICTED|UNVERIFIED)\s*:?\s*/i, "")}`).join("\n");
         const downgraded = inventedRead.findings.filter(f => f.moved);
         if (inventedCheck.error) {
@@ -5525,6 +5654,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
   const loadQueueResult = (r) => {
     if (!r?.draft) return;
     setQueueResults(prev => prev.map(x => (x === r || (x.name === r.name && x.type === r.type)) ? { ...x, opened: true } : x));
+    clearPreviousEntry();
     setStudioType(r.type);
     setStudioTown(r.name);
     setStudioDraft(r.draft);
@@ -5536,15 +5666,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     // the button while publishStatus is "sent". Nothing here reset it, so the
     // handover after a publish carried the previous draft's success state onto
     // the next draft and left it with no way to publish at all.
-    setPublishStatus(null);
-    setPublishErrorDetail(null);
-    setDraftEditError(null);
-    // A queue draft is always a fresh publish. If he had been editing a
-    // published row and then opened a queue result, editingId was still set and
-    // Publish would have PATCHED the row he was editing with this new draft.
-    setEditingId(null);
     setStudioPhotoName(`${slugify(r.name)}.jpg`);
-    setStudioInstagramUrl("");
     // THE SILENT ONE. Without this, publishing a draft opened from the queue
     // stamped it with whatever verified station and coordinates the most recent
     // BACKGROUND run happened to leave in state, which is a different place.
@@ -5584,13 +5706,14 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     food: "individual restaurants or food spots in Denmark",
     foodStreet: "food streets or food markets (multiple vendors in one place) in Denmark",
     night: "bars or nightlife venues in Denmark",
+    nightStreet: "Danish streets known as bar streets or club strips, the ones a whole night gets built around",
     nightTown: "Danish towns with a real, distinct nightlife scene",
     booking: "bookable craft workshops or hands-on experiences in Denmark",
     essential: "practical things a visitor to Denmark has to do or decide, such as ticket systems, payment, SIM cards, adapters and rules worth a fine. Not places",
   };
   const discoverSourceArrays = () => ({
     town: towns, festival: [...events, ...majorEvents, ...vikingEvents], free: freeEntrance,
-    food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
+    food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
   });
 
   const runDiscovery = async (typeOverride, extraFraming) => {
@@ -6194,62 +6317,85 @@ TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n$
     sweepCancelRef.current = false;
     setSweepWriteState({ running: true, phase: "writing", done: 0, total: accepted.length, written: 0, unchanged: 0, failed: [] });
 
+    // ── A THROW HERE KILLS THE ONLY UNDO THERE IS ─────────────────────
+    // running:true was set above and set back to false only by reaching the
+    // bottom or by the cancel branch. Everything between them, the row re-read,
+    // Object.keys(prop.patch), the taken check and applySweepPatch, sat outside
+    // any try. One throw on row twelve of forty and the panel freezes at
+    // "Writing 12/40" with three controls permanently disabled, including
+    // "Restore from a snapshot", which this file's own text calls the only undo
+    // there is. Recovery meant reloading the page mid bulk-write with no way to
+    // see how far it got.
+    //
+    // proposeSweepRun, the pass that only READS, has had a try/catch since it
+    // was written. The one that writes did not.
     let written = 0, unchanged = 0; const failed = [];
-    for (let i = 0; i < accepted.length; i++) {
-      if (sweepCancelRef.current) {
-        setSweepWriteState({ running: false, phase: "writing", done: i, total: accepted.length, written, unchanged, failed, stopped: true });
-        if (written > 0) { refreshLiveContent(); bumpLiveContent(v => v + 1); }
-        return;
-      }
-      const prop = accepted[i];
-      const step = (extra = {}) => setSweepWriteState({ running: true, phase: "writing", done: i + 1, total: accepted.length, written, unchanged, failed, ...extra });
-      let row = null;
-      try {
-        // Read RIGHT BEFORE writing, one row at a time. A single fetch before
-        // the loop makes "current" fourteen seconds stale by the fortieth row,
-        // and this is the only thing standing between a bulk pass and silently
-        // reverting a correction somebody made while the table sat on screen.
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}&select=id,payload`, { headers: sweepHeaders() });
-        const rows = await r.json();
-        row = Array.isArray(rows) ? rows[0] : null;
-      } catch (err) { failed.push(`${prop.name}: could not be re-read (${err?.message || err})`); step(); continue; }
-      if (!row?.payload) { failed.push(`${prop.name}: the row could not be re-read, so nothing was written to it.`); step(); continue; }
+    let crashed = null, stoppedAt = null;
+    try {
+      for (let i = 0; i < accepted.length; i++) {
+        // BREAK, NOT RETURN. A finally runs on the way out of a return too, so
+        // returning here would hand the panel a "done: all of them" state one
+        // line after saying it stopped at row twelve. Break, record where it
+        // stopped, and let the single exit below report it.
+        if (sweepCancelRef.current) { stoppedAt = i; break; }
+        const prop = accepted[i];
+        const step = (extra = {}) => setSweepWriteState({ running: true, phase: "writing", done: i + 1, total: accepted.length, written, unchanged, failed, ...extra });
+        let row = null;
+        try {
+          // Read RIGHT BEFORE writing, one row at a time. A single fetch before
+          // the loop makes "current" fourteen seconds stale by the fortieth row,
+          // and this is the only thing standing between a bulk pass and silently
+          // reverting a correction somebody made while the table sat on screen.
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}&select=id,payload`, { headers: sweepHeaders() });
+          const rows = await r.json();
+          row = Array.isArray(rows) ? rows[0] : null;
+        } catch (err) { failed.push(`${prop.name}: could not be re-read (${err?.message || err})`); step(); continue; }
+        if (!row?.payload) { failed.push(`${prop.name}: the row could not be re-read, so nothing was written to it.`); step(); continue; }
 
-      // A FIELD THAT IS NO LONGER EMPTY IS NOT OURS TO FILL. Every proposal was
-      // made against a row that had nothing there. If something has arrived
-      // since, from a redraft or the assistant or another tab, writing the
-      // proposal over it is a silent revert dressed as a backfill.
-      const taken = Object.keys(prop.patch).filter(f => String(row.payload[f] ?? "").trim() && String(row.payload[f]) !== String(prop.patch[f]));
-      if (taken.length) {
-        failed.push(`${prop.name}: ${taken.join(" and ")} ${taken.length === 1 ? "was" : "were"} filled in by something else after this table was built, so ${taken.length === 1 ? "it" : "they"} would have been overwritten. Skipped. Run the sweep again to see the current state.`);
-        step(); continue;
-      }
+        // A FIELD THAT IS NO LONGER EMPTY IS NOT OURS TO FILL. Every proposal was
+        // made against a row that had nothing there. If something has arrived
+        // since, from a redraft or the assistant or another tab, writing the
+        // proposal over it is a silent revert dressed as a backfill.
+        const taken = Object.keys(prop.patch).filter(f => String(row.payload[f] ?? "").trim() && String(row.payload[f]) !== String(prop.patch[f]));
+        if (taken.length) {
+          failed.push(`${prop.name}: ${taken.join(" and ")} ${taken.length === 1 ? "was" : "were"} filled in by something else after this table was built, so ${taken.length === 1 ? "it" : "they"} would have been overwritten. Skipped. Run the sweep again to see the current state.`);
+          step(); continue;
+        }
 
-      const { patched, changed, reverted } = applySweepPatch(row.payload, prop.patch, sweep, { at: new Date().toISOString().slice(0, 10), source: `sweep: ${sweep.id}` });
-      if (reverted.length) failed.push(`${prop.name}: tried to change ${reverted.join(", ")}, which this sweep may not touch. Put back.`);
-      // Counted and REPORTED rather than absorbed into "Saved N of M". Pressing
-      // Save twice used to print "Saved 0 of 40" with an empty failure list,
-      // which reads as total failure when in fact everything already landed.
-      if (!changed.length) { unchanged++; step(); continue; }
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}`, {
-          method: "PATCH",
-          headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=representation" },
-          body: JSON.stringify({ payload: patched }),
-        });
-        // return=representation, not minimal: PostgREST answers 204 for a PATCH
-        // that matched nothing, so "minimal" cannot tell a write from a no-op
-        // on a row that has since been deleted.
-        const body = res.ok ? await res.json().catch(() => null) : null;
-        if (res.ok && Array.isArray(body) && body.length === 1) written++;
-        else if (res.ok) failed.push(`${prop.name}: the row was not there any more, so nothing was written.`);
-        else failed.push(`${prop.name}: save failed (${res.status})`);
-      } catch (err) { failed.push(`${prop.name}: ${err?.message || err}`); }
-      step();
-      await new Promise(r => setTimeout(r, 350));
+        const { patched, changed, reverted } = applySweepPatch(row.payload, prop.patch, sweep, { at: new Date().toISOString().slice(0, 10), source: `sweep: ${sweep.id}` });
+        if (reverted.length) failed.push(`${prop.name}: tried to change ${reverted.join(", ")}, which this sweep may not touch. Put back.`);
+        // Counted and REPORTED rather than absorbed into "Saved N of M". Pressing
+        // Save twice used to print "Saved 0 of 40" with an empty failure list,
+        // which reads as total failure when in fact everything already landed.
+        if (!changed.length) { unchanged++; step(); continue; }
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${Number(prop.rowId)}`, {
+            method: "PATCH",
+            headers: { ...sweepHeaders(), "Content-Type": "application/json", Prefer: "return=representation" },
+            body: JSON.stringify({ payload: patched }),
+          });
+          // return=representation, not minimal: PostgREST answers 204 for a PATCH
+          // that matched nothing, so "minimal" cannot tell a write from a no-op
+          // on a row that has since been deleted.
+          const body = res.ok ? await res.json().catch(() => null) : null;
+          if (res.ok && Array.isArray(body) && body.length === 1) written++;
+          else if (res.ok) failed.push(`${prop.name}: the row was not there any more, so nothing was written.`);
+          else failed.push(`${prop.name}: save failed (${res.status})`);
+        } catch (err) { failed.push(`${prop.name}: ${err?.message || err}`); }
+        step();
+        await new Promise(r => setTimeout(r, 350));
+      }
+    } catch (err) {
+      crashed = String(err?.message || err);
+      failed.push(`The write stopped part way: ${crashed}. Nothing after this point was attempted. Restore from the snapshot if any of it landed wrong.`);
+    } finally {
+      // ALWAYS, so Restore is reachable whatever happened above it. One exit,
+      // reporting how far it actually got: the row the Stop button landed on,
+      // the row a throw landed on, or all of them.
+      const reached = stoppedAt !== null ? stoppedAt : accepted.length;
+      setSweepWriteState({ running: false, phase: "writing", done: reached, total: accepted.length, written, unchanged, failed, stopped: stoppedAt !== null || !!crashed });
+      if (written > 0) { refreshLiveContent(); bumpLiveContent(v => v + 1); }
     }
-    setSweepWriteState({ running: false, phase: "writing", done: accepted.length, total: accepted.length, written, unchanged, failed });
-    if (written > 0) { refreshLiveContent(); bumpLiveContent(v => v + 1); }
   };
 
   // ── UNDO, WHICH IS ITSELF A BULK WRITE ──────────────────────────
@@ -6519,7 +6665,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         // tools/image-finder). public/free/ has never existed, so every path
         // this map has ever written for an attraction pointed at a folder that
         // is not there, and six perfectly good images sat orphaned beside it.
-        const folder = { town: "towns", festival: "events", free: "attractions", food: "food", foodStreet: "food", night: "nightlife", nightTown: "nightlife", booking: "craft" }[studioType] || "towns";
+        const folder = { town: "towns", festival: "events", free: "attractions", food: "food", foodStreet: "food", night: "nightlife", nightStreet: "nightlife-streets", nightTown: "nightlife", booking: "craft", essential: "essentials" }[studioType] || "towns";
         shaped.photo = `/${folder}/${studioPhotoName}`;
       }
       // Force-override with the real pre-computed values from generateArea, regardless
@@ -7746,6 +7892,26 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
         if (candidate < new Date(now.toDateString())) candidate = new Date(now.getFullYear() + 1, monthIdx, day); // already passed this year — assume next year
         arrivalDate = candidate;
       }
+      // ── THE EVENTS THE TRAVELLER TICKED ARE FIXED POINTS ────────
+      // Oliver, 14 Aug 2026, on the preview screen: "make the person able to
+      // 'tick' these events to be part of the trip."
+      //
+      // They enter HERE, at the planner, and not in the writer's brief, for
+      // the reason this pipeline keeps relearning: an event is a place plus a
+      // date, and the date decides which day every other stop lands on. Giving
+      // it to the writer instead would be asking a model to notice a
+      // constraint the structure had already been built to break, which is the
+      // same shape as measuring a route after the prose about it is written.
+      //
+      // Matched by name against the live arrays rather than carried as objects,
+      // because the preview's rows are a render-time copy and these arrays are
+      // filled from Supabase; the name is the thing both ends agree on.
+      const chosenEvents = Array.isArray(pickedEvents) && pickedEvents.length
+        ? [...events, ...majorEvents, ...vikingEvents].filter(e => pickedEvents.includes(e.name))
+        : [];
+      const chosenEventsBlock = chosenEvents.length
+        ? `\n\nEVENTS THE TRAVELER HAS ALREADY CHOSEN, which are fixed points and not suggestions. Every one MUST appear as a stop, on the day its own dates fall on, and that day's other stops must be near it rather than across the country:\n${chosenEvents.map(e => `- ${e.name} in ${e.town || "Denmark"} (${getEventDate(e.date, e.dateEnd)})`).join("\n")}`
+        : "";
       // FULL ACCURACY PIPELINE (Oliver's spec, Aug 2026): ChatGPT plans/structures
       // (never writes prose) -> Tavily + Maps research -> Perplexity fact-check ->
       // Claude writes -> ChatGPT scans the finished writing for poor/generic prose
@@ -7768,7 +7934,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       let planProblems = [];
       try {
         const plannerRes = await askOpenAI(
-          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.\n\nConversation:\n${convoText}`,
+          `You are planning the STRUCTURE of a Denmark trip itinerary from this conversation — day count, which real places go on which day, in what order, and roughly when. Do NOT write any descriptive prose, do NOT write notes, explanations or reasons — structure only, nothing else.${requestedDays ? ` The traveler explicitly wants exactly ${requestedDays} days — the "days" array must have exactly ${requestedDays} entries.` : ""}\n\nRespond with ONLY strict JSON, no markdown, no commentary: {"days": [{"day": 1, "stops": [{"name": "real place name actually mentioned in the conversation", "town": "the real Danish town/city it's in", "arrivalTime": "suggested clock time"}]}]}\n\nUse only real place names actually mentioned in the conversation — never invent one. Group each day's stops by geography so nothing zigzags needlessly, put any long-distance leg first in its day, and leave a realistic arrival/departure buffer on the first and last days.\n\nCRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE SENSIBLE ROUTE, using real Danish geography (Copenhagen/Zealand is a genuinely different region from Jutland — they're connected only by a long bridge/ferry crossing or a flight, never a short hop): the trip as a whole should move in one general direction across the country, not double back across a major region-crossing more than once. Bad, avoid this shape: Day 1 in central Jutland, Day 2 further into Jutland, Day 3 suddenly Copenhagen (a full region jump with nothing bridging it, right after two days moving the opposite way). If the conversation gives a real starting point and/or return point, treat the whole itinerary as one path between them; otherwise, order the days to minimize total region-crossings and backtracking across the WHOLE trip, not just within each single day.${chosenEventsBlock}\n\nConversation:\n${convoText}`,
           1200
         );
         if (!plannerRes.error && plannerRes.text) {
@@ -7908,7 +8074,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are genuinely different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${chosenEventsBlock}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -8123,6 +8289,17 @@ If the conversation only covers a single day or a few stops with no explicit day
       // stage from the route, one call per day, in parallel, and until now
       // nothing read all of those answers together. See utils/accommodation.js.
       planProblems = [...planProblems, ...stayProblems(parsed.days)];
+      // ── AND A TICK IS A PROMISE, SO IT IS CHECKED ────────────────
+      // Both prompts above were TOLD the chosen events are fixed points, and a
+      // request has a failure rate while code does not. This is the check that
+      // makes the difference visible: if the traveller ticked Roskilde Festival
+      // and no day contains it, that is not a style note, it is the one thing
+      // they explicitly asked for going missing between the tick and the page.
+      if (chosenEvents.length) {
+        const planned = parsed.days.flatMap(d => (d.stops || []).map(s => String(s?.name || "")));
+        const missing = chosenEvents.filter(e => !planned.some(n => samePlaceName(n, e.name) || containsName(n, e.name)));
+        for (const e of missing) planProblems.push(`${e.name} was added to this trip on the preview screen and no day contains it.`);
+      }
 
       // ── AND THE LOGISTICS GATES, ON THIS PIPELINE TOO ────────────
       // Oliver, 12 Aug 2026: "Have you put this rule on everything? Also the
@@ -8481,6 +8658,18 @@ If the conversation only covers a single day or a few stops with no explicit day
   // know whether to go straight to build (random-guide path, mode already
   // randomly chosen) or to the real map/plain choice screen (real chat path).
   const [pendingRandomGuideMode, setPendingRandomGuideMode] = useState(null);
+  // ── THE EVENTS THE TRAVELLER TICKED ON THE PREVIEW ────────────────
+  // Oliver, 14 Aug 2026: "make the person able to 'tick' these events to be
+  // part of the trip." Names rather than rows, because this outlives the
+  // objects the preview held and is matched back against the live arrays at
+  // build time.
+  //
+  // NULL IS NOT AN EMPTY LIST, and the difference carries a real decision:
+  // null means the traveller never touched the section, so Gemlyx's own
+  // recommendation stands, while [] means they unticked everything and want no
+  // event at all. Collapsing the two would silently re-add a festival somebody
+  // had just removed.
+  const [pickedEvents, setPickedEvents] = useState(null);
   // TEST-PIPELINE TRANSPARENCY (Oliver: "Can you in the test pipeline also
   // show me what the plan was? I want to see what recommendations is given to
   // the different types of people"): the Random-guide button stores its
@@ -8943,10 +9132,37 @@ If the conversation only covers a single day or a few stops with no explicit day
     const convo = aiMessages.filter(m => !m.hidden).map(m => `${m.role}: ${m.text}`).join("\n").slice(-3000);
     if (!convo || previewWhyForRef.current === convo) return;
     previewWhyForRef.current = convo;
+    // ── AND THE TICKS BELONG TO THIS CONVERSATION, NOT THE LAST ──
+    // Reset HERE and nowhere else, and the position is the whole point. The
+    // obvious place is when the preview closes, and it is wrong: continuing
+    // from the preview sets guideModal to "choosing", which closes this screen,
+    // so the picks would be wiped a moment before generateGuide reads them.
+    // This line only runs when the conversation itself is new, which is exactly
+    // when last time's picks stopped meaning anything. Same failure the italic
+    // line above had on 7 Aug, one roll behind its own screen.
+    setPickedEvents(null);
     const run = ++previewWhyRunRef.current;
+    // ── "LOOKING AT THE DESCRIPTION, IT MAKES NO SENSE" ──────────
+    // Oliver, 15 Aug 2026, on a preview whose italic line promised "the
+    // markets and cycling you love" above a list reading Copenhagen,
+    // Amalienborg Slot, Kobenhavns Museum, Ny Carlsberg Glyptotek.
+    //
+    // Neither half was broken. They were answering different questions from
+    // different material: this sentence was written from the conversation
+    // alone ("Based ONLY on this conversation"), while the list under it comes
+    // from a name match against the database, and nothing connected them. A
+    // sentence that cannot see the screen it sits on will contradict it as
+    // often as it happens to agree.
+    //
+    // Same function the screen itself calls, on the same text, so the two
+    // cannot drift apart again.
+    const forMatch = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
+    const onScreen = matchedPlaces(forMatch, previewPools({
+      towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+    })).map(p => p.name).slice(0, 14);
     (async () => {
       const r = await askClaude(
-        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes. Respond with only the sentence(s), nothing else.\n\n${convo}`,
+        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.` : ""} Respond with only the sentence(s), nothing else.\n\n${convo}`,
         200
       );
       if (run !== previewWhyRunRef.current) return;   // a later roll owns the screen now
@@ -10704,7 +10920,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     })()}
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightTown", "🌃 Nightlife (Town)"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
+                      {[["town", "🏘 Town"], ["festival", "🎪 Events"], ["free", "🎟 Attractions"], ["food", "🍽 Food"], ["foodStreet", "🍜 Food Street"], ["night", "🍺 Nightlife"], ["nightStreet", "🍻 Bar street"], ["nightTown", "🌃 Nightlife (Town)"], ["booking", "🔨 Workshop"], ["essential", "🧭 Essential"]].map(([k, label]) => (
                         <button key={k} onClick={() => { setStudioType(k); setStudioResult(null); setStudioError(null); }}
                           style={{ background: studioType === k ? C.gold : "none", border: `1px solid ${studioType === k ? C.gold : C.border}`, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: studioType === k ? "#000" : C.light, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                           {label}
@@ -10713,7 +10929,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                       <input value={studioTown} onChange={e => setStudioTown(e.target.value)} onKeyDown={e => e.key === "Enter" && generateArea()}
-                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market/street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
+                        placeholder={{ town: "Town name, e.g. Ringkøbing", festival: "Festival name, e.g. Tønder Festival", free: "Place name + city, e.g. Rundetaarn Copenhagen", booking: "Workshop/craft name + city, e.g. Bornholm Ceramics Studio", food: "Place name + city, e.g. Gasoline Grill Copenhagen", foodStreet: "Market/street name + city, e.g. Reffen Copenhagen", night: "Bar name + city, e.g. Mikkeller Bar Viktoriagade", nightStreet: "Street name + city, e.g. Gothersgade Copenhagen", nightTown: "Town name, e.g. Aarhus", essential: "What a visitor has to sort out, e.g. Rejsebillet app or Tax-free shopping" }[studioType] || "Name"}
                         style={{ flex: 1, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, outline: "none", background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif" }} />
                       <button onClick={() => generateArea()} disabled={studioLoading}
                         style={{ background: C.gold, border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
@@ -10985,7 +11201,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
                       <button onClick={() => runDiscovery()} disabled={discoverLoading}
                         style={{ flex: 1, minWidth: 160, background: "none", border: `1px solid ${C.gold}66`, borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        {discoverLoading ? "Searching the web…" : `🔍 Discover new ${{ town: "towns", festival: "events", free: "attractions", food: "food spots", foodStreet: "food streets", night: "nightlife", nightTown: "nightlife towns", booking: "craft experiences", essential: "essentials" }[studioType] || "candidates"}`}
+                        {discoverLoading ? "Searching the web…" : `🔍 Discover new ${{ town: "towns", festival: "events", free: "attractions", food: "food spots", foodStreet: "food streets", night: "nightlife", nightStreet: "bar streets", nightTown: "nightlife towns", booking: "craft experiences", essential: "essentials" }[studioType] || "candidates"}`}
                       </button>
                       {studioType !== "festival" && (
                         <button onClick={discoverNewEvents} disabled={discoverLoading}
@@ -11357,7 +11573,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       const typedNorm = norm(typed);
                       const sourceArrays = {
                         town: towns, festival: [...events, ...majorEvents], free: freeEntrance,
-                        food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
+                        food: foodSpots, foodStreet: foodSpots, night: nightlifeSpots, nightStreet: nightlifeStreets, booking: craftItems, nightTown: nightlifeTowns, essential: essentials,
                       };
                       const arr = sourceArrays[studioType] || [];
                       const cityWords = ["copenhagen", "aarhus", "aalborg", "odense", "esbjerg", "randers", "kolding", "horsens", "vejle", "roskilde"];
@@ -11501,10 +11717,25 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             stays as the option, not the expectation. */}
                         {studioSession && studioDraft && (
                           <StudioAssistant
+                            /* ── A CORRECTION BELONGS TO ONE DRAFT ──────────
+                               This had no key, so switching drafts by any of
+                               the four doors never remounted it and nothing
+                               inside reset. Its `pending` state holds an entire
+                               patched payload waiting behind a Save/Discard
+                               card: ask it to correct draft A, load draft B,
+                               press Save, and B's editor is silently replaced
+                               by A's payload. The chat transcript stayed too,
+                               so it kept discussing the previous entry.
+
+                               Keyed on the draft's own name, so a new entry is
+                               a new conversation and an edit to the one on
+                               screen is not. Same family as clearPreviousEntry
+                               above, which cannot reach inside a child. */
+                            key={`assistant-${editingId ?? "new"}-${studioDraft?.name || ""}`}
                             inline
                             session={studioSession}
                             draft={(() => { try { return JSON.parse(studioDraftText); } catch { return studioDraft; } })()}
-                            draftKind={{ festival: "event", night: "nightlife", nightTown: "town", foodStreet: "food" }[studioType] || studioType}
+                            draftKind={srcForType(studioType)}
                             onDraftPatched={(next) => { setStudioDraft(next); setStudioDraftText(JSON.stringify(next, null, 2)); setDraftEditError(null); }}
                             onSweepRequested={(id) => proposeSweepRun(id)}
                           />
@@ -11878,8 +12109,32 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, outline: "none", background: C.bg, color: C.text, fontFamily: "monospace", marginBottom: 12, boxSizing: "border-box" }} />
                           </>
                         )}
+                        {/* ── A SUCCESS BANNER MAY NOT BE A DEAD END ──────────
+                            The green line REPLACED the button, so spotting a
+                            typo one second after publishing left no way to send
+                            the fix: the JSON box was still editable and nothing
+                            would take it. The only exits were a type chip,
+                            which throws the whole draft away, or paying for
+                            another research run. This file already names that
+                            exact class one screen over, about the queue: "it
+                            was not the button being disabled, it was the button
+                            not being RENDERED". Same shape, one panel along.
+
+                            The banner stays, because publishing worked and he
+                            should see that. A second, quieter button sits under
+                            it: republishing the same name POSTs a new row, so
+                            it says so rather than pretending to be an edit. */}
                         {publishStatus === "sent" && editingId === null ? (
-                          <div style={{ textAlign: "center", padding: "10px 0", fontSize: 12.5, color: "#4CAF50", fontWeight: 700 }}>✓ Published — live on Gemlyx now</div>
+                          <>
+                            <div style={{ textAlign: "center", padding: "10px 0 6px", fontSize: 12.5, color: "#4CAF50", fontWeight: 700 }}>✓ Published, live on Gemlyx now</div>
+                            <button onClick={publishDraft} disabled={publishStatus === "sending"}
+                              style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, borderRadius: 10, padding: "9px", fontSize: 11.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 6 }}>
+                              ↻ Publish the edits above as well
+                            </button>
+                            <div style={{ fontSize: 9.5, color: C.muted, textAlign: "center", marginBottom: 8 }}>
+                              This creates a second row rather than changing the one you just published. Delete the older of the two in Manage Published, or edit it there instead.
+                            </div>
+                          </>
                         ) : (
                           <button onClick={publishDraft} disabled={publishStatus === "sending"}
                             style={{ width: "100%", background: C.gold, border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, color: "#000", cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 8 }}>
@@ -12738,6 +12993,37 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             const spotsFor = (t) => spotsForTown(townGroups, t);
             const townContentFor = (t) => townPageFor(nightlifeTowns, t);
             const townList = nightlifeTownList(nightlifeSpots, nightlifeTowns).sort(daCompare);
+            // ── AND THE STREETS BETWEEN THEM ──────────────────────
+            // Oliver, 15 Aug 2026, on Gothersgade and Jomfru Ane Gade: "it's
+            // technically in Copenhagen.. but it's a bar street with bars."
+            // nightlifeForTown returns the town's published streets with the
+            // bars matched onto each, and `loose` for everything on no street.
+            // A bar under a street is NOT also in the flat list below it, which
+            // is the half he picked: one strip should read as one thing, not as
+            // six near-identical cards crowding out the rest of the town.
+            const townSplit = nightlifeTownView ? nightlifeForTown(nightlifeTownView, spotsFor(nightlifeTownView), nightlifeStreets) : { streets: [], loose: [] };
+            const looseSpots = nightlifeStreetView ? [] : townSplit.loose;
+            // One card, drawn the same way whether it is sitting under a town
+            // or under a street. Two copies of this markup is how the two
+            // levels start disagreeing about what a bar looks like.
+            const spotRow = (spot) => (
+              <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                  <span style={{ fontSize: 22 }}>{spot.emoji}</span>
+                  <div>
+                    <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}>{spot.name}</div>
+                    <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
+                  </div>
+                </div>
+                <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
+                  👥 {spot.crowd}
+                </div>
+                <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{(spot.desc || "").slice(0, 100)}{(spot.desc || "").length > 100 ? "…" : ""}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
+                  Read more <span style={{ fontSize: 15 }}>›</span>
+                </div>
+              </div>
+            );
 
             return (
             <div className={pageAnim} style={{ padding: "16px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
@@ -12764,8 +13050,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     const localCount = spots.filter(s => s.type === "Local").length;
                     const internationalCount = spots.filter(s => s.type === "International").length;
                     const townContent = townContentFor(t);
+                    // The street is cleared on the click as well as on the way
+                    // back, so a town can never open showing the last town's
+                    // street. Not reachable today, because the back button
+                    // clears it first, and that is exactly the argument the four
+                    // Studio doors lost: "not reachable by the path I thought
+                    // of" is how every one of those leaks got in.
                     return (
-                      <div key={t} onClick={() => setNightlifeTownView(t)} style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${C.border}`, padding: "16px 0", cursor: "pointer" }}>
+                      <div key={t} onClick={() => { setNightlifeStreetView(null); setNightlifeTownView(t); }} style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${C.border}`, padding: "16px 0", cursor: "pointer" }}>
                         <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, overflow: "hidden" }}>
                           {townContent?.photo ? (
                             <img src={townContent.photo} alt={t} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -12790,12 +13082,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               ) : (
                 // ── LEVEL 2: venues in the chosen town ────────────
                 <>
-                  <button onClick={() => setNightlifeTownView(null)}
+                  <button onClick={() => (nightlifeStreetView ? setNightlifeStreetView(null) : setNightlifeTownView(null))}
                     style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.muted, fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 14, fontFamily: "'Inter', sans-serif" }}>
-                    ‹ All towns
+                    {nightlifeStreetView ? `‹ ${nightlifeTownView}` : "‹ All towns"}
                   </button>
 
-                  {(() => {
+                  {!nightlifeStreetView && (() => {
                     const townContent = townContentFor(nightlifeTownView);
                     if (townContent) {
                       return (
@@ -12822,17 +13114,113 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     );
                   })()}
 
+                  {/* ── LEVEL 3: ONE STREET, AND WHAT IS ON IT ────────
+                      Oliver, 15 Aug 2026: "Copenhagen -> Gothersgade -> List of
+                      bars." The bars are matched from their own published rows
+                      at render time, so publishing one more bar on this street
+                      needs no edit to the street entry and deleting one cannot
+                      leave a dangling name on a list nothing would correct. */}
+                  {nightlifeStreetView ? (() => {
+                    const street = nightlifeStreetView;
+                    const bars = barsOnStreet(street, spotsFor(nightlifeTownView)).slice().sort(byName);
+                    return (
+                      <>
+                        {street.photo && (
+                          <div style={{ height: 160, borderRadius: 14, overflow: "hidden", marginBottom: 12, background: C.surface }}>
+                            <img src={street.photo} alt={street.name} onError={e => { e.target.style.display = "none"; }}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          </div>
+                        )}
+                        <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 6 }}>{street.emoji || "🍻"} {street.name}</div>
+                        <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>
+                          {street.category || "Bar street"}{street.location ? ` · ${street.location}` : ""}
+                        </div>
+                        <div style={{ fontSize: 13, color: C.light, lineHeight: 1.7, marginBottom: 12 }}>{street.desc}</div>
+                        {street.crowd && (
+                          <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: street.color || C.gold, background: `${street.color || C.gold}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
+                            👥 {street.crowd}
+                          </div>
+                        )}
+                        {/* A PRICE ONLY IF THE RESEARCH GAVE ONE. The draft
+                            prompt refuses to invent a cover charge, so this row
+                            is absent rather than filled with a guess. */}
+                        {street.priceNote && (
+                          <div style={{ fontSize: 12.5, color: C.light, marginBottom: 12 }}>💰 {street.priceNote}</div>
+                        )}
+                        {street.gemlyxFind && (
+                          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+                            ◆ <b>Gemlyx Find:</b> {street.gemlyxFind}
+                          </div>
+                        )}
+                        <button onClick={() => setNightlifeDetail(street)}
+                          style={{ background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "7px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 18 }}>
+                          Read the full street guide
+                        </button>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 4 }}>Bars &amp; clubs on {street.name}</div>
+                        {/* AN EMPTY STREET IS A REAL STATE, not a broken page.
+                            The street has its own writing and its own entry, and
+                            it is publishable before any of its venues are. */}
+                        {bars.length === 0 ? (
+                          <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 12, padding: "22px 0", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+                            No individual venues on {street.name} are published yet. The street guide above is the whole entry for now.
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 10 }}>{bars.length} published here</div>
+                            {bars.map(spotRow)}
+                          </>
+                        )}
+                      </>
+                    );
+                  })() : (<>
+                  {/* ── LEVEL 2.5: THE STREETS IN THIS TOWN ──────────
+                      Above the flat list, because a strip somebody plans a
+                      whole night around is a bigger unit than one bar on it,
+                      and because the bars underneath it have been taken OUT of
+                      the flat list to stop one street crowding out the town. */}
+                  {townSplit.streets.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 12 }}>Bar streets</div>
+                      {townSplit.streets.map(({ street, bars }) => (
+                        <div key={street.id} onClick={() => setNightlifeStreetView(street)}
+                          style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${C.border}`, padding: "16px 0", cursor: "pointer" }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, overflow: "hidden" }}>
+                            {street.photo ? (
+                              <img src={street.photo} alt={street.name} onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (street.emoji || "🍻")}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{street.name}</div>
+                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                              {bars.length === 0
+                                ? `${street.category || "Bar street"}, no venues published yet`
+                                : `${bars.length} bar${bars.length !== 1 ? "s" : ""} and club${bars.length !== 1 ? "s" : ""} published here`}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 18, color: C.muted }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* GUARDED, because townGroups[town] is undefined for a town
                       that has a scene guide and no venues, and .filter on it
                       threw. Opening the town he had just published would have
                       taken the whole page down. */}
-                  {spotsFor(nightlifeTownView).length === 0 ? (
+                  {looseSpots.length === 0 && townSplit.streets.length === 0 ? (
                     <div style={{ borderTop: `1px solid ${C.border}`, padding: "22px 0", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
                       No individual bars or clubs published for {nightlifeTownView} yet. The scene guide above is the whole entry for now.
                     </div>
                   ) : (
                   <>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 14 }}>Bars &amp; clubs in {nightlifeTownView}</div>
+                  {/* ELSEWHERE IN THE TOWN, which is what this heading now
+                      means: every venue that is not on a published street. The
+                      streets are above with their own bars under them, so no
+                      bar appears twice on one page. */}
+                  {looseSpots.length > 0 && (<>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", marginBottom: 14 }}>
+                    {townSplit.streets.length > 0 ? `Elsewhere in ${nightlifeTownView}` : `Bars & clubs in ${nightlifeTownView}`}
+                  </div>
 
                   <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
                     {[{ id: "Local", label: "🇩🇰 Local" }, { id: "International", label: "🌍 International" }].map(t => (
@@ -12843,29 +13231,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     ))}
                   </div>
 
-                  {spotsFor(nightlifeTownView).filter(f => f.type === nightlifeTab).length === 0 && (
+                  {looseSpots.filter(f => f.type === nightlifeTab).length === 0 && (
                     <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" }}>No {nightlifeTab.toLowerCase()} spots in {nightlifeTownView} yet, try the other tab.</div>
                   )}
-                  {spotsFor(nightlifeTownView).filter(f => f.type === nightlifeTab).slice().sort(byName).map(spot => (
-                    <div key={spot.id} onClick={() => setNightlifeDetail(spot)} style={{ borderTop: `1px solid ${C.border}`, padding: "18px 0 22px", cursor: "pointer" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                        <span style={{ fontSize: 22 }}>{spot.emoji}</span>
-                        <div>
-                          <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}>{spot.name}</div>
-                          <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, color: spot.color, background: `${spot.color}18`, padding: "5px 12px", borderRadius: 100, marginBottom: 12 }}>
-                        👥 {spot.crowd}
-                      </div>
-                      <div style={{ fontSize: 13, color: C.light, lineHeight: 1.65, marginBottom: 10, maxWidth: 560 }}>{(spot.desc || "").slice(0, 100)}{(spot.desc || "").length > 100 ? "…" : ""}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.light, fontSize: 13, fontWeight: 700 }}>
-                        Read more <span style={{ fontSize: 15 }}>›</span>
-                      </div>
-                    </div>
-                  ))}
+                  {looseSpots.filter(f => f.type === nightlifeTab).slice().sort(byName).map(spotRow)}
+                  </>)}
                   </>
                   )}
+                  </>)}
                 </>
               )}
             </div>
@@ -13468,14 +13841,15 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
               {/* Quick-jump grid — modern icon menu, tap to scroll */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 24 }}>
+                {/* Weather and FAQ are not categories, they are two fixed
+                    blocks. Everything between them is the category list itself,
+                    so a chip cannot go missing for a category that renders, and
+                    a chip cannot point at a category nothing renders. Both had
+                    happened: no Culture & Etiquette chip existed at all, and
+                    the Solo Travel chip pointed at prose. */}
                 {[
                   { id: "ess-weather", icon: "🌤", label: "Weather", color: "#1565C0" },
-                  { id: "ess-flights", icon: "✈️", label: "Flights & Buses", color: "#6A1B9A" },
-                  { id: "ess-transport", icon: "🚇", label: "Transport", color: "#00838F" },
-                  { id: "ess-payments", icon: "💳", label: "Payments", color: "#2E7D32" },
-                  { id: "ess-sightseeing", icon: "🎟", label: "Sightseeing", color: C.gold },
-                  { id: "ess-connectivity", icon: "📶", label: "Connectivity", color: "#E23B4E" },
-                  { id: "ess-solo", icon: "🍺", label: "Solo Travel", color: "#8D6E63" },
+                  ...ESSENTIAL_CATEGORIES.map(c => ({ id: c.anchor, icon: c.icon, label: c.cat, color: c.color })),
                   { id: "ess-faq", icon: "❓", label: "FAQ", color: "#455A64" },
                 ].map(s => (
                   <button key={s.id} onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -13493,13 +13867,16 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 ))}
               </div>
 
-              {[
-                { cat: "Flights & Buses", anchor: "ess-flights" },
-                { cat: "Transport", anchor: "ess-transport" },
-                { cat: "Payments", anchor: "ess-payments" },
-                { cat: "Sightseeing", anchor: "ess-sightseeing" },
-                { cat: "Connectivity", anchor: "ess-connectivity" },
-              ].map(({ cat, anchor }) => (
+              {/* ── FIVE OF THE SEVEN CATEGORIES USED TO BE HERE ──────
+                  The draft prompt demands one of seven and this loop listed
+                  five, so a published essential filed under "Culture &
+                  Etiquette" or "Solo Travel" wrote to the database, merged into
+                  the essentials array and rendered nowhere. The two anchors
+                  carrying those names are hardcoded prose that reads no data.
+                  This is the project's signature bug one level down inside a
+                  content type, and the loop is derived from the same list the
+                  prompt is built from now, so the two cannot come apart. */}
+              {ESSENTIAL_CATEGORIES.map(({ cat, anchor }) => (
                 <div key={cat} id={anchor} style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{cat}</div>
                   {essentials.filter(e => e.category === cat && e.id !== 7).map(item => (
@@ -13538,7 +13915,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               ))}
 
               {/* Solo traveller tip */}
-              <div id="ess-solo" style={{ marginBottom: 20, scrollMarginTop: 90 }}>
+              {/* The id moved to the Solo Travel category section above, so
+                  there is exactly one #ess-solo on the page and the chip lands
+                  on the published rows rather than on this fixed block. */}
+              <div style={{ marginBottom: 20, scrollMarginTop: 90 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Traveling Solo?</div>
                 <div style={{ background: C.surface, borderRadius: 14, padding: "16px", border: `1px solid ${C.border}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -14353,8 +14733,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           try { const parsed = JSON.parse(studioDraftText); if (parsed && typeof parsed === "object") liveDraft = parsed; }
           catch { liveDraft = studioDraft; }
         } else liveDraft = studioDraft;
-        const draftKind = { festival: "event", night: "nightlife", nightTown: "town", foodStreet: "food" }[studioType] || studioType;
+        // One definition, in utils/sourcePolicy.js. This used to be a second
+        // hand-copy of the same object literal as the inline assistant above.
+        const draftKind = srcForType(studioType);
         return <StudioAssistant
+          key={`assistant-floating-${openKind || "draft"}-${openDetail?.name || liveDraft?.name || ""}`}
           session={studioSession}
           item={openDetail}
           kind={openKind}
@@ -14422,6 +14805,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           setAiMessages={setAiMessages}
           setGuideModal={setGuideModal}
           generateGuide={generateGuide}
+          intakeArrival={intakeArrival}
+          intakeDeparture={intakeDeparture}
+          intakeInterest={intakeInterest}
+          pickedEvents={pickedEvents}
+          setPickedEvents={setPickedEvents}
         />
       )}
       {/* PREVIEW CHAT — floating Ask Gemlyx corner launcher + panel ON TOP of

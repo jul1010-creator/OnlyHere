@@ -70,7 +70,7 @@ export const EventMatchCard = ({ intakeArrival, intakeDeparture, intakeInterest,
             <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.2 }}>{matchedEvent.name}</div>
           </div>
           <div style={{ fontSize: 11, color: C.light, lineHeight: 1.5, marginBottom: 10 }}>
-            {matchedEvent.town} · {getEventDate(matchedEvent.date, matchedEvent.dateEnd)} — happening while you're there.
+            {matchedEvent.town} · {getEventDate(matchedEvent.date, matchedEvent.dateEnd)} · happening while you're there.
           </div>
           <button onClick={() => setEventDetail(matchedEvent)}
             style={{ width: "100%", background: "none", border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 100, padding: "6px 0", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>

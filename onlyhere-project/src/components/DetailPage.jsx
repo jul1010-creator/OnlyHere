@@ -539,10 +539,19 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             { icon: "📍", label: "Neighbourhood", value: item.location },
           ]} />
         )}
+        {/* ── "WHERE ARE THE PRICES?" ──────────────────────────────
+            Oliver, 15 Aug 2026, reading a finished draft for a concert hall.
+            Every other place type had a price row on this card and nightlife
+            had none, because the night schema had no price field at all: not
+            what a beer costs in a bar, not what a ticket costs at a venue that
+            sells them. AtAGlanceCard drops a row whose value is empty, so a
+            venue whose research genuinely had no figure looks exactly as it
+            did before, and the ones that did stop hiding it. */}
         {kind === "nightlife" && (
           <AtAGlanceCard rows={[
             { icon: "👥", label: "Crowd", value: item.crowd },
             { icon: "🍺", label: "Type", value: item.category },
+            { icon: "💰", label: "What it costs", value: item.priceNote },
             { icon: "📍", label: "Neighbourhood", value: item.location },
           ]} />
         )}

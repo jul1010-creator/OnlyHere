@@ -47,6 +47,10 @@ export const CURRENT_HEADINGS = [
   "Being There", "Who It's For", "The Reality Check", "Things to Know",
   "Atmosphere", "How It's Made", "How It Works", "After Dark", "Before Dark",
   "Best Time to Go", "When Do People Enter", "What to Be Aware Of",
+  // Bar streets, added 15 Aug 2026. A street's two useful questions are which
+  // nights are worth it and which way to walk, and neither is a question you
+  // would ask about a single bar, so they are headings of their own.
+  "Best Nights", "Walking It",
 ];
 
 // A town's first heading carries the town's name, so it can never be a fixed

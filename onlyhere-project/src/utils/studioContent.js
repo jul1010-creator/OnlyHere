@@ -108,12 +108,26 @@ const shapeForLiveFields = (type, t) => {
     blogBody: [
       ...bbData([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]]),
     ] };
-  if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", location: t.location || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
+  if (type === "night") { const isClub = !!t.isClub; return { name: t.name, type: t.type || "Local", crowd: t.crowd || "", emoji: t.emoji || "🍺", category: t.category || "", priceNote: t.priceNote || "", location: t.location || "", isClub, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData(isClub ? [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["When Do People Enter", t.whenEnter], ["The Reality Check", t.realityCheck]]
                         : [["Who It's For", t.whoFor], ["Best Time to Go", t.bestTime], ["Before Dark", t.beforeDark], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]]),
       ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
     ] }; }
+  // A BAR STREET, WHICH IS NEITHER OF ITS NEIGHBOURS ABOVE OR BELOW.
+  // `town` is stored as its own field rather than left inside `location`,
+  // because this is the field the town page groups on and a grouping that has
+  // to parse a street address to find its own parent is one bad address away
+  // from an empty section. `location` stays too, for the card line and the map.
+  // The bars on the street are deliberately NOT stored: they are matched from
+  // their own rows at render time, so publishing a bar needs no edit here.
+  if (type === "nightStreet") return { name: t.name, isStreet: true, town: t.town || "", location: t.location || "", emoji: t.emoji || "🍻",
+    category: t.category || "Bar street", crowd: t.crowd || "", priceNote: t.priceNote || "",
+    photo: `/nightlife-streets/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
+    blogBody: [
+      ...bbData([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]]),
+      ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
+    ] };
   if (type === "nightTown") return { name: t.name, emoji: t.emoji || "🌃", photo: `/nightlife-towns/${slugify(t.name)}.jpg`, desc: t.desc, color: t.color || "#5D4037", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]]),

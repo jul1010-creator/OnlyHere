@@ -1,0 +1,96 @@
+{
+  "name": "Græskarfestival",
+  "scale": "Local",
+  "town": "Skælskør",
+  "type": "Festival",
+  "emoji": "🎃",
+  "dateStart": "2026-10-12",
+  "dateEnd": "2026-10-17",
+  "tier": "Worth Considering",
+  "nearestStation": "Skælskør Busterminal",
+  "ticketInfo": "Free entry",
+  "camping": "",
+  "accommodationTip": "Few hotel rooms in town, and they fill up around the autumn school break.",
+  "travelTime": "1h 59min 🚂",
+  "ticketStatus": "free",
+  "desc": "Billed by its organisers as Denmark's largest pumpkin festival, it fills Skælskør's harbour streets for a week every October. The town runs paid workshops and horse-drawn carriage rides scattered across the harbour and the old red warehouse, Det Røde Pakhus.",
+  "mapHint": "Kajgade, 4230 Skælskør, Denmark",
+  "website": "https://graeskarfestival.dk",
+  "tags": [
+    "Pumpkin festival",
+    "Autumn family event"
+  ],
+  "color": "#E86A17",
+  "atmosphere": "Skælskør's harbour turns orange for six days, pumpkins piled on window ledges, doorsteps and market stalls along Kajgade. Kids run between the pony track, the pumpkin-cake decorating table and Det Røde Pakhus, while the smell of warm cider and honey drifts from the cider-press stalls. It plays out closer to a big community harvest fair than a festival with a stage or a headline act.",
+  "whoItsFor": "This is built for families with young kids, especially around the Danish autumn school holiday when the whole week runs on that rhythm. Couples and older visitors turn up too, mostly for the harbour walk, the workshops and the pumpkin menus rather than any nightlife. If you want music, drinking culture or a festival with an evening pulse, skip it, it is daytime, hands-on, and quiet after dark.",
+  "realityCheck": "Entry to the grounds is free, but almost everything worth doing, pony rides, ceramics, treasure hunts, costs extra and runs in its own fixed one-to-four-hour slot, so you need to plan rather than wander in expecting access to everything. Popular free spots like Græskarland and the horse-drawn wagon rides queue up fast, especially on weekend days within the week. Getting there from Copenhagen without a car means a train to Slagelse and a bus change onto Skælskør, nearly two hours each way.",
+  "gemlyxFind": "The paid activities cluster into overlapping windows, with the pony rides and the cider press both running 11:00 to 14:00, so read the day's programme the night before and pick the two or three slots you want rather than trying to catch everything.",
+  "uncertainties": [
+    "Some paid activity prices in the 2026 program are listed as a number with no currency symbol; assumed to be DKK.",
+    "\"Denmark's largest pumpkin festival\" is the festival's own description and was not independently verified against other pumpkin events in the country."
+  ],
+  "__journey": {
+    "total": 119,
+    "onBoard": 84,
+    "onFoot": 26,
+    "waiting": 9,
+    "changes": 1,
+    "interchanges": [
+      "Slagelse"
+    ],
+    "longest": {
+      "mins": 50,
+      "vehicle": "train",
+      "line": "IC",
+      "from": "København H",
+      "to": "Slagelse"
+    },
+    "legs": [
+      {
+        "vehicle": "train",
+        "line": "IC",
+        "from": "København H",
+        "to": "Slagelse",
+        "mins": 50
+      },
+      {
+        "vehicle": "bus",
+        "line": "470R",
+        "from": "Slagelse St. (Ndr.Stationsvej)",
+        "to": "Skælskør Busterminal (Stationsvej)",
+        "mins": 34
+      }
+    ],
+    "vehicles": [
+      "train",
+      "bus"
+    ],
+    "drivingMins": 84,
+    "from": "Copenhagen",
+    "at": "2026-08-14"
+  },
+  "__sources": [
+    "https://www.kultunaut.dk/perl/arrmore/type-nynaut/type-nynaut?ArrNr=19975594",
+    "https://www.visitdenmark.dk/danmark/explore/graeskarfestival-danmarks-stoerste-i-skaelskoer-gdk1158284",
+    "https://graeskarfestival.dk",
+    "https://destinationsjaelland.dk/partnere/begivenheder-efteraar/graeskarfestival",
+    "https://happydays.nu/dk/rejseklubben/rejsebloggen/blogindlaeg/danmarks-stoerste-graeskarfestival-i-skaelskoer",
+    "https://www.visitdenmark.com/denmark/plan-your-trip/graeskarfestival-gdk1138043",
+    "https://skef.dk/graeskarfestival",
+    "https://www.sjfbank.dk/fonden/nyt/graeskarfestival-2024"
+  ],
+  "__dateSource": {
+    "by": "official-site",
+    "dates": [
+      "2026-10-12",
+      "2026-10-17"
+    ],
+    "at": "2026-08-14T17:22:09.216Z"
+  },
+  "__ticket": {
+    "source": "writer",
+    "at": "2026-08-14T17:22:09.216Z",
+    "verdict": "no-match",
+    "url": ""
+  }
+}

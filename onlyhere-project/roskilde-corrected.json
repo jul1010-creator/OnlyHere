@@ -1,0 +1,40 @@
+{
+  "name": "Roskilde Festival",
+  "scale": "Major",
+  "town": "Roskilde",
+  "type": "Music",
+  "emoji": "🎪",
+  "dateStart": "2027-06-26",
+  "dateEnd": "2027-07-03",
+  "tier": "Highly Recommended",
+  "nearestStation": "Roskilde St.",
+  "ticketInfo": "2,720 DKK in total for a full-festival ticket. The Smart Ticket splits it into 8 instalments of 327 DKK plus a 100 DKK ticket fee.",
+  "camping": "Camping is included in every ticket, including one-day and two-day.",
+  "accommodationTip": "Rooms in Roskilde town are scarce during festival week, so book early if you want a bed rather than a tent.",
+  "travelTime": "50min 🚂",
+  "ticketStatus": "on_sale",
+  "desc": "Northern Europe's largest music and cultural festival, drawing up to 130,000 people to Roskilde for eight days of concerts, camping and volunteering. Founded in 1971, it runs more than 170 concerts across genres from heavy metal to hip hop, with all profits going to humanitarian and cultural causes.",
+  "mapHint": "Festivalpladsen, Darupvej 19, 4000 Roskilde, Denmark",
+  "website": "https://www.roskilde-festival.dk",
+  "tags": [
+    "music festival",
+    "camping"
+  ],
+  "color": "#E85D2A",
+  "atmosphere": "Sound bleeds from stage to stage across the fields, heavy metal riffs fading into hip hop beats as you walk between them. The Orange Stage has been the festival's center since 1978, and even from a distance you can feel the crowd swell before a headliner starts. By night the campsite turns into its own city of bonfires, shared beers and music spilling out of tents long after the main stages close.",
+  "whoItsFor": "This suits people who don't mind sleeping in a tent for the better part of a week and who like their music festivals loud, sprawling and a little rough around the edges. It works for genre-hoppers who'll go from a metal show to electronic to folk music in the same afternoon, and for anyone who wants the volunteer or community side of it too, not just the bands. If you need your own bathroom, quiet nights or personal space, this isn't the festival that will give you any of that.",
+  "realityCheck": "A full-festival ticket is 2,720 DKK all in, and the Smart Ticket instalment plan closes at the end of August, after which your options shrink fast. The 2026 edition sold out before the gates opened. Camping for a week means shared toilets, long walks between your tent and the stages, and weather that can turn a dry field into mud with no warning. With up to 130,000 people on site, queues for food, showers and the biggest sets are a normal part of every day, not an occasional annoyance. If you're picturing a comfortable weekend getaway rather than a physically demanding week outdoors, this isn't it.",
+  "gemlyxFind": "For camping, skip the general fields and book into Settle'n Share in the South. It's organised around mutual help and keeping the area clean, so you land near people looking out for each other instead of next to the loudest tent block.",
+  "uncertainties": [
+    "The 2,720 DKK total is stated on the organiser's own news post of 5 July 2026 announcing the 2027 festival, not on the current tickets page. A price announced eleven months ahead can move.",
+    "The eight instalments of 327 DKK plus the 100 DKK fee come to 2,716 DKK, four kroner short of the stated total, so the components and the total do not reconcile exactly. The stated total is the one printed here.",
+    "During the festival a temporary station serves the site directly. It is not in the year-round timetable, so the journey above is measured on an ordinary weekday and does not include it.",
+    "ticketStatus is set to on_sale from the active Smart Ticket plan, but a full sellout before the date is possible on the 2026 precedent."
+  ],
+  "__ticket": {
+    "source": "official-site",
+    "at": "2026-08-14",
+    "verdict": "total-stated",
+    "url": "https://www.roskilde-festival.dk/en/news/thank-you-roskilde-see-you-in-2027"
+  }
+}

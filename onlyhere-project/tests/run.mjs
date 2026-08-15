@@ -43,7 +43,7 @@ writeFileSync(entry, `
   export { journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
-  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
+  export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
@@ -69,7 +69,6 @@ writeFileSync(entry, `
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
-  export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { FERRY, classifyFerry, ferryFindings } from ${JSON.stringify(join(root, "src/utils/transport.js"))};
   export { enforceScope, resolveField, classifyClaim, routeMessage, allowedFieldsFor, isEditRequest, factsIn, factsPreserved, editEntry, EDITABLE_FIELDS, VERIFY_PROMPT, keepMeasured, isPipelineOwned, MEASURED_FIELDS } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { studioPrompts } from ${JSON.stringify(join(root, "src/utils/studioPrompts.js"))};
@@ -98,6 +97,11 @@ writeFileSync(entry, `
   export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, describeAverage, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
+  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
+  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -570,10 +574,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const TYPES = M.CONTENT_TYPES;
   const p = M.studioPrompts("Aarhus Festuge");
   is("every registered type has a draft prompt", Object.keys(p).sort(), TYPES.slice().sort());
+  // String(...) rather than p[t] directly: a type registered without a prompt
+  // yet must make these three FAIL, not throw. A throw aborts this file and
+  // takes several hundred assertions below it down unread, which is how a
+  // mutation run comes back clean without having earned it.
   TYPES.forEach(t => {
-    ok(`${t} still carries the voice rules`, p[t].includes("NEVER USE THE EM DASH"));
-    ok(`${t} still demands strict JSON`, /Respond with ONLY strict JSON/.test(p[t]));
-    ok(`${t} interpolates the real name`, p[t].includes("Aarhus Festuge"));
+    const text = String(p[t] || "");
+    ok(`${t} still carries the voice rules`, text.includes("NEVER USE THE EM DASH"));
+    ok(`${t} still demands strict JSON`, /Respond with ONLY strict JSON/.test(text));
+    ok(`${t} interpolates the real name`, text.includes("Aarhus Festuge"));
   });
   ok("the town prompt still refuses the copied example coordinate", /NEVER copy a number out of this schema/.test(p.town));
   ok("the town prompt still bans a guessed travel time", /never guess/.test(p.town));
@@ -2392,7 +2401,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // is the single most useful logistical fact about it.
   is("a festival does", hasArrivalField("festival"), true);
   is("a free attraction does", hasArrivalField("free"), true);
-  is("a restaurant does", hasArrivalField("food"), true);
+  // ── AND THIS LINE USED TO SAY A RESTAURANT DOES ─────────────────
+  // It asserted hasArrivalField("food") === true, and it was never true of
+  // anything that ships: nearestStation is in NO food, foodStreet or night
+  // schema and shapeForLive drops it for all three. The set's only caller uses
+  // it to decide whether to tell the model "put ONLY that station name in the
+  // nearestStation field", so every restaurant draft was being instructed to
+  // fill a field that could not publish. The assertion was enforcing the gap
+  // rather than catching it, which is the same shape as the pasted-draft row id
+  // that once asserted the ABSENCE of a fix. Checked three ways below now, so
+  // this cannot drift back in silence.
+  is("a restaurant does not, because nothing downstream would publish it", hasArrivalField("food"), false);
+  is("nor a food street", hasArrivalField("foodStreet"), false);
+  is("nor a bar", hasArrivalField("night"), false);
   is("a workshop does", hasArrivalField("craft"), true);
   is("and an unknown type does not", hasArrivalField("wat"), false);
   ok("town is not in the set under any name", !ARRIVAL_TYPES.has("town") && !ARRIVAL_TYPES.has("nightTown"));
@@ -5919,14 +5940,272 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 // The 3-character minimum beside it was standing in for the boundary check and
 // could not do that job: "Als" and "Møn" are three characters, so the guard
 // admitted precisely the names that cause trouble.
+//
+// The matcher moved to utils/previewMatch.js on 15 Aug so it could be run
+// without rendering a component, which is why these read that file now. Same
+// rules; the screen calls them instead of carrying them.
 {
-  const previewSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
-  const code = stripNonCode(previewSrc);
-  ok("the preview screen uses the shared boundary check", /containsName\(convoText, v\)/.test(code));
-  ok("and imports it", /import \{[^}]*\bcontainsName\b[^}]*\} from "\.\.\/utils\/danishNames"/.test(previewSrc));
+  const matchSrc = readFileSync(join(root, "src/utils/previewMatch.js"), "utf8");
+  const code = stripNonCode(matchSrc);
+  ok("the matcher uses the shared boundary check", /containsName\(convoText, v\)/.test(code));
+  ok("and imports it", /import \{[^}]*\bcontainsName\b[^}]*\} from "\.\/danishNames"/.test(matchSrc));
   // The bare include is what made "also" an island. It must not come back.
   ok("the unpadded include is gone", !/hay\.includes\(/.test(code));
   ok("and the length guard standing in for it is gone", !/f\.length >= 3/.test(code));
+  // And the screen calls it rather than keeping a second copy that can drift.
+  const previewSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("the preview screen calls the shared matcher", /matchedPlaces\(convoText, previewPools\(/.test(previewSrc));
+  ok("and no longer runs its own passes", !/matched\.push\(p\)/.test(stripNonCode(previewSrc)));
+}
+
+// ── THE TOWN FIELD IS NOT CALLED THE SAME THING TWICE ───────────────
+// Oliver, 15 Aug 2026, on a preview for a family who had asked for markets,
+// cycling and a couple of meals out: "same attraction and same town that are
+// always shown. Nothing else."
+//
+// It was not thin content. free rows keep their town in `city`, festival rows
+// in `town`, and food, nightlife and craft rows in `location`. The second pass
+// skips any row whose parent town comes back empty, so every restaurant, food
+// market, bar, club and workshop in the database was permanently ineligible
+// for this screen, whatever anybody typed. Torvehallerne is a food market in
+// Copenhagen and could never appear for somebody who wrote "markets".
+{
+  const { matchedPlaces, previewPools, parentTownOf } = M;
+  const CONVO = "user: Family of four, kids 7 and 10, four days in Copenhagen. We love markets and cycling, mid range, one or two special meals out.";
+  const pools = previewPools({
+    towns: [{ name: "Copenhagen", isMajorCity: true }],
+    freeEntrance: [{ name: "Amalienborg Slot", city: "Copenhagen" }],
+    // The two real shapes: a bare town, and a full street address.
+    foodSpots: [{ name: "Torvehallerne", location: "Frederiksborggade 21, Copenhagen" }, { name: "Reffen", location: "Copenhagen" }],
+    nightlifeSpots: [{ name: "Culture Box", location: "Kronprinsessegade 54, Copenhagen" }],
+    craftItemsFallback: [{ name: "Keramik Vaerksted", location: "Copenhagen" }],
+    events: [], majorEvents: [],
+  });
+  const got = matchedPlaces(CONVO, pools).map(p => p.name);
+  ok("the market they asked for is reachable at all", got.includes("Torvehallerne"));
+  ok("a food row whose location is a bare town too", got.includes("Reffen"));
+  ok("and a bar", got.includes("Culture Box"));
+  ok("and a workshop", got.includes("Keramik Vaerksted"));
+  ok("the attraction that always worked still works", got.includes("Amalienborg Slot"));
+  // THE SHAPE OF THE BUG, stated directly, so an edit that puts parentTownOf
+  // back to the two fields it used to read fails here by name.
+  is("a food row's town is read out of location", parentTownOf({ location: "Frederiksborggade 21, Copenhagen" }), "Copenhagen");
+  is("a free row's town is still read out of city", parentTownOf({ city: "Aarhus" }), "Aarhus");
+  is("a festival row's town is still read out of town", parentTownOf({ town: "Roskilde" }), "Roskilde");
+  is("and a row with no town anywhere yields nothing", parentTownOf({ name: "Somewhere" }), "");
+  // A row in a DIFFERENT town is still not admitted, which is the rule the
+  // second pass exists to enforce. Widening the field list may not widen this.
+  const other = matchedPlaces(CONVO, previewPools({
+    towns: [{ name: "Copenhagen" }],
+    foodSpots: [{ name: "Restaurant Domestic", location: "Mejlgade 35, Aarhus" }],
+  })).map(p => p.name);
+  ok("a food row in another town is still left out", !other.includes("Restaurant Domestic"));
+
+  // AND THE ITALIC LINE AT THE TOP READS THE SAME LIST. Raw source, because
+  // what is being checked is a prompt string and stripNonCode blanks those.
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("previewWhy matches the same places the screen shows",
+    /const onScreen = matchedPlaces\(forMatch, previewPools\(\{/.test(appSrc));
+  ok("on the same text the screen builds", appSrc.includes("const forMatch = aiMessages.slice(1).map("));
+  ok("and the prompt is told what is on the screen",
+    /THE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE/.test(appSrc));
+  ok("and told not to promise an interest the list does not serve",
+    /Do not name an interest of theirs that nothing on the list serves/.test(appSrc));
+
+  // ── AND THE TICKS ARE NOT ONE CONVERSATION BEHIND ─────────────────
+  // The reset may NOT sit in the guideModal !== "preview" branch: continuing
+  // from the preview sets guideModal to "choosing", so a reset there would
+  // clear the picks a moment before generateGuide reads them, and the feature
+  // would appear to work while quietly doing nothing.
+  const whyEffect = appSrc.slice(appSrc.indexOf("const previewWhyRunRef = useRef(0);"), appSrc.indexOf("Based ONLY on this Denmark trip conversation"));
+  ok("a new conversation drops last time's picks", /previewWhyForRef\.current = convo;\s*(?:\/\/[^\n]*\n\s*)*setPickedEvents\(null\);/.test(whyEffect));
+  const closeBranch = whyEffect.slice(whyEffect.indexOf('if (guideModal !== "preview")'), whyEffect.indexOf("const convo ="));
+  ok("and closing the screen does not", !/setPickedEvents/.test(closeBranch));
+}
+
+// ── EVERY EVENT IN TOWN, OFFERED AS IF IT WERE ON ───────────────────
+// Oliver, 14 Aug 2026: "every single event is for some reason shown in the
+// preview instead of just the one that the visitor will explore".
+//
+// The preview matches in two passes. Pass one takes any place whose name is in
+// the conversation. Pass two adds every row whose own town field points at a
+// town pass one matched, and it reads only the place half of an event.
+//
+// Measured on the real matcher before the fix, "Four days in Copenhagen in
+// March, we want the Copenhagen Light Festival" returned six events: the one
+// named, then Jazz (July), Distortion (June), Kulturnatten (last October),
+// Copenhagen Cooking (August) and CPH:DOX, with a seventh dropped by the cap.
+// Four in the wrong season, one already finished, all six drawn identically.
+{
+  const { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded,
+    overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS } = M;
+  const TODAY = new Date(2026, 7, 14);        // 14 August 2026, fixed
+  const ev = (name, date, dateEnd, extra = {}) => ({ name, town: "Copenhagen", date, dateEnd, ...extra });
+  const POOL = [
+    ev("Copenhagen Light Festival", "2027-02-02", "2027-02-25", { tier: "Highly Recommended", type: "Culture", tags: ["light", "art"] }),
+    ev("CPH:DOX", "2027-03-17", "2027-03-28", { tier: "Worth Considering", type: "Film", tags: ["film"] }),
+    ev("Copenhagen Jazz Festival", "2027-07-02", "2027-07-11", { tier: "Can't Miss Out", type: "Music", tags: ["music"] }),
+    ev("Distortion", "2027-06-02", "2027-06-06", { tier: "Worth Considering", type: "Music", tags: ["music"] }),
+    ev("Kulturnatten", "2026-10-09", "2026-10-09", { tier: "Highly Recommended", type: "Culture" }),
+  ];
+  const names = (r) => r.rows.map(x => x.event.name);
+  const run = (opts) => tripEvents(POOL, { today: TODAY, ...opts });
+
+  // THE ONE FROM THE REPORT. Four days in March, one festival named. The other
+  // four are in this town and in this pool and none of them is on that week.
+  const march = tripWindow({ arrival: "2027-03-12", departure: "2027-03-15" });
+  is("four days in March returns the named festival and nothing else",
+    names(run({ window: march, named: e => e.name === "Copenhagen Light Festival" })),
+    ["Copenhagen Light Festival"]);
+
+  // AND THE SAME TRIP RUN A WEEK LONGER FINDS THE ONE THAT IS ON. The rule is
+  // the dates, not a smaller number: this must not pass by showing less.
+  const marchLong = tripWindow({ arrival: "2027-03-12", departure: "2027-03-20" });
+  is("a longer March trip picks up the festival that overlaps it",
+    names(run({ window: marchLong, named: e => e.name === "Copenhagen Light Festival" })),
+    ["Copenhagen Light Festival", "CPH:DOX"]);
+
+  // A NAMED EVENT THAT CANNOT HAPPEN IS SHOWN, AND SAYS SO. Hiding it is how
+  // somebody finds out at the gate instead of on this screen.
+  // Read defensively on purpose. A row that vanished has to FAIL here, and an
+  // assertion that throws instead takes the rest of this file down with it,
+  // which is how a mutation run gets a clean bill of health it has not earned.
+  const light = run({ window: march, named: e => e.name === "Copenhagen Light Festival" }).rows[0] || null;
+  ok("the named festival that does not overlap is still shown", !!light);
+  ok("and cannot be ticked", !!light && !light.tickable);
+  is("and it says why", light ? light.note : null, "Not on while you are there");
+  ok("and it is never the recommendation", !!light && !light.recommended);
+
+  // AN EVENT NOBODY NAMED, IN THE RIGHT TOWN, IN THE WRONG MONTH, IS GONE.
+  ok("Distortion is not offered for a trip in March", !names(run({ window: march, named: () => false })).includes("Distortion"));
+  // AND ONE ALREADY OVER IS GONE EVEN WHEN THE DATES ARE UNKNOWN.
+  ok("a finished event is not offered", !names(run({ window: null, named: () => false })).includes("Kulturnatten"));
+  ok("hasEnded reads the LAST day, not the first",
+    hasEnded({ date: "2026-08-10", dateEnd: "2026-08-20" }, TODAY) === false && hasEnded({ date: "2026-08-01", dateEnd: "2026-08-03" }, TODAY) === true);
+
+  // ROW 62. TinderBox is stored 2027-06-24 to 2026-06-26, an end before its
+  // start, which as a raw range spans a year and collides with every trip.
+  is("a backwards range collapses to its start day",
+    JSON.stringify(eventWindow({ date: "2027-06-24", dateEnd: "2026-06-26" })),
+    JSON.stringify({ start: new Date(2027, 5, 24), end: new Date(2027, 5, 24) }));
+  ok("so it does not overlap a trip eleven months earlier",
+    overlapsTrip({ date: "2027-06-24", dateEnd: "2026-06-26" }, tripWindow({ arrival: "2026-07-01", departure: "2026-07-10" })) === false);
+
+  // OLIVER'S LIMIT, IN HIS NUMBERS: "4 days ... limited to only one. If the
+  // person is there for 10 ... he can easily make 3 or 4."
+  is("four days is one event", eventPickLimit(4), 1);
+  is("ten days is three", eventPickLimit(10), 3);
+  is("a fortnight is four", eventPickLimit(14), 4);
+  is("six days is two", eventPickLimit(6), 2);
+  is("one day is still one, never zero", eventPickLimit(1), 1);
+  is("an unknown trip length is one", eventPickLimit(null), 1);
+  is("and nothing exceeds the cap", eventPickLimit(90), MAX_EVENT_PICKS);
+
+  // THE LIMIT REACHES THE LIST, not just the helper: a four day trip may not
+  // arrive with two events already ticked.
+  const june = tripWindow({ arrival: "2027-06-02", departure: "2027-06-05" });
+  const shortTrip = run({ window: june, named: () => false, interests: ["music"] });
+  is("a four day trip recommends exactly one", shortTrip.rows.filter(r => r.recommended).length, 1);
+  is("and the limit it reports is one", shortTrip.limit, 1);
+
+  // THE RECOMMENDATION IS THE TRAVELLER'S INTEREST FIRST, THEN OUR TIER.
+  // Distortion is "Worth Considering" and tagged music; Kulturnatten is
+  // "Highly Recommended" and is not. On a trip where both are on, someone who
+  // said music gets the music one.
+  const bothOn = [
+    ev("Distortion", "2027-06-02", "2027-06-06", { tier: "Worth Considering", type: "Music", tags: ["music"] }),
+    ev("Kulturnatten", "2027-06-03", "2027-06-03", { tier: "Highly Recommended", type: "Culture" }),
+  ];
+  const picked = tripEvents(bothOn, { window: june, interests: ["music"], named: () => false, today: TODAY });
+  is("the interest wins over the higher tier", (picked.rows.find(r => r.recommended) || {}).event?.name ?? null, "Distortion");
+  // And with no interests stated, our own tier decides.
+  const noInterest = tripEvents(bothOn, { window: june, interests: [], named: () => false, today: TODAY });
+  is("with nothing stated, the tier decides", (noInterest.rows.find(r => r.recommended) || {}).event?.name ?? null, "Kulturnatten");
+  is("interestScore counts the tags that match", interestScore(bothOn[0], ["music", "food"]), 1);
+  is("and none stated is not a match for everything", interestScore(bothOn[0], []), 0);
+
+  // WITHOUT DATES, ONE SUGGESTION. The screen cannot claim any of these is on
+  // while they are there, so it stops at the strongest rather than listing.
+  const undated = tripEvents(POOL, { window: tripWindow({ convoText: "we have 4 days in Copenhagen" }), named: () => false, today: TODAY });
+  ok("an undated trip knows it is undated", !undated.dated);
+  is("and offers exactly one", undated.rows.length, 1);
+
+  // THE WINDOW ITSELF.
+  const w = tripWindow({ arrival: "2027-03-12", departure: "2027-03-15" });
+  is("intake dates give an exact window", [w?.days ?? null, w?.dated ?? null, w?.source ?? null], [4, true, "intake"]);
+  is("a departure before the arrival is not a window", tripWindow({ arrival: "2027-03-15", departure: "2027-03-12" }), null);
+  is("a length with no dates is a length only",
+    (() => { const t = tripWindow({ convoText: "four days, I mean 4 days" }); return [t?.days ?? null, t?.dated ?? null]; })(), [4, false]);
+  is("a date in the conversation plus a length is a real window",
+    (() => { const t = tripWindow({ convoText: "arriving the 12th of March for 4 days", today: TODAY }); return [t?.days ?? null, t?.dated ?? null, t?.end?.getMonth() ?? null]; })(), [4, true, 2]);
+  is("nothing said at all is null", tripWindow({ convoText: "somewhere quiet please" }), null);
+  is("a trip counts both its end days", daysBetween("2027-03-12", "2027-03-15"), 4);
+  is("and one day is one, not zero", daysBetween("2027-03-12", "2027-03-12"), 1);
+
+  // THE TWO PARSERS LIFTED OUT OF generateGuide, still answering as they did.
+  is("digits", dayCountIn("we have 5 days"), 5);
+  is("a week", dayCountIn("here for a week"), 7);
+  is("two weeks", dayCountIn("2 weeks in Jutland"), 14);
+  is("a fortnight", dayCountIn("a fortnight"), 14);
+  is("and it is capped at a fortnight", dayCountIn("30 days"), 14);
+  is("nothing stated", dayCountIn("a nice long trip"), null);
+  is("day before month", arrivalDateIn("the 12th of March", TODAY)?.getMonth() ?? null, 2);
+  is("month before day", arrivalDateIn("March 12th", TODAY)?.getMonth() ?? null, 2);
+  is("a month already gone means next year",
+    arrivalDateIn("2nd of February", TODAY)?.getFullYear() ?? null, 2027);
+  is("a month still ahead means this year",
+    arrivalDateIn("2nd of December", TODAY)?.getFullYear() ?? null, 2026);
+  is("no date, no guess", arrivalDateIn("sometime in the spring", TODAY), null);
+
+  // THE SENTENCE UNDER THE HEADING, since a checkbox that stops responding
+  // without saying why reads as broken.
+  ok("one pick reads as one", /one event/i.test(describePicks(1, 0)));
+  ok("and a full list says so", /most this trip has room for/i.test(describePicks(3, 3)));
+  is("overlapDays counts the days that actually coincide",
+    overlapDays({ date: "2027-06-01", dateEnd: "2027-06-10" }, june), 4);
+}
+
+// ── AND THE SCREEN ITSELF STOPPED DECIDING THIS ─────────────────────
+// The rules above are only worth anything if the component uses them. Events
+// left CATEGORY_SECTIONS, which is what made the generic town pass reach them.
+{
+  const previewSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  const code = stripNonCode(previewSrc);
+  // The two here that name a string literal read the RAW source: stripNonCode
+  // blanks literals, so "event" is not in the stripped copy to match against.
+  ok("events are no longer a generic category section", !/\{ src: "event", label: "Events" \}/.test(previewSrc));
+  ok("the screen builds them from tripEvents", /tripEvents\(matched\.filter\(p => p\._src === "event"\)/.test(previewSrc));
+  ok("with the traveller's real dates", /tripWindow\(\{ arrival: intakeArrival, departure: intakeDeparture/.test(code));
+  ok("and it prints the dates on the card", /getEventDate\(place\.date, place\.dateEnd\)/.test(code));
+  // The tick, the limit and the badge, each of which is the feature.
+  ok("there is a tick", /toggleEvent\(place\.name\)/.test(code));
+  ok("the limit blocks a further tick", /list\.length >= eventPlan\.limit\) return list/.test(code));
+  ok("and the recommendation is marked", /row\.recommended && \(/.test(code));
+}
+
+// ── A TICK IS A PROMISE, SO THE BUILD KEEPS IT ──────────────────────
+// Read on the raw source, not the stripped copy: what matters here is that the
+// chosen events reach the PLANNER's prompt string, and stripNonCode blanks
+// string literals. Same reason the message assertions elsewhere read raw.
+{
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the chosen events are gathered from the live arrays",
+    /const chosenEvents = Array\.isArray\(pickedEvents\)/.test(appSrc));
+  ok("and stated as fixed points, not suggestions",
+    /EVENTS THE TRAVELER HAS ALREADY CHOSEN, which are fixed points and not suggestions/.test(appSrc));
+  // THE ORDERING THAT IS THE WHOLE POINT: the planner decides which day each
+  // stop lands on, so a dated event has to be in front of IT, not in front of
+  // the writer. Both get it; only the planner's position is load bearing.
+  const plannerAt = appSrc.indexOf("You are planning the STRUCTURE of a Denmark trip");
+  const blockAt = appSrc.indexOf("const chosenEventsBlock");
+  ok("the block is built before the planner runs", blockAt > 0 && blockAt < plannerAt);
+  ok("the planner prompt carries it", /not just within each single day\.\$\{chosenEventsBlock\}/.test(appSrc));
+  ok("the writer prompt carries it too", /atmosphere and experience instead\.\$\{chosenEventsBlock\}/.test(appSrc));
+  // And the deterministic half, because a prompt has a failure rate.
+  ok("a ticked event that never made the plan is a plan problem",
+    /was added to this trip on the preview screen and no day contains it/.test(appSrc));
+  ok("null is not treated as an empty pick list",
+    /Array\.isArray\(pickedEvents\) && pickedEvents\.length/.test(appSrc));
 }
 
 // ── THE MAP FRAME THAT OUTLIVES THE MAP ─────────────────────────────
@@ -6469,6 +6748,110 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const codegen = region(app, 'let code = "";', "ui(setStudioResult, code);", "paste-ready codegen");
   const unbranched = TYPES.filter(t => t !== "night" && !codegen.includes(`"${t}"`));
   is("every type has its own codegen branch, since the fallback is nightlife", unbranched, []);
+
+  // ── THE SITES THIS SWEEP DID NOT REACH ────────────────────────────
+  // Oliver, 15 Aug 2026: "walk through bugs, and the entire studio of
+  // navigations ... so I don't need to waste money having to constantly call
+  // out bugs." A full inventory of the per-type sites found nine more than this
+  // block covered, and three of them were already wrong. Every one of the last
+  // several Studio bugs has the same shape: a type registered in most of the
+  // places it needs to be, and quietly absent from one.
+  missing("Danish query keywords", region(app, "const daWords = {", "}[sType]", "Danish query keywords"), t => `${t}:`);
+  missing("founder-source search words", JSON.stringify(Object.keys(M.QUERY_WORDS || {})), t => `"${t}"`);
+  missing("discover search words", JSON.stringify(Object.keys(M.DISCOVER_WORDS || {})), t => `"${t}"`);
+  missing("the name-input placeholder map", region(app, "placeholder={{ town:", "}[studioType]", "placeholder map"), t => `${t}:`);
+
+  // ── AND THE TWO VOCABULARIES, WRITTEN DOWN AT LAST ────────────────
+  // A row's `type` is what Studio publishes; a rendered place carries `_src`,
+  // and there are only six of those. The correspondence existed nowhere except
+  // an object literal hand-copied into two render sites three thousand lines
+  // apart, and BOTH copies were wrong in the same two ways: booking fell
+  // through a `|| studioType` and became "booking", which is not an `_src`
+  // anywhere, and nightTown was mapped to "town", which made the audit demand a
+  // coordinate that type's own publish shape does not store. Every nightlife
+  // town draft opened with a blocking finding about a field it cannot have.
+  {
+    const { SRC_FOR_TYPE, PLACE_SOURCES, srcForType } = M;
+    is("every content type has an answer", TYPES.filter(t => !Object.prototype.hasOwnProperty.call(SRC_FOR_TYPE, t)), []);
+    is("and every answer is a real render source, or null for a thing that is not a place",
+      TYPES.filter(t => SRC_FOR_TYPE[t] !== null && !PLACE_SOURCES.includes(SRC_FOR_TYPE[t])), []);
+    // The two that were wrong, by name, so neither can come back quietly.
+    is("a workshop renders as craft", srcForType("booking"), "craft");
+    is("a nightlife town is not a town", srcForType("nightTown"), "nightlife");
+    // A bar street opens a nightlife page that happens to contain other
+    // nightlife cards, so it is nightlife all the way down. Mapping it to
+    // "town" would send it to the town detail page, which knows nothing about
+    // a crowd, a category or the venues on it, and would demand a coordinate
+    // its publish shape does not store, exactly as nightTown used to.
+    is("a bar street is nightlife, not a town", srcForType("nightStreet"), "nightlife");
+    ok("and it is not a town specifically, which is what triggered the coordinate finding", srcForType("nightTown") !== "town");
+    is("an essential is not a place at all", srcForType("essential"), null);
+    is("an unknown type is null rather than itself", srcForType("banana"), null);
+    // The literals are gone from both render sites.
+    is("no hand-copied vocabulary map is left in App.jsx",
+      (app.match(/festival: "event", night: "nightlife"/g) || []).length, 0);
+    // AND THE SIX ARE THE SIX EVERYWHERE ELSE. Each of these is a separate
+    // list of the render vocabulary, and they have to agree or a published row
+    // opens the wrong page, or none.
+    const deepLink = region(app, "const m = window.location.hash.match(", "if (!m) return;", "deep-link route");
+    const setters = region(app, "const ENTRY_SETTERS = {", "};", "entry setters");
+    const pools = region(readFileSync(join(root, "src/utils/previewMatch.js"), "utf8"), "export const previewPools =", "];", "preview pools");
+    for (const src of PLACE_SOURCES) {
+      ok(`${src} has a deep link`, deepLink.includes(src));
+      ok(`${src} has an entry setter`, setters.includes(`${src}:`));
+      ok(`${src} is in the preview pools`, pools.includes(`_src: "${src}"`));
+    }
+  }
+
+  // ── A FIELD IS EITHER ASKED FOR, PUBLISHED AND CLAIMED, OR NONE ───
+  // ARRIVAL_TYPES decides whether a draft is told to put a measured station
+  // name into nearestStation. It listed food, foodStreet and night, and
+  // nearestStation is in none of their schemas and is dropped by shapeForLive
+  // for all three, so those drafts were told to fill a field that could not
+  // publish. Three-way agreement, asserted, so a fourth type cannot be added to
+  // one of the three lists alone.
+  {
+    const { ARRIVAL_TYPES, shapeForLive } = M;
+    const wrong = [];
+    for (const t of TYPES) {
+      const inSchema = /nearestStation/.test(String(prompts[t] || ""));
+      const shaped = shapeForLive(t, { name: "X", desc: "d", vibeLocation: "v", characterAndFit: "c", howTo: "h", nearestStation: "Roskilde St." });
+      const inShape = !!shaped && Object.prototype.hasOwnProperty.call(shaped, "nearestStation");
+      const claimed = ARRIVAL_TYPES.has(t);
+      // ASKED FOR AND CLAIMED MUST MATCH EXACTLY. That is the pair the bug was
+      // in: three types were claimed and never asked, so their drafts were told
+      // to fill a field nothing would keep.
+      if (inSchema !== claimed) wrong.push(`${t}: schema ${inSchema} but claimed ${claimed}`);
+      // CLAIMED IMPLIES PUBLISHED, one way only. A town publishes the field
+      // without ever asking the model for it, on purpose: its value is the
+      // arrival stop of the MEASURED route, written at publish. A measured
+      // value landing in a field the writer never sees is the design, not a
+      // gap, so the implication does not run backwards.
+      if (claimed && !inShape) wrong.push(`${t}: claimed but shapeForLive drops it`);
+    }
+    is("a type is asked for a station exactly when it claims one, and always publishes what it claims", wrong, []);
+  }
+
+  // ── AND A CATEGORY THE PAGE NEVER LOOPS OVER ─────────────────────
+  // One level down inside a content type, the same bug: the essential prompt
+  // demanded seven categories and the Essentials page rendered five, so a row
+  // filed under "Culture & Etiquette" or "Solo Travel" published cleanly and
+  // appeared nowhere. Both lists are derived from ESSENTIAL_CATEGORIES now.
+  {
+    const { ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES } = M;
+    ok("there are seven categories", ESSENTIAL_CATEGORIES.length === 7);
+    ok("the two that used to vanish are there",
+      ESSENTIAL_CATEGORY_NAMES.includes("Culture & Etiquette") && ESSENTIAL_CATEGORY_NAMES.includes("Solo Travel"));
+    ok("the prompt builds its list from them", /EXACTLY one of: \$\{ESSENTIAL_CATEGORY_NAMES\.join/.test(readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));
+    ok("and the page loops over the same list", /\{ESSENTIAL_CATEGORIES\.map\(\(\{ cat, anchor \}\) =>/.test(app));
+    // Every anchor is unique, since the Solo Travel chip used to point at a
+    // hardcoded prose block that read no data.
+    const anchors = ESSENTIAL_CATEGORIES.map(c => c.anchor);
+    is("every anchor is distinct", anchors.length - new Set(anchors).size, 0);
+    for (const a of anchors) {
+      is(`there is exactly one #${a} on the page`, (app.match(new RegExp(`id="${a}"`, "g")) || []).length, 0);
+    }
+  }
 }
 
 // ── THE ESSENTIALS TYPE ─────────────────────────────────────────────
@@ -6966,11 +7349,60 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("what each url said about itself is kept", /urlSaidWhat\.set\(r\.url/.test(code));
   ok("and it is a real map, not a comment", /const urlSaidWhat = new Map\(\);/.test(code));
   ok("sources are filtered by whether the page names the place", /if \(!mentionsThisPlace\(u\)\) return false;/.test(code));
-  ok("using the shared word-boundary check", /containsName\(said, v\)/.test(code));
-  ok("across the place's real name variants", /variantsOf\(name, \{ includeSights: true \}\)/.test(code));
-  // A page we never saw the text of is not a source. Never conclude a fact from
-  // a failed lookup, which is this project's own standing rule.
-  ok("a url with no snippet is not a source", /if \(!said\) return false;/.test(code));
+  // The three rules the filter carries moved into sourceIsAboutPlace on 15 Aug
+  // so they could be run without the pipeline. Asserted where they live now;
+  // the call site is asserted just above.
+  {
+    const { sourceIsAboutPlace } = M;
+    ok("the filter calls the shared rule", /sourceIsAboutPlace\(urlSaidWhat\.get\(u\)/.test(code));
+    // A page we never saw the text of is not a source. Never conclude a fact
+    // from a failed lookup, which is this project's own standing rule.
+    ok("a url with no snippet is not a source", !sourceIsAboutPlace("", { name: "Ribe", town: "Ribe" }));
+    ok("nor is one whose snippet never names the place",
+      !sourceIsAboutPlace("A page about somewhere else entirely.", { name: "Ribe", town: "Ribe" }));
+    ok("a distinctive name identifies itself",
+      sourceIsAboutPlace("Ny Carlsberg Glyptotek holds the collection.", { name: "Ny Carlsberg Glyptotek" }));
+    // Danish spellings still match, which is the whole reason variantsOf is in
+    // here rather than a raw compare.
+    ok("across the place's real name variants",
+      sourceIsAboutPlace("En guide til København og omegn.", { name: "Copenhagen" }));
+  }
+
+  // ── A VENUE CALLED "TRAIN" POISONS ITS OWN RESEARCH ─────────────
+  // Oliver, 15 Aug 2026, on the __sources of an Aarhus concert-hall draft:
+  // "this is what I mean with old sources". Three of eight were about railways,
+  // one of them an article titled "the trainwreck called Quora". This test was
+  // one question, does the snippet say the name, and every page about Danish
+  // rail travel says train in its first sentence.
+  {
+    const { sourceIsAboutPlace, nameIsDistinctive } = M;
+    const TRAIN = { name: "Train", town: "Aarhus", ownHost: "train.dk" };
+    // THE THREE THAT GOT IN. Each says the word and nothing else about it.
+    ok("a rail-pass page is not a source for a venue called Train",
+      !sourceIsAboutPlace("Denmark rail passes: taking the train around Denmark is easy.", { ...TRAIN, url: "https://www.ricksteves.com/travel-tips/transportation/trains/denmark-rail-passes" }));
+    ok("nor is a page about trains in Denmark",
+      !sourceIsAboutPlace("Trains in Denmark: the train network is run by DSB.", { ...TRAIN, url: "https://www.interrail.com/en/plan-your-trip/trains-country/trains-denmark" }));
+    ok("nor an article about Quora that happens to say train",
+      !sourceIsAboutPlace("The train wreck called Quora and why we do not need it.", { ...TRAIN, url: "https://baekdal.com/article/the-trainwreck-called-quora" }));
+    // AND THE REAL ONES STILL GET IN. Corroboration, not exclusion.
+    ok("the venue's own site is a source whatever it says",
+      sourceIsAboutPlace("Se koncerter og køb billetter.", { ...TRAIN, url: "http://www.train.dk/" }));
+    ok("a page that names the venue AND the town is a source",
+      sourceIsAboutPlace("Train is a music venue in Aarhus with room for 1,000.", { ...TRAIN, url: "https://www.visitaarhus.com/music-venue-train-aarhus" }));
+    // Danish spelling of the town counts, same as everywhere else.
+    ok("even when the town is spelled the Danish way",
+      sourceIsAboutPlace("Train ligger i Århus C.", { ...TRAIN, url: "https://example.dk/x" }));
+
+    // AND THE RULE ONLY APPLIES WHERE IT IS NEEDED. Demanding a second signal
+    // from a name that identifies itself would throw away good sources to solve
+    // a problem those names do not have.
+    ok("an ordinary word is not a distinctive name", !nameIsDistinctive("Train"));
+    ok("nor is The Old Irish Pub", !nameIsDistinctive("The Old Irish Pub"));
+    ok("but a real Danish name is", nameIsDistinctive("Ærøskøbing"));
+    ok("and so is a compound one", nameIsDistinctive("Ny Carlsberg Glyptotek"));
+    ok("a distinctive name needs no town",
+      sourceIsAboutPlace("Vikingeskibsmuseet holds five original ships.", { name: "Vikingeskibsmuseet", town: "Roskilde", url: "https://anything.example" }));
+  }
   // ── ONE EXEMPTION, NOT TWO ───────────────────────────────────────
   // The official site is about the place by definition, so it is exempt. A
   // founder-vouched DOMAIN is not, and used to be. That conflated two
@@ -10460,6 +10892,30 @@ rmSync(dir, { recursive: true, force: true });
   ok("the real cap is large enough to clear the fixed prefix that caused this",
      RESEARCH_CHECK_CAP > 3000 * 4);
 
+  // ── AND HEAD PLUS TAIL WAS STILL THE WRONG CUT ──────────────────
+  // A hole in the middle eats the END of the high-authority blocks and the
+  // START of the search results, which is where a specific number tends to be
+  // stated once and never repeated. rawResearch is assembled weakest-last, so
+  // the cut is made by SECTION now, weakest first, and a measured block is
+  // never touched at any size.
+  {
+    const measured = "VERIFIED LOCATION\n" + "m".repeat(400);
+    const tickets = "TICKET PAGES READ\n" + "t".repeat(400);
+    const perplexity = "PERPLEXITY FACT-CHECK\n" + "p".repeat(400);
+    const web = "SEARCH RESULTS\n" + "w".repeat(4000);
+    const cut = researchForCheck([measured, tickets, perplexity, web].join("\n\n"), 1500);
+    ok("it is truncated", cut.truncated);
+    ok("the measured block survives", cut.text.includes("VERIFIED LOCATION"));
+    ok("so does the ticket block", cut.text.includes("TICKET PAGES READ"));
+    ok("the general web results are what goes", !cut.text.includes("w".repeat(100)));
+    ok("and the checker is told which block went by name", /SEARCH RESULTS/.test(cut.text.slice(cut.text.indexOf("are not shown"))) || cut.dropped.some(d => /SEARCH RESULTS/.test(d)));
+    ok("absence is still not evidence", /do not call anything invented/i.test(cut.text));
+    // WEAKEST FIRST, so Perplexity outranks the raw web and goes second.
+    const tighter = researchForCheck([measured, tickets, perplexity, web].join("\n\n"), 900);
+    ok("the strongest blocks are the last to go", tighter.text.includes("VERIFIED LOCATION"));
+    ok("and Perplexity goes before the measured facts do", !tighter.text.includes("p".repeat(100)));
+  }
+
   // ── WIRED: ALL FOUR, ON THE AUTOMATIC PATH ───────────────────────
   const appI = app;
   const codeI = app.split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
@@ -10521,10 +10977,15 @@ rmSync(dir, { recursive: true, force: true });
   // measurement appears in web snippets is a category error that puts a flag on
   // every measured field of every draft, and then hands those flags to a
   // rewriter.
+  // The check now sends the draft SPLIT in two, so it calls writtenFields and
+  // hands the result to splitForCheck rather than stringifying it whole. Same
+  // rule, one step further along: machine fields never reach the checker.
   ok("the draft is stripped of machine fields before being checked",
+     /splitForCheck\(writtenFields\(t\)\)/.test(codeI));
+  ok("and the rewrite is stripped too",
      /JSON\.stringify\(writtenFields\(t\)\)/.test(codeI));
-  is("in both the check and the rewrite",
-     (codeI.match(/JSON\.stringify\(writtenFields\(t\)\)/g) || []).length, 2);
+  is("writtenFields reaches both of them and nothing else",
+     (codeI.match(/writtenFields\(t\)/g) || []).length, 2);
   // Anchored on the ONE definition, so a second shadowing helper cannot satisfy
   // it: a mutation that added `const writtenFieldsUnused = o => o` above the
   // real one left this green in its first form.
@@ -12395,44 +12856,380 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // editItem sets editingId because it was handed a row that exists. A pasted
   // payload has no row, and silently adopting one would make Publish overwrite
   // a different entry. That is the worst available guess, so it is not made.
+  //
+  // TWICE NOW THIS ASSERTION HAS HAD TO MOVE, and both times for the same
+  // reason. It first read `!/setEditingId\(/.test(fn)`, asserting the ABSENCE
+  // of any call, which enforced the bug: not setting is not clearing. It then
+  // read setEditingId(null) inside this function, which broke when the clearing
+  // moved into clearPreviousEntry with the rest of its family. It now asserts
+  // the rule and not the address: whatever the door does, a pasted draft must
+  // not carry a row id. See the four-doors block below for the clear itself.
   const fn = code.slice(code.indexOf("const loadPastedDraft"), code.indexOf("const editItem"));
-  // ── THIS ASSERTION USED TO ENFORCE THE BUG ──────────────────────
-  // It read `!/setEditingId\(/.test(fn)`, asserting the ABSENCE of any call.
-  // Not setting is not clearing: open a published row (editItem sets
-  // editingId), click a type chip (nulls studioResult, leaves editingId), paste
-  // a draft, and Publish PATCHes the row that was open. The correct fix,
-  // setEditingId(null), turned the old assertion RED. A test that can only fail
-  // once the code is right is worse than a test that can never fail.
-  ok("a pasted draft CLEARS any row id it inherited", /setEditingId\(null\)/.test(fn));
-  // stripNonCode blanks string literals, so setStudioInstagramUrl("") reads as
-  // setStudioInstagramUrl() in `fn`. Third time tonight; read the raw source.
+  ok("a pasted draft clears any row id it inherited, wherever that happens",
+    /setEditingId\(null\)/.test(fn) || /clearPreviousEntry\(/.test(fn));
   ok("and the previously edited row's instagram embed with it",
-     /setStudioInstagramUrl\(""\)/.test(appL.slice(appL.indexOf("const loadPastedDraft"), appL.indexOf("const editItem"))));
-  // The messages live in STRING LITERALS, which stripNonCode blanks by design,
-  // so they are read from the raw source. Asserting them against the stripped
-  // copy failed at baseline and would have failed forever: a test that can
-  // never pass is worse than no test, because it teaches you to ignore a red.
-  const rawFn = appL.slice(appL.indexOf("const loadPastedDraft"), appL.indexOf("const editItem"));
-  // Refusals, because a parse failure that silently does nothing is the same
-  // screen as a load that worked.
-  ok("unparseable JSON is reported", /that is not valid JSON/i.test(rawFn));
-  ok("a non-object is refused", /not a draft object/i.test(rawFn));
-  ok("and a payload with no name is refused, since every check downstream needs one",
-     /A draft needs a name field/.test(rawFn));
-  // Stale state from a previous draft must not survive onto a new one.
-  ok("it clears the previous draft's warnings", /setStudioInventedWarning\(null\)/.test(fn));
-  ok("and the previous verification results", /setVerifyResults\(null\)/.test(fn));
+    /setStudioInstagramUrl\(""\)/.test(fn) || /clearPreviousEntry\(/.test(fn));
   // The run log must not claim this was measured.
   ok("and it says plainly that nothing here was measured this session",
      /Nothing here was measured by this session/.test(appL));
-  // ── AND THE CODE MAKES THAT TRUE RATHER THAN ASSERTING IT ───────
-  // Oliver, minutes after this shipped: "Not published, because the map pin
-  // would be wrong. Stored at 0.000, 0.000." publishDraft stamps
-  // studioFrozenGeo onto the payload for EVERY type, on purpose, so a festival
-  // gets a pin at all. That state is left over from whatever ran last, so a
-  // pasted draft was inheriting another entry's coordinate and station.
-  ok("a pasted draft does not inherit the last run's coordinate", /setStudioFrozenGeo\(null\)/.test(fn));
-  ok("nor the last run's placement", /setStudioPlaced\(null\)/.test(fn));
+}
+
+// ── FOUR DOORS, ONE SET OF THINGS TO FORGET ────────────────────────
+// Oliver, 15 Aug 2026: "walk through bugs, and the entire studio of
+// navigations ... so I don't need to waste money having to constantly call out
+// bugs."
+//
+// Four paths load an entry into the Studio editor, and each cleared its own
+// hand-picked subset of the previous entry's state. No two subsets matched.
+// The worst gap: generateArea never cleared editingId, so researching a new
+// place while a published row was open turned Publish into "Save changes" and
+// PATCHed the OLD row with the new unshaped draft. That table has no undo.
+// Second worst: scanHint was cleared by nothing at all, and it is injected
+// into research as "trust this over a weaker fresh search".
+//
+// Asserted as one function called by all four, rather than four subsets
+// compared to each other, because comparing subsets is what let them drift.
+{
+  const appD = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  const clearFn = appD.slice(appD.indexOf("const clearPreviousEntry ="), appD.indexOf("const loadPastedDraft ="));
+  ok("there is one shared clear", clearFn.length > 200);
+  // Every piece of per-entry state, named. A setter dropped from this list is a
+  // leak into the next entry, which is the whole bug family.
+  for (const setter of [
+    "setEditingId", "setDraftEditError", "setPublishStatus", "setPublishErrorDetail",
+    "setStudioIdentityWarning", "setStudioInventedWarning",
+    "setVerifyResults", "setVerifyError", "setGoogleCheckResult", "setGoogleCheckError", "setGooglePrecheckRan",
+    "setFactCheckClaims", "setFactCheckFixPreview", "setFactCheckFixError",
+    "setStudioInstagramUrl", "setStudioFrozenGeo", "setStudioPlaced",
+    "setScanHint", "setCheckSites", "setAiTellFlags", "setRephraseSuggestions", "setManualPriceInputs",
+  ]) ok(`the shared clear forgets ${setter.replace(/^set/, "")}`, new RegExp(`\\bset\\(${setter},`).test(clearFn));
+
+  // AND ALL FOUR DOORS CALL IT. A door that does its own clearing is the
+  // fifth subset waiting to happen.
+  for (const [door, next] of [
+    ["const loadPastedDraft =", "const editItem ="],
+    ["const editItem =", "const setStudioMedia"],
+    ["const loadQueueResult =", "const DISCOVER_TYPE_LABEL"],
+  ]) {
+    const at = appD.indexOf(door);
+    const end = appD.indexOf(next, at);
+    const body = end > at ? appD.slice(at, end) : appD.slice(at, at + 4000);
+    ok(`${door.replace("const ", "").replace(" =", "")} calls the shared clear`, /clearPreviousEntry\(/.test(body));
+  }
+  // generateArea is the one that had the editingId leak, and it passes `ui` so
+  // a background draft still touches no shared state.
+  ok("generateArea calls it too, through the queued-safe wrapper", /clearPreviousEntry\(ui\)/.test(appD));
+  // THE ORDER THAT MAKES IT SAFE: the clear runs BEFORE the door sets what it
+  // genuinely carries, so editItem's own row id survives its own clear.
+  const editBody = appD.slice(appD.indexOf("const editItem ="), appD.indexOf("const editItem =") + 900);
+  ok("editItem clears before it sets its row id",
+    editBody.indexOf("clearPreviousEntry(") < editBody.indexOf("setEditingId(row.id)"));
+  const queueBody = appD.slice(appD.indexOf("const loadQueueResult ="), appD.indexOf("const loadQueueResult =") + 2000);
+  ok("and the queue clears before it sets its own frozen geo",
+    queueBody.indexOf("clearPreviousEntry(") < queueBody.indexOf("setStudioFrozenGeo(r.frozenGeo"));
+  // scanHint is read one line ABOVE the clear in generateArea, on purpose: the
+  // hint is spent on this draft and denied to the next.
+  const gen = appD.slice(appD.indexOf("const generateArea ="), appD.indexOf("clearPreviousEntry(ui)"));
+  ok("the scan hint is read before it is cleared", /const hint = queued \? null : scanHint;/.test(gen));
+}
+
+// ── "WHERE ARE THE PRICES?" ────────────────────────────────────────
+// Oliver, 15 Aug 2026, reading a finished draft for Train, an Aarhus concert
+// hall: not one figure anywhere in it. Not because the research had none, but
+// because `night` was the only place type in the app with NO price field in
+// its schema at all. A bar could not publish what a beer costs and a ticketed
+// venue could not publish what a ticket costs, and nothing anywhere said so.
+{
+  const { shapeForLive, studioPrompts, CONTENT_TYPES } = M;
+  const prompts = studioPrompts("Train");
+  // EVERY TYPE A VISITOR PAYS FOR SAYS WHAT IT COSTS. town, nightTown and
+  // nightStreet-the-editorial-page are about a place rather than an admission,
+  // so they are named as the exceptions rather than left to be inferred.
+  const NO_PRICE_BY_DESIGN = ["town", "nightTown"];
+  const PRICE_FIELDS = ["price", "priceNote", "ticketInfo", "ticketsGlance", "extraCosts"];
+  const silent = [];
+  for (const t of CONTENT_TYPES) {
+    if (NO_PRICE_BY_DESIGN.includes(t)) continue;
+    const shaped = shapeForLive(t, { name: "X", desc: "d", vibeLocation: "v", characterAndFit: "c", howTo: "h" }) || {};
+    const inShape = PRICE_FIELDS.some(f => Object.prototype.hasOwnProperty.call(shaped, f));
+    const inSchema = PRICE_FIELDS.some(f => new RegExp(`"${f}"`).test(String(prompts[t] || "")));
+    if (!inShape || !inSchema) silent.push(`${t}: schema ${inSchema}, shape ${inShape}`);
+  }
+  is("every type a visitor pays for can publish what it costs", silent, []);
+
+  // THE ONE FROM THE REPORT, by name, so it cannot quietly go away again.
+  ok("a bar is asked what a night there costs", /"priceNote"/.test(String(prompts.night || "")));
+  ok("and told to leave it empty rather than invent one",
+    /never a plausible-sounding number and never a vague tier/.test(String(prompts.night || "")));
+  const bar = shapeForLive("night", { name: "Train", desc: "d", priceNote: "Tickets from 250 DKK" }) || {};
+  is("and it survives publish", bar.priceNote, "Tickets from 250 DKK");
+  // An empty one publishes as empty rather than as a guess, and the card drops
+  // a row with no value, so a venue whose research had no figure looks the same
+  // as it did before.
+  is("an unresearched price is empty, not invented", (shapeForLive("night", { name: "X", desc: "d" }) || {}).priceNote, "");
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("and a reader sees it", /label: "What it costs", value: item\.priceNote/.test(detail));
+}
+
+// ── FOURTEEN FLAGS, AND NINE OF THEM WERE THE BRIEF WORKING ────────
+//
+// Oliver, 15 Aug 2026, on an Old Irish Pub draft that came back with fourteen
+// flagged claims and was auto-corrected: "this amount of unverified is
+// unacceptable."
+//
+// Every finding below is his, verbatim from that run. The point of this block
+// is which ones survive: a checker asked "does this appear in the research"
+// answers no to every sentence about atmosphere, every time, because research
+// is pages and atmosphere is a judgement about a room. And then the corrector
+// deletes what it could not verify, so the pipeline was removing the writing.
+{
+  const { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK } = M;
+  const f = (label, text) => ({ label, text });
+
+  // THE NINE THAT MUST NOW BE DROPPED. Each one is a field the draft prompt
+  // explicitly asks the writer to characterise.
+  const noise = [
+    f("UNVERIFIED", '“run by a group” in the description; the opened sources identify The Old Irish Pub and its location, but not a separate group behind it in that wording.'),
+    f("UNVERIFIED", '“football goes up on the big screens whenever there’s a match worth showing” in the description; the official page mentions sports and football on a big screen, but not that exact qualifier.'),
+    f("UNVERIFIED", '“it empties out fast even late at night” in bestTime; the research does not state that crowd pattern.'),
+    f("UNVERIFIED", '“Mostly tourists ducking in after Tivoli or people parked in front of a screen for football” in beforeDark; the sources do not support this crowd breakdown.'),
+    f("UNVERIFIED", '“Weekend nights bring pub crawl groups and bachelor parties through in waves” in afterDark; the sources mention pub crawls and bachelor parties, but not that wave pattern.'),
+    f("UNVERIFIED", '“Service and door staff get mixed reviews” in realityCheck; the supplied research includes review snippets, but not a supported summary of staff quality.'),
+    f("UNVERIFIED", '“some visitors report rough treatment at the door or bar” in realityCheck; the research snippets do not specifically support that detail.'),
+    f("UNVERIFIED", '“worth asking about at the bar since it isn’t always advertised loudly inside” in gemlyxFind; the research does not mention that behavior or visibility.'),
+    f("UNVERIFIED", '“without booking ahead” in whoFor; the official page says tables can be booked in advance.'),
+  ];
+  is("every finding that was really the brief working is dropped", noise.filter(admissible).map(x => fieldIn(x.text)), []);
+
+  // AND THE REAL CATCHES SURVIVE. A figure inside a judgement is still a
+  // figure, which is why the mode governs the VERDICT and not which fields are
+  // sent: exempting whole fields would have lost all three of these.
+  const real = [
+    f("UNVERIFIED", '“3 mins on foot from the centre” in the location field; the opened pages confirm Vesterbrogade 2D but not that specific walking time.'),
+    f("UNVERIFIED", '“The official site runs a 2-for-1 cocktail deal in summer” in gemlyxFind; the snippet shows “2 for 1 cocktail” and “summer offers” separately.'),
+    f("UNVERIFIED", '“One of the few places still going at 4am near the center” in thingsToKnow; the opened pages give hours, but not that comparative claim.'),
+  ];
+  is("a figure inside a judgement is still checked", real.filter(admissible).length, 3);
+
+  // A CONTRADICTION IS ALWAYS ADMISSIBLE, whatever field it is about. A page
+  // that says the place is dead at weekends against a draft that says it is
+  // packed is exactly the finding worth having.
+  ok("a contradicted characterisation still stands",
+    admissible(f("CONTRADICTED", '“packed every weekend” in afterDark; the official page says it closes at 10pm on Saturdays.')));
+
+  // The modes themselves, by name, because the split is the whole mechanism.
+  is("atmosphere is a judgement", checkModeOf("beforeDark"), "characterisation");
+  is("so is who it suits", checkModeOf("whoFor"), "characterisation");
+  is("so is the verdict", checkModeOf("realityCheck"), "characterisation");
+  is("so is when to turn up", checkModeOf("bestTime"), "characterisation");
+  is("a price is a report", checkModeOf("price"), "report");
+  is("an address is a report", checkModeOf("location"), "report");
+  is("a date is a report", checkModeOf("date"), "report");
+  is("opening hours are a report, even though bestTime is not", checkModeOf("openingHours"), "report");
+  // A NEW FIELD DEFAULTS TO CHECKED. The safe direction: a field nobody has
+  // classified is checked until somebody decides it is editorial, rather than
+  // silently exempted the day it is added.
+  is("an unclassified field is checked", checkModeOf("somethingBrandNew"), "report");
+
+  // fieldIn reads the longest name first, or whoItsFor is read as whoFor and
+  // dateEnd as date, and both would land in the wrong mode.
+  is("the longer name wins", fieldIn("something about the whoItsFor field"), "whoItsFor");
+  is("and dateEnd is not date", fieldIn("the dateEnd is wrong"), "dateEnd");
+  is("no field named is empty, not a guess", fieldIn("this is just prose"), "");
+
+  // The split sends both groups and drops nothing, so a contradiction in an
+  // atmosphere field is still reachable.
+  const split = splitForCheck({ name: "X", price: "40 DKK", whoFor: "loud nights", _machine: 1 });
+  is("reports go to the report group", Object.keys(split.report).sort(), ["name", "price"]);
+  is("judgements go to the other", Object.keys(split.characterisation), ["whoFor"]);
+  ok("and machine fields go to neither", !("_machine" in split.report) && !("_machine" in split.characterisation));
+
+  ok("a figure is checkable", hasCheckableClaim("3 mins on foot"));
+  ok("so is a superlative", hasCheckableClaim("one of the only places"));
+  ok("a plain judgement is not", !hasCheckableClaim("it feels like a proper local pub"));
+
+  // The prompt says the rule too, because the code drop is the belt and this
+  // is the braces: a finding never made is cheaper than one dropped later.
+  ok("the checker is told never to write unverified about a judgement",
+    /NEVER WRITE UNVERIFIED ABOUT ONE/.test(CHECK_SCOPE_BLOCK));
+  ok("and that a paraphrase is not an invention",
+    /A PARAPHRASE IS NOT AN INVENTION/.test(CHECK_SCOPE_BLOCK));
+
+  // ── AND THE PIPELINE ACTUALLY DOES THIS ─────────────────────────
+  const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the check sends the two groups apart", /CHARACTERISATION FIELDS \(CONTRADICTED only/.test(appC));
+  ok("it carries the scope block", /\$\{CHECK_SCOPE_BLOCK\}/.test(appC));
+  ok("out-of-scope findings are dropped, not downgraded", /inventedRead\.findings = inventedRead\.findings\.filter\(f => admissible\(f\)\)/.test(appC));
+  ok("and an empty list is reported as clean", /if \(!inventedRead\.findings\.length && inventedRead\.verdict !== "clean"\) inventedRead\.verdict = "clean"/.test(appC));
+  ok("what was dropped is still written to the run log", /Findings about the writing rather than the facts/.test(appC));
+
+  // ── THE TWO RESEARCH BODIES, WHICH THE COMMENT SAID WERE ONE ────
+  // The writer is handed OpenAI's organised notes; userContent is REPLACED by
+  // them, not added to. The checker was handed the raw research the writer
+  // never saw, and the comment above it asserted they were the same research.
+  ok("the checker is given the notes the writer actually read",
+    /AND THE ORGANISED NOTES THE WRITER ACTUALLY READ/.test(appC));
+  ok("and told that a claim in the notes was not invented by the writer",
+    /was NOT invented by the writer even if the raw research does not obviously support it/.test(appC));
+}
+
+// ── COPENHAGEN, THEN GOTHERSGADE, THEN THE BARS ────────────────────
+// Oliver, 15 Aug 2026: "I don't know how to recommend Gothersgade. Because
+// it's technically in Copenhagen.. but it's a bar street with bars.. same with
+// Jomfru Ane Gade." Then, exactly: "So Copenhagen -> Gothersgade -> List of
+// bars.. like that."
+{
+  const { streetForSpot, barsOnStreet, nightlifeForTown } = M;
+  const street = (name, town, location) => ({ name, town, location, isStreet: true });
+  const bar = (name, location) => ({ name, location });
+
+  const GOTHERSGADE = street("Gothersgade", "Copenhagen", "Gothersgade, Indre By, Copenhagen");
+  const JOMFRU = street("Jomfru Ane Gade", "Aalborg", "Jomfru Ane Gade, Aalborg");
+  const STREETS = [GOTHERSGADE, JOMFRU];
+
+  // A house number and a neighbourhood between the street and the town is the
+  // normal way a venue's location is written, and it is still the same street.
+  is("a bar with a house number is on the street",
+    (streetForSpot(bar("Kind of Blue", "Gothersgade 8B, Copenhagen"), STREETS) || {}).name, "Gothersgade");
+  is("so is one written bare", (streetForSpot(bar("Nemoland", "Gothersgade, Copenhagen"), STREETS) || {}).name, "Gothersgade");
+  is("and one in another town's street", (streetForSpot(bar("Rock Nielsen", "Jomfru Ane Gade 15, Aalborg"), STREETS) || {}).name, "Jomfru Ane Gade");
+  is("a bar somewhere else in the same town is on no street",
+    streetForSpot(bar("Toga Vinstue", "Store Kongensgade 18, Copenhagen"), STREETS), null);
+
+  // THE SAME STREET NAME IN TWO TOWNS IS TWO STREETS. Nørregade exists in a
+  // dozen Danish towns, so the town has to agree before the name is believed.
+  const NOR_CPH = street("Nørregade", "Copenhagen", "Nørregade, Copenhagen");
+  const NOR_ODE = street("Nørregade", "Odense", "Nørregade, Odense");
+  is("an Odense bar is not put on a Copenhagen street",
+    (streetForSpot(bar("Bar", "Nørregade 40, Odense"), [NOR_CPH, NOR_ODE]) || {}).town, "Odense");
+
+  // LONGEST NAME FIRST. A bar on Store Kongensgade contains the name of
+  // Kongensgade, and belongs to the more specific of the two.
+  const KONG = street("Kongensgade", "Copenhagen", "Kongensgade, Copenhagen");
+  const STORE = street("Store Kongensgade", "Copenhagen", "Store Kongensgade, Copenhagen");
+  is("the most specific street claims the bar",
+    (streetForSpot(bar("Bar", "Store Kongensgade 18, Copenhagen"), [KONG, STORE]) || {}).name, "Store Kongensgade");
+
+  // ── "Noerregade" AND "Nørregade" ARE ONE STREET ────────────────
+  // fold() maps ø to o, so the Danish spelling becomes norregade while the
+  // ASCII transliteration people and scraped pages write becomes noerregade,
+  // and neither contains the other. A bar drafted from a page that spells it
+  // the second way used to fall off its own street silently.
+  is("the ASCII transliteration matches the Danish name",
+    (streetForSpot(bar("Bar", "Noerregade 40, Odense"), [NOR_ODE]) || {}).name, "Nørregade");
+  is("and the other way round", (streetForSpot(bar("Bar", "Nørregade 40, Odense"), [street("Noerregade", "Odense", "Noerregade, Odense")]) || {}).name, "Noerregade");
+  is("ae too", (streetForSpot(bar("Bar", "Vaerkstedsgade 2, Aarhus"), [street("Værkstedsgade", "Aarhus", "Værkstedsgade, Aarhus")]) || {}).name, "Værkstedsgade");
+  is("and aa", (streetForSpot(bar("Bar", "Åboulevarden 1, Aarhus"), [street("Aaboulevarden", "Aarhus", "Aaboulevarden, Aarhus")]) || {}).name, "Aaboulevarden");
+  // It spells ONE name a few ways. It does not make every comparison in the app
+  // more willing to say yes, which is why fold() was left alone.
+  is("a different street is still a different street",
+    streetForSpot(bar("Bar", "Vestergade 4, Odense"), [NOR_ODE]), null);
+
+  // ── THE WHOLE TOWN PAGE, WHICH IS WHAT HE ASKED FOR ─────────────
+  const SPOTS = [
+    bar("Kind of Blue", "Gothersgade 8B, Copenhagen"),
+    bar("Nemoland", "Gothersgade 12, Copenhagen"),
+    bar("Toga Vinstue", "Store Kongensgade 18, Copenhagen"),
+    bar("Rock Nielsen", "Jomfru Ane Gade 15, Aalborg"),
+  ];
+  const cph = nightlifeForTown("Copenhagen", SPOTS, STREETS);
+  is("Copenhagen has one bar street", cph.streets.map(x => x.street.name), ["Gothersgade"]);
+  is("with the two bars on it under it", cph.streets[0] ? cph.streets[0].bars.map(b => b.name) : null, ["Kind of Blue", "Nemoland"]);
+  // AND THE COLLAPSE, which is the half he chose: a bar on a published street
+  // may not ALSO sit in the flat list beside it.
+  is("a bar on the street is not listed twice", cph.loose.map(b => b.name), ["Toga Vinstue"]);
+  // The other town's street and bar do not leak in.
+  ok("Aalborg's street stays in Aalborg", !cph.streets.some(x => x.street.name === "Jomfru Ane Gade"));
+  ok("nor does its bar", !cph.loose.some(b => b.name === "Rock Nielsen"));
+
+  // A STREET WITH NO PUBLISHED BARS IS STILL A STREET. It has its own writing
+  // and its own page, and blinking out of existence the moment its last bar is
+  // unpublished is the behaviour nightlifeTownList was written to stop.
+  const empty = nightlifeForTown("Copenhagen", [], STREETS);
+  is("an empty street is still shown", empty.streets.map(x => x.street.name), ["Gothersgade"]);
+  is("with no bars under it", empty.streets[0] ? empty.streets[0].bars.length : null, 0);
+
+  // barsOnStreet answers the same question one street at a time, for the page
+  // that opens a single street.
+  is("opening Gothersgade lists its bars", barsOnStreet(GOTHERSGADE, SPOTS).map(b => b.name), ["Kind of Blue", "Nemoland"]);
+  is("and opening the Aalborg one lists its own", barsOnStreet(JOMFRU, SPOTS).map(b => b.name), ["Rock Nielsen"]);
+
+  // ── AND THE PAGE ACTUALLY USES IT ──────────────────────────────
+  // The rules above are worth nothing if the nightlife tab still lists every
+  // venue flat. Three levels: towns, then the streets in a town beside the
+  // venues that are on no street, then one street with its own venues.
+  {
+    const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("the tab computes the split", /nightlifeForTown\(nightlifeTownView, spotsFor\(nightlifeTownView\), nightlifeStreets\)/.test(appN));
+    ok("there is a street level", /const \[nightlifeStreetView, setNightlifeStreetView\] = useState\(null\)/.test(appN));
+    ok("a town lists its streets", /townSplit\.streets\.map\(\(\{ street, bars \}\) =>/.test(appN));
+    ok("clicking one opens it", /setNightlifeStreetView\(street\)/.test(appN));
+    ok("and the street lists the bars on it", /barsOnStreet\(street, spotsFor\(nightlifeTownView\)\)/.test(appN));
+    // THE COLLAPSE HE CHOSE: a bar on a published street may not also sit in
+    // the flat list under it. The flat list reads `loose`, never the whole town.
+    ok("the flat list is the ones on no street", /looseSpots\.filter\(f => f\.type === nightlifeTab\)/.test(appN));
+    ok("and no longer the whole town", !/spotsFor\(nightlifeTownView\)\.filter\(f => f\.type === nightlifeTab\)/.test(appN));
+    // Back goes one level, not straight out.
+    ok("back from a street returns to its town", /nightlifeStreetView \? setNightlifeStreetView\(null\) : setNightlifeTownView\(null\)/.test(appN));
+    ok("and opening a town clears any street", /setNightlifeStreetView\(null\); setNightlifeTownView\(t\)/.test(appN));
+    // One card, drawn by one function, so the two levels cannot disagree about
+    // what a bar looks like.
+    ok("both levels draw the same card", (appN.match(/\.map\(spotRow\)|bars\.map\(spotRow\)/g) || []).length >= 2);
+  }
+
+  // Nothing published anywhere is an empty answer, not a crash.
+  is("no streets at all is not an error", nightlifeForTown("Copenhagen", SPOTS, []).streets, []);
+  is("and every bar stays in the flat list", nightlifeForTown("Copenhagen", SPOTS, []).loose.length, 3);
+  is("junk in is empty out", streetForSpot(null, STREETS), null);
+  is("a spot with no location is on no street", streetForSpot(bar("X", ""), STREETS), null);
+}
+
+// ── FOUR STUDIO CONTROLS THAT COULD NOT REPORT AN OUTCOME ──────────
+// All four are the same failure, and this codebase has already named it once,
+// about a different button: "from the outside that is indistinguishable from a
+// dead button." Read on raw source where a string literal is the point.
+{
+  const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const fnAt = (from, to) => { const a = appS.indexOf(from); const b = appS.indexOf(to, a); return a >= 0 && b > a ? appS.slice(a, b) : ""; };
+
+  // 1. SAVE CREDIT was a bare await with no try, no busy flag and no toast, and
+  //    its caller neither awaited nor caught. patchContentPayload throws on a
+  //    non-ok response, so an expired token produced literally nothing on
+  //    screen and a working save looked identical to a failed one.
+  const credit = fnAt("const saveMediaCredit =", "const uploadMediaFiles =");
+  ok("saveMediaCredit was found", credit.length > 200);
+  ok("it reports a failure", /setMediaError\(`Credit not saved/.test(credit));
+  ok("and a success, so the two are distinguishable", /setToast\("💾 Credit saved"\)/.test(credit));
+  ok("and it catches rather than throwing into a console nobody has open", /catch \(e\)/.test(credit));
+
+  // 2. THE SWEEP WRITE had running:true set before a loop with no try/finally
+  //    around it. One throw on row twelve of forty froze the panel and
+  //    permanently disabled three controls, including Restore from a snapshot,
+  //    which this file's own text calls the only undo there is.
+  const sweep = fnAt("const writeSweepProposals =", "const restoreSweepSnapshot =");
+  ok("writeSweepProposals was found", sweep.length > 500);
+  ok("the write is wrapped", /\n    try \{/.test(sweep));
+  ok("and always releases the running flag", /\} finally \{[\s\S]*running: false/.test(sweep));
+  ok("a crash is reported rather than swallowed", /The write stopped part way/.test(sweep));
+  // The cancel path must BREAK, not return: a finally runs on the way out of a
+  // return too, and would report "done: all of them" one line after saying it
+  // stopped at row twelve.
+  ok("Stop breaks rather than returning past the finally", /stoppedAt = i; break;/.test(sweep));
+  ok("and no return is left inside the loop", !/\n          return;/.test(sweep));
+
+  // 3. A SUCCESSFUL PUBLISH replaced the button with a green line, so spotting
+  //    a typo one second later left no way to send the fix.
+  ok("a published draft can still be sent again", /Publish the edits above as well/.test(appS));
+  ok("and it says plainly that this creates a second row", /creates a second row rather than changing the one you just published/.test(appS));
+
+  // 4. BOOKING WAS THE ONE TYPE WITH NO MODULE-LEVEL ARRAY, so the two readers
+  //    outside a component, lookupRealPlace and previewPools, read the empty
+  //    hardcoded fallback. Every published workshop was invisible to guides and
+  //    to the preview screen.
+  const liveSrc = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+  ok("a published workshop reaches the module array every other type uses",
+    /row\.type === "booking"[^\n]*craftItemsFallback\.push/.test(liveSrc));
+  ok("and the React state path it already had is untouched", /onBookingRow/.test(liveSrc));
 }
 
 // ── A FIELD AND THE CAVEAT BESIDE IT MUST NOT DISAGREE ─────────────

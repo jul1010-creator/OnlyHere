@@ -34,7 +34,7 @@
 // timetable, which is the single error class this project has spent the most
 // time on. The block below says so out loud, every time.
 
-import { samePlaceName, otherNameFor, variantsOf, fold, containsName } from "./danishNames";
+import { samePlaceName, otherNameFor, variantsOf, fold, containsName, distinctiveWords } from "./danishNames";
 import { canonicalRegion, isRegion, regionPart, REGION_NAMES } from "./regions";
 
 const clean = (v) => String(v == null ? "" : v).trim();
@@ -100,11 +100,163 @@ export const cleanNote = (v) => clean(v).replace(/\s+/g, " ").slice(0, 160);
 // the ONLY content that never went near the research pipeline, while a town
 // entry gets two research passes and a fact-check. Making it a real type is how
 // it gets sources, a verdict, and a way to be re-checked rather than remembered.
-export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightTown", "booking", "essential"];
+// ── "I DON'T KNOW HOW TO RECOMMEND GOTHERSGADE" ─────────────────────
+// Oliver, 15 Aug 2026: "it's technically in Copenhagen.. but it's a bar street
+// with bars.. same with Jomfru Ane Gade. Perhaps make a nightlife 'street'
+// section as well that goes under towns. So gothersgade goes into Copenhagen
+// along with bars. And then perhaps you should be able to click on the
+// different bars and clubs after clicking on the street."
+//
+// A bar street is not a bar and it is not a town. It is the level between,
+// and it needs its own research because the questions are different: which
+// nights it is busy, which end is which, what it costs to get in along it, how
+// it feels at two in the morning. Asking a strip of twenty bars the questions
+// written for one bar is how you get twenty generic paragraphs.
+//
+// foodStreet already made this exact move for food, and it made it as a FLAG on
+// an ordinary food row, which is why a food street has never been able to list
+// what is on it. This one is a type of its own so that it can.
+export const CONTENT_TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "booking", "essential"];
 export const TYPE_LABEL = {
   "": "Everything", town: "Towns", festival: "Events", free: "Attractions", food: "Food",
-  foodStreet: "Food streets", night: "Nightlife", nightTown: "Nightlife towns", booking: "Workshops", essential: "Essentials",
+  foodStreet: "Food streets", night: "Nightlife", nightStreet: "Bar streets", nightTown: "Nightlife towns", booking: "Workshops", essential: "Essentials",
 };
+
+// ── A VENUE CALLED "TRAIN" POISONS ITS OWN RESEARCH ─────────────────
+//
+// Oliver, 15 Aug 2026, on the __sources of an Aarhus concert-hall draft:
+// "this is what I mean with old sources".
+//
+// Three of the eight sources on that draft were about railways:
+//
+//     ricksteves.com/travel-tips/transportation/trains/denmark-rail-passes
+//     interrail.com/.../trains-country/trains-denmark
+//     baekdal.com/article/the-trainwreck-called-quora-and-why-we-dont-need-it
+//
+// The venue is called Train. The relevance filter asks one question, does the
+// snippet mention the place's name, and every page about Danish rail travel
+// says "train" in the first sentence. The third one is an article about Quora.
+//
+// This is the same failure as "we would ALSO like a beach" matching the island
+// Als, one level up: a name that is an ordinary word cannot identify anything
+// on its own, and the boundary check that fixed Als does nothing here, because
+// "train" really is the whole word on those pages.
+//
+// The rule that does work is CORROBORATION. A page is about this place if it
+// says the name AND one other thing that ties it to this place: the town, the
+// venue's own domain, or a word from the name that is not an ordinary word.
+// A page that only says the name, when the name is an ordinary word, is not
+// evidence of anything.
+//
+// Deliberately NOT applied to every name. "Ærøskøbing" or "Ny Carlsberg
+// Glyptotek" identify themselves, and demanding a second signal from them
+// would throw away good sources to solve a problem they do not have. The test
+// is whether the name carries a distinctive word at all.
+const COMMON_NAME_WORDS = new Set([
+  // Ordinary English and Danish words that are also real Danish venue names.
+  // Each one is a name this app either holds or plausibly will.
+  "train", "rust", "vega", "pumpehuset", "loppen", "stengade", "nord", "syd",
+  "culture", "box", "the", "old", "irish", "pub", "bar", "cafe", "kaffe",
+  "huset", "hus", "hall", "room", "space", "studio", "works", "yard",
+  "station", "bridge", "harbour", "harbor", "beach", "garden", "park",
+  "north", "south", "east", "west", "city", "town", "street", "gade",
+]);
+
+// True when the NAME alone is enough to identify the place: it contains at
+// least one word that is neither generic (GENERIC_PLACE_WORDS) nor an ordinary
+// word that happens to be a venue name.
+export const nameIsDistinctive = (name) => {
+  const words = distinctiveWords(name);
+  return words.some(w => !COMMON_NAME_WORDS.has(w));
+};
+
+// The corroborating signals, in the order they are worth anything. `ownHost` is
+// the place's own website: a page ON the venue's own domain is about the venue,
+// full stop, and needs no second signal.
+export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = "" } = {}) => {
+  const said = String(snippet || "");
+  if (!said.trim()) return false;             // never saw the page, so it is not a source
+  const host = normaliseDomain(url);
+  if (ownHost && host && host === normaliseDomain(ownHost)) return true;
+  const namesIt = variantsOf(name, { includeSights: true }).some(v => v && containsName(said, v));
+  if (!namesIt) return false;
+  if (nameIsDistinctive(name)) return true;   // the name identifies it on its own
+  // An ordinary name has to be corroborated. The town is the strongest signal
+  // and the one always available; the host containing a distinctive word from
+  // the name is the second.
+  if (town && variantsOf(town).some(v => v && containsName(said, v))) return true;
+  const distinct = distinctiveWords(name).filter(w => !COMMON_NAME_WORDS.has(w));
+  if (distinct.length && host && distinct.some(w => host.includes(w))) return true;
+  return false;
+};
+
+// ── A CATEGORY THE PAGE DOES NOT LOOP OVER IS A ROW THAT VANISHES ───
+//
+// The essential draft prompt demands one of exactly seven categories. The
+// Essentials page rendered five of them. A published essential filed under
+// "Culture & Etiquette" or "Solo Travel" wrote to the database, merged cleanly
+// into the essentials array, and appeared nowhere: the two anchors with those
+// names are hardcoded prose blocks that read no data at all. The one already
+// hardcoded row in src/data/essentials.js, "Overtourism in Central
+// Copenhagen", is filed under a category the loop never asked for and has been
+// invisible on the live site since it was written.
+//
+// One list now, read by the prompt that demands the value and by the loop that
+// renders it, so neither can grow a category the other has never heard of.
+// `anchor` is the quick-jump target, and it is part of the definition rather
+// than a second list beside it.
+export const ESSENTIAL_CATEGORIES = [
+  { cat: "Flights & Buses", anchor: "ess-flights", icon: "\u2708\ufe0f", color: "#6A1B9A" },
+  { cat: "Transport", anchor: "ess-transport", icon: "\ud83d\ude87", color: "#00838F" },
+  { cat: "Payments", anchor: "ess-payments", icon: "\ud83d\udcb3", color: "#2E7D32" },
+  { cat: "Sightseeing", anchor: "ess-sightseeing", icon: "\ud83c\udf9f", color: "#B8860B" },
+  { cat: "Connectivity", anchor: "ess-connectivity", icon: "\ud83d\udcf6", color: "#E23B4E" },
+  { cat: "Culture & Etiquette", anchor: "ess-culture", icon: "\ud83e\udd1d", color: "#5E35B1" },
+  { cat: "Solo Travel", anchor: "ess-solo", icon: "\ud83c\udf7a", color: "#8D6E63" },
+];
+export const ESSENTIAL_CATEGORY_NAMES = ESSENTIAL_CATEGORIES.map(c => c.cat);
+
+// ── THE APP RUNS TWO VOCABULARIES AND ONLY ONE WAS WRITTEN DOWN ─────
+//
+// A row's `type` is what Studio publishes and what the database stores, and
+// there are nine. A rendered place carries `_src`, and there are six of those:
+// town, event, food, nightlife, free, craft. They are not the same list and
+// they never were: foodStreet and food share one `_src`, nightTown and
+// essential correspond to no place card at all.
+//
+// The only place this correspondence existed was an inline object literal,
+// hand-copied into two render sites about three thousand lines apart, and both
+// copies had the same two faults:
+//
+//   booking   fell through the `|| studioType` and became "booking", which is
+//             not an `_src` anywhere, so the assistant opened a workshop draft
+//             with a kind nothing recognises.
+//   nightTown was mapped to "town", and the audit takes that literally:
+//             coordProblems only names one type, and it is "town". A nightTown
+//             row stores no coordinate by design (see shapeForLive), so EVERY
+//             nightlife-town draft was handed a blocking "No coordinate stored"
+//             finding for a field its own shape does not have.
+//
+// One export, one definition, and `null` where the honest answer is that this
+// type is not a place. A caller that needs place rules can then ask, instead of
+// being handed a wrong answer that looks like a right one.
+export const SRC_FOR_TYPE = {
+  town: "town",
+  festival: "event",
+  free: "free",
+  food: "food",
+  foodStreet: "food",
+  night: "nightlife",
+  // A street renders as a nightlife card and opens a nightlife page that
+  // happens to contain other nightlife cards. It is the same vocabulary all
+  // the way down, which is what lets Copenhagen link to it at all.
+  nightStreet: "nightlife",
+  nightTown: "nightlife",
+  booking: "craft",
+  essential: null,
+};
+export const PLACE_SOURCES = ["town", "event", "food", "nightlife", "free", "craft"];
+export const srcForType = (type) => (Object.prototype.hasOwnProperty.call(SRC_FOR_TYPE, type) ? SRC_FOR_TYPE[type] : null);
 
 // ── "VISITCOPENHAGEN IS A GOOD SOURCE BUT PROBABLY NOT FOR AARHUS" ──
 // Oliver, 8 Aug 2026, and the content-type axis alone does not answer it:
@@ -344,7 +496,7 @@ export const MAX_DIRECT_SEARCHES = 4;
 // Both languages in one query, because a Danish tourist board files the capital
 // under København and an English-only query cannot reach that page. Most Danish
 // towns are spelled the same either way and cost nothing extra for this.
-const QUERY_WORDS = {
+export const QUERY_WORDS = {
   // Danish first, because the authority on a Danish ticket system is a Danish
   // page. "gældende" and "priser" are what a rules or price page calls itself.
   essential: "priser regler gældende 2026 turist besøgende practical information visitors price rules",
@@ -354,6 +506,7 @@ const QUERY_WORDS = {
   food: "menukort priser åbningstider menu prices opening hours",
   foodStreet: "boder madmarked åbningstider stalls market opening hours",
   night: "åbningstider entré opening hours entry",
+  nightStreet: "natteliv barer nightlife bars",
   nightTown: "natteliv barer nightlife bars",
   booking: "værksted booking priser workshop booking prices",
 };
@@ -652,13 +805,14 @@ export const overflowSourceSearch = (rows, type, ctx) => {
 // season, in this part of the country. Danish first for the same reason as
 // everywhere else, since these are Danish sites and their listing pages are
 // filed under Danish words.
-const DISCOVER_WORDS = {
+export const DISCOVER_WORDS = {
   town: "byer seværdigheder oplevelser besøg små byer towns to visit",
   festival: "kalender hvad sker der arrangementer festival 2026 2027 what's on events calendar",
   free: "gratis seværdigheder oplevelser attraktioner free attractions things to do",
   food: "restauranter spisesteder anbefalinger restaurants where to eat",
   foodStreet: "madmarked street food boder market halls",
   night: "natteliv barer klubber nightlife bars",
+  nightStreet: "natteliv udeliv nightlife towns",
   nightTown: "natteliv udeliv nightlife towns",
   booking: "værksteder kurser oplevelser workshops courses experiences",
   essential: "praktisk information turist gældende priser practical visitor information",

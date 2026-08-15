@@ -47,9 +47,11 @@ import { towns, TOWN_COORDS } from "../data/towns";
 import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { nightlifeTowns } from "../data/nightlifeTowns";
+import { nightlifeStreets } from "../data/nightlifeStreets";
 import { foodSpots } from "../data/food";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { essentials } from "../data/essentials";
+import { craftItemsFallback } from "../data/craft";
 import { stripDashesDeep } from "./helpers";
 
 const mergedIds = new Set();      // Supabase row ids already folded in
@@ -114,8 +116,23 @@ const doLoad = async () => {
       else if (row.type === "free") freeEntrance.push({ id, ...item });
       else if (row.type === "food" || row.type === "foodStreet") foodSpots.push({ id, ...item });
       else if (row.type === "night") nightlifeSpots.push({ id, ...item });
+      else if (row.type === "nightStreet") nightlifeStreets.push({ id, ...item });
       else if (row.type === "nightTown") nightlifeTowns.push({ id, ...item });
-      else if (row.type === "booking") bookingRowsCache.push({ id, ...item });
+      // ── THE ONE TYPE WITH NO MODULE ARRAY, AND WHAT IT COST ────
+      // Every other type is pushed into a module-level singleton that any
+      // module can import. Booking rows went only into this local cache and
+      // out through the onBookingRow callback into React state, so the two
+      // places that read craft OUTSIDE a component read the hardcoded
+      // craftItemsFallback, which has been empty since content moved to
+      // Supabase: utils/guideEnrichment.js lookupRealPlace, which is how a
+      // guide stop becomes a clickable published entry, and
+      // utils/previewMatch.js previewPools, which is the preview screen.
+      // Every published workshop was invisible to both.
+      //
+      // Filled here as well, so booking behaves like the other eight rather
+      // than needing every reader to know it is special. The React state path
+      // stays exactly as it was.
+      else if (row.type === "booking") { bookingRowsCache.push({ id, ...item }); craftItemsFallback.push({ id, ...item }); }
       // Published essentials sit alongside the hardcoded ones rather than
       // replacing the file. Day one, nothing disappears; each hardcoded entry
       // can then be retired one at a time as a researched version replaces it.

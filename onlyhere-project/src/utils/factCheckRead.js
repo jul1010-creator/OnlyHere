@@ -307,16 +307,88 @@ export const readInventedCheck = (text) => {
 // is dropped the checker is told, in the text, that absence is not evidence.
 export const RESEARCH_CHECK_CAP = 20000;
 
+// ── AND HEAD PLUS TAIL WAS STILL THE WRONG CUT ─────────────────────
+//
+// Head 35 percent and tail 65 percent punches a hole in the MIDDLE, and the
+// middle is not where the weakest material is. rawResearch is assembled in a
+// deliberate order: the measured and frozen facts first, then tickets and
+// transport, then Perplexity, then the general search context last and
+// largest. A hole in the middle therefore eats the END of the high-authority
+// blocks and the START of the search results, which is precisely where a
+// specific number tends to be stated once and never repeated.
+//
+// Computed from the code's own caps, a festival draft assembles 30,000 to
+// 60,000 characters, so truncation is the NORMAL case rather than the edge
+// one, and this cut was being made on nearly every draft.
+//
+// So it cuts by section instead, weakest first, and never touches a measured
+// block at all. What is dropped is dropped WHOLE and NAMED, so the checker
+// reads "the general search results were not included" rather than "some of
+// the middle is missing" and can weigh a missing claim accordingly.
+//
+// The order below is the same authority order the assembly already uses. It is
+// derived from the text's own headers rather than from a second list that
+// could drift: a block is weak if it is the general search context, strong if
+// it names a measurement we made ourselves.
+const WEAKEST_FIRST = [
+  // The general web results. Largest, most redundant, least authoritative.
+  /^(?:SEARCH (?:RESULTS|CONTEXT)|WEB RESEARCH|FRESH RESEARCH|TAVILY)\b/i,
+  // A second model's synthesis of the same web. Useful, not primary.
+  /^PERPLEXITY FACT-CHECK\b/i,
+  // Everything else falls between these and the protected blocks below.
+];
+// Never cut, at any size. Each of these is something this pipeline MEASURED or
+// read off an official page, and it is the only support a specific number in
+// the draft is ever going to have.
+const NEVER_CUT = [
+  /^KNOWN FROM SOURCE LISTING\b/i,
+  /^(?:VERIFIED|REAL|MEASURED)\b/i,
+  /^(?:OFFICIAL|TICKET)\b/i,
+  /^(?:GETTING THERE|TRANSPORT|THE MEASURED JOURNEY)\b/i,
+  /^SOURCE ORDER\b/i,
+];
+const rankOf = (block) => {
+  const head = String(block || "").trimStart().slice(0, 120);
+  if (NEVER_CUT.some(re => re.test(head))) return 100;
+  const weak = WEAKEST_FIRST.findIndex(re => re.test(head));
+  return weak === -1 ? 50 : weak;          // 0 is the first to go
+};
+
 export const researchForCheck = (raw, cap = RESEARCH_CHECK_CAP) => {
   const t = String(raw || "");
-  if (t.length <= cap) return { text: t, truncated: false, kept: t.length, total: t.length };
-  const head = Math.floor(cap * 0.35);
-  const tail = cap - head;
-  const dropped = t.length - cap;
-  return {
-    total: t.length,
-    kept: cap,
-    truncated: true,
-    text: `${t.slice(0, head)}\n\n[${dropped} characters of the middle of this research are not shown. A CLAIM YOU CANNOT FIND HERE MAY SIMPLY BE IN THE OMITTED PART: do not call anything invented on the strength of it being missing from this text alone.]\n\n${t.slice(-tail)}`,
-  };
+  if (t.length <= cap) return { text: t, truncated: false, kept: t.length, total: t.length, dropped: [] };
+  // Blocks in their original order, each remembering where it sat, so what is
+  // kept goes back to the checker reading the way it was assembled.
+  const blocks = t.split(/\n\n+/).map((text, at) => ({ text, at, rank: rankOf(text) }));
+  // Strongest first for the keep decision. Ties keep original order, so the
+  // result is deterministic and a re-run of the same draft cuts the same way.
+  const byStrength = blocks.slice().sort((a, b) => (b.rank - a.rank) || (a.at - b.at));
+  const keep = new Set();
+  let used = 0;
+  const dropped = [];
+  for (const b of byStrength) {
+    const cost = b.text.length + 2;
+    if (used + cost <= cap) { keep.add(b.at); used += cost; }
+    else dropped.push(b);
+  }
+  // A CUT THAT KEEPS NOTHING IS WORSE THAN THE OLD BEHAVIOUR, NOT BETTER.
+  // Research with no blank line in it at all is one block, and one block that
+  // does not fit leaves this with nothing to rank. Falling back to head plus
+  // tail keeps the guarantee the old version was written for: the sources sit
+  // at the END of the assembly, and a head-only cut is exactly the bug that
+  // made every web-sourced fact look invented. Section-aware where there are
+  // sections, both ends where there are not.
+  if (!keep.size) {
+    const head = Math.floor(cap * 0.35);
+    const tail = cap - head;
+    return {
+      total: t.length, kept: cap, truncated: true, dropped: ["the middle of a single unbroken block"],
+      text: `${t.slice(0, head)}\n\n[${t.length - cap} characters of the middle of this research are not shown. A CLAIM YOU CANNOT FIND HERE MAY SIMPLY BE IN THE OMITTED PART: do not call anything invented on the strength of it being missing from this text alone.]\n\n${t.slice(-tail)}`,
+    };
+  }
+  const label = (b) => String(b.text || "").trimStart().split("\n")[0].slice(0, 60).trim() || "an unlabelled block";
+  const names = [...new Set(dropped.map(label))];
+  const text = blocks.filter(b => keep.has(b.at)).map(b => b.text).join("\n\n")
+    + `\n\n[${dropped.length} block${dropped.length === 1 ? "" : "s"} of this research (${t.length - used} characters) are not shown, the least authoritative first: ${names.join("; ")}. A CLAIM YOU CANNOT FIND HERE MAY SIMPLY BE IN AN OMITTED BLOCK: do not call anything invented on the strength of it being missing from this text alone.]`;
+  return { total: t.length, kept: used, truncated: true, dropped: names, text };
 };

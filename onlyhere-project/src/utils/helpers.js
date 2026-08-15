@@ -536,7 +536,26 @@ const ARRIVAL_BY_KIND = {
 // KEPT for festivals and venues, because a festival ground genuinely is one
 // point in a field somewhere and the nearest stop is the single most useful
 // logistical fact about it.
-export const ARRIVAL_TYPES = new Set(["festival", "free", "booking", "food", "foodStreet", "night", "craft", "attraction"]);
+// ── AND THE SET HAD TO MATCH THE SCHEMA, WHICH IT DID NOT ───────────
+// 15 Aug 2026. This set held eight names in two different vocabularies, and
+// three of them were false. `food`, `foodStreet` and `night` were listed as
+// having an arrival field, and nearestStation is in NONE of their draft schemas
+// and is dropped by shapeForLive for all three. Its only caller uses it to
+// decide whether to tell the model "put ONLY that station name in the
+// nearestStation field", so every restaurant, food street and bar draft was
+// instructed to fill a field that could not publish, spending prompt on it and
+// inviting an invention nothing downstream would catch.
+//
+// Three Studio types genuinely carry it, in both the schema and the shape:
+// festival, free, booking.
+//
+// `craft` and `attraction` are the RENDER vocabulary rather than the Studio
+// one, kept deliberately and named as such, because DetailPage asks this same
+// question about a place it is drawing, where a workshop is "craft" and a free
+// attraction is "attraction". Both of those do have the field. Every entry
+// below is now true of the thing it names, which is the only property that made
+// this set worth having.
+export const ARRIVAL_TYPES = new Set(["festival", "free", "booking", "craft", "attraction"]);
 export const hasArrivalField = (type) => ARRIVAL_TYPES.has(String(type || ""));
 
 export const arrivalRow = (value, kind) => {
