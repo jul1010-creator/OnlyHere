@@ -62,6 +62,39 @@ export const AIRPORTS = [
 const ARRIVAL_CUE = /\b(?:fly(?:ing)?\s+into|flies\s+into|fly\s+in\s+to|land(?:ing|s)?\s+(?:at|in|into)|arriv(?:e|ing|es)\s+(?:at|in|into)|we\s+land|touch\s+down\s+(?:at|in))\s*$/i;
 const NEAR = 42;   // characters before the name that the cue may sit in
 
+// ── AND NOT EVERYBODY FLIES ─────────────────────────────────────────
+//
+// Oliver's report, 15 Aug 2026: "We are coming up by train from Hamburg." No
+// airport in the brief, so arrivalPoint returned nothing, so the route went
+// unanchored and the coverage finding could not name a region. And yet that
+// sentence says exactly where they enter the country: a train from Hamburg
+// crosses at Padborg and runs up through South Jutland.
+//
+// Denmark has four land and sea doors and they are not interchangeable. A
+// traveller coming from Malmö starts on Zealand, one coming from Oslo lands in
+// North Jutland, and one coming from Puttgarden arrives on Lolland. Guessing
+// Copenhagen for all of them is the "don't assume a Copenhagen start" mistake
+// the guide planner already warns about in its own prompt.
+//
+// The coordinate is the DANISH side of each crossing, not the foreign city, so
+// everything downstream (the region a finding names, the distance a route is
+// ordered by) is measured from where they actually stand in Denmark.
+export const ENTRY_POINTS = [
+  { code: "PAD", name: "the German border at Padborg", lat: 54.830, lon: 9.362,
+    from: ["Hamburg", "Germany", "Flensburg", "Berlin", "Kiel", "Tyskland"] },
+  { code: "ROD", name: "the Rødby ferry from Puttgarden", lat: 54.653, lon: 11.353,
+    from: ["Puttgarden", "Fehmarn"] },
+  { code: "ORE", name: "the Øresund bridge from Malmö", lat: 55.618, lon: 12.656,
+    from: ["Malmo", "Malmö", "Sweden", "Stockholm", "Lund", "Sverige"] },
+  { code: "HIR", name: "the Hirtshals ferry from Norway", lat: 57.588, lon: 9.960,
+    from: ["Oslo", "Norway", "Larvik", "Kristiansand", "Stavanger", "Norge"] },
+];
+
+// A travelling cue, and then "from". "We are coming up by train from Hamburg"
+// and "driving up from Germany" are arrivals; "we loved Hamburg last year" is
+// not, and neither is "the pastries are better than in Sweden".
+const OVERLAND_CUE = /\b(?:by\s+(?:train|car|bus|coach|ferry|road|rail)|driv(?:e|ing)|com(?:e|ing)\s+(?:up|down|over|across|in)|travell?ing|head(?:ing)?\s+(?:up|north)|take\s+the\s+(?:train|ferry|bus))[^.!?]{0,30}\bfrom\s+$/i;
+
 export const arrivalPoint = (convoText) => {
   const text = String(convoText || "");
   if (!text.trim()) return null;
@@ -72,7 +105,19 @@ export const arrivalPoint = (convoText) => {
       if (at < 0) continue;
       const before = text.slice(Math.max(0, at - NEAR), at);
       if (!ARRIVAL_CUE.test(before)) continue;
-      return { code: air.code, name: air.name, lat: air.lat, lon: air.lon, said: spelling };
+      return { code: air.code, name: air.name, lat: air.lat, lon: air.lon, said: spelling, by: "air" };
+    }
+  }
+  // Airports first, because a brief naming both ("fly into Billund, then the
+  // train from Hamburg for the second week") means they LANDED at the airport.
+  for (const door of ENTRY_POINTS) {
+    for (const city of door.from) {
+      if (!containsName(text, city)) continue;
+      const at = fold(text).indexOf(fold(city));
+      if (at < 0) continue;
+      const before = text.slice(Math.max(0, at - 60), at);
+      if (!OVERLAND_CUE.test(before)) continue;
+      return { code: door.code, name: door.name, lat: door.lat, lon: door.lon, said: city, by: "land" };
     }
   }
   return null;

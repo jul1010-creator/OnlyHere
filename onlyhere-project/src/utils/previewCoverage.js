@@ -65,7 +65,35 @@ export const COVERAGE_OK = "";
 // `library` is the published rows the Studio already holds (manageItems), which
 // is what coverageByTarget counts. Returns null when the preview found
 // something, because a finding on a working run is noise.
-export const previewCoverage = ({ matched = [], library = [], convoText = "", themes = null, days = null } = {}) => {
+// ── AND WHAT TO GO AND LOOK FOR ─────────────────────────────────────
+// Oliver, 15 Aug 2026: "I would also like a button for studio, that can click
+// 'search for content in this area'. Because apparently here there was
+// NOTHING."
+//
+// A finding that names a gap and leaves him to work out what to type is half a
+// tool. The brief already said what they wanted, so the button carries it: the
+// wanted CATEGORIES become the Studio content type to draft, and the region
+// becomes the discovery target. Castles and festivals go looking for
+// attractions and festivals, not for whatever the dropdown was last set to.
+//
+// First wanted category wins, in the order a traveller is most likely to have
+// meant it. `event` before `free` because a festival is dated and a castle is
+// not: a missing festival is a missing week, a missing castle is a missing
+// entry.
+const TYPE_FOR_CATEGORY = [
+  ["event", "festival"],
+  ["free", "free"],
+  ["nightlife", "night"],
+  ["food", "food"],
+];
+
+export const searchTypeFor = (wanted) => {
+  if (!wanted || !wanted.size) return null;
+  const hit = TYPE_FOR_CATEGORY.find(([cat]) => wanted.has(cat));
+  return hit ? hit[1] : null;
+};
+
+export const previewCoverage = ({ matched = [], library = [], convoText = "", themes = null, days = null, wanted = null } = {}) => {
   const rows = Array.isArray(matched) ? matched : [];
   if (rows.length > 0) return null;
 
@@ -94,6 +122,12 @@ export const previewCoverage = ({ matched = [], library = [], convoText = "", th
     themes: themes ? [...themes].sort() : [],
     days: Number.isFinite(Number(days)) ? Number(days) : null,
     total: (Array.isArray(library) ? library : []).length,
+    // What the button should go and look for, from what they asked for rather
+    // than from whatever the Studio dropdown was last left on.
+    searchType: searchTypeFor(wanted),
+    // "anywhere" is discovery.js's own id for "wherever it is thinnest", which
+    // is the right aim when the brief gave nothing to aim at.
+    searchTarget: target ? target.id : "anywhere",
   };
 };
 
@@ -110,5 +144,12 @@ export const describeCoverage = (f) => {
   if (f.verdict === COVERAGE_MATCHER) {
     return `Nothing to show, and it is NOT a content gap. ${said}${trip}, landing at ${f.arrival.name}, and you have ${f.published} published in ${f.target.label} that the preview could not reach, because the matcher only finds places the traveller names.`;
   }
-  return `Nothing to show. ${said}${trip}, and the brief names no town, no region and no arrival the matcher can use, so no pass could reach any of your ${f.total} entries.`;
+  // ── AND IT MUST NOT SAY "ANY OF YOUR 0 ENTRIES" ──────────────────
+  // Which is what it said on the 20:24 run. manageItems is null until Manage
+  // Published has been opened, so the library arrives empty and the sentence
+  // printed a count it had not measured. An unknown number and a real zero are
+  // different facts and this said the wrong one confidently, which is the
+  // failure the whole apiCost file was written to avoid.
+  const reach = f.total > 0 ? `, so no pass could reach any of your ${f.total} entries` : ", so no pass had anything to reach";
+  return `Nothing to show. ${said}${trip}, and the brief names no town, no region and no arrival the matcher can use${reach}.`;
 };

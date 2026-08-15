@@ -151,6 +151,11 @@ export const GuidePreviewScreen = ({
   // that is a content gap or a matcher that could not reach the content. Only
   // ever passed on the pipeline test path; a real traveller never sees this.
   library = [],
+  // Sends the founder straight from a gap to a discovery run aimed at it.
+  // Oliver, 15 Aug 2026: "I would also like a button for studio, that can click
+  // 'search for content in this area'. Because apparently here there was
+  // NOTHING." Null on any path that has no Studio behind it.
+  onSearchArea = null,
   // What the traveller typed about themselves, if they have an account. Read
   // ONLY to order what is offered behind a door, never to filter and never to
   // put a word on screen about the person. See profilePull in interestFit.js.
@@ -296,7 +301,7 @@ export const GuidePreviewScreen = ({
   // Oliver, 15 Aug 2026, on a test run that returned nothing at all. Computed
   // only on the test path, because it is a finding for the founder and not a
   // message for a traveller. Null whenever the preview found something.
-  const coverage = testProfile ? previewCoverage({ matched, library, convoText, themes, days: win?.days ?? null }) : null;
+  const coverage = testProfile ? previewCoverage({ matched, library, convoText, themes, days: win?.days ?? null, wanted }) : null;
 
   const closePreview = () => {
     if (pendingRandomGuideMode) {
@@ -368,6 +373,18 @@ export const GuidePreviewScreen = ({
                   {coverage.verdict === "no-content-there" ? "Content gap" : coverage.verdict === "matcher-could-not-reach-it" ? "Matcher gap" : "Nothing to match on"}
                 </div>
                 {describeCoverage(coverage)}
+                {/* ── FROM THE FINDING STRAIGHT TO THE SEARCH ────
+                    A finding that names a gap and then leaves him to work out
+                    what to type is half a tool. This carries the region AND
+                    the content type the brief asked for, so a brief about
+                    castles and festivals goes looking for those rather than
+                    for whatever the dropdown was last set to. */}
+                {onSearchArea && (
+                  <button onClick={() => onSearchArea(coverage)}
+                    style={{ marginTop: 9, background: "none", border: "1px solid #E5737388", color: "#E57373", borderRadius: 100, padding: "6px 13px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    🔭 Search for content {coverage.target ? `in ${coverage.target.label}` : "where it is thinnest"}
+                  </button>
+                )}
               </div>
             )}
             <button onClick={() => {

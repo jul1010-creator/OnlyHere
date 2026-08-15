@@ -15247,6 +15247,29 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // opened, and an empty array then means "unknown", which the finding
           // reports as nothing named rather than as a gap.
           library={manageItems || []}
+          // ── FROM THE GAP TO THE SEARCH, IN ONE CLICK ────────────
+          // Oliver, 15 Aug 2026: "I would also like a button for studio, that
+          // can click 'search for content in this area'. Because apparently
+          // here there was NOTHING."
+          //
+          // Closes the preview, because the Discover panel is behind it and a
+          // run he cannot watch is a run he will not trust. Aims at the region
+          // the finding named, or at discovery.js's own "wherever it is
+          // thinnest" when the brief gave nothing to aim at. The content TYPE
+          // comes from what the traveller asked for, so a brief about castles
+          // and festivals searches for those rather than for whatever the
+          // dropdown was last left on.
+          onSearchArea={(finding) => {
+            if (finding?.searchTarget) setDiscoverTarget(finding.searchTarget);
+            setDiscoverTown("");
+            if (pendingRandomGuideMode) { setPendingRandomGuideMode(null); setAiMessages(prev => prev.slice(0, -1)); }
+            setGuideModal(null);
+            setToast(`🔭 Searching ${finding?.target?.label || "where coverage is thinnest"}`);
+            setTimeout(() => setToast(null), 2600);
+            // After the modal has gone, so the panel he is sent to is the one
+            // he can see working.
+            setTimeout(() => runDiscovery(finding?.searchType || undefined), 250);
+          }}
           // "or ask Gemlyx", from inside a section that is holding something
           // back. Opens the SAME floating Detour panel rendered just below,
           // with the question already typed, because a door that opens onto an

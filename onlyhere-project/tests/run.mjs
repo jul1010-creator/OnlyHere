@@ -113,6 +113,8 @@ writeFileSync(entry, `
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
   export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
+  export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
+  export { ENTRY_POINTS } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
   export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
@@ -15315,7 +15317,8 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 // was a studio test.. let the studio tell me that this area lacks content."
 {
   const { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS,
-    COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, briefThemes } = M;
+    COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, briefThemes,
+    searchTypeFor, ENTRY_POINTS } = M;
   const BRIEF = "user: I'm planning 5 days in Denmark. It is my family, two adults and two kids aged 7 and 10. We fly into Billund. We want to cycle where it makes sense. We like architecture. We arrive on 30 September We do not know Denmark at all, so surprise us";
 
   // ── THE ARRIVAL NOTHING HAS EVER READ ───────────────────────────
@@ -15324,8 +15327,8 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // briefs, and the guide planner has a paragraph on what Billund implies.
   // previewMatch.js reads no arrival at all.
   is("the arrival is found", arrivalPoint(BRIEF)?.code, "BLL");
-  is("and so is a Copenhagen one under its other name", arrivalPoint("user: we land at Kastrup late").code, "CPH");
-  is("and a flying-into phrasing", arrivalPoint("user: flying into Aalborg Airport on the 3rd").code, "AAL");
+  is("and so is a Copenhagen one under its other name", arrivalPoint("user: we land at Kastrup late")?.code, "CPH");
+  is("and a flying-into phrasing", arrivalPoint("user: flying into Aalborg Airport on the 3rd")?.code, "AAL");
   // ── AN ARRIVAL CUE IS REQUIRED ──────────────────────────────────
   // Half these airports are named after towns, so "we skipped Aarhus" contains
   // an airport name and is not an arrival. Reading it as one sends the whole
@@ -15387,6 +15390,73 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("a brief with no arrival names no region", blind.verdict, COVERAGE_NOTHING_SAID);
   is("and claims nothing about coverage", blind.target, null);
 
+  // ── NOT EVERYBODY FLIES ─────────────────────────────────────────
+  // His 20:24 report: "We are coming up by train from Hamburg." No airport, so
+  // the arrival came back null, the route went unanchored and the finding could
+  // not name a region. That sentence says exactly where they enter: a train
+  // from Hamburg crosses at Padborg and runs up through South Jutland.
+  is("a train from Hamburg enters at the German border", arrivalPoint("user: We are coming up by train from Hamburg")?.code, "PAD");
+  is("and that is South Jutland", targetForCoords(54.830, 9.362)?.id, "south-jutland");
+  is("driving up from Germany is the same door", arrivalPoint("user: driving up from Germany")?.code, "PAD");
+  // Four doors, and they are not interchangeable. Guessing Copenhagen for all
+  // of them is the "don't assume a Copenhagen start" mistake the guide planner
+  // already warns about in its own prompt.
+  // ── EACH DOOR'S OWN COORDINATE, NOT A LITERAL BESIDE IT ─────────
+  // The first version asserted targetForCoords on hand typed numbers and only
+  // checked the door's CODE, so moving every door to Copenhagen left it green.
+  // Read the coordinate off the arrival the function returns, which is the
+  // thing the route and the finding are both measured from.
+  const doorFor = (t) => { const a = arrivalPoint(t); return a ? targetForCoords(a.lat, a.lon)?.id : null; };
+  is("a ferry from Oslo lands in the north", doorFor("user: we take the ferry from Oslo"), "north-jutland");
+  is("and Norway is that door", arrivalPoint("user: we take the ferry from Oslo")?.code, "HIR");
+  is("Hamburg comes in at the other end of the country", doorFor("user: We are coming up by train from Hamburg"), "south-jutland");
+  is("Malmö is the bridge", arrivalPoint("user: coming over from Malmö for a weekend")?.code, "ORE");
+  // partFor, not an inline destructure of a possibly null arrival. The inline
+  // version read a.lat directly and CRASHED when a mutation removed the doors,
+  // which aborts the file and reads as a pass. Third time today, same trap.
+  const partFor = (t) => { const a = arrivalPoint(t); return a ? targetForCoords(a.lat, a.lon)?.part : null; };
+  is("and it lands on Zealand, not in Jutland", partFor("user: coming over from Malmö for a weekend"), "Zealand");
+  // Four doors, four different corners of the country.
+  is("no two doors land in the same place",
+    new Set(ENTRY_POINTS.map(d => `${d.lat},${d.lon}`)).size, ENTRY_POINTS.length);
+  // A CUE IS STILL REQUIRED. Naming a foreign city is not arriving from it.
+  is("loving a city is not entering from it", arrivalPoint("user: we loved Hamburg last year"), null);
+  is("and comparing one is not either", arrivalPoint("user: the pastries are better than in Sweden"), null);
+  // Airports are checked first, so a brief naming both means they FLEW.
+  is("a flight beats an overland mention later in the brief",
+    arrivalPoint("user: we fly into Billund and later the train from Hamburg")?.code, "BLL");
+  ok("every door carries a Danish side coordinate",
+    ENTRY_POINTS.every(d => Number.isFinite(d.lat) && Number.isFinite(d.lon) && d.from.length));
+
+  // ── "SEARCH FOR CONTENT IN THIS AREA" ───────────────────────────
+  // Oliver, 15 Aug 2026: "I would also like a button for studio, that can click
+  // 'search for content in this area'. Because apparently here there was
+  // NOTHING." A finding that names a gap and leaves him to work out what to
+  // type is half a tool, so it carries the content type the brief asked for.
+  is("a brief about festivals searches for festivals", searchTypeFor(new Set(["event", "free"])), "festival");
+  is("one about castles searches for attractions", searchTypeFor(new Set(["free"])), "free");
+  is("a night out searches nightlife", searchTypeFor(new Set(["nightlife"])), "night");
+  is("and a brief that asked for nothing suggests nothing", searchTypeFor(null), null);
+  // Dated content first: a missing festival is a missing week, a missing castle
+  // is a missing entry.
+  is("events outrank attractions when both were asked for", searchTypeFor(new Set(["free", "event"])), "festival");
+  const aimed = previewCoverage({ matched: [], library: [], convoText: BRIEF, themes, days: 5, wanted: new Set(["free"]) });
+  is("the finding carries a target to aim at", aimed.searchTarget, "south-jutland");
+  is("and a type to look for", aimed.searchType, "free");
+  is("with no region to aim at, it aims where it is thinnest",
+    previewCoverage({ matched: [], library: [], convoText: "user: five days, we like castles", wanted: new Set(["free"]) }).searchTarget, "anywhere");
+
+  // ── AND IT MUST NOT SAY "ANY OF YOUR 0 ENTRIES" ─────────────────
+  // Which is what the 20:24 run printed. manageItems is null until Manage
+  // Published is opened, so the library arrives empty and the sentence stated a
+  // count it had never measured. An unknown number and a real zero are
+  // different facts, and it said the wrong one confidently.
+  const unloaded = previewCoverage({ matched: [], library: [], convoText: "user: five days, we like castles", days: 5 });
+  ok("an unmeasured library is not reported as zero entries", !/0 entries/.test(describeCoverage(unloaded)));
+  ok("and it says what it does know instead", /had anything to reach/i.test(describeCoverage(unloaded)));
+  const loaded = previewCoverage({ matched: [], library: [{ payload: { name: "a" } }, { payload: { name: "b" } }], convoText: "user: five days, we like castles", days: 5 });
+  ok("a library it has counted is stated", /2 entries/.test(describeCoverage(loaded)));
+
   // ── AND A WORKING RUN SAYS NOTHING ──────────────────────────────
   // A finding on a run that found something is noise, and noise on a panel is
   // how a real finding gets scrolled past.
@@ -15402,7 +15472,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("it is on the screen", /describeCoverage\(coverage\)/.test(prev));
   ok("and on the report, which is where the empty run was least explained",
     /coverage,/.test(readFileSync(join(root, "src/utils/previewReport.js"), "utf8")));
-  ok("the published library reaches the screen", /library=\{manageItems \|\| \[\]\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the published library reaches the screen", /library=\{manageItems \|\| \[\]\}/.test(appC));
+  ok("the finding has a button", /🔭 Search for content/.test(prev));
+  ok("which aims the discovery at the region it named", /setDiscoverTarget\(finding\.searchTarget\)/.test(appC));
+  ok("and searches for the type the brief asked for", /runDiscovery\(finding\?\.searchType \|\| undefined\)/.test(appC));
+  // The Discover panel sits behind the preview. A run he cannot watch is a run
+  // he will not trust.
+  ok("and closes the preview first, so he can watch it run", /setGuideModal\(null\);\s*\n\s*setToast\(`🔭/.test(appC));
 }
 
 // ── "THE ROUTE DOESN'T BECOME SILLY" ───────────────────────────────
