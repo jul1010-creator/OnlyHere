@@ -121,3 +121,45 @@ export const tierLabel = (entry) => {
   const t = tierOf(entry);
   return t ? `${t.mark ? `${t.mark} ` : ""}${t.label}` : null;
 };
+
+// ── "IT HAS TO BE MORE EXPOSED" ─────────────────────────────────────
+//
+// Oliver, 15 Aug 2026: "I think the 'worth considering' 'only if you're nearby'
+// has to be more exposed. I know it's there, but many users probably will
+// overlook it. And it's quite important to see. Perhaps having it in the right
+// or left corner of the picture?"
+//
+// He is right and it is worse than a visibility problem. The tier rendered as a
+// gold pill in the SAME row, the SAME shape and the SAME size as the theme
+// chips, so "Worth a look, Coast, History, Art" reads as one row of categories.
+// The tier is a VERDICT and the themes are LABELS, and they were written in one
+// visual language.
+//
+// AND THE PHOTO CORNER WAS ALREADY TAKEN, BY THE WRONG THING. It carried
+// `nomiPotential === "Very High"` as "Top Pick" and `popularityTag === "Common
+// Attraction"`, two legacy free text fields, while `tier`, the closed
+// vocabulary the whole app filters on, sat buried in the chip row. Two
+// competing rank systems on one card, with the weaker one in the prominent slot.
+//
+// ── AND THE CAUTIOUS TIERS ARE THE ONES THAT MATTER MOST ────────────
+// "Can't miss" on a photo is nice to have. "If you're nearby" on a photo is the
+// one that saves somebody a four hour drive to Lundeborg. The old design
+// promoted the tier that costs nothing to miss and hid the tier that costs a
+// day, which is exactly backwards.
+//
+// So the badge is TONED by what it is telling you: gold for a recommendation,
+// plain for a caution. A caution painted in the same celebratory gold as a
+// recommendation is the same mistake in a new place.
+export const TIER_TONE = {
+  must: { bg: "rgba(212,175,55,0.92)", fg: "#1A1206", caution: false },
+  high: { bg: "rgba(212,175,55,0.82)", fg: "#1A1206", caution: false },
+  worth: { bg: "rgba(10,15,30,0.82)", fg: "#E8E4DC", caution: true },
+  nearby: { bg: "rgba(10,15,30,0.88)", fg: "#FFB347", caution: true },
+};
+
+export const tierBadge = (entry) => {
+  const t = tierOf(entry);
+  if (!t) return null;
+  const tone = TIER_TONE[t.id] || TIER_TONE.worth;
+  return { id: t.id, label: `${t.mark ? `${t.mark} ` : ""}${t.label}`, ...tone };
+};

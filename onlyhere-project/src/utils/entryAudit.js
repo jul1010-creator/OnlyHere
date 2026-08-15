@@ -28,6 +28,7 @@ import { coordProblems } from "./coordCheck";
 // fold, because a Danish word ending in é, ø, æ or å cannot carry a \b word
 // boundary in JavaScript. See TICKET_WORD.
 import { fold } from "./danishNames";
+import { stayContradiction, restatementFindings } from "./draftShape";
 
 // Claims that a place has no public transport. Same pattern as the live
 // pipeline guard, kept in sync deliberately: an entry published before that
@@ -334,6 +335,17 @@ export const auditEntry = (row) => {
   const type = row?.type || "";
   const findings = [];
   const add = (severity, field, detail) => findings.push({ severity, field, detail });
+
+  // ── THE SHAPE OF THE DRAFT, NOT ITS FACTS ─────────────────────
+  // Oliver, 15 Aug 2026, on the Billund draft: the glance box said "A day trip"
+  // while the body said the three parks together need two or three, and three
+  // of the four secondary fields were the body again in different words. Both
+  // rules are already written into studioPrompts.js and neither was checked.
+  // See utils/draftShape.js, which is measured against that real draft rather
+  // than invented prose.
+  const stayClash = stayContradiction(p);
+  if (stayClash) findings.push(stayClash);
+  findings.push(...restatementFindings(p));
 
   const all = textOf(p);
 

@@ -100,7 +100,7 @@ import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { partOfCountry, partsPresent, matchesSearch } from "./utils/geography";
-import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, TIERS, tierOf } from "./utils/placeThemes";
+import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf } from "./utils/placeThemes";
 import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
@@ -682,14 +682,14 @@ function GemlyxApp() {
   // the diff, and was invisible on every card on the site. Three copies would
   // have been three chances to do it again.
   const CardChips = ({ town }) => {
-    const tier = tierLabel(town);
     const themes = themesOf(town);
-    if (!tier && !themes.length) return null;
+    if (!themes.length) return null;
+    // THE TIER IS NOT IN THIS ROW ANY MORE. It sat here as a gold pill the same
+    // shape and size as the theme chips, so a VERDICT read as one more
+    // CATEGORY, which is what Oliver meant by "many users probably will
+    // overlook it". It is on the photo now, see tierBadge in placeThemes.js.
     return (
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
-        {tier && (
-          <span style={{ fontSize: 9.5, fontWeight: 700, color: C.gold, background: `${C.gold}1a`, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.3 }}>{tier}</span>
-        )}
         {themes.map(th => (
           <span key={th} style={{ fontSize: 9.5, fontWeight: 700, color: C.light, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 8px", letterSpacing: 0.3 }}>{THEME_EMOJI[th]} {THEME_LABEL[th]}</span>
         ))}
@@ -13829,12 +13829,33 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ position: "absolute", top: 8, right: 8, width: 68, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.4)", pointerEvents: "none" }}>
                         <DKLocator town={town.name} color={C.gold} />
                       </div>
-                      {town.nomiPotential === "Very High" && (
-                        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.gold, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>⭐ Top Pick</div>
-                      )}
-                      {town.popularityTag === "Common Attraction" && (
-                        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>○ Common Attraction</div>
-                      )}
+                      {/* ── THE VERDICT, ON THE PICTURE ────────────
+                          Oliver, 15 Aug 2026: "the 'worth considering' 'only
+                          if you're nearby' has to be more exposed... Perhaps
+                          having it in the right or left corner of the
+                          picture?"
+
+                          This corner used to carry nomiPotential and
+                          popularityTag, two legacy free text fields, while the
+                          real tier (a closed vocabulary the whole app filters
+                          on) was buried in the chip row below. Two rank
+                          systems on one card with the weaker one in the
+                          prominent slot. Both legacy badges retired from here;
+                          the fields still exist and still drive the front page
+                          picker, they just no longer speak for the tier.
+
+                          Toned by what it says: gold recommends, plain
+                          cautions. A caution in celebratory gold is the same
+                          mistake wearing a different colour. See tierBadge. */}
+                      {(() => {
+                        const b = tierBadge(town);
+                        if (!b) return null;
+                        return (
+                          <div style={{ position: "absolute", top: 8, left: 8, maxWidth: "60%", background: b.bg, color: b.fg, fontSize: 9.5, fontWeight: 800, padding: "4px 10px", borderRadius: 100, letterSpacing: 0.4, textTransform: "uppercase", boxShadow: "0 2px 10px rgba(0,0,0,0.45)", border: b.caution ? "1px solid rgba(255,255,255,0.22)" : "none" }}>
+                            {b.label}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
                     <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{dotJoin(placeKindOf(town) === "village" ? "Village" : "", town.region, travelLabel(userCoords, town, town.travelTime))}</div>

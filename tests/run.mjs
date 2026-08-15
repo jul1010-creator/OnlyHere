@@ -113,7 +113,7 @@ writeFileSync(entry, `
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
-  export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
+  export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { ENTRY_POINTS } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
@@ -15338,8 +15338,8 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 // was a studio test.. let the studio tell me that this area lacks content."
 {
   const { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS,
-    COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, briefThemes,
-    searchTypeFor, ENTRY_POINTS } = M;
+    COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED, briefThemes,
+    fitsBrief, searchTypeFor, ENTRY_POINTS } = M;
   const BRIEF = "user: I'm planning 5 days in Denmark. It is my family, two adults and two kids aged 7 and 10. We fly into Billund. We want to cycle where it makes sense. We like architecture. We arrive on 30 September We do not know Denmark at all, so surprise us";
 
   // ── THE ARRIVAL NOTHING HAS EVER READ ───────────────────────────
@@ -15484,6 +15484,81 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("a run that found something reports no finding",
     previewCoverage({ matched: [{ name: "Ribe" }], library: [], convoText: BRIEF }), null);
 
+  // ── "MATCHED PLENTY, ANSWERED NOTHING" ──────────────────────────
+  // The 20:24 Jutland run. Sixteen rows came back so the finding above stayed
+  // silent and the screen looked full. Every Food and Drink row was in Aalborg
+  // and the brief had asked for MARKETS and NIGHTLIFE: no nightlife section, not
+  // one market. A finding that only fires on zero is the easy half; a screen
+  // that is full and answers nothing stated is the more damaging failure,
+  // because it looks like it worked.
+  const WANT_BRIEF = "user: six days, we like markets and nightlife, we fly into Aalborg";
+  const wantThemes = briefThemes(WANT_BRIEF);
+  is("markets and nightlife are both read off the brief", [...wantThemes].sort(), ["market", "nightlife"]);
+  // _fit is what previewMatch stamps on every expanded row: why is the list of
+  // STATED themes that row satisfies, and an empty why is a row that fits
+  // nothing they said.
+  const foodRows = Array.from({ length: 16 }, (_, i) => ({ name: `R${i}`, _src: "food", themes: ["food"], _fit: { fits: false, why: [], via: "" } }));
+  const unanswered = previewCoverage({ matched: foodRows, library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6, wanted: new Set(["food"]) });
+  is("a full screen that answers nothing they said is a finding", unanswered?.verdict, COVERAGE_UNANSWERED);
+  is("and it counts what was shown", unanswered.shown, 16);
+  is("and names what went unanswered", unanswered.unanswered, ["market", "nightlife"]);
+  ok("and says plainly that it looked like it worked", /looks full and answers nothing/.test(describeCoverage(unanswered)));
+
+  // ── AND "ANSWERED" MEANS ANSWERED WHAT THEY ASKED FOR ───────────
+  // A castle is a real row that really matched, and it answers neither markets
+  // nor nightlife. The guard is written against the STATED set for that reason.
+  const wrongTheme = [{ name: "Slot", _src: "free", themes: ["history"], _fit: { fits: false, why: ["history"], via: "themes" } }];
+  is("answering a theme nobody asked for is not answering",
+    previewCoverage({ matched: wrongTheme, library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6 })?.verdict, COVERAGE_UNANSWERED);
+  // ── AND THAT ONLY HOLDS BECAUSE OF THIS ─────────────────────────
+  // The guard leans on fitsBrief never reporting a theme outside the want set.
+  // Asserted, not assumed: the moment a why list can carry an unstated theme,
+  // one castle silences this finding on the very run it was written for. The
+  // fixture is a row tagged with three themes, one of which was asked for.
+  const threeTagged = { name: "X", themes: ["history", "food", "nightlife"] };
+  is("a fit reports only the themes that were asked for",
+    fitsBrief(threeTagged, new Set(["nightlife"])).why, ["nightlife"]);
+  is("and an untagged row read on its own words is held to the same set",
+    fitsBrief({ name: "Y", desc: "a castle with a famous restaurant" }, new Set(["food"])).why, ["food"]);
+  // Some answered and some not is ordinary: a library is never complete, and a
+  // finding on a partly answered brief is noise on a panel he has to read.
+  const oneHit = [...foodRows, { name: "Bar", _src: "nightlife", themes: ["nightlife"], _fit: { fits: true, why: ["nightlife"], via: "themes" } }];
+  is("one stated interest answered is enough to stay quiet",
+    previewCoverage({ matched: oneHit, library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6 }), null);
+  // A brief that named no interests cannot have them unanswered.
+  is("a brief that asked for nothing gets no unanswered finding",
+    previewCoverage({ matched: foodRows, library: [], convoText: "user: six days, surprise us", themes: null, days: 6 }), null);
+
+  // ── A TOWN CARRIES NO _fit STAMP, AND STILL ANSWERS ─────────────
+  // previewMatch stamps _fit in its expansion pass only. A town matched because
+  // the traveller NAMED it never goes through that pass, so reading the stamp
+  // alone would count a nightlife town as answering nothing and fire a finding
+  // on a run that worked.
+  is("an unstamped town that fits is an answer",
+    previewCoverage({ matched: [{ name: "Aalborg", _src: "town", themes: ["nightlife"] }], library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6 }), null);
+  const townMiss = previewCoverage({ matched: [{ name: "Ribe", _src: "town", themes: ["history"] }], library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6 });
+  is("and an unstamped town that does not fit is still a finding", townMiss?.verdict, COVERAGE_UNANSWERED);
+  is("which names the town it did show", townMiss.towns, ["Ribe"]);
+
+  // ── AND THE BUTTON HAS SOMEWHERE TO POINT ───────────────────────
+  // "Where it is thinnest" is honest when nothing matched and nobody said where
+  // they land. It is wrong here: this run knows exactly where it was looking.
+  is("the search is aimed at where they land", unanswered.searchTarget, "north-jutland");
+  const noArrival = previewCoverage({
+    matched: [{ name: "Ribe", _src: "town", themes: ["history"], __lat: 55.33, __lon: 8.76 }],
+    library: [], convoText: "user: six days, we like markets and nightlife", themes: wantThemes, days: 6,
+  });
+  is("and with no arrival, at the region the rows were in", noArrival.searchTarget, "south-jutland");
+
+  // ── IT READS LIKE A SENTENCE ────────────────────────────────────
+  // The first version joined raw theme ids with a comma into a clause that also
+  // carried the trip length, and printed "They asked for market, nightlife and
+  // 6 days", which reads as three interests one of which is a number.
+  const line = describeCoverage(unanswered);
+  ok("themes are named the way every chip on the site names them", /Markets and Nightlife/.test(line));
+  ok("and the trip length is not inside that list", !/nightlife and 6 days/i.test(line));
+  ok("the label is used in the other branches too", /Design/.test(describeCoverage(nothingPublished)));
+
   // ── WIRED, AND ONLY ON THE TEST PATH ────────────────────────────
   const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
   ok("the finding is computed", /const coverage = testProfile \? previewCoverage\(/.test(prev));
@@ -15491,6 +15566,19 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // a note about the founder's content coverage.
   ok("and never for a real traveller", /testProfile \? previewCoverage/.test(prev) && !/^\s*const coverage = previewCoverage/m.test(prev));
   ok("it is on the screen", /describeCoverage\(coverage\)/.test(prev));
+  // ── AND THE HEADER READS OFF THE CONSTANTS ──────────────────────
+  // The panel title was a ternary chain with the verdict strings retyped as
+  // literals beside the module that exports them, so the fourth verdict was
+  // silently labelled "Nothing to match on", which is the one thing a run with
+  // sixteen rows on screen is not.
+  ok("the panel title is a map off the exported verdicts", /COVERAGE_TITLE\[coverage\.verdict\]/.test(prev));
+  // Comments stripped first. The comment above the map QUOTES the ternary it
+  // replaced, so the first version of this assertion matched its own
+  // explanation and failed on a file that was already correct. Third time a
+  // source scan in this suite has read a comment as code.
+  ok("and no verdict string is retyped as a literal in the component",
+    !/"no-content-there"|"matcher-could-not-reach-it"|"asked-for-nothing-you-have"/.test(stripNonCode(prev)));
+  ok("the new verdict has its own title", /\[COVERAGE_UNANSWERED\]:/.test(prev));
   ok("and on the report, which is where the empty run was least explained",
     /coverage,/.test(readFileSync(join(root, "src/utils/previewReport.js"), "utf8")));
   const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
