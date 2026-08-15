@@ -1,6 +1,7 @@
 import { fold, variantsOf, samePlaceName, containsName } from "./danishNames";
 import { townOfLocation } from "./nightlife";
 import { canonicalRegion, regionPart, regionOf, REGION_NAMES } from "./regions";
+import { tierOf } from "./placeThemes";
 import { PARTS_OF_COUNTRY } from "./sourcePolicy";
 
 // ── WHAT THE PREVIEW SCREEN ACTUALLY HOLDS ON A CONVERSATION ────────
@@ -230,6 +231,8 @@ export const placeIsInRegion = (place, regionName) => {
 // named. Pass two is what Gemlyx holds inside the places they named, which is
 // the difference between "you said Copenhagen" and "here is what we have on
 // Copenhagen", and the only reason the screen exists.
+// Gemlyx's own editorial rank, the same one the cards already badge.
+const TIER_RANK = { must: 3, high: 2, worth: 1, nearby: 0 };
 export const REGION_TOWN_CAP = 6;
 export const matchedPlaces = (convoText, pools) => {
   const text = String(convoText || "");
@@ -256,17 +259,54 @@ export const matchedPlaces = (convoText, pools) => {
   // because Jutland is half the country.
   const wantedRegions = regionsNamed(text);
   if (wantedRegions.length) {
-    let added = 0;
+    // ── AND WHICH SIX, WHICH IS THE WHOLE QUESTION ────────────────
+    // Oliver's screenshot, 15 Aug 2026. The region pass worked, and for a two
+    // day trip out of Copenhagen wanting "quiet walks and history" it returned
+    // Sparkær, "a small railway town of 616 inhabitants built around a railway
+    // junction", Asaa, and Øster Hurup: three villages in north Jutland, four
+    // and five hours away, chosen for no reason except that they came first in
+    // the array, which is Supabase id order. His reaction to the trip that
+    // implies was "IN 3 days!? Damn.. good luck."
+    //
+    // Appending in database order is the same defect the second pass has for
+    // attractions, and here it is worse: pass two at least holds places inside
+    // a town the traveller named, while this one is free to reach anywhere in
+    // half a country.
+    //
+    // Ranked, then capped. Gemlyx's own tier first, because that is the
+    // editorial judgement the whole app is built on and a 616-person railway
+    // junction is not "Can't miss". Then what they said they were into, read
+    // off the town's own words. Then name, so two runs of the same brief give
+    // the same screen.
+    const wanted = String(text).toLowerCase();
+    const interestHit = (p) => {
+      // `topics`, not `hay`: a plain substring test is exactly right for a
+      // topic word and exactly wrong for a place name, and the suite guards the
+      // NAME matcher against `hay.includes(` by that name. Different question,
+      // different variable, so the guard keeps meaning what it means.
+      const topics = [p.highlight, p.desc, p.region, ...(Array.isArray(p.tags) ? p.tags : [])].join(" ").toLowerCase();
+      let n = 0;
+      for (const w of ["history", "historic", "walk", "walks", "quiet", "beach", "coast", "art", "museum", "food", "hike", "nature", "castle", "viking", "old town"]) {
+        if (wanted.includes(w) && topics.includes(w)) n++;
+      }
+      return n;
+    };
+    const candidates = [];
     for (const p of list) {
-      if (added >= REGION_TOWN_CAP) break;
       if (!p?.name || p._src !== "town") continue;
       const key = fold(p.name);
       if (!key || seen.has(key)) continue;
       const hit = wantedRegions.find(r => placeIsInRegion(p, r));
       if (!hit) continue;
-      seen.add(key);
-      matched.push({ ...p, _viaRegion: hit });
-      added++;
+      candidates.push({ p, hit, key, score: [TIER_RANK[tierOf(p)?.id] ?? 0, interestHit(p), p.isMajorCity ? 1 : 0] });
+    }
+    candidates.sort((a, b) => {
+      for (let i = 0; i < a.score.length; i++) if (b.score[i] !== a.score[i]) return b.score[i] - a.score[i];
+      return String(a.p.name).localeCompare(String(b.p.name));
+    });
+    for (const c of candidates.slice(0, REGION_TOWN_CAP)) {
+      seen.add(c.key);
+      matched.push({ ...c.p, _viaRegion: c.hit });
     }
   }
   // A town they are LEAVING does not get expanded. This is the whole of the

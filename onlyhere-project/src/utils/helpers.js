@@ -97,7 +97,15 @@ export const getEventDate = (dateStr, dateEnd, today = new Date()) => {
   // that read "24 Jun to 26 Jun", which is a coherent looking sentence about a
   // festival that ends before it begins. One date is better than a confident
   // wrong two, so the end is dropped and the start speaks for itself.
-  if (end && !isNaN(end.getTime()) && end.getTime() >= d.getTime()) return show(d) + " to " + show(end);
+  // ── AND A ONE DAY EVENT IS NOT A RANGE ──────────────────────────
+  // Live on the front page, 15 Aug 2026: "Ribelund Festival, 19 Aug to 19 Aug".
+  // A range whose two ends are the same day is a single day, and printing it
+  // twice reads as a template that was not finished. Compared on the DAY, not
+  // on the timestamp, because a row stored with a midnight start and an evening
+  // end is still one day.
+  const sameDay = end && !isNaN(end.getTime())
+    && end.getFullYear() === d.getFullYear() && end.getMonth() === d.getMonth() && end.getDate() === d.getDate();
+  if (end && !isNaN(end.getTime()) && end.getTime() >= d.getTime() && !sameDay) return show(d) + " to " + show(end);
   if (d.getFullYear() === thisYear) return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
   return show(d);
 };

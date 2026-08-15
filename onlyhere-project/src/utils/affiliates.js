@@ -54,7 +54,14 @@ export const airbnbUrl = ({ area, country = "Denmark", checkin, checkout, adults
 // is not saying things that are not so.
 export const STAY_DISCLOSURE = BOOKING_AFFILIATE_ID
   ? "Booking.com links may earn Gemlyx a small commission at no cost to you. The Airbnb link earns nothing."
-  : "These are plain search links. Gemlyx earns nothing from them yet.";
+  // ── AND "YET" IS A NOTE TO YOURSELF ─────────────────────────────
+  // Oliver, 15 Aug 2026, reading a live town page: "anything that does not look
+  // professionel gotta go." This line said "Gemlyx earns nothing from them
+  // yet", and the "yet" is the tell: it is a founder's note about a plan,
+  // printed under a reader's booking buttons. A reader does not need to know
+  // what we intend to monetise later, only whether the link in front of them is
+  // paid. It is not, and that is the whole sentence.
+  : "Plain search links. Gemlyx earns no commission on these.";
 
 export const affiliateActive = () => !!BOOKING_AFFILIATE_ID;
 

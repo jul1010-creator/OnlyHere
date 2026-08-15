@@ -960,3 +960,62 @@ export const editEntry = async ({ entry, instruction, deps }) => {
   stage("Done", 100);
   return { patched, changed, refused, targets };
 };
+
+// ── A CORRECTION MAY NOT ANSWER WITH ITS OWN VERDICT ────────────────
+//
+// Oliver's screenshot, 15 Aug 2026, of the preview screen. The card for
+// Hyllested Skovgårde read:
+//
+//   "The claim is not confirmed by the checked sources. It suits someone
+//    already driving through Mols Bje..."
+//
+// That is the fact-checker's own verdict, published as the entry's description,
+// on a card a traveller reads. The auto-correction is told to remove what it
+// cannot verify rather than guess, and on that draft it removed the sentence
+// and wrote down WHY in the same field, which is a note to the founder living
+// where the prose should be.
+//
+// keepMeasured already guards the fields the pipeline measured. Prose was
+// unguarded, because prose is exactly what a correction is allowed to change.
+// What it is not allowed to do is stop being prose.
+//
+// The test is comparative on purpose. An entry may legitimately say a claim is
+// unverified, in `uncertainties`, which exists for that, and an original that
+// already hedged keeps its hedge. Only language the correction ADDED is
+// refused, and only in a field a reader sees.
+const VERDICT_LANGUAGE = /\b(?:not confirmed|could not be confirmed|cannot be confirmed|is not (?:supported|verified|stated)|not stated in the (?:research|sources)|no source (?:states|confirms|supports)|the checked sources|the sources (?:do not|don't)|unverifiable|could not be verified|nothing (?:in the research|states|supports))\b/i;
+
+// The fields a traveller reads as writing. `uncertainties` is deliberately
+// absent: saying what is unconfirmed is that field's whole job.
+const READER_PROSE = [
+  "desc", "atmosphere", "special", "whoFor", "whoItsFor", "realityCheck",
+  "beforeDark", "afterDark", "whenEnter", "bestTime", "bestNights", "walkIt",
+  "gemlyxFind", "tip", "highlight", "vibeLocation", "crowd", "howTo",
+];
+
+export const verdictInProse = (before, after) => {
+  const bad = [];
+  for (const field of READER_PROSE) {
+    const was = String(before?.[field] ?? "");
+    const now = String(after?.[field] ?? "");
+    if (!now || now === was) continue;
+    if (VERDICT_LANGUAGE.test(now) && !VERDICT_LANGUAGE.test(was)) bad.push(field);
+  }
+  return bad;
+};
+
+// Put the original back, field by field, and say which. A correction that got
+// three fields right and one wrong keeps the three: refusing the whole rewrite
+// over one sentence would throw away real fixes, which is the mistake the
+// truncation guard above was careful not to make.
+export const keepProse = (before, corrected) => {
+  const bad = verdictInProse(before, corrected);
+  if (!bad.length) return { patched: corrected, restored: [], why: "" };
+  const patched = { ...corrected };
+  for (const f of bad) patched[f] = before?.[f] ?? "";
+  return {
+    patched,
+    restored: bad,
+    why: `The correction answered in ${bad.join(" and ")} with a statement about the checking rather than with prose, so ${bad.length === 1 ? "that field was" : "those fields were"} put back. A reader is not the audience for "the claim is not confirmed by the checked sources": if a claim genuinely cannot stand, it comes out of the sentence and goes into uncertainties.`,
+  };
+};

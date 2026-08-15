@@ -40,7 +40,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
@@ -96,6 +96,7 @@ writeFileSync(entry, `
   export { towns as TOWNS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, describeAverage, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
+  export { verdictInProse, keepProse } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -9490,7 +9491,13 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // written and never wired. A mutation reverting the call site went straight
   // through every behaviour test above.
   const appW = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the auto-correction merges rather than replaces", /const kept = keepMeasured\(t, corrected\);[\s\S]{0,120}const merged = kept\.patched;/.test(appW));
+  // keepProse now sits between these two: keepMeasured guards what the pipeline
+  // MEASURED, keepProse guards what it WROTE. The chain is asserted rather than
+  // the adjacency, so a third guard can be added without this going red for the
+  // wrong reason.
+  ok("the auto-correction merges rather than replaces", /const kept = keepMeasured\(t, corrected\);/.test(appW));
+  ok("prose is guarded after the measured fields are", /const prose = keepProse\(t, kept\.patched\);/.test(appW));
+  ok("and the merged draft is the end of that chain", /const merged = prose\.patched;/.test(appW));
   ok("and the draft Publish reads is the merged one", /t = merged;/.test(appW));
   ok("nothing assigns the raw rewrite to the draft", !/\bt = corrected;/.test(appW));
   ok("and an overreach is recorded as a decision", /winner: "the measured values"/.test(appW));
@@ -12998,6 +13005,255 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("an unresearched price is empty, not invented", (shapeForLive("night", { name: "X", desc: "d" }) || {}).priceNote, "");
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("and a reader sees it", /label: "What it costs", value: item\.priceNote/.test(detail));
+}
+
+// ── TWO STRINGS A READER SEES, BOTH READ AS UNFINISHED ─────────────
+// Oliver, 15 Aug 2026, walking the live site: "anything that does not look
+// professionel gotta go."
+{
+  const { getEventDate, STAY_DISCLOSURE } = M;
+  const AUG = new Date(2026, 7, 15);
+  // Live on the front page: "Ribelund Festival, 19 Aug to 19 Aug". A range
+  // whose two ends are the same day is a day, and printing it twice reads as a
+  // template nobody finished.
+  ok("a one day event is not printed as a range",
+    !/to/.test(getEventDate("2026-08-19", "2026-08-19", AUG)));
+  ok("and it still names the day", /19 Aug/.test(getEventDate("2026-08-19", "2026-08-19", AUG)));
+  // Compared on the DAY, not the timestamp: a row stored with a midnight start
+  // and an evening end is still one day.
+  ok("a start and end on the same date with different times is still one day",
+    !/to/.test(getEventDate("2026-08-19T00:00:00", "2026-08-19T23:00:00", AUG)));
+  // A real range is untouched.
+  ok("a genuine range is still a range", /to/.test(getEventDate("2026-08-23", "2026-08-29", AUG)));
+
+  // "Gemlyx earns nothing from them yet" was printed under a reader's booking
+  // buttons. The "yet" is the tell: a founder's note about a plan, on a page a
+  // traveller reads.
+  ok("the disclosure says whether the link is paid", /commission/i.test(STAY_DISCLOSURE));
+  ok("and does not talk about what we intend to monetise later", !/\byet\b/i.test(STAY_DISCLOSURE));
+}
+
+// ── AND THE ROW THAT IS ALREADY LIVE WITH IT ───────────────────────
+// keepProse stops a new draft publishing a verdict as its writing. It cannot
+// reach a row that is already published, and gemlyxtravel.com/#/town/
+// hyllestedskovgaarde is published with exactly that. Three findings the audit
+// could not see, all read off that one live page.
+{
+  const { auditEntry } = M;
+  const LIVE = {
+    id: 1, type: "town",
+    payload: {
+      name: "Hyllested Skovgårde",
+      desc: "The claim is not confirmed by the checked sources. It suits someone already driving through Mols Bjerge who wants a real stop for a local beer, not a day trip planned entirely around it.",
+      realityCheck: "Driving from Copenhagen is the sane option, taking about 4 hours 9 minutes over 363 km, compared with 5h 39min by train, light rail and bus with two changes if you go by public transport.",
+      gemlyxFind: "Ebeltoft Gårdbryggeri's taproom on the 1860 farm.",
+      blogBody: [{ type: "text", heading: "What to Do", content: "Ebeltoft Gårdbryggeri's café and taproom sit on a farm dating from 1860 at Skovgårde Bygade 4, serving its own hand-brewed beer." }],
+    },
+  };
+  const found = auditEntry(LIVE).findings;
+  const on = (f) => found.filter(x => x.field === f);
+  ok("the verdict in the description is caught", on("desc").length > 0);
+  ok("and it is critical, because it is the first sentence a reader meets",
+    on("desc").some(f => f.severity === "critical"));
+  ok("the journey in the reality check is caught", on("realityCheck").length > 0);
+  ok("and the find repeating the body is caught", on("gemlyxFind").length > 0);
+
+  // ── AND NONE OF THE THREE FIRES ON A GOOD ENTRY ─────────────────
+  // The interesting question for any check that flags prose is never what it
+  // flags, it is what it leaves alone.
+  const GOOD = {
+    id: 2, type: "town",
+    payload: {
+      name: "Ærøskøbing",
+      desc: "Cobbled lanes, hand-painted doors and a harbour that still works, on an island small enough to cross on foot in an afternoon.",
+      realityCheck: "Half the shops shut out of season and the island empties, so a November visit is a different place from an August one. Worth it either way if you want quiet.",
+      gemlyxFind: "The bakery on Vestergade opens at six and the queue is locals until eight.",
+      blogBody: [{ type: "text", heading: "What to Do", content: "Walk the lanes, look at the doors, take the ferry back at dusk." }],
+    },
+  };
+  const clean = auditEntry(GOOD).findings.filter(f => ["desc", "realityCheck", "gemlyxFind"].includes(f.field));
+  is("a well written entry trips none of the three", clean.map(f => f.field), []);
+
+  // The word "confirmed" about the WORLD is fine. Only a sentence whose subject
+  // is the checking is caught.
+  const worldly = auditEntry({ id: 3, type: "festival", payload: { name: "X", desc: "The 2027 dates are confirmed and tickets open in November." } }).findings;
+  is("a date confirmed about the world is not a verdict", worldly.filter(f => f.field === "desc"), []);
+  // And uncertainties may say exactly the thing desc may not.
+  const unc = auditEntry({ id: 4, type: "town", payload: { name: "X", desc: "A quiet harbour town.", uncertainties: ["The claim about the 1860 farm could not be confirmed by the checked sources."] } }).findings;
+  is("uncertainties is where that sentence belongs", unc.filter(f => f.field === "uncertainties" || f.field === "desc"), []);
+  // A Find that names the same place with a genuinely new detail still passes.
+  const newDetail = auditEntry({ id: 5, type: "town", payload: {
+    name: "X", desc: "Ebeltoft Gårdbryggeri's café and taproom sit on a farm dating from 1860.",
+    gemlyxFind: "Ask for the unfiltered pilsner, it never leaves the farm and is not on the printed list.",
+  } }).findings;
+  is("a find with something new to say is not a repeat", newDetail.filter(f => f.field === "gemlyxFind"), []);
+  // ── AND THE THRESHOLD HAS TO BE THE THING BEING TESTED ──────────
+  // A mutation dropping it to 5 percent left the fixture above green, because
+  // that Find shares almost no words with its body anyway. This one deliberately
+  // shares SOME: it names the brewery and the farm, which any good Find about
+  // this place would, and still says something the body did not. It must pass.
+  const overlapping = auditEntry({ id: 6, type: "town", payload: {
+    name: "X", desc: "Ebeltoft Gårdbryggeri's café and taproom sit on a farm dating from 1860, serving its own hand-brewed beer.",
+    gemlyxFind: "Ebeltoft Gårdbryggeri pours an unfiltered pilsner that never leaves the farm and is not on the printed list.",
+  } }).findings;
+  is("naming the same place with a new detail is not a repeat", overlapping.filter(f => f.field === "gemlyxFind"), []);
+}
+
+// ── "The claim is not confirmed by the checked sources." ───────────
+//
+// Oliver's preview screenshot, 15 Aug 2026. That sentence was the DESCRIPTION
+// on a town card, on a screen a traveller reads. It is the fact-checker's own
+// verdict published as the entry's writing: the auto-correction is told to
+// remove what it cannot verify rather than guess, and it removed the sentence
+// and wrote down why in the same field.
+//
+// keepMeasured guards what the pipeline measured. Prose was unguarded, because
+// prose is exactly what a correction is allowed to change. What it may not do
+// is stop being prose.
+{
+  const { verdictInProse, keepProse } = M;
+  const before = { name: "Hyllested Skovgårde", desc: "A working farm museum in the Mols hills, with rare Danish breeds in the paddocks.", realityCheck: "Worth an hour if you are already driving past." };
+  const after = { ...before, desc: "The claim is not confirmed by the checked sources. It suits someone already driving through Mols Bjerge." };
+  is("a verdict written into the description is caught", verdictInProse(before, after), ["desc"]);
+  const kept = keepProse(before, after);
+  is("and the original sentence is put back", kept.patched.desc, before.desc);
+  is("with the field named", kept.restored, ["desc"]);
+  ok("and a reason a person can act on", /goes into uncertainties/.test(kept.why));
+
+  // FIELD BY FIELD, not all or nothing. A correction that got three fields
+  // right and one wrong keeps the three: refusing the whole rewrite over one
+  // sentence throws away real fixes.
+  const mixed = { ...before, desc: "The sources do not support this.", realityCheck: "Busy on summer weekends, quiet otherwise." };
+  const k2 = keepProse(before, mixed);
+  is("the bad field goes back", k2.patched.desc, before.desc);
+  is("and the good one stays", k2.patched.realityCheck, "Busy on summer weekends, quiet otherwise.");
+
+  // COMPARATIVE, on purpose. An original that already hedged keeps its hedge,
+  // and uncertainties is exempt entirely: saying what is unconfirmed is that
+  // field's whole job.
+  const hedged = { name: "X", desc: "Opening hours could not be confirmed for winter." };
+  is("a hedge the draft already had is not the correction's fault", verdictInProse(hedged, { ...hedged, desc: "Opening hours could not be confirmed for winter, so ring ahead." }), []);
+  is("and uncertainties may say exactly this", verdictInProse({ name: "X", uncertainties: [] }, { name: "X", uncertainties: ["The 2027 date is not confirmed by any source we reached."] }), []);
+  is("an unchanged field is not examined", verdictInProse(before, before), []);
+  is("junk in is nothing out", verdictInProse(null, null), []);
+  ok("a clean correction passes through untouched", keepProse(before, { ...before, desc: "A working farm museum with rare Danish breeds." }).restored.length === 0);
+
+  // ── AND IT IS WIRED ─────────────────────────────────────────────
+  const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("prose is guarded on the auto-correction path", /const prose = keepProse\(t, kept\.patched\);/.test(appP));
+  ok("and the founder is told when it fired", /The correction answered with a verdict/.test(appP));
+}
+
+// ── SIX JUTLAND TOWNS, AND WHICH SIX ───────────────────────────────
+// The same screenshot. The region pass worked and returned Sparkær, "a small
+// railway town of 616 inhabitants built around a railway junction", Asaa and
+// Øster Hurup: villages four and five hours from where the traveller was, for a
+// two day trip, chosen for no reason except that they came first in the array,
+// which is Supabase id order. His reaction to that itinerary: "IN 3 days!?
+// Damn.. good luck."
+{
+  const { matchedPlaces, previewPools } = M;
+  const town = (name, tier, extra = {}) => ({ name, region: "Midtjylland", tier, ...extra });
+  const POOL = previewPools({
+    towns: [
+      // Database order, worst first, exactly as it arrived.
+      // ── AND THE FIXTURE HAS TO BEAT ITS OWN TIE-BREAK ─────────
+      // A mutation zeroing every score left this green, because the sort then
+      // falls through to the name and Aarhus happens to sort first anyway. A
+      // test that passes for the wrong reason is worse than none, so the
+      // weakest town here is deliberately the one that sorts FIRST.
+      town("Aabenraa", "Best If You're Already Nearby", { desc: "A small border town." }),
+      town("Sparkær", "Best If You're Already Nearby", { desc: "A small railway town of 616 inhabitants built around a railway junction." }),
+      town("Asaa", "Worth Considering", { desc: "A harbour town on the Kattegat coast." }),
+      town("Aarhus", "Can't Miss Out", { isMajorCity: true, desc: "Denmark's second city, with a museum quarter and an old town." }),
+      town("Ribe", "Highly Recommended", { desc: "The oldest town in Denmark, walkable in an afternoon, heavy with history." }),
+    ],
+  });
+  const got = matchedPlaces("Two days out of Copenhagen. We like quiet walks and history. We have heard about Jutland", POOL).map(p => p.name);
+  is("the editorial tier decides, not the row id", got[0], "Aarhus");
+  ok("and the history town outranks the railway junction", got.indexOf("Ribe") < got.indexOf("Sparkær"));
+  ok("the junction is at the bottom", got.indexOf("Sparkær") >= got.length - 2);
+  ok("and a weak town that sorts first alphabetically does not lead", got[0] !== "Aabenraa");
+  ok("it is at the bottom with the other one", got.indexOf("Aabenraa") >= got.length - 2);
+  // AND IT IS STABLE. Two runs of the same brief give the same screen, which
+  // is why the tie-break ends on the name rather than on anything ambient.
+  is("the same brief gives the same order twice",
+    matchedPlaces("Two days out of Copenhagen. We like quiet walks and history. We have heard about Jutland", POOL).map(p => p.name), got);
+}
+
+// ── THE GUIDE HAD THE WHOLE JOURNEY AND PRINTED A NUMBER ───────────
+//
+// Oliver, 13 Aug 2026: "Why it is that our drafts refuse to give the reader a
+// proper guide for transport."
+//
+// For the guide it was never the ordering: its directions genuinely already
+// run last. /api/directions returns every step with its line, its operator, its
+// two stops and its minutes, fetchExactDurations stores the WHOLE response on
+// the guide object, and the leg chip read two fields out of it. The Slagelse
+// leg below is what Google actually returns and what the reader used to get
+// instead.
+{
+  const { legSteps, journeyFromStored, worthShowingLegs } = M;
+  const STORED = {
+    durationMinutes: 119,
+    durationText: "1 hour 59 mins",
+    steps: [
+      { mode: "walking", mins: 6, duration: "6 mins" },
+      { mode: "transit", vehicle: "HEAVY_RAIL", line: "IC", agency: "DSB", from: "København H", to: "Slagelse", mins: 62, stops: 3 },
+      { mode: "walking", mins: 4, duration: "4 mins" },
+      { mode: "transit", vehicle: "BUS", line: "470R", agency: "Movia", from: "Slagelse St.", to: "Skælskør Busterminal", mins: 38, stops: 12 },
+      { mode: "walking", mins: 5, duration: "5 mins" },
+    ],
+    ferries: [], hasFerry: false,
+  };
+  const parts = journeyFromStored(STORED);
+  ok("a stored directions response becomes a journey", !!parts);
+  is("it keeps both rides in order", (parts.legs || []).map(l => l.line), ["IC", "470R"]);
+  is("and knows there is a change", parts.changes, 1);
+  is("named where it happens", parts.interchanges, ["Slagelse"]);
+
+  const steps = legSteps(parts);
+  // THE SEQUENCE, which is the whole point: this is what the reader gets
+  // instead of "~1h 59 by train/bus".
+  is("the reader gets the line to look for and the stop to get off at",
+    steps.filter(s => s.kind === "ride").map(s => s.text),
+    ["train IC to Slagelse", "bus 470R to Skælskør Busterminal"]);
+  is("with the minutes on each", steps.filter(s => s.kind === "ride").map(s => s.mins), [62, 38]);
+  // Walking and waiting are TOTALS across the journey, not steps in it, so they
+  // come last and say so. This must never read as "the station is N minutes
+  // from the centre", which is the sentence journey.js was written to stop.
+  const walk = steps.find(s => s.kind === "walk");
+  ok("the walk says it is both ends together", !!walk && /both ends/.test(walk.text));
+  is("and it is the sum of them", walk.mins, 15);
+  ok("the change is stated on the ride it follows", steps.find(s => s.kind === "ride").change === "Slagelse");
+
+  // A LEG WITH NOTHING TO SAY SAYS NOTHING. One unnamed ride is already fully
+  // described by the chip above it, and repeating it is noise on every short
+  // hop in a guide.
+  ok("a real journey is worth showing", worthShowingLegs(parts));
+  ok("a single unnamed ride is not",
+    !worthShowingLegs({ legs: [{ vehicle: "bus", line: "", from: "", to: "", mins: 9 }], onFoot: 0, waiting: 0 }));
+  ok("but a single NAMED ride is, because the line is what you look for",
+    worthShowingLegs({ legs: [{ vehicle: "bus", line: "5C", to: "Nørreport", mins: 9 }], onFoot: 0, waiting: 0 }));
+  is("nothing stored is no steps", journeyFromStored(null), null);
+  is("and a response with no steps is not a journey", journeyFromStored({ durationMinutes: 20, steps: [] }), null);
+  is("junk in is an empty list, not a crash", legSteps(null), []);
+
+  // A FERRY IS THE FACT THAT DECIDES AN ISLAND LEG, and the guide fetched it
+  // and dropped it, exactly as it dropped the steps.
+  const ferry = journeyFromStored({ ...STORED, hasFerry: true, ferries: [{ line: "Fanølinjen", from: "Esbjerg", to: "Nordby" }] });
+  ok("a crossing survives into the guide", ferry.hasFerry);
+  is("with its name", ferry.ferries[0].line, "Fanølinjen");
+
+  // ── AND THE PAGE RENDERS IT ─────────────────────────────────────
+  const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the chip reads the stored response as a journey", /journeyFromStored\(exact\)/.test(gp));
+  ok("and only prints a list worth printing", /worthShowingLegs\(journey\)/.test(gp));
+  ok("the steps are drawn", /steps\.map\(\(st, i\) =>/.test(gp));
+  ok("a ferry crossing is named to the reader", /This journey includes a ferry crossing/.test(gp));
+  // NOTHING IS FETCHED FOR THIS. It is the response the build already stored,
+  // so this cannot slow a guide down or fail on its own.
+  ok("no new request is made for it", !/fetch\(`\/api\/directions/.test(gp));
 }
 
 // ── EVERYTHING FABLE FOUND IN TODAY'S WORK ─────────────────────────

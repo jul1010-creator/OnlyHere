@@ -300,6 +300,35 @@ export const costContradictions = (payload) => {
 // See utils/claimCheck.js. It needs no API and no coordinates: when a sentence
 // states both a distance and a duration for the same journey, those two numbers
 // are a claim about speed, and speed is arithmetic.
+// The language of a verdict about checking, as opposed to the language of a
+// travel guide. Written narrowly: an entry may legitimately say a price is
+// unconfirmed IN uncertainties, and may legitimately use the word "confirmed"
+// about the world ("confirmed for 2027"). What is caught is a sentence whose
+// SUBJECT is the checking.
+const VERDICT_AS_PROSE = /\b(?:the claim|this claim|the claims)\b[^.!?]{0,60}\b(?:not|could not|cannot)\b|\b(?:not|could not|cannot) be confirmed by\b|\bthe checked sources\b|\bnot (?:stated|supported) (?:in|by) the (?:research|sources|checked)\b|\bno source (?:states|confirms|supports)\b/i;
+
+// A duration or a distance in a field that is not about the journey. Both
+// forms this app actually produces: "4 hours 9 minutes", "5h 39min", "363 km".
+const LOGISTICS_IN_PROSE = /\b\d+\s*(?:h|hr|hrs|hour|hours)\b[^.!?]{0,12}\b\d+\s*(?:m|min|mins|minute|minutes)\b|\b\d+\s*(?:km|kilometres|kilometers)\b|\b\d+\s*(?:min|mins|minutes)\b[^.!?]{0,20}\b(?:by (?:train|bus|car|ferry|bike)|on foot|drive|driving)\b/i;
+
+// The Find repeating the body. Compared on the distinctive words rather than on
+// the sentence, because a rewrite that changes the wording and keeps the fact
+// is the same failure: "Ebeltoft Gårdbryggeri's café and taproom sit on a farm
+// dating from 1860" against "Ebeltoft Gårdbryggeri's taproom on the 1860 farm".
+const duplicatesBody = (find, payload) => {
+  const words = (t) => new Set(String(t || "").toLowerCase().replace(/[^a-z0-9æøå ]/g, " ").split(/\s+/).filter(w => w.length >= 5));
+  const f = words(find);
+  if (f.size < 3) return false;
+  const body = words([payload?.desc, payload?.special, payload?.atmosphere, ...(Array.isArray(payload?.blogBody) ? payload.blogBody.map(b => b?.content) : [])].join(" "));
+  if (!body.size) return false;
+  let shared = 0;
+  for (const w of f) if (body.has(w)) shared++;
+  // Two thirds of a short curated line already being in the body is a repeat,
+  // not an echo. Set high enough that a Find naming the same PLACE with a
+  // genuinely new detail still passes.
+  return shared / f.size >= 0.67;
+};
+
 export const auditEntry = (row) => {
   const p = row?.payload || {};
   const type = row?.type || "";
@@ -312,6 +341,52 @@ export const auditEntry = (row) => {
   if (NO_TRANSPORT.test(all)) {
     add("critical", "getting there", "Claims no public transport route exists. This has been wrong every time it was checked, and it tells travelers without a car to skip the place entirely.");
   }
+  // ── THE CHECKER'S VERDICT, PUBLISHED AS THE WRITING ─────────────
+  //
+  // Oliver, 15 Aug 2026, reading gemlyxtravel.com/#/town/hyllestedskovgaarde.
+  // The entry opens:
+  //
+  //   "The claim is not confirmed by the checked sources. It suits someone
+  //    already driving through Mols Bjerge..."
+  //
+  // That is the fact-checker's own verdict, live, as the first sentence a
+  // traveller reads. keepProse in utils/correction.js stops it happening to a
+  // new draft. It cannot reach a row that is already published, and that row is
+  // published, so the audit has to be able to see it.
+  //
+  // `uncertainties` is exempt: saying what is unconfirmed is that field's job,
+  // and it is not prose a reader meets as writing.
+  for (const field of ["desc", "atmosphere", "special", "whoFor", "realityCheck", "beforeDark", "afterDark", "gemlyxFind", "highlight", "tip"]) {
+    const v = String(p[field] ?? "");
+    if (v && VERDICT_AS_PROSE.test(v)) {
+      add("critical", field, `Reads as a note about the checking rather than as writing: "${v.slice(0, 90).trim()}...". A reader is not the audience for whether a claim could be confirmed. If it cannot stand, take it out of the sentence and put it in uncertainties.`);
+    }
+  }
+
+  // ── THE REALITY CHECK IS NOT A TIMETABLE ────────────────────────
+  // Every draft prompt that has a realityCheck says the same thing: "2-3 blunt
+  // sentences ... Never a logistics note". The Hyllested entry's reads
+  //
+  //   "Driving from Copenhagen is the sane option, taking about 4 hours 9
+  //    minutes over 363 km, compared with 5h 39min by train, light rail and bus
+  //    with two changes..."
+  //
+  // which is the journey, in the field that exists to say whether the place is
+  // worth the trip. The travel time has its own field, the journey has its own
+  // block, and a rule stated in nine prompts and enforced nowhere is a request.
+  if (p.realityCheck && LOGISTICS_IN_PROSE.test(String(p.realityCheck))) {
+    add("high", "realityCheck", "Carries the journey rather than the verdict. Every draft prompt says this field is never a logistics note: travelTime, the measured journey and Getting There already hold the minutes and the changes. This field answers whether the place is worth going to.");
+  }
+
+  // ── AND THE FIND IS NOT A SECOND COPY OF THE BODY ───────────────
+  // Hyllested's body says "Ebeltoft Gårdbryggeri's café and taproom sit on a
+  // farm dating from 1860"; its Gemlyx Find says "Ebeltoft Gårdbryggeri's
+  // taproom on the 1860 farm." The Find is the one curated thing in the entry
+  // and repeating the paragraph above it makes the whole page look automatic.
+  if (p.gemlyxFind && duplicatesBody(p.gemlyxFind, p)) {
+    add("high", "gemlyxFind", "Repeats what the body already said. This is the one curated line in the entry, and a reader who has just read the same sentence twenty words higher learns nothing from it.");
+  }
+
   // ── IS THE COORDINATE ABOUT THIS PLACE ──────────────────────────
   // Was: the schema-example pair and a town-only null check, both written here
   // by hand. isInDenmark existed the whole time and was never once applied to a

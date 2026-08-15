@@ -521,3 +521,71 @@ export const guideLogisticsProblems = (fields, legs) => {
   }
   return [...new Set(out)];
 };
+
+// ── THE GUIDE HAD THE WHOLE JOURNEY AND PRINTED A NUMBER ────────────
+//
+// Oliver, 13 Aug 2026: "Why it is that our drafts refuse to give the reader a
+// proper guide for transport." That got `legs` onto an ENTRY, and the guide
+// pipeline was left alone because its directions genuinely already run last.
+//
+// They do, and it was never the ordering. /api/directions returns every step
+// with its line, its operator, its two stops and its minutes, and
+// fetchExactDurations stores the WHOLE response on the guide object. GuidePage
+// reads two fields out of it, durationText and durationMinutes, and draws
+// "~1h 59 by train/bus 🚆". A leg Google described as an IC to Slagelse, a
+// change, then bus 470R to Skælskør Busterminal is sitting in the browser at
+// full detail and reaching the reader as one number and an emoji.
+//
+// Same defect as the entry side, one pipeline over, and the fix is the same
+// one: stop summarising something that was already a sequence.
+//
+// Reader-facing, unlike journeyBlock above, which is a prompt: short lines a
+// person reads while standing on a platform, in the order they happen.
+export const legSteps = (parts) => {
+  if (!parts) return [];
+  const out = [];
+  const rides = Array.isArray(parts.legs) ? parts.legs : [];
+  rides.forEach((leg, i) => {
+    const vehicle = leg.vehicle || "service";
+    // THE LINE IS THE THING YOU LOOK FOR ON THE FRONT OF THE BUS, so it leads
+    // when there is one. "Bus 470R" beats "bus towards Skælskør".
+    const named = leg.line ? `${vehicle} ${leg.line}` : vehicle;
+    out.push({
+      kind: "ride",
+      vehicle,
+      text: leg.to ? `${named} to ${leg.to}` : named,
+      mins: leg.mins || 0,
+      // Where you get off this one is where you get on the next, so the change
+      // is stated between them rather than left to be inferred from two stops.
+      change: i < rides.length - 1 ? leg.to || "" : "",
+    });
+  });
+  // Walking and waiting are totals across the whole journey, not steps in it,
+  // so they come last and say so. journeyParts sums the walk at BOTH ends,
+  // which is why this must never read as "the station is N minutes away".
+  if (parts.onFoot > 0) out.push({ kind: "walk", text: "walking, both ends together", mins: parts.onFoot });
+  if (parts.waiting > 0) out.push({ kind: "wait", text: "waiting and connections", mins: parts.waiting });
+  return out;
+};
+
+// The one call the guide needs: a stored /api/directions response in, the same
+// parts an entry gets out. Kept here rather than in the page so the page has no
+// opinion about the shape of a directions response.
+export const journeyFromStored = (stored) => {
+  const steps = stored && Array.isArray(stored.steps) ? stored.steps : null;
+  if (!steps || !steps.length) return null;
+  const parts = journeyParts(steps, stored.durationMinutes);
+  if (!parts) return null;
+  return { ...parts, ferries: Array.isArray(stored.ferries) ? stored.ferries : [], hasFerry: !!stored.hasFerry, ferryUnnamed: !!stored.ferryUnnamed };
+};
+
+// A journey worth spelling out. One unnamed ride with no walk and no wait is
+// already fully described by the chip above it, and repeating it as a single
+// bullet is noise on every short leg in a guide.
+export const worthShowingLegs = (parts) => {
+  if (!parts) return false;
+  const rides = Array.isArray(parts.legs) ? parts.legs : [];
+  if (rides.length > 1) return true;                       // a change is always worth stating
+  if (rides.some(l => l.line || l.to)) return true;        // a line or a stop to look for
+  return false;
+};

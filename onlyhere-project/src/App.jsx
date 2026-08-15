@@ -77,7 +77,7 @@ import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, arrivalStop } from "./utils/journey";
-import { correctEntry, keepMeasured, MEASURED_FIELDS } from "./utils/correction";
+import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS } from "./utils/correction";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance } from "./utils/glanceExtract";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
@@ -5163,7 +5163,21 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   // The MANUAL correction path has had enforceScope guarding it
                   // all along. This one had nothing. See keepMeasured.
                   const kept = keepMeasured(t, corrected);
-                  const merged = kept.patched;
+                  // ── AND PROSE HAS TO STAY PROSE ─────────────────
+                  // Oliver's preview screenshot: a town card whose description
+                  // read "The claim is not confirmed by the checked sources."
+                  // That is the checker's verdict published as the entry's
+                  // writing, on a card a traveller reads. keepMeasured guards
+                  // what was measured; this guards what was written.
+                  const prose = keepProse(t, kept.patched);
+                  const merged = prose.patched;
+                  if (prose.restored.length) {
+                    note("The correction answered with a verdict", {
+                      provider: "claude", detail: `put back: ${prose.restored.join(", ")}`,
+                      outcome: "empty", used: false, why: prose.why,
+                    });
+                    ui(setStudioInventedWarning, inventedWarning = `${inventedWarning ? `${inventedWarning}\n\n` : ""}${prose.why}`);
+                  }
                   // ── A TRUNCATED REWRITE IS NOT A CORRECTION ─────
                   // Oliver's draft came back holding name, the measured fields
                   // and the __ fields, and nothing else: no desc, no dates, no

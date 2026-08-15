@@ -9,6 +9,7 @@ import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
+import { journeyFromStored, legSteps, worthShowingLegs } from "../utils/journey";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { askClaude } from "../utils/aiClient";
 import { testTravelerLine, isFerryText } from "../utils/helpers";
@@ -1065,10 +1066,51 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 <span style={{ fontSize: 9.5, color: unverified ? C.muted : C.light, fontWeight: 700 }}>{unverified ? "· Check Maps ↗" : "· Maps ↗"}</span>
               </a>
             );
-            if (!ops.length) return chip;
+            // ── AND THE JOURNEY IT ALREADY HAD ───────────────────
+            // Oliver, 13 Aug 2026: "Why it is that our drafts refuse to give
+            // the reader a proper guide for transport."
+            //
+            // The answer for the guide was never the ordering: its directions
+            // genuinely already run last. It is that /api/directions returns
+            // every step with its line, its operator, its two stops and its
+            // minutes, fetchExactDurations stores the WHOLE response, and this
+            // chip reads two fields out of it. A leg Google described as an IC
+            // to Slagelse, a change, then bus 470R to Skælskør Busterminal was
+            // sitting in the browser at full detail and reaching the reader as
+            // "~1h 59 by train/bus 🚆".
+            //
+            // Nothing is fetched for this and nothing upstream changes. It
+            // prints what was measured, and only when there is something to
+            // print: one unnamed ride is already fully described by the chip.
+            const journey = exact ? journeyFromStored(exact) : null;
+            const steps = journey && worthShowingLegs(journey) ? legSteps(journey) : [];
+            const legList = steps.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 340, width: "100%" }}>
+                {steps.map((st, i) => (
+                  <div key={`${st.kind}-${i}`} style={{ display: "flex", alignItems: "baseline", gap: 7, fontSize: 11, lineHeight: 1.5 }}>
+                    <span style={{ fontSize: 10, opacity: 0.75 }}>
+                      {st.kind === "walk" ? "🚶" : st.kind === "wait" ? "⏱" : st.vehicle === "ferry" ? "⛴" : st.vehicle === "bus" ? "🚌" : st.vehicle === "metro" ? "🚇" : "🚆"}
+                    </span>
+                    <span style={{ color: st.kind === "ride" ? C.light : C.muted, flex: 1 }}>
+                      {st.text}
+                      {st.mins ? <span style={{ color: C.muted }}> · {st.mins} min</span> : null}
+                    </span>
+                  </div>
+                ))}
+                {journey.hasFerry && (
+                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
+                    {journey.ferries.length
+                      ? `Ferry: ${journey.ferries.map(f => [f.line, f.from && f.to ? `${f.from} to ${f.to}` : ""].filter(Boolean).join(", ")).filter(Boolean).join(" · ")}`
+                      : "This journey includes a ferry crossing."}
+                  </div>
+                )}
+              </div>
+            );
+            if (!ops.length && !legList) return chip;
             return (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
                 {chip}
+                {legList}
                 <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6 }}>
                   {ops.map(op => (
                     <a key={op.id} href={op.url} target="_blank" rel="noreferrer"
