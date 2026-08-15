@@ -137,10 +137,26 @@ export const spellingVariants = (name) => {
 };
 const nameIsIn = (haystack, name) => spellingVariants(name).some(v => containsName(haystack, v));
 
+// ── AND THE STREET IS NOT IN THE FIELD I FIRST LOOKED IN ────────────
+//
+// Caught reviewing my own work the same day. This read `location`, and the
+// night schema asks for `location` as "Neighbourhood, City": the example in the
+// prompt is literally "Indre By, Copenhagen". A bar filed that way carries no
+// street name at all, so Gothersgade would have listed nothing, for every bar
+// already published, and the whole feature would have looked broken while every
+// test passed.
+//
+// `mapHint` is where the street actually lives, on every type, and it always
+// has: "Train, Toldbodgade 6c, 8000 Aarhus C, Denmark". Reading both means this
+// works on the rows that exist today rather than only on ones drafted after the
+// schema changed, which is the difference between a feature and a plan.
+const whereIsIt = (spot) => [spot?.street, spot?.location, spot?.mapHint]
+  .map(v => String(v || "").trim()).filter(Boolean).join(", ");
+
 export const streetForSpot = (spot, streets, cities = NIGHTLIFE_CITIES) => {
-  const where = String(spot?.location || "").trim();
+  const where = whereIsIt(spot);
   if (!where) return null;
-  const town = townOfLocation(where, cities);
+  const town = townOfLocation(String(spot?.location || spot?.mapHint || ""), cities);
   const list = (Array.isArray(streets) ? streets : []).filter(s => s?.name).slice().sort(byLengthDesc);
   for (const st of list) {
     // A street in another town with the same name is a different street.
@@ -152,8 +168,18 @@ export const streetForSpot = (spot, streets, cities = NIGHTLIFE_CITIES) => {
   return null;
 };
 
-export const barsOnStreet = (street, spots, cities = NIGHTLIFE_CITIES) =>
-  (Array.isArray(spots) ? spots : []).filter(s => streetForSpot(s, [street], cities));
+// ── AND IT HAS TO BE ASKED AGAINST ALL THE STREETS ──────────────────
+// Fable's catch. This tested each bar against a ONE-street list, so longest-
+// wins never ran, while the town page awards each bar to the most specific
+// street. With Kongensgade and Store Kongensgade both published in Copenhagen,
+// the town row said "1 bar published here" and opening it showed 2, and a bar
+// on Store Kongensgade appeared on both streets' pages. `allStreets` defaults
+// to the one street for a caller that genuinely has no others, and the page
+// passes the full list.
+export const barsOnStreet = (street, spots, allStreets = null, cities = NIGHTLIFE_CITIES) => {
+  const list = Array.isArray(allStreets) && allStreets.length ? allStreets : [street];
+  return (Array.isArray(spots) ? spots : []).filter(s => streetForSpot(s, list, cities) === street);
+};
 
 // The town page, as one answer rather than three lookups that can disagree.
 // `streets` carries each street with the venues on it, `loose` is everything in
@@ -162,7 +188,7 @@ export const barsOnStreet = (street, spots, cities = NIGHTLIFE_CITIES) =>
 // its bars are unpublished would make it flicker in and out of existence.
 export const nightlifeForTown = (town, spots, streets, cities = NIGHTLIFE_CITIES) => {
   const inTown = (Array.isArray(spots) ? spots : []).filter(s => {
-    const t = townOfLocation(s?.location, cities);
+    const t = townOfLocation(s?.location || s?.mapHint, cities);
     return t && town && samePlaceName(t, town);
   });
   const townStreets = (Array.isArray(streets) ? streets : []).filter(st => {

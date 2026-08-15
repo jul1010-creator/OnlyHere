@@ -2040,7 +2040,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
         detail: "run BEFORE the research, so the searches and the founder sources know which corner of Denmark this is",
         outcome: placed ? "ok" : "empty",
         got: placed
-          ? `${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)} via ${via} — ${describeRegion(placed.lat, placed.lon, precise)}`
+          ? `${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)} via ${via}, ${describeRegion(placed.lat, placed.lon, precise)}`
           : `nothing placed "${name}"${draftTown ? ` or "${name}, ${draftTown}"` : ""}, so no region is known and every place-scoped source will be left out`,
         why: placed ? "" : "A place-scoped source is excluded when the place is unknown, deliberately: including the wrong town's tourist board costs money on every research call and invites its page being read as an authority here.",
         used: !!placed,
@@ -2537,7 +2537,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             detail: "a Danish postal address read out of the research already gathered",
             outcome: placed ? "ok" : "empty",
             got: placed
-              ? `${found.address} appeared ${found.mentions === 1 ? "once" : `${found.mentions} times`} in the research, giving ${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)} — ${describeRegion(placed.lat, placed.lon, placed.precise)}`
+              ? `${found.address} appeared ${found.mentions === 1 ? "once" : `${found.mentions} times`} in the research, giving ${placed.lat.toFixed(4)}, ${placed.lon.toFixed(4)}, ${describeRegion(placed.lat, placed.lon, placed.precise)}`
               : found
                 ? `found "${found.address}" in the research but nothing geocoded from it`
                 : "no Danish postal address anywhere in the research, so this draft stays unplaced",
@@ -3757,6 +3757,29 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
           why: staleSkipped.length ? `held back as too old to price or date anything: ${staleSkipped.join(", ")}` : "",
           used: !!(scrapedSiteText.trim() || listingSiteText.trim()),
         });
+        // ── AND A SILENT ONE IS THE WHOLE COMPLAINT ─────────────────
+        //
+        // Oliver, 15 Aug 2026, on Farfar's Bodega: "This wouldn't have been a
+        // big issue if the AI had paid more attention to the home website."
+        //
+        // The operator's own site came back empty. Everything downstream then
+        // degraded politely and said so only in the log: the hours
+        // reconciliation reported "no-hours-on-page", both price traces read
+        // SKIPPED "because the official site's text was not available", the
+        // ticket read found nothing, and the glance extraction came back empty
+        // for priceNote. Five stages quietly stood down, the summary line said
+        // "19 ok, 3 found nothing, 2 failed", and the draft arrived looking
+        // finished. He found out what was missing by asking Gemini, which read
+        // the same site and came back with a 1,500 DKK package, the DJ nights
+        // and a 19+ door policy.
+        //
+        // A degradation nobody is told about is indistinguishable from a place
+        // that has nothing to say. This puts it in front of him, on the draft,
+        // in the same box as every other reason not to publish yet.
+        if (!scrapedSiteText.trim() && isPlaceType) {
+          const tried = [...new Set(toFetch.filter(u => !isListingHost(u)).map(u => domainOf(u)))];
+          ui(setStudioIdentityWarning, identityWarning = `THE OPERATOR'S OWN SITE WAS NOT READ${tried.length ? ` (${tried.join(", ")})` : ""}. ${listingDomains.length ? `Only a listing on ${listingDomains.join(", ")} could be read, and a listing may not confirm a price or a date.` : "No page belonging to this place could be read at all."} Everything below is written from search snippets, so the price trace, the opening-hours reconciliation and the ticket read all stood down rather than failing: an empty price here means NOT CHECKED, not free. Open the site yourself before publishing, especially its own prices, menu or events page.`);
+        }
         if (staleSkipped.length) {
           note("Sources too old to state a fact", {
             provider: "fetch",
@@ -6392,7 +6415,13 @@ TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n$
       // ALWAYS, so Restore is reachable whatever happened above it. One exit,
       // reporting how far it actually got: the row the Stop button landed on,
       // the row a throw landed on, or all of them.
-      const reached = stoppedAt !== null ? stoppedAt : accepted.length;
+      // A THROW STOPPED SOMEWHERE, AND THAT SOMEWHERE IS NOT THE END.
+      // Fable's catch: on a throw, stoppedAt stayed null, so the panel read
+      // "done: all of them" one line under a failure saying "Nothing after this
+      // point was attempted". `written + unchanged + failed` is how far it got.
+      const reached = stoppedAt !== null ? stoppedAt
+        : crashed ? Math.min(accepted.length, written + unchanged + failed.length)
+        : accepted.length;
       setSweepWriteState({ running: false, phase: "writing", done: reached, total: accepted.length, written, unchanged, failed, stopped: stoppedAt !== null || !!crashed });
       if (written > 0) { refreshLiveContent(); bumpLiveContent(v => v + 1); }
     }
@@ -9157,12 +9186,21 @@ If the conversation only covers a single day or a few stops with no explicit day
     // Same function the screen itself calls, on the same text, so the two
     // cannot drift apart again.
     const forMatch = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
-    const onScreen = matchedPlaces(forMatch, previewPools({
+    const matchedForWhy = matchedPlaces(forMatch, previewPools({
       towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
-    })).map(p => p.name).slice(0, 14);
+    }));
+    const onScreen = matchedForWhy.filter(p => !p._leaving).map(p => p.name).slice(0, 14);
+    // ── AND WHICH ONE THEY SAID THEY WERE LEAVING ────────────────
+    // The line under this heading read "This route keeps you and your partner
+    // rooted in Copenhagen's quieter historic corners" for a traveller whose
+    // own words were "we are already in Copenhagen and want to get out of the
+    // city". It was describing the list correctly; the list was wrong. Both
+    // halves are fixed, and this is the half that stops the sentence promising
+    // the place they are trying to leave.
+    const leavingNames = matchedForWhy.filter(p => p._leaving).map(p => p.name);
     (async () => {
       const r = await askClaude(
-        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.` : ""} Respond with only the sentence(s), nothing else.\n\n${convo}`,
+        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.${leavingNames.length ? ` THEY ARE LEAVING ${leavingNames.join(" and ")}: that is where they START, and your sentence must not promise it as somewhere the trip keeps them. Write about where they are going.` : ""}` : ""} Respond with only the sentence(s), nothing else.\n\n${convo}`,
         200
       );
       if (run !== previewWhyRunRef.current) return;   // a later roll owns the screen now
@@ -10464,7 +10502,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                       📍 Kind
                                     </button>
                                   )}
-                                  <button onClick={() => editItem(row)}
+                                  {/* ── NOT WHILE A DRAFT IS RUNNING ────────────
+                            Fable's catch. Neither this nor the queue's Open was
+                            disabled during a run, so: start "Draft it", open
+                            Edit on a published row mid-run, and when the run
+                            lands its closing writes replace the JSON while
+                            editingId survives. The button then reads "Save
+                            changes" and PATCHes the published row with a
+                            different place's draft. That is the editingId
+                            catastrophe clearPreviousEntry was written to kill,
+                            reachable by interleaving rather than by sequence,
+                            and "not reachable by the path I thought of" is how
+                            every one of those leaks got in. */}
+                        <button onClick={() => editItem(row)} disabled={studioLoading}
+                          title={studioLoading ? "A draft is running. Let it finish first, or this row gets its draft." : ""}
                                     style={{ background: "none", border: `1px solid ${C.gold}66`, color: C.gold, borderRadius: 100, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                     ✏️ Edit
                                   </button>
@@ -11115,7 +11166,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <div key={`r${i}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 3 }}>
                             <span style={{ color: r.ok ? C.gold : "#FFB347" }}>{r.ok ? "◆" : "✕"} {r.name}</span>
                             {r.ok ? (
-                              <button onClick={() => loadQueueResult(r)} title="Loads this finished draft into the editor. It does not start any research."
+                              <button onClick={() => loadQueueResult(r)} disabled={studioLoading} title={studioLoading ? "A draft is running. Opening this now would let the run overwrite it." : "Loads this finished draft into the editor. It does not start any research."}
                                 style={{ background: "none", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "3px 10px", fontSize: 10.5, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                                 Open
                               </button>
@@ -13122,7 +13173,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       leave a dangling name on a list nothing would correct. */}
                   {nightlifeStreetView ? (() => {
                     const street = nightlifeStreetView;
-                    const bars = barsOnStreet(street, spotsFor(nightlifeTownView)).slice().sort(byName);
+                    const bars = barsOnStreet(street, spotsFor(nightlifeTownView), nightlifeStreets).slice().sort(byName);
                     return (
                       <>
                         {street.photo && (

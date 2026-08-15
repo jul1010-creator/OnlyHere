@@ -366,10 +366,26 @@ export const researchForCheck = (raw, cap = RESEARCH_CHECK_CAP) => {
   const keep = new Set();
   let used = 0;
   const dropped = [];
+  // ── A PROTECTED BLOCK TOO BIG TO FIT IS TRIMMED, NOT DROPPED ──────
+  // Fable's catch, and it made the comment above a lie. The greedy keep skipped
+  // any block bigger than the remaining budget whatever its rank, so a 30,000
+  // character scraped official page was dropped WHOLE while a 100 character
+  // search snippet was kept, and the note then called the official page "the
+  // least authoritative". A measured block that does not fit is trimmed to what
+  // does, head and tail, because half of the official site beats none of it.
+  const trimmed = new Map();
   for (const b of byStrength) {
     const cost = b.text.length + 2;
-    if (used + cost <= cap) { keep.add(b.at); used += cost; }
-    else dropped.push(b);
+    if (used + cost <= cap) { keep.add(b.at); used += cost; continue; }
+    const room = cap - used - 2;
+    if (b.rank >= 100 && room > 400) {
+      const head = Math.floor(room * 0.5);
+      trimmed.set(b.at, `${b.text.slice(0, head)}\n[... ${b.text.length - room} characters of this block are not shown ...]\n${b.text.slice(-(room - head))}`);
+      keep.add(b.at);
+      used += room + 2;
+      continue;
+    }
+    dropped.push(b);
   }
   // A CUT THAT KEEPS NOTHING IS WORSE THAN THE OLD BEHAVIOUR, NOT BETTER.
   // Research with no blank line in it at all is one block, and one block that
@@ -388,7 +404,7 @@ export const researchForCheck = (raw, cap = RESEARCH_CHECK_CAP) => {
   }
   const label = (b) => String(b.text || "").trimStart().split("\n")[0].slice(0, 60).trim() || "an unlabelled block";
   const names = [...new Set(dropped.map(label))];
-  const text = blocks.filter(b => keep.has(b.at)).map(b => b.text).join("\n\n")
+  const text = blocks.filter(b => keep.has(b.at)).map(b => trimmed.get(b.at) || b.text).join("\n\n")
     + `\n\n[${dropped.length} block${dropped.length === 1 ? "" : "s"} of this research (${t.length - used} characters) are not shown, the least authoritative first: ${names.join("; ")}. A CLAIM YOU CANNOT FIND HERE MAY SIMPLY BE IN AN OMITTED BLOCK: do not call anything invented on the strength of it being missing from this text alone.]`;
   return { total: t.length, kept: used, truncated: true, dropped: names, text };
 };

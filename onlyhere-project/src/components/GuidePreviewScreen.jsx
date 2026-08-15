@@ -191,7 +191,9 @@ export const GuidePreviewScreen = ({
         <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8, textAlign: "center" }}>Here's what's coming up</div>
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, textAlign: "center" }}>
           {totalShown > 0
-            ? "Places you have already mentioned that Gemlyx has its own page for. The route itself comes next."
+            ? (matched.some(p => p._viaRegion)
+                ? "Places you named, and what Gemlyx holds in the part of Denmark you asked about. The route itself comes next."
+                : "Places you have already mentioned that Gemlyx has its own page for. The route itself comes next.")
             : "Gemlyx will pick the stops and build your full guide next."}
         </div>
         {/* TEST-PROFILE CARD (Oliver: "When I click the random guide, I have
@@ -245,7 +247,22 @@ export const GuidePreviewScreen = ({
                     )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>{place.name}</div>
+                      {/* ── WHY THIS ROW IS HERE ────────────────────────
+                          Oliver, 15 Aug 2026, on a preview for somebody whose
+                          brief was "we are already in Copenhagen and want to
+                          get out of the city": ten Copenhagen rows and nothing
+                          from Jutland, which is the one thing they asked for.
+                          A row that is on the screen for a reason other than
+                          "you typed it" now says which. */}
+                      {place._leaving && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.border}`, borderRadius: 100, padding: "2px 7px" }}>Where you start</span>
+                      )}
+                      {place._viaRegion && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "2px 7px" }}>In {place._viaRegion}</span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{(place.desc || "").slice(0, 100)}{(place.desc || "").length > 100 ? "…" : ""}</div>
                   </div>
                   <button onClick={() => openStopDetail(place)}

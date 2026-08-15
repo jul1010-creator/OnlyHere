@@ -38,6 +38,7 @@
 
 import { FERRY, classifyFerry } from "./transport";
 import { hostMatchesName } from "./helpers";
+import { CHECK_SCOPE_BLOCK } from "./checkScope";
 
 // ── which claims can be settled without asking a model ──────────────
 // Only two things here are settled by a live route query, and the line is
@@ -660,6 +661,10 @@ IF THE ENTRY DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} fol
 Be short. No preamble, no restating the question. Never use an em dash or an en dash.
 
 If the honest answer is that something looks wrong and should be corrected, say so and say which field.
+
+${CHECK_SCOPE_BLOCK}
+
+AND THAT RULE APPLIES TO YOU. "Argue with this draft" is the founder asking whether an entry is right, and the same category error is available here as in the automated check: a field the brief asked the writer to characterise cannot be argued with on the grounds that no page states it. If you think an atmosphere sentence is wrong, say what contradicts it. Never answer that it is unsupported.
 
 Entry:
 ${entryJson}

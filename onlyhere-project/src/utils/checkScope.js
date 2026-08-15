@@ -109,7 +109,25 @@ export const checkModeOf = (field) => {
 // This helper is for the run log and for the prompt: it says which sentences in
 // a characterisation field carry something checkable at all, so the note can
 // report honestly how much of a draft was even in scope.
-const CHECKABLE_TOKEN = /\d|\b(?:kr|dkk|eur|euro|free|gratis)\b|\b(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b|\b(?:only|oldest|largest|biggest|first|last|nearest|closest|cheapest)\b/i;
+// ── AND HALF OF THESE WERE ORDINARY ENGLISH WORDS ───────────────────
+// Fable, same day: the first list matched the month "may" and the weekday
+// "sat", so "crowds may thin out late" and "regulars sat at the bar" were read
+// as carrying a checkable figure, admitted as UNVERIFIED, and handed to a
+// corrector whose instruction is DELETE THE SENTENCE. That is the fourteen-flag
+// deletion bug reintroduced for any judgement containing "may" or "sat".
+//
+// So the ambiguous ones are gone: may, mar, wed, sat, sun as abbreviations, and
+// "first" and "last" as superlatives ("the first floor", "last orders"). What
+// is left cannot be an ordinary word in an atmosphere sentence.
+const CHECKABLE_TOKEN = new RegExp([
+  "\\d",                                                       // any figure
+  "\\b(?:kr|dkk|eur|euros?|free|gratis)\\b",                     // money
+  "\\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b",
+  "\\b(?:mon|tue|tues|thu|thur|thurs|fri)\\b",                   // unambiguous abbreviations only
+  "\\b(?:january|february|march|april|june|july|august|september|october|november|december)\\b",
+  "\\b(?:jan|feb|apr|jun|jul|aug|sept?|oct|nov|dec)\\b",
+  "\\b(?:only|oldest|largest|biggest|smallest|nearest|closest|cheapest|busiest)\\b",
+].join("|"), "i");
 export const hasCheckableClaim = (text) => CHECKABLE_TOKEN.test(String(text || ""));
 
 // Split a draft into the two groups, dropping nothing. Both are sent; they are
@@ -157,8 +175,17 @@ export const admissible = (finding, fieldOf = null) => {
   // The quoted claim, not the whole explanation: the model's reasoning after
   // the semicolon routinely contains the research's own numbers, and matching
   // on those would keep every finding it explains well.
-  const quoted = text.match(/[“"']([^”"']{2,200})[”"']/);
-  return hasCheckableClaim(quoted ? quoted[1] : "");
+  //
+  // AND A FINDING WITH NO QUOTE MARKS IS NOT AN EMPTY ONE. Fable's catch: this
+  // fell back to hasCheckableClaim("") and DROPPED the finding, so a real
+  // invented figure written without quotes ("the claim that it is open until
+  // 4am in afterDark is not in the research") was silently discarded. Nothing
+  // in the output format ever asked the checker to use quote marks, so the
+  // enforcement was resting on a habit. The claim half is the fallback: still
+  // not the reasoning, which is where the research's own numbers live.
+  const quoted = text.match(/[“"]([^”"]{2,200})[”"]/) || text.match(/'([^']{2,200})'/);
+  const claimHalf = text.includes(";") ? text.slice(0, text.indexOf(";")) : text;
+  return hasCheckableClaim(quoted ? quoted[1] : claimHalf);
 };
 
 // ── AND IT MUST READ THE CLAIM, NOT THE EXPLANATION ────────────────
@@ -202,10 +229,21 @@ export const fieldIn = (text) => {
   for (const c of candidates) {
     const low = c.toLowerCase().trim();
     if (FIELD_WORDS[low]) return FIELD_WORDS[low];
-    // Longest first, so `whoItsFor` is not read as `whoFor` and `dateEnd` is
-    // not read as `date`.
-    for (const f of all.slice().sort((a, b) => b.length - a.length)) {
-      if (new RegExp(`\\b${f}\\b`, "i").test(c)) return f;
+    // ── THE FIRST FIELD NAMED, NOT THE LONGEST ANYWHERE ──────────
+    // Fable's catch. Longest-first across the whole claim let a report field
+    // mentioned in passing win: '"the quietest time" in bestTime, not stated in
+    // the openingHours' resolved to openingHours, and the finding was admitted.
+    // The subject is named first; anything after it is context. Longest still
+    // breaks a tie at the same position, so `whoItsFor` is not read as `whoFor`
+    // and `dateEnd` is not read as `date`.
+    const hits = [];
+    for (const f of all) {
+      const at = c.search(new RegExp(`\\b${f}\\b`, "i"));
+      if (at >= 0) hits.push([at, f]);
+    }
+    if (hits.length) {
+      hits.sort((a, b) => (a[0] - b[0]) || (b[1].length - a[1].length));
+      return hits[0][1];
     }
     for (const [word, field] of Object.entries(FIELD_WORDS)) {
       if (new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(c)) return field;

@@ -100,7 +100,7 @@ writeFileSync(entry, `
   export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
-  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -6005,7 +6005,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // what is being checked is a prompt string and stripNonCode blanks those.
   const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("previewWhy matches the same places the screen shows",
-    /const onScreen = matchedPlaces\(forMatch, previewPools\(\{/.test(appSrc));
+    /const matchedForWhy = matchedPlaces\(forMatch, previewPools\(\{/.test(appSrc));
+  // AND IT IS NOT TOLD ABOUT THE ONE THEY ARE LEAVING. The line read "keeps
+  // you rooted in Copenhagen's quieter historic corners" for a traveller whose
+  // own words were "we are already in Copenhagen and want to get out".
+  ok("the departure town is kept out of the list it writes from",
+    /const onScreen = matchedForWhy\.filter\(p => !p\._leaving\)/.test(appSrc));
+  ok("and named to it as a starting point, not a destination",
+    /that is where they START, and your sentence must not promise it/.test(appSrc));
   ok("on the same text the screen builds", appSrc.includes("const forMatch = aiMessages.slice(1).map("));
   ok("and the prompt is told what is on the screen",
     /THE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE/.test(appSrc));
@@ -10905,15 +10912,37 @@ rmSync(dir, { recursive: true, force: true });
     const web = "SEARCH RESULTS\n" + "w".repeat(4000);
     const cut = researchForCheck([measured, tickets, perplexity, web].join("\n\n"), 1500);
     ok("it is truncated", cut.truncated);
-    ok("the measured block survives", cut.text.includes("VERIFIED LOCATION"));
-    ok("so does the ticket block", cut.text.includes("TICKET PAGES READ"));
+    // ── AND `includes` CANNOT TELL KEPT FROM DROPPED ─────────────
+    // Fable's catch. The truncation note repeats each dropped block's first
+    // line into the same string, so `text.includes("VERIFIED LOCATION")` was
+    // true even when that block had been dropped whole. The BODY is the test:
+    // the block's own filler, not its heading.
+    ok("the measured block survives, body and all", cut.text.includes("m".repeat(200)));
+    ok("so does the ticket block", cut.text.includes("t".repeat(200)));
     ok("the general web results are what goes", !cut.text.includes("w".repeat(100)));
+    ok("and the note names what went rather than the text merely mentioning it",
+      cut.dropped.some(d => /SEARCH RESULTS/.test(d)));
     ok("and the checker is told which block went by name", /SEARCH RESULTS/.test(cut.text.slice(cut.text.indexOf("are not shown"))) || cut.dropped.some(d => /SEARCH RESULTS/.test(d)));
     ok("absence is still not evidence", /do not call anything invented/i.test(cut.text));
     // WEAKEST FIRST, so Perplexity outranks the raw web and goes second.
     const tighter = researchForCheck([measured, tickets, perplexity, web].join("\n\n"), 900);
-    ok("the strongest blocks are the last to go", tighter.text.includes("VERIFIED LOCATION"));
+    ok("the strongest blocks are the last to go", tighter.text.includes("m".repeat(200)));
     ok("and Perplexity goes before the measured facts do", !tighter.text.includes("p".repeat(100)));
+
+    // ── A PROTECTED BLOCK TOO BIG TO FIT IS TRIMMED, NOT DROPPED ──
+    // Fable's catch, and it made the comment a lie: the greedy keep skipped any
+    // block bigger than the remaining budget whatever its rank, so a 30,000
+    // character scraped official page was dropped WHOLE while a 100 character
+    // search snippet was kept, and the note then called the official page "the
+    // least authoritative".
+    {
+      const huge = "VERIFIED LOCATION\n" + "M".repeat(30000);
+      const junk = "SEARCH RESULTS\n" + "w".repeat(100);
+      const r = researchForCheck([huge, junk].join("\n\n"), 20000);
+      ok("the oversized measured block is still there", r.text.includes("M".repeat(500)));
+      ok("and it says it was trimmed rather than pretending to be whole", /characters of this block are not shown/.test(r.text));
+      ok("the junk did not survive at its expense", !r.dropped.some(d => /VERIFIED LOCATION/.test(d)));
+    }
   }
 
   // ── WIRED: ALL FOUR, ON THE AUTOMATIC PATH ───────────────────────
@@ -12176,7 +12205,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const matcher = mw.match(/export const config = \{ matcher: \[([^\]]*)\] \};/);
   ok("the middleware states its matcher as plain strings", !!matcher);
   ok("and does not match the homepage", !!matcher && !/["']\/["']/.test(matcher[1]));
-  ok("nor everything", !!matcher && !matcher[1].includes("/:path*\"") === false ? true : true);
+  ok("nor everything", !!matcher && !matcher[1].includes("/(.*)"));
 }
 
 // ── EDITING A PUBLISHED ENTRY BY HAND ──────────────────────────────
@@ -12212,7 +12241,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // the reality-check requirement and the image layout stay as the pipeline
   // left them and bodyProblems cannot start firing because of a hand edit.
   const edited = applyBodyEdits(body, { 1: "A quiet harbour town on the fjord." });
-  is("the edit lands", edited[1].text, "A quiet harbour town on the fjord.");
+  is("the edit lands", (edited[1] || {}).text, "A quiet harbour town on the fjord.");
   is("and the block count is untouched", edited.length, body.length);
   is("an edit aimed at an image is ignored", applyBodyEdits(body, { 3: "hack" })[3], body[3]);
   is("and one aimed at a block that is not there", applyBodyEdits(body, { 99: "x" }).length, 5);
@@ -12255,7 +12284,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // ── WHO CHANGED WHAT ─────────────────────────────────────────────
   const stamped = stampEdit(pay, { by: "helper@x.dk", blocks: [1], problems: probs, at: "2026-08-13T20:00:00.000Z" });
   is("the edit is recorded on the row", stamped.__edited.length, 1);
-  is("with who made it", stamped.__edited[0].by, "helper@x.dk");
+  is("with who made it", ((stamped.__edited || [])[0] || {}).by, "helper@x.dk");
   // Warning rather than blocking is only acceptable if an override is legible
   // afterwards, so the COUNT and the worst severity are kept.
   ok("and whether anything was overridden", stamped.__edited[0].warned > 0 && stamped.__edited[0].worst === "high");
@@ -12908,7 +12937,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // fifth subset waiting to happen.
   for (const [door, next] of [
     ["const loadPastedDraft =", "const editItem ="],
-    ["const editItem =", "const setStudioMedia"],
+    ["const editItem =", "const uploadMediaFiles ="],
     ["const loadQueueResult =", "const DISCOVER_TYPE_LABEL"],
   ]) {
     const at = appD.indexOf(door);
@@ -12969,6 +12998,102 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("an unresearched price is empty, not invented", (shapeForLive("night", { name: "X", desc: "d" }) || {}).priceNote, "");
   const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   ok("and a reader sees it", /label: "What it costs", value: item\.priceNote/.test(detail));
+}
+
+// ── EVERYTHING FABLE FOUND IN TODAY'S WORK ─────────────────────────
+// A review pass on 15 Aug found eight real defects in changes made the same
+// day. Each one is asserted here by the exact input that exposed it.
+{
+  const { isDeparturePlace, regionsNamed, admissible, fieldIn, hasCheckableClaim } = M;
+
+  // A1, THE WORST: the first departure test accepted "we are in X", "staying in
+  // X" and "based in X" with no leaving verb at all, so a traveller asking
+  // about the town they are staying in got ONE card badged "Where you start"
+  // and nothing else. The same emptiness as the bug, aimed the other way.
+  ok("staying somewhere is not leaving it", !isDeparturePlace("We are staying in Copenhagen for four days, what should we see?", "Copenhagen"));
+  ok("nor is being there", !isDeparturePlace("We are in Copenhagen for a week and love museums", "Copenhagen"));
+  ok("nor is being based there", !isDeparturePlace("we are based in Odense and want to explore the town itself", "Odense"));
+  ok("nor is being there right now", !isDeparturePlace("I'm in Aarhus with my family, what is good here?", "Aarhus"));
+  // AND NEGATION. "leave" preceded by "never" is somebody saying the opposite.
+  ok("never wanting to leave is not leaving", !isDeparturePlace("we never want to leave Copenhagen, we love it", "Copenhagen"));
+  ok("nor is not wanting to", !isDeparturePlace("we do not want to leave Aarhus without seeing the harbour", "Aarhus"));
+  // And the real one still reads as a departure.
+  ok("the real brief still reads as a departure",
+    isDeparturePlace("We are already in Copenhagen and want to get out of the city", "Copenhagen"));
+
+  // A2b: "may" and "sat" were matching as a month and a weekday, so ordinary
+  // atmosphere sentences were admitted and handed to a corrector that deletes.
+  ok("a modal verb is not a month", !hasCheckableClaim("crowds may thin out late"));
+  ok("a past tense is not a weekday", !hasCheckableClaim("regulars sat at the bar chatting with staff"));
+  ok("but a real weekday still is", hasCheckableClaim("busiest on Friday and Saturday"));
+  ok("and a real month still is", hasCheckableClaim("closed through January"));
+  ok("and a figure always is", hasCheckableClaim("open until 4am"));
+  ok("those sentences are dropped again", !admissible({ label: "UNVERIFIED", text: '"crowds may thin out late" in afterDark; the research does not say.' }));
+
+  // A2a: a finding written WITHOUT quote marks fell back to testing an empty
+  // string and was dropped, so a real invented figure was silently discarded.
+  // Nothing in the output format ever asked for quote marks.
+  ok("an unquoted finding with a figure is still checked",
+    admissible({ label: "UNVERIFIED", text: "the claim that it is open until 4am in afterDark is not in the research" }));
+  ok("an unquoted finding with no figure is still dropped",
+    !admissible({ label: "UNVERIFIED", text: "the claim that it feels like a local pub in afterDark is not in the research" }));
+
+  // A2c: fieldIn took the longest field name ANYWHERE in the claim, so a report
+  // field mentioned in passing re-admitted a characterisation finding.
+  is("the field named first is the subject", fieldIn('"the quietest time" in bestTime, not stated in the openingHours'), "bestTime");
+  ok("so the finding is still dropped",
+    !admissible({ label: "UNVERIFIED", text: '"the quietest time" in bestTime, not stated in the openingHours' }));
+
+  // A6: containsName sees the whole word Zealand inside New Zealand.
+  is("New Zealand is not Zealand", regionsNamed("we loved our trip around New Zealand last year"), []);
+  ok("but Zealand on its own still counts", regionsNamed("a few days on Zealand").includes("Zealand"));
+
+  // A5: Edit and Open were live during a run, so a row could be opened mid-draft
+  // and then PATCHed with a different place's research.
+  const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("Edit is not live while a draft is running", /editItem\(row\)\} disabled=\{studioLoading\}/.test(appF));
+  ok("nor is opening a queued draft", /loadQueueResult\(r\)\} disabled=\{studioLoading\}/.test(appF));
+  // C: the sweep's finally said "done: all of them" after a throw.
+  ok("a crashed sweep reports how far it got", /crashed \? Math\.min\(accepted\.length, written \+ unchanged \+ failed\.length\)/.test(appF));
+  // The operator-site failure is on the draft now, not only in the log.
+  ok("a failed operator read reaches the founder", /THE OPERATOR'S OWN SITE WAS NOT READ/.test(appF));
+  ok("and says an empty price means not checked", /an empty price here means NOT CHECKED, not free/.test(appF));
+  // "Argue with this draft" answers under the same rule as the automated check.
+  const corr = readFileSync(join(root, "src/utils/correction.js"), "utf8");
+  ok("the assistant carries the scope block", /\$\{CHECK_SCOPE_BLOCK\}/.test(corr));
+  ok("and is told the rule applies to it", /AND THAT RULE APPLIES TO YOU/.test(corr));
+  // The address the pipeline is handed is often the old one.
+  const rp = readFileSync(join(root, "src/utils/readPage.js"), "utf8");
+  ok("four spellings of the official address are tried", /const addressVariants = \(url\) =>/.test(rp));
+  ok("but only when the first found nothing, never against a bot wall",
+    /empty\|thin\|fetch-failed/.test(rp));
+  // ── AND IT ACTUALLY RETRIES, rather than declaring the variants and
+  // never walking them. Run against a fake fetch: the http www address that
+  // Google's business profile hands over comes back empty, the https bare host
+  // has the page on it, and the read has to reach the second one.
+  {
+    const { readPage } = M;
+    const seen = [];
+    const fakeFetch = async (u) => {
+      seen.push(u);
+      const body = u === "https://farfarbodega.dk/"
+        ? "<html><body>" + "Farfars Bodega, Skindergade 20. Karaoke 1500 kr. ".repeat(40) + "</body></html>"
+        : "";
+      return { ok: true, status: 200, text: async () => body };
+    };
+    const r = await readPage("http://www.farfarbodega.dk/", { fetchImpl: fakeFetch });
+    ok("the page is found on another spelling of the same address", !r.blocked && r.text.includes("Karaoke"));
+    is("and it says which one reached it", r.reachedAt, "https://farfarbodega.dk/");
+    ok("the first attempt is the address it was given", seen[0] === "http://www.farfarbodega.dk/");
+    ok("and it did try more than one", seen.length > 1);
+    // A BOT WALL IS NOT AN ADDRESS PROBLEM. Retrying three spellings of it
+    // spends three requests to be told the same thing.
+    const walls = [];
+    const wallFetch = async (u) => { walls.push(u); return { ok: true, status: 200, text: async () => "<html><body>Please verify you are a human. Checking your browser before accessing.</body></html>" }; };
+    const w = await readPage("https://blocked.example/", { fetchImpl: wallFetch });
+    ok("a bot wall is still blocked", w.blocked);
+    is("and it was asked exactly once", walls.length, 1);
+  }
 }
 
 // ── FOURTEEN FLAGS, AND NINE OF THEM WERE THE BRIEF WORKING ────────
@@ -13073,6 +13198,83 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     /was NOT invented by the writer even if the raw research does not obviously support it/.test(appC));
 }
 
+// ── "HE SAID HE WANTED TO GO OUT OF COPENHAGEN" ────────────────────
+//
+// Oliver, 15 Aug 2026. This is his brief verbatim, and the screen it produced
+// held Copenhagen, three Copenhagen attractions, five Copenhagen restaurants
+// and a Copenhagen pub, with nothing at all from Jutland.
+{
+  const { matchedPlaces, previewPools, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP } = M;
+  const BRIEF = "user: I'm planning 2 days in Denmark. It is me and my partner. We are already in Copenhagen and want to get out of the city. We have not decided how to get around yet. We would like one base for the first half and another for the second. We like quiet walks and history. Mid range, we do not mind paying for one or two good meals. We arrive on 7 January We have heard about Jutland and would like to see some of it";
+
+  // FAULT ONE. Copenhagen is named in a sentence that rejects it.
+  ok("a town they say they are leaving is read as a departure", isDeparturePlace(BRIEF, "Copenhagen"));
+  // AND THE TEST IS NARROW ON PURPOSE. Treating a wanted town as unwanted
+  // empties the screen in the other direction, which is worse.
+  ok("an ordinary mention is not a departure", !isDeparturePlace("Four days in Copenhagen with the kids", "Copenhagen"));
+  ok("nor is arriving there", !isDeparturePlace("We fly into Copenhagen on the 3rd", "Copenhagen"));
+  ok("nor is a town simply not mentioned", !isDeparturePlace("Four days in Aarhus", "Copenhagen"));
+  // One neutral mention anywhere wins: somebody who leaves and comes back has
+  // named it both ways, and the wanting is the one that matters.
+  ok("a town named both ways is wanted",
+    !isDeparturePlace("We are already in Copenhagen and want to get out, but we come back to Copenhagen for the last night", "Copenhagen"));
+  // The other phrasings people actually use.
+  ok("out of X", isDeparturePlace("we want to get out of Aarhus for a day", "Aarhus"));
+  ok("away from X", isDeparturePlace("somewhere away from Odense", "Odense"));
+  ok("leaving X", isDeparturePlace("leaving Ribe on the Tuesday", "Ribe"));
+
+  // FAULT TWO. Jutland is the one thing they asked for, and it is not a town,
+  // so no row was ever a candidate.
+  is("the region they named is found", regionsNamed(BRIEF), ["Jutland"]);
+  is("nothing named is nothing found", regionsNamed("two days somewhere quiet"), []);
+  ok("a specific region counts too", regionsNamed("we want to see Sønderjylland").includes("Sønderjylland"));
+  ok("a Jutland town is in Jutland", placeIsInRegion({ name: "Ribe", region: "Sydvestjylland" }, "Jutland"));
+  ok("and so is one in another Jutland region", placeIsInRegion({ name: "Aarhus", region: "Østjylland" }, "Jutland"));
+  ok("a Copenhagen town is not", !placeIsInRegion({ name: "Copenhagen", region: "Storkøbenhavn" }, "Jutland"));
+  ok("and the narrow region matches itself", placeIsInRegion({ name: "Ribe", region: "Sydvestjylland" }, "Sydvestjylland"));
+  ok("but not a different one on the same landmass", !placeIsInRegion({ name: "Ribe", region: "Sydvestjylland" }, "Nordjylland"));
+
+  // ── AND THE WHOLE SCREEN, WHICH IS WHAT HE SAW ──────────────────
+  const POOLS = previewPools({
+    towns: [
+      { name: "Copenhagen", isMajorCity: true, region: "Storkøbenhavn" },
+      { name: "Ribe", region: "Sydvestjylland" },
+      { name: "Aarhus", region: "Østjylland" },
+      { name: "Odense", region: "Fyn" },
+    ],
+    freeEntrance: [{ name: "Amalienborg Slot", city: "Copenhagen" }, { name: "Kobenhavns Museum", city: "Copenhagen" }],
+    foodSpots: [{ name: "Geranium", location: "Copenhagen" }, { name: "Bones", location: "Amagerbro, Copenhagen" }],
+    nightlifeSpots: [{ name: "Old Irish Pub (Copenhagen)", location: "Vesterbrogade, Copenhagen" }],
+  });
+  const got = matchedPlaces(BRIEF, POOLS);
+  const names = got.map(p => p.name);
+  // THE TEN COPENHAGEN ROWS ARE GONE. A town they are leaving is still shown,
+  // because it is their starting point and hiding it would look like a miss,
+  // but it does not get expanded into its restaurants and its pub.
+  ok("the town they are leaving is still on the screen", names.includes("Copenhagen"));
+  ok("and marked as where they start", got.find(p => p.name === "Copenhagen")?._leaving === true);
+  is("but nothing inside it is dragged along", names.filter(n => /Amalienborg|Kobenhavns|Geranium|Bones|Old Irish/.test(n)), []);
+  // AND THE THING THEY ASKED FOR IS ON IT.
+  ok("Jutland towns are shown", names.includes("Ribe") && names.includes("Aarhus"));
+  is("each one says why it is here", got.find(p => p.name === "Ribe")?._viaRegion, "Jutland");
+  ok("and a town on another island is not", !names.includes("Odense"));
+
+  // A TOWN THEY WANT IS STILL EXPANDED. The departure rule must not quietly
+  // switch the second pass off for everybody.
+  const wanted = matchedPlaces("Four days in Copenhagen, we love museums", POOLS).map(p => p.name);
+  ok("a wanted town still brings its attractions", wanted.includes("Amalienborg Slot"));
+  ok("and its restaurants", wanted.includes("Geranium"));
+
+  // Jutland is half the country, so the region pass is capped.
+  const many = previewPools({ towns: Array.from({ length: 20 }, (_, i) => ({ name: `Town${i}`, region: "Midtjylland" })) });
+  is("the region pass is capped", matchedPlaces("we want to see Jutland", many).length, REGION_TOWN_CAP);
+
+  // ── AND THE SCREEN SAYS WHY ─────────────────────────────────────
+  const preview = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("a departure row is labelled", /Where you start/.test(preview));
+  ok("and a region row says which region", /In \{place\._viaRegion\}/.test(preview));
+}
+
 // ── COPENHAGEN, THEN GOTHERSGADE, THEN THE BARS ────────────────────
 // Oliver, 15 Aug 2026: "I don't know how to recommend Gothersgade. Because
 // it's technically in Copenhagen.. but it's a bar street with bars.. same with
@@ -13086,11 +13288,40 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const GOTHERSGADE = street("Gothersgade", "Copenhagen", "Gothersgade, Indre By, Copenhagen");
   const JOMFRU = street("Jomfru Ane Gade", "Aalborg", "Jomfru Ane Gade, Aalborg");
   const STREETS = [GOTHERSGADE, JOMFRU];
+  const NOR_CPH = street("Nørregade", "Copenhagen", "Nørregade, Copenhagen");
+  const NOR_ODE = street("Nørregade", "Odense", "Nørregade, Odense");
 
   // A house number and a neighbourhood between the street and the town is the
   // normal way a venue's location is written, and it is still the same street.
   is("a bar with a house number is on the street",
     (streetForSpot(bar("Kind of Blue", "Gothersgade 8B, Copenhagen"), STREETS) || {}).name, "Gothersgade");
+  // ── AND THE STREET IS USUALLY NOT IN `location` AT ALL ──────────
+  // Caught reviewing the same day it was written. The night schema asks for
+  // location as "Neighbourhood, City", and its own example is "Indre By,
+  // Copenhagen". Every bar already published is filed that way, so matching on
+  // location alone would have listed NOTHING under Gothersgade while every test
+  // in this block passed. mapHint is where the street lives, on every type, and
+  // always has: "Train, Toldbodgade 6c, 8000 Aarhus C, Denmark".
+  is("a bar whose location is only a neighbourhood is still placed, from mapHint",
+    (streetForSpot({ name: "Kind of Blue", location: "Indre By, Copenhagen", mapHint: "Kind of Blue, Gothersgade 8B, 1123 Copenhagen, Denmark" }, STREETS) || {}).name, "Gothersgade");
+  is("and the town still comes from the row, not from the street name",
+    (streetForSpot({ name: "X", location: "Indre By, Copenhagen", mapHint: "X, Nørregade 2, 1165 Copenhagen, Denmark" }, [NOR_CPH, NOR_ODE]) || {}).town, "Copenhagen");
+  is("an explicit street field wins when a row has one",
+    (streetForSpot({ name: "X", street: "Gothersgade", location: "Indre By, Copenhagen" }, STREETS) || {}).name, "Gothersgade");
+  ok("and a bar on no named street is still on no street",
+    !streetForSpot({ name: "X", location: "Vesterbro, Copenhagen", mapHint: "X, Istedgade 44, 1650 Copenhagen, Denmark" }, STREETS));
+  // A row with NO location at all still has to be placeable, because mapHint is
+  // the field that is always filled and location is the one that is optional on
+  // several types. Without the fallback the town comes back empty and the
+  // same-town guard rejects every street.
+  is("a row with only a mapHint is still placed",
+    (streetForSpot({ name: "X", mapHint: "X, Gothersgade 8B, 1123 Copenhagen, Denmark" }, STREETS) || {}).name, "Gothersgade");
+  // AND ITS TOWN COMES FROM THE MAPHINT TOO. Without that, the town is unknown,
+  // the same-town guard is skipped rather than enforced, and a row with only a
+  // mapHint is claimed by whichever Nørregade happens to be first in the list.
+  // An unknown town is not a licence to guess.
+  is("a mapHint-only row lands in the right one of two same-named streets",
+    (streetForSpot({ name: "X", mapHint: "X, Nørregade 40, 5000 Odense C, Denmark" }, [NOR_CPH, NOR_ODE]) || {}).town, "Odense");
   is("so is one written bare", (streetForSpot(bar("Nemoland", "Gothersgade, Copenhagen"), STREETS) || {}).name, "Gothersgade");
   is("and one in another town's street", (streetForSpot(bar("Rock Nielsen", "Jomfru Ane Gade 15, Aalborg"), STREETS) || {}).name, "Jomfru Ane Gade");
   is("a bar somewhere else in the same town is on no street",
@@ -13098,8 +13329,6 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   // THE SAME STREET NAME IN TWO TOWNS IS TWO STREETS. Nørregade exists in a
   // dozen Danish towns, so the town has to agree before the name is believed.
-  const NOR_CPH = street("Nørregade", "Copenhagen", "Nørregade, Copenhagen");
-  const NOR_ODE = street("Nørregade", "Odense", "Nørregade, Odense");
   is("an Odense bar is not put on a Copenhagen street",
     (streetForSpot(bar("Bar", "Nørregade 40, Odense"), [NOR_CPH, NOR_ODE]) || {}).town, "Odense");
 
@@ -13151,8 +13380,26 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 
   // barsOnStreet answers the same question one street at a time, for the page
   // that opens a single street.
-  is("opening Gothersgade lists its bars", barsOnStreet(GOTHERSGADE, SPOTS).map(b => b.name), ["Kind of Blue", "Nemoland"]);
-  is("and opening the Aalborg one lists its own", barsOnStreet(JOMFRU, SPOTS).map(b => b.name), ["Rock Nielsen"]);
+  is("opening Gothersgade lists its bars", barsOnStreet(GOTHERSGADE, SPOTS, STREETS).map(b => b.name), ["Kind of Blue", "Nemoland"]);
+  is("and opening the Aalborg one lists its own", barsOnStreet(JOMFRU, SPOTS, STREETS).map(b => b.name), ["Rock Nielsen"]);
+  // ── AND THE PAGE MUST AGREE WITH THE COUNT ON THE ROW ───────────
+  // Fable's catch. This tested each bar against a ONE-street list, so
+  // longest-wins never ran here while the town page applied it. With
+  // Kongensgade and Store Kongensgade both in Copenhagen, the row said "1 bar
+  // published here", opening it showed 2, and one bar appeared on both pages.
+  {
+    const KONG2 = street("Kongensgade", "Copenhagen", "Kongensgade, Copenhagen");
+    const STORE2 = street("Store Kongensgade", "Copenhagen", "Store Kongensgade, Copenhagen");
+    const BOTH = [KONG2, STORE2];
+    const PAIR = [bar("Toga Vinstue", "Store Kongensgade 18, Copenhagen"), bar("K-Bar", "Kongensgade 5, Copenhagen")];
+    is("the shorter street's page holds only its own bar", barsOnStreet(KONG2, PAIR, BOTH).map(b => b.name), ["K-Bar"]);
+    is("and the longer one holds only its own", barsOnStreet(STORE2, PAIR, BOTH).map(b => b.name), ["Toga Vinstue"]);
+    // THE TWO VIEWS AGREE, which is the property that was broken.
+    const town = nightlifeForTown("Copenhagen", PAIR, BOTH);
+    for (const { street: st, bars } of town.streets) {
+      is(`the row count for ${st.name} matches the page behind it`, bars.length, barsOnStreet(st, PAIR, BOTH).length);
+    }
+  }
 
   // ── AND THE PAGE ACTUALLY USES IT ──────────────────────────────
   // The rules above are worth nothing if the nightlife tab still lists every
@@ -13164,7 +13411,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     ok("there is a street level", /const \[nightlifeStreetView, setNightlifeStreetView\] = useState\(null\)/.test(appN));
     ok("a town lists its streets", /townSplit\.streets\.map\(\(\{ street, bars \}\) =>/.test(appN));
     ok("clicking one opens it", /setNightlifeStreetView\(street\)/.test(appN));
-    ok("and the street lists the bars on it", /barsOnStreet\(street, spotsFor\(nightlifeTownView\)\)/.test(appN));
+    ok("and the street lists the bars on it", /barsOnStreet\(street, spotsFor\(nightlifeTownView\), nightlifeStreets\)/.test(appN));
     // THE COLLAPSE HE CHOSE: a bar on a published street may not also sit in
     // the flat list under it. The flat list reads `loose`, never the whole town.
     ok("the flat list is the ones on no street", /looseSpots\.filter\(f => f\.type === nightlifeTab\)/.test(appN));
@@ -13311,7 +13558,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // `CUR?\s*NUM` the empty group let \s* eat it, every `at` shifted one left,
   // and priceForNoun handed the water the hot dog's price.
   is("a price starts at its own first character",
-     pricesIn("water 1.20 EUR")[0].at, 6);
+     (pricesIn("water 1.20 EUR")[0] || {}).at, 6);
 
   // ── AND THE FEE AFTER THE FIGURE ─────────────────────────────────
   // BESIDE_THE_TICKET was tested against the sentence BEFORE a figure only, so

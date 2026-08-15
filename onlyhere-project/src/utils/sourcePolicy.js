@@ -219,7 +219,7 @@ export const ESSENTIAL_CATEGORY_NAMES = ESSENTIAL_CATEGORIES.map(c => c.cat);
 // ── THE APP RUNS TWO VOCABULARIES AND ONLY ONE WAS WRITTEN DOWN ─────
 //
 // A row's `type` is what Studio publishes and what the database stores, and
-// there are nine. A rendered place carries `_src`, and there are six of those:
+// there are ten. A rendered place carries `_src`, and there are six of those:
 // town, event, food, nightlife, free, craft. They are not the same list and
 // they never were: foodStreet and food share one `_src`, nightTown and
 // essential correspond to no place card at all.

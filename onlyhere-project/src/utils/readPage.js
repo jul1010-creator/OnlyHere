@@ -64,9 +64,55 @@ export const readFirecrawl = async (url, key, f = fetch) => {
 // retried, because a dead link is not a wall and Firecrawl does not have the
 // login either. Paying to re-read nothing is the quiet waste this project keeps
 // finding in other forms.
+// ── AND THE ADDRESS GOOGLE HANDS US IS OFTEN THE OLD ONE ────────────
+//
+// Oliver, 15 Aug 2026, on a Farfar's Bodega draft: the operator's own site came
+// back empty, so the hours reconciliation had nothing, both price traces were
+// SKIPPED "because the official site's text was not available", and the entry
+// published with no price. He then asked Gemini, which read farfarbodega.dk and
+// found a 1,500 DKK karaoke package, the DJ nights, and a 19+ door policy. His
+// verdict: "This wouldn't have been a big issue if the AI had paid more
+// attention to the home website."
+//
+// The URL the pipeline was given was `http://www.farfarbodega.dk/`, because
+// that is the string in Google's business profile, and Google's copy of a
+// website is frequently the one the owner typed in 2016. A plain http fetch of
+// a host that now serves https, or a www host that no longer resolves, comes
+// back empty and is indistinguishable from a site with nothing on it.
+//
+// Four spellings of one address, tried in order, before anything is called
+// blocked. No key needed, no credit spent, and it is the difference between an
+// entry with a price and an entry without one.
+const addressVariants = (url) => {
+  const out = [url];
+  try {
+    const u = new URL(url);
+    const bare = u.host.replace(/^www\./i, "");
+    for (const proto of ["https:", "http:"]) {
+      for (const host of [bare, `www.${bare}`]) {
+        const v = `${proto}//${host}${u.pathname}${u.search}`;
+        if (!out.includes(v)) out.push(v);
+      }
+    }
+  } catch { /* not a parseable URL, so there is nothing to vary */ }
+  return out.slice(0, 4);
+};
+
 export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
-  const plain = await readPlain(url, fetchImpl);
-  const first = pageReadVerdict(plain.status, plain.text, plain.err);
+  let plain = await readPlain(url, fetchImpl);
+  let first = pageReadVerdict(plain.status, plain.text, plain.err);
+  // Only when the first attempt found NOTHING. A bot wall is not an address
+  // problem and retrying three spellings of it wastes three requests to be told
+  // the same thing, so the retry is for empty and unreachable only.
+  if (!first.usable && /^(?:empty|thin|fetch-failed|http-40[34]|http-5\d\d)$/.test(String(first.reason))) {
+    for (const alt of addressVariants(url).slice(1)) {
+      const again = await readPlain(alt, fetchImpl);
+      const verdict = pageReadVerdict(again.status, again.text, again.err);
+      if (verdict.usable) {
+        return { text: again.text, via: "fetch", read: verdict.reason, blocked: false, credits: 0, sample: "", tickets: again.tickets, reachedAt: alt, firstTry: first.reason };
+      }
+    }
+  }
   if (first.usable) {
     return { text: plain.text, via: "fetch", read: first.reason, blocked: false, credits: 0, sample: "", tickets: plain.tickets };
   }

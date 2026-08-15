@@ -1,5 +1,7 @@
 import { fold, variantsOf, samePlaceName, containsName } from "./danishNames";
 import { townOfLocation } from "./nightlife";
+import { canonicalRegion, regionPart, regionOf, REGION_NAMES } from "./regions";
+import { PARTS_OF_COUNTRY } from "./sourcePolicy";
 
 // ── WHAT THE PREVIEW SCREEN ACTUALLY HOLDS ON A CONVERSATION ────────
 //
@@ -101,10 +103,134 @@ export const previewPools = ({ towns = [], freeEntrance = [], foodSpots = [], ni
 export const mentionsPlace = (convoText, name) =>
   variantsOf(name, { includeSights: true }).some(v => containsName(convoText, v));
 
+// ── "HE SAID HE WANTED TO GO OUT OF COPENHAGEN" ─────────────────────
+//
+// Oliver, 15 Aug 2026, on a preview built from this brief:
+//
+//   "We are already in Copenhagen and want to get out of the city ... We have
+//    heard about Jutland and would like to see some of it"
+//
+// The screen came back with Copenhagen, three Copenhagen attractions, five
+// Copenhagen restaurants and a Copenhagen pub. Nothing from Jutland. And the
+// line above it read "This route keeps you and your partner rooted in
+// Copenhagen's quieter historic corners", which is the italic line correctly
+// describing a list that was wrong.
+//
+// TWO SEPARATE FAULTS, and they compound.
+//
+// 1. A NAMED PLACE IS NOT A WANTED PLACE. The matcher asks whether the name
+//    appears, and Copenhagen appears in a sentence that REJECTS it. There is no
+//    polarity anywhere in this file, so "we are already in Copenhagen and want
+//    to get out" reads exactly like "four days in Copenhagen".
+//
+// 2. A REGION MATCHES NOTHING. Jutland is the one thing they asked for. It is
+//    not a town, so no row has that name, so the pool never had a candidate.
+//    utils/regions.js has known which towns are in Jutland since it was
+//    written, and this screen never asked it. Fourth time on this screen that
+//    the helper already existed and the call did not.
+//
+// The departure test is deliberately narrow. "Already in X" and "out of X" are
+// unambiguous; "three days in Copenhagen" is not a departure and must not read
+// as one, because treating a wanted town as unwanted empties the screen in the
+// other direction.
+// ── AND THE FIRST VERSION OF THIS WAS WORSE THAN THE BUG ────────────
+// Fable, reviewing it the same day: LEAVING_BEFORE accepted "we are in X",
+// "staying in X" and "based in X" with no leaving verb anywhere, so
+// "We are staying in Copenhagen for four days, what should we see?" came back
+// as a DEPARTURE. The screen then showed one Copenhagen card badged "Where you
+// start" and nothing else, and told the italic line not to promise the town the
+// traveller had just asked about. That is the same emptiness as the bug, aimed
+// at the opposite traveller, and it is the exact false positive the comment
+// above claims to avoid.
+//
+// A leaving VERB is the signal. Being somewhere is not, and never was: "we are
+// already in Copenhagen" is a fact about where they stand, and only the "and
+// want to get out" after it makes it a departure.
+//
+// A leaving preposition or verb immediately before the name: "out of X",
+// "away from X", "leave X".
+const LEAVING_DIRECT = /\b(?:out\s+of|outside(?:\s+of)?|away\s+from|leave|leaving|escaping|escape)\s*$/i;
+// Or a leaving intent just after it: "X, and we want to get out of the city".
+const LEAVING_AT = /^[^.!?]{0,40}?\b(?:would like to|want to|wanna|need to|hoping to|hope to|plan to)\s*(?:get\s+)?(?:out|away|off|going)\b|^[^.!?]{0,40}?\b(?:and|but)\s+(?:get|head|move)\s+(?:out|on|away)\b/i;
+// ── AND NEITHER COUNTS INSIDE A NEGATION ────────────────────────────
+// "we never want to leave Copenhagen, we love it" and "we do not want to leave
+// Aarhus without seeing the harbour" both read as departures without this, and
+// both are somebody saying the opposite.
+const NOT_LEAVING = /\b(?:never|not|don'?t|do\s+not|didn'?t|won'?t|wouldn'?t|can'?t|cannot|hate\s+to|no\s+need\s+to|rather\s+not)\b[^.!?]{0,30}$/i;
+
+export const isDeparturePlace = (convoText, name) => {
+  const text = String(convoText || "");
+  const variants = variantsOf(name, { includeSights: true }).filter(Boolean);
+  let found = 0, leaving = 0;
+  for (const v of variants) {
+    const re = new RegExp(`(?<![\\w])${v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w])`, "gi");
+    let m;
+    while ((m = re.exec(text))) {
+      found++;
+      const before = text.slice(Math.max(0, m.index - 40), m.index);
+      const after = text.slice(m.index + m[0].length, m.index + m[0].length + 60);
+      const directly = LEAVING_DIRECT.test(before) && !NOT_LEAVING.test(before.replace(LEAVING_DIRECT, ""));
+      const intent = LEAVING_AT.test(after) && !NOT_LEAVING.test(after.slice(0, 40));
+      if (directly || intent) leaving++;
+    }
+  }
+  return found > 0 && leaving === found;
+};
+
+// Every part of the country and every named region, as one list to test the
+// conversation against. REGION_NAMES is the specific tier ("Sønderjylland"),
+// PARTS_OF_COUNTRY the wide one ("Jutland"); both are things a traveller says.
+export const regionsNamed = (convoText) => {
+  const text = String(convoText || "");
+  const out = [];
+  for (const r of [...PARTS_OF_COUNTRY, ...REGION_NAMES]) {
+    // ── "NEW ZEALAND" IS NOT ZEALAND ────────────────────────────
+    // Fable's catch. containsName sees the whole word Zealand inside "New
+    // Zealand", so "we loved our trip around New Zealand last year" put six
+    // Sjælland towns on a screen for a brief that named no Danish place at all.
+    // Same shape as "also" matching Als, one list up.
+    const named = variantsOf(r).some(v => {
+      if (!v) return false;
+      if (!containsName(text, v)) return false;
+      const at = fold(text).indexOf(fold(v));
+      return !/\b(?:new|nya|nieuw|nouvelle)\s*$/i.test(fold(text).slice(Math.max(0, at - 12), at));
+    });
+    if (named) out.push(r);
+  }
+  return out;
+};
+
+// Is this row in one of them? A town row carries `region` as free text and
+// coordinates as __lat/__lon, so both are asked: the stored region first
+// because it is what the drafter wrote, then the measured one.
+// ── AND A NARROW REQUEST MAY NOT WIDEN ITSELF ──────────────────────
+// The first version took the wanted region, looked up which landmass it sits
+// on, and matched anything on that landmass. So "we want to see Sønderjylland"
+// matched Skagen, which is four hours north and a different country as far as
+// a two day trip is concerned. Containment runs ONE WAY: asking for the whole
+// of Jutland reaches every region in it, asking for one region does not reach
+// its neighbours. Caught by the assertion that a narrow request stays narrow,
+// which is the one worth writing whenever a match is widened at all.
+export const placeIsInRegion = (place, regionName) => {
+  const askedForPart = PARTS_OF_COUNTRY.includes(regionName);
+  const want = askedForPart ? "" : canonicalRegion(regionName);
+  const wantPart = askedForPart ? regionName : "";
+  if (!want && !wantPart) return false;
+  const stated = canonicalRegion(place?.region || "");
+  const measured = canonicalRegion(regionOf(place) || "");
+  for (const got of [stated, measured]) {
+    if (!got) continue;
+    if (want && got === want) return true;
+    if (wantPart && regionPart(got) === wantPart) return true;
+  }
+  return false;
+};
+
 // Two passes, and the order is the meaning. Pass one is what the traveller
 // named. Pass two is what Gemlyx holds inside the places they named, which is
 // the difference between "you said Copenhagen" and "here is what we have on
 // Copenhagen", and the only reason the screen exists.
+export const REGION_TOWN_CAP = 6;
 export const matchedPlaces = (convoText, pools) => {
   const text = String(convoText || "");
   const seen = new Set();
@@ -114,9 +240,39 @@ export const matchedPlaces = (convoText, pools) => {
     if (!p?.name) continue;
     const key = fold(p.name);
     if (!key || seen.has(key)) continue;
-    if (mentionsPlace(text, p.name)) { seen.add(key); matched.push(p); }
+    // `_leaving` rather than dropped: it IS a place they named, it is their
+    // starting point, and hiding it would make the screen look like it missed
+    // the one town in the brief. What it does not get is its contents.
+    if (mentionsPlace(text, p.name)) {
+      seen.add(key);
+      matched.push(isDeparturePlace(text, p.name) ? { ...p, _leaving: true } : p);
+    }
   }
-  const matchedTowns = new Set(matched.filter(p => p._src === "town").map(p => fold(p.name)));
+  // ── AND THE REGION THEY ACTUALLY ASKED FOR ────────────────────────
+  // "We have heard about Jutland and would like to see some of it" named the
+  // one thing this traveller wanted and matched nothing, because Jutland is not
+  // a town and no row is called that. Towns in a named region are added here,
+  // marked `_viaRegion` so the screen can say why they are on it, and capped
+  // because Jutland is half the country.
+  const wantedRegions = regionsNamed(text);
+  if (wantedRegions.length) {
+    let added = 0;
+    for (const p of list) {
+      if (added >= REGION_TOWN_CAP) break;
+      if (!p?.name || p._src !== "town") continue;
+      const key = fold(p.name);
+      if (!key || seen.has(key)) continue;
+      const hit = wantedRegions.find(r => placeIsInRegion(p, r));
+      if (!hit) continue;
+      seen.add(key);
+      matched.push({ ...p, _viaRegion: hit });
+      added++;
+    }
+  }
+  // A town they are LEAVING does not get expanded. This is the whole of the
+  // Copenhagen report: ten Copenhagen rows on a screen for somebody whose brief
+  // was "we are already in Copenhagen and want to get out of the city".
+  const matchedTowns = new Set(matched.filter(p => p._src === "town" && !p._leaving).map(p => fold(p.name)));
   if (matchedTowns.size) {
     for (const p of list) {
       if (!p?.name || p._src === "town") continue;
