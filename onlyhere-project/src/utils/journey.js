@@ -39,6 +39,7 @@
 // numbers were always in the response; only the total was being passed on.
 
 import { durationsIn } from "./claimCheck";
+import { containsName } from "./danishNames";
 
 const mins = (s) => (Number.isFinite(Number(s?.mins)) ? Number(s.mins) : 0);
 
@@ -517,6 +518,62 @@ export const guideLogisticsProblems = (fields, legs) => {
       if (!/walk/i.test(l.mode) || l.mins > SHORT_WALK_MINUTES) continue;
       if (!l.to || !text.toLowerCase().includes(l.to.toLowerCase())) continue;
       out.push(...lastLegProblems(text, { stop: l.to, walkMinutes: l.mins }).map(p => `${id}: ${p}`));
+    }
+  }
+  return [...new Set(out)];
+};
+
+// ── AND IT PLANNED TWO HOURS SOMEWHERE IT SAID WAS SHUT ─────────────
+//
+// Off the same live guide as the leg numbers, 15 Aug 2026. KEEP IN MIND, in
+// the guide's own words: "Note also that Trapholt is currently closed for
+// renovation, so check its official site for the latest reopening details
+// before including it in your plans."
+//
+// Trapholt is Day 3's 13:30 stop, for two hours. The model that wrote the
+// warning is the model that built the day, and it told the reader to decide
+// something it had already decided for them. Nothing compared the two, because
+// the warning and the plan are different fields and every gate reads one field
+// at a time.
+//
+// THE HARD PART IS NOT FINDING THE WORD "CLOSED". It is the difference between
+// these two sentences, both of which are in that guide:
+//
+//   "Trapholt is currently closed for renovation"           a fact, and it
+//                                                           contradicts the plan
+//   "they may already be closed or on reduced winter hours" a caution, and it
+//                                                           is the honest thing
+//                                                           to say about a
+//                                                           26 October visit
+//
+// A gate that cannot tell those apart flags the useful sentence too and gets
+// switched off in a week. So the test runs on the CLAUSE, not the sentence: the
+// stop has to be named in the same clause as the closure, and that clause has to
+// state it rather than hedge it. "so check its official site" sits in a later
+// clause and cannot rescue the first one, which is right, because a reader who
+// has been given the stop at 13:30 for two hours has already been told it is on.
+const CLAUSE_SPLIT = /[,;:]|\bso\b|\bbut\b|\balthough\b|\bthough\b|\bhowever\b|\bunless\b/i;
+const CLOSED_NOW = /\b(?:is|are|has|have|had|remains?|stays?|sits?)\s+(?:been\s+|currently\s+|now\s+|still\s+)?(?:closed|shut)\b|\b(?:currently|permanently|temporarily|indefinitely)\s+closed\b|\bclosed\s+(?:for|until|due to|since)\b/i;
+// Any of these in the same clause turns a statement into a caution, and a
+// caution about a stop is a service rather than a contradiction.
+const CLOSURE_HEDGED = /\b(?:may|might|could|can|possibly|perhaps|likely|probably|check|verify|confirm|if|whether|risk|expect(?:ed)? to|due to (?:re)?open|reopen(?:s|ed|ing)?)\b/i;
+
+export const closedButPlanned = (fields, stopNames) => {
+  const stops = (Array.isArray(stopNames) ? stopNames : []).map(s => String(s || "").trim()).filter(Boolean);
+  if (!stops.length) return [];
+  const out = [];
+  for (const f of Array.isArray(fields) ? fields : []) {
+    const id = f?.id || "field";
+    const text = String(f?.text || "");
+    if (!text.trim()) continue;
+    for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+      for (const clause of sentence.split(CLAUSE_SPLIT)) {
+        if (!CLOSED_NOW.test(clause) || CLOSURE_HEDGED.test(clause)) continue;
+        for (const stop of stops) {
+          if (!containsName(clause, stop)) continue;
+          out.push(`${id}: this says ${stop} is closed, and ${stop} is a planned stop. Either drop it from the day or say what is open about it. A reader given a stop at a time, for a length of time, has been told it is on.`);
+        }
+      }
     }
   }
   return [...new Set(out)];

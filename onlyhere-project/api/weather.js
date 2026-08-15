@@ -379,7 +379,21 @@ export default async function handler(req, res) {
         byDay[d] = { ...point, _hour: hour };
       }
     }
-    const forecast = Object.entries(byDay).slice(0, 7).map(([date, point]) => ({
+    // ── DO NOT THROW AWAY THREE DAYS OF FORECAST ────────────────────
+    // This was slice(0, 7), and utils/weather.js then set its own horizon to 6
+    // to match it, so a trip nine days out was told "too far out for a real
+    // forecast" about weather MET Norway had already sent us. locationforecast
+    // 2.0 runs hourly for about two and a half days and then six-hourly out to
+    // ten, so ten buckets is what the response contains rather than a number
+    // picked here. FORECAST_HORIZON_DAYS in utils/weather.js is the client half
+    // of this one decision and moves with it: offsets 0 through 9.
+    //
+    // The last bucket can be a partial day, which is why it is ten and not
+    // eleven, and the other two sources run out earlier (OpenWeatherMap's free
+    // forecast is five days, WeatherAPI's is three). The merge already treats a
+    // source that has no entry for a date as one fewer opinion, so days seven
+    // to ten arrive single-source and honestly labelled rather than absent.
+    const forecast = Object.entries(byDay).slice(0, 10).map(([date, point]) => ({
       date,
       temperature_c: point.data.instant.details.air_temperature,
       wind_speed_ms: point.data.instant.details.wind_speed,

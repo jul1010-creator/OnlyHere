@@ -928,13 +928,20 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           // (real data or this guide's own geocode — NOT the town-center
           // fallback), the link now uses it, so Maps opens the same journey the
           // chip's number came from.
-          const preciseCoord = (name) => {
-            const real = lookupRealPlace(name);
-            const rc = placeCoords(real);
-        if (rc) return rc;
-            return geo[name] || null;
-          };
           const stopTownOf = (name) => (day.stops || []).find(s => s.name === name)?.town || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
+          // ── AND "PRECISE" HAS TO MEAN PRECISE ─────────────────────
+          // This promised "NOT the town-center fallback" in its own comment and
+          // then returned whatever row lookupRealPlace matched, town centres
+          // included, with no look at the `precise` flag and no coordFitsTown.
+          // That is how a Maps link for ARoS → Aarhus Ø opened with a bare pair
+          // that Google labelled simply "Aarhus": the link and the chip were
+          // built from the same wrong point, so they agreed with each other and
+          // with nothing on the ground. resolveStopCoordsDetailed answers the
+          // question this was trying to ask, and answers it with the flag.
+          const preciseCoord = (name) => {
+            const d = resolveStopCoordsDetailed(name, geo, stopTownOf(name));
+            return d && d.precise ? { lat: d.lat, lon: d.lon } : null;
+          };
           const routeUrl = (originName, destName, mode) => {
             // READABILITY over raw precision in the LINK (Oliver's screenshot:
             // Google Maps opening with "55.2613281,12.1288198" sitting in the
@@ -1001,7 +1008,15 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               // walking Maps link, never "check Rome2Rio" for a five minute
               // stroll. Rome2Rio stays only for real long-distance dead ends
               // (island crossings needing ferry+train combinations).
-              if ((km != null && km <= 3) || (legOriginTown && legDestTown && legOriginTown.trim().toLowerCase() === legDestTown.trim().toLowerCase())) {
+              // THE CAP APPLIES HERE TOO, AND DID NOT. This branch accepted any
+              // km up to 3, which at the route factor is up to about 54 minutes
+              // printed as a "short leg" under a rule that says 20. It is the
+              // same mistake as the fallback estimate below it, in the one
+              // branch that runs when Google found nothing at all: the less we
+              // know about a leg, the more careful the number has to be, not
+              // less. walkEstimateTooFar is the single rule for this, already
+              // used four lines further down.
+              if ((km != null && !walkEstimateTooFar(km)) || (km == null && legOriginTown && legDestTown && legOriginTown.trim().toLowerCase() === legDestTown.trim().toLowerCase())) {
                 return (
                   <a href={routeUrl(originName, destName, "walking")} target="_blank" rel="noreferrer"
                     style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>

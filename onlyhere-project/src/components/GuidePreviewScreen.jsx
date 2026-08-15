@@ -133,7 +133,12 @@ export const GuidePreviewScreen = ({
   // tested. App.jsx's previewWhy effect reads the same function, so the italic
   // line at the top of this screen can no longer describe a different trip
   // from the list underneath it.
-  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }));
+  // The trip's own length reaches the matcher, because how many towns to offer
+  // for a named region is a question about the trip, not about the region.
+  // Computed here rather than inside, so the events and the towns read the same
+  // window and cannot disagree about how long somebody is here.
+  const win = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText });
+  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null });
   // Group into the fixed category order above, each capped independently.
   // Two sections ("Major Cities"/"Towns") now share src:"town" and are
   // told apart by their own `match` predicate — apply it on top of the
@@ -145,7 +150,6 @@ export const GuidePreviewScreen = ({
   // `named` is the first pass's own answer rather than a second guess at it:
   // an event is named exactly when the traveller wrote it, which is the same
   // question mentions() already answered above.
-  const win = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText });
   const eventPlan = tripEvents(matched.filter(p => p._src === "event"), {
     window: win,
     interests: intakeInterest,
@@ -261,6 +265,14 @@ export const GuidePreviewScreen = ({
                       )}
                       {place._viaRegion && (
                         <span style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "2px 7px" }}>In {place._viaRegion}</span>
+                      )}
+                      {/* WHAT IS UNDER IT. "All it does now is show towns" was
+                          six bare town cards, and a card that says what Gemlyx
+                          holds inside it is the difference between a name and
+                          an answer. Absent when there is nothing, because a
+                          badge reading "0 places" is worse than no badge. */}
+                      {place._holds > 0 && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase" }}>{place._holds} {place._holds === 1 ? "place" : "places"} inside</span>
                       )}
                     </div>
                     <div style={{ fontSize: 12, color: C.light, lineHeight: 1.5, marginTop: 3 }}>{(place.desc || "").slice(0, 100)}{(place.desc || "").length > 100 ? "…" : ""}</div>

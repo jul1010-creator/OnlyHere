@@ -38,14 +38,20 @@
 // The label is not decoration. It is the difference between a promise this app
 // can keep and one it cannot.
 
-// 6, NOT 8, AND THE NUMBER IS NOT ARBITRARY. api/weather.js builds its daily
-// buckets with `Object.entries(byDay).slice(0, 7)`, so it emits seven days:
-// offsets 0 through 6. This constant said 8, which meant days 7 and 8 were
-// claimed as forecastable, no bucket existed for them, and dayWeather returned
-// null. A guide arriving exactly a week out showed NO weather at all, and a
-// short trip in that window reported "too far out for a real forecast" about
-// something seven days away. Found by review, not by looking at the API.
-export const FORECAST_HORIZON_DAYS = 6;
+// THE NUMBER IS NOT ARBITRARY, AND IT IS HALF OF ONE DECISION. api/weather.js
+// builds its daily buckets from MET Norway's timeseries, so this constant and
+// that slice have to name the same horizon or a guide claims a forecastable day
+// the API has no bucket for and dayWeather returns null: that is how a trip
+// arriving exactly a week out once showed no weather at all.
+//
+// It was 6, because the slice was 7. Oliver, 15 Aug 2026, reading "too far out
+// for a real forecast" and asking "Really? With all the APIs?" — and on a trip
+// ten weeks out he had a point about the wording rather than the number, since
+// nothing forecasts October in August. But six was wrong on its own terms:
+// locationforecast 2.0 carries about ten days and we were slicing three of them
+// off, so a trip nine days away was told no forecast existed for weather we had
+// already been sent. Ten buckets, offsets 0 through 9.
+export const FORECAST_HORIZON_DAYS = 9;
 
 export const FORECAST = "forecast";
 export const NORMALS = "normals";
@@ -148,8 +154,30 @@ export const weatherBadge = ({ source, forecast, normals, agreement } = {}) => {
 // days by number, which only works when there is a forecast. This is the other
 // half, and it says plainly that no forecast exists yet, because "we do not
 // know" stated is far better than a confident icon that was never checked.
-export const normalsNote = (badges, whenWords) => {
-  const real = (Array.isArray(badges) ? badges : []).filter(b => b && b.source === NORMALS);
+// ── AND IT LEADS WITH WHAT IT KNOWS ─────────────────────────────────
+// Oliver, 15 Aug 2026: "Really? With all the APIs?", under a line whose first
+// eleven words were an apology for not having a forecast. The apology was true
+// and it was still the wrong thing to put first: he is holding a trip in late
+// October read in mid-August, and no API on earth forecasts that. What this
+// line knows is ten years of recorded October weather for those exact places,
+// which is the fact somebody deciding what coat to pack wants.
+//
+// So the temperatures come first and the caveat comes after them, and three
+// smaller things go with it:
+//
+//   "before you fly" is dropped. This guide's own transport note says he
+//   arrives by train from Hamburg, and a weather line has no business assuming
+//   an aeroplane. "before you leave" is true of every trip.
+//
+//   "a week before" was hardcoded next to a horizon of six days, so it was
+//   wrong even then. It reads off FORECAST_HORIZON_DAYS now and cannot drift.
+//
+//   "on the days planned" claimed the whole trip while describing whichever
+//   days resolved to a coordinate. On the guide he was reading that was two
+//   days out of five. `totalDays` lets it say so.
+export const normalsNote = (badges, whenWords, totalDays = null) => {
+  const list = Array.isArray(badges) ? badges : [];
+  const real = list.filter(b => b && b.source === NORMALS);
   if (!real.length) return null;
   // b.temp is the MIDPOINT of the normal range, not its high. Using it as the
   // range printed "expect 6° to 7°" directly under badges whose own line said
@@ -160,7 +188,14 @@ export const normalsNote = (badges, whenWords) => {
   const lo = Math.min(...lows), hi = Math.max(...his);
   const wetDays = real.filter(b => b.risk === "high").length;
   const range = lo === hi ? `around ${lo}°` : `${lo}° to ${hi}°`;
-  return `This trip is too far out for a real forecast, so these are ten year averages rather than a prediction. ${whenWords ? `In ${whenWords} you` : "You"} can expect ${range} on the days planned${wetDays ? `, and ${wetDays === real.length ? "every one of them is" : `${wetDays} of them are`} in a stretch that is wet more often than not` : ""}. Check again a week before you fly, when a real forecast exists.`;
+  // list.length counts every day the trip has, including the ones that returned
+  // no badge; real.length counts the ones this sentence is about.
+  const total = Number(totalDays) || list.length || real.length;
+  const scope = real.length >= total ? "on the days planned" : `on ${real.length} of your ${total} days`;
+  const wet = wetDays
+    ? `, and ${wetDays === real.length ? "every one of them falls" : `${wetDays} of them fall`} in a stretch that is wet more often than not`
+    : "";
+  return `${whenWords ? `In ${whenWords} you` : "You"} can expect ${range} ${scope}${wet}. That is ten years of recorded weather for this week rather than a prediction, because nothing forecasts this far ahead. A real forecast appears here on its own about ${FORECAST_HORIZON_DAYS} days before you leave.`;
 };
 
 // ── "BOTH SHOULD BE ABLE TO SERVE A PURPOSE" ────────────────────────

@@ -40,7 +40,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
@@ -78,6 +78,7 @@ writeFileSync(entry, `
   export { resolveStopCoordsDetailed, legDistanceKm, townInName, townKeyFor, resolveLegMode, coordFitsTown, townPointFor, townFallbackFor } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { lookupRealPlace, placeCoords } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { directionsEndpoint, collapsedRoute } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING, COLLAPSE_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { repairBody, headingsOf, bodyProblems, auditPublished, describeAudit, LEGACY_HEADINGS, CURRENT_HEADINGS, DYNAMIC_HEADING } from ${JSON.stringify(join(root, "src/utils/publishedRepair.js"))};
   export { cleanProfile, isBlank, profileForPrompt, missingProfileColumn, AGE_BANDS, SEX_OPTIONS, COMPANY, PACE, DESCRIPTION_MAX, EMPTY_PROFILE, SETUP_SQL } from ${JSON.stringify(join(root, "src/utils/profile.js"))};
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
@@ -101,7 +102,7 @@ writeFileSync(entry, `
   export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
-  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -5093,6 +5094,64 @@ is("missing licence does not require credit", creditIsRequired({}), false);
      gp2.some(p => /^days\.0\.stops\.1\.note/.test(p) && /MEASURED at 8 minutes/.test(p)));
   ok("a duration matching no measured leg is caught",
      gp2.some(p => /^days\.0\.stops\.2\.note/.test(p) && /matches no leg this guide measured/.test(p)));
+  // ── AND IT PLANNED TWO HOURS SOMEWHERE IT SAID WAS SHUT ──────────
+  // Off Oliver's live Jutland guide, 15 Aug 2026. KEEP IN MIND said "Note also
+  // that Trapholt is currently closed for renovation, so check its official
+  // site for the latest reopening details before including it in your plans."
+  // Trapholt is Day 3's 13:30 stop, for two hours. The model that wrote the
+  // warning built the day, and told the reader to decide what it had already
+  // decided for them. Nothing compared the two, because they are different
+  // fields and every gate reads one field at a time.
+  const { closedButPlanned } = M;
+  const jutlandStops = ["Koldinghus", "Trapholt", "Kolding City Centre", "Glud Museum", "Økolariet"];
+  const keepInMind = [{
+    id: "essentials.keepInMind",
+    text: "You arrive 26 October, which is the tail end of the season, several open-air and craft spots run April to October only, so Glud Museum and Det Kreative Gartneri in particular must be checked for current opening before you build a day around them, as they may already be closed or on reduced winter hours. Note also that Trapholt is currently closed for renovation, so check its official site for the latest reopening details before including it in your plans.",
+  }];
+  const shut = closedButPlanned(keepInMind, jutlandStops);
+  ok("a planned stop the guide calls closed is caught", shut.some(p => /Trapholt/.test(p)));
+  // THE HALF THAT DECIDES WHETHER THIS SURVIVES A WEEK. The same paragraph
+  // carries an honest caution about a 26 October visit, and a gate that cannot
+  // tell a caution from a statement gets switched off.
+  ok("and a hedged caution about the same trip is left alone", !shut.some(p => /Glud/.test(p)));
+  // THAT ONE PASSES FOR A WEAKER REASON THAN IT LOOKS: "may already be closed
+  // or on reduced winter hours" does not trip CLOSED_NOW at all, so removing
+  // the hedge test entirely leaves it green. This is the same sentence written
+  // so that it DOES trip the closure test, and is cleared only by the hedge.
+  is("a caution that would otherwise read as a closure is still cleared",
+    closedButPlanned([{ id: "f", text: "Glud Museum may be closed for the winter by late October." }], jutlandStops), []);
+  ok("and the unhedged version of that exact sentence is caught",
+    closedButPlanned([{ id: "f", text: "Glud Museum is closed for the winter by late October." }], jutlandStops).length === 1);
+  is("one finding, not one per clause it appears in", shut.length, 1);
+  // The clause is the unit, not the sentence: "so check its official site"
+  // arrives after the closure and cannot rescue it. A reader handed a stop at a
+  // time, for a length of time, has already been told it is on.
+  ok("a later clause cannot hedge an earlier statement",
+    closedButPlanned([{ id: "f", text: "Trapholt is closed for renovation, so check before you go." }], ["Trapholt"]).length === 1);
+  ok("but a hedge in its own clause does", !closedButPlanned([{ id: "f", text: "Trapholt may be closed for renovation." }], ["Trapholt"]).length);
+  // A REOPENING DATE IN A LATER CLAUSE DOES NOT CLEAR IT, and that is deliberate
+  // rather than a gap. Nothing here can check March against a trip in October,
+  // so "closed, due to reopen in March" is still a stop the guide calls closed
+  // and still plans. Flagging it costs one line in the run log; clearing it on a
+  // date nobody compared is how Trapholt got two hours in the first place.
+  is("a reopening date in a later clause does not clear the closure",
+    closedButPlanned([{ id: "f", text: "Trapholt is closed for renovation, due to reopen in March." }], ["Trapholt"]).length, 1);
+  // In its OWN clause it does, because then the sentence is about the reopening.
+  ok("but in the same clause it does", !closedButPlanned([{ id: "f", text: "Trapholt is closed until it reopens in March." }], ["Trapholt"]).length);
+  // A closure about somewhere that is NOT on the plan is information, not a
+  // contradiction, and this is the guide's whole job.
+  is("a closure about a place nobody planned is not a problem",
+    closedButPlanned([{ id: "f", text: "Den Gamle By's bakery is closed on Mondays." }], jutlandStops), []);
+  // Word boundaries, through the same folding every other matcher uses: a stop
+  // called "Ribe" must not be found inside "Ribelund".
+  is("a stop name is matched as a word",
+    closedButPlanned([{ id: "f", text: "Ribelund is closed for renovation." }], ["Ribe"]), []);
+  is("no stops means nothing to contradict", closedButPlanned(keepInMind, []), []);
+  // And it is wired, on the side of the pipeline that has the plan in hand.
+  const shutApp = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the gate runs on the built guide", /closedButPlanned\(collectGuideProseFields\(parsed\), stopNames\)/.test(shutApp));
+  ok("its findings block the guide like every other plan problem", /planProblems = \[\.\.\.planProblems, \.\.\.shut\]/.test(shutApp));
+
   // ── AND THE TWO HONEST SENTENCES SURVIVE ─────────────────────────
   // "The museum takes about an hour" is not a route claim, and a gate that
   // cannot tell the difference gets switched off inside a week.
@@ -5536,10 +5595,60 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and never the narrowed midpoint range", !/6° to 7°/.test(twoDays));
 
   const note = normalsNote([nm, nm], "November");
-  ok("it says plainly that no forecast exists yet", /too far out for a real forecast/.test(note));
-  ok("it names the source as averages", /ten year averages rather than a prediction/.test(note));
-  ok("and tells them when a real one will exist", /Check again a week before you fly/.test(note));
+  // ── "REALLY? WITH ALL THE APIS?" ─────────────────────────────────
+  // Oliver, 15 Aug 2026, reading a line whose first eleven words apologised for
+  // not having a forecast. The caveat is true and it belongs second.
+  ok("the temperatures come before the caveat", note.indexOf("°") < note.indexOf("rather than a prediction"));
+  ok("it still names the source as recorded weather", /ten years of recorded weather/.test(note));
+  ok("it still says this is not a prediction", /rather than a prediction/.test(note));
+  ok("and says why, rather than only that", /nothing forecasts this far ahead/.test(note));
+  // A weather line has no business assuming an aeroplane: the guide this came
+  // off says in its own transport note that he arrives by train from Hamburg.
+  ok("it never assumes they are flying", !/fly|flight|flying/i.test(note));
+  ok("and tells them when a real one will exist", /before you leave/.test(note));
+  // "a week" was hardcoded next to a horizon constant that said six days, so
+  // the sentence was wrong on the day it was written. This asserts the READING
+  // of the constant, not the number, so raising the horizon cannot desync it.
+  ok("the wait is read off the horizon, not typed", new RegExp(`about ${FORECAST_HORIZON_DAYS} days before you leave`).test(note));
+
+  // ── IT SAYS HOW MANY DAYS IT IS DESCRIBING ──────────────────────
+  // "on the days planned" claimed the whole trip while describing whichever
+  // days happened to resolve to a coordinate. On Oliver's live guide that was
+  // two days out of five, and the other three carried no badge at all.
+  const partial = normalsNote([nm, nm, null, null, null], "October", 5);
+  ok("a partial answer says how partial", /on 2 of your 5 days/.test(partial));
+  ok("and does not claim the whole trip", !/on the days planned/.test(partial));
+  const full = normalsNote([nm, nm, nm], "October", 3);
+  ok("a complete answer still reads as the whole trip", /on the days planned/.test(full));
+  // Falling back to the array's own length matters: deriving the total from the
+  // days that ANSWERED would make every answer look complete by construction.
+  ok("a missing total falls back to the array's own length", /on 1 of your 3 days/.test(normalsNote([nm, null, null], "October")));
+
   is("no normals means no note", normalsNote([fc], "November"), null);
+
+  // ── AND THE DAYS THAT SHOWED NOTHING AT ALL ─────────────────────
+  // Days 1 and 2 of Oliver's live guide carried a badge; days 3, 4 and 5
+  // carried nothing. The point for each day was resolved from the stop's NAME
+  // through two matchers that both end at TOWN_COORDS, which holds 34 towns.
+  // Day 3 was Koldinghus, Trapholt and Kolding City Centre, and Kolding is not
+  // one of the 34. Day 4 was Glud Museum, Økolariet and Spinderihallerne. Day 5
+  // was Godsbanen and Møllestien. Eight stops, no town name among them this app
+  // holds a coordinate for, so `point` was null and the day returned early.
+  //
+  // Two things were sitting unused: every stop's own stated `town`, and this
+  // guide's freshly geocoded coordinates. A forecast point only has to be right
+  // to a few kilometres, so any of these is enough and none of them is not.
+  const wxPoint = (appSrc.match(/const point = day\.stops\.map\([\s\S]*?\}\)\.find\(Boolean\);/) || [""])[0];
+  ok("the weather point block is findable", wxPoint.length > 40);
+  ok("it reads this guide's own geocodes", /freshGeo\?\.\[s\.name\]/.test(wxPoint));
+  ok("and the stop's own stated town", /townPointFor\(s\.town\)/.test(wxPoint));
+  // The geocodes have to be handed IN. They were computed a few lines earlier
+  // and thrown away, which is the same shape as the _exactDurations bug.
+  ok("and the geocodes are passed to it", /fetchGuideWeather\(parsed\.days, arrivalDate, freshGeo\)/.test(appSrc));
+  ok("the note is told how many days the trip has", /normalsNote\(results, when, days\.length\)/.test(appSrc));
+  // GuidePage's refresh-on-open path already resolved the town; asserted so the
+  // two paths cannot drift back apart the way the walking estimates did.
+  ok("the refresh path resolves the town too", /resolveStopCoords\(x\.name, guide\._geo \|\| \{\}, x\.town\)/.test(guideSrc));
 
   // ── "ICONS NEED TO BE MORE PROMINENT" ───────────────────────────
   ok("the icon is no longer body-text sized", /fontSize: 22, lineHeight: 1 \}\}>/.test(guideSrc));
@@ -7677,6 +7786,161 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Allowed, ranked last, and shortest wins so it reaches for the least.
   freeEntrance.push({ id: 9006, name: "Kronborg Slot", __lat: 56.039, __lon: 12.622 });
   is("a broad stop can still find one specific entry", hit("Kronborg"), "Kronborg Slot");
+
+  // ── A TOWN IS WHERE A STOP IS, NOT WHAT A STOP IS ─────────────────
+  // Oliver, 15 Aug 2026, on a live five day Jutland guide: "~1 min on foot"
+  // between ARoS and Aarhus Ø, which Google puts at 1.3 km and 20 minutes, and
+  // "~24 mins by train/bus" for Den Gamle By to ARoS, which is a 700 m walk.
+  //
+  // The narrowing tier says "the stop contains the entry's name, so the stop is
+  // the more specific of the two". True of every pool except towns, where it
+  // reads a stop's ADDRESS as its IDENTITY: "Aarhus Ø" contains "Aarhus", so it
+  // matched the town, at the head of the chain, and took the town centre with
+  // it marked precise. That one match then geocoded nothing (the guide's _geo
+  // had no entry for any stop naming its own town), sent Google a bare
+  // town-centre pair, collapsed the distance to zero, and printed the type
+  // "Town" and a link to the Aarhus town page on three cards.
+  towns.push({ id: 9007, name: "Aarhus", __lat: 56.157, __lon: 10.210 });
+  towns.push({ id: 9008, name: "Kolding", __lat: 55.491, __lon: 9.472 });
+  is("a district is not the city it is in", hit("Aarhus Ø"), null);
+  is("a museum is not the city it is in", hit("ARoS Aarhus Kunstmuseum"), null);
+  is("a station is not the city it is in", hit("Aarhus H"), null);
+  is("and a city centre is not the city", hit("Kolding City Centre"), null);
+  // The half that decides whether this is a fix or a stricter thing that finds
+  // nothing. A stop that IS the town still resolves, because that match is
+  // exact and exact is the one tier a town keeps.
+  is("a town is still itself", hit("Aarhus"), "Aarhus");
+  // And a REAL venue whose name contains its town is found in its own pool, so
+  // the rule costs nothing except the wrong answers.
+  freeEntrance.push({ id: 9009, name: "Aarhus Street Food", __lat: 56.150, __lon: 10.202 });
+  is("a venue naming its town finds itself", hit("Aarhus Street Food"), "Aarhus Street Food");
+  // Narrowing still works everywhere it was ever right: only towns are dropped.
+  is("narrowing survives outside the towns pool", hit("Møns Klint viewpoint car park"), "Møns Klint");
+  // And the OTHER direction keeps its towns, which is the whole reason this is
+  // a rule about narrowing rather than about towns. A stop spelled shorter than
+  // the row is one place under two spellings, and the town is the right answer.
+  towns.push({ id: 9010, name: "Nørresundby (Aalborg)", __lat: 57.058, __lon: 9.925 });
+  is("a stop spelled shorter than its town still finds it", hit("Nørresundby"), "Nørresundby (Aalborg)");
+  // Which must not reopen the bug: widening asks whether the ENTRY contains the
+  // STOP, and "Aarhus" does not contain "Aarhus Ø".
+  is("and that does not let the district back in", hit("Aarhus Ø"), null);
+
+  // AND THE COORDINATE, WHICH IS WHERE THE DAMAGE WAS. Before this, both of
+  // these answered with the Aarhus town centre and said precise: true, which is
+  // why legDistanceKm's collapse guard (it needs BOTH ends imprecise) never
+  // ran and 0 km reached a reader as "~1 min on foot".
+  // The point is not that these resolve to nothing. Both still land on the
+  // Aarhus town centre through townFallbackFor, which is the right answer to
+  // "roughly where is this" and is drawn as a dashed ring, labelled "(somewhere
+  // in Aarhus)" and sent to Google as a NAME. The point is the flag: it used to
+  // come back precise: true, and every downstream rule keys off that.
+  const dist = resolveStopCoordsDetailed("Aarhus Ø", {});
+  const aros = resolveStopCoordsDetailed("ARoS Aarhus Kunstmuseum", {});
+  ok("an unplaced district still lands somewhere sensible", !!dist && !!aros);
+  ok("but a district is never a precise coordinate", dist.precise === false);
+  ok("and neither is a museum", aros.precise === false);
+  // Which is the whole fix, in the one number that reached a reader: two stops
+  // 1.3 km apart resolving to the same town centre now have no distance rather
+  // than a zero, and a zero is what estimateMinutes printed as "~1 min".
+  is("so the leg between them has no distance to invent",
+    M.legDistanceKm("ARoS Aarhus Kunstmuseum", "Aarhus Ø", {}), null);
+  is("and the same holds with the town stated explicitly",
+    M.legDistanceKm("ARoS Aarhus Kunstmuseum", "Aarhus Ø", {}, "Aarhus", "Aarhus"), null);
+
+  // ── HOW CLOSE IS TOO CLOSE TO BELIEVE ─────────────────────────────
+  // The old guard wanted BOTH ends imprecise AND under 50 m, which is the
+  // narrowest possible reading of a collapse and left two holes: a pair marked
+  // precise that had collapsed anyway (the bug above), and a mixed pair whose
+  // "distance" is really venue-to-middle-of-its-town.
+  const { COLLAPSE_KM } = M;
+  ok("the collapse threshold is a stated constant", COLLAPSE_KM > 0 && COLLAPSE_KM < 0.5);
+  const GG = {
+    "Zzalpha Point": { lat: 56.1500, lon: 10.2000 },   // 64 m from Zzbeta
+    "Zzbeta Point": { lat: 56.1505, lon: 10.2005 },
+    "Zzfar Point": { lat: 56.1400, lon: 10.2000 },     // 1.1 km from Zzalpha
+    "Zznear Aarhus": { lat: 56.1520, lon: 10.2100 },   // 0.56 km from the centre
+    "Zzout Aarhus": { lat: 56.1100, lon: 10.2100 },    // 5.2 km from the centre
+  };
+  is("two stops 64 m apart are a collapse, not a hop",
+    M.legDistanceKm("Zzalpha Point", "Zzbeta Point", GG), null);
+  const realKm = M.legDistanceKm("Zzalpha Point", "Zzfar Point", GG);
+  ok("two genuinely placed stops still get their distance", realKm > 1 && realKm < 1.3);
+  // The mixed pair. "Zzunknown" has no entry and no geocode, so it falls to the
+  // Aarhus town centre: the honest reading of the resulting 0.56 km is that we
+  // do not know, because half a kilometre is inside a town centre's own slop.
+  is("a venue measured against the middle of its own town is not a distance",
+    M.legDistanceKm("Zznear Aarhus", "Zzunknown Place", GG, "Aarhus", "Aarhus"), null);
+  // And the rule is a floor, not a blanket refusal: far enough out, the town
+  // centre is still telling you something true about the shape of the day.
+  const mixed = M.legDistanceKm("Zzout Aarhus", "Zzunknown Place", GG, "Aarhus", "Aarhus");
+  ok("but a town centre five km away still says something", mixed > 4 && mixed < 6);
+
+  // ── AN UPGRADE HAS TO BE AN IMPROVEMENT ───────────────────────────
+  // The walk-is-over-the-cap re-route took any answer that was not an error.
+  // On Oliver's guide that stored a 32 minute bus in place of a 33 minute walk,
+  // and 18 of those 32 minutes were themselves on foot, which the leg list
+  // printed underneath: a ticket, a timetable and a change of vehicle to save
+  // one minute.
+  const { upgradeWorthIt, onFootMinutes, MIN_UPGRADE_SAVING } = M;
+  ok("a saving inside the noise is not a saving", !upgradeWorthIt(33, { durationMinutes: 32 }));
+  ok("and neither is a re-route that is slower", !upgradeWorthIt(33, { durationMinutes: 41 }));
+  ok("a real saving is taken", upgradeWorthIt(50, { durationMinutes: 32 }));
+  // The boundary, both sides, so the constant is what decides and not a >= typo.
+  ok("exactly the threshold counts", upgradeWorthIt(30, { durationMinutes: 30 - MIN_UPGRADE_SAVING }));
+  ok("one minute short does not", !upgradeWorthIt(30, { durationMinutes: 30 - MIN_UPGRADE_SAVING + 1 }));
+  ok("an errored re-route is refused", !upgradeWorthIt(50, { durationMinutes: 20, error: "ZERO_RESULTS" }));
+  ok("and a zero minute one is refused", !upgradeWorthIt(50, { durationMinutes: 0 }));
+  // No walk to compare against means the re-route is the only measurement there
+  // is, so it stands. Refusing here would delete a real answer.
+  ok("no walk to beat means the re-route stands", upgradeWorthIt(null, { durationMinutes: 32 }));
+
+  // Google itemises the walking inside a transit itinerary and nothing read it,
+  // which is how "24 mins by train/bus" could be 16 minutes of walking.
+  is("the walking inside a transit answer is countable", onFootMinutes({
+    steps: [{ mode: "walking", mins: 4 }, { mode: "transit", mins: 7, line: "3A" }, { mode: "walking", mins: 12 }],
+  }), 16);
+  is("an answer with no steps admits it knows nothing", onFootMinutes({ durationMinutes: 24 }), null);
+  is("and a pure ride is zero, not null", onFootMinutes({ steps: [{ mode: "transit", mins: 7 }] }), 0);
+
+  // AND THE FETCH USES IT. A rule nothing calls is a comment.
+  const legSrc = stripNonCode(appSrc);
+  ok("the re-route is gated on the rule", /upgradeWorthIt\(data\.durationMinutes, udata\)/.test(legSrc));
+  ok("and no longer on merely not erroring", !/if \(!udata\.error\) \{/.test(legSrc));
+
+  // ── AND THE RESCUE PATH IS HELD TO THE SAME RULES ─────────────────
+  // The walking retry that runs when transit finds nothing took `!wdata.error`
+  // and nothing else: no usable() check, so a zero minute answer between two
+  // collapsed coordinates went in, and no cap, so a 3.9 km leg with no bus
+  // could be stored as a 55 minute walk under a TRANSIT key, where the render's
+  // plausibility cap is Infinity because it reads the resolved mode rather than
+  // modeUsed. Every guard the main path has was absent on the path that runs
+  // precisely when the main path has already failed.
+  const rescue = (appSrc.match(/const wdata = await wres\.json\(\);[\s\S]{0,1400}?rescued = true;/) || [""])[0];
+  ok("the rescue block is findable", rescue.length > 40);
+  ok("the rescued answer is checked like any other", /usable\(wdata, originCoord, destCoord, sentAsCoords\)/.test(rescue));
+  ok("and the walking cap applies to it", /wdata\.durationMinutes <= WALK_MAX_MINUTES/.test(rescue));
+  ok("it no longer accepts anything that merely did not error", !/if \(!wdata\.error\) \{ found\[key\]/.test(rescue));
+
+  // ── AND "PRECISE" HAS TO MEAN PRECISE ─────────────────────────────
+  // preciseCoord promised "NOT the town-center fallback" in its own comment and
+  // then returned whatever row lookupRealPlace matched, town centres included,
+  // with no look at the flag. It feeds the Google Maps link, which is why the
+  // link for ARoS → Aarhus Ø opened on a bare pair Google labelled "Aarhus".
+  const gSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const pc = (gSrc.match(/const preciseCoord = \(name\) => \{[\s\S]{0,400}?\n\s*\};/) || [""])[0];
+  ok("preciseCoord is findable", pc.length > 20);
+  ok("it asks the resolver that carries the flag", /resolveStopCoordsDetailed\(name, geo, stopTownOf\(name\)\)/.test(pc));
+  ok("and refuses anything not marked precise", /d\.precise/.test(pc));
+  ok("it no longer reaches straight into a matched row", !/placeCoords\(real\)/.test(pc));
+
+  // ── THE WALKING CAP APPLIES TO THE NO-ROUTE BRANCH TOO ────────────
+  // The short-leg guard accepted any km up to 3, which at the route factor is
+  // about 54 minutes printed as a short leg under a rule that says 20. The less
+  // we know about a leg, the more careful the number has to be.
+  ok("the no-route short-leg guard uses the one walking rule",
+    /if \(\(km != null && !walkEstimateTooFar\(km\)\) \|\| \(km == null &&/.test(stripNonCode(gSrc)));
+  ok("and no longer carries its own three kilometre threshold",
+    !/\(km != null && km <= 3\)/.test(stripNonCode(gSrc)));
 
   // AND THE TWO FAULTS TOGETHER, which is the point: a correct match now
   // carries a real coordinate, marked precise, instead of falling through.
@@ -13171,10 +13435,13 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   });
   const got = matchedPlaces("Two days out of Copenhagen. We like quiet walks and history. We have heard about Jutland", POOL).map(p => p.name);
   is("the editorial tier decides, not the row id", got[0], "Aarhus");
-  ok("and the history town outranks the railway junction", got.indexOf("Ribe") < got.indexOf("Sparkær"));
-  ok("the junction is at the bottom", got.indexOf("Sparkær") >= got.length - 2);
+  ok("and the history town is offered at all", got.includes("Ribe"));
+  // Both of these are tier "Best If You're Already Nearby", which is Gemlyx
+  // saying do not plan around them, so they are not offered at all now. That is
+  // stronger than being last and it is what the screen needed.
+  ok("the railway junction is not offered", !got.includes("Sparkær"));
+  ok("nor is the other one, however early it sorts", !got.includes("Aabenraa"));
   ok("and a weak town that sorts first alphabetically does not lead", got[0] !== "Aabenraa");
-  ok("it is at the bottom with the other one", got.indexOf("Aabenraa") >= got.length - 2);
   // AND IT IS STABLE. Two runs of the same brief give the same screen, which
   // is why the tie-break ends on the name rather than on anything ambient.
   is("the same brief gives the same order twice",
@@ -13521,14 +13788,64 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("a wanted town still brings its attractions", wanted.includes("Amalienborg Slot"));
   ok("and its restaurants", wanted.includes("Geranium"));
 
-  // Jutland is half the country, so the region pass is capped.
-  const many = previewPools({ towns: Array.from({ length: 20 }, (_, i) => ({ name: `Town${i}`, region: "Midtjylland" })) });
-  is("the region pass is capped", matchedPlaces("we want to see Jutland", many).length, REGION_TOWN_CAP);
+  // ── AND HOW MANY, WHICH IS THE TRIP'S QUESTION ──────────────────
+  // Oliver, on a four day family trip that came back with six Jutland towns:
+  // "All it does now is show towns". Same principle he set for events. A town
+  // is a bigger unit than an event so this is more generous, and still nowhere
+  // near six.
+  const many = previewPools({ towns: Array.from({ length: 20 }, (_, i) => ({ name: `Town${i}`, region: "Midtjylland", tier: "Highly Recommended" })) });
+  is("four days is two towns", matchedPlaces("four days, we want to see Jutland", many, { days: 4 }).length, 2);
+  is("a week is three", matchedPlaces("we want to see Jutland", many, { days: 7 }).length, 3);
+  is("a fortnight is the cap", matchedPlaces("we want to see Jutland", many, { days: 14 }).length, REGION_TOWN_CAP);
+  is("an unknown length is a shortlist, not a directory", matchedPlaces("we want to see Jutland", many).length, 3);
+
+  // ── AND GEMLYX'S OWN BOTTOM TIER IS NEVER A REGION PICK ─────────
+  // Asaa is "Best If You're Already Nearby", which is this app saying do not
+  // plan around it. It was on that screen anyway.
+  const weak = previewPools({ towns: [
+    { name: "Asaa", region: "Nordjylland", tier: "Best If You're Already Nearby" },
+    { name: "Ribe", region: "Sydvestjylland", tier: "Highly Recommended" },
+  ] });
+  is("a town that says do not plan around it is not offered",
+    matchedPlaces("we want to see Jutland", weak, { days: 7 }).map(p => p.name), ["Ribe"]);
+
+  // ── AND A TOWN GEMLYX CAN FILL OUT BEATS ONE IT CANNOT ──────────
+  // The other half of "all it does now is show towns": the six that replaced
+  // Copenhagen were picked without ever asking whether Gemlyx holds anything in
+  // them, and it holds nothing in Asaa or Viborg. A town card on its own does
+  // not prove this app knows the ground, which is the screen's whole job.
+  const filled = previewPools({
+    towns: [
+      { name: "Viborg", region: "Midtjylland", tier: "Highly Recommended" },
+      { name: "Aarhus", region: "Østjylland", tier: "Highly Recommended" },
+    ],
+    freeEntrance: [{ name: "ARoS", city: "Aarhus" }, { name: "Den Gamle By", city: "Aarhus" }],
+    foodSpots: [{ name: "Hærværk", location: "Aarhus" }],
+  });
+  const two = matchedPlaces("we want to see Jutland", filled, { days: 4 });
+  is("the town with something under it leads", two[0].name, "Aarhus");
+  is("and the card knows how much is under it", two[0]._holds, 3);
+  ok("and what it holds is on the screen too", two.map(p => p.name).includes("ARoS"));
 
   // ── AND THE SCREEN SAYS WHY ─────────────────────────────────────
   const preview = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
   ok("a departure row is labelled", /Where you start/.test(preview));
   ok("and a region row says which region", /In \{place\._viaRegion\}/.test(preview));
+  ok("and a town says what is inside it", /place\._holds > 0/.test(preview));
+  ok("the trip's own length reaches the matcher", /\{ days: win\?\.days \?\? null \}/.test(preview));
+
+  // ── AND THE LINE ABOVE AN EMPTY LIST ────────────────────────────
+  // Oliver's seven day ferry run: the list said "Nothing here yet, and that is
+  // expected", and the italic line above it promised "at least one island visit
+  // without wasting your limited seven days". The list is the evidence and
+  // there was none. An empty list has to constrain that sentence MORE, and it
+  // was constraining it less, because the whole block was omitted when the list
+  // was empty.
+  const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("an empty list is told to the model rather than hidden from it",
+    /THE SCREEN THIS SENTENCE SITS ON IS EMPTY/.test(appE));
+  ok("and it may not name a place over one", /name no place at all/.test(appE));
+  ok("with the island promise named as the worst case", /at least one island visit/.test(appE));
 }
 
 // ── COPENHAGEN, THEN GOTHERSGADE, THEN THE BARS ────────────────────

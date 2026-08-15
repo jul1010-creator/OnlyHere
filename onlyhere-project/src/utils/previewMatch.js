@@ -234,7 +234,32 @@ export const placeIsInRegion = (place, regionName) => {
 // Gemlyx's own editorial rank, the same one the cards already badge.
 const TIER_RANK = { must: 3, high: 2, worth: 1, nearby: 0 };
 export const REGION_TOWN_CAP = 6;
-export const matchedPlaces = (convoText, pools) => {
+
+// ── A FOUR DAY TRIP CANNOT VISIT SIX TOWNS ──────────────────────────
+// Oliver, 15 Aug 2026, on a four day family trip with two kids: six Jutland
+// towns, Esbjerg and Viborg and Asaa among them. Same principle he set for
+// events, in his words: "If the person has chosen like 4 days, then obviously
+// he should be limited to only one. If the person is there for 10 on the other
+// hand.. then he can easily make 3 or 4."
+//
+// A town is a bigger unit than an event, so this is more generous than the
+// event limit and still nowhere near six: two for a short trip, four for a
+// fortnight. An unknown length gets three, because the screen still has to show
+// something and three is the number that reads as a shortlist.
+export const regionPickLimit = (days) => {
+  const n = Number(days);
+  if (!Number.isFinite(n) || n <= 0) return 3;
+  return Math.max(2, Math.min(REGION_TOWN_CAP, Math.floor(n / 2)));
+};
+
+// ── AND "BEST IF YOU'RE ALREADY NEARBY" SAYS IT ITSELF ──────────────
+// Asaa is tier "Best If You're Already Nearby", which is Gemlyx's own way of
+// saying do not plan around this. It has no business being offered to somebody
+// who named a region and is deciding where to go, and it was on that screen
+// twice. A traveller who is already nearby finds it by browsing.
+const TOO_WEAK_FOR_A_REGION_PICK = "nearby";
+
+export const matchedPlaces = (convoText, pools, { days = null } = {}) => {
   const text = String(convoText || "");
   const seen = new Set();
   const matched = [];
@@ -291,6 +316,25 @@ export const matchedPlaces = (convoText, pools) => {
       }
       return n;
     };
+    // ── "ALL IT DOES NOW IS SHOW TOWNS" ──────────────────────────
+    // Oliver, 15 Aug 2026, on the screen this produced: six town cards and
+    // nothing else. Two things met to cause that. The town he named was the one
+    // he was LEAVING, so it is correctly not expanded, and it is also the only
+    // town in the database with attractions and restaurants under it. The six
+    // that replaced it were picked without ever asking whether Gemlyx holds
+    // anything in them, and it holds nothing in Asaa or Viborg.
+    //
+    // So a town Gemlyx can actually fill out beats one it cannot. This is not a
+    // quality judgement about the town, it is about what this screen is FOR:
+    // proving Gemlyx knows the ground. A town card on its own proves nothing.
+    const holdings = new Map();
+    for (const q of list) {
+      if (!q?.name || q._src === "town") continue;
+      const parent = parentTownOf(q);
+      if (!parent) continue;
+      const k = fold(parent);
+      holdings.set(k, (holdings.get(k) || 0) + 1);
+    }
     const candidates = [];
     for (const p of list) {
       if (!p?.name || p._src !== "town") continue;
@@ -298,15 +342,27 @@ export const matchedPlaces = (convoText, pools) => {
       if (!key || seen.has(key)) continue;
       const hit = wantedRegions.find(r => placeIsInRegion(p, r));
       if (!hit) continue;
-      candidates.push({ p, hit, key, score: [TIER_RANK[tierOf(p)?.id] ?? 0, interestHit(p), p.isMajorCity ? 1 : 0] });
+      // Gemlyx's own bottom tier is a statement that this is not worth planning
+      // around, so it is never offered to somebody choosing where to go.
+      if (tierOf(p)?.id === TOO_WEAK_FOR_A_REGION_PICK) continue;
+      const held = holdings.get(key) || 0;
+      candidates.push({
+        p, hit, key, held,
+        // Held content sits SECOND, under the editorial tier: a "Can't miss"
+        // town with nothing under it yet is still the better recommendation
+        // than a "Worth a look" one with three restaurants.
+        score: [TIER_RANK[tierOf(p)?.id] ?? 0, Math.min(held, 5), interestHit(p), p.isMajorCity ? 1 : 0],
+      });
     }
     candidates.sort((a, b) => {
       for (let i = 0; i < a.score.length; i++) if (b.score[i] !== a.score[i]) return b.score[i] - a.score[i];
       return String(a.p.name).localeCompare(String(b.p.name));
     });
-    for (const c of candidates.slice(0, REGION_TOWN_CAP)) {
+    for (const c of candidates.slice(0, regionPickLimit(days))) {
       seen.add(c.key);
-      matched.push({ ...c.p, _viaRegion: c.hit });
+      // `_holds` so the card can say what is under it rather than looking like
+      // a bare name, and so a screen that is all towns is visibly all towns.
+      matched.push({ ...c.p, _viaRegion: c.hit, _holds: c.held });
     }
   }
   // A town they are LEAVING does not get expanded. This is the whole of the

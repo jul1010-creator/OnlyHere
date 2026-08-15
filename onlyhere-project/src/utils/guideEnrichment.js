@@ -78,6 +78,40 @@ export const placeCoords = (row) => {
 //              over-reaching. It is the tier that turned the stop "Ribe",
 //              which means the town, into Ribe VikingeCenter three km outside
 //              it, taking its coordinate with it.
+// ── A TOWN IS WHERE A STOP IS, NOT WHAT A STOP IS ───────────────────
+// Oliver, 15 Aug 2026, on a live five day Jutland guide: "~1 min on foot"
+// between ARoS and Aarhus Ø, which Google puts at 1.3 km and 20 minutes, and
+// "~24 mins by train/bus" between Den Gamle By and ARoS, which is a 700 metre
+// walk. Both legs, and three wrong type badges and three wrong links on the
+// same page, are this one line.
+//
+// `towns` is in the pools, and the narrowing tier says "the stop contains the
+// entry's name, so the stop is the more specific of the two". That is right
+// for every pool except this one. A stop called "Aarhus Ø" contains "Aarhus",
+// so it matched the TOWN of Aarhus, at the top of the resolution chain, and
+// took the town centre coordinate with it — flagged `precise: true`, because
+// the flag describes where the coordinate came from and a published row is
+// normally the most precise thing there is.
+//
+// Everything downstream then behaved correctly on a false premise:
+//   - geocodeStopsForGuide skipped it, because it already had a precise coord
+//     (this guide's _geo has no entry for Aarhus H, Aarhus Street Food, ARoS,
+//     Aarhus Ø or Kolding City Centre — every stop naming its own town)
+//   - directionsEndpoint sent a bare coordinate pair, so Google measured a
+//     real journey to the middle of Aarhus instead of to ARoS
+//   - legDistanceKm's collapse guard needs BOTH ends imprecise, and these were
+//     both "precise", so two stops on the identical point gave 0 km and
+//     estimateMinutes' Math.max(1, …) printed it as "~1 min"
+//   - the card showed the type "Town" and linked to the Aarhus town page
+//
+// The rule is the one this file already applies one tier down in townInName,
+// and it is the same judgement: a town name inside a longer stop name tells
+// you the AREA, and an area is the fallback, never the identity. So a town row
+// may answer an EXACT match ("Aarhus" the stop is Aarhus the town) and nothing
+// else. Every other tier drops it, the stop reaches Nominatim like any other
+// unplaced venue, and if that fails it still lands on the town centre through
+// townFallbackFor, which says out loud that it is approximate.
+const TOWN_ROW = (p) => p?._src === "town";
 export const lookupRealPlace = (name) => {
   if (!name) return null;
   const pools = [
@@ -93,7 +127,15 @@ export const lookupRealPlace = (name) => {
   const narrowing = pools.filter(p => containsName(name, p.name));
   const exact = narrowing.filter(p => containsName(p.name, name));
   if (exact.length) return exact.sort((a, b) => String(b.name).length - String(a.name).length)[0];
-  if (narrowing.length) return narrowing.sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  const narrowed = narrowing.filter(p => !TOWN_ROW(p));
+  if (narrowed.length) return narrowed.sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  // NARROWING ONLY. Towns stay in the widening tier on purpose, and the two
+  // directions are why: narrowing means the stop is MORE specific than the town
+  // it names, which is the bug above. Widening means the stop is LESS specific
+  // than the entry, so a stop reading "Nørresundby" against a row spelled
+  // "Nørresundby (Aalborg)" is one place under two spellings, and answering it
+  // with the town is right. Dropping towns here too was tried and no assertion
+  // could be written that justified it, which is its own answer.
   const widening = pools.filter(p => containsName(p.name, name));
   if (widening.length) return widening.sort((a, b) => String(a.name).length - String(b.name).length)[0];
   return null;
@@ -267,15 +309,36 @@ export const resolveStopCoordsDetailed = (name, geo = {}, town = "") => {
   return null;
 };
 
+// ── HOW CLOSE IS TOO CLOSE TO BELIEVE ───────────────────────────────
+// The guard below asked for BOTH ends to be imprecise, which is the narrowest
+// possible reading of a collapse and left two holes open:
+//
+//   1. ONE end precise, the other a town centre. The distance is then
+//      "from this venue to the middle of its town", which is a real number
+//      about a question nobody asked, and it prints with full confidence.
+//   2. BOTH ends "precise" and identical, which is what the town-row bug
+//      above produced: `precise` was true, the guard never ran, 0 km survived
+//      and reached the reader as "~1 min on foot" for a 1.3 km walk.
+//
+// So the threshold is on the DISTANCE as well as on the provenance. Two stops
+// a guide bothered to list separately, and wrote a leg between, are not 150
+// metres apart; that figure is a collapse signature every time it appears, and
+// the honest answer to a collapse is that we do not know. Every caller already
+// handles null by falling back to the model's own leg text or "Check route".
+export const COLLAPSE_KM = 0.15;
 // Trustworthy straight-line distance, or null when the inputs can't support one.
 export const legDistanceKm = (originName, destName, geo = {}, originTown = "", destTown = "") => {
   const a = resolveStopCoordsDetailed(originName, geo, originTown);
   const b = resolveStopCoordsDetailed(destName, geo, destTown);
   if (!a || !b) return null;
   const km = kmBetween(a, b);
-  // Neither end is precise and they landed on (essentially) the same point:
-  // that is the town-centre collapse described above, not a real short hop.
-  if (!a.precise && !b.precise && km < 0.05) return null;
+  // Anything under the threshold is a collapse, whatever the flags claim: two
+  // separately named stops with a leg between them are never this close.
+  if (km < COLLAPSE_KM) return null;
+  // And a town centre standing in for a venue cannot support a SHORT distance
+  // either. Half a kilometre of slop is normal in a town centre point, so a
+  // sub-kilometre figure built on one is noise wearing a number.
+  if ((!a.precise || !b.precise) && km < 1) return null;
   return km;
 };
 
@@ -453,6 +516,44 @@ export const estimateMinutes = (km, mode) => {
 export const walkEstimateTooFar = (km) => {
   const mins = estimateMinutes(km, "walking");
   return mins != null && mins > WALK_MAX_MINUTES;
+};
+
+// ── AN UPGRADE HAS TO BE AN IMPROVEMENT ─────────────────────────────
+// The walk-is-over-the-cap re-route in fetchExactDurations asked Google for
+// transit and then took whatever came back, with no test that the answer was
+// any better than the walk it replaced. On this guide that stored a 32 minute
+// bus journey in place of a 33 minute walk, and the bus journey contained 18
+// minutes of walking: the reader was handed a ticket, a timetable and a change
+// of vehicle to save one minute, and the leg list said so out loud.
+//
+// The cap exists to stop the app PLANNING absurd walks, not to make it hide
+// them. When nothing beats the walk, the walk is the fact, and the render has
+// its own honest way of saying a leg is longer on foot than it should be.
+//
+// Five minutes rather than zero, because a saving inside the noise of when you
+// happen to reach the stop is not a saving. Below it, two options are the same
+// journey and the simpler one wins.
+export const MIN_UPGRADE_SAVING = 5;
+
+// Minutes inside a stored Directions answer that are spent on foot. Google
+// itemises them and nothing read them, which is how "24 mins by train/bus"
+// could be 16 minutes of walking without anything noticing.
+export const onFootMinutes = (data) => {
+  const steps = Array.isArray(data?.steps) ? data.steps : [];
+  if (!steps.length) return null;
+  return steps
+    .filter(s => String(s?.mode || "").toLowerCase() === "walking")
+    .reduce((n, s) => n + (Number(s?.mins) || 0), 0);
+};
+
+export const upgradeWorthIt = (walkMinutes, upgrade) => {
+  const w = Number(walkMinutes);
+  const u = Number(upgrade?.durationMinutes);
+  if (upgrade?.error) return false;
+  if (!Number.isFinite(u) || u < 1) return false;
+  // No walk to compare against means the re-route is all we have, so it stands.
+  if (!Number.isFinite(w) || w < 1) return true;
+  return w - u >= MIN_UPGRADE_SAVING;
 };
 
 export const estimateDurationText = (km, mode) => {

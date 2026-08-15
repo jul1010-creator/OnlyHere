@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, useParams } from "react-router-dom";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
 import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } from "./utils/checkScope";
+import { tripWindow } from "./utils/tripEvents";
 import { denmarkFacts } from "./data/denmarkFacts";
 import { shuffledOrder, identityOrder, advancePos, factAt } from "./utils/factRotation";
 import { events, majorEvents, vikingEvents } from "./data/events";
@@ -21,7 +22,7 @@ import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
 import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn } from "./utils/entryAudit";
-import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM } from "./utils/guideEnrichment";
+import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
@@ -76,7 +77,7 @@ import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent } from "./utils/liveContent";
 import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
-import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, arrivalStop } from "./utils/journey";
+import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS } from "./utils/correction";
 import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance } from "./utils/glanceExtract";
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive } from "./utils/sourcePolicy";
@@ -6909,7 +6910,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // every day of every one of the last eight saved guides, because this wrote
   // into GemlyxApp's state after the route had already destroyed GemlyxApp.
   // Returns its results now so the caller can bake them on before navigating.
-  const fetchGuideWeather = async (days, arrivalDate) => {
+  const fetchGuideWeather = async (days, arrivalDate, freshGeo = {}) => {
     setWeatherPending(days.length);
     // How many days from today the trip's Day 1 actually starts — 0 if arrivalDate is
     // unknown (falls back to the old assume-it-starts-today behavior) or already today.
@@ -6941,10 +6942,30 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // Beyond the forecast, ten years of recorded observations for that place
       // and that week, labelled as what it is. See utils/weather.js.
       const source = weatherSourceFor(forecastIdx);
+      // ── A DAY WITH NO WEATHER IS A DAY THIS ASKED THE WRONG QUESTION ──
+      // Oliver, 15 Aug 2026, on a live five day guide: days 1 and 2 carried a
+      // badge and days 3, 4 and 5 carried nothing at all, while the trip note
+      // above them said "on the days planned" as though it had covered all five.
+      //
+      // This read the stop's NAME and nothing else, through two matchers that
+      // both end at TOWN_COORDS, which holds 34 towns. Day 3 was Koldinghus,
+      // Trapholt and Kolding City Centre; Kolding is not one of the 34. Day 4
+      // was Glud Museum, Økolariet and Spinderihallerne. Day 5 was Godsbanen
+      // and Møllestien. Not one of those eight names contains a town this app
+      // has a coordinate for, so `point` was null and the whole day returned.
+      //
+      // Two things were sitting right there unused. Every stop carries its own
+      // `town` as a stated field, and this guide's freshly geocoded coordinates
+      // are handed in for exactly this kind of question. A forecast point only
+      // has to be right to within a few kilometres to describe a day's weather,
+      // so any of these is good enough and having none of them is not.
       const point = day.stops.map(s => {
         const real = lookupRealPlace(s.name);
         const rc = placeCoords(real);
         if (rc) return rc;
+        if (freshGeo?.[s.name]) return freshGeo[s.name];
+        const stated = townPointFor(s.town);
+        if (stated) return { lat: stated.lat, lon: stated.lon };
         const key = townKeyFor(s.name);
         return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
       }).find(Boolean);
@@ -6964,7 +6985,9 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       const forecastDays = results.filter(w => w && w.source === FORECAST);
       if (!forecastDays.length) {
         const when = arrivalDate ? new Date(arrivalDate).toLocaleString("en", { month: "long" }) : "";
-        return normalsNote(results, when);
+        // days.length, not results.filter(Boolean).length: the sentence has to
+        // know how many days the TRIP has to be able to say it covered fewer.
+        return normalsNote(results, when, days.length);
       }
       const rainyDayNums = results.map((w, i) => (w?.source === FORECAST && w?.risk === "high" ? i + 1 : null)).filter(Boolean);
       if (rainyDayNums.length === 0) return null; // nothing genuinely worth flagging, rather than a generic "check the forecast" filler line
@@ -7475,11 +7498,19 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
             try {
               const ures = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=${upgrade}${departureParam(upgrade, tripDate, dayOffset)}`);
               const udata = await ures.json();
-              if (!udata.error) {
-                console.warn(`Leg ${origin} → ${dest}: Google says ${data.durationMinutes} min on foot, over the ${WALK_MAX_MINUTES} min walking cap — re-routed as ${upgrade}.`);
+              // AND THE RE-ROUTE HAS TO BEAT THE WALK IT REPLACES. This used to
+              // accept any answer that was not an error, which put a 32 minute
+              // bus in place of a 33 minute walk — and 18 of those 32 minutes
+              // were themselves on foot. See upgradeWorthIt.
+              if (upgradeWorthIt(data.durationMinutes, udata)) {
+                const legWalk = onFootMinutes(udata);
+                console.warn(`Leg ${origin} → ${dest}: Google says ${data.durationMinutes} min on foot, over the ${WALK_MAX_MINUTES} min walking cap — re-routed as ${upgrade} (${udata.durationMinutes} min${legWalk ? `, ${legWalk} of them still on foot` : ""}).`);
                 found[`${origin}|${dest}|${upgrade}`] = { ...udata, modeUsed: upgrade };
                 found[key] = { ...udata, modeUsed: upgrade }; // also under the walking key, so an already-built guide's render still finds it
-              } else if (usable(data, originCoord, destCoord, sentAsCoords)) found[key] = data;
+              } else if (usable(data, originCoord, destCoord, sentAsCoords)) {
+                console.warn(`Leg ${origin} → ${dest}: ${upgrade} saves nothing over the ${data.durationMinutes} min walk, so the walk stands.`);
+                found[key] = data;
+              }
             } catch { if (usable(data, originCoord, destCoord, sentAsCoords)) found[key] = data; }
           } else if (usable(data, originCoord, destCoord, sentAsCoords)) found[key] = data;
         }
@@ -7504,7 +7535,20 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
             try {
               const wres = await fetch(`/api/directions?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destParam)}&mode=walking`);
               const wdata = await wres.json();
-              if (!wdata.error) { found[key] = { ...wdata, modeUsed: "walking" }; rescued = true; }
+              // ── AND THE RESCUE IS HELD TO THE SAME RULES ────────
+              // This took `!wdata.error` and nothing else: no usable() check,
+              // so a zero minute answer between two collapsed coordinates went
+              // straight in, and no cap, so a 3.9 km leg with no bus could be
+              // stored as a 55 minute walk under a TRANSIT cache key — where
+              // the render's plausibility cap is Infinity, because it reads the
+              // resolved mode and not modeUsed. Every guard the main path has
+              // was missing on the one path that runs when the main path failed.
+              if (usable(wdata, originCoord, destCoord, sentAsCoords) && wdata.durationMinutes <= WALK_MAX_MINUTES) {
+                found[key] = { ...wdata, modeUsed: "walking" };
+                rescued = true;
+              } else if (wdata && !wdata.error && wdata.durationMinutes > WALK_MAX_MINUTES) {
+                console.warn(`Leg ${origin} → ${dest}: no transit route, and walking it is ${wdata.durationMinutes} min, over the ${WALK_MAX_MINUTES} min cap — not rescued as a walk.`);
+              }
             } catch { /* fall through to the normal failed marking below */ }
           }
           if (!rescued) { failed[key] = true; console.warn(`Directions API: no result for ${origin} → ${dest} (${legMode}):`, data.error, "— check GOOGLE_MAPS_KEY is set on Vercel and the Directions API is enabled on that key's project."); }
@@ -8322,7 +8366,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // The forecast, also baked on rather than posted to a component that is
       // about to stop existing. Cheap: one /api/weather call per distinct day.
       buildStage("Checking the forecast", 98);
-      const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate);
+      const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate, freshGeo);
       parsed.days = parsed.days.map((d, i) => (weatherByDay[i] ? { ...d, weather: weatherByDay[i] } : d));
       // ── "IT SUGGESTS HOSTELS, BUT THEN GIVES A SPECIFIC HOTEL???" ──
       // Runs HERE and not with the other plan checks, because it needs
@@ -8366,6 +8410,21 @@ If the conversation only covers a single day or a few stops with no explicit day
           used: !gl.length,
         });
         planProblems = [...planProblems, ...gl];
+        // AND THE OTHER WAY THE GUIDE CONTRADICTS ITSELF. Same live guide, same
+        // day: KEEP IN MIND said "Trapholt is currently closed for renovation"
+        // and Day 3 gave the reader Trapholt at 13:30 for two hours. The
+        // warning and the plan are different fields and every gate until now
+        // read one field at a time. See closedButPlanned in utils/journey.js
+        // for why this runs on the clause rather than the sentence.
+        const stopNames = (parsed.days || []).flatMap(d => (d.stops || []).map(s => s.name)).filter(Boolean);
+        const shut = closedButPlanned(collectGuideProseFields(parsed), stopNames);
+        note("Stops the guide's own writing calls closed", {
+          detail: `${stopNames.length} planned stops, against every prose field in the guide`,
+          outcome: shut.length ? "empty" : "ok",
+          got: shut.length ? shut.join(" ") : "no planned stop is described as closed anywhere in this guide",
+          used: !shut.length,
+        });
+        planProblems = [...planProblems, ...shut];
       }
       const finalEssentials = stripDashesDeep(weatherNote
         ? { ...(parsed.essentials || {}), weatherNote }
@@ -9202,7 +9261,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     const forMatch = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
       towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
-    }));
+    }), { days: tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText: forMatch })?.days ?? null });
     const onScreen = matchedForWhy.filter(p => !p._leaving).map(p => p.name).slice(0, 14);
     // ── AND WHICH ONE THEY SAID THEY WERE LEAVING ────────────────
     // The line under this heading read "This route keeps you and your partner
@@ -9214,7 +9273,7 @@ If the conversation only covers a single day or a few stops with no explicit day
     const leavingNames = matchedForWhy.filter(p => p._leaving).map(p => p.name);
     (async () => {
       const r = await askClaude(
-        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.${leavingNames.length ? ` THEY ARE LEAVING ${leavingNames.join(" and ")}: that is where they START, and your sentence must not promise it as somewhere the trip keeps them. Write about where they are going.` : ""}` : ""} Respond with only the sentence(s), nothing else.\n\n${convo}`,
+        `Based ONLY on this Denmark trip conversation, write 1-2 short, warm sentences in second person explaining why the route being prepared fits THIS traveler specifically. Connect it to their actual stated interests, pace, budget, and travel companions from the conversation, never generic praise, never invented places or facts. Never use em dashes or en dashes.${onScreen.length ? `\n\nTHE SCREEN THIS SENTENCE SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE: ${onScreen.join(", ")}. Your sentence must be true of that list. Do not name an interest of theirs that nothing on the list serves, and do not name a place that is not on it. If what they asked for and what is on the list only partly meet, write about the part that does.${leavingNames.length ? ` THEY ARE LEAVING ${leavingNames.join(" and ")}: that is where they START, and your sentence must not promise it as somewhere the trip keeps them. Write about where they are going.` : ""}` : `\n\nTHE SCREEN THIS SENTENCE SITS ON IS EMPTY. Gemlyx holds a page for nothing they have named yet, and it says so underneath you. So write about THEM and about how the trip will be put together, and name no place at all: not a town, not an island, not a region. A sentence promising "at least one island visit" over an empty list is the single worst thing this line can do, because the list is the evidence and there is none.`} Respond with only the sentence(s), nothing else.\n\n${convo}`,
         200
       );
       if (run !== previewWhyRunRef.current) return;   // a later roll owns the screen now
