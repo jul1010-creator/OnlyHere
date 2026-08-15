@@ -18,6 +18,10 @@
 // or React, so it always runs in about a second and can never be flaky.
 
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
+// One assertion needs a timezone that is not this machine's. See the event date
+// block near the end: the container runs on UTC, and UTC is the one zone where
+// the bug it guards cannot be seen.
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,7 +46,7 @@ const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
   export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
-  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
@@ -6298,8 +6302,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // AND IT IS NOT TOLD ABOUT THE ONE THEY ARE LEAVING. The line read "keeps
   // you rooted in Copenhagen's quieter historic corners" for a traveller whose
   // own words were "we are already in Copenhagen and want to get out".
+  // _notAsked joined _leaving here on 15 Aug. A row the screen put behind a
+  // door is a row not on the screen, and naming it in the sentence above the
+  // screen is the same contradiction as naming one they are leaving.
   ok("the departure town is kept out of the list it writes from",
-    /const onScreen = matchedForWhy\.filter\(p => !p\._leaving\)/.test(appSrc));
+    /const onScreen = matchedForWhy\.filter\(p => !p\._leaving && !p\._notAsked\)/.test(appSrc));
   ok("and named to it as a starting point, not a destination",
     /that is where they START, and your sentence must not promise it/.test(appSrc));
   ok("on the same text the screen builds", appSrc.includes("const forMatch = aiMessages.slice(1).map("));
@@ -15900,6 +15907,230 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("and neither is a missing one", tierBadge({}), null);
   ok("every tier in the vocabulary has a tone", M.TIERS.every(t => !!TIER_TONE[t.id]));
   ok("and the label carries the mark the list gives it", /★/.test(tierBadge({ tier: "Can't miss out" }).label));
+}
+
+// ── SEVEN BUGS FOUND BY AUDITING THE DAY'S OWN WORK ──────────────────
+//
+// Oliver, 15 Aug 2026, before leaving: "look through stuff that we can change
+// and do better. And if you see bugs, fix them."
+//
+// Every one of these was found by reading the files written TODAY, and every
+// one of them shipped green through a suite of nearly five thousand assertions.
+// That is the useful part: the tests all covered the happy path of each rule,
+// and each bug lives one Danish letter or one repeated word away from it.
+{
+  const { arrivalPoint, mentionsPlace, isDeparturePlace, regionsNamed, foundAt,
+    matchVariantsOf, variantsOf, GENERIC_ALIASES, parseEventDate, eventMonthShort,
+    isPastDate, eventTime, matchedPlaces, previewPools } = M;
+
+  // ── ONE: A FOLDED INDEX USED TO SLICE THE RAW TEXT ──────────────
+  // fold is not length preserving. æ becomes ae and å becomes aa, each ADDING a
+  // character; runs of whitespace collapse to one, REMOVING several. The cue
+  // window was measured in folded space and cut out of the raw string, so one
+  // Danish letter earlier in the conversation slid it off the cue entirely.
+  is("an arrival is found", arrivalPoint("We land at Billund Airport at 21:00.")?.code, "BLL");
+  is("and one Danish letter earlier in the brief does not lose it",
+    arrivalPoint("We want to see Ærø. We land at Billund Airport at 21:00.")?.code, "BLL");
+  // Whitespace shifts it the other way. convoText joins the assistant's replies
+  // too, so blank lines are in every real conversation.
+  is("and neither do the blank lines every real conversation has",
+    arrivalPoint("Hi.\n\nWe are 4 people.\n\nWe land at Billund Airport")?.code, "BLL");
+  is("the overland doors had the same fault",
+    arrivalPoint("user: We loved Ærø.\nuser: We are coming up by train from Hamburg.")?.code, "PAD");
+
+  // ── TWO: ONLY THE FIRST OCCURRENCE WAS EVER TESTED ──────────────
+  // indexOf returns one position. A town mentioned before it is arrived at
+  // shadowed the arrival completely, and "I want to see X, we fly into X" is an
+  // ordinary way to write a brief.
+  is("a town named before it is landed at does not shadow the landing",
+    arrivalPoint("Aarhus looks great. We fly into Aarhus on the 3rd.")?.code, "AAR");
+  is("and the same for the capital",
+    arrivalPoint("We loved Copenhagen last year. We land in Copenhagen at 22:00.")?.code, "CPH");
+  // The cue guard still has to hold, or this fix just deletes it: an arrival
+  // now needs a cue in front of SOME occurrence, not in front of none.
+  is("a town mentioned twice and never arrived at is still not an arrival",
+    arrivalPoint("Billund looks fun. We are not going to Billund though."), null);
+
+  // ── AND BOTH FAULTS LIVE IN ONE HELPER NOW ──────────────────────
+  // Three callers had written the same two lines by hand. The helper returns
+  // the string the indices were measured in, because slicing a different one is
+  // the bug it replaces.
+  const f = foundAt("Ærø first, then Aarhus, and Aarhus again", "Aarhus");
+  is("every occurrence comes back", f.at.length, 2);
+  ok("and the indices point at the name in the string it hands back",
+    f.at.every(i => f.hay.slice(i, i + f.len) === "aarhus"));
+  is("a name that is not there returns nothing", foundAt("three days in Ribe", "Aalborg").at, []);
+  is("and a partial word is not an occurrence", foundAt("we drove through Aarhusvej", "Aarhus").at, []);
+  is("punctuation is a gap, so a trailing comma still matches", foundAt("we saw Ribe, then home", "Ribe").at.length, 1);
+  is("an empty needle finds nothing", foundAt("anything at all", "").at, []);
+  is("and an empty haystack too", foundAt("", "Aarhus").at, []);
+
+  // ── THREE: A SIGHT ALIAS THAT IS AN ORDINARY ENGLISH PHRASE ─────
+  // danishNames.js says in its own words that matching must not walk the sight
+  // table. mentionsPlace walked it with includeSights: true, and one entry in
+  // that table is "The Old Town", the English name of an open air museum in
+  // AARHUS and also what every traveller in Europe calls the middle of every
+  // town. This app lists "old town" as a topic word in two separate places.
+  ok("the search table still knows the English name",
+    variantsOf("Den Gamle By", { includeSights: true }).includes("The Old Town"));
+  ok("and the matcher does not", !matchVariantsOf("Den Gamle By").includes("The Old Town"));
+  is("so loving the old town of Ribe does not name a museum in Aarhus",
+    mentionsPlace("user: Three days in Ribe. We love the old town.", "Den Gamle By"), false);
+  // The useful half of the sight table is kept. Somebody who writes the English
+  // name of a palace HAS named the row filed under the Danish one.
+  is("naming a palace in English still names the row filed in Danish",
+    mentionsPlace("user: we want to see Amalienborg Palace", "Amalienborg Slot"), true);
+  // And a row genuinely called by the generic phrase still matches its own name.
+  is("a row called The Old Town still matches its own name",
+    mentionsPlace("user: we want to see The Old Town in Aarhus", "The Old Town"), true);
+  ok("the generic list is short and folded on comparison", GENERIC_ALIASES.length <= 3);
+
+  // ── FOUR: THE DEPARTURE TEST DID NOT FOLD ───────────────────────
+  // mentionsPlace folds and isDeparturePlace built a raw regex out of the raw
+  // variant, so the two disagreed on one sentence: Copenhagen was mentioned and
+  // was not being left, _leaving never got set, and pass 2 expanded every
+  // Copenhagen row underneath it. That is the ten-Copenhagen-rows screen this
+  // function exists to stop, for the spelling Oliver used himself when he asked
+  // for the fold in the first place.
+  const OUT = "We are already in Kobenhavn and want to get out of the city";
+  is("the ASCII spelling is a mention", mentionsPlace(OUT, "Copenhagen"), true);
+  is("and now it is a departure too", isDeparturePlace(OUT, "Copenhagen"), true);
+  is("the other two spellings never broke", isDeparturePlace("We are already in København and want to get out of the city", "Copenhagen"), true);
+  // The negation guard has to survive the move into folded space, apostrophe
+  // and all: fold keeps punctuation, which is why the cue window is cut from
+  // the folded text rather than from a version with punctuation stripped.
+  is("not wanting to leave is not leaving",
+    isDeparturePlace("we don't want to leave Aarhus at all", "Aarhus"), false);
+  is("and being somewhere is still not leaving it",
+    isDeparturePlace("we are staying in Aarhus for three nights", "Aarhus"), false);
+  // The window after the name starts AFTER the name. LEAVING_AT allows forty
+  // characters between the place and the intent, and starting the window at the
+  // name itself spends ten of them on the word "Copenhagen", so a sentence with
+  // thirty-two characters of detail in between stopped being a departure.
+  // Mutation testing found it: every other fixture had the cue close enough that
+  // the ten characters did not matter.
+  is("detail between the place and the intent does not hide the intent",
+    isDeparturePlace("We are in Copenhagen for a couple of quiet days and want to get out of the city", "Copenhagen"), true);
+
+  // ── FIVE: THE NEW ZEALAND GUARD DROPPED THE REAL REQUEST ────────
+  // Same first-occurrence shape. The guard found the Zealand inside New
+  // Zealand, correctly rejected it, and never looked at the one they asked for.
+  is("a brief naming both keeps the Danish one",
+    regionsNamed("We loved our trip around New Zealand last year, now we want to see Zealand and Funen").sort(), ["Funen", "Zealand"]);
+  // And the guard itself still holds, or this fix just deleted it.
+  is("New Zealand on its own is still not Zealand",
+    regionsNamed("We loved our trip around New Zealand last year"), []);
+
+  // ── SIX: THE HOLDINGS COUNT ASKED A DIFFERENT QUESTION ──────────
+  // It keyed on fold(parent) and looked up fold(town.name), which is exact
+  // equality after folding, while the pass that expands a town under its rows
+  // asks samePlaceName sixty lines below and says why in a comment. Nine rows
+  // filed under "København" counted as zero holdings for the town row called
+  // "Copenhagen", and were expanded under it anyway.
+  {
+    const towns = [
+      { name: "Copenhagen", region: "Zealand", __lat: 55.68, __lon: 12.57, isMajorCity: true },
+      { name: "Roskilde", region: "Zealand", __lat: 55.64, __lon: 12.08 },
+    ];
+    const freeEntrance = Array.from({ length: 9 }, (_, i) => ({ name: `Museum ${i}`, city: "København" }));
+    const pools = previewPools({ towns, freeEntrance, foodSpots: [], nightlifeSpots: [], craftItemsFallback: [], events: [], majorEvents: [] });
+    const out = matchedPlaces("user: We want to explore Zealand for a few days", pools, { days: 4 });
+    const cph = out.find(p => p.name === "Copenhagen");
+    ok("the town comes back", !!cph);
+    // _holds is what the "9 places inside" badge reads, and what the score's
+    // held-content term is built from.
+    is("and the rows filed under its Danish name are counted", cph?._holds, 9);
+  }
+  // ── AND THE COUNTING SIDE HAD TO MOVE TOO ───────────────────────
+  // Reading the count with samePlaceName is enough when every row is filed
+  // under one spelling. Rows written over weeks are not: five say København and
+  // four say Copenhagen, and keyed on exact fold that is two buckets, of which
+  // the lookup finds one. The town then reports five of its nine.
+  {
+    const towns = [{ name: "Copenhagen", region: "Zealand", __lat: 55.68, __lon: 12.57, isMajorCity: true }];
+    const freeEntrance = [
+      ...Array.from({ length: 5 }, (_, i) => ({ name: `Museum ${i}`, city: "København" })),
+      ...Array.from({ length: 4 }, (_, i) => ({ name: `Gallery ${i}`, city: "Copenhagen" })),
+    ];
+    const pools = previewPools({ towns, freeEntrance, foodSpots: [], nightlifeSpots: [], craftItemsFallback: [], events: [], majorEvents: [] });
+    const out = matchedPlaces("user: We want to explore Zealand for a few days", pools, { days: 4 });
+    is("two spellings of one town are one count", out.find(p => p.name === "Copenhagen")?._holds, 9);
+  }
+
+  // ── SEVEN: TWO DATE FORMATS LANDING ON DIFFERENT DAYS ───────────
+  // new Date("2026-09-01") is UTC midnight and new Date("1 September 2026") is
+  // LOCAL midnight, by the spec. Both are in the database. Everything then
+  // reads them back in local time, so west of Greenwich a September festival
+  // was filed under August and missing from the month a visitor searches.
+  is("the two stored formats are the same day",
+    eventTime("2026-09-01"), eventTime("1 September 2026"));
+  is("and the same month chip", eventMonthShort("2026-09-01"), eventMonthShort("1 September 2026"));
+  is("a September date is September", eventMonthShort("2026-09-01"), "Sep");
+  // An event happening today is not finished. This read as past for every
+  // reader west of Greenwich.
+  is("today's event has not ended", isPastDate("2026-08-15", new Date(2026, 7, 15)), false);
+  is("and yesterday's has", isPastDate("2026-08-14", new Date(2026, 7, 15)), true);
+  // The day is read as a calendar day, not as a moment, so it is the same day
+  // whatever clock the reader is on.
+  is("the parsed day is the day that was written", parseEventDate("2026-09-01")?.getDate(), 1);
+  is("and the month too", parseEventDate("2026-09-01")?.getMonth(), 8);
+
+  // ── AND THIS ONE CANNOT BE TESTED IN THE AMBIENT ZONE ───────────
+  // Every assertion above passes with the bug back in, because the container
+  // runs on UTC and UTC is the one zone where the two parsings agree. Mutation
+  // testing said so: putting Date.UTC back killed nothing. A timezone bug needs
+  // a timezone, so this runs the same bundle in a child process on New York
+  // time, which is where a real reader of a Danish travel guide sits.
+  {
+    // Its own bundle, not the suite's: `dir` is removed six thousand lines up,
+    // so the shared one is long gone by here. One file, so it costs nothing.
+    const tzDir = mkdtempSync(join(tmpdir(), "gemlyx-tz-"));
+    const tzEntry = join(tzDir, "entry.js");
+    const tzBundle = join(tzDir, "bundle.mjs");
+    writeFileSync(tzEntry, `export { eventMonthShort, isPastDate, eventTime } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};`);
+    buildSync({ entryPoints: [tzEntry], bundle: true, format: "esm", platform: "node", outfile: tzBundle, logLevel: "silent" });
+    const probe = `import(${JSON.stringify("file://" + tzBundle)}).then(M => console.log(JSON.stringify({
+      month: M.eventMonthShort("2026-09-01"),
+      worded: M.eventMonthShort("1 September 2026"),
+      todayIsPast: M.isPastDate("2026-08-15", new Date(2026, 7, 15)),
+      sameDay: M.eventTime("2026-09-01") === M.eventTime("1 September 2026"),
+    })));`;
+    let west = null;
+    try {
+      west = JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", probe],
+        { encoding: "utf8", timeout: 30000, env: { ...process.env, TZ: "America/New_York" } }).trim());
+    } catch (e) { west = { error: String(e?.message || e) }; }
+    rmSync(tzDir, { recursive: true, force: true });
+    // Named rather than swallowed. A probe that failed to run must not read as
+    // a timezone that behaved.
+    is("the New York probe ran", west.error || "ran", "ran");
+    is("west of Greenwich, a September festival is still in September", west.month, "Sep");
+    is("and the two stored formats still agree", west.worded, west.month);
+    is("and today's event has still not finished", west.todayIsPast, false);
+    ok("and both formats are the same instant", west.sameDay === true);
+  }
+
+  // A hand written constructor rolls a bad month over silently, so the result
+  // is read back and compared: an unreadable date must stay null and never
+  // become a real one somewhere else on the calendar.
+  is("an impossible month does not roll over into next year", parseEventDate("2026-13-01"), null);
+  is("and neither does an impossible day", parseEventDate("2026-02-30"), null);
+  is("month zero is not December of the year before", parseEventDate("2026-00-15"), null);
+  is("and day zero is not the last of the month before", parseEventDate("2026-03-00"), null);
+  is("a real leap day is fine", parseEventDate("2028-02-29")?.getDate(), 29);
+  is("the worded format still parses", parseEventDate("17 June 2026")?.getMonth(), 5);
+  is("and an unreadable one is still null", parseEventDate("sometime in the summer"), null);
+
+  // ── AND THE ITALIC LINE SAW A DIFFERENT LIST TO THE SCREEN ──────
+  // App.jsx called matchedPlaces without wanted or themes while the screen
+  // passed both, so nothing was marked _notAsked and the line's prompt was
+  // handed the held-back rows under the instruction "THE SCREEN THIS SENTENCE
+  // SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE".
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the line is built from the same narrowing the screen uses",
+    /\}\), \{ days, wanted, themes \}\);/.test(appSrc));
+  ok("and it reads the intake interests, as the screen does",
+    /briefThemes\(forMatch, intakeInterest\)/.test(appSrc));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

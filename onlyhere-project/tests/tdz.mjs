@@ -308,7 +308,27 @@ export const readOutOfScope = (body) => {
     }
     for (const name of names) {
       // Declared again anywhere outside is shadowing, which this does not model.
-      const outside = lines.filter((l, i) => (i < open || i > close) && new RegExp(`(?:const|let|var|function)\\s+${name}\\b`).test(l)).length;
+      // ── AND A PARAMETER IS A DECLARATION ──────────────────────────
+      // It counted `const`, `let`, `var` and `function` and not the commonest
+      // binding in this file. `[...].map(f => (` binds f, and a `const f` in
+      // some unrelated onChange handler four thousand lines earlier then made
+      // every line of that map body read as an out-of-scope use of it.
+      //
+      // Reported as "GemlyxApp(): reads f on line 8895, but its block closed on
+      // line 6804", against code that is completely correct, and it fired on a
+      // change that did not touch either place. A scanner that cries wolf on
+      // correct code is worse than no scanner, because the next real finding is
+      // the one somebody waves through.
+      //
+      // Every binding form is one clause, and each one is a real way to
+      // introduce a name that this line-based walk cannot see the scope of.
+      const bindsOutside = (l) =>
+        new RegExp(`(?:const|let|var|function)\\s+${name}\\b`).test(l)
+        || new RegExp(`(?:\\(([^()]*\\W)?${name}(\\W[^()]*)?\\)|(?:^|[^\\w$.])${name})\\s*=>`).test(l)
+        || new RegExp(`function\\s*[\\w$]*\\s*\\([^()]*\\b${name}\\b[^()]*\\)`).test(l)
+        || new RegExp(`catch\\s*\\(\\s*${name}\\s*\\)`).test(l)
+        || new RegExp(`for\\s*\\(\\s*(?:const|let|var)\\s+${name}\\b`).test(l);
+      const outside = lines.filter((l, i) => (i < open || i > close) && bindsOutside(l)).length;
       if (outside) continue;
       const word = new RegExp(`(?:^|[^\\w$.])${name}(?![\\w$:])`);
       for (let i = close + 1; i < lines.length; i++) {

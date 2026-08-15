@@ -35,6 +35,8 @@
 // research".
 import { DISCOVERY_TARGETS, coverageByTarget } from "./discovery";
 import { arrivalPoint } from "./arrival";
+import { fitsBrief } from "./interestFit";
+import { THEME_LABEL } from "./placeThemes";
 
 // AIRPORTS and arrivalPoint moved to utils/arrival.js when previewMatch needed
 // them too, to order a route from where the traveller lands. Re-exported here
@@ -57,6 +59,7 @@ export const targetForCoords = (lat, lon) => {
 };
 
 export const COVERAGE_NOTHING_SAID = "nothing-named";
+export const COVERAGE_UNANSWERED = "asked-for-nothing-you-have";
 export const COVERAGE_THIN = "no-content-there";
 export const COVERAGE_MATCHER = "matcher-could-not-reach-it";
 export const COVERAGE_OK = "";
@@ -95,7 +98,74 @@ export const searchTypeFor = (wanted) => {
 
 export const previewCoverage = ({ matched = [], library = [], convoText = "", themes = null, days = null, wanted = null } = {}) => {
   const rows = Array.isArray(matched) ? matched : [];
-  if (rows.length > 0) return null;
+
+  // ── "MATCHED PLENTY, ANSWERED NOTHING" ────────────────────────────
+  // The Jutland run, 15 Aug 2026. Sixteen rows matched, so this file said
+  // nothing at all, and the screen looked full. Every one of the eight Food and
+  // Drink rows was in Aalborg, the town furthest from the airport, and the
+  // brief had asked for MARKETS and NIGHTLIFE. There was no nightlife section
+  // and not one market anywhere.
+  //
+  // A finding that only fires on zero is the easy half. A screen that is full
+  // and answers nothing stated is the harder failure and the more damaging one,
+  // because it looks like it worked.
+  //
+  // The test is per stated theme: which of the things they said did any matched
+  // row satisfy? A theme nobody can answer is a content gap with a name on it.
+  if (rows.length > 0) {
+    if (!themes || !themes.size) return null;
+    const answered = new Set();
+    // ── ASKED, NOT READ OFF THE STAMP ──────────────────────────────
+    // Every expanded row arrives carrying `_fit`, and reading that stamp was
+    // the obvious thing to do and is wrong: previewMatch stamps it in its
+    // EXPANSION pass and only there, so a town matched because the traveller
+    // named it has no stamp at all. Trusting the stamp counted a nightlife town
+    // as answering nothing and fired a finding on a run that worked. Asked
+    // directly instead, off the same function and the same theme set the stamp
+    // was built from, so there is one code path rather than two that agree
+    // until one of them is touched.
+    for (const r of rows) for (const t of fitsBrief(r, themes).why) answered.add(t);
+    const unanswered = [...themes].filter(t => !answered.has(t)).sort();
+    // ── AND "ANSWERED" MEANS ANSWERED WHAT THEY ASKED FOR ───────────
+    // Written against the STATED set, not against `answered.size > 0`. Today
+    // those two are the same line: fitsBrief intersects a row's themes with the
+    // want set before returning them, so nothing outside the brief can ever
+    // reach `answered`, and mutation testing correctly reports the swap as
+    // making no difference. It is written this way anyway, because the day that
+    // invariant slips is the day a castle counts as an answer to a request for
+    // markets and this finding goes quiet on exactly the run it exists for. The
+    // invariant is asserted in the suite rather than trusted here.
+    //
+    // Some answered and some not is ordinary: a library is never complete. The
+    // finding is for a brief where NOTHING they asked for came back, which is
+    // the case that reads as working and is not.
+    if (unanswered.length < themes.size) return null;
+    const townsShown = [...new Set(rows.filter(r => r?._src === "town").map(r => r.name))];
+    // ── AND THE BUTTON HAS SOMEWHERE TO POINT ──────────────────────
+    // "Search where it is thinnest" is the honest answer when nothing matched
+    // and no arrival was named. It is the WRONG answer here, because this run
+    // knows exactly where it was looking: sixteen rows came back and they were
+    // all in one place. Aimed at where the traveller lands first, and at the
+    // towns the run actually returned when they never said how they arrive.
+    const arrival = arrivalPoint(convoText);
+    const anchor = arrival
+      ? targetForCoords(arrival.lat, arrival.lon)
+      : rows.map(r => targetForCoords(r?.__lat ?? r?.lat, r?.__lon ?? r?.lon)).find(Boolean) || null;
+    return {
+      verdict: COVERAGE_UNANSWERED,
+      arrival,
+      target: anchor ? { id: anchor.id, label: anchor.label, danish: anchor.danish } : null,
+      published: null,
+      themes: [...themes].sort(),
+      unanswered,
+      shown: rows.length,
+      towns: townsShown,
+      days: Number.isFinite(Number(days)) ? Number(days) : null,
+      total: (Array.isArray(library) ? library : []).length,
+      searchType: searchTypeFor(wanted),
+      searchTarget: anchor ? anchor.id : "anywhere",
+    };
+  }
 
   const arrival = arrivalPoint(convoText);
   const target = arrival ? targetForCoords(arrival.lat, arrival.lon) : null;
@@ -134,10 +204,27 @@ export const previewCoverage = ({ matched = [], library = [], convoText = "", th
 // One line for a founder, and it says which of the two jobs this is rather than
 // describing the symptom. "Nothing matched" is a symptom and he has already
 // seen it on the screen.
+// ── AND IT HAS TO READ LIKE A SENTENCE ──────────────────────────────
+// The first version printed the raw theme ids joined with a comma, straight
+// into a clause that also carried the trip length, and produced "They asked for
+// market, nightlife and 6 days". The reader parses that as three interests, one
+// of which is a number. THEME_LABEL is the list every chip on the site is
+// already drawn from, so the panel and the browse page name a theme the same
+// way, and the trip length is moved out of the list it was sitting inside.
+const listOf = (ids, join = "and") => {
+  const named = (ids || []).map(t => THEME_LABEL[t] || t);
+  if (named.length <= 1) return named[0] || "";
+  return `${named.slice(0, -1).join(", ")} ${join} ${named[named.length - 1]}`;
+};
+
 export const describeCoverage = (f) => {
   if (!f) return "";
-  const said = f.themes.length ? `They asked for ${f.themes.join(", ")}` : "They named no interests";
-  const trip = f.days ? ` and ${f.days} days` : "";
+  const said = f.themes.length ? `They asked for ${listOf(f.themes)}` : "They named no interests";
+  const trip = f.days ? ` on a ${f.days} day trip` : "";
+  if (f.verdict === COVERAGE_UNANSWERED) {
+    const where = f.towns.length ? ` across ${f.towns.join(", ")}` : "";
+    return `${f.shown} rows matched${where}, and not one of them answers what they asked for. ${said}${trip}, and nothing published satisfies ${listOf(f.unanswered, "or")}. The screen looks full and answers nothing they said.`;
+  }
   if (f.verdict === COVERAGE_THIN) {
     return `Nothing to show, and it is a content gap. ${said}${trip}, landing at ${f.arrival.name}, and you have nothing published in ${f.target.label}. Discovery target: ${f.target.label}${f.target.danish ? ` (${f.target.danish})` : ""}.`;
   }

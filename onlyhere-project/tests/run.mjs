@@ -18,6 +18,10 @@
 // or React, so it always runs in about a second and can never be flaky.
 
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
+// One assertion needs a timezone that is not this machine's. See the event date
+// block near the end: the container runs on UTC, and UTC is the one zone where
+// the bug it guards cannot be seen.
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,7 +46,7 @@ const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
   export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
-  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
+  export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
@@ -113,7 +117,7 @@ writeFileSync(entry, `
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
-  export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
+  export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { ENTRY_POINTS } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
@@ -2391,6 +2395,27 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // guessed at. A checker that guesses gets switched off.
   const shadowed = `const f = async () => {\n  {\n    const x = 1;\n    use(x);\n  }\n  const x = 2;\n  return x;\n};`;
   is("a name declared twice is left alone", readOutOfScope(bodyOf(shadowed, "const f = ")), []);
+  // ── AND A PARAMETER IS A DECLARATION ────────────────────────────
+  // It counted const, let, var and function, and not the commonest binding in
+  // App.jsx. One `const f` in an onChange handler made every line of an
+  // unrelated `.map(f => ...)` four thousand lines later read as an
+  // out-of-scope use, and the suite failed on a change that touched neither.
+  // Caught by the false failure itself, on correct code.
+  const param = `const g = async () => {\n  {\n    const row = 1;\n    use(row);\n  }\n  return list.map((row) => row.name);\n};`;
+  is("an arrow parameter with parentheses is a binding", readOutOfScope(bodyOf(param, "const g = ")), []);
+  const bare = `const g = async () => {\n  {\n    const row = 1;\n    use(row);\n  }\n  return list.map(row => cell(row.name));\n};`;
+  is("and one without them", readOutOfScope(bodyOf(bare, "const g = ")), []);
+  // The body of a multi-line arrow, which is where it actually bit: the read is
+  // on a different line from the arrow, so the old per-line parameter guard
+  // could not see it.
+  const multi = `const g = async () => {\n  {\n    const row = 1;\n    use(row);\n  }\n  return list.map((row) => (\n    cell(row.name)\n  ));\n};`;
+  is("and the body of a multi line one", readOutOfScope(bodyOf(multi, "const g = ")), []);
+  const caught = `const g = async () => {\n  {\n    const err = 1;\n    use(err);\n  }\n  try { go(); } catch (err) { report(err); }\n};`;
+  is("a catch binding is one too", readOutOfScope(bodyOf(caught, "const g = ")), []);
+  // And none of that may cost the shape it was written for. draftTown is read
+  // past a closing brace and is bound nowhere else, which is still a finding.
+  is("the 12 Aug shape is still caught",
+     readOutOfScope(bodyOf(scoped, "const f = ")).map(x => x.name), ["draftTown"]);
   // THE STRIPPER IS WHAT IS BEING TESTED HERE, so this fixture has to have a
   // real read INSIDE an interpolation and prose OUTSIDE it. The earlier version
   // asserted [] and passed against a stripper that blanked ${...} too — which
@@ -6298,8 +6323,11 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // AND IT IS NOT TOLD ABOUT THE ONE THEY ARE LEAVING. The line read "keeps
   // you rooted in Copenhagen's quieter historic corners" for a traveller whose
   // own words were "we are already in Copenhagen and want to get out".
+  // _notAsked joined _leaving here on 15 Aug. A row the screen put behind a
+  // door is a row not on the screen, and naming it in the sentence above the
+  // screen is the same contradiction as naming one they are leaving.
   ok("the departure town is kept out of the list it writes from",
-    /const onScreen = matchedForWhy\.filter\(p => !p\._leaving\)/.test(appSrc));
+    /const onScreen = matchedForWhy\.filter\(p => !p\._leaving && !p\._notAsked\)/.test(appSrc));
   ok("and named to it as a starting point, not a destination",
     /that is where they START, and your sentence must not promise it/.test(appSrc));
   ok("on the same text the screen builds", appSrc.includes("const forMatch = aiMessages.slice(1).map("));
@@ -15338,8 +15366,8 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
 // was a studio test.. let the studio tell me that this area lacks content."
 {
   const { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS,
-    COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, briefThemes,
-    searchTypeFor, ENTRY_POINTS } = M;
+    COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED, briefThemes,
+    fitsBrief, searchTypeFor, ENTRY_POINTS } = M;
   const BRIEF = "user: I'm planning 5 days in Denmark. It is my family, two adults and two kids aged 7 and 10. We fly into Billund. We want to cycle where it makes sense. We like architecture. We arrive on 30 September We do not know Denmark at all, so surprise us";
 
   // ── THE ARRIVAL NOTHING HAS EVER READ ───────────────────────────
@@ -15484,6 +15512,81 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("a run that found something reports no finding",
     previewCoverage({ matched: [{ name: "Ribe" }], library: [], convoText: BRIEF }), null);
 
+  // ── "MATCHED PLENTY, ANSWERED NOTHING" ──────────────────────────
+  // The 20:24 Jutland run. Sixteen rows came back so the finding above stayed
+  // silent and the screen looked full. Every Food and Drink row was in Aalborg
+  // and the brief had asked for MARKETS and NIGHTLIFE: no nightlife section, not
+  // one market. A finding that only fires on zero is the easy half; a screen
+  // that is full and answers nothing stated is the more damaging failure,
+  // because it looks like it worked.
+  const WANT_BRIEF = "user: six days, we like markets and nightlife, we fly into Aalborg";
+  const wantThemes = briefThemes(WANT_BRIEF);
+  is("markets and nightlife are both read off the brief", [...wantThemes].sort(), ["market", "nightlife"]);
+  // _fit is what previewMatch stamps on every expanded row: why is the list of
+  // STATED themes that row satisfies, and an empty why is a row that fits
+  // nothing they said.
+  const foodRows = Array.from({ length: 16 }, (_, i) => ({ name: `R${i}`, _src: "food", themes: ["food"], _fit: { fits: false, why: [], via: "" } }));
+  const unanswered = previewCoverage({ matched: foodRows, library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6, wanted: new Set(["food"]) });
+  is("a full screen that answers nothing they said is a finding", unanswered?.verdict, COVERAGE_UNANSWERED);
+  is("and it counts what was shown", unanswered.shown, 16);
+  is("and names what went unanswered", unanswered.unanswered, ["market", "nightlife"]);
+  ok("and says plainly that it looked like it worked", /looks full and answers nothing/.test(describeCoverage(unanswered)));
+
+  // ── AND "ANSWERED" MEANS ANSWERED WHAT THEY ASKED FOR ───────────
+  // A castle is a real row that really matched, and it answers neither markets
+  // nor nightlife. The guard is written against the STATED set for that reason.
+  const wrongTheme = [{ name: "Slot", _src: "free", themes: ["history"], _fit: { fits: false, why: ["history"], via: "themes" } }];
+  is("answering a theme nobody asked for is not answering",
+    previewCoverage({ matched: wrongTheme, library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6 })?.verdict, COVERAGE_UNANSWERED);
+  // ── AND THAT ONLY HOLDS BECAUSE OF THIS ─────────────────────────
+  // The guard leans on fitsBrief never reporting a theme outside the want set.
+  // Asserted, not assumed: the moment a why list can carry an unstated theme,
+  // one castle silences this finding on the very run it was written for. The
+  // fixture is a row tagged with three themes, one of which was asked for.
+  const threeTagged = { name: "X", themes: ["history", "food", "nightlife"] };
+  is("a fit reports only the themes that were asked for",
+    fitsBrief(threeTagged, new Set(["nightlife"])).why, ["nightlife"]);
+  is("and an untagged row read on its own words is held to the same set",
+    fitsBrief({ name: "Y", desc: "a castle with a famous restaurant" }, new Set(["food"])).why, ["food"]);
+  // Some answered and some not is ordinary: a library is never complete, and a
+  // finding on a partly answered brief is noise on a panel he has to read.
+  const oneHit = [...foodRows, { name: "Bar", _src: "nightlife", themes: ["nightlife"], _fit: { fits: true, why: ["nightlife"], via: "themes" } }];
+  is("one stated interest answered is enough to stay quiet",
+    previewCoverage({ matched: oneHit, library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6 }), null);
+  // A brief that named no interests cannot have them unanswered.
+  is("a brief that asked for nothing gets no unanswered finding",
+    previewCoverage({ matched: foodRows, library: [], convoText: "user: six days, surprise us", themes: null, days: 6 }), null);
+
+  // ── A TOWN CARRIES NO _fit STAMP, AND STILL ANSWERS ─────────────
+  // previewMatch stamps _fit in its expansion pass only. A town matched because
+  // the traveller NAMED it never goes through that pass, so reading the stamp
+  // alone would count a nightlife town as answering nothing and fire a finding
+  // on a run that worked.
+  is("an unstamped town that fits is an answer",
+    previewCoverage({ matched: [{ name: "Aalborg", _src: "town", themes: ["nightlife"] }], library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6 }), null);
+  const townMiss = previewCoverage({ matched: [{ name: "Ribe", _src: "town", themes: ["history"] }], library: [], convoText: WANT_BRIEF, themes: wantThemes, days: 6 });
+  is("and an unstamped town that does not fit is still a finding", townMiss?.verdict, COVERAGE_UNANSWERED);
+  is("which names the town it did show", townMiss.towns, ["Ribe"]);
+
+  // ── AND THE BUTTON HAS SOMEWHERE TO POINT ───────────────────────
+  // "Where it is thinnest" is honest when nothing matched and nobody said where
+  // they land. It is wrong here: this run knows exactly where it was looking.
+  is("the search is aimed at where they land", unanswered.searchTarget, "north-jutland");
+  const noArrival = previewCoverage({
+    matched: [{ name: "Ribe", _src: "town", themes: ["history"], __lat: 55.33, __lon: 8.76 }],
+    library: [], convoText: "user: six days, we like markets and nightlife", themes: wantThemes, days: 6,
+  });
+  is("and with no arrival, at the region the rows were in", noArrival.searchTarget, "south-jutland");
+
+  // ── IT READS LIKE A SENTENCE ────────────────────────────────────
+  // The first version joined raw theme ids with a comma into a clause that also
+  // carried the trip length, and printed "They asked for market, nightlife and
+  // 6 days", which reads as three interests one of which is a number.
+  const line = describeCoverage(unanswered);
+  ok("themes are named the way every chip on the site names them", /Markets and Nightlife/.test(line));
+  ok("and the trip length is not inside that list", !/nightlife and 6 days/i.test(line));
+  ok("the label is used in the other branches too", /Design/.test(describeCoverage(nothingPublished)));
+
   // ── WIRED, AND ONLY ON THE TEST PATH ────────────────────────────
   const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
   ok("the finding is computed", /const coverage = testProfile \? previewCoverage\(/.test(prev));
@@ -15491,6 +15594,19 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // a note about the founder's content coverage.
   ok("and never for a real traveller", /testProfile \? previewCoverage/.test(prev) && !/^\s*const coverage = previewCoverage/m.test(prev));
   ok("it is on the screen", /describeCoverage\(coverage\)/.test(prev));
+  // ── AND THE HEADER READS OFF THE CONSTANTS ──────────────────────
+  // The panel title was a ternary chain with the verdict strings retyped as
+  // literals beside the module that exports them, so the fourth verdict was
+  // silently labelled "Nothing to match on", which is the one thing a run with
+  // sixteen rows on screen is not.
+  ok("the panel title is a map off the exported verdicts", /COVERAGE_TITLE\[coverage\.verdict\]/.test(prev));
+  // Comments stripped first. The comment above the map QUOTES the ternary it
+  // replaced, so the first version of this assertion matched its own
+  // explanation and failed on a file that was already correct. Third time a
+  // source scan in this suite has read a comment as code.
+  ok("and no verdict string is retyped as a literal in the component",
+    !/"no-content-there"|"matcher-could-not-reach-it"|"asked-for-nothing-you-have"/.test(stripNonCode(prev)));
+  ok("the new verdict has its own title", /\[COVERAGE_UNANSWERED\]:/.test(prev));
   ok("and on the report, which is where the empty run was least explained",
     /coverage,/.test(readFileSync(join(root, "src/utils/previewReport.js"), "utf8")));
   const appC = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -15812,6 +15928,269 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("and neither is a missing one", tierBadge({}), null);
   ok("every tier in the vocabulary has a tone", M.TIERS.every(t => !!TIER_TONE[t.id]));
   ok("and the label carries the mark the list gives it", /★/.test(tierBadge({ tier: "Can't miss out" }).label));
+}
+
+// ── SEVEN BUGS FOUND BY AUDITING THE DAY'S OWN WORK ──────────────────
+//
+// Oliver, 15 Aug 2026, before leaving: "look through stuff that we can change
+// and do better. And if you see bugs, fix them."
+//
+// Every one of these was found by reading the files written TODAY, and every
+// one of them shipped green through a suite of nearly five thousand assertions.
+// That is the useful part: the tests all covered the happy path of each rule,
+// and each bug lives one Danish letter or one repeated word away from it.
+{
+  const { arrivalPoint, mentionsPlace, isDeparturePlace, regionsNamed, foundAt,
+    matchVariantsOf, variantsOf, GENERIC_ALIASES, parseEventDate, eventMonthShort,
+    isPastDate, eventTime, matchedPlaces, previewPools } = M;
+
+  // ── ONE: A FOLDED INDEX USED TO SLICE THE RAW TEXT ──────────────
+  // fold is not length preserving. æ becomes ae and å becomes aa, each ADDING a
+  // character; runs of whitespace collapse to one, REMOVING several. The cue
+  // window was measured in folded space and cut out of the raw string, so one
+  // Danish letter earlier in the conversation slid it off the cue entirely.
+  is("an arrival is found", arrivalPoint("We land at Billund Airport at 21:00.")?.code, "BLL");
+  is("and one Danish letter earlier in the brief does not lose it",
+    arrivalPoint("We want to see Ærø. We land at Billund Airport at 21:00.")?.code, "BLL");
+  // Whitespace shifts it the other way. convoText joins the assistant's replies
+  // too, so blank lines are in every real conversation.
+  is("and neither do the blank lines every real conversation has",
+    arrivalPoint("Hi.\n\nWe are 4 people.\n\nWe land at Billund Airport")?.code, "BLL");
+  is("the overland doors had the same fault",
+    arrivalPoint("user: We loved Ærø.\nuser: We are coming up by train from Hamburg.")?.code, "PAD");
+
+  // ── TWO: ONLY THE FIRST OCCURRENCE WAS EVER TESTED ──────────────
+  // indexOf returns one position. A town mentioned before it is arrived at
+  // shadowed the arrival completely, and "I want to see X, we fly into X" is an
+  // ordinary way to write a brief.
+  is("a town named before it is landed at does not shadow the landing",
+    arrivalPoint("Aarhus looks great. We fly into Aarhus on the 3rd.")?.code, "AAR");
+  is("and the same for the capital",
+    arrivalPoint("We loved Copenhagen last year. We land in Copenhagen at 22:00.")?.code, "CPH");
+  // The cue guard still has to hold, or this fix just deletes it: an arrival
+  // now needs a cue in front of SOME occurrence, not in front of none.
+  is("a town mentioned twice and never arrived at is still not an arrival",
+    arrivalPoint("Billund looks fun. We are not going to Billund though."), null);
+
+  // ── AND BOTH FAULTS LIVE IN ONE HELPER NOW ──────────────────────
+  // Three callers had written the same two lines by hand. The helper returns
+  // the string the indices were measured in, because slicing a different one is
+  // the bug it replaces.
+  const f = foundAt("Ærø first, then Aarhus, and Aarhus again", "Aarhus");
+  is("every occurrence comes back", f.at.length, 2);
+  ok("and the indices point at the name in the string it hands back",
+    f.at.every(i => f.hay.slice(i, i + f.len) === "aarhus"));
+  is("a name that is not there returns nothing", foundAt("three days in Ribe", "Aalborg").at, []);
+  is("and a partial word is not an occurrence", foundAt("we drove through Aarhusvej", "Aarhus").at, []);
+  is("punctuation is a gap, so a trailing comma still matches", foundAt("we saw Ribe, then home", "Ribe").at.length, 1);
+  is("an empty needle finds nothing", foundAt("anything at all", "").at, []);
+  is("and an empty haystack too", foundAt("", "Aarhus").at, []);
+
+  // ── THREE: A SIGHT ALIAS THAT IS AN ORDINARY ENGLISH PHRASE ─────
+  // danishNames.js says in its own words that matching must not walk the sight
+  // table. mentionsPlace walked it with includeSights: true, and one entry in
+  // that table is "The Old Town", the English name of an open air museum in
+  // AARHUS and also what every traveller in Europe calls the middle of every
+  // town. This app lists "old town" as a topic word in two separate places.
+  ok("the search table still knows the English name",
+    variantsOf("Den Gamle By", { includeSights: true }).includes("The Old Town"));
+  ok("and the matcher does not", !matchVariantsOf("Den Gamle By").includes("The Old Town"));
+  is("so loving the old town of Ribe does not name a museum in Aarhus",
+    mentionsPlace("user: Three days in Ribe. We love the old town.", "Den Gamle By"), false);
+  // The useful half of the sight table is kept. Somebody who writes the English
+  // name of a palace HAS named the row filed under the Danish one.
+  is("naming a palace in English still names the row filed in Danish",
+    mentionsPlace("user: we want to see Amalienborg Palace", "Amalienborg Slot"), true);
+  // And a row genuinely called by the generic phrase still matches its own name.
+  is("a row called The Old Town still matches its own name",
+    mentionsPlace("user: we want to see The Old Town in Aarhus", "The Old Town"), true);
+  ok("the generic list is short and folded on comparison", GENERIC_ALIASES.length <= 3);
+
+  // ── FOUR: THE DEPARTURE TEST DID NOT FOLD ───────────────────────
+  // mentionsPlace folds and isDeparturePlace built a raw regex out of the raw
+  // variant, so the two disagreed on one sentence: Copenhagen was mentioned and
+  // was not being left, _leaving never got set, and pass 2 expanded every
+  // Copenhagen row underneath it. That is the ten-Copenhagen-rows screen this
+  // function exists to stop, for the spelling Oliver used himself when he asked
+  // for the fold in the first place.
+  const OUT = "We are already in Kobenhavn and want to get out of the city";
+  is("the ASCII spelling is a mention", mentionsPlace(OUT, "Copenhagen"), true);
+  is("and now it is a departure too", isDeparturePlace(OUT, "Copenhagen"), true);
+  is("the other two spellings never broke", isDeparturePlace("We are already in København and want to get out of the city", "Copenhagen"), true);
+  // The negation guard has to survive the move into folded space, apostrophe
+  // and all: fold keeps punctuation, which is why the cue window is cut from
+  // the folded text rather than from a version with punctuation stripped.
+  is("not wanting to leave is not leaving",
+    isDeparturePlace("we don't want to leave Aarhus at all", "Aarhus"), false);
+  is("and being somewhere is still not leaving it",
+    isDeparturePlace("we are staying in Aarhus for three nights", "Aarhus"), false);
+  // The window after the name starts AFTER the name. LEAVING_AT allows forty
+  // characters between the place and the intent, and starting the window at the
+  // name itself spends ten of them on the word "Copenhagen", so a sentence with
+  // thirty-two characters of detail in between stopped being a departure.
+  // Mutation testing found it: every other fixture had the cue close enough that
+  // the ten characters did not matter.
+  is("detail between the place and the intent does not hide the intent",
+    isDeparturePlace("We are in Copenhagen for a couple of quiet days and want to get out of the city", "Copenhagen"), true);
+
+  // ── FIVE: THE NEW ZEALAND GUARD DROPPED THE REAL REQUEST ────────
+  // Same first-occurrence shape. The guard found the Zealand inside New
+  // Zealand, correctly rejected it, and never looked at the one they asked for.
+  is("a brief naming both keeps the Danish one",
+    regionsNamed("We loved our trip around New Zealand last year, now we want to see Zealand and Funen").sort(), ["Funen", "Zealand"]);
+  // And the guard itself still holds, or this fix just deleted it.
+  is("New Zealand on its own is still not Zealand",
+    regionsNamed("We loved our trip around New Zealand last year"), []);
+
+  // ── SIX: THE HOLDINGS COUNT ASKED A DIFFERENT QUESTION ──────────
+  // It keyed on fold(parent) and looked up fold(town.name), which is exact
+  // equality after folding, while the pass that expands a town under its rows
+  // asks samePlaceName sixty lines below and says why in a comment. Nine rows
+  // filed under "København" counted as zero holdings for the town row called
+  // "Copenhagen", and were expanded under it anyway.
+  {
+    const towns = [
+      { name: "Copenhagen", region: "Zealand", __lat: 55.68, __lon: 12.57, isMajorCity: true },
+      { name: "Roskilde", region: "Zealand", __lat: 55.64, __lon: 12.08 },
+    ];
+    const freeEntrance = Array.from({ length: 9 }, (_, i) => ({ name: `Museum ${i}`, city: "København" }));
+    const pools = previewPools({ towns, freeEntrance, foodSpots: [], nightlifeSpots: [], craftItemsFallback: [], events: [], majorEvents: [] });
+    const out = matchedPlaces("user: We want to explore Zealand for a few days", pools, { days: 4 });
+    const cph = out.find(p => p.name === "Copenhagen");
+    ok("the town comes back", !!cph);
+    // _holds is what the "9 places inside" badge reads, and what the score's
+    // held-content term is built from.
+    is("and the rows filed under its Danish name are counted", cph?._holds, 9);
+  }
+  // ── AND THE COUNTING SIDE HAD TO MOVE TOO ───────────────────────
+  // Reading the count with samePlaceName is enough when every row is filed
+  // under one spelling. Rows written over weeks are not: five say København and
+  // four say Copenhagen, and keyed on exact fold that is two buckets, of which
+  // the lookup finds one. The town then reports five of its nine.
+  {
+    const towns = [{ name: "Copenhagen", region: "Zealand", __lat: 55.68, __lon: 12.57, isMajorCity: true }];
+    const freeEntrance = [
+      ...Array.from({ length: 5 }, (_, i) => ({ name: `Museum ${i}`, city: "København" })),
+      ...Array.from({ length: 4 }, (_, i) => ({ name: `Gallery ${i}`, city: "Copenhagen" })),
+    ];
+    const pools = previewPools({ towns, freeEntrance, foodSpots: [], nightlifeSpots: [], craftItemsFallback: [], events: [], majorEvents: [] });
+    const out = matchedPlaces("user: We want to explore Zealand for a few days", pools, { days: 4 });
+    is("two spellings of one town are one count", out.find(p => p.name === "Copenhagen")?._holds, 9);
+  }
+
+  // ── SEVEN: TWO DATE FORMATS LANDING ON DIFFERENT DAYS ───────────
+  // new Date("2026-09-01") is UTC midnight and new Date("1 September 2026") is
+  // LOCAL midnight, by the spec. Both are in the database. Everything then
+  // reads them back in local time, so west of Greenwich a September festival
+  // was filed under August and missing from the month a visitor searches.
+  is("the two stored formats are the same day",
+    eventTime("2026-09-01"), eventTime("1 September 2026"));
+  is("and the same month chip", eventMonthShort("2026-09-01"), eventMonthShort("1 September 2026"));
+  is("a September date is September", eventMonthShort("2026-09-01"), "Sep");
+  // An event happening today is not finished. This read as past for every
+  // reader west of Greenwich.
+  is("today's event has not ended", isPastDate("2026-08-15", new Date(2026, 7, 15)), false);
+  is("and yesterday's has", isPastDate("2026-08-14", new Date(2026, 7, 15)), true);
+  // The day is read as a calendar day, not as a moment, so it is the same day
+  // whatever clock the reader is on.
+  is("the parsed day is the day that was written", parseEventDate("2026-09-01")?.getDate(), 1);
+  is("and the month too", parseEventDate("2026-09-01")?.getMonth(), 8);
+
+  // ── AND THIS ONE CANNOT BE TESTED IN THE AMBIENT ZONE ───────────
+  // Every assertion above passes with the bug back in, because the container
+  // runs on UTC and UTC is the one zone where the two parsings agree. Mutation
+  // testing said so: putting Date.UTC back killed nothing. A timezone bug needs
+  // a timezone, so this runs the same bundle in a child process on New York
+  // time, which is where a real reader of a Danish travel guide sits.
+  {
+    // Its own bundle, not the suite's: `dir` is removed six thousand lines up,
+    // so the shared one is long gone by here. One file, so it costs nothing.
+    const tzDir = mkdtempSync(join(tmpdir(), "gemlyx-tz-"));
+    const tzEntry = join(tzDir, "entry.js");
+    const tzBundle = join(tzDir, "bundle.mjs");
+    writeFileSync(tzEntry, `export { eventMonthShort, isPastDate, eventTime } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};`);
+    buildSync({ entryPoints: [tzEntry], bundle: true, format: "esm", platform: "node", outfile: tzBundle, logLevel: "silent" });
+    const probe = `import(${JSON.stringify("file://" + tzBundle)}).then(M => console.log(JSON.stringify({
+      month: M.eventMonthShort("2026-09-01"),
+      worded: M.eventMonthShort("1 September 2026"),
+      todayIsPast: M.isPastDate("2026-08-15", new Date(2026, 7, 15)),
+      sameDay: M.eventTime("2026-09-01") === M.eventTime("1 September 2026"),
+    })));`;
+    let west = null;
+    try {
+      west = JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", probe],
+        { encoding: "utf8", timeout: 30000, env: { ...process.env, TZ: "America/New_York" } }).trim());
+    } catch (e) { west = { error: String(e?.message || e) }; }
+    rmSync(tzDir, { recursive: true, force: true });
+    // Named rather than swallowed. A probe that failed to run must not read as
+    // a timezone that behaved.
+    is("the New York probe ran", west.error || "ran", "ran");
+    is("west of Greenwich, a September festival is still in September", west.month, "Sep");
+    is("and the two stored formats still agree", west.worded, west.month);
+    is("and today's event has still not finished", west.todayIsPast, false);
+    ok("and both formats are the same instant", west.sameDay === true);
+  }
+
+  // A hand written constructor rolls a bad month over silently, so the result
+  // is read back and compared: an unreadable date must stay null and never
+  // become a real one somewhere else on the calendar.
+  is("an impossible month does not roll over into next year", parseEventDate("2026-13-01"), null);
+  is("and neither does an impossible day", parseEventDate("2026-02-30"), null);
+  is("month zero is not December of the year before", parseEventDate("2026-00-15"), null);
+  is("and day zero is not the last of the month before", parseEventDate("2026-03-00"), null);
+  is("a real leap day is fine", parseEventDate("2028-02-29")?.getDate(), 29);
+  is("the worded format still parses", parseEventDate("17 June 2026")?.getMonth(), 5);
+  is("and an unreadable one is still null", parseEventDate("sometime in the summer"), null);
+
+  // ── AND THE ITALIC LINE SAW A DIFFERENT LIST TO THE SCREEN ──────
+  // App.jsx called matchedPlaces without wanted or themes while the screen
+  // passed both, so nothing was marked _notAsked and the line's prompt was
+  // handed the held-back rows under the instruction "THE SCREEN THIS SENTENCE
+  // SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE".
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the line is built from the same narrowing the screen uses",
+    /\}\), \{ days, wanted, themes \}\);/.test(appSrc));
+  ok("and it reads the intake interests, as the screen does",
+    /briefThemes\(forMatch, intakeInterest\)/.test(appSrc));
+
+  // ── PHOTOS WHILE DRAFTING ───────────────────────────────────────
+  // Oliver, 15 Aug 2026: "when making the draft, I'd like to be able to put in
+  // pictures. Instead of doing it only in manage published."
+  //
+  // Source assertions, because this is an upload against a live bucket and
+  // there is nothing pure to call. Each one is a mutation that survived the
+  // suite: every rule below was deleted, nothing failed, and that is the only
+  // reason it is written down here.
+  ok("the draft has its own photo upload", /const uploadDraftPhotos = async/.test(appSrc));
+  // It writes to studioDraftText, not to a row. The Media panel next door
+  // cannot be reused because every action in it PATCHes gemlyx_content by id,
+  // and a draft has no id.
+  ok("and it saves onto the draft rather than a published row",
+    /const uploadDraftPhotos = async[\s\S]{0,1600}setStudioDraftText\(JSON\.stringify\(next, null, 2\)\)/.test(appSrc));
+  ok("and never PATCHes a row it does not have",
+    !/const uploadDraftPhotos = async[\s\S]{0,1600}patchContentPayload/.test(appSrc));
+  // PARSED BEFORE ANYTHING UPLOADS. Otherwise a typo in the JSON sends the
+  // files to the bucket with nowhere to put the URLs, and he re-picks them not
+  // knowing they already went.
+  ok("nothing uploads until the draft JSON parses",
+    /const uploadDraftPhotos = async[\s\S]{0,700}JSON\.parse\(studioDraftText\)[\s\S]{0,300}return;[\s\S]{0,200}setDraftPhotoBusy\(true\)/.test(appSrc));
+  // Same rule as the published panel: the first photo becomes the hero and a
+  // later one does not take that away.
+  ok("a later upload does not replace the hero", /photo: draft\?\.photo \|\| firstUrl/.test(appSrc));
+  // Reset on click, or re-picking the SAME file after a failed upload fires no
+  // onChange at all and the button looks broken.
+  ok("picking the same file twice still fires", /onClick=\{e => \{ e\.currentTarget\.value = ""; \}\}/.test(appSrc));
+
+  // ── AND ONE UPLOAD, NOT THREE ───────────────────────────────────
+  // The POST to the bucket was written out three times and the error message
+  // had already drifted: one copy named the one-time SQL setup, another said
+  // "Upload failed (404)". Same failure, two answers, depending on which
+  // button you pressed.
+  ok("there is one upload helper", /const uploadToMedia = async/.test(appSrc));
+  is("and only it posts to the bucket",
+    (appSrc.match(/storage\/v1\/object\/gemlyx-media\//g) || []).length, 1);
+  ok("and it says what is actually wrong", /run the one-time SQL setup/.test(appSrc));
+  is("that sentence is written once", (appSrc.match(/run the one-time SQL setup/g) || []).length, 1);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

@@ -6,8 +6,21 @@ import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
 import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/interestFit";
 import { cardLine } from "../utils/cardLine";
 import { buildPreviewReport, downloadReport, reportFilename } from "../utils/previewReport";
-import { previewCoverage, describeCoverage } from "../utils/previewCoverage";
+import { previewCoverage, describeCoverage, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_UNANSWERED } from "../utils/previewCoverage";
 import { AskGemlyx } from "./AskGemlyx";
+
+// ── THE HEADER ON THE FINDING, FROM THE CONSTANTS ───────────────────
+// This read `coverage.verdict === "no-content-there" ? ... : ...`, with the
+// verdict strings retyped here as literals beside the module that exports them.
+// A fourth verdict was added to previewCoverage.js and this chain silently
+// labelled it "Nothing to match on", which is the one thing it is not: sixteen
+// rows matched. A map off the exported constants cannot drift that way, and a
+// verdict with no entry falls through to the same default on purpose.
+const COVERAGE_TITLE = {
+  [COVERAGE_THIN]: "Content gap",
+  [COVERAGE_MATCHER]: "Matcher gap",
+  [COVERAGE_UNANSWERED]: "Full screen, nothing they asked for",
+};
 
 // ── "Here's what's coming up" preview screen ────────────────────────
 // PASS 27 EXTRACTION (App.jsx file-split, per Oliver: "you gotta start
@@ -370,7 +383,7 @@ export const GuidePreviewScreen = ({
             {coverage && (
               <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#E5737314", border: "1px solid #E5737355", color: C.light, fontSize: 11.5, lineHeight: 1.6 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#E57373", letterSpacing: 1.1, textTransform: "uppercase", marginBottom: 4 }}>
-                  {coverage.verdict === "no-content-there" ? "Content gap" : coverage.verdict === "matcher-could-not-reach-it" ? "Matcher gap" : "Nothing to match on"}
+                  {COVERAGE_TITLE[coverage.verdict] || "Nothing to match on"}
                 </div>
                 {describeCoverage(coverage)}
                 {/* ── FROM THE FINDING STRAIGHT TO THE SEARCH ────

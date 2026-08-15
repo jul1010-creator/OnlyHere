@@ -1244,42 +1244,6 @@ function GemlyxApp() {
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState(null);
   const [mediaReelInput, setMediaReelInput] = useState("");
-
-  // ── ONE UPLOAD, THREE CALLERS ───────────────────────────────────────
-  // The POST to the storage bucket was written out three times: once for the
-  // Manage Published media panel, once for a fact card's photo, and once more
-  // the moment drafting got its own upload. Three copies of a URL, a header set
-  // and an error message, and the error message had ALREADY drifted: one copy
-  // named the SQL setup and told you where to find it, the other said "Upload
-  // failed (404)". Same failure, same cause, two different answers depending on
-  // which button you pressed.
-  //
-  // Returns the public URL. Throws with the sentence that says what is wrong,
-  // because the likely cause really is that the one-time bucket SQL has not
-  // been run and that is a thing you can go and do.
-  const uploadToMedia = async (file, path) => {
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
-      method: "POST",
-      headers: { ...studioAuth(), "Content-Type": file?.type || "image/jpeg", "x-upsert": "true" },
-      body: file,
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(res.status === 404 || /bucket/i.test(detail)
-        ? "The gemlyx-media storage bucket doesn't exist yet — run the one-time SQL setup (see the comment above the media editor in App.jsx, or CHANGES_THIS_PASS.md)."
-        : `Upload failed (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ""}`);
-    }
-    return `${SUPABASE_URL}/storage/v1/object/public/gemlyx-media/${path}`;
-  };
-
-  // A filename that cannot collide and cannot break a URL. The extension is
-  // stripped to letters and digits because a file picked off a phone can arrive
-  // called "IMG_0042.JPG?1" and that question mark ends the path early.
-  const mediaPathFor = (file, folder, base, i = 0) => {
-    const ext = ((String(file?.name || "").split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "")) || "jpg";
-    return `${folder}/${base}-${Date.now()}-${i}.${ext}`;
-  };
-
   const patchContentPayload = async (row, newPayload) => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${row.id}`, {
       method: "PATCH",
@@ -1475,7 +1439,21 @@ function GemlyxApp() {
       const newBlocks = [];
       let firstUrl = null;
       for (let i = 0; i < files.length; i++) {
-        const url = await uploadToMedia(files[i], mediaPathFor(files[i], row.type, slugBase, i));
+        const f = files[i];
+        const ext = ((f.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "")) || "jpg";
+        const path = `${row.type}/${slugBase}-${Date.now()}-${i}.${ext}`;
+        const up = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
+          method: "POST",
+          headers: { ...studioAuth(), "Content-Type": f.type || "image/jpeg", "x-upsert": "true" },
+          body: f,
+        });
+        if (!up.ok) {
+          const detail = await up.text().catch(() => "");
+          throw new Error(up.status === 404 || /bucket/i.test(detail)
+            ? "The gemlyx-media storage bucket doesn't exist yet — run the one-time SQL setup (see the comment above the media editor in App.jsx, or CHANGES_THIS_PASS.md)."
+            : `Upload failed (${up.status})`);
+        }
+        const url = `${SUPABASE_URL}/storage/v1/object/public/gemlyx-media/${path}`;
         newBlocks.push({ type: "image", src: url });
         if (!firstUrl) firstUrl = url;
       }
@@ -1614,67 +1592,6 @@ function GemlyxApp() {
   const [rephraseSuggestions, setRephraseSuggestions] = useState({}); // flag index -> { original, suggestion }
   const [rephraseLoadingIdx, setRephraseLoadingIdx] = useState(null);
   const [draftEditError, setDraftEditError] = useState(null);
-
-  // ── "I'D LIKE TO BE ABLE TO PUT IN PICTURES" ────────────────────────
-  //
-  // Oliver, 15 Aug 2026: "when making the draft, I'd like to be able to put in
-  // pictures. Instead of doing it only in manage published."
-  //
-  // The Media panel could not be reused as it stood, and the reason is worth
-  // writing down. Every one of its actions ends in patchContentPayload, which
-  // PATCHes gemlyx_content WHERE id = row.id. A draft has no id. It is not in
-  // the database yet; that is what makes it a draft. So the panel was not
-  // merely unavailable here, it had nowhere to write.
-  //
-  // The upload half is identical and is shared (uploadToMedia). The saving half
-  // is what differs: the URL goes onto the draft IN MEMORY, through
-  // studioDraftText, because that is the source of truth this panel publishes
-  // from. Publish then writes the photo with everything else, in one insert.
-  //
-  // Uploaded BEFORE publish on purpose. The file has to live somewhere with a
-  // URL, and the bucket is that somewhere; holding it in the browser until
-  // publish would mean losing it on a refresh, which is the one thing a draft
-  // panel must not do to work you have already done.
-  //
-  // The cost of that choice, stated rather than hidden: abandoning a draft
-  // leaves the file in the bucket. It is a few kilobytes, it is not linked from
-  // anywhere, and the alternative is worse.
-  const [draftPhotoBusy, setDraftPhotoBusy] = useState(false);
-  const [draftPhotoError, setDraftPhotoError] = useState(null);
-  const uploadDraftPhotos = async (fileList) => {
-    const files = Array.from(fileList || []);
-    if (!files.length || draftPhotoBusy) return;
-    // Parsed FIRST, and nothing is uploaded if it will not parse. Otherwise a
-    // typo in the JSON means the files go to the bucket and the URLs have
-    // nowhere to land, and he re-picks them not knowing they already uploaded.
-    let draft;
-    try { draft = JSON.parse(studioDraftText); }
-    catch { setDraftPhotoError("The draft JSON below does not parse, so there is nothing to attach the photo to. Fix it first."); return; }
-    setDraftPhotoBusy(true); setDraftPhotoError(null);
-    try {
-      const base = slugify(draft?.name || studioDraft?.name || "draft");
-      const blocks = [];
-      let firstUrl = null;
-      for (let i = 0; i < files.length; i++) {
-        const url = await uploadToMedia(files[i], mediaPathFor(files[i], `drafts/${studioType || "item"}`, base, i));
-        blocks.push({ type: "image", src: url });
-        if (!firstUrl) firstUrl = url;
-      }
-      // Same rule as the published panel: the first photo on an entry with none
-      // becomes the hero, so the card stops looking bare, and later ones land
-      // in the writing only.
-      const next = {
-        ...draft,
-        photo: draft?.photo || firstUrl,
-        blogBody: [...(Array.isArray(draft?.blogBody) ? draft.blogBody : []), ...blocks],
-      };
-      setStudioDraft(next);
-      setStudioDraftText(JSON.stringify(next, null, 2));
-      setDraftEditError(null);
-    } catch (e) { setDraftPhotoError(String(e?.message || e)); }
-    setDraftPhotoBusy(false);
-  };
-
   // ── A DRAFT YOU ALREADY HAVE, PUT BACK ──────────────────────────────
   // Oliver, 14 Aug 2026, having deleted a good draft and been handed a fixed
   // copy of it: "Well, I can't put it in anywhere.."
@@ -5827,13 +5744,20 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (!file) return;
     setFactDrafts(prev => prev.map(d => d.key === key ? { ...d, uploading: true } : d));
     try {
-      // A fact keeps ONE photo and replaces it, so the path is the fact's key
-      // rather than a timestamped name: re-uploading overwrites rather than
-      // leaving the old file orphaned in the bucket. Everything else about the
-      // upload is the shared helper, so the bucket-missing message is the same
-      // sentence here as in the other two places.
-      const ext = ((String(file.name || "").split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "")) || "jpg";
-      const url = await uploadToMedia(file, `facts/${key}.${ext}`);
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `facts/${key}.${ext}`;
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/gemlyx-media/${path}`, {
+        method: "POST",
+        headers: { ...studioAuth(), "Content-Type": file.type || "image/jpeg", "x-upsert": "true" },
+        body: file,
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        // Says what is actually wrong rather than "upload failed": the bucket
+        // SQL genuinely has not been run yet, and that is the likely cause.
+        throw new Error(/bucket/i.test(body) ? "The gemlyx-media bucket does not exist yet. Run the bucket SQL from CHANGES_THIS_PASS.md." : body.slice(0, 160));
+      }
+      const url = `${SUPABASE_URL}/storage/v1/object/public/gemlyx-media/${path}`;
       setFactDrafts(prev => prev.map(d => d.key === key ? { ...d, photo: url, uploading: false } : d));
     } catch (e) {
       setFactError(String(e.message || e));
@@ -12271,44 +12195,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             onSweepRequested={(id) => proposeSweepRun(id)}
                           />
                         )}
-                        {/* ── PHOTOS, WHILE DRAFTING ────────────────────
-                            Oliver, 15 Aug 2026: "when making the draft, I'd
-                            like to be able to put in pictures. Instead of
-                            doing it only in manage published."
-
-                            Sits above the JSON rather than beside Publish,
-                            because what it does is EDIT THE DRAFT: the URLs
-                            appear in the text below the moment they upload,
-                            and he can see exactly what was added and move or
-                            remove it by hand like any other field. A panel
-                            that changed the draft invisibly would be the one
-                            thing this editor has never done.
-
-                            See uploadDraftPhotos for why the Media panel next
-                            door could not simply be reused: every action in it
-                            PATCHes a row by id, and a draft has no id. */}
-                        {(() => {
-                          const heroOf = (() => { try { return JSON.parse(studioDraftText)?.photo || ""; } catch { return studioDraft?.photo || ""; } })();
-                          return (
-                            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-                              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: C.text, cursor: draftPhotoBusy ? "default" : "pointer", opacity: draftPhotoBusy ? 0.6 : 1, fontFamily: "'Inter', sans-serif" }}>
-                                {draftPhotoBusy ? "Uploading…" : "🖼 Add photos"}
-                                {/* Reset on click so picking the SAME file twice
-                                    still fires onChange. Without it a re-pick
-                                    after a failed upload does nothing at all
-                                    and looks like the button is broken. */}
-                                <input type="file" accept="image/*" multiple disabled={draftPhotoBusy} style={{ display: "none" }}
-                                  onClick={e => { e.currentTarget.value = ""; }}
-                                  onChange={e => uploadDraftPhotos(e.target.files)} />
-                              </label>
-                              {heroOf
-                                ? <img src={heroOf} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: `1px solid ${C.border}` }} />
-                                : <span style={{ fontSize: 10.5, color: C.muted }}>No hero photo yet. The first one you add becomes it.</span>}
-                              <span style={{ fontSize: 10, color: C.muted }}>Uploads to the media bucket now and lands in the JSON below. Publish saves it with the rest.</span>
-                            </div>
-                          );
-                        })()}
-                        {draftPhotoError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8 }}>{draftPhotoError}</div>}
                         <textarea value={studioDraftText} onChange={e => { setStudioDraftText(e.target.value); setDraftEditError(null); }}
                           rows={12}
                           style={{ width: "100%", background: C.bg, border: `1px solid ${draftEditError ? "#E23B4E" : C.border}`, borderRadius: 10, padding: "12px", fontSize: 11, color: C.light, lineHeight: 1.6, fontFamily: "monospace", marginBottom: 8, boxSizing: "border-box", resize: "vertical" }} />
