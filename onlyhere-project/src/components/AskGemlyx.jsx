@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { C } from "../utils/theme";
 import { stripDashes } from "../utils/helpers";
+import { readerLanguage } from "../utils/readerLanguage";
 
 // ── THE TRAVELER'S ASSISTANT ─────────────────────────────────────────
 // Oliver, 7 Aug 2026: "There is a studio/admin assistant and a paid subscriber
@@ -94,6 +95,14 @@ export const AskGemlyx = ({ session, item, kind, onSignIn, startOpen = false, on
         body: JSON.stringify({
           question,
           entryName: item.name,
+          // ── THE SERVER CANNOT SEE navigator.language ──────────
+          // Oliver, 15 Aug 2026: "If someone only knows Mandarin Chinese..
+          // then this page will probably be difficult." The Detour prompt
+          // reads the browser directly; this one runs in api/ask.js, so the
+          // language has to travel with the question. Sent as a tag rather
+          // than a sentence, so the server owns the wording and one prompt
+          // change reaches both.
+          lang: readerLanguage(),
           // The stored entry, minus the internals a reader has no use for.
           entry: Object.fromEntries(Object.entries(item).filter(([k]) => !k.startsWith("_") && k !== "photo")),
         }),

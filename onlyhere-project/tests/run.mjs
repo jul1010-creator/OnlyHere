@@ -112,6 +112,8 @@ writeFileSync(entry, `
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
+  export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
+  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -133,6 +135,7 @@ writeFileSync(entry, `
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
+  export { readerLanguage, languageName, answerInLanguage, languageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { datesFromListings } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { costContradictions, bareOccurrence, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
@@ -15203,6 +15206,373 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     (appEv.match(/inEventMonth\(e, /g) || []).length, 1);
   ok("and the list runs the facets rather than its own copy of them",
     /const filteredEvents = applyFacets\(upcomingInTab, eventFacets, eventFacetState\)/.test(appEv));
+}
+
+// ── "IF SOMEONE ONLY KNOWS MANDARIN CHINESE" ───────────────────────
+// Oliver, 15 Aug 2026: "What do we do about language? If someone only knows
+// Mandarin Chinese.. then this page will probably be difficult."
+//
+// Nothing in this codebase read navigator.language before today, and not one of
+// the prompts that talk to a reader said which language to answer in, so every
+// one answered in English and nobody chose that. Translating the 78 published
+// entries is a separate decision with a real risk attached. This half costs one
+// line in a prompt that was already being sent.
+{
+  const { readerLanguage, languageName, answerInLanguage, languageBlock } = M;
+
+  // ── THE REGION COMES OFF, THE SCRIPT STAYS ON ───────────────────
+  // Both were wrong first time and these assertions are why. Passing the whole
+  // tag gave "German (Germany)" for de-DE and "Austrian German" for de-AT, and
+  // "ANSWER IN AUSTRIAN GERMAN" is not what a reader asked for: a region says
+  // where somebody is, not which language they read.
+  is("a German browser is German", languageName("de-DE"), "German");
+  is("and an Austrian one is still German, not Austrian German", languageName("de-AT"), "German");
+  is("a Swiss French browser is French", languageName("fr-CH"), "French");
+  is("and a bare tag works too", languageName("nl"), "Dutch");
+  // The tag he asked about. Passing the full tag matters: "zh" alone is the
+  // ambiguous "Chinese", and a reader on zh-Hans should not be answered in a
+  // script they cannot read.
+  // The script is the opposite of the region and has to survive, which is the
+  // case his question raises: answering a Simplified reader in Traditional is
+  // answering in a script they may not read.
+  is("Simplified Chinese keeps its script", languageName("zh-Hans"), "Simplified Chinese");
+  is("and Traditional keeps its own", languageName("zh-Hant"), "Traditional Chinese");
+  is("while a bare zh stays as unspecific as the browser was", languageName("zh"), "Chinese");
+  is("and a region on top of a script still comes off", languageName("zh-Hans-CN"), "Simplified Chinese");
+  // AN UNKNOWN TAG COMES BACK FORMATTED, NOT UNCHANGED. Intl gives "qq (XX)"
+  // for qq-XX, so the first version tested the answer against the raw tag,
+  // decided it was a real language, and would have told a model to answer in
+  // "qq (XX)".
+  is("an unknown tag names nothing rather than guessing", languageName("qq-XX"), "");
+  is("and neither does a bare unknown one", languageName("qq"), "");
+  is("and an empty one is empty", languageName(""), "");
+
+  // ── ENGLISH IS null, AND null MEANS CHANGE NOTHING ──────────────
+  // A traveller whose browser is already English must not get a line added to
+  // every prompt telling it to answer in English. That is a token on every
+  // request and an instruction that can only be obeyed or misread.
+  is("an English browser adds nothing", readerLanguage({ language: "en-GB" }), null);
+  is("and so does en-US", readerLanguage({ language: "en-US" }), null);
+  is("a missing navigator adds nothing", readerLanguage({}), null);
+  is("and an unrecognised tag adds nothing", readerLanguage({ language: "qq-XX" }), null);
+  is("a German browser is picked up", readerLanguage({ language: "de-AT" })?.name, "German");
+  is("with the tag it was given", readerLanguage({ language: "de-AT" })?.tag, "de-AT");
+  is("the block is empty for English", languageBlock({ language: "en-GB" }), "");
+  ok("and real for German", languageBlock({ language: "de-DE" }).includes("GERMAN"));
+
+  // ── AND IT NEVER TRANSLATES A PLACE NAME ────────────────────────
+  // The rule that makes this useful rather than dangerous. "Nordtor Station"
+  // instead of "Nørreport Station" is WORSE than an English answer, because the
+  // traveller has to match that word against a sign, a departure board and a
+  // ticket machine, none of which are translated. Same for a street, a ferry
+  // route and a price in DKK.
+  const de = answerInLanguage({ tag: "de-DE", name: "German" });
+  ok("a name is never translated", /NEVER TRANSLATE A NAME/.test(de));
+  ok("stations are named specifically", /station/i.test(de));
+  ok("and so are prices in DKK", /DKK/.test(de));
+  // What they TYPED beats a browser setting. A Dane on a German laptop who
+  // writes in English gets English, with no language picker needed.
+  ok("what they wrote in beats the browser setting", /match the language THEY used/.test(de));
+
+  // ── WIRED, AT EVERY READER FACING SURFACE ───────────────────────
+  const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the Detour conversation carries it", /\$\{languageBlock\(\)\}`;/.test(appL));
+  const askSrc = readFileSync(join(root, "api/ask.js"), "utf8");
+  // BOTH prompts in ask.js. The second one runs on the Perplexity fallback
+  // path, which is the branch that fires when the entry does not hold the
+  // answer, and it is the easier of the two to forget.
+  is("and both prompts in Ask Gemlyx do", (askSrc.match(/\$\{answerIn\}/g) || []).length, 2);
+  ok("the client sends the tag the server cannot see",
+    /lang: readerLanguage\(\)/.test(readFileSync(join(root, "src/components/AskGemlyx.jsx"), "utf8")));
+  ok("and the server says nothing when the reader is English",
+    /!lang\?\.name \|\| \/\^en\/i\.test/.test(askSrc));
+
+  // ── THE PIPELINE STAYS ENGLISH ──────────────────────────────────
+  // This must never reach a DRAFTING prompt. glanceExtract.js spent today
+  // fixing the opposite bug, untranslated Danish reaching a reader-facing
+  // field, and every gate in this codebase reads English: entryAudit,
+  // factSweep, claimCheck, checkScope, correction. A published row written in
+  // German would sit outside all five.
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  ok("no drafting prompt asks for another language",
+    !/readerLanguage|languageBlock|answerInLanguage/.test(prompts));
+  ok("and neither does the sweep", !/readerLanguage|languageBlock/.test(readFileSync(join(root, "src/utils/sweeps.js"), "utf8")));
+}
+
+// ── "ABSOLUTELY FK ALL WAS GENERATED" ──────────────────────────────
+// Oliver, 15 Aug 2026, with a run report attached. The report is why this could
+// be diagnosed in one read instead of guessed at: it carried the brief, the
+// themes read off it, a correct 5 day window, and `rows: []`.
+//
+// The brief was a family of four flying into Billund for five days who said "We
+// do not know Denmark at all, so surprise us". They named no town, no region
+// the matcher holds, and nothing else it could reach, so all three passes
+// returned nothing and the screen was blank. Reproduced against a deliberately
+// rich fake library: 0 rows for that brief, 3 rows the moment the word Aarhus
+// appears in it. The pool was never the problem.
+//
+// His call on the fix, which is better than the one offered: "Considering it
+// was a studio test.. let the studio tell me that this area lacks content."
+{
+  const { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS,
+    COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, briefThemes } = M;
+  const BRIEF = "user: I'm planning 5 days in Denmark. It is my family, two adults and two kids aged 7 and 10. We fly into Billund. We want to cycle where it makes sense. We like architecture. We arrive on 30 September We do not know Denmark at all, so surprise us";
+
+  // ── THE ARRIVAL NOTHING HAS EVER READ ───────────────────────────
+  // The intake placeholder says "e.g. Billund Airport, Aarhus, or leave blank",
+  // the random-guide generator writes "We fly into Billund" into its own
+  // briefs, and the guide planner has a paragraph on what Billund implies.
+  // previewMatch.js reads no arrival at all.
+  is("the arrival is found", arrivalPoint(BRIEF)?.code, "BLL");
+  is("and so is a Copenhagen one under its other name", arrivalPoint("user: we land at Kastrup late").code, "CPH");
+  is("and a flying-into phrasing", arrivalPoint("user: flying into Aalborg Airport on the 3rd").code, "AAL");
+  // ── AN ARRIVAL CUE IS REQUIRED ──────────────────────────────────
+  // Half these airports are named after towns, so "we skipped Aarhus" contains
+  // an airport name and is not an arrival. Reading it as one sends the whole
+  // preview to the wrong end of the country. Same discipline as
+  // isDeparturePlace, which requires a leaving VERB rather than treating being
+  // somewhere as leaving it.
+  // BILLUND, because it is the one bare town name in the table and therefore the
+  // only fixture that can fail. The first version used "we skipped Aarhus",
+  // which was green with the cue guard deleted: bare "Aarhus" is not a spelling
+  // in the table at all (Aarhus Airport is at Tirstrup, forty km from the town),
+  // so nothing matched with or without the rule. Mutation testing found it.
+  is("a town mentioned without arriving is not an arrival", arrivalPoint("user: we skipped Billund entirely"), null);
+  is("and neither is ruling one out", arrivalPoint("user: we do not want Billund, no theme parks"), null);
+  // And the town forty km from its own airport is not that airport.
+  // ── THE CUE IS WHAT DRAWS THE LINE, NOT THE SPELLING ────────────
+  // The first version required the word "airport", so "We fly into Aalborg"
+  // silently returned nothing and the whole route went unanchored. That is the
+  // commonest phrasing there is. Found by building a fixture, not by reading
+  // the rule.
+  is("Aarhus the town, with no cue in front of it, is not an arrival", arrivalPoint("user: three days in Aarhus"), null);
+  is("but flying into it is", arrivalPoint("user: we fly into Aarhus on the 3rd")?.code, "AAR");
+  is("and so is flying into Aalborg, which used to return nothing", arrivalPoint("user: We fly into Aalborg")?.code, "AAL");
+  // `into` alone is not a cue, or wanting to go somewhere becomes landing there.
+  is("wanting to go into a town is not landing in it", arrivalPoint("user: we want to go into Aarhus one evening"), null);
+  is("an empty brief has no arrival", arrivalPoint(""), null);
+  ok("every airport carries a coordinate", AIRPORTS.every(a => Number.isFinite(a.lat) && Number.isFinite(a.lon)));
+
+  // Billund is at 55.74, which is inside South Jutland's band. The region falls
+  // out of the latitude rather than being hand assigned, so this and the
+  // Studio's own region picker cannot describe different places.
+  is("Billund lands in South Jutland", targetForCoords(55.740, 9.152)?.id, "south-jutland");
+  is("Copenhagen airport lands in Zealand", targetForCoords(55.618, 12.656)?.part, "Zealand");
+  is("and Bornholm is decided on longitude, since no band reaches it",
+    targetForCoords(55.063, 14.760)?.id, "bornholm");
+  is("a coordinate that is not one returns nothing", targetForCoords("x", null), null);
+
+  // ── THE TWO CAUSES, WHICH LOOK IDENTICAL ON SCREEN ──────────────
+  // This is the whole reason the finding exists rather than a "nothing matched"
+  // line. They need opposite responses and telling them apart needs a count.
+  const themes = briefThemes(BRIEF);
+  const nothingPublished = previewCoverage({ matched: [], library: [], convoText: BRIEF, themes, days: 5 });
+  is("an empty region is reported as a content gap", nothingPublished.verdict, COVERAGE_THIN);
+  ok("and it names the discovery target to aim at", /South Jutland/.test(describeCoverage(nothingPublished)));
+  ok("in Danish too, because the queries are Danish", /Sønderjylland/.test(describeCoverage(nothingPublished)));
+
+  // ELEVEN ROWS IN THAT REGION AND STILL NOTHING ON SCREEN. Sending him to
+  // research eleven entries he already has is the failure this half prevents.
+  const southJutland = Array.from({ length: 11 }, (_, i) => ({ payload: { name: `T${i}`, __lat: 55.4, __lon: 8.8 } }));
+  const matcherGap = previewCoverage({ matched: [], library: southJutland, convoText: BRIEF, themes, days: 5 });
+  is("content that exists but could not be reached is a matcher gap", matcherGap.verdict, COVERAGE_MATCHER);
+  is("and the count is stated", matcherGap.published, 11);
+  ok("and it says plainly that this is not a content gap", /NOT a content gap/.test(describeCoverage(matcherGap)));
+  ok("so it never sends him to research what he already has",
+    !/Discovery target/.test(describeCoverage(matcherGap)));
+
+  // No arrival at all is a third case: there is nothing to measure coverage
+  // against, so it must not claim a gap anywhere.
+  const blind = previewCoverage({ matched: [], library: southJutland, convoText: "user: five days, we like beaches", themes: null, days: 5 });
+  is("a brief with no arrival names no region", blind.verdict, COVERAGE_NOTHING_SAID);
+  is("and claims nothing about coverage", blind.target, null);
+
+  // ── AND A WORKING RUN SAYS NOTHING ──────────────────────────────
+  // A finding on a run that found something is noise, and noise on a panel is
+  // how a real finding gets scrolled past.
+  is("a run that found something reports no finding",
+    previewCoverage({ matched: [{ name: "Ribe" }], library: [], convoText: BRIEF }), null);
+
+  // ── WIRED, AND ONLY ON THE TEST PATH ────────────────────────────
+  const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("the finding is computed", /const coverage = testProfile \? previewCoverage\(/.test(prev));
+  // testProfile is null for every real traveller. A visitor must never be shown
+  // a note about the founder's content coverage.
+  ok("and never for a real traveller", /testProfile \? previewCoverage/.test(prev) && !/^\s*const coverage = previewCoverage/m.test(prev));
+  ok("it is on the screen", /describeCoverage\(coverage\)/.test(prev));
+  ok("and on the report, which is where the empty run was least explained",
+    /coverage,/.test(readFileSync(join(root, "src/utils/previewReport.js"), "utf8")));
+  ok("the published library reaches the screen", /library=\{manageItems \|\| \[\]\}/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+}
+
+// ── "THE ROUTE DOESN'T BECOME SILLY" ───────────────────────────────
+// Oliver, 15 Aug 2026, on a preview for a family landing at Billund that listed
+// Aarhus above Ribe: "Am I wrong, or is this route very akward? Is Ribe not
+// under Billund?" Then the requirement: "the important thing is that the route
+// doesn't become silly. That they follow a pattern that makes sense."
+//
+// He was not wrong, and the report he sent made it measurable:
+//   shown   Billund, Aarhus, Ribe, Aalborg   416 km
+//   route   Billund, Ribe, Aarhus, Aalborg   282 km
+// 134 km spent driving back past the airport you started at.
+{
+  const { routeOrder, reachBand, haversineKm, coordsOf, kmBetween,
+    REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, matchedPlaces, previewPools, arrivalPoint } = M;
+
+  const BLL = { name: "Billund Airport", lat: 55.740, lon: 9.152 };
+  const T = {
+    billund: { name: "Billund", __lat: 55.7247, __lon: 9.1196, tier: "Highly Recommended", region: "Jutland" },
+    aarhus: { name: "Aarhus", __lat: 56.157, __lon: 10.210, tier: "Highly Recommended", region: "Jutland" },
+    ribe: { name: "Ribe", __lat: 55.328, __lon: 8.765, tier: "Highly Recommended", region: "Jutland" },
+    aalborg: { name: "Aalborg", __lat: 57.048, __lon: 9.919, tier: "Worth Considering", region: "Jutland" },
+  };
+
+  // The trip he looked at. Measured from the AIRPORT, which is three km from
+  // Billund town and is the thing they actually stand in. My first version of
+  // these three used the town as the origin and was out by two or three km on
+  // each: the code was right and the expected numbers were from the wrong
+  // point, which is worth leaving written down because the badge on the card
+  // says "from Billund Airport" and has to mean it.
+  is("Ribe is the closest published town to where they land", kmBetween(BLL, T.ribe), 52);
+  is("and Aarhus is further, in the other direction", kmBetween(BLL, T.aarhus), 81);
+  is("and Aalborg is furthest", kmBetween(BLL, T.aalborg), 153);
+  ok("the airport is not the town", kmBetween(BLL, T.billund) > 0 && kmBetween(BLL, T.billund) < 6);
+
+  const r = routeOrder([T.aarhus, T.ribe, T.billund, T.aalborg], { from: BLL });
+  is("the route runs south then north, not back and forth",
+    r.ordered.map(t => t.name), ["Billund", "Ribe", "Aarhus", "Aalborg"]);
+  ok("and it is shorter than what was shown", r.totalKm < 300);
+  // ── THE TWO BASES HE ASKED FOR FALL OUT OF IT ───────────────────
+  // His brief: "one base for the first half and another for the second." The
+  // geography hands you that for free once the order is right, and the old
+  // order interleaved them.
+  is("the first half is the southern pair", r.ordered.slice(0, 2).map(t => t.name), ["Billund", "Ribe"]);
+  is("and the second half is the northern pair", r.ordered.slice(2).map(t => t.name), ["Aarhus", "Aalborg"]);
+  // Every leg is measured from the stop before it, which is what the card shows.
+  is("each leg is measured from the one before", r.legs.map(l => l.to), ["Billund", "Ribe", "Aarhus", "Aalborg"]);
+  is("and the first leg is measured from the airport", r.legs[0].from, "Billund Airport");
+
+  // ── NO ANCHOR MEANS NO ROUTE ────────────────────────────────────
+  // Inventing a start point would order the list around a place nobody named,
+  // which is the same class of error as filling an empty section with whatever
+  // the town happened to hold.
+  const noFrom = routeOrder([T.aarhus, T.ribe, T.billund], {});
+  is("with no arrival the order is left alone", noFrom.ordered.map(t => t.name), ["Aarhus", "Ribe", "Billund"]);
+  is("and no distance is claimed", noFrom.totalKm, null);
+  is("one town is not a route either", routeOrder([T.ribe], { from: BLL }).legs.length, 0);
+  is("and nor is none", routeOrder([], { from: BLL }).ordered, []);
+
+  // ── A TOWN WITH NO COORDINATE IS KEPT ───────────────────────────
+  // Never dropped, and never able to make the answer arbitrary. That is the
+  // lesson byEventDate learned this afternoon, where one unparseable date
+  // scrambled thirteen good rows through a comparator returning NaN.
+  const blind = routeOrder([T.aarhus, { name: "Ukendt" }, T.ribe, T.billund], { from: BLL });
+  is("a town with no coordinate survives", blind.ordered.length, 4);
+  // OPTIONAL CHAINING, and it is not neatness. The first version read
+  // blind.ordered[3].name, so a change that DROPS the row threw instead of
+  // failing, which aborts the whole file and takes every assertion below it
+  // with it, which reads as a pass. The handoff names this exact trap and I
+  // walked into it anyway.
+  is("at the end, after the ones that can be placed", blind.ordered[3]?.name, "Ukendt");
+  is("and the placed ones are still in route order", blind.ordered.slice(0, 3).map(t => t.name), ["Billund", "Ribe", "Aarhus"]);
+  is("a coordinate that is not one measures nothing", haversineKm([1, 2], null), null);
+  is("and coordsOf says so rather than guessing", coordsOf({ name: "x" }), null);
+  // ── A GENUINE TIE, WHICH IS THE ONLY FIXTURE THAT TESTS THIS ────
+  // Two towns exactly 81 km either side of the same airport. With a unique
+  // shortest path any implementation looks deterministic, so the first version
+  // of this assertion passed against a build where the INPUT order decided the
+  // answer. Feeding the same pair in both possible orders is what found it.
+  const west = { name: "Vestby", __lat: 57.093, __lon: 8.500 };
+  const east = { name: "Ostby", __lat: 57.093, __lon: 11.198 };
+  const AAL = { name: "Aalborg Airport", lat: 57.093, lon: 9.849 };
+  is("the two are the same distance away", kmBetween(AAL, west), kmBetween(AAL, east));
+  is("and a tie is broken the same way whichever order they arrive in",
+    routeOrder([west, east], { from: AAL }).ordered.map(t => t.name).join("|"),
+    routeOrder([east, west], { from: AAL }).ordered.map(t => t.name).join("|"));
+  is("the route is stable between runs",
+    routeOrder([T.aalborg, T.billund, T.ribe, T.aarhus], { from: BLL }).ordered.map(t => t.name).join("|"),
+    routeOrder([T.ribe, T.aarhus, T.aalborg, T.billund], { from: BLL }).ordered.map(t => t.name).join("|"));
+
+  // ── HOW FAR IS TOO FAR DEPENDS ON HOW LONG THEY HAVE ────────────
+  // 155 km is nothing on seven days and most of a day on two. Same principle as
+  // regionPickLimit, which already scales the NUMBER of towns by trip length.
+  is("on a week, Aalborg is comfortable", reachBand(155, 7), REACH_COMFORTABLE);
+  is("on two days it is a stretch", reachBand(155, 2), REACH_STRETCH);
+  is("and the far end of the country is out", reachBand(300, 2), REACH_FAR);
+  is("an unknown distance is neither near nor far", reachBand(null, 5), REACH_STRETCH);
+
+  // ── AND IT IS THE MATCHER THAT USES IT ──────────────────────────
+  // The rule above is correct and useless if the ranking never calls it, which
+  // is the failure previewMatch.js has already documented four times.
+  const BRIEF = "user: 7 days in Denmark with my parents. We fly into Billund. We are renting a car. We have heard about Jutland and would like to see some of it";
+  // Aalborg deliberately holds the most, because `held content` used to be the
+  // second ranking term and that is what put it above the towns by the airport.
+  const foodSpots = [
+    ...Array.from({ length: 8 }, (_, i) => ({ name: `Aalborg spot ${i}`, location: "Aalborg" })),
+    { name: "Ribe spot", location: "Ribe" },
+  ];
+  const pools = previewPools({ towns: Object.values(T), foodSpots });
+  const rows = matchedPlaces(BRIEF, pools, { days: 7 });
+  const order = rows.filter(p => p._src === "town").map(p => p.name);
+  is("the matcher returns the towns in travel order", order, ["Billund", "Ribe", "Aarhus", "Aalborg"]);
+  // ── THE LEGS CHAIN, THEY ARE NOT ALL FROM THE AIRPORT ───────────
+  // Only the first stop is measured from where they land. Every one after it is
+  // measured from the stop before, because that is the drive they make. My
+  // first version of this expected Ribe to read "from Billund Airport" and the
+  // code was right: Ribe follows Billund town.
+  is("the first stop is measured from the airport", rows.find(p => p.name === "Billund")?._legFrom, "Billund Airport");
+  is("and every one after it from the stop before", rows.find(p => p.name === "Ribe")?._legFrom, "Billund");
+  is("so the card shows the drive that is actually made", rows.find(p => p.name === "Ribe")?._legKm, 49);
+  is("and the last leg too", rows.find(p => p.name === "Aalborg")?._legFrom, "Aarhus");
+  // Held content must no longer be able to outrank being near the airport.
+  ok("the town holding the most no longer leads", order[0] !== "Aalborg");
+  // Food rows must NOT be reordered: a restaurant is read under its town, not
+  // driven to from an airport, and reordering them breaks the section grouping.
+  is("only towns are put in route order", rows.filter(p => p._src === "food").length, 9);
+
+  // ── A FIXTURE WHERE THE SCORE AND THE ROUTE DISAGREE ────────────
+  // The Billund one above cannot prove the reordering happens: Billund is
+  // NAMED in that brief so it is pinned first by pass one, and the score order
+  // for the other three happened to equal the travel order. Two mutants walked
+  // straight through it. Landing at Aalborg with the most-published town at the
+  // far end of the country separates them completely.
+  const NORTH = {
+    ribe: { name: "Ribe", __lat: 55.328, __lon: 8.765, tier: "Highly Recommended", region: "Jutland" },
+    aarhus: { name: "Aarhus", __lat: 56.157, __lon: 10.210, tier: "Highly Recommended", region: "Jutland" },
+    skagen: { name: "Skagen", __lat: 57.720, __lon: 10.590, tier: "Highly Recommended", region: "Jutland" },
+  };
+  const NORTH_BRIEF = "user: 7 days in Denmark. We fly into Aalborg. We are renting a car. We have heard about Jutland and would like to see some of it";
+  // Ribe holds five and is 207 km away, so the old ranking led with it.
+  const ribeHeavy = Array.from({ length: 5 }, (_, i) => ({ name: `R${i}`, location: "Ribe" }));
+  const northRows = matchedPlaces(NORTH_BRIEF, previewPools({ towns: Object.values(NORTH), foodSpots: ribeHeavy }), { days: 7 });
+  const northOrder = northRows.filter(p => p._src === "town").map(p => p.name);
+  is("the route runs out from the airport, not from the fullest town", northOrder, ["Skagen", "Aarhus", "Ribe"]);
+  ok("the town holding the most is last, because it is furthest", northOrder[2] === "Ribe");
+  is("and the first leg is measured from the airport they named",
+    northRows.find(p => p.name === "Skagen")?._legFrom, "Aalborg Airport");
+
+  // ── AND REACH DECIDES WHO GETS IN, NOT JUST THE ORDER ───────────
+  // The route reordering above masks the ranking completely for display, so the
+  // reach term can only be observed where the CAP bites: more candidates than
+  // regionPickLimit allows. Two days permits two towns, and the question is
+  // whether a town holding five entries 207 km away takes a slot from one 83 km
+  // away holding none. It used to, because held content was the second term and
+  // that is the feedback loop: the best covered town keeps winning.
+  const CROWDED = {
+    ...NORTH,
+    sonderborg: { name: "Sønderborg", __lat: 54.909, __lon: 9.792, tier: "Highly Recommended", region: "Jutland" },
+  };
+  const short = matchedPlaces(NORTH_BRIEF.replace("7 days", "2 days"),
+    previewPools({ towns: Object.values(CROWDED), foodSpots: ribeHeavy }), { days: 2 });
+  const shortOrder = short.filter(p => p._src === "town").map(p => p.name);
+  is("a two day trip is offered two towns", shortOrder.length, 2);
+  ok("and they are the ones within reach of the airport",
+    shortOrder.every(n => n === "Skagen" || n === "Aarhus"));
+  ok("so the fullest town does not take a slot from a nearer one", !shortOrder.includes("Ribe"));
+
+  const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("and the leg is on the card, so the order can be checked",
+    /\{place\._legKm\} km from \{place\._legFrom\}/.test(prev));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

@@ -76,7 +76,19 @@ export default async function handler(req, res) {
   }
   if (!userId) return json(res, 401, { error: "Sign in to ask a question." });
 
-  const { question, entry, entryName } = req.body || {};
+  const { question, entry, entryName, lang } = req.body || {};
+  // ── ANSWER IN THE LANGUAGE THEY READ IN ─────────────────────────
+  // Oliver, 15 Aug 2026, on somebody who only reads Mandarin. Neither prompt in
+  // this file said a word about language, so both answered in English and
+  // nobody chose that. The client sends the tag because a serverless handler
+  // has no navigator; the WORDING lives here so the two prompts below cannot
+  // drift, and so does the rule that matters most: a station name is not
+  // translated, because the traveller has to match it against a sign.
+  //
+  // Deliberately inlined rather than imported from src/: api/ deploys as
+  // separate serverless functions and does not share the client bundle.
+  const answerIn = (!lang?.name || /^en/i.test(String(lang.tag || ""))) ? "" :
+    `\n\nANSWER IN ${String(lang.name).toUpperCase()}. Write your reply in ${lang.name}. If the question is written in a different language, match the language the question used instead.\nNEVER TRANSLATE A NAME. Place names, station and stop names, street names, ferry routes and the names of festivals and venues stay exactly as the entry writes them, because the traveller has to match them against a sign or a departure board that will not be translated. Prices stay in DKK with the figure unchanged.`;
   const q = String(question || "").trim().slice(0, MAX_QUESTION);
   if (!q) return json(res, 400, { error: "Ask me something first." });
 
@@ -158,7 +170,7 @@ Answer ONLY from the entry below. Never add a Danish fact the entry does not con
 
 IF THE ENTRY DOES NOT CONTAIN THE ANSWER, reply with exactly ${NOT_IN_ENTRY} and one short sentence naming what is missing, and nothing else. Something else will go and look it up. Answering from memory instead is the one mistake that matters here.
 
-Be short and plain. No preamble. Never use an em dash or an en dash.
+Be short and plain. No preamble. Never use an em dash or an en dash.${answerIn}
 
 Entry:
 ${entryJson}
@@ -202,7 +214,7 @@ Be short and concrete. Prefer the venue's own site, the organiser, or an officia
         sources = Array.isArray(pd?.citations) ? pd.citations.slice(0, 3) : [];
         answer = research.trim()
           ? await askClaude(
-              `Answer the traveler's question using ONLY the fresh research below. Short and direct. If the research does not actually settle it, say so plainly rather than hedging. Never use an em dash or an en dash.\n\nQuestion: ${q}\n\nFresh research:\n${research}`,
+              `Answer the traveler's question using ONLY the fresh research below. Short and direct. If the research does not actually settle it, say so plainly rather than hedging. Never use an em dash or an en dash.${answerIn}\n\nQuestion: ${q}\n\nFresh research:\n${research}`,
               400
             )
           : "I could not find an answer to that just now.";

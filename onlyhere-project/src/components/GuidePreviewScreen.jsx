@@ -6,6 +6,7 @@ import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
 import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/interestFit";
 import { cardLine } from "../utils/cardLine";
 import { buildPreviewReport, downloadReport, reportFilename } from "../utils/previewReport";
+import { previewCoverage, describeCoverage } from "../utils/previewCoverage";
 import { AskGemlyx } from "./AskGemlyx";
 
 // ── "Here's what's coming up" preview screen ────────────────────────
@@ -146,6 +147,10 @@ export const GuidePreviewScreen = ({
   // deciding on to find out what a place is.
   session = null,
   onSignIn = () => {},
+  // Everything the Studio has published, so an empty preview can say whether
+  // that is a content gap or a matcher that could not reach the content. Only
+  // ever passed on the pipeline test path; a real traveller never sees this.
+  library = [],
   // What the traveller typed about themselves, if they have an account. Read
   // ONLY to order what is offered behind a door, never to filter and never to
   // put a word on screen about the person. See profilePull in interestFit.js.
@@ -287,6 +292,12 @@ export const GuidePreviewScreen = ({
   // would leak into whatever the traveler does next (e.g. a real chat
   // message right after would silently ride along with the test's
   // mode/skip-choosing-screen behavior).
+  // ── "LET THE STUDIO TELL ME THAT THIS AREA LACKS CONTENT" ────
+  // Oliver, 15 Aug 2026, on a test run that returned nothing at all. Computed
+  // only on the test path, because it is a finding for the founder and not a
+  // message for a traveller. Null whenever the preview found something.
+  const coverage = testProfile ? previewCoverage({ matched, library, convoText, themes, days: win?.days ?? null }) : null;
+
   const closePreview = () => {
     if (pendingRandomGuideMode) {
       setPendingRandomGuideMode(null);
@@ -345,6 +356,20 @@ export const GuidePreviewScreen = ({
                 ONLY ON THE PIPELINE TEST PATH. testProfile is null for every
                 real traveller, so nobody's own brief can be written to disk by
                 a button they did not know was there. */}
+            {/* ── THE GAP, NAMED ─────────────────────────────
+                A test run that returns nothing has told him something, and
+                until now it told him by looking broken. The two causes need
+                opposite responses and look identical on screen, so the finding
+                says which one this is: go and research, or go and fix the
+                matcher. See utils/previewCoverage.js. */}
+            {coverage && (
+              <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#E5737314", border: "1px solid #E5737355", color: C.light, fontSize: 11.5, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#E57373", letterSpacing: 1.1, textTransform: "uppercase", marginBottom: 4 }}>
+                  {coverage.verdict === "no-content-there" ? "Content gap" : coverage.verdict === "matcher-could-not-reach-it" ? "Matcher gap" : "Nothing to match on"}
+                </div>
+                {describeCoverage(coverage)}
+              </div>
+            )}
             <button onClick={() => {
                 const at = new Date().toISOString();
                 const report = buildPreviewReport({
@@ -355,6 +380,7 @@ export const GuidePreviewScreen = ({
                   matched,
                   namedNames: matched.filter(p => mentions(p.name)).map(p => p.name),
                   profile: userProfile,
+                  coverage,
                 });
                 downloadReport(report, reportFilename(at));
               }}
@@ -414,6 +440,16 @@ export const GuidePreviewScreen = ({
                           holds inside it is the difference between a name and
                           an answer. Absent when there is nothing, because a
                           badge reading "0 places" is worse than no badge. */}
+                      {/* ── THE LEG, SO THE ORDER IS LEGIBLE ────────
+                          Oliver, 15 Aug 2026: "the important thing is that the
+                          route doesn't become silly. That they follow a pattern
+                          that makes sense." A reordering nobody can see is a
+                          change nobody can check, so each town says how far it
+                          is from the one before it, starting at the airport
+                          they land at. See utils/routeOrder.js. */}
+                      {place._legKm != null && place._legFrom && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase" }}>{place._legKm} km from {place._legFrom}</span>
+                      )}
                       {place._holds > 0 && (
                         <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 0.8, textTransform: "uppercase" }}>{place._holds} {place._holds === 1 ? "place" : "places"} inside</span>
                       )}

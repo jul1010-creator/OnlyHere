@@ -96,6 +96,7 @@ export const buildPreviewReport = ({
   matched = [],
   namedNames = [],
   profile = null,
+  coverage = null,
 } = {}) => {
   const named = new Set(namedNames);
   return {
@@ -143,6 +144,11 @@ export const buildPreviewReport = ({
         note: r.note || "",
       })),
     },
+    // ── WHY IT IS EMPTY, ON THE REPORT ITSELF ──────────────────────
+    // The run that prompted this file had `rows: []` and nothing to say about
+    // it, so the cause still had to be worked out by hand. An empty result is
+    // the case a report is MOST useful for and was the one it explained least.
+    coverage,
     pickedExtras,
     rows: (Array.isArray(matched) ? matched : []).map(p => rowReport(p, { wasNamed: named.has(p?.name) })),
   };

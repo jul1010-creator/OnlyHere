@@ -9,6 +9,11 @@ import { PARTS_OF_COUNTRY } from "./sourcePolicy";
 // means, and two copies of a word boundary check drift the first time either
 // one of them is touched.
 import { saysWord, fitsBrief } from "./interestFit";
+// Where they land, and how to order a list of towns from it. See routeOrder.js
+// for the measurement that prompted both: 416 km shown against 279 km possible,
+// on a brief that had asked for two bases.
+import { arrivalPoint } from "./arrival";
+import { routeOrder, reachBand, kmBetween } from "./routeOrder";
 
 // ── WHAT THE PREVIEW SCREEN ACTUALLY HOLDS ON A CONVERSATION ────────
 //
@@ -343,6 +348,12 @@ const TOO_WEAK_FOR_A_REGION_PICK = "nearby";
 // it. See interestFit.js for what a theme is and why a category gate on its
 // own put a palace in front of somebody who asked for markets.
 export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null } = {}) => {
+  // ── WHERE THEY LAND ─────────────────────────────────────────────
+  // Read once, at the top, because two things below need it: the region pass
+  // ranks by how reachable a town is from here, and the towns are handed back
+  // in travel order from here. Null for a brief that names no arrival, and null
+  // changes nothing, which is every brief before today.
+  const from = arrivalPoint(convoText);
   const text = String(convoText || "");
   const seen = new Set();
   const matched = [];
@@ -447,7 +458,28 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
         // Held content sits SECOND, under the editorial tier: a "Can't miss"
         // town with nothing under it yet is still the better recommendation
         // than a "Worth a look" one with three restaurants.
-        score: [TIER_RANK[tierOf(p)?.id] ?? 0, Math.min(held, 5), interestHit(p), p.isMajorCity ? 1 : 0],
+        // ── REACH SITS UNDER TIER AND OVER HELD CONTENT ────────
+        // Under tier, because Gemlyx's own editorial judgement is the thing
+        // this whole app is built on and a "Can't miss" town must never be
+        // dropped for being thirty km further away.
+        //
+        // OVER held content, and that is the fix. `held` was second, so the
+        // town with the most published entries won, which is a fact about the
+        // library rather than about this trip AND a feedback loop: Aalborg
+        // already held the most, so every entry published there pushed it
+        // further above the towns beside the airport. Researching more content
+        // was making the route worse.
+        //
+        // Bands, not raw kilometres, so a three km difference can never outrank
+        // a tier. See reachBand: the bands widen with trip length, because 155
+        // km is nothing on seven days and most of a day on two.
+        score: [
+          TIER_RANK[tierOf(p)?.id] ?? 0,
+          from ? reachBand(kmBetween(from, p), days) : 1,
+          Math.min(held, 5),
+          interestHit(p),
+          p.isMajorCity ? 1 : 0,
+        ],
       });
     }
     candidates.sort((a, b) => {
@@ -505,6 +537,33 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
         ? { ...p, _notAsked: true, _held: askedCategory ? "fit" : "category", _fit: fit }
         : { ...p, _fit: fit });
     }
+  }
+  // ── AND THE ORDER THEY COME BACK IN ─────────────────────────────
+  // Oliver, 15 Aug 2026: "the important thing is that the route doesn't become
+  // silly. That they follow a pattern that makes sense."
+  //
+  // Selection above is Gemlyx's judgement about WHICH towns. This is a separate
+  // question about what order to read them in, and answering both with one
+  // score is what put Aarhus above Ribe for somebody standing at Billund
+  // airport. Towns only: a restaurant is read under its town, not driven to
+  // from the airport, and reordering the food section by distance would break
+  // the grouping the sections rely on.
+  //
+  // No arrival means no anchor, and routeOrder leaves the order untouched
+  // rather than inventing a start point.
+  const towns = matched.filter(p => p._src === "town");
+  if (from && towns.length > 1) {
+    const { ordered, legs } = routeOrder(towns, { from });
+    const byName = new Map(legs.map(l => [l.to, l]));
+    const inOrder = ordered.map(p => {
+      const leg = byName.get(p.name);
+      // Stamped so the card can say "49 km from Billund Airport" and the order
+      // is legible rather than merely correct. A silent reordering is a change
+      // nobody can check.
+      return leg ? { ...p, _legKm: leg.km, _legFrom: leg.from } : p;
+    });
+    const rest = matched.filter(p => p._src !== "town");
+    return [...inOrder, ...rest];
   }
   return matched;
 };

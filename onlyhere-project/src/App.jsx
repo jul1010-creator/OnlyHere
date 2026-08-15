@@ -92,6 +92,7 @@ import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange,
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, isUndated, UNDATED } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
+import { languageBlock, readerLanguage } from "./utils/readerLanguage";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { AuthSheet } from "./components/AuthSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
@@ -9892,7 +9893,9 @@ If asked for a plan or itinerary, structure it day by day using only the above, 
 
 You also have a web_search tool. Use it whenever someone asks about something that changes over time and isn't in the lists above — current opening hours, whether a specific event is still on, ticket availability, or anything at a museum/castle/attraction not already listed here. Don't use it for things already covered in your lists above.
 
-${profileForPrompt(userProfile)}`;
+${profileForPrompt(userProfile)}
+
+${languageBlock()}`;
 
       const claudeTools = [{
         name: "web_search",
@@ -15238,6 +15241,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           // with no model call at all. Null for a signed out traveller, and the
           // ranking then runs on stated interest and editorial tier alone.
           userProfile={userProfile}
+          // What is published, so a test run that finds nothing can say whether
+          // that is a content gap or a matcher that could not reach the
+          // content. manageItems is null until Manage Published has been
+          // opened, and an empty array then means "unknown", which the finding
+          // reports as nothing named rather than as a gap.
+          library={manageItems || []}
           // "or ask Gemlyx", from inside a section that is holding something
           // back. Opens the SAME floating Detour panel rendered just below,
           // with the question already typed, because a door that opens onto an
