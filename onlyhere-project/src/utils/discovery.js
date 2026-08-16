@@ -39,6 +39,7 @@
 // every published row's coordinates and which part of the country each falls
 // in. Ask the data where it is thin and aim there.
 import { PARTS, partOfCountry } from "./geography";
+import { monthsInText } from "./eventDates";
 import { samePlaceName, fold, containsName } from "./danishNames";
 import { KOMMUNER, K } from "../data/kommuner";
 import { TOWN_COORDS } from "../data/towns";
@@ -259,6 +260,106 @@ ${withoutGap}`;
   return `SEARCH THIS REGION: ${t.label}, which Danes call ${t.danish}. Every one of the five queries must be aimed there, and the Danish ones must use ${t.danish} rather than the English name, because that is what local pages are written under. Name specific municipalities, islands or towns inside it rather than searching the region as one blob: ${t.hint}. Whichever town inside ${t.label} is the biggest will have absorbed most of the English writing about the region, the way Copenhagen has for the country, so do not let any single town take more than one of the five queries. Nowhere outside ${t.label} counts, however good a find it is.
 
 ${withoutGap}`;
+};
+
+// ── "RIGHT NOW, IT'S FILLED WITH EVENTS IN AUGUST" ──────────────────
+//
+// Oliver, 16 August 2026, asking to search for events in a specific month.
+//
+// It is filled with August because it is August. The search returns what is
+// current and splitFinishedCandidates correctly drops what has ended, so a button
+// pressed today can only reach the next few weeks. Every Christmas market, every
+// February light festival and the whole of spring is unreachable, and those are
+// exactly the things worth writing up MONTHS before somebody travels.
+//
+// ── AND THE YEAR IS NOT A DETAIL ─────────────────────────────────────
+// Asking for "December" in August means this December. Asking for "February"
+// means NEXT February. Getting that wrong sends the search after an edition that
+// has already happened, which is the one failure splitFinishedCandidates then
+// silently cleans up, so the run comes back empty and nothing says why.
+export const DISCOVERY_MONTHS = [
+  { id: "any", label: "Any month", month: null, danish: "" },
+  { id: "jan", label: "January", month: 0, danish: "januar" },
+  { id: "feb", label: "February", month: 1, danish: "februar" },
+  { id: "mar", label: "March", month: 2, danish: "marts" },
+  { id: "apr", label: "April", month: 3, danish: "april" },
+  { id: "may", label: "May", month: 4, danish: "maj" },
+  { id: "jun", label: "June", month: 5, danish: "juni" },
+  { id: "jul", label: "July", month: 6, danish: "juli" },
+  { id: "aug", label: "August", month: 7, danish: "august" },
+  { id: "sep", label: "September", month: 8, danish: "september" },
+  { id: "oct", label: "October", month: 9, danish: "oktober" },
+  { id: "nov", label: "November", month: 10, danish: "november" },
+  { id: "dec", label: "December", month: 11, danish: "december" },
+];
+
+export const monthById = (id) => DISCOVERY_MONTHS.find(m => m.id === id) || DISCOVERY_MONTHS[0];
+
+// The next occurrence of that month, so December asked for in August is this year
+// and February is next. `today` is a parameter for the reason every date helper in
+// this codebase takes one: a function that reads the clock cannot be tested
+// against a fixed calendar.
+export const yearForMonth = (month, today = new Date()) => {
+  // null BEFORE Number(), because Number(null) is 0 and 0 is January. The
+  // no-month choice would have come back as "next January", which is the same
+  // trap as new Date(null) landing on the epoch: an absent value coerced into a
+  // real one and then treated as a measurement. Caught by the test on its first
+  // run, on the one input the whole "Any month" option produces.
+  if (month === null || month === undefined || month === "") return null;
+  const m = Number(month);
+  if (!Number.isInteger(m) || m < 0 || m > 11) return null;
+  const now = today instanceof Date && Number.isFinite(today.getTime()) ? today : new Date();
+  // The CURRENT month counts as now rather than a year away: asking for August on
+  // 16 August means the edition running this week.
+  return m >= now.getMonth() ? now.getFullYear() : now.getFullYear() + 1;
+};
+
+// Appended to the brief, in Danish as well as English, for the reason the rest of
+// this file gives at length: a Danish what's-on page is where a Danish event first
+// appears in writing, and it is filed under "julemarked", not "Christmas market".
+export const framingForMonth = (monthId, today = new Date()) => {
+  const m = monthById(monthId);
+  if (m.month === null) return "";
+  const year = yearForMonth(m.month, today);
+  const now = today instanceof Date ? today : new Date();
+  const soon = m.month === now.getMonth();
+  return `\nAIM EVERY QUERY AT ONE MONTH: ${m.label} ${year}. Not the next few weeks, ${m.label} ${year} specifically, and say the month and the year in the queries themselves. Use the Danish month name ${m.danish} in the Danish ones, because a Danish what's-on page files it under ${m.danish} and under ${year}, never under the English name. ${soon ? `That month is the one running now, so the current edition is the right one.` : `That month has not happened yet, so anything you find describing a ${m.label} edition that has already finished is the WRONG YEAR: look for ${year}, and if a source only describes an earlier edition, say the name and let the research pass confirm the new dates rather than reporting the old ones.`} Seasonal wording reaches this better than a date does: for a winter month try julemarked, juletræstænding, lysfest, vinterbadning; for spring, forårsmarked, påske; for late summer, høstmarked, æblefestival. An event that runs all year is not an answer to this question.`;
+};
+
+// ── AND THE THIRD DETERMINISTIC FILTER, FOR THE THIRD TIME ──────────
+//
+// The month goes in the brief above, and a brief is not a filter. That sentence
+// has now been written three times in this one file: splitAlreadyCovered,
+// splitFinishedCandidates, splitOffTarget. This is the fourth, and by now it is
+// the default rather than a lesson.
+//
+// It reads the candidate's OWN stated dates, the way splitOffTarget reads its own
+// stated region. The extraction prompt is asked for a `when` for exactly this, and
+// a candidate that names no month is KEPT: not knowing when something runs is not
+// evidence it runs at the wrong time, which is the discipline every other check
+// here follows.
+export const splitOffMonth = (candidates, monthId) => {
+  const m = monthById(monthId);
+  const list = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
+  if (m.month === null) return { kept: list, dropped: [] };
+  const kept = [], dropped = [];
+  for (const c of list) {
+    const said = clean(c?.when || c?.dates || "");
+    const months = monthsInText(said);
+    // A range naming several months counts if the wanted one is among them: "late
+    // November to 23 December" is a December answer.
+    if (!months.length || months.includes(m.month)) kept.push(c);
+    else dropped.push({ ...c, _saidMonths: months.map(i => DISCOVERY_MONTHS[i + 1].label) });
+  }
+  return { kept, dropped };
+};
+
+export const describeOffMonth = (dropped, monthId) => {
+  const list = Array.isArray(dropped) ? dropped.filter(Boolean) : [];
+  if (!list.length) return "";
+  const m = monthById(monthId);
+  const when = [...new Set(list.flatMap(d => d._saidMonths || []))];
+  return `${list.length} ${list.length === 1 ? "was" : "were"} left out for running in a different month than ${m.label}${when.length ? `, by their own dates: ${when.join(", ")}` : ""}. The search was aimed at ${m.label} and answered with another month, which is worth knowing about the run rather than about the events.`;
 };
 
 // ── "BUT THIS IS NOT SOUTH JUTLAND" ─────────────────────────────────

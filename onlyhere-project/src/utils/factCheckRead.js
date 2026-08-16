@@ -289,6 +289,85 @@ export const readInventedCheck = (text) => {
   return { verdict: "flagged", findings, why: "" };
 };
 
+// ── AND THEN NOBODY CHECKED THAT THE CORRECTION LANDED ───────────────
+//
+// Oliver's Gothersgade run log, 16 August 2026. Step 13, the invented-claim
+// check: "3 claims flagged: 2 contradicted, 1 unverified". Steps 14 to 18 are
+// the after-the-correction re-runs, and they re-check prices, the journey,
+// glance fields and stated absences. Every gate in that log has an "after the
+// correction" twin.
+//
+// EXCEPT THE ONE THAT FOUND SOMETHING. The invented-claim check has no twin. So
+// the only stage that reported real problems is the only stage that never sees
+// what replaced the draft, and the banner he was shown says, in its own words,
+// that the claims were "re-researched with fresh web search, and fixed in the
+// draft below (anything still unverifiable was removed rather than guessed)".
+// That sentence is a claim about work nobody verified. This codebase's own fifth
+// standing rule is that checking a draft does not check what replaced it.
+//
+// ── AND IT DOES NOT COST ANOTHER PERPLEXITY CALL ─────────────────────
+// The tempting fix is to re-run the check, which is a second paid search on a
+// 0 kr budget. It is also the wrong question. The check already told us WHICH
+// claims are wrong; what nobody asked is whether they are still there, and that
+// is a string comparison.
+//
+// THE ANCHOR HAS TO BE THE DRAFT'S OWN WORDS, not the finding's. The answer
+// format asks the checker to "Quote what the research says", so a quote inside a
+// finding is often the RESEARCH's phrasing, and its absence from the draft proves
+// nothing at all. So an anchor counts only if it was in the draft BEFORE the
+// correction: that is what makes it the draft's claim rather than the checker's
+// commentary. Same shape as nameCore's guard, for the same reason.
+const FIGURES = /\d{2,}/g;
+const QUOTED = /"([^"]{4,90})"|“([^”]{4,90})”/g;
+
+const anchorsOf = (finding) => {
+  const t = String(finding || "");
+  const out = new Set();
+  for (const m of t.match(FIGURES) || []) out.add(m);
+  for (const m of t.matchAll(QUOTED)) {
+    const q = (m[1] || m[2] || "").trim();
+    if (q.length >= 4) out.add(q);
+  }
+  return [...out];
+};
+
+const hasAnchor = (text, anchor) => String(text || "").toLowerCase().includes(String(anchor).toLowerCase());
+
+// "gone", "survived" or "uncheckable", and the third is its own answer for the
+// reason readInventedCheck keeps "unreadable" separate: a finding with no figure
+// and no quote of the draft cannot be followed by code, and calling that fixed
+// would be the exact false reassurance this replaces.
+export const claimLanded = (finding, before, after) => {
+  const anchors = anchorsOf(finding).filter(a => hasAnchor(before, a));
+  if (!anchors.length) return { finding, anchors: [], verdict: "uncheckable" };
+  const survived = anchors.filter(a => hasAnchor(after, a));
+  return { finding, anchors, survived, verdict: survived.length ? "survived" : "gone" };
+};
+
+export const correctionLanded = (findings, before, after) => {
+  const list = (Array.isArray(findings) ? findings : []).map(f => String(f || "")).filter(Boolean);
+  const results = list.map(f => claimLanded(f, before, after));
+  return {
+    results,
+    gone: results.filter(r => r.verdict === "gone").length,
+    survived: results.filter(r => r.verdict === "survived"),
+    uncheckable: results.filter(r => r.verdict === "uncheckable").length,
+  };
+};
+
+// The founder line, and the point of it is that the banner above it stops being
+// able to say "fixed" on its own authority.
+export const describeCorrection = (r) => {
+  const res = r || {};
+  const survived = Array.isArray(res.survived) ? res.survived : [];
+  if (!survived.length) {
+    return res.uncheckable
+      ? `${res.gone || 0} flagged claim${(res.gone || 0) === 1 ? "" : "s"} are gone from the draft. ${res.uncheckable} could not be checked in code, because ${res.uncheckable === 1 ? "the finding names" : "those findings name"} no figure and quote none of the draft's own words, so read ${res.uncheckable === 1 ? "it" : "them"} by eye rather than trusting this line.`
+      : "";
+  }
+  return `THE CORRECTION DID NOT LAND. ${survived.length} flagged claim${survived.length === 1 ? " is" : "s are"} still in the draft after the rewrite, on the draft's own words: ${survived.map(s => s.survived.map(a => `"${String(a).slice(0, 40)}"`).join(", ")).join("; ")}. The rewrite was asked to remove or replace ${survived.length === 1 ? "it" : "them"} and did not, so the draft below still carries ${survived.length === 1 ? "a claim" : "claims"} the checker contradicted. Fix by hand or redraft, and do not read the banner above as a pass.`;
+};
+
 // ── THE CHECKER COULD NOT SEE THE RESEARCH IT WAS CHECKING ──────────
 //
 // The invented-claim check was handed rawResearch.slice(0, 3000). rawResearch

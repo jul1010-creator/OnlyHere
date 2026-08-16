@@ -251,6 +251,69 @@ export const mergeGlance = (draft, values, fields, research = "") => {
   return { patched: out, changed, kept, blocked, rejected };
 };
 
+// ── AND THE UNCERTAINTY THAT SAID THE FIELD WAS EMPTY ────────────────
+//
+// Oliver's Gothersgade draft, 16 August 2026. Its DECISIONS block reads:
+//
+//   priceNote: believed the research (extracted), overruled an empty field
+//     value: Free entry
+//     rule:  A value stated on a page beats one composed by a writer
+//
+// The rule is right and it was applied correctly. What nobody did was go back for
+// the SENTENCE THE WRITER HAD ALREADY WRITTEN ABOUT THAT FIELD BEING EMPTY:
+//
+//   "No cover charge or typical beer price for the street was found in research,
+//    so priceNote is left empty"
+//
+// So the published row says priceNote is "Free entry" and says in its own
+// uncertainties that priceNote is empty. Both in front of a reader, contradicting
+// each other, and STUDIO_VOICE's first reasoning check is "every field must agree
+// with every other field in the same response".
+//
+// This is the same failure the invented-claim correction has one file over: a
+// stage fixes something and nothing re-reads what the fix made false. An
+// uncertainty is the honesty channel, so a FALSE one costs more than a missing
+// one: it teaches a reader that the caveats are decoration.
+//
+// ── DELIBERATELY CONSERVATIVE ABOUT WHAT IT REMOVES ──────────────────
+// The emptiness phrase has to sit NEAR the field name, so "so priceNote is left
+// empty" goes and "priceNote covers entry only, drink prices unconfirmed" stays.
+// When the two are far apart the line is kept, because a stale uncertainty is a
+// smaller wrong than a deleted true one, and this returns what it would remove so
+// the caller can report it rather than doing it silently.
+const EMPTINESS = /(left empty|is empty|left blank|left out|not found|no value|could not be found|was not found|none was found|nothing was found|unconfirmed, so|omitted)/i;
+const NEAR_FIELD = 60;
+
+export const staleUncertainties = (uncertainties, changed) => {
+  const lines = (Array.isArray(uncertainties) ? uncertainties : []).map(u => String(u ?? ""));
+  const fields = (Array.isArray(changed) ? changed : [])
+    .map(c => String(c?.field ?? c ?? "")).filter(Boolean);
+  if (!fields.length) return { kept: lines, stale: [] };
+  const kept = [], stale = [];
+  for (const line of lines) {
+    const hit = fields.find(f => {
+      const at = line.toLowerCase().indexOf(f.toLowerCase());
+      if (at < 0) return false;
+      // A window either side of the field name, because both orders occur in
+      // real drafts: "so priceNote is left empty" and "left empty: priceNote".
+      const from = Math.max(0, at - NEAR_FIELD);
+      return EMPTINESS.test(line.slice(from, at + f.length + NEAR_FIELD));
+    });
+    if (hit) stale.push({ line, field: hit }); else kept.push(line);
+  }
+  return { kept, stale };
+};
+
+// The founder note. Never silent, for the reason the discovery panel is never
+// silent: a list that got shorter without saying so is how a filter becomes a
+// thing nobody trusts.
+export const describeStale = (stale) => {
+  const list = Array.isArray(stale) ? stale.filter(Boolean) : [];
+  if (!list.length) return "";
+  const which = [...new Set(list.map(s => s.field))].join(", ");
+  return `${list.length} uncertaint${list.length === 1 ? "y was" : "ies were"} removed for having gone false: the extraction filled ${which}, and ${list.length === 1 ? "this line" : "these lines"} still said the field was left empty. A row cannot state a value and state in its own uncertainties that it has none. Removed rather than kept, because a false caveat teaches a reader the caveats are decoration, and reported here rather than dropped quietly: ${list.map(s => `"${s.line.slice(0, 90)}"`).join("; ")}`;
+};
+
 // One line for the run log. Says what it took over and what it left alone,
 // because a stage that silently rewrites six fields is the kind of thing that
 // is discovered a month later by somebody reading a diff.

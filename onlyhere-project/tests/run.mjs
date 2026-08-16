@@ -50,7 +50,7 @@ writeFileSync(entry, `
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
-  export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { byEventDate, eventTime, eventMonthShort, isUndated, UNDATED } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
@@ -71,7 +71,7 @@ writeFileSync(entry, `
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -113,12 +113,12 @@ writeFileSync(entry, `
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { verdictInProse, keepProse } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore, isNeverOwnSite, isNeverASource, SOURCE_RULES_NEST } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { wantedCategories, groupKeyOf } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
-  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
   export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
@@ -131,7 +131,7 @@ writeFileSync(entry, `
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
-  export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
+  export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
@@ -143,13 +143,14 @@ writeFileSync(entry, `
   export { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
-  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
+  export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
-  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
+  export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { datesFromListings } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { sourceFit, describeSourceFit, LIVING_TYPES } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { costContradictions, bareOccurrence, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
@@ -11799,8 +11800,31 @@ rmSync(dir, { recursive: true, force: true });
      /splitForCheck\(writtenFields\(t\)\)/.test(codeI));
   ok("and the rewrite is stripped too",
      /JSON\.stringify\(writtenFields\(t\)\)/.test(codeI));
-  is("writtenFields reaches both of them and nothing else",
-     (codeI.match(/writtenFields\(t\)/g) || []).length, 2);
+  // ── AND THIS COUNTED CALLS INSTEAD OF ASSERTING THE RULE ────────
+  // It expected exactly 2 and broke the moment a THIRD correct caller appeared:
+  // correctionLanded compares the reader-facing fields before and after the
+  // rewrite, which is the same discipline for the same reason. Third assertion
+  // in this file to fail on correct code today by pinning a count.
+  //
+  // The rule was never "twice". It is that the whole draft, machine fields and
+  // all, is never handed over unstripped, which is what the invented-claim check
+  // used to do. That is what this asserts now, and it cannot be satisfied by
+  // adding a caller or defeated by removing one.
+  // Interpolation, not every call: `JSON.stringify(t)}` closes a template hole,
+  // which is a PROMPT. `JSON.stringify(t))` is an argument, and two of those are
+  // regex tests against the draft rather than handoffs to a model. The rule is
+  // about what a model is shown, so that is what it counts.
+  //
+  // This found a third unguarded path on its first run: the awkward-phrase polish
+  // pass sent the entire draft, machine fields included, to a 3000-token rewrite
+  // and then did `t = rewritten`, with none of keepMeasured or keepProse. Smallest
+  // budget, largest payload, no guard.
+  is("no prompt is shown the unstripped draft",
+     (codeI.match(/JSON\.stringify\(t\)\}/g) || []).length, 0);
+  ok("and the polish pass is guarded like the correction is",
+     /const kept = keepMeasured\(t, \{ \.\.\.t, \.\.\.rewritten \}\);/.test(codeI));
+  ok("and every handoff of the draft goes through writtenFields",
+     (codeI.match(/writtenFields\(t\)/g) || []).length >= 2);
   // Anchored on the ONE definition, so a second shadowing helper cannot satisfy
   // it: a mutation that added `const writtenFieldsUnused = o => o` above the
   // real one left this green in its first form.
@@ -17760,6 +17784,401 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Guarded on the field EXISTING, because not every content type has one and
   // adding a price to a town would be a new field nothing reads.
   ok("it does not invent the field on a type that has none", /"price" in t/.test(appP));
+}
+
+
+// ── "WHY SO INNACCURATE? THE SOURCES USED ARE VERY GOOD" ─────────────
+//
+// Oliver, 16 August 2026, on a Gothersgade nightlife draft that two other models
+// had called highly inaccurate. Checked rather than agreed with, and the split
+// matters: the STREET was right, every word of it, including a Sortedam Lake
+// claim I was about to correct from memory and should not have. The NIGHTLIFE was
+// invented. "Highly inaccurate" hides that, and the hidden half is the fixable
+// one.
+//
+// The sources were very good at a different question. Four findings, all from his
+// own run log, and every one is a measurement the app already had and never read.
+{
+  const {
+    sourceFit, describeSourceFit, staleUncertainties, describeStale,
+    correctionLanded, describeCorrection, isNeverOwnSite, isNeverASource, SOURCE_RULES_NEST,
+  } = M;
+
+  // His eight, with what each page was seen to say.
+  const HIS = {
+    "https://www.visitdenmark.dk/danmark/explore/botanisk-have-gdk422317": "Botanisk Have i Gothersgade, København. Palmehuset er fra 1874.",
+    "https://en.wikipedia.org/wiki/Gothersgade": "Gothersgade is a street in central Copenhagen running from Kongens Nytorv to Sortedam Lake, passing Rosenborg Castle.",
+    "https://da.wikipedia.org/wiki/Gothersgade": "Gothersgade blev anlagt 1650-1655 og hed Kongensgade indtil 1664.",
+    "https://lex.dk/Gothersgade": "Gothersgade, gade i Indre By, København, anlagt i 1600-tallet.",
+    "https://www.hovedstadshistorie.dk/indre-by/gothersgade/": "Gothersgade set mod Kongens Nytorv, historiske fotografier.",
+  };
+
+  // ── ONE: TWO HOST LISTS THAT HAD DRIFTED ────────────────────────
+  // Six of his eight sources were hosts the research pass had already refused.
+  // They reached the reader-facing list because App.jsx carried two regexes and
+  // the second was missing half the first.
+  ok("the nesting rule holds", SOURCE_RULES_NEST);
+  for (const u of ["https://gothersgade-copenhagen-1123-2.hotelscopenhagen.org/en", "https://www.booking.com/x", "https://www.tripadvisor.com/x"]) {
+    ok(`an accommodation aggregator is never a source (${new URL(u).hostname.slice(0, 24)})`, isNeverASource(u));
+    ok("and never the own site either", isNeverOwnSite(u));
+  }
+  // THE TWO LISTS ARE STILL TWO, DELIBERATELY. A reseller listing proves a tour
+  // runs and is never the venue's own page; an encyclopedia is a real reference
+  // and is never the venue's own page. Collapsing them would have thrown away
+  // good evidence to fix a bad list.
+  ok("a reseller is not the own site", isNeverOwnSite("https://www.getyourguide.com/x"));
+  ok("but it is still evidence", !isNeverASource("https://www.getyourguide.com/x"));
+  ok("an encyclopedia is not the own site", isNeverOwnSite("https://en.wikipedia.org/wiki/Gothersgade"));
+  ok("but it is still a source", !isNeverASource("https://en.wikipedia.org/wiki/Gothersgade"));
+  ok("a tourist board is not the own site", isNeverOwnSite("https://www.visitdenmark.dk/x"));
+  ok("and is on his own vouched list, so still a source", !isNeverASource("https://www.visitdenmark.dk/x"));
+  ok("a venue's own domain is neither", !isNeverOwnSite("https://natcafeen.dk/") && !isNeverASource("https://natcafeen.dk/"));
+  const appG = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("and there is no second copy of either list left in App.jsx",
+    (appG.match(/tripadvisor\|booking/g) || []).length, 0);
+
+  // ── TWO: NOTHING NOTICED THE SOURCES MISSED THE SUBJECT ─────────
+  const fit = sourceFit(Object.keys(HIS), { type: "nightStreet", saidByUrl: HIS });
+  is("nothing read is about the subject", fit.onSubject, 0);
+  is("though five pages were read", fit.heard, 5);
+  is("so a bar street is unsourced", fit.subjectUnsourced, true);
+  const fitSaid = describeSourceFit(fit, { type: "nightStreet" });
+  ok("the note says so plainly", /^NOTHING WE READ IS ABOUT THE SUBJECT/.test(fitSaid));
+  ok("names the words it looked for", /natteliv/.test(fitSaid) && /barer/.test(fitSaid));
+  ok("counts the encyclopedias", /3 of the 5 hosts are encyclopedias/.test(fitSaid));
+  // AND IT SEPARATES THE HALVES, which is the thing two other models did not.
+  ok("and says the geography may be right", /geography in this draft may be perfectly right/.test(fitSaid));
+
+  // THE SAME EIGHT ARE FINE FOR A TOWN. A lexicon is what a town's history is
+  // for, and a check that fired on every type would be a check he stops reading.
+  is("the same sources answer a town", sourceFit(Object.keys(HIS), { type: "town", saidByUrl: HIS }).subjectUnsourced, false);
+  is("and say nothing about it", describeSourceFit(sourceFit(Object.keys(HIS), { type: "town", saidByUrl: HIS }), { type: "town" }), "");
+  // ONE REAL PAGE IS ENOUGH TO CLEAR IT.
+  const withReal = { ...HIS, "https://www.degulesider.dk/barer-gothersgade": "Barer og cocktailbarer paa Gothersgade: 9 resultater." };
+  is("one page about the subject clears the finding", sourceFit(Object.keys(withReal), { type: "nightStreet", saidByUrl: withReal }).subjectUnsourced, false);
+  // ── AND THE WORDS ARE THIS TYPE'S, NOT NIGHTLIFE'S ──────────────
+  // A mutation hardcoding "natteliv barer" survived, because every fixture here
+  // was a nightStreet and the hardcoded words happened to be the right ones. Two
+  // types with different vocabularies is what proves it reads QUERY_WORDS.
+  const FOOD_ENCYCLOPEDIC = { "https://lex.dk/Reffen": "Reffen, street food-marked paa Refshaleoeen i Koebenhavn, aabnet 2018." };
+  const FOOD_REAL = { ...FOOD_ENCYCLOPEDIC, "https://reffen.dk/menu": "Se menukort og priser for boderne, samt aabningstider." };
+  is("a food entry on a lexicon alone is unsourced",
+    sourceFit(Object.keys(FOOD_ENCYCLOPEDIC), { type: "food", saidByUrl: FOOD_ENCYCLOPEDIC }).subjectUnsourced, true);
+  is("and a menu page clears it",
+    sourceFit(Object.keys(FOOD_REAL), { type: "food", saidByUrl: FOOD_REAL }).subjectUnsourced, false);
+  // The words that cleared it are food words and appear in no nightlife list, so
+  // this cannot pass on a hardcoded nightlife vocabulary.
+  ok("the food note names food words", /menukort/.test(describeSourceFit(sourceFit(Object.keys(FOOD_ENCYCLOPEDIC), { type: "food", saidByUrl: FOOD_ENCYCLOPEDIC }), { type: "food" })));
+  ok("and the nightlife note does not", !/menukort/.test(fitSaid));
+  // AND UNMEASURED IS NOT A FINDING. Not knowing what the pages said is not
+  // evidence they said nothing, which is the discipline the whole day was about.
+  is("with no page text there is no finding", sourceFit(Object.keys(HIS), { type: "nightStreet" }).subjectUnsourced, false);
+  is("nor with no sources at all", sourceFit([], { type: "nightStreet", saidByUrl: HIS }).subjectUnsourced, false);
+  is("and nothing at all does not throw", sourceFit().subjectUnsourced, false);
+
+  // ── THREE: THE UNCERTAINTY THE EXTRACTION MADE FALSE ────────────
+  // His row said priceNote was "Free entry" AND said in its own uncertainties
+  // that priceNote was left empty. His DECISIONS block records the overrule
+  // correctly; nothing went back for the sentence it falsified.
+  const HIS_UNCERTAINTIES = [
+    "No cover charge or typical beer price for the street was found in research, so priceNote is left empty",
+    "The exact block where bar density starts and stops isn't confirmed by name, only inferred from the street's known geography",
+    "Closing-time atmosphere is a reasonable Copenhagen-norms inference, not something the research explicitly described for this street",
+    "Late-night conditions near Sortedam Lake were not found in the research opened",
+  ];
+  const recon = staleUncertainties(HIS_UNCERTAINTIES, [{ field: "priceNote", was: "", now: "Free entry" }]);
+  is("the contradicting line goes", recon.stale.map(x => x.field), ["priceNote"]);
+  is("and the three real ones stay", recon.kept.length, 3);
+  ok("none of the survivors mentions priceNote being empty", !recon.kept.some(l => /priceNote is left empty/.test(l)));
+  const staleSaid = describeStale(recon.stale);
+  ok("it says what went and why", /removed for having gone false/.test(staleSaid));
+  ok("and quotes the line, so it is never silent", /No cover charge/.test(staleSaid));
+  is("nothing stale says nothing", describeStale([]), "");
+
+  // ── DELIBERATELY CONSERVATIVE, because an uncertainty is the honesty
+  //     channel and deleting a true one costs more than keeping a stale one.
+  is("a still-true line naming the same field stays",
+    staleUncertainties(["priceNote covers entry only, drink prices unconfirmed"], [{ field: "priceNote" }]).stale.length, 0);
+  is("a mention far from the emptiness phrase stays",
+    staleUncertainties(["priceNote is the tier a reader scans, and the venue list, the crowd figures and the seasonal opening pattern for this whole quarter of the city were not found"], [{ field: "priceNote" }]).stale.length, 0);
+  // AND FROM THE OTHER SIDE, which is the case every other fixture here missed:
+  // the emptiness phrase BEFORE the field name and far from it. A mutation
+  // widening the window to the whole line survived until this existed, because
+  // nothing tested the left edge.
+  is("an emptiness phrase far to the left of the field stays",
+    staleUncertainties(["Opening hours were not found for any venue, and the seasonal pattern across the whole quarter is unconfirmed, which is separate from what priceNote reports"], [{ field: "priceNote" }]).stale.length, 0);
+  ok("while the same phrase next to the field goes",
+    staleUncertainties(["not found, so priceNote is empty"], [{ field: "priceNote" }]).stale.length === 1);
+  is("no changed field removes nothing", staleUncertainties(HIS_UNCERTAINTIES, []).stale.length, 0);
+  is("and keeps everything", staleUncertainties(HIS_UNCERTAINTIES, []).kept.length, 4);
+  is("a missing list does not throw", staleUncertainties(null, [{ field: "priceNote" }]).kept, []);
+
+  // ── FOUR: THE ONE CHECK THAT FOUND SOMETHING NEVER RE-RAN ───────
+  // Step 13 of his run flagged 3 claims, 2 contradicted. Steps 14 to 18 are the
+  // after-correction twins of every OTHER gate. The banner then told him the
+  // claims were "fixed in the draft below".
+  const FINDINGS = [
+    "CONTRADICTED: the draft says entry is 275 kr; the research states no entry fee for a public street",
+    'CONTRADICTED: the draft claims "jazz rooms" on the street; the research names no jazz venue',
+    "UNVERIFIED: the after-work crowd arriving first",
+  ];
+  const BEFORE = 'Entry is 275 kr. Cocktail bars and jazz rooms mixed in with old buildings. The after-work crowd shows up first.';
+  const FIXED = "Cocktail bars mixed in with old buildings. The after-work crowd shows up first.";
+
+  const landedBad = correctionLanded(FINDINGS, BEFORE, BEFORE);
+  is("a rewrite that changed nothing is caught", landedBad.survived.length, 2);
+  const badSaid = describeCorrection(landedBad);
+  ok("and says the correction did not land", /^THE CORRECTION DID NOT LAND/.test(badSaid));
+  ok("naming the draft's own words", /275/.test(badSaid) && /jazz rooms/.test(badSaid));
+  ok("and tells him not to trust the banner", /do not read the banner above as a pass/.test(badSaid));
+
+  const landedGood = correctionLanded(FINDINGS, BEFORE, FIXED);
+  is("a rewrite that removed them is clean", landedGood.survived.length, 0);
+  is("both are gone", landedGood.gone, 2);
+  ok("and it does not claim the third was fixed", /could not be checked in code/.test(describeCorrection(landedGood)));
+
+  // ── THE ANCHOR HAS TO BE THE DRAFT'S OWN WORDS ──────────────────
+  // The answer format asks the checker to "Quote what the research says", so a
+  // quote in a finding is often the RESEARCH's phrasing. Requiring the anchor to
+  // have been in the draft BEFORE the correction is what tells them apart, and
+  // without it every finding would read as survived forever.
+  const researchQuote = ['CONTRADICTED: the research says "no jazz venue has operated on this street"'];
+  is("a phrase only the research used is not an anchor",
+    correctionLanded(researchQuote, BEFORE, FIXED).results[0].verdict, "uncheckable");
+  is("and an unanchorable finding is never called fixed",
+    correctionLanded(researchQuote, BEFORE, FIXED).gone, 0);
+  is("no findings means nothing to say", describeCorrection(correctionLanded([], BEFORE, FIXED)), "");
+
+  // ── AND ALL FOUR ARE WIRED ──────────────────────────────────────
+  ok("the gate asks whether the sources cover the subject",
+    /const fit = sourceFit\(t\.__sources, \{ type: sType, saidByUrl: urlSaidWhat \}\)/.test(appG));
+  ok("the extraction reconciles the uncertainties it falsified",
+    /const recon = staleUncertainties\(t\.uncertainties, merged\.changed\)/.test(appG));
+  ok("and puts the kept ones back on the draft", /t\.uncertainties = recon\.kept;/.test(appG));
+  ok("the correction is checked against what replaced the draft",
+    /const landed = correctionLanded\(/.test(appG));
+  // AND ITS RESULT IS USED. Deleting the note call left this block green with the
+  // check computed and thrown away, which is the third time today an assertion
+  // proved a call existed without proving anything came of it.
+  ok("and what it finds reaches him", /noteToFounder\(describeCorrection\(landed\)\)/.test(appG));
+  ok("and the run log too", /outcome: landed\.survived\.length \? "failed" : "ok"/.test(appG));
+  ok("using the draft as it was before the rewrite", /const beforeCorrection = JSON\.stringify\(writtenFields\(t\)\);/.test(appG));
+  // noteToFounder is read by the glance stage now, which sits ABOVE where it used
+  // to be declared. A const arrow read before its declaration is a ReferenceError
+  // a build cannot catch, which is what tests/tdz.mjs exists for.
+  ok("noteToFounder is declared above its first caller",
+    appG.indexOf("const noteToFounder = (line)") < appG.indexOf("const recon = staleUncertainties("));
+  ok("and above the gate that also uses it",
+    appG.indexOf("const noteToFounder = (line)") < appG.indexOf("const gateDraft = (pass)"));
+}
+
+
+// ── "WILL PEOPLE COME FOR NIGHTLIFE BE TOLD ABOUT NIGHTPAY" ──────────
+//
+// Oliver, 16 August 2026, having published Nightpay: a Denmark-only app for
+// nightlife discounts across 80-plus bars and clubs. The answer was no. The
+// published Essentials array is read by the Essentials page and the two Studio
+// type maps and by NO PROMPT IN THE APP, so the type his own codegen calls the
+// fastest to go stale could not reach a reader through a guide at all.
+{
+  const { essentialsForTrip, essentialsBlock, storeKindOf } = M;
+
+  // His two real rows, as published.
+  const NIGHTPAY = {
+    name: "Nightpay", category: "Transport", price: "49 DKK per month",
+    desc: "Nightpay is a Denmark-only app for nightlife discounts and payment, covering more than 80 bars and clubs. Creating a basic account is free.",
+    howTo: "Download the Nightpay app and create a free account.",
+    tip: "Do not judge the app by its in-app ratings: the company behind it was fined for staged Trustpilot reviews.",
+  };
+  const DSB = {
+    name: "DSB App", category: "Transport", price: "Free app",
+    desc: "Danish national railway app. Book tickets, check schedules, get real-time delays.",
+    howTo: "Download DSB app. Buy tickets in advance for cheaper prices.",
+    tip: "Buy Orange tickets weeks ahead for up to 50% off.",
+  };
+  const ROWS = [NIGHTPAY, DSB];
+  const names = (o) => essentialsForTrip(ROWS, o).map(p => p.row.name);
+
+  // The question he asked, answered.
+  is("a nightlife trip is told about it", names({ convoText: "We want a proper night out, bars and clubs in Copenhagen" }), ["Nightpay"]);
+  is("and a ticked interest is enough on its own", names({ interests: ["Nightlife"] }), ["Nightpay"]);
+  // Optional-chained: three mutants killed this by CRASHING here, which aborts the
+  // file and reads every later block as a pass. Fourth time today.
+  is("with the theme that matched recorded",
+    essentialsForTrip(ROWS, { interests: ["Nightlife"] })[0]?.themes, ["nightlife"]);
+
+  // ── AND MATCHED ON THE ROW'S OWN WORDS, NOT ITS CATEGORY ────────
+  // Nightpay is filed under Transport, which is the wrong shelf, and there is no
+  // Nightlife category to move it to. Matching on category would have made the
+  // feature depend on a taxonomy that cannot express the thing being matched.
+  is("its category is the wrong shelf and does not matter", NIGHTPAY.category, "Transport");
+  is("a copy filed under Payments matches identically",
+    essentialsForTrip([{ ...NIGHTPAY, category: "Payments" }], { interests: ["Nightlife"] }).length, 1);
+  is("and a row stripped of its words matches nothing",
+    essentialsForTrip([{ name: "Nightpay", category: "Transport" }], { interests: ["Nightlife"] }).length, 0);
+
+  // ── SELECTED, NOT DUMPED. Nine categories in a guide prompt is a wall of
+  //     text that pushes the trip out of the model's attention.
+  is("a history trip gets none of it", names({ convoText: "We are here for castles and viking history" }), []);
+  is("nor does a cycling trip", names({ convoText: "We will cycle and take trains between towns" }), []);
+  is("a brief that states nothing gets nothing", names({ convoText: "" }), []);
+  is("and no rows does not throw", essentialsForTrip(null, { interests: ["Nightlife"] }), []);
+  // Capped, and the cap is asserted rather than trusted.
+  const many = Array.from({ length: 9 }, (_, i) => ({ ...NIGHTPAY, name: `Bar app ${i}` }));
+  is("the block is capped", essentialsForTrip(many, { interests: ["Nightlife"] }).length, M.ESSENTIALS_IN_GUIDE);
+  ok("and the cap is a small number", M.ESSENTIALS_IN_GUIDE <= 5);
+
+  // ── THE BLOCK QUOTES HIM RATHER THAN DESCRIBING HIM ─────────────
+  const block = essentialsBlock(essentialsForTrip(ROWS, { interests: ["Nightlife"] }));
+  ok("it names the thing", /Nightpay/.test(block));
+  ok("and what it costs, in his words", /49 DKK per month/.test(block));
+  ok("and says why this trip got it", /this trip is about nightlife/.test(block));
+  ok("it is marked frozen so nothing rewrites it", /FROZEN PRACTICAL FACTS/.test(block));
+  // THE FAILURE MODE THIS EXISTS TO PREVENT is a helpful-sounding Danish payment
+  // app that does not exist, so the block says so in as many words.
+  ok("and it forbids inventing a second one", /NEVER invent a Danish app, card, pass or payment system/.test(block));
+  ok("it allows leaving them out", /leave them out rather than forcing one in/.test(block));
+  is("nothing picked is an empty block", essentialsBlock([]), "");
+  is("and nothing at all is too", essentialsBlock(null), "");
+  ok("the block uses no dash", !/[–—]/.test(block));
+
+  // ── AND IT REACHES THE PROMPT ───────────────────────────────────
+  // The whole bug was a measurement that existed and was never read, so the wiring
+  // is asserted as hard as the matcher.
+  const appE2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the build picks them", /const essentialsPicked = essentialsForTrip\(essentials, \{ convoText, interests: intakeInterest \}\)/.test(appE2));
+  ok("builds the block", /const essentialsFacts = essentialsBlock\(essentialsPicked\)/.test(appE2));
+  ok("and the guide prompt is given it", /\$\{chosenEventsBlock\}\$\{chosenExtrasBlock\}\$\{essentialsFacts\}/.test(appE2));
+
+  // ── "THE DOWNLOAD LIKE WITH THE DSB APP IS NOT THERE" ────────────
+  // Not a missing field. `link` is asked for in the prompt as "the official URL"
+  // and was rendered as an App Store badge whatever it held, so a drafted
+  // essential showed a homepage under "Download on the App Store" or, with no URL
+  // found, showed nothing. DSB App is a hardcoded row with a real store URL.
+  is("an App Store URL is an App Store URL", storeKindOf("https://apps.apple.com/dk/app/nightpay/id123"), "ios");
+  is("the old iTunes host too", storeKindOf("https://itunes.apple.com/dk/app/x"), "ios");
+  is("Google Play is Android", storeKindOf("https://play.google.com/store/apps/details?id=dk.nightpay"), "android");
+  is("a company homepage is a website", storeKindOf("https://nightpay.dk/"), "web");
+  is("and so is a tourist board", storeKindOf("https://www.visitdenmark.dk/x"), "web");
+  is("junk is nothing", storeKindOf("not a url"), "");
+  is("and so is nothing", storeKindOf(""), "");
+  ok("the page renders a website as a link, not a store badge",
+    /storeKindOf\(item\.link\) === "web" && !item\.linkAndroid \?/.test(appE2));
+  ok("and picks the badge by host when there are two",
+    /type=\{storeKindOf\(item\.link\) === "android" \? "android" : "ios"\}/.test(appE2));
+  // And the prompt now asks for the store URL rather than "the official URL",
+  // because a field asked for as one thing and rendered as another is the bug.
+  const promptsE = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  ok("the prompt asks for the iOS store URL by name", /the iOS App Store URL \(apps\.apple\.com/.test(promptsE));
+  ok("and the Play URL by name", /the Google Play URL \(play\.google\.com/.test(promptsE));
+  ok("and explains what the page does with each", /putting a homepage here does not fake a download button/.test(promptsE));
+}
+
+
+// ── "RIGHT NOW, IT'S FILLED WITH EVENTS IN AUGUST" ───────────────────
+//
+// Oliver, 16 August 2026, asking to search Studio for events in a chosen month.
+// It was filled with August because it WAS August: the search returns what is
+// current and splitFinishedCandidates drops what has ended, so a button pressed
+// today could only ever reach the next few weeks. Every Christmas market and the
+// whole of spring was unreachable.
+{
+  const { DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth, monthsInText } = M;
+  const AUG16 = new Date(2026, 7, 16);
+
+  is("thirteen choices, one per month plus any", DISCOVERY_MONTHS.length, 13);
+  is("the first is the no-filter one", DISCOVERY_MONTHS[0].month, null);
+  is("and the twelve are in calendar order", DISCOVERY_MONTHS.slice(1).map(m => m.month), [0,1,2,3,4,5,6,7,8,9,10,11]);
+  ok("each carries its Danish name", DISCOVERY_MONTHS.slice(1).every(m => m.danish));
+  is("december is spelled as a Dane files it", monthById("dec").danish, "december");
+
+  // ── THE YEAR, WHICH IS NOT A DETAIL ─────────────────────────────
+  // Asking in August: December is this year, February is next. Getting it wrong
+  // sends the search after an edition already over, which splitFinishedCandidates
+  // then silently cleans up, so the run comes back empty and nothing says why.
+  is("this month counts as now", yearForMonth(7, AUG16), 2026);
+  is("a later month is this year", yearForMonth(11, AUG16), 2026);
+  is("an earlier month is next year", yearForMonth(1, AUG16), 2027);
+  is("and July asked in August is next year", yearForMonth(6, AUG16), 2027);
+  // From December, January is next year and December is now.
+  is("from December, January is next", yearForMonth(0, new Date(2026, 11, 20)), 2027);
+  is("and December is now", yearForMonth(11, new Date(2026, 11, 20)), 2026);
+  is("a bad month has no year", yearForMonth(12, AUG16), null);
+  // null BEFORE the numeric coercion, because Number(null) is 0 and 0 is January.
+  // The "Any month" option produces exactly this input, so the no-month choice
+  // came back as "next January" until the test said so.
+  is("nor does nothing", yearForMonth(null, AUG16), null);
+  is("nor undefined", yearForMonth(undefined, AUG16), null);
+  is("nor an empty string", yearForMonth("", AUG16), null);
+  is("and the any-month row is that input", DISCOVERY_MONTHS[0].month, null);
+  is("so the any-month chip shows no year", yearForMonth(DISCOVERY_MONTHS[0].month, AUG16), null);
+  // A real zero still works: January is month 0 and is not nothing.
+  is("but January is still January", yearForMonth(0, AUG16), 2027);
+
+  // ── THE BRIEF ───────────────────────────────────────────────────
+  const dec = framingForMonth("dec", AUG16);
+  // Anchored on the OPENING instruction, not on the string appearing anywhere.
+  // Both of these first passed while the mutation had removed them, because the
+  // same month and the same Danish name appear again later in the paragraph. Same
+  // class as an indexOf that found a comment: assert the place, not the presence.
+  ok("the opening instruction names the month and the year", /AIM EVERY QUERY AT ONE MONTH: December 2026\./.test(dec));
+  ok("and it says the month again with the year", /Not the next few weeks, December 2026 specifically/.test(dec));
+  ok("the Danish name is given as an instruction", /Use the Danish month name december in the Danish ones/.test(dec));
+  ok("with the reason attached", /Danish what's-on page files it under december/.test(dec));
+  ok("it warns that the month has not happened yet", /has not happened yet/.test(dec));
+  ok("and gives seasonal Danish wording rather than a date", /julemarked/.test(dec));
+  // The current month is a different instruction: the edition running now is right.
+  ok("the current month says the current edition is right", /the one running now/.test(framingForMonth("aug", AUG16)));
+  is("and no month adds nothing to the brief", framingForMonth("any", AUG16), "");
+  ok("the brief uses no dash", !/[–—]/.test(dec));
+
+  // ── AND THE FILTER, BECAUSE A BRIEF IS NOT A FILTER ─────────────
+  // Fourth one in this pass. splitAlreadyCovered, splitFinishedCandidates,
+  // splitOffTarget, and now this.
+  const CANDS = [
+    { name: "Tivoli Jul", when: "mid November to 30 December 2026" },
+    { name: "Juletræstænding Nyhavn", when: "early December" },
+    { name: "Copenhagen Jazz Festival", when: "3 to 12 July 2026" },
+    { name: "Aarhus Festuge", when: "28 August to 6 September 2026" },
+    { name: "Nothing stated", when: "" },
+  ];
+  const r = splitOffMonth(CANDS, "dec");
+  is("a July festival is refused on a December run", r.dropped.map(d => d.name), ["Copenhagen Jazz Festival", "Aarhus Festuge"]);
+  is("and the December ones survive", r.kept.map(k => k.name), ["Tivoli Jul", "Juletræstænding Nyhavn", "Nothing stated"]);
+  // A RANGE NAMING SEVERAL MONTHS COUNTS. Tivoli's Christmas season starts in
+  // November and is a December answer, and refusing it would be the filter being
+  // wrong in the direction that costs real content.
+  is("a November to December range names both", monthsInText("mid November to 30 December 2026"), [10, 11]);
+  is("so it answers a December run", splitOffMonth([CANDS[0]], "dec").dropped.length, 0);
+  is("and a November one too", splitOffMonth([CANDS[0]], "nov").dropped.length, 0);
+  // UNSTATED IS KEPT, the same discipline as every other check here.
+  is("a candidate that names no month is kept", splitOffMonth([CANDS[4]], "dec").kept.length, 1);
+  is("no month chosen drops nothing", splitOffMonth(CANDS, "any").dropped.length, 0);
+  is("an unknown id drops nothing", splitOffMonth(CANDS, "not-a-month").dropped.length, 0);
+  is("and a missing list does not throw", splitOffMonth(null, "dec").kept, []);
+
+  // ── NEVER A SILENTLY SHORTER LIST ───────────────────────────────
+  const said = describeOffMonth(r.dropped, "dec");
+  ok("it counts them", /^2 were left out/.test(said));
+  ok("names the month asked for", /than December/.test(said));
+  ok("and the months they actually run in", /July/.test(said) && /September/.test(said));
+  is("nothing dropped says nothing", describeOffMonth([], "dec"), "");
+
+  // ── AND IT IS WIRED, BRIEF AND FILTER BOTH ──────────────────────
+  const appM = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the brief carries the month", /\+ framingForMonth\(discoverMonth, new Date\(\)\)/.test(appM));
+  ok("the pass filters on it", /const \{ kept, dropped: wrongMonth \} = splitOffMonth\(inRegion, discoverMonth\)/.test(appM));
+  ok("and it runs after the region filter, on what that kept", /splitOffMonth\(inRegion, discoverMonth\)/.test(appM));
+  ok("the panel reports what it dropped", /setDiscoverOffMonth\(describeOffMonth\(wrongMonth, discoverMonth\)\)/.test(appM));
+  ok("with a render gated on it", /\{\s*discoverOffMonth\s*&&/.test(appM));
+  ok("and it is reset on every run", /setDiscoverOffMonth\(""\)/.test(appM));
+  // THE MODEL HAS TO BE ASKED FOR THE FIELD THE FILTER READS. splitOffTarget
+  // worked because `region` was already being asked for; `when` was not.
+  ok("the extractor is asked when it runs", /"when": "\.\.\."/.test(appM));
+  ok("and told a month by name, not a season", /rather than a season or a vague phrase/.test(appM));
+  // Only offered for the dated types: a bar street does not happen in a month, and
+  // a control that changes nothing is worse than no control.
+  ok("the picker is only shown for dated types", /\["festival", "nightTown"\]\.includes\(studioType\)/.test(appM));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

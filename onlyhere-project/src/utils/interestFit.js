@@ -220,6 +220,77 @@ const TIER_RANK = { must: 3, high: 2, worth: 1, nearby: 0 };
 // whatever the second pass had already collected, in the order the database
 // returned it, capped at six only because six is where the cap happened to sit.
 // Nothing in it was chosen.
+// ── "WILL PEOPLE COME FOR NIGHTLIFE BE TOLD ABOUT THAT" ─────────────
+//
+// Oliver, 16 August 2026, having published Nightpay as an Essential: a Denmark
+// only app for nightlife discounts and payment across 80-plus bars and clubs.
+// The answer was no, and not because it was filed wrong. The published Essentials
+// array is read in exactly three places, the Essentials page and the two Studio
+// type maps, and NO GUIDE OR CHAT PROMPT HAS EVER READ IT. The word "essentials"
+// appears in the guide because guide.essentials is a different thing with the
+// same name: three fields the model writes itself.
+//
+// So the type his own codegen calls "the type that goes stale fastest" was
+// page-only, and a traveller who came for the nightlife was told nothing about
+// the app that pays for it.
+//
+// ── SELECTED, NOT DUMPED ─────────────────────────────────────────────
+// Nine categories of essential in a guide prompt is a wall of text that pushes
+// the trip out of the model's attention, and most of it is irrelevant to any one
+// trip. So it matches the ROW'S OWN WORDS against the themes the brief asks for,
+// through THEME_WORDS, which already exists and already has "nightlife" pointing
+// at bar, bars, club, clubs, drinks and the rest. Nightpay's own desc says
+// "nightlife discounts and payment, covering more than 80 bars and clubs", so it
+// matches on its own text without needing a tag, a new category or a field.
+//
+// AND THE CATEGORY IS NOT THE MATCHER, deliberately. Nightpay is filed under
+// Transport, which is the wrong shelf and renders fine, and there is no Nightlife
+// category to move it to: the seven are fixed and an essential filed outside them
+// renders nowhere. Matching on category would have made this feature depend on a
+// taxonomy that cannot express the thing being matched.
+export const ESSENTIALS_IN_GUIDE = 4;
+
+export const essentialsForTrip = (rows, { convoText = "", interests = [], limit = ESSENTIALS_IN_GUIDE } = {}) => {
+  const want = briefThemes(convoText, interests);
+  if (!want) return [];
+  const list = (Array.isArray(rows) ? rows : []).filter(r => r && r.name);
+  const hit = [];
+  for (const r of list) {
+    // The row's own words, plus the two fields only an essential has. howTo and
+    // tip are where the useful specifics live: "80-plus venues", "49 DKK".
+    const hay = fold([r.name, r.desc, r.howTo, r.tip, r.category, r.price].filter(Boolean).join(" "));
+    if (!hay.trim()) continue;
+    const themes = [...want].filter(t => (THEME_WORDS[t] || []).some(w => saysWord(hay, w)));
+    if (themes.length) hit.push({ row: r, themes });
+  }
+  // Most themes matched first, so a row answering two of the traveller's stated
+  // interests outranks one answering a single word in passing. Name as the
+  // tie-break, so one brief always produces one list.
+  hit.sort((a, b) => (b.themes.length - a.themes.length)
+    || String(a.row.name).localeCompare(String(b.row.name), "da"));
+  return hit.slice(0, Math.max(0, Number(limit) || 0));
+};
+
+// ── AS FROZEN FACTS, IN THE ROW'S OWN WORDS ──────────────────────────
+// The block quotes what he published rather than describing it, for the reason
+// the transport facts are frozen: a model asked to summarise a payment system
+// invents a payment system. It is also told plainly not to invent a second one,
+// because the failure mode here is a helpful-sounding app that does not exist.
+export const essentialsBlock = (picked) => {
+  const list = (Array.isArray(picked) ? picked : []).filter(p => p?.row?.name);
+  if (!list.length) return "";
+  const lines = list.map(({ row, themes }) => {
+    const bits = [
+      row.price ? `costs ${row.price}` : "",
+      row.howTo ? `how: ${row.howTo}` : "",
+      row.tip ? `worth knowing: ${row.tip}` : "",
+      row.link ? `link: ${row.link}` : "",
+    ].filter(Boolean);
+    return `- ${row.name} (${row.category || "practical"}, relevant because this trip is about ${themes.join(" and ")}): ${row.desc || ""} ${bits.join(". ")}`.trim();
+  });
+  return `\nFROZEN PRACTICAL FACTS, PUBLISHED BY GEMLYX AND CHOSEN FOR THIS TRIP'S OWN INTERESTS. Every one of these is already verified, so USE THE WORDS BELOW and do not restate, improve, price or extend them. Work whichever genuinely helps into keepInMind or transportTip, naming the thing and what it costs. If none of them fits the trip you have written, leave them out rather than forcing one in. NEVER invent a Danish app, card, pass or payment system that is not in this list: an app that sounds plausible and does not exist is the single worst thing this guide can tell somebody, and these are here so there is no reason to reach for one.\n${lines.join("\n")}`;
+};
+
 export const OFFER_LIMIT = 3;
 
 export const rankOffers = (rows, { want = null, profile = null, limit = OFFER_LIMIT } = {}) => {

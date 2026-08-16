@@ -165,6 +165,32 @@ export const hasFinished = (e, today = new Date()) => {
 //
 // The scheme is added here, at render, rather than fixed in the rows: it
 // repairs all seven immediately and it holds for the eighth.
+// ── "THE DOWNLOAD LIKE WITH THE DSB APP IS NOT THERE" ────────────────
+//
+// Oliver, 16 August 2026, on his published Nightpay essential. DSB App shows an
+// App Store and a Google Play badge; Nightpay shows neither.
+//
+// Not a missing field. A FIELD ASKED FOR AS ONE THING AND RENDERED AS ANOTHER.
+// The essential prompt asks for `link` as "the official URL ONLY if it is present
+// in the research context", which is a WEBSITE, and the Essentials page renders
+// that same value as `<StoreBadge type="ios" href={item.link} />`. So a drafted
+// essential either shows nothing, when the research found no URL, or shows a
+// company homepage behind a button that says "Download on the App Store". DSB App
+// works because it is one of the few hardcoded rows and somebody put a real store
+// URL in there by hand.
+//
+// Decided by the HOST, which is the rule the same block already applies to paid
+// links one branch down: "Decided by the link's HOST rather than by a flag on the
+// row, so adding a second paid link needs nobody to remember this."
+export const storeKindOf = (url) => {
+  let host = "";
+  try { host = new URL(String(url)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
+  if (!host) return "";
+  if (host === "apps.apple.com" || host === "itunes.apple.com" || host.endsWith(".apple.com")) return "ios";
+  if (host === "play.google.com") return "android";
+  return "web";
+};
+
 export const externalHref = (value) => {
   const s = String(value || "").trim();
   if (!s) return null;

@@ -20,12 +20,12 @@ import { sweepAll, sweepRow, deepCheckPlan, checkAge } from "./utils/factSweep";
 import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filterRows } from "./utils/manageGroups";
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
-import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED } from "./utils/entryAudit";
+import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
-import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget } from "./utils/discovery";
+import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
@@ -45,7 +45,7 @@ import {
   getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
-  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep} from "./utils/helpers";
+  hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf } from "./utils/helpers";
 import { checkNightTransport, geocodePlace, findRealNearestStation, geocodePostcode } from "./utils/geo";
 import { runOnce } from "./utils/inFlight";
 import { Pill } from "./components/Pill";
@@ -80,12 +80,12 @@ import { ensureLiveFactsLoaded, refreshLiveFacts } from "./utils/liveFacts";
 import { founderSources, ensureSourcesLoaded, refreshSources } from "./utils/liveSources";
 import { journeyParts, journeyBlock, transitProblems, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, closedButPlanned, arrivalStop } from "./utils/journey";
 import { correctEntry, keepMeasured, keepProse, MEASURED_FIELDS } from "./utils/correction";
-import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance } from "./utils/glanceExtract";
-import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive } from "./utils/sourcePolicy";
+import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor, describeGlance, staleUncertainties, describeStale } from "./utils/glanceExtract";
+import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
-import { briefThemes } from "./utils/interestFit";
+import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure } from "./utils/affiliates";
 import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
@@ -952,6 +952,12 @@ function GemlyxApp() {
   // the override, for when he knows something the coverage numbers do not.
   // A named town beats a region, because he only types one when he has a lead.
   const [discoverTarget, setDiscoverTarget] = useState("anywhere");
+  // ── WHEN, NOT ONLY WHERE ────────────────────────────────────────
+  // Oliver, 16 Aug 2026: "right now, it's filled with events in August." It is
+  // August, so of course it is. Every Christmas market and the whole of spring
+  // was unreachable from a button pressed today. See DISCOVERY_MONTHS.
+  const [discoverMonth, setDiscoverMonth] = useState("any");
+  const [discoverOffMonth, setDiscoverOffMonth] = useState("");
   const [discoverTown, setDiscoverTown] = useState("");
   const [placeEditId, setPlaceEditId] = useState(null);
   const [placeDraft, setPlaceDraft] = useState({ placeKind: "", partOf: "", dayTripFrom: "" });
@@ -3578,7 +3584,13 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // official site is not one site named after the place, it is the sites of
       // the specific things IN it. So for those types we take the best few
       // plausible official pages instead, with aggregators filtered out.
-      const AGGREGATOR_HOSTS = /tripadvisor|booking\.com|expedia|hotels|airbnb|getyourguide|viator|yelp|facebook|instagram|twitter|x\.com|youtube|reddit|quora|wikipedia|wikivoyage|directferries|rome2rio|lonelyplanet|visitdenmark|pinterest|tiktok/i;
+      // isNeverOwnSite, not a regex declared here. This one and the one that
+      // gated __sources were two copies of nearly the same list, and the second
+      // was missing half the first: that is how three Wikipedias, a VisitDenmark
+      // page and a hotel aggregator reached the reader-facing sources of the
+      // Gothersgade draft. The two QUESTIONS are genuinely different, which is
+      // why there are still two predicates, and they now live together in
+      // utils/sourcePolicy.js where the difference is written down.
       const isPlaceType = ["town", "festival", "nightTown"].includes(sType);
       if (["food", "foodStreet", "night", "booking", "free", "town", "festival", "nightTown"].includes(sType) && candidateUrls.length > 0) {
         // ── ONLY A WORD THAT IDENTIFIES THE PLACE COUNTS ──────────────
@@ -3587,7 +3599,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // read a ceramics festival as the operator's own site. See
         // distinctiveWords in utils/danishNames.js for the full story.
         const nameWords = distinctiveWords(name);
-        const usable = candidateUrls.filter(u => { try { return !AGGREGATOR_HOSTS.test(new URL(u).hostname); } catch { return false; } });
+        const usable = candidateUrls.filter(u => !isNeverOwnSite(u));
         // ── A PAGE THAT NAMES THE PLACE IS A CANDIDATE FOR BEING ITS ──
         // ── OWN PAGE, WHATEVER ITS HOSTNAME IS ────────────────────────
         // Two ways to qualify now, and the second is the one that was missing.
@@ -4258,13 +4270,50 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
             try { flagged = JSON.parse(scanResult.text.replace(/^```json\s*|\s*```$/g, "").trim()); } catch { flagged = []; }
             if (Array.isArray(flagged) && flagged.length > 0) {
               const rewriteResult = await askClaude(
-                `Here is a draft (JSON) and a list of specific phrases an editor flagged as reading awkward or unnatural. Rewrite ONLY those exact flagged phrases in place with more natural, plain English that keeps the same meaning and any real facts in that sentence — leave every other field and every other sentence completely untouched, same structure, same keys, same wording for anything not flagged.\n\nFlagged phrases:\n${flagged.map(f => `- "${f.phrase}" (in ${f.field}) — ${f.why || ""}`).join("\n")}\n\nCurrent draft:\n${JSON.stringify(t)}\n\nRespond with ONLY the complete corrected JSON, valid JSON, nothing else.`,
+                `Here is a draft (JSON) and a list of specific phrases an editor flagged as reading awkward or unnatural. Rewrite ONLY those exact flagged phrases in place with more natural, plain English that keeps the same meaning and any real facts in that sentence — leave every other field and every other sentence completely untouched, same structure, same keys, same wording for anything not flagged.\n\nFlagged phrases:\n${flagged.map(f => `- "${f.phrase}" (in ${f.field}) — ${f.why || ""}`).join("\n")}\n\nCurrent draft:\n${JSON.stringify(writtenFields(t))}\n\nRespond with ONLY the complete corrected JSON, valid JSON, nothing else.`,
                 3000
               );
               if (!rewriteResult.error && rewriteResult.text) {
                 try {
                   const rewritten = JSON.parse(rewriteResult.text.replace(/^```json\s*|\s*```$/g, "").trim());
-                  if (rewritten && rewritten.name) t = rewritten; // only swap in if it came back as a genuinely valid, complete draft
+                  // ── AND THIS PASS HAD NONE OF THE GUARDS THE OTHER ONE HAS ──
+                  // Found on 16 Aug by an assertion written for something else.
+                  // This was `t = rewritten`, a wholesale replacement, on a payload
+                  // that was the ENTIRE draft: __sources, __hours, __journey's leg
+                  // array, __priceSource, the frozen coordinate, all of it, sent to
+                  // a 3000-token rewrite whose job is to reword one awkward phrase.
+                  //
+                  // The invented-claim correction two hundred lines below carries
+                  // keepMeasured and keepProse and a comment explaining that
+                  // `t = corrected` "handed the entire draft to a JSON rewrite
+                  // AFTER every value the pipeline had measured in code", and that
+                  // the manual path "has had enforceScope guarding it all along.
+                  // This one had nothing." A third path had nothing either, and it
+                  // is the one with the SMALLEST budget for the LARGEST payload,
+                  // so a truncated answer that still parsed and still had a name
+                  // replaced the draft with a shell.
+                  //
+                  // Two changes, both structural rather than asking nicely.
+                  // writtenFields on the way out, so a machine field cannot be
+                  // rewritten because it was never sent, and keepMeasured on the
+                  // way back, which also refuses a rewrite that came back short.
+                  if (rewritten && rewritten.name) {
+                    const kept = keepMeasured(t, { ...t, ...rewritten });
+                    if (kept.rejected) {
+                      note("The polish pass was refused", {
+                        provider: "claude", detail: "reword of the flagged phrases only",
+                        outcome: "failed", used: false, why: kept.why,
+                      });
+                    } else {
+                      t = kept.patched;
+                      if (kept.restored.length) {
+                        note("The polish pass overreached", {
+                          provider: "claude", detail: "reword of the flagged phrases only",
+                          outcome: "ok", used: true, got: kept.why,
+                        });
+                      }
+                    }
+                  }
                 } catch { /* Claude's rewrite wasn't valid JSON — keep the original draft rather than risk corrupting it with a partial parse */ }
               }
             }
@@ -4399,7 +4448,6 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // social are dropped, since "we checked TripAdvisor" is not the claim
       // being made, and the entry's own official site is not repeated because
       // it already has its own line above the list.
-      const AGG = /tripadvisor|booking\.com|expedia|getyourguide|viator|tiqets|headout|klook|musement|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|yelp/i;
       const seenHost = new Set();
       // Founder-vouched pages FIRST, and not merged into candidateUrls before
       // this point on purpose: candidateUrls also feeds the official-site pick
@@ -4505,7 +4553,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       t.__sources = [...new Set([...founderUrls, ...candidateUrls])].filter(u => {
         try {
           const h = new URL(u).hostname.replace(/^www\./, "");
-          if (AGG.test(h) || seenHost.has(h)) return false;
+          if (isNeverASource(u) || seenHost.has(h)) return false;
           if (!mentionsThisPlace(u)) return false;
           seenHost.add(h);
           return true;
@@ -4515,6 +4563,17 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // about should show no sources rather than eight about somewhere else.
       // HowWeKnow renders this under a heading promising how we know, so a
       // wrong list there is worse than no list.
+
+      // ── DECLARED HERE, ABOVE ITS FIRST CALLER ───────────────────
+      // This sat two hundred lines below, next to gateDraft, which was fine
+      // while gateDraft was its only caller. The At a Glance stage below now
+      // needs it too, and a `const` arrow read before its declaration is a
+      // ReferenceError at runtime that a build cannot catch: exactly what
+      // tests/tdz.mjs exists to find. Moved rather than copied.
+      const noteToFounder = (line) => {
+        if (!line) return;
+        t.__notes = [...(t.__notes || []).filter(u => u !== line), line];
+      };
 
       // ── AT A GLANCE, EXTRACTED RATHER THAN WRITTEN ───────────────
       //
@@ -4564,6 +4623,23 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               ].filter(Boolean).join(". ").slice(0, 400),
               used: merged.changed.length > 0,
             });
+            // ── AND THE UNCERTAINTY THAT SAID THE FIELD WAS EMPTY ──
+            // His Gothersgade row said priceNote was "Free entry" AND said in its
+            // own uncertainties that priceNote was left empty. The decide() call
+            // below records the overrule correctly and nothing went back for the
+            // sentence the overrule had just made false. See staleUncertainties.
+            if (merged.changed.length && Array.isArray(t.uncertainties)) {
+              const recon = staleUncertainties(t.uncertainties, merged.changed);
+              if (recon.stale.length) {
+                t.uncertainties = recon.kept;
+                noteToFounder(describeStale(recon.stale));
+                note("Uncertainties reconciled against the extraction", {
+                  provider: "openai", detail: "lines claiming a field was empty, after that field was filled",
+                  outcome: "ok", used: true,
+                  got: describeStale(recon.stale).slice(0, 300),
+                });
+              }
+            }
             merged.changed.forEach(c => decide(c.field, {
               winner: "the research (extracted)", loser: c.was ? `the writer ("${c.was}")` : "an empty field",
               rule: "At a Glance is data. A value stated on a page beats one composed by a writer, and a value nobody stated stays empty.",
@@ -4761,11 +4837,6 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       // ALLOW-LIST: a __ field it does not name cannot reach a reader by
       // accident, whereas a prefix rule can be defeated by a reworded message.
       // The Studio panel renders them separately, so he loses nothing.
-      const noteToFounder = (line) => {
-        if (!line) return;
-        t.__notes = [...(t.__notes || []).filter(u => u !== line), line];
-      };
-
       const gateDraft = (pass) => {
         const again = pass === "again";
         const suffix = again ? ", after the correction" : "";
@@ -4880,6 +4951,24 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         {
           const standing = evidenceStanding({ sources: t.__sources, ownSite: placesWebsite || t.website || "" });
           noteToFounder(describeEvidence(standing, { untracedPrices: pt.checked ? pt.untraced.length : 0 }));
+          // ── AND WHETHER THEY ANSWER THE QUESTION THIS ENTRY ASKS ──
+          // Oliver, on the Gothersgade draft: "why so innaccurate? The sources
+          // used are very good." They were, about a different question. Step 6 of
+          // that run ranked eight sources and printed "(reference)" against seven
+          // of them, so the app had already classified them correctly and nothing
+          // read the classification. See sourceFit in utils/entryAudit.js.
+          const fit = sourceFit(t.__sources, { type: sType, saidByUrl: urlSaidWhat });
+          noteToFounder(describeSourceFit(fit, { type: sType }));
+          note(`Do the sources cover the subject${suffix}`, {
+            provider: "fetch",
+            detail: `what each page said, against the words this type is about`,
+            outcome: fit.subjectUnsourced ? "empty" : fit.heard ? "ok" : "skipped",
+            why: fit.heard ? "" : "nothing was recorded about what these pages said, so this cannot be answered either way",
+            got: fit.heard
+              ? `${fit.onSubject} of ${fit.heard} pages read mention the subject; ${fit.reference} of ${fit.total} hosts are encyclopedias`
+              : "no page text to read",
+            used: !fit.subjectUnsourced,
+          });
         }
 
         // ── AND THE JOURNEY, AGAINST THE ONE THING THAT MEASURED IT ──
@@ -5459,6 +5548,10 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   // t, not just the editor. draftOutcome below returns t, and
                   // for a queued draft that return value IS the draft, so an
                   // auto-correction that only reached state was thrown away.
+                  // Captured before the reassignment, because correctionLanded
+                  // needs the draft the claims were flagged IN to tell the
+                  // draft's own words from the checker's commentary.
+                  const beforeCorrection = JSON.stringify(writtenFields(t));
                   t = merged;
                   // ── AND NOW CHECK WHAT REPLACED THE DRAFT ─────────
                   // The price and date gates ran a hundred lines above, on a
@@ -5494,6 +5587,28 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
                   if (frozenGeo && typeof t.lat !== "undefined") t.lat = frozenGeo.lat;
                   if (frozenGeo && typeof t.lon !== "undefined") t.lon = frozenGeo.lon;
                   gateDraft("again");
+                  // ── AND DID THE CORRECTION ACTUALLY LAND ────────
+                  // Every gate above has an "after the correction" twin. The
+                  // invented-claim check, the one stage that FOUND something,
+                  // had none, and the banner below tells him the claims were
+                  // "fixed in the draft below". That was a claim about work
+                  // nobody verified. This costs no second Perplexity call: the
+                  // check already said which claims are wrong, and whether they
+                  // are still there is a string comparison. See correctionLanded.
+                  const landed = correctionLanded(
+                    inventedRead.findings.map(f => f.text),
+                    beforeCorrection,
+                    JSON.stringify(writtenFields(t)),
+                  );
+                  noteToFounder(describeCorrection(landed));
+                  note("Did the correction land", {
+                    provider: "claude",
+                    detail: "each flagged claim, against the draft that replaced the one it was flagged in",
+                    outcome: landed.survived.length ? "failed" : "ok",
+                    used: !landed.survived.length,
+                    why: landed.survived.length ? describeCorrection(landed).slice(0, 300) : "",
+                    got: `${landed.gone} gone, ${landed.survived.length} still there, ${landed.uncheckable} not checkable in code`,
+                  });
                   if (kept.restored.length) {
                     note("Auto-correction overreached", {
                       provider: "claude", detail: "rewrite of the flagged claims only",
@@ -6041,7 +6156,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (discoverLoading) return;
     const type = typeOverride || studioType;
     setDiscoverForType(type);
-    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0); setDiscoverOffTarget("");
+    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0); setDiscoverOffTarget(""); setDiscoverOffMonth("");
     try {
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
       const typeLabel = DISCOVER_TYPE_LABEL[type] || "places in Denmark";
@@ -6053,7 +6168,10 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
       // the country are thinnest, and the instruction to search in Danish,
       // which is what actually reaches past the tourist canon. See
       // utils/discovery.js.
-      const discoverAim = framingForTarget(discoverTarget, manageItems || [], { typeLabel, town: discoverTown });
+      const discoverAim = framingForTarget(discoverTarget, manageItems || [], { typeLabel, town: discoverTown })
+        // The month, appended rather than replacing: where and when are separate
+        // questions and a brief can carry both.
+        + framingForMonth(discoverMonth, new Date());
       // ── "I MEAN THE 'DISCOVER NEW EVENTS' TAB" ─────────────────────
       // Oliver, 13 Aug 2026, pointing at exactly this function. His eighteen
       // vouched domains have never been searched by it: five queries are
@@ -6152,7 +6270,9 @@ SKIP ANY EVENT WHOSE EDITION HAS ALREADY FINISHED. Today's date is in the prompt
 
 For each real candidate found, give its exact name, the town/region it's in (empty string if genuinely unclear), and a one-sentence hook — a specific, concrete reason from the search results this is worth including (not a generic reason like "popular" or "worth visiting"). Aim for 8-15 if the results genuinely support that many; return fewer if that's honestly all that's there — never pad the list with weak or vague entries just to hit a number.
 
-Respond with ONLY a JSON array: [{"name": "...", "region": "...", "hook": "..."}]
+For each one also give WHEN it runs, in its own words from the search results: a month, a date range, or an empty string if the results genuinely do not say. This is read by code to check the month a search was aimed at, so give the month by name ("early December", "28 August to 6 September 2026") rather than a season or a vague phrase, and leave it empty rather than guessing.
+
+Respond with ONLY a JSON array: [{"name": "...", "region": "...", "when": "...", "hook": "..."}]
 
 TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 16000)}`,
           2200
@@ -6184,10 +6304,18 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
       // seven were on Funen and one was Randers. The region was in the prompt,
       // and a prompt is not a filter, which is the identical lesson the two
       // lines above this one were each written to learn. See splitOffTarget.
-      const { kept, dropped: elsewhere } = splitOffTarget(dated, discoverTarget);
+      const { kept: inRegion, dropped: elsewhere } = splitOffTarget(dated, discoverTarget);
+      // ── AND THE FOURTH DETERMINISTIC FILTER ─────────────────────
+      // The month is in the brief above, and a brief is not a filter. That is now
+      // four in this one function, which makes it the default rather than a
+      // lesson. Reads each candidate's own stated `when`, and keeps anything that
+      // states no month: not knowing when something runs is not evidence it runs
+      // at the wrong time.
+      const { kept, dropped: wrongMonth } = splitOffMonth(inRegion, discoverMonth);
       setDiscoverCovered(covered.length);
       setDiscoverDropped(dropped.length);
       setDiscoverOffTarget(describeOffTarget(elsewhere, discoverTarget));
+      setDiscoverOffMonth(describeOffMonth(wrongMonth, discoverMonth));
       setDiscoverResults(kept);
     } catch (err) {
       setDiscoverError(err?.message || "Discovery failed — try again.");
@@ -8527,6 +8655,27 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
       // to the single moment concrete facts actually get committed. (Comment
       // fixed: this hasn't called Gemini since Gemini was fully retired in favor
       // of Perplexity — see project memory.)
+      // ── "WILL PEOPLE COME FOR NIGHTLIFE BE TOLD ABOUT NIGHTPAY" ──
+      // Oliver, 16 Aug 2026. The answer was no: the published Essentials array is
+      // read by the Essentials page and the two Studio type maps, and by no prompt
+      // in the app. So the one content type he calls the fastest to go stale could
+      // never reach a reader through a guide.
+      //
+      // Selected against the trip's own themes rather than dumped, and matched on
+      // each row's OWN WORDS rather than its category: Nightpay is filed under
+      // Transport, there is no Nightlife category to move it to, and its desc says
+      // "nightlife discounts and payment, covering more than 80 bars and clubs",
+      // which is what the match reads. See essentialsForTrip in utils/interestFit.js.
+      const essentialsPicked = essentialsForTrip(essentials, { convoText, interests: intakeInterest });
+      const essentialsFacts = essentialsBlock(essentialsPicked);
+      if (essentialsPicked.length) {
+        note("Published essentials chosen for this trip", {
+          provider: "fetch",
+          detail: "matched on each row's own words against the themes this brief asks for",
+          outcome: "ok", used: true,
+          got: essentialsPicked.map(p => `${p.row.name} (${p.themes.join(", ")})`).join("; "),
+        });
+      }
       let guideGrounding = "";
       {
         buildStage("Fact-checking the guide", 42);
@@ -8551,7 +8700,7 @@ CRITICAL — GEOGRAPHIC GROUPING AND SEQUENCING: within a single day, group stop
 CRITICAL — SEQUENCE THE DAYS THEMSELVES ALONG ONE ROUTE, NOT JUST EACH DAY INTERNALLY: this applies across the whole trip, not just within one day — Copenhagen/Zealand and Jutland are genuinely different regions connected only by a long bridge/ferry crossing or a flight, never a short hop. Don't send the trip deeper into one region for several days and then jump straight to the other with no bridging day (e.g. Day 1-2 further into Jutland, Day 3 suddenly Copenhagen). If a planning skeleton is provided below, its day-to-day order already accounts for this — follow it. If you're structuring the trip yourself (no skeleton, or it's missing this), order the days to move in one general direction across the country and minimize total region-crossings over the whole trip.
 CRITICAL — REALISTIC ARRIVAL-DAY TIMING: on the actual arrival day, never schedule the first real activity at or right after the exact landing time — leave a genuine buffer for immigration/baggage claim, then getting from the airport to accommodation and checking in, roughly 60-90 minutes depending on distance, before anything else starts. Someone landing at 12:00 realistically reaches their hotel/hostel around 13:00-13:30, not before — the first stop's arrivalTime should reflect that reality, not the literal landing timestamp.
 CRITICAL — REALISTIC DEPARTURE-DAY TIMING: on the actual departure day, never schedule an activity (a museum visit, a meal, anything) that runs right up against the flight's departure time — leave a genuine buffer BEFORE it for getting to the airport, checking in, and security, same logic as the arrival buffer but in reverse. People commonly arrive at the airport 2-3 hours before a flight, so if departure is at 14:00, the last real activity should wrap up by roughly 11:00-11:30 at the latest, not 13:30. If the departure time is early enough that there's no realistic room for any activity that day at all, say so plainly rather than forcing one in anyway — a half-day or single relaxed stop near the accommodation is the honest call, not a full itinerary crammed against the clock. If "Traveling with kids" is mentioned, genuinely adjust the plan for it — shorter, less-packed days (2-3 stops, not 4-5), avoid late-night-only venues and anything genuinely inappropriate for children, favor stops with real breaks (parks, casual food) between bigger activities, and mention if something specific is a poor fit for kids rather than including it anyway.
-If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${chosenEventsBlock}${chosenExtrasBlock}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
+If the conversation only covers a single day or a few stops with no explicit day breakdown, use one day.${requestedDays ? ` CRITICAL — the traveler explicitly said they have ${requestedDays} day${requestedDays > 1 ? "s" : ""} for this trip: the "days" array MUST contain exactly ${requestedDays} entries, one per day, even if the conversation text itself didn't spell out "Day 1:", "Day 2:" etc. for each one — split ALL the places discussed across those ${requestedDays} days yourself, in a sensible geographic/logical order (don't cram everything into day 1 and leave later days empty). If genuinely too few distinct places were discussed to fill every day with something real, it's fine for a day to have fewer stops or repeat a base town for a slower day — but never invent a place that wasn't actually mentioned just to fill a day.` : ""} Use only real place names actually mentioned in the conversation — never invent new ones, and never invent facts, prices or opening hours in the notes; describe atmosphere and experience instead.${chosenEventsBlock}${chosenExtrasBlock}${essentialsFacts}${plannerSkeleton ? `\nA planning pass already worked out a day-by-day structure (which places, which day, what order) — follow this exact breakdown unless it's genuinely missing something the conversation clearly mentioned; your job is to write the full essentials and every stop's note yourself, this only gives you the skeleton: ${plannerSkeleton}` : ""}${tavilyGrounding ? `\nWEB RESEARCH (Tavily, real current results — weigh alongside the conversation for prices, hours, and current details): ${tavilyGrounding}` : ""}${guideGrounding ? `\nGOOGLE AI CROSS-CHECK (weigh this alongside the conversation — if it reveals a mentioned place doesn't seem to exist, prefer the nearest real equivalent rather than inventing): ${guideGrounding}` : ""}`;
       // Guide-building is genuine multi-step reasoning (timing, geography, avoiding
       // duplicates, family-mode adjustments) — this is the one call in Detour worth
       // Opus's extra reasoning depth, and it already has a loading screen the person
@@ -11867,6 +12016,38 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               ? `Every query will name ${discoverTown.trim()}, in Danish too. Works for events as well as places.`
                               : t.hint}
                           </div>
+                          {/* ── AND WHEN ──────────────────────────────
+                              Only for the dated types, because a bar street does
+                              not happen in a month and offering the choice would
+                              be a control that changes nothing. */}
+                          {["festival", "nightTown"].includes(studioType) && (
+                            <div style={{ marginTop: 12 }}>
+                              <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 7 }}>Which month</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                {DISCOVERY_MONTHS.map(opt => {
+                                  const on = discoverMonth === opt.id;
+                                  const yr = opt.month === null ? null : yearForMonth(opt.month, new Date());
+                                  return (
+                                    <button key={opt.id} onClick={() => setDiscoverMonth(opt.id)}
+                                      title={yr ? `${opt.label} ${yr}, the next one` : "No month filter"}
+                                      style={{ background: on ? C.gold : "none", border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : C.light, borderRadius: 100, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                      {opt.label}
+                                      {/* The year, because asking for December in
+                                          August means this one and February means
+                                          next, and getting that wrong sends the
+                                          search after an edition already over. */}
+                                      {yr && <span style={{ color: on ? "#0A0F1E99" : C.muted, fontWeight: 700 }}> {String(yr).slice(2)}</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+                                {monthById(discoverMonth).month === null
+                                  ? "Without a month, a search run today mostly finds the next few weeks, because that is what is current on the web."
+                                  : `Queries will name ${monthById(discoverMonth).label} ${yearForMonth(monthById(discoverMonth).month, new Date())} and its Danish name, and anything coming back with a different month of its own is dropped.`}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -11912,6 +12093,11 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             {/* Never a silently shorter list. Every reason separately, because
                                 "already published", "that edition is over" and "that is not
                                 the region you asked for" are three different pieces of news. */}
+                            {discoverOffMonth && (
+                              <div style={{ fontSize: 10.5, color: "#FFB347", marginBottom: 5, lineHeight: 1.5 }}>
+                                {discoverOffMonth}
+                              </div>
+                            )}
                             {discoverOffTarget && (
                               <div style={{ fontSize: 10.5, color: "#FFB347", marginBottom: (discoverCovered || discoverDropped) ? 5 : 10, lineHeight: 1.5 }}>
                                 {discoverOffTarget}
@@ -14636,9 +14822,24 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: item.link ? 8 : 0 }}>💡 {item.tip}</div>
                       {item.link && (
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {item.linkAndroid ? (
+                      {/* ── AND A WEBSITE IS NOT AN APP STORE ──────────
+                          `link` is asked for in the prompt as "the official URL",
+                          and this rendered it as an iOS store badge whatever it
+                          was. So a drafted essential showed a company homepage
+                          under "Download on the App Store", or, when the research
+                          found no URL at all, showed nothing: which is what
+                          happened to Nightpay while DSB App, a hardcoded row with
+                          a real store URL typed in by hand, looked fine.
+                          Decided by the host now, the same way the paid-link
+                          branch below already decides. See storeKindOf. */}
+                      {storeKindOf(item.link) === "web" && !item.linkAndroid ? (
+                        <a href={externalHref(item.link)} target="_blank" rel="noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
+                          Official site ↗
+                        </a>
+                      ) : item.linkAndroid ? (
                         <>
-                          <StoreBadge type="ios" href={item.link} />
+                          <StoreBadge type={storeKindOf(item.link) === "android" ? "android" : "ios"} href={item.link} />
                           <StoreBadge type="android" href={item.linkAndroid} />
                         </>
                       ) : (

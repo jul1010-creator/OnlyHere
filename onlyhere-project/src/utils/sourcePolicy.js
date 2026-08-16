@@ -170,6 +170,61 @@ export const nameIsDistinctive = (name) => {
   return words.some(w => !COMMON_NAME_WORDS.has(w));
 };
 
+// ── TWO QUESTIONS ABOUT A HOST, AND ONLY ONE HAD A NAME ─────────────
+//
+// Oliver's Gothersgade draft, 16 August 2026. Eight sources, and six of them are
+// hosts the research pass had already refused: three Wikipedias, a VisitDenmark
+// page and a hotel aggregator. They reached the reader-facing list because
+// App.jsx carried TWO regexes, one at the official-site picker and one at the
+// sources list, and the second was missing half the first.
+//
+// THE TWO LISTS WERE NOT A DUPLICATION BUG. App.jsx already argues the reason,
+// about GetYourGuide: it "is never the official website of anything", and it
+// "answers one question better than any official site does: what can you
+// actually BOOK here, for how much, and does it sell out". Both true. The bug is
+// that only one of those two questions had a name, so the second list was
+// maintained as a vaguer copy of the first and drifted.
+//
+//   isNeverOwnSite   this host is not the place's own website. A reseller, an
+//                    encyclopedia, a tourist board, a social feed. Excellent
+//                    evidence, wrong answer for the officialSite field.
+//   isNeverASource   this host is not evidence of anything. An accommodation
+//                    aggregator whose page exists because the street has a
+//                    postcode, a social feed with no editing.
+//
+// Wikipedia sits in the FIRST and not the second on purpose: pageScan already
+// classes it as a "reference" source, ranked below an operator and above
+// nothing, which is right. An encyclopedia is a real source about a street's
+// history and no source at all about who drinks there on a Tuesday, and that
+// second half is not a host problem. See sourceFit in utils/entryAudit.js.
+const NEVER_OWN_SITE = /tripadvisor|booking\.com|expedia|hotels|hostelworld|airbnb|agoda|trivago|kayak\.|momondo|getyourguide|viator|tiqets|headout|klook|musement|yelp|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|wikipedia|wikivoyage|directferries|rome2rio|lonelyplanet|visitdenmark/i;
+
+// Strictly smaller, and every omission is deliberate. A reseller listing proves
+// a tour runs; an encyclopedia is a real reference; a tourist board is on the
+// founder's own vouched list. None of those belong here. What belongs here is a
+// page that exists only because an address exists.
+const NEVER_A_SOURCE = /tripadvisor|booking\.com|expedia|hotels|hostelworld|airbnb|agoda|trivago|kayak\.|momondo|facebook|instagram|twitter|x\.com|youtube|reddit|quora|pinterest|tiktok|google\.|yelp/i;
+
+const hostOfUrl = (u) => {
+  try { return new URL(String(u)).hostname.replace(/^www\./, ""); } catch { return ""; }
+};
+
+export const isNeverOwnSite = (url) => {
+  const h = hostOfUrl(url);
+  return !!h && NEVER_OWN_SITE.test(h);
+};
+
+export const isNeverASource = (url) => {
+  const h = hostOfUrl(url);
+  return !!h && NEVER_A_SOURCE.test(h);
+};
+
+// Asserted rather than assumed, because the whole failure was these two drifting
+// apart: anything refused as a SOURCE must also be refused as the own site. The
+// reverse does not hold and that is the point of having two.
+export const SOURCE_RULES_NEST = ["tripadvisor.com", "booking.com", "hotelscopenhagen.org", "facebook.com", "yelp.com"]
+  .every(h => NEVER_A_SOURCE.test(h) && NEVER_OWN_SITE.test(h));
+
 // ── "ONE SOURCE? WHAT DA FK" ────────────────────────────────────────
 //
 // Oliver, 16 August 2026, on a finished draft for the paper art museum in Hune,

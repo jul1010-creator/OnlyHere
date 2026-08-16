@@ -287,6 +287,36 @@ const MONTH_WORDS = [
 // its own abbreviation.
 const MONTH_RE = MONTH_WORDS.map((alts, i) => [new RegExp(`\\b(?:${alts})\\b`, "i"), i]);
 
+// ── WHICH MONTHS DOES A PIECE OF TEXT NAME ──────────────────────────
+//
+// Oliver, 16 August 2026: "In Studio, I'd like to be able to search for events
+// specifically happening in a specific month. Like, right now, it's filled with
+// events in August."
+//
+// Of course it is. It is the 16th of August, the search returns what is current,
+// and splitFinishedCandidates correctly drops what has ended. So discovery can
+// only ever find the next few weeks, and the Christmas markets, the February
+// light festivals and the whole spring are unreachable from a button that is
+// pressed in August.
+//
+// Reads MONTH_RE, the table already in this file, rather than a second list of
+// month spellings. The one above it is 1-based and strict on purpose and these
+// two must not be merged, which is written down there; a THIRD copy for a filter
+// is exactly the drift that comment is warning about.
+//
+// Returns every month named, not the first, because a candidate's own words are
+// often a range: "late November to 23 December" names both, and a December run
+// should not be refused for having started in November.
+export const monthsInText = (text) => {
+  const t = String(text || "");
+  if (!t.trim()) return [];
+  const found = [];
+  for (const [re, monthIndex] of MONTH_RE) {
+    if (re.test(t)) found.push(monthIndex);
+  }
+  return found.sort((a, b) => a - b);
+};
+
 // The LAST day the text mentions for that month, because a festival is over when
 // it ends. "8-16 August 2026" is not finished on the 9th.
 export const lastDateInText = (text) => {

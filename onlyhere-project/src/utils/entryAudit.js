@@ -28,6 +28,8 @@ import { coordProblems } from "./coordCheck";
 // fold, because a Danish word ending in é, ø, æ or å cannot carry a \b word
 // boundary in JavaScript. See TICKET_WORD.
 import { fold } from "./danishNames";
+import { isReferenceHost } from "./pageScan";
+import { QUERY_WORDS } from "./sourcePolicy";
 import { stayContradiction, restatementFindings } from "./draftShape";
 
 // Claims that a place has no public transport. Same pattern as the live
@@ -1136,6 +1138,91 @@ export const evidenceStanding = ({ sources = [], ownSite = "" } = {}) => {
   const hosts = [...new Set(list.map(host).filter(Boolean))];
   const others = own ? hosts.filter(h => h !== own && !h.endsWith(`.${own}`)) : hosts;
   return { total: hosts.length, hasOwn: !!own && hosts.length > others.length, others: others.length };
+};
+
+// ── AND WHETHER THE SOURCES ANSWER THE QUESTION THE ENTRY ASKS ───────
+//
+// Oliver, 16 August 2026, on a Gothersgade nightlife draft: "why so innaccurate?
+// The sources used are very good."
+//
+// They were very good, at a different question. Seven of the eight were
+// encyclopedias, and the run log had already said so out loud: step 6 ranked them
+// and printed "(reference)" eight times. The app classified every source
+// correctly and then nothing read the classification.
+//
+// An encyclopedia is a real source about when a street was laid out and where it
+// runs, and no source at all about who drinks there on a Tuesday. The draft's
+// geography was right, every word of it. Its jazz, its after-work crowd and its
+// half-empty weeknights came from nowhere, and eight plausible URLs underneath
+// them is what made that invisible: a short source list looks thin, and a list of
+// eight reference works looks researched.
+//
+// SO THE TEST IS BY TYPE, because the same source list is fine or useless
+// depending on what is being written. A town's history is what a lexicon is for.
+// A bar street is about this year, and pageScan's own comment on the reference
+// class already says it: "good for history and bad for a price".
+export const LIVING_TYPES = ["night", "nightStreet", "nightTown", "food", "foodStreet", "booking"];
+
+// ── AND THE TEST IS THE SUBJECT, NOT THE HOST ───────────────────────
+// The first version of this counted encyclopedias and asked whether they were
+// ALL of them. Measured on his own eight, that came out FALSE: four hosts
+// classify as reference, and hovedstadshistorie.dk, visitdenmark.dk and a
+// hostel's generic nightlife page do not, while being no more use about
+// Gothersgade's bars. A host-shaped test cannot answer a subject-shaped question,
+// and shipping the first version would have been a check that agreed the draft
+// was fine.
+//
+// So it asks the real question: did any page we read say anything about the
+// SUBJECT. The words come from QUERY_WORDS, which already holds one line per type
+// and is already maintained, rather than a second list here that would drift from
+// it the first time either was touched. nightStreet is "natteliv barer nightlife
+// bars", which is what a page about a bar street contains and what a lexicon
+// entry on a 1650s street does not.
+//
+// `saidByUrl` is what each page was seen to say, the same map sourceIsAboutPlace
+// is fed. WITHOUT IT THERE IS NO FINDING: not knowing what the pages said is not
+// evidence they said nothing, and calling a draft unsourced on the strength of a
+// missing map is the overreach this file has spent the day removing.
+export const sourceFit = (urls, { type = "", saidByUrl = null } = {}) => {
+  const list = (Array.isArray(urls) ? urls : []).map(u => String(u || "")).filter(Boolean);
+  const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
+  const hosts = [...new Set(list.map(hostOf).filter(Boolean))];
+  const reference = hosts.filter(h => isReferenceHost(`https://${h}/`)).length;
+  const living = LIVING_TYPES.includes(String(type));
+
+  const said = (u) => String(
+    (saidByUrl && typeof saidByUrl.get === "function" ? saidByUrl.get(u) : saidByUrl?.[u]) ?? ""
+  );
+  const heard = list.filter(u => said(u).trim());
+  const words = [...new Set(String(QUERY_WORDS[String(type)] || "").split(/\s+/).map(fold).filter(w => w.length >= 3))];
+  const spaced = (v) => ` ${fold(v).replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const onSubject = heard.filter(u => {
+    const hay = spaced(said(u));
+    return words.some(w => hay.includes(` ${w} `));
+  });
+
+  return {
+    total: hosts.length,
+    reference,
+    other: hosts.length - reference,
+    living,
+    heard: heard.length,
+    onSubject: onSubject.length,
+    // Three conditions, and dropping any one of them makes this lie: it has to be
+    // a type that is about the present, we have to have read something, and
+    // nothing we read may mention the subject.
+    subjectUnsourced: living && hosts.length > 0 && heard.length > 0 && onSubject.length === 0,
+  };
+};
+
+export const describeSourceFit = (fit, { type = "" } = {}) => {
+  const f = fit || {};
+  if (!f.subjectUnsourced) return "";
+  const looked = String(QUERY_WORDS[String(type)] || "").trim();
+  const refNote = f.reference > 0
+    ? ` ${f.reference} of the ${f.total} hosts are encyclopedias, which is why the list reads as thorough research: a lexicon is a real source about when a street was laid out and no source at all about who drinks there on a Tuesday.`
+    : "";
+  return `NOTHING WE READ IS ABOUT THE SUBJECT. ${f.heard} page${f.heard === 1 ? "" : "s"} were read and not one mentions${looked ? ` any of: ${looked}` : " the subject"}.${refNote} The geography in this draft may be perfectly right while everything about the crowd, the hours and the money has nothing behind it. Search the subject rather than the name before this goes out.`;
 };
 
 export const describeEvidence = (standing, { untracedPrices = 0 } = {}) => {
