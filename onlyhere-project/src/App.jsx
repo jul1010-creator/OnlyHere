@@ -86,6 +86,7 @@ import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommun
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
 import { briefThemes } from "./utils/interestFit";
+import { partnerDisclosure } from "./utils/affiliates";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
@@ -14473,10 +14474,31 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           <StoreBadge type="android" href={item.linkAndroid} />
                         </>
                       ) : (
-                        <a href={item.link} target="_blank" rel="noreferrer"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, color: C.light, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-                          🌐 Website ↗
-                        </a>
+                        // ── AND A PAID LINK SAYS SO, HERE TOO ──────────
+                        // This renders whatever sits in a data row's `link`,
+                        // and one row now points through Tiqets. A tracked
+                        // link with nothing under it is the exact thing
+                        // public/privacy.html promises does not happen.
+                        //
+                        // Decided by the link's HOST rather than by a flag on
+                        // the row, so adding a second paid link to
+                        // data/essentials.js needs nobody to remember this.
+                        // rel gains sponsored and nofollow when it is tracked,
+                        // which is what Google asks for on a paid link and is
+                        // the difference between an affiliate link and an
+                        // undisclosed ad.
+                        (() => {
+                          const note = partnerDisclosure(item.link);
+                          return (
+                            <div>
+                              <a href={item.link} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, color: C.light, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                                🌐 Website ↗
+                              </a>
+                              {note && <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 5, maxWidth: 320 }}>{note}</div>}
+                            </div>
+                          );
+                        })()
                       )}
                     </div>
                   )}

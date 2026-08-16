@@ -1,4 +1,4 @@
-import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE } from "../config";
+import { BOOKING_AFFILIATE_ID, TICKETMASTER_AFFILIATE_TEMPLATE, TIQETS_BROWSE_LINK, TIQETS_AFFILIATE_TEMPLATE, CAR_RENTAL_LINK } from "../config";
 // hostOf, not a fourth copy of it. See pageScan.js, and see the four other
 // functions this codebase has already found existing twice.
 import { hostOf } from "./pageScan";
@@ -137,4 +137,145 @@ export const ticketmasterActive = () => !!TICKETMASTER_AFFILIATE_TEMPLATE;
 export const ticketDisclosure = (url, template = TICKETMASTER_AFFILIATE_TEMPLATE) =>
   !!template && isTicketmasterUrl(url)
     ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
+    : "";
+
+// ── TIQETS, THROUGH TRAVELPAYOUTS ───────────────────────────────────
+//
+// Oliver, 15 Aug 2026: "Imma sign up for tiquts." Approved the same evening.
+//
+// Tiqets sells admission to the museums, castles and gardens Gemlyx already has
+// pages about, which makes it the first programme whose inventory matches what
+// this site writes about. It is reached through Travelpayouts, so the tracking
+// hosts are tpx.li and tp.media rather than tiqets.com.
+//
+// ── AND A SHORT LINK IS NOT A DEEP LINK ─────────────────────────────
+// This is why there are two constants rather than one. The link Travelpayouts
+// hands you on signup, tiqets.tpx.li/<code>, resolves to ONE fixed destination.
+// It cannot carry a different attraction each time. Put it on a card about
+// Rosenborg Slot and a reader who asked for Rosenborg lands somewhere that is
+// not Rosenborg: it pays close to nothing and it spends the one thing this site
+// is built on.
+//
+// So the short link is only ever a BROWSE link, offered where the reader was
+// not promised a particular page, and a named attraction uses the template.
+const TIQETS_HOSTS = ["tiqets.com"];
+
+export const isTiqetsUrl = (url) => {
+  const h = hostOf(url);
+  return !!h && TIQETS_HOSTS.some(d => h === d || h.endsWith(`.${d}`));
+};
+
+// The same contract as ticketmasterUrl, deliberately: the two are read side by
+// side and a different shape in each is how one of them gets forgotten. Returns
+// the tracked link, or the ORIGINAL url, or null when there is nothing worth
+// linking to, and never wraps a destination that is not Tiqets.
+export const tiqetsUrl = (url, template = TIQETS_AFFILIATE_TEMPLATE) => {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  if (!template || !isTiqetsUrl(raw)) return raw;
+  // Encoded, because it rides inside a query parameter and a Tiqets product URL
+  // carries its own ?query often enough. Raw would truncate the deep link at
+  // the first ampersand and drop the reader on a homepage.
+  return template.replace("{url}", encodeURIComponent(raw));
+};
+
+// The general "see what is on Tiqets" link, for a place with no product page of
+// its own. Null rather than a bare tiqets.com when nothing is configured, so a
+// caller renders no button at all rather than an untracked one that pretends.
+export const tiqetsBrowseUrl = (link = TIQETS_BROWSE_LINK) => {
+  const raw = String(link || "").trim();
+  return /^https?:\/\//i.test(raw) ? raw : null;
+};
+
+// ── AND "ACTIVE" MEANS THE DEEP LINK, NOT THE SHORT ONE ─────────────
+// Reading the browse link here would report the programme live on the day he
+// signed up, while every attraction link on the site was still untracked and
+// earning nothing. The template is what makes a named link pay, so the template
+// is what this answers about.
+//
+// THE TEMPLATE IS A PARAMETER FOR THE REASON ticketmasterUrl'S ALREADY IS. Now
+// that a real template is configured, a version of this that read the browse
+// link instead would return true as well, and no call against the live config
+// could tell the two apart. Passing an empty template can: the browse link is
+// still configured, so anything reading THAT still says true.
+export const tiqetsActive = (template = TIQETS_AFFILIATE_TEMPLATE) => !!template;
+
+export const tiqetsDisclosure = (url, template = TIQETS_AFFILIATE_TEMPLATE) =>
+  !!template && isTiqetsUrl(url)
+    ? "Booking through this link may earn Gemlyx a small commission. It costs you nothing and does not change the price."
+    : "";
+
+// ── CAR HIRE, AND WHY THERE IS NO LINK HERE YET ─────────────────────
+//
+// Oliver, 15 Aug 2026, sending a GetRentacar link: "I guess multiple car ones
+// are fine."
+//
+// Several car programmes IS fine, and this returns the one configured link
+// rather than a list on purpose. A page offering a reader two rental buttons
+// has not given them more choice, it has given them a decision they did not
+// come here to make, and the second button halves the clicks on the first.
+// Several programmes, one link: pick per page by which has the cars.
+//
+// AND THAT IS THE PART THAT IS NOT SETTLED. GetRentacar is a marketplace of
+// cars from local owners, and its own front page lists Turkey, the UAE, Spain,
+// Greece and the United States. Denmark is not on it, its /country/denmark page
+// is a 404, and no search turns up Danish inventory. A rental link that opens
+// on an empty result is worse than no link at all: the reader learns that
+// Gemlyx sends them to things that are not there, which costs more than the
+// commission was ever going to pay.
+//
+// So this ships empty and the check is one search on their own site for
+// Copenhagen. If the cars are there, paste the link. If they are not, the
+// programmes with real Danish coverage are DiscoverCars and Rentalcars, both
+// reachable through Travelpayouts.
+export const carRentalUrl = (link = CAR_RENTAL_LINK) => {
+  const raw = String(link || "").trim();
+  return /^https?:\/\//i.test(raw) ? raw : null;
+};
+
+export const carRentalActive = () => !!carRentalUrl();
+
+// ── A PAID LINK SAYS SO, WHEREVER IT IS PRINTED ─────────────────────
+//
+// Every disclosure above is tied to ONE programme and answers "is this
+// particular link a Ticketmaster link, a Tiqets link". That works where the
+// caller knows which programme it is calling. The Essentials list does not: it
+// renders whatever sits in `link` on a data row, as a plain 🌐 Website button,
+// with no idea where it points.
+//
+// So the moment a tracked link goes into essentials.js, that page prints a paid
+// link with nothing under it. That is the exact thing public/privacy.html now
+// promises a reader does not happen, in a section written tonight, and a
+// promise on one page broken by a button on another is still broken.
+//
+// This asks the question from the other end: not "which programme is this" but
+// "is this link tracked at all". Answered by HOST, because that is the part a
+// tracking link cannot hide. tpx.li and tp.media are Travelpayouts, and the
+// Impact and Ticketmaster hosts are the ones the template above can produce.
+//
+// Booking.com is deliberately NOT on this list. A booking.com link only pays
+// when it carries aid=, and the host alone cannot tell you that, so it is
+// tested on the parameter instead. Guessing from the host would print "this may
+// earn us a commission" over the plain search links the app builds today, which
+// is the same false statement in the opposite direction.
+const PARTNER_HOSTS = [
+  "tpx.li", "tp.media", "tp.st",
+  "ticketmaster.evyy.net", "impact.com", "pxf.io",
+];
+
+export const isPartnerLink = (url) => {
+  const raw = String(url || "").trim();
+  const h = hostOf(raw);
+  if (!h) return false;
+  if (PARTNER_HOSTS.some(d => h === d || h.endsWith(`.${d}`))) return true;
+  // The one that is decided by a parameter rather than a host.
+  return /(?:[?&])aid=\d/.test(raw) && (h === "booking.com" || h.endsWith(".booking.com"));
+};
+
+// One sentence, the same one the other disclosures use, and "" when the link
+// earns nothing. A caller can render it unconditionally and print nothing on an
+// ordinary link.
+export const partnerDisclosure = (url) =>
+  isPartnerLink(url)
+    ? "Partner link. Gemlyx may earn a small commission, at no cost to you and with no change to the price."
     : "";

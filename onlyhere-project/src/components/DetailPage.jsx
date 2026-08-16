@@ -8,7 +8,8 @@ import { InstagramEmbed } from "./InstagramEmbed";
 import { ReviewsSection } from "./ReviewsSection";
 import { PhotoCredit } from "./PhotoCredit";
 import { PlaceMiniMap } from "./PlaceMiniMap";
-import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure } from "../utils/affiliates";
+import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure } from "../utils/affiliates";
+import { isTiqetsProductUrl } from "../utils/ticketLink";
 import { HowWeKnow } from "./HowWeKnow";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { freeEntrance } from "../data/freeEntrance";
@@ -715,6 +716,45 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
               <a href={href} target="_blank" rel={paid ? "noreferrer sponsored nofollow" : "noreferrer"}
                 style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.border}`, color: C.light, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                 🌐 Visit website
+              </a>
+              {note && (
+                <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{note}</div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── AND A TICKET, WHERE ONE ACTUALLY EXISTS ────────────────
+            Oliver, 15 Aug 2026: "if I add on a Copenhagen attraction, then
+            it'll automatically put in the affiliate."
+
+            EVERY CONTENT TYPE, not just free and event above. A workshop, a
+            town's own attraction pass and a festival can all have a Tiqets
+            page, and restricting this the way the website button is restricted
+            would mean the field silently does nothing on the types nobody
+            thought about.
+
+            ABSENT, NOT DEGRADED, when there is no ticketUrl. A Tickets button
+            falling back to a Tiqets search is the failure Oliver named on the
+            preview screen the same morning, "don't put up a bunch of random
+            attractions just to have something", except this one asks a reader
+            for money. shapeForLive refuses to store anything that is not a
+            bookable Tiqets page, so an empty field means there genuinely is
+            not one.
+
+            The stored value is the PLAIN Tiqets URL and the tracking is added
+            here, at render, from the template in config.js. That is what lets
+            the marker change without a database migration. */}
+        {(() => {
+          const dest = String(item.ticketUrl || "").trim();
+          if (!isTiqetsProductUrl(dest)) return null;
+          const href = tiqetsUrl(dest) || dest;
+          const note = tiqetsDisclosure(dest);
+          return (
+            <div style={{ marginBottom: 10 }}>
+              <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
+                style={{ display: "block", textAlign: "center", background: C.surface, border: `1px solid ${C.gold}55`, color: C.gold, borderRadius: 12, padding: "13px", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
+                🎫 Book tickets
               </a>
               {note && (
                 <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 5, textAlign: "center" }}>{note}</div>

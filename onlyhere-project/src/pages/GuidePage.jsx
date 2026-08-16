@@ -15,6 +15,7 @@ import { askClaude } from "../utils/aiClient";
 import { testTravelerLine, isFerryText } from "../utils/helpers";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
+import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
 import { shareMessage, shareTitle } from "../utils/share";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
@@ -849,6 +850,46 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>{v}</span>
                 </div>
               ))}
+              {/* ── TICKETS, ONCE PER GUIDE ────────────────────────
+                  Oliver, 15 Aug 2026: "We need these implemented into
+                  essentials and the guide."
+
+                  HERE AND NOT ON EVERY DAY CARD, which was the obvious place
+                  and is the wrong one. "Where to stay" repeats per day because
+                  the answer genuinely changes per day: a different town, a
+                  different date range, a different search. Tickets do not. The
+                  same booking link under all seven days is the same link seven
+                  times, and a reader learns to scroll past it, which costs the
+                  clicks it was added to earn.
+
+                  A BROWSE LINK, and the wording has to match that. It goes to
+                  Tiqets and not to any one attraction, so it says "browse" and
+                  never promises a particular place. Once the deep link
+                  template is filled in, an attraction card can link to its own
+                  tickets and this stays what it is: the general one.
+
+                  Nothing renders when the link is not configured, rather than
+                  a dead row, and the disclosure is printed from the link
+                  itself rather than typed here, so it cannot say "this pays
+                  us" over a link that does not. */}
+              {(() => {
+                const href = tiqetsBrowseUrl();
+                if (!href) return null;
+                const note = partnerDisclosure(href);
+                return (
+                  <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", flexShrink: 0, width: 92 }}>Tickets</span>
+                    <span style={{ fontSize: 13, color: C.light, lineHeight: 1.6 }}>
+                      Denmark's bigger attractions take timed entry in summer, so the queue is the thing worth planning around rather than availability. Buy direct from the attraction where you can.
+                      <a href={href} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
+                        style={{ display: "block", marginTop: 5, color: C.gold, fontWeight: 700, textDecoration: "none" }}>
+                        🎫 Browse Danish attraction tickets ↗
+                      </a>
+                      {note && <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5, marginTop: 4 }}>{note}</div>}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

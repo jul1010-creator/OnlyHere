@@ -1,4 +1,7 @@
 import { TOWN_COORDS } from "../data/towns";
+// Its own file, not inlined here and not imported from eventDates.js, which
+// already imports daCompare from this one. See utils/calendarDay.js.
+import { dayStart, dayWithin } from "./calendarDay";
 
 // ── ONE ANSWER TO "IS THIS LEG A BOAT" ───────────────────────────────
 // Audited 10 Aug 2026: this question was being asked in SEVEN places in FIVE
@@ -114,11 +117,22 @@ export const getEventDate = (dateStr, dateEnd, today = new Date()) => {
 // opened yesterday and runs all week has not finished, and isUpcoming, which
 // only ever looks at the start, says it is not upcoming either. Both of those
 // can be true at once, which is exactly why this is its own question.
+// ── AND IT HAD HALF THE SAME BUG ────────────────────────────────────
+// This compared `new Date(last)`, which is UTC midnight for a date-only ISO
+// string, against LOCAL midnight today. In Denmark the two are close enough
+// that it always looked right. In New York, UTC midnight on the 16th is 20:00
+// on the 15th local, so an event ending today read as finished for every reader
+// in the Americas, which is most of the people this English guide is written
+// for. It was failing in the suite under TZ=America/New_York before tonight and
+// nobody was running the suite in another timezone.
+//
+// dayStart reads the value as the local calendar day it names, so both sides of
+// the comparison are now the same kind of thing.
 export const hasFinished = (e, today = new Date()) => {
   const last = e?.dateEnd || e?.date || e;
   if (!last) return false;
-  const d = new Date(last);
-  if (isNaN(d.getTime())) return false;
+  const d = dayStart(last);
+  if (!d) return false;
   return d.getTime() < new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 };
 
@@ -166,7 +180,15 @@ export const externalHref = (value) => {
 // NOTE THE `!d`: an entry with NO date counts as upcoming here, deliberately,
 // because a festival whose dates have not been announced has not finished
 // either and should still be findable on the Events page.
-export const isUpcoming = (d) => !d || new Date(d) >= new Date();
+// dayStart, not new Date(d): the date-only ISO form parses as UTC while
+// `new Date()` is local, so this ran two hours out through a Danish summer and a
+// whole day out for a reader in the Americas. See utils/calendarDay.js, which
+// exists because that is the second copy of the same mistake found in two days.
+export const isUpcoming = (d, today = new Date()) => {
+  if (!d) return true;
+  const s = dayStart(d);
+  return s ? s.getTime() >= today.getTime() : true;
+};
 
 // ── "Don't have it showing it in 'coming events' then" ─────────────
 // Oliver, 7 Aug, on seeing "Dates not confirmed" inside a list headed COMING
@@ -183,12 +205,25 @@ export const hasConfirmedDate = (e) => {
 };
 export const isConfirmedUpcoming = (e) => hasConfirmedDate(e) && isUpcoming(e?.date ?? e);
 
-export const isCurrentlyLive = (start, end) => {
-  const now = new Date();
-  const s = new Date(start);
-  const e = end ? new Date(end) : s;
-  return s <= now && now <= e;
-};
+// ── AND A FESTIVAL IS ON, ON ITS LAST DAY ───────────────────────────
+//
+// This read `now <= new Date(end)`, which is midnight at the START of the end
+// day, so every festival read as over from the first minute of its final day.
+// A closing Saturday is a day people go.
+//
+// It also disagreed with hasFinished, seventy lines up in this same file, which
+// compares against LOCAL midnight today and correctly says a festival ending
+// today has not finished. On 16 August 2026 the site would have told you both
+// things at once about one event: not finished, and not happening.
+//
+// Found by the suite going red overnight rather than by anybody reading it. The
+// fixture ran 10 to 16 August and had passed every day until the 16th, which is
+// the only day of the year it could fail.
+//
+// `today` is a parameter for that exact reason. A date helper that reads the
+// clock cannot be tested against a fixed calendar, and this bug lives on one
+// specific day.
+export const isCurrentlyLive = (start, end, today = new Date()) => dayWithin(start, end, today);
 
 
 export const weatherIcon = (code) => {

@@ -57,3 +57,71 @@ export const BOOKING_AFFILIATE_ID = "";
 // the link disappears: a reader still has to be able to reach the tickets, and
 // the revenue is the second reason that button exists, not the first.
 export const TICKETMASTER_AFFILIATE_TEMPLATE = "";
+
+// ── TIQETS, THROUGH TRAVELPAYOUTS ───────────────────────────────────
+//
+// Oliver, 15 Aug 2026, having decided to stop chasing a Copenhagen Card deal
+// and get users first: "Imma sign up for tiquts."
+//
+// Tiqets sells tickets to the attractions Gemlyx already writes about, and it
+// is the one programme that states in its own words that it has no visitor or
+// order number requirements. It is reached through Travelpayouts rather than
+// directly, which is why the links sit on a tpx.li or tp.media host and not on
+// tiqets.com.
+//
+// TWO CONSTANTS, BECAUSE THERE ARE TWO DIFFERENT LINKS AND ONLY ONE OF THEM IS
+// A DEEP LINK. Getting this wrong is the failure that pays nothing and annoys
+// somebody, which is the same trap the Ticketmaster block above describes.
+//
+//   BROWSE   the short link Travelpayouts generates on signup. It goes to
+//            Tiqets and nowhere in particular. Right for a general "find
+//            tickets" button, wrong for a card about one attraction, because a
+//            reader who clicks Rosenborg Slot and lands on a homepage has been
+//            sent somewhere they did not ask to go.
+//
+//   TEMPLATE the deep link, built in the Travelpayouts Links tool by pasting a
+//            specific Tiqets page. Paste the LONG form here, not the short one,
+//            with {url} where the destination sits, so one template serves
+//            every attraction rather than one link per page:
+//
+//              "https://tp.media/click?shmarker=562709&promo_id=...&u={url}"
+//
+//            A short link cannot do this. It resolves to one fixed destination,
+//            so it cannot carry a different attraction each time.
+//
+// EMPTY TEMPLATE MEANS NO DEEP LINK AND AN ORDINARY tiqets.com URL, the same
+// rule as Ticketmaster: the reader still reaches the tickets, and Gemlyx
+// earns nothing and says so.
+export const TIQETS_BROWSE_LINK = "https://tiqets.tpx.li/gjhkxmoh";
+
+// Generated 15 Aug 2026 off the Copenhagen Card Discover product page, then the
+// destination swapped for {url} so one template serves every attraction.
+//
+//   campaign_id=89   Tiqets
+//   marker=765061    the affiliate marker clicks are credited to
+//   p=2074           the programme
+//   trs=562709       the account, the same number the signup script carried
+//   u=               the destination, LAST in the string and url encoded
+//
+// u BEING LAST IS WHY THIS WORKS. tiqetsUrl appends an encoded destination, and
+// an encoded string contains no bare & to end the parameter early, so nothing
+// after it can be swallowed. If Travelpayouts ever hands out a template with u
+// in the middle, it still works for the same reason: it is the ENCODING that
+// makes it safe, not the position.
+export const TIQETS_AFFILIATE_TEMPLATE = "https://tp.media/r?campaign_id=89&marker=765061&p=2074&trs=562709&u={url}";
+
+// ── CAR HIRE, EMPTY ON PURPOSE ──────────────────────────────────────
+//
+// The link Oliver has is GetRentacar, https://getrentacar.tpx.li/KyhVj8Bg, and
+// it is not pasted here yet for one reason: their own front page lists Turkey,
+// the UAE, Spain, Greece and the United States, their /country/denmark page is
+// a 404, and nothing turns up Danish inventory. Cars from local owners is a
+// model that works where the owners are.
+//
+// A rental button that opens on an empty result teaches a reader that Gemlyx
+// sends them to things that are not there, and that costs more than the
+// commission pays. One search on getrentacar.com for Copenhagen settles it: if
+// the cars are there, paste the link and it goes live everywhere at once. If
+// they are not, DiscoverCars and Rentalcars both have real Danish coverage and
+// both are on Travelpayouts.
+export const CAR_RENTAL_LINK = "";

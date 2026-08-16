@@ -62,6 +62,9 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
@@ -3644,7 +3647,12 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const helpers = readFileSync(join(root, "src/utils/helpers.js"), "utf8");
   // isUpcoming counts an event with NO DATE as upcoming, on purpose, so the
   // browse page can still list a festival whose dates are unannounced.
-  ok("isUpcoming still lets an undated event through", /export const isUpcoming = \(d\) => !d \|\|/.test(helpers));
+  // ASKED OF THE FUNCTION, NOT OF ITS TEXT. This matched the one-liner
+  // `export const isUpcoming = (d) => !d ||` and went red the moment the body
+  // changed, on a change that kept the behaviour it was guarding exactly as it
+  // was. A source scan pinned to a shape tests the shape.
+  ok("isUpcoming still lets an undated event through", M.isUpcoming(""));
+  ok("and one with no date at all", M.isUpcoming(null));
   // isConfirmedUpcoming was written for this on 7 Aug and applied everywhere
   // except the component that renders the words COMING EVENTS.
   ok("the strip uses the strict test", /isConfirmedUpcoming\(e\) && !isCurrentlyLive/.test(strip));
@@ -11943,8 +11951,44 @@ rmSync(dir, { recursive: true, force: true });
   // and runs all week is NOT upcoming and has NOT finished, both at once.
   const running = { date: "2026-08-10", dateEnd: "2026-08-16" };
   ok("a festival running right now has not finished", !hasFinished(running, AUG_12));
-  ok("and isUpcoming, which only reads the start, says it is not upcoming", !isUpcoming(running.date));
-  ok("so the grid has to ask isCurrentlyLive as well", isCurrentlyLive(running.date, running.dateEnd));
+  ok("and isUpcoming, which only reads the start, says it is not upcoming", !isUpcoming(running.date, AUG_12));
+  ok("so the grid has to ask isCurrentlyLive as well", isCurrentlyLive(running.date, running.dateEnd, AUG_12));
+
+  // ── AND A FESTIVAL IS ON, ON ITS LAST DAY ───────────────────────
+  // The three lines above passed every day for a week and went red on 16
+  // August, which is the one day of the year they could. isCurrentlyLive
+  // compared against `new Date(end)`, midnight at the START of the end day, so
+  // every festival read as over from the first minute of its closing day. A
+  // closing Saturday is a day people go.
+  //
+  // Worse, it disagreed with hasFinished in the same file, which correctly
+  // compares against local midnight today. On that date the site said one
+  // event was both not finished and not happening.
+  //
+  // TODAY IS A PARAMETER NOW, on both of them, or this test is a time bomb
+  // rather than a test. eventDates.js already says why in its own words: a date
+  // helper that reads the clock cannot be tested against a fixed calendar.
+  const AUG_16 = new Date(2026, 7, 16, 11, 0, 0);
+  ok("a festival is still on during its closing day", isCurrentlyLive("2026-08-10", "2026-08-16", AUG_16));
+  ok("and at one minute to midnight on it",
+    isCurrentlyLive("2026-08-10", "2026-08-16", new Date(2026, 7, 16, 23, 59, 0)));
+  // The two must agree, and until tonight they could not: hasFinished had the
+  // other half of the same bug, comparing a UTC-parsed date against local
+  // midnight, so an event ending today read as finished for every reader west
+  // of Greenwich. It was failing under TZ=America/New_York before tonight and
+  // nobody was running the suite in another timezone.
+  ok("and it agrees with hasFinished, which had the other half of it",
+    !hasFinished({ date: "2026-08-10", dateEnd: "2026-08-16" }, AUG_16));
+  ok("but it is over the next morning", !isCurrentlyLive("2026-08-10", "2026-08-16", new Date(2026, 7, 17, 0, 1, 0)));
+  ok("and has not started the day before it opens", !isCurrentlyLive("2026-08-10", "2026-08-16", new Date(2026, 7, 9, 23, 59, 0)));
+  // A one day event is live all of that day, which is the same rule with the
+  // range collapsed and the case that has no end date to fall back on.
+  ok("a one day event is on all day", isCurrentlyLive("2026-08-16", "", AUG_16));
+  ok("and is over the next day", !isCurrentlyLive("2026-08-16", "", new Date(2026, 7, 17, 9, 0, 0)));
+  // An unreadable date is not live. It must not become either past or present
+  // by accident, which is parseEventDate's own rule.
+  ok("an unreadable date is not live", !isCurrentlyLive("sometime in summer", "", AUG_16));
+  ok("and neither is nothing at all", !isCurrentlyLive("", "", AUG_16));
   ok("a festival that ended three days ago has finished", hasFinished({ date: "2026-08-02", dateEnd: "2026-08-09" }, AUG_12));
   ok("the LAST day decides, not the first", !hasFinished({ date: "2026-08-02", dateEnd: "2026-08-13" }, AUG_12));
   ok("an event ending today has not finished", !hasFinished({ date: "2026-08-12", dateEnd: "2026-08-12" }, AUG_12));
@@ -16108,13 +16152,27 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     const tzDir = mkdtempSync(join(tmpdir(), "gemlyx-tz-"));
     const tzEntry = join(tzDir, "entry.js");
     const tzBundle = join(tzDir, "bundle.mjs");
-    writeFileSync(tzEntry, `export { eventMonthShort, isPastDate, eventTime } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};`);
+    writeFileSync(tzEntry, `export { eventMonthShort, isPastDate, eventTime } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};`);
     buildSync({ entryPoints: [tzEntry], bundle: true, format: "esm", platform: "node", outfile: tzBundle, logLevel: "silent" });
+    // ── AND THE THREE IN helpers.js RIDE ALONG ──────────────────
+    // Reverting hasFinished and isUpcoming to `new Date(isoString)` killed
+    // nothing under mutation, because this container runs on UTC and UTC is the
+    // one zone where the two parsings agree. Same lesson as the month chip
+    // above, in a second file, so they are asked in the same child rather than
+    // in a second one.
     const probe = `import(${JSON.stringify("file://" + tzBundle)}).then(M => console.log(JSON.stringify({
       month: M.eventMonthShort("2026-09-01"),
       worded: M.eventMonthShort("1 September 2026"),
       todayIsPast: M.isPastDate("2026-08-15", new Date(2026, 7, 15)),
       sameDay: M.eventTime("2026-09-01") === M.eventTime("1 September 2026"),
+      endsToday: M.hasFinished({ date: "2026-08-10", dateEnd: "2026-08-16" }, new Date(2026, 7, 16, 11)),
+      endedYesterday: M.hasFinished({ date: "2026-08-01", dateEnd: "2026-08-15" }, new Date(2026, 7, 16, 11)),
+      startsTomorrow: M.isUpcoming("2026-08-17", new Date(2026, 7, 16, 11)),
+      startsTomorrowLateEvening: M.isUpcoming("2026-08-17", new Date(2026, 7, 16, 21, 30)),
+      startsToday: M.isUpcoming("2026-08-16", new Date(2026, 7, 16, 11)),
+      onToday: M.isCurrentlyLive("2026-08-16", "", new Date(2026, 7, 16, 11)),
+      liveOnLastDay: M.isCurrentlyLive("2026-08-10", "2026-08-16", new Date(2026, 7, 16, 11)),
     })));`;
     let west = null;
     try {
@@ -16129,6 +16187,25 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     is("and the two stored formats still agree", west.worded, west.month);
     is("and today's event has still not finished", west.todayIsPast, false);
     ok("and both formats are the same instant", west.sameDay === true);
+    // A festival on its closing day, read from New York. Every one of these
+    // passed in the container and failed here before tonight.
+    is("a festival ending today has not finished for a reader in New York", west.endsToday, false);
+    is("and one that ended yesterday has", west.endedYesterday, true);
+    is("tomorrow's event is upcoming there", west.startsTomorrow, true);
+    // AND STILL UPCOMING AT HALF NINE IN THE EVENING, which is the case that
+    // catches the UTC parse and nothing else does. New York is four hours
+    // behind, so "2026-08-17" read as UTC lands at 20:00 tonight local: from
+    // then until midnight, tomorrow's festival dropped off Coming Events for
+    // everyone on the east coast. A three and a half hour hole every evening,
+    // invisible from Denmark.
+    is("and still upcoming late that evening", west.startsTomorrowLateEvening, true);
+    // NOT upcoming and NOT finished, both at once, which is the distinction the
+    // whole block above turns on: an event starting today is not something
+    // still to come, it is on. isUpcoming reads only the start, so the pair is
+    // what covers it, and the pair now agrees in both timezones.
+    is("today's event is no longer upcoming", west.startsToday, false);
+    is("because it is on instead", west.onToday, true);
+    is("and a festival is on during its closing day there too", west.liveOnLastDay, true);
   }
 
   // A hand written constructor rolls a bad month over silently, so the result
@@ -16191,6 +16268,284 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
     (appSrc.match(/storage\/v1\/object\/gemlyx-media\//g) || []).length, 1);
   ok("and it says what is actually wrong", /run the one-time SQL setup/.test(appSrc));
   is("that sentence is written once", (appSrc.match(/run the one-time SQL setup/g) || []).length, 1);
+}
+
+// ── TIQETS, AND A PAID LINK THAT SAYS SO ─────────────────────────────
+//
+// Oliver, 15 Aug 2026, having decided to stop chasing a Copenhagen Card deal
+// and get users first: "Imma sign up for tiquts." Then: "We need these
+// implemented into essentials and the guide."
+{
+  const { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure,
+    carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure, ESSENTIALS_FOR_TEST } = M;
+  const TPL = "https://tp.media/click?shmarker=562709&promo_id=9999&u={url}";
+  const PRODUCT = "https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-copenhagen-card-discover-p1068607/";
+
+  // ── THE HOST GUARD, WHICH IS THE WHOLE SAFETY OF THIS ────────────
+  // Same rule as Ticketmaster's: wrapping a destination that is not the
+  // programme's sends a reader somewhere they did not choose AND bills a
+  // network for a click it did not earn, which closes accounts.
+  is("a Tiqets product page is a Tiqets url", isTiqetsUrl(PRODUCT), true);
+  is("a subdomain is too", isTiqetsUrl("https://www.tiqets.com/da/"), true);
+  is("and a lookalike is not", isTiqetsUrl("https://tiqets.com.evil.example/x"), false);
+  is("nor is another ticket agent", isTiqetsUrl("https://www.billetto.dk/e/thing"), false);
+  is("a non-Tiqets url is passed through untouched, never wrapped",
+    tiqetsUrl("https://www.billetto.dk/e/thing", TPL), "https://www.billetto.dk/e/thing");
+  is("and something that is not a url at all returns nothing", tiqetsUrl("tiqets.com", TPL), null);
+  is("an empty url too", tiqetsUrl("", TPL), null);
+
+  // THE DESTINATION IS ENCODED, because it rides in a query parameter and a
+  // Tiqets URL carries its own ?query often enough. Raw would truncate the deep
+  // link at the first ampersand and drop the reader on a homepage.
+  const deep = tiqetsUrl(`${PRODUCT}?a=1&b=2`, TPL);
+  ok("the destination is encoded into the template", /u=https%3A%2F%2Fwww\.tiqets\.com/.test(deep));
+  ok("and its own query survives", /%26b%3D2/.test(deep));
+  ok("so the tracking link is not cut short", !/&b=2$/.test(deep));
+
+  // ── AND WITH NO TEMPLATE IT IS AN ORDINARY LINK ──────────────────
+  // The template ships EMPTY until he pastes the deep link, and empty must mean
+  // the reader still reaches the tickets while Gemlyx earns nothing and says
+  // nothing. Exactly the Ticketmaster contract, on purpose: the two are read
+  // side by side and a different shape in each is how one gets forgotten.
+  is("no template means the plain Tiqets url", tiqetsUrl(PRODUCT, ""), PRODUCT);
+  is("and no disclosure over a link that earns nothing", tiqetsDisclosure(PRODUCT, ""), "");
+  ok("a configured one does disclose", /commission/.test(tiqetsDisclosure(PRODUCT, TPL)));
+  is("and never over a link to somebody else", tiqetsDisclosure("https://www.billetto.dk/e/x", TPL), "");
+  // tiqetsActive answers about the TEMPLATE, not the short link. Reading the
+  // browse link here would report the programme live on the day he signed up,
+  // while every attraction link on the site was still untracked.
+  //
+  // ASKED WITH AN EMPTY TEMPLATE, because a real one is now configured and a
+  // version that read the browse link would answer true as well. The browse
+  // link stays configured in this call, so anything reading it still says true
+  // and the two are told apart.
+  is("the programme is not live on the browse link alone", tiqetsActive(""), false);
+  ok("even though the browse link is configured", !!tiqetsBrowseUrl());
+  is("and it is live now that the deep link is in", tiqetsActive(), true);
+
+  // ── THE REAL TEMPLATE, AGAINST THE REAL CONFIG ───────────────────
+  // Oliver generated this off the Copenhagen Card Discover page on 15 Aug 2026.
+  // Asserted against the live constant rather than a fixture, because a typo
+  // pasted into config.js is exactly the failure a fixture cannot see: every
+  // test above would stay green while every ticket link on the site paid
+  // nobody.
+  const live = tiqetsUrl(PRODUCT);
+  ok("the live template produces a tp.media link", /^https:\/\/tp\.media\/r\?/.test(live));
+  ok("carrying the marker", /[?&]marker=765061(?:&|$)/.test(live));
+  ok("and the account", /[?&]trs=562709(?:&|$)/.test(live));
+  ok("and it points at the page it was asked for", /u=https%3A%2F%2Fwww\.tiqets\.com%2Fen%2F/.test(live));
+  // The placeholder must be gone. A template pasted without {url} silently
+  // sends every attraction to whatever the template's own destination was.
+  ok("no placeholder survives into a live link", !/\{url\}/.test(live));
+  ok("and the destination is not doubled", (live.match(/u=/g) || []).length === 1);
+  // A second, different page must produce a different link, or the template is
+  // a fixed redirect wearing a deep link's clothes.
+  ok("a different attraction gets a different link",
+    tiqetsUrl("https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-tivoli-p974094/") !== live);
+  is("and a junk browse link renders nothing rather than a broken button", tiqetsBrowseUrl("not a url"), null);
+  is("an empty one too", tiqetsBrowseUrl(""), null);
+
+  // ── CAR HIRE SHIPS OFF ───────────────────────────────────────────
+  // GetRentacar's own front page lists Turkey, the UAE, Spain, Greece and the
+  // US, /country/denmark is a 404, and no Danish inventory turns up. A rental
+  // button that opens on an empty search teaches a reader that Gemlyx sends
+  // them to things that are not there.
+  is("no car link is configured yet", carRentalActive(), false);
+  is("and nothing renders for one", carRentalUrl(), null);
+  is("but the link works the moment it is pasted", carRentalUrl("https://getrentacar.tpx.li/KyhVj8Bg"), "https://getrentacar.tpx.li/KyhVj8Bg");
+
+  // ── A PAID LINK SAYS SO WHEREVER IT IS PRINTED ───────────────────
+  // The other disclosures ask "is this a Tiqets link". The Essentials list
+  // cannot: it renders whatever sits in a data row's `link` with no idea where
+  // it points. This asks from the other end, by host, which is the part a
+  // tracking link cannot hide.
+  is("a Travelpayouts short link is a partner link", isPartnerLink("https://tiqets.tpx.li/gjhkxmoh"), true);
+  is("so is a tp.media deep link", isPartnerLink("https://tp.media/click?shmarker=1&u=x"), true);
+  is("and an Impact one", isPartnerLink("https://ticketmaster.evyy.net/c/1/2/3?u=x"), true);
+  is("an ordinary site is not", isPartnerLink("https://www.copenhagencard.com"), false);
+  is("nor is a lookalike host", isPartnerLink("https://tpx.li.evil.example/x"), false);
+  // BOOKING.COM IS DECIDED BY THE PARAMETER, NOT THE HOST. The app builds plain
+  // Booking search links today, and calling those paid would be the same false
+  // statement in the other direction.
+  is("a plain Booking search link is not a partner link",
+    isPartnerLink("https://www.booking.com/searchresults.html?ss=Ribe%2C%20Denmark&group_adults=2"), false);
+  is("and one carrying an aid is", isPartnerLink("https://www.booking.com/searchresults.html?ss=Ribe&aid=1234567"), true);
+  ok("the disclosure follows the link", /commission/.test(partnerDisclosure("https://tiqets.tpx.li/gjhkxmoh")));
+  is("and is empty for an ordinary one", partnerDisclosure("https://www.copenhagencard.com"), "");
+  is("and for nothing at all", partnerDisclosure(null), "");
+
+  // ── WIRED INTO ESSENTIALS AND INTO THE GUIDE ─────────────────────
+  const paid = ESSENTIALS_FOR_TEST.filter(e => isPartnerLink(e.link));
+  is("exactly one essentials row carries a paid link", paid.length, 1);
+  is("and it is the tickets one", paid[0]?.category, "Sightseeing");
+  // id 5 is the Copenhagen Card, which Tiqets also sells. It still points at
+  // the official site: quietly rewriting an existing recommendation into a paid
+  // one is the thing the front of this app exists not to do.
+  const cph = ESSENTIALS_FOR_TEST.find(e => e.id === 5);
+  ok("the Copenhagen Card row still points at the official site", /copenhagencard\.com/.test(cph?.link || ""));
+  is("and is not a paid link", isPartnerLink(cph?.link), false);
+  // Every essentials id is unique, or the React key collides and one row
+  // silently replaces another.
+  is("no two essentials share an id",
+    new Set(ESSENTIALS_FOR_TEST.map(e => e.id)).size, ESSENTIALS_FOR_TEST.length);
+
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the essentials card prints the disclosure", /partnerDisclosure\(item\.link\)/.test(appSrc));
+  // rel gains sponsored and nofollow when it is tracked. That is what Google
+  // asks for on a paid link and is the difference between an affiliate link and
+  // an undisclosed ad.
+  ok("and marks a tracked link sponsored", /rel=\{note \? "noreferrer sponsored nofollow" : "noreferrer"\}/.test(appSrc));
+  const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the guide offers tickets", /tiqetsBrowseUrl\(\)/.test(guideSrc));
+  ok("and discloses it", /partnerDisclosure\(href\)/.test(guideSrc));
+  // Nothing renders when the link is not configured, rather than an empty row
+  // with a label and no button. A source assertion because the browse link IS
+  // configured, so no call to the real function can reach the other branch, and
+  // mutation testing said so by deleting this guard and killing nothing.
+  ok("and renders nothing at all when there is no link", /if \(!href\) return null;/.test(guideSrc));
+  // ONCE PER GUIDE, NOT PER DAY. "Where to stay" repeats per day because the
+  // answer changes per day. The same ticket link under all seven days is the
+  // same link seven times, and a reader learns to scroll past it.
+  is("the ticket link is rendered once", (guideSrc.match(/tiqetsBrowseUrl\(\)/g) || []).length, 1);
+  ok("and it sits in the guide's own essentials block, not in a day card",
+    /Before you go[\s\S]{0,4000}tiqetsBrowseUrl\(\)/.test(guideSrc));
+  // It goes to Tiqets and not to any one attraction, so it must not promise one.
+  ok("a browse link says browse", /Browse Danish attraction tickets/.test(guideSrc));
+}
+
+// ── FINDING THE TICKET, AND REFUSING THE WRONG ONE ───────────────────
+//
+// Oliver, 15 Aug 2026: "can't we just put the affiliate links into the program
+// itself, and then if I add on a Copenhagen attraction, then it'll
+// automatically put in the affiliate.."
+//
+// Every assertion here is a refusal. The wrapping was never the hard part; the
+// hard part is that a lookup which returns "close enough" is worse than one
+// that returns nothing, because a reader who clicks Tickets has been asked for
+// money.
+{
+  const { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl,
+    describeTicketSearch, ticketQuery } = M;
+  const PRODUCT = "https://www.tiqets.com/en/copenhagen-attractions-c113/tickets-for-rosenborg-castle-p974091/";
+  const VENUE = "https://www.tiqets.com/en/tivoli-gardens-tickets-l145543/";
+  const CATEGORY = "https://www.tiqets.com/en/copenhagen-attractions-c113/";
+
+  // ── WHICH PAGES SELL SOMETHING ──────────────────────────────────
+  // Their URLs end in a typed id and the letter is the type: p is one bookable
+  // product, l is a venue's whole list, c is a city's category listing. The
+  // first two are tickets. The third is the search the reader already did by
+  // coming to Gemlyx.
+  is("a product page is bookable", isTiqetsProductUrl(PRODUCT), true);
+  is("a venue page is too", isTiqetsProductUrl(VENUE), true);
+  is("a category listing is not", isTiqetsProductUrl(CATEGORY), false);
+  is("and the kinds are named", [tiqetsPageKind(PRODUCT), tiqetsPageKind(VENUE), tiqetsPageKind(CATEGORY)], ["product", "venue", "category"]);
+  // The host guard still applies, or a product id in somebody else's URL
+  // becomes a Tiqets ticket.
+  is("another agent's url with the same shape is refused", isTiqetsProductUrl("https://www.billetto.dk/e/thing-p12345"), false);
+  is("and is named as such", tiqetsPageKind("https://www.billetto.dk/e/thing"), "not tiqets");
+  is("a trailing slash does not change the answer",
+    isTiqetsProductUrl(PRODUCT.replace(/\/$/, "")), true);
+  is("the Tiqets home page sells nothing", isTiqetsProductUrl("https://www.tiqets.com/en/"), false);
+  is("nor does a junk value", isTiqetsProductUrl("tiqets.com/p123"), false);
+  is("nor nothing at all", isTiqetsProductUrl(""), false);
+
+  // ── AND IS IT ABOUT THIS PLACE ──────────────────────────────────
+  // sourceIsAboutPlace, the same function the research pipeline already uses to
+  // decide whether a page it found is about the place it was drafting. A second
+  // copy of that judgement would drift the first time either was touched.
+  const rosenborg = { url: PRODUCT, title: "Rosenborg Castle tickets", snippet: "Skip the line at the crown jewels" };
+  is("a ticket for the place being drafted matches",
+    ticketMatches(rosenborg, { name: "Rosenborg Slot", town: "Copenhagen" }), true);
+  // THIS IS THE ONE THAT MATTERS. A harbour town with no ticket page must not
+  // inherit a Copenhagen museum's, which is the "something on the card so there
+  // is something on the card" failure Oliver named on the preview screen the
+  // same morning, with money attached.
+  is("and a different place does not",
+    ticketMatches(rosenborg, { name: "Asaa Havn", town: "Asaa" }), false);
+  is("a category page never matches, however well the name fits",
+    ticketMatches({ url: CATEGORY, title: "Rosenborg Slot and other Copenhagen attractions" }, { name: "Rosenborg Slot", town: "Copenhagen" }), false);
+  // The slug is part of the haystack, because a Tiqets snippet is often
+  // marketing copy that never repeats the venue name while the slug always
+  // carries it.
+  is("the name in the url alone is enough",
+    ticketMatches({ url: PRODUCT, title: "Book now", snippet: "Skip the line" }, { name: "Rosenborg Slot", town: "Copenhagen" }), true);
+
+  // ── PICKING ONE, OR NONE ────────────────────────────────────────
+  is("the right one comes back", pickTicketUrl([rosenborg], { name: "Rosenborg Slot", town: "Copenhagen" }), PRODUCT);
+  is("nothing comes back for the wrong place", pickTicketUrl([rosenborg], { name: "Asaa Havn", town: "Asaa" }), null);
+  is("nor from category pages alone", pickTicketUrl([{ url: CATEGORY, title: "Copenhagen attractions" }], { name: "Rosenborg Slot" }), null);
+  is("an empty search returns nothing rather than a guess", pickTicketUrl([], { name: "Tivoli" }), null);
+  is("and so does junk", pickTicketUrl(null, { name: "Tivoli" }), null);
+  // A venue page shows every ticket for a place rather than picking one on the
+  // reader's behalf, so it wins a tie. Both are acceptable, which is why this
+  // is a tie-break and not a filter.
+  is("a venue page wins over a single product when both fit",
+    pickTicketUrl([
+      { url: "https://www.tiqets.com/en/tivoli-gardens-tickets-for-tivoli-p1/", title: "Tivoli Gardens entry" },
+      { url: VENUE, title: "Tivoli Gardens tickets" },
+    ], { name: "Tivoli", town: "Copenhagen" }), VENUE);
+
+  // ── AND IT SAYS WHY IT FOUND NOTHING ────────────────────────────
+  // Three different things for him to do, so three different sentences. A
+  // Studio that says "none found" when it means "found one and would not trust
+  // it" sends him hunting by hand for something that is genuinely not there.
+  ok("no page at all is its own answer",
+    /do not have one/.test(describeTicketSearch([], { name: "Asaa Havn" })));
+  ok("a category-only result says so",
+    /only category listings/.test(describeTicketSearch([{ url: CATEGORY, title: "x" }], { name: "Rosenborg Slot" })));
+  ok("and a bookable page that does not match says that instead",
+    /none of them is clearly about/.test(describeTicketSearch([rosenborg], { name: "Asaa Havn", town: "Asaa" })));
+  // The three branches must be three different sentences, or the distinction
+  // exists in the code and not on the screen.
+  is("the three answers are all different",
+    new Set([
+      describeTicketSearch([], { name: "X" }),
+      describeTicketSearch([{ url: CATEGORY, title: "x" }], { name: "X" }),
+      describeTicketSearch([rosenborg], { name: "X" }),
+    ]).size, 3);
+
+  // The query has to make the engine find the NAME on tiqets.com, rather than
+  // find tiqets.com and hope.
+  const q = ticketQuery("Rosenborg Slot", "Copenhagen");
+  ok("the query is scoped to the site", /site:tiqets\.com/.test(q));
+  ok("and quotes the name so it cannot be dropped", /"Rosenborg Slot"/.test(q));
+  ok("and carries the town, which is the corroborating signal", /Copenhagen/.test(q));
+  ok("a place with no town still makes a usable query", /site:tiqets\.com "Tivoli"/.test(ticketQuery("Tivoli")));
+
+  // ── AND IT SURVIVES PUBLISH, WHICH IS NOT AUTOMATIC ─────────────
+  // shapeForLive is an allow-list and the only insert path into gemlyx_content.
+  // Its own comments record it silently eating a feature four times: __sources
+  // on all 79 rows, then nearly __hours, __ticket and __corrections. A field the
+  // draft computes is not a field that ships.
+  const { shapeForLive } = M;
+  const drafted = shapeForLive("free", { name: "Rosenborg Slot", desc: "x", city: "Copenhagen", ticketUrl: PRODUCT });
+  is("a validated ticket url reaches the database", drafted.ticketUrl, PRODUCT);
+  // VALIDATED ON THE WAY IN, so a category page or a search cannot get in by
+  // being pasted into the draft JSON by hand.
+  is("a category listing is refused at publish",
+    shapeForLive("free", { name: "x", desc: "x", ticketUrl: CATEGORY }).ticketUrl, undefined);
+  is("and so is another site",
+    shapeForLive("free", { name: "x", desc: "x", ticketUrl: "https://www.billetto.dk/e/thing-p1" }).ticketUrl, undefined);
+  is("an entry with no ticket carries no empty field",
+    shapeForLive("free", { name: "x", desc: "x" }).ticketUrl, undefined);
+  // Shared across every type, not added to eight branches of nine. A town, a
+  // festival and a workshop can all have a ticket page.
+  for (const type of ["town", "festival", "free", "food", "night", "booking"]) {
+    const row = shapeForLive(type, { name: "Tivoli", desc: "x", characterAndFit: "x", vibeLocation: "x", ticketUrl: VENUE });
+    is(`${type} carries a ticket url too`, row?.ticketUrl, VENUE);
+  }
+  // THE PLAIN URL IS STORED, NOT THE TRACKED ONE. Storing a tracked link would
+  // freeze today's marker into every row and make changing it a migration.
+  ok("the stored url is not wrapped in tracking", !/tp\.media/.test(drafted.ticketUrl));
+
+  const detail = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  ok("the detail page offers the ticket", /🎫 Book tickets/.test(detail));
+  ok("tracked at render rather than at publish", /tiqetsUrl\(dest\)/.test(detail));
+  ok("and disclosed", /tiqetsDisclosure\(dest\)/.test(detail));
+  // ABSENT, NOT DEGRADED. A Tickets button falling back to a search is the
+  // "something on the card so there is something on the card" failure with
+  // money attached.
+  ok("and absent entirely when there is no ticket", /if \(!isTiqetsProductUrl\(dest\)\) return null;/.test(detail));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

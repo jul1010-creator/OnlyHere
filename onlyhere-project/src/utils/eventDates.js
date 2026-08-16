@@ -31,6 +31,7 @@
 // daCompare, not localeCompare: Æ, Ø and Å sort after Z in Danish, and the name
 // tie-break below is on a page about Denmark.
 import { daCompare } from "./helpers";
+import { dayStart } from "./calendarDay";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 
@@ -64,30 +65,14 @@ const clean = (v) => String(v == null ? "" : v).trim();
 // because none of these values is a moment in time. "2026-09-01" is a day on a
 // calendar; the day a festival opens is the same day whatever timezone the
 // reader is sitting in.
-const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-export const parseEventDate = (v) => {
-  const t = clean(v);
-  if (!t) return null;
-  const iso = ISO_DAY.exec(t);
-  // Month is 0 based, and the constructor rolls a bad one over silently:
-  // "2026-13-01" becomes January 2027 and "2026-02-30" becomes 2 March. So the
-  // result is read back and compared, and an unreadable date comes back null
-  // rather than becoming a real one somewhere else on the calendar.
-  //
-  // A range check on the parts was here as well and is gone: reading the date
-  // back catches every case it caught, including month 0 and day 0, and a
-  // second guard that can never be the one that fires is a line no test can
-  // hold. Mutation testing deleted it and nothing broke, which is the whole
-  // signal.
-  if (iso) {
-    const [, y, m, day] = iso.map(Number);
-    const d = new Date(y, m - 1, day);
-    return d.getMonth() === m - 1 && d.getDate() === day ? d : null;
-  }
-  const d = new Date(t);
-  return Number.isFinite(d.getTime()) ? d : null;
-};
+// ── AND THE SAME BUG WAS IN helpers.js TOO ──────────────────────────
+// This was fixed here on 15 August and found again on the 16th in
+// isCurrentlyLive, which had its own copy of new Date(isoString) and its own
+// version of the consequences. The reading of a calendar day now lives in one
+// place, utils/calendarDay.js, which both files import. It is in a file of its
+// own rather than here because helpers.js needs it and eventDates.js already
+// imports daCompare from helpers.js, so either direction would be a cycle.
+export const parseEventDate = (v) => dayStart(clean(v));
 
 // ── "HOW IS THIS 'BY NAME'" ─────────────────────────────────────────
 //
