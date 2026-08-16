@@ -80,9 +80,20 @@ export const getEventDate = (dateStr, dateEnd, today = new Date()) => {
   // the drafting pipeline stripped a date it could not stand up (a festival date
   // already in the past is treated as a guess and removed rather than shown).
   // Saying that plainly is also more honest than a three letter acronym.
+  // ── AND IT PRINTED THE WRONG DAY WEST OF GREENWICH ──────────────
+  // `new Date("2026-06-23")` is UTC midnight, and every line below reads it
+  // back with getFullYear, getMonth and toLocaleDateString, all of which are
+  // LOCAL. In New York that is 20:00 on the 22nd, so this function printed
+  // "Mon 22 Jun" for a festival opening on Tuesday the 23rd. Not a rounding
+  // error: the wrong date and the wrong weekday, on the card a reader plans
+  // around, for everyone in the Americas.
+  //
+  // dayStart reads a stored date as the calendar day it names, which is what
+  // these values are. See utils/calendarDay.js, written when the same mistake
+  // turned up for the fourth time in two days.
   if (!dateStr) return "Dates not confirmed";
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "Dates not confirmed";
+  const d = dayStart(dateStr);
+  if (!d) return "Dates not confirmed";
   const thisYear = today.getFullYear();
   const opts = { day: "numeric", month: "short" };
   const show = (date) => date.toLocaleDateString("en-GB",
@@ -93,7 +104,7 @@ export const getEventDate = (dateStr, dateEnd, today = new Date()) => {
   // would have run, so it reached the page untouched every time a festival ran
   // for more than one day. Its own rule for a range is the word "to", which is
   // what this now says.
-  const end = dateEnd ? new Date(dateEnd) : null;
+  const end = dateEnd ? dayStart(dateEnd) : null;
   // A RANGE THAT RUNS BACKWARDS IS NOT A RANGE. Row 62, TinderBox, is stored
   // with date 2027-06-24 and dateEnd 2026-06-26: somebody bumped the start to
   // next year's edition and left the end on last year's. Printed as a range
@@ -106,9 +117,12 @@ export const getEventDate = (dateStr, dateEnd, today = new Date()) => {
   // twice reads as a template that was not finished. Compared on the DAY, not
   // on the timestamp, because a row stored with a midnight start and an evening
   // end is still one day.
-  const sameDay = end && !isNaN(end.getTime())
+  // dayStart returns null for an unreadable date rather than an Invalid Date,
+  // so these are null checks now. Same meaning, one fewer way to be wrong: an
+  // Invalid Date is truthy and quietly poisons every comparison it touches.
+  const sameDay = !!end
     && end.getFullYear() === d.getFullYear() && end.getMonth() === d.getMonth() && end.getDate() === d.getDate();
-  if (end && !isNaN(end.getTime()) && end.getTime() >= d.getTime() && !sameDay) return show(d) + " to " + show(end);
+  if (end && end.getTime() >= d.getTime() && !sameDay) return show(d) + " to " + show(end);
   if (d.getFullYear() === thisYear) return d.toLocaleDateString("en-GB", { ...opts, weekday: "short" });
   return show(d);
 };
@@ -241,19 +255,57 @@ export const weatherIcon = (code) => {
 export const isInDenmark = (coords) => coords && typeof coords === "object" &&
   coords.lat >= 54.4 && coords.lat <= 57.9 && coords.lon >= 7.9 && coords.lon <= 15.3;
 
-// Budget filter for Food — prefers an explicit AI-given budgetLevel (new drafts),
-// falls back to parsing the price text for older entries that predate that field,
-// so existing listings still filter sensibly without needing to be re-drafted.
-export const deriveBudgetLevel = (priceStr, explicitLevel) => {
-  if (explicitLevel) return explicitLevel;
-  if (!priceStr) return "Mid-range";
-  const nums = (priceStr.match(/\d+/g) || []).map(Number);
-  if (nums.length === 0) return "Mid-range"; // "See website", "Varies by stall" etc — unknown, don't hide it from any filter
+// ── "THE AVERAGE TRAVELLER DOESN'T KNOW WHAT MID-BUDGET IS IN
+//     DENMARK" ─────────────────────────────────────────────────────
+//
+// Oliver, 16 Aug 2026, and it retires the whole vocabulary.
+//
+// Budget, Mid-range and Splurge are defined relative to Denmark, so reading one
+// requires already knowing what things cost in Denmark. That is exactly the
+// reader who does not need this site. A German sees 250 kr and thinks
+// expensive, a Norwegian thinks cheap, and an American has to open a converter
+// either way. The word carries none of it.
+//
+// STUDIO_VOICE says the same thing without noticing the consequence: "Budget
+// language must match real Danish price norms, a 200-300 DKK dinner or sub-100
+// DKK entry point is affordable/mid-tier here". That rule is right for the
+// WRITER, it stops a model calling a normal Copenhagen dinner expensive. It
+// also makes the reader-facing label more Denmark-relative, not less, in a file
+// whose next rule is "write for an ordinary international traveller".
+//
+// So the adjective goes and the money stays. The bands below were always in
+// kroner; they were just hidden behind words. "Under 100 kr" needs no
+// calibration and converts in one tap.
+//
+// ── AND UNKNOWN IS NULL, NOT THE MIDDLE BAND ────────────────────────
+// The old version returned "Mid-range" for any price with no digits in it, so
+// "See website" and "Varies by stall" were filed as a real tier. Reffen, whose
+// own uncertainties say no reliable prices were found, sat in the Mid-range tab
+// on the strength of nothing: returned by a reader filtering for Mid-range, and
+// withheld from one filtering for Budget, on a measurement nobody made.
+//
+// The intent behind that default was right and worth keeping: an unpriced row
+// must not vanish. Null does that better. It belongs to no band, so it shows
+// under All and is claimed by nothing.
+export const PRICE_BANDS = [
+  { id: "under-100", label: "Under 100 kr" },
+  { id: "100-250", label: "100 to 250 kr" },
+  { id: "over-250", label: "Over 250 kr" },
+];
+
+// The same three cuts the old function made, spelled out rather than derived
+// from the table, so the boundary at exactly 250 stays where it was: 250 is
+// inside the middle band, as it has always been.
+export const priceBand = (priceStr) => {
+  const nums = (String(priceStr || "").match(/\d+/g) || []).map(Number);
+  if (!nums.length) return null;                 // nothing to band, and that is an answer
   const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-  if (avg < 100) return "Budget";
-  if (avg <= 250) return "Mid-range";
-  return "Splurge";
+  if (avg < 100) return "under-100";
+  if (avg <= 250) return "100-250";
+  return "over-250";
 };
+
+export const priceBandLabel = (id) => (PRICE_BANDS.find(b => b.id === id) || {}).label || "";
 
 // Straight-line km between two {lat,lon} points — used as a sanity check on leg
 // transport mode, since an AI-written "how" description (e.g. "on foot") can be
@@ -427,7 +479,27 @@ export const stripMarkdown = (text) => {
 };
 
 
-export const daysUntil = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
+// ── AND IT COMPARED A UTC MIDNIGHT TO A LOCAL CLOCK ─────────────────
+// `Math.ceil((new Date(d) - new Date()) / 86400000)` mixes two different kinds
+// of thing: a stored date parsed as UTC midnight, and the actual instant right
+// now. The remainder then depends on the time of day, so the answer changed as
+// the evening wore on.
+//
+// Measured in New York at 22:20 on 15 August: daysUntil("2026-08-16") returned
+// -0, so the Events grid pilled tomorrow's festival "Happening now" from about
+// 20:00 every evening while the date printed beside it still read 16 Aug. The
+// mirror case in Denmark is between midnight and 02:00, where an event on today
+// reads "Tomorrow".
+//
+// Whole days between two calendar days now, so it is the same number all day
+// and the pill agrees with the date next to it. `today` is a parameter for the
+// reason the rest of this file already takes one.
+export const daysUntil = (d, today = new Date()) => {
+  const then = dayStart(d);
+  if (!then) return NaN;
+  const now = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((then.getTime() - now.getTime()) / 86400000);
+};
 
 // ── normName and dedupeAgainstExisting USED TO LIVE HERE ────────────
 // They are gone, and the deletion is the fix, not a tidy-up.

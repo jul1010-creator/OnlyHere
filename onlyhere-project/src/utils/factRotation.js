@@ -64,6 +64,60 @@ export const shuffledOrder = (n, rand = Math.random) => {
 
 export const identityOrder = (n) => Array.from({ length: Math.max(0, n | 0) }, (_, i) => i);
 
+// ── "IT HAS TO BE RANDOMS, BUT IT HAS TO START ON A FACT" ───────────
+//
+// Oliver, 16 Aug 2026, correcting the reading of his own August complaint:
+// "I never said I wanted it to open on fact 1.. I said I didn't want it to go
+// 'inbetween' two facts when opening. Like it would show H.C. Andersen for half
+// a second and then go off to the first fact."
+//
+// The comment at the top of this file took "it should start on the first fact"
+// to mean denmarkFacts[0], and built a rule around it: identity order for the
+// first build of a session, shuffled after. He meant the opposite of what that
+// implemented. There was never a request to open on H.C. Andersen. There was a
+// request not to see a card swap out from under you.
+//
+// The two asks were never in tension:
+//
+//   NO FLICKER    the order must exist BEFORE the first paint, because an
+//                 effect runs after it. That is the whole of that complaint.
+//   RANDOM        including the first card.
+//
+// ── AND A SEED, RATHER THAN A STORED ARRAY ──────────────────────────
+// The old version stored the shuffled array in state, chosen when the previous
+// build closed. That carries a second bug: denmarkFacts GROWS at runtime, since
+// Studio publishes into it and liveContent merges into it after mount. An order
+// captured when the array was empty is `[]`, and factAt on an empty order
+// returns 0 for every position. Fact zero, forever, which is the symptom he
+// reported.
+//
+// A seed has no length in it. The order is derived from the seed and whatever
+// the array holds right now, during render, so it is settled before paint and
+// it is correct however late the facts arrive.
+//
+// mulberry32, because Math.random cannot be seeded and a shuffle tested against
+// Math.random can only be tested for "did not crash". Same reason `rand` is
+// injectable above; this is the injectable thing.
+export const seededRandom = (seed) => {
+  let a = (Number(seed) >>> 0) || 1;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+// The order for one build. Pure: the same seed and the same count always give
+// the same sequence, which is what lets it be computed during render on every
+// pass without the cards reshuffling under the reader mid-build.
+export const orderFor = (n, seed) => shuffledOrder(n, seededRandom(seed));
+
+// A seed for the NEXT build. Kept here rather than inlined at the call site so
+// the whole rotation, including where its randomness enters, lives in one file.
+export const nextSeed = (rand = Math.random) => Math.floor(rand() * 0xFFFFFFFF) >>> 0;
+
 // Walking the order, wrapping at the end. Wrapping is the point where a repeat
 // becomes legitimate: everything has been seen, so starting again is not the
 // bug he reported.

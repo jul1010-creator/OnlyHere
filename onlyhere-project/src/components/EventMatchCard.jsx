@@ -1,5 +1,6 @@
 import { C } from "../utils/theme";
 import { getEventDate } from "../utils/helpers";
+import { tripWindow, overlapsTrip as overlapsTripWindow } from "../utils/tripEvents";
 
 // ── "Worth knowing" event-match card, shown during the loading screen ──
 // PASS 27 EXTRACTION (App.jsx file-split, per Oliver: "you gotta start
@@ -31,19 +32,36 @@ export const EventMatchCard = ({ intakeArrival, intakeDeparture, intakeInterest,
   // card itself isn't in the DOM, and keeping it unconditional here matches
   // the original App.jsx layout exactly (the <style> tag was a sibling of
   // the matching IIFE, not inside its early-return branches).
+  // ── AND THIS WAS THE SIXTH COPY OF THE OVERLAP TEST ───────────────
+  //
+  // The extraction note above says this was a behaviour-preserving move, and it
+  // was. What it preserved was a private overlap test carrying both faults the
+  // shared one exists to fix:
+  //
+  //   const eStart = new Date(e.date);
+  //   const eEnd = e.dateEnd ? new Date(e.dateEnd) : eStart;
+  //   return eStart <= tripEnd && eEnd >= tripStart;
+  //
+  // ONE, the end is midnight at the START of the closing day, so a traveller
+  // arriving on a festival's last day was told nothing. Measured in every
+  // timezone including Denmark: festival 10 to 16 August, arrival on the 16th,
+  // this card silent while the shared overlapsTrip says yes.
+  //
+  // TWO, UTC-parsed event dates compared against locally-parsed trip dates. In
+  // New York an event starting the day AFTER departure matched, so the card
+  // announced something "worth knowing" for a day the reader had gone home.
+  //
+  // tripWindow and overlapsTrip now, the same pair the preview screen uses, so
+  // this card and that screen can no longer disagree about whether an event is
+  // on. `=== true` because overlapsTrip returns null for an undated window, and
+  // null is not a soft yes.
   let matchedEvent = null;
   if (intakeArrival && intakeDeparture) {
-    const tripStart = new Date(intakeArrival);
-    const tripEnd = new Date(intakeDeparture);
-    if (!isNaN(tripStart) && !isNaN(tripEnd)) {
+    const win = tripWindow({ arrival: intakeArrival, departure: intakeDeparture });
+    if (win?.dated) {
       const interestsLower = intakeInterest.map(i => i.toLowerCase());
       const pool = [...events, ...majorEvents, ...vikingEvents];
-      const overlapsTrip = (e) => {
-        const eStart = new Date(e.date);
-        const eEnd = e.dateEnd ? new Date(e.dateEnd) : eStart;
-        if (isNaN(eStart)) return false;
-        return eStart <= tripEnd && eEnd >= tripStart;
-      };
+      const overlapsTrip = (e) => overlapsTripWindow(e, win) === true;
       const matchesInterest = (e) => {
         if (interestsLower.length === 0) return false;
         const haystack = [e.type || "", ...(e.tags || [])].join(" ").toLowerCase();

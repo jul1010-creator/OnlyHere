@@ -89,7 +89,7 @@ const shapeForLiveFields = (type, t) => {
   // it folds the old spellings ("available", "selling_fast") onto the one
   // vocabulary so the badge and the booking advice finally read the same field
   // the same way. See utils/tickets.js.
-  if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", camping: t.camping || "", accommodationTip: t.accommodationTip || "", budgetLevel: t.budgetLevel || "", travelTime: t.travelTime || "", ticketStatus: normaliseTicketStatus(t.ticketStatus), town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", website: t.website || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", gemlyxFind: t.gemlyxFind || "",
+  if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", camping: t.camping || "", accommodationTip: t.accommodationTip || "", travelTime: t.travelTime || "", ticketStatus: normaliseTicketStatus(t.ticketStatus), town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", website: t.website || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]]),
     ] };
@@ -105,7 +105,7 @@ const shapeForLiveFields = (type, t) => {
       ...bbData([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]]),
       ...bulletsBlock("Things to Know", t.thingsToKnow),
     ] };
-  if (type === "food" || type === "foodStreet") return { name: t.name, isFoodStreet: type === "foodStreet", budgetLevel: t.budgetLevel || "", emoji: t.emoji || (type === "foodStreet" ? "🍜" : "🍽"), category: t.category || (type === "foodStreet" ? "Food market" : ""), location: t.location || "", price: t.price || "See website", timeNeeded: t.timeNeeded || "", photo: `/food/${slugify(t.name)}.jpg`, desc: t.vibeLocation, mapHint: t.mapHint || "", color: t.color || "#D9A441", gemlyxFind: t.gemlyxFind || "",
+  if (type === "food" || type === "foodStreet") return { name: t.name, isFoodStreet: type === "foodStreet", emoji: t.emoji || (type === "foodStreet" ? "🍜" : "🍽"), category: t.category || (type === "foodStreet" ? "Food market" : ""), location: t.location || "", price: t.price || "See website", timeNeeded: t.timeNeeded || "", photo: `/food/${slugify(t.name)}.jpg`, desc: t.vibeLocation, mapHint: t.mapHint || "", color: t.color || "#D9A441", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]]),
     ] };

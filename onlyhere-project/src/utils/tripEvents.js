@@ -35,15 +35,31 @@ import { tierOf } from "./placeThemes";
 
 const MS_DAY = 86400000;
 
-// Date only, local, so an arrival at 22:00 and a departure at 09:00 four days
-// later is a five day trip rather than three and a bit.
-const dayStart = (value) => {
-  if (!value && value !== 0) return null;
-  const d = value instanceof Date ? new Date(value.getTime()) : new Date(value);
-  if (isNaN(d.getTime())) return null;
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
+// ── AND THIS WAS THE FIFTH COPY OF THE SAME HELPER ──────────────────
+//
+// It read:
+//
+//   const d = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+//   d.setHours(0, 0, 0, 0);
+//
+// The intent was right, and its comment said so: "date only, local, so an
+// arrival at 22:00 and a departure at 09:00 four days later is a five day trip
+// rather than three and a bit". The implementation carried the mistake this
+// codebase has now found FIVE separate times. `new Date("2027-06-24")` is UTC
+// midnight, and setHours then pins it to local midnight of whatever local day
+// that INSTANT falls on. West of Greenwich, that is the day before.
+//
+// Measured under TZ=America/New_York: eventWindow({ date: "2027-06-24" }) came
+// back as 23 June. A festival's whole window sat a day early, so overlapsTrip
+// decided whether to offer an event against dates that were wrong for every
+// reader in the Americas.
+//
+// One shared reader now. calendarDay.dayStart treats the date-only ISO form as
+// the calendar day it names and falls back to the local day for anything else,
+// which is what the two lines above were reaching for. Date instances still
+// work, and they matter here: arrivalDateIn returns one and tripWindow is
+// handed them.
+import { dayStart } from "./calendarDay";
 
 export const daysBetween = (start, end) => {
   const a = dayStart(start), b = dayStart(end);

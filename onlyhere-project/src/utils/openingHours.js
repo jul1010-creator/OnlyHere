@@ -1,3 +1,4 @@
+import { dayStart } from "./calendarDay";
 // ── TWO SOURCES FOR OPENING HOURS, AND NEITHER WINS BY DEFAULT ───────
 //
 // Oliver, 11 Aug 2026: "Website opening hours of course should be prioritised.
@@ -219,10 +220,29 @@ export const closedDays = (hours) => {
 };
 
 // Which real calendar day is day N of this trip.
+//
+// ── AND IT WAS A DAY EARLY FOR HALF THE READERS ─────────────────────
+// This did `new Date(arrivalDate)` and then `.getDay()`. The date-only ISO form
+// parses as UTC midnight while getDay reads LOCAL, so in New York an arrival of
+// "2026-08-09" is 20:00 on the 8th and this returned Saturday for a Sunday
+// arrival. Every later day of the trip inherited the shift.
+//
+// THIS IS THE ONE THAT COSTS AN AFTERNOON. shutOnVisit below is what warns a
+// reader that a museum is closed on the day they mean to go. Off by one, it
+// clears a Monday visit as fine and flags the Tuesday instead, so somebody
+// crosses a city to stand outside a locked door having been told it was open.
+// Every other bug in this family cost a click.
+//
+// Measured before the fix, under TZ=America/New_York:
+//   "a Monday museum visit is caught"   expected Monday, got Sunday
+//   "a Tuesday visit is fine"           expected null, got a Monday warning
+//
+// dayStart reads a stored date as the calendar day it names, and returns null
+// rather than an Invalid Date, which is why the two guards collapse into one.
+// See utils/calendarDay.js.
 export const dayOfVisit = (arrivalDate, dayNumber) => {
-  if (!arrivalDate) return null;
-  const d = new Date(arrivalDate);
-  if (Number.isNaN(d.getTime())) return null;
+  const d = dayStart(arrivalDate);
+  if (!d) return null;
   d.setDate(d.getDate() + Math.max(0, (Number(dayNumber) || 1) - 1));
   return d.getDay();
 };

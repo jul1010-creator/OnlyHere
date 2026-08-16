@@ -65,6 +65,33 @@ export const dayEnd = (v) => {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 };
 
+// ── STORING A DAY, WHICH IS WHERE THE WHOLE FAMILY STARTS ───────────
+//
+// Everything above reads a stored value. This is how one should be WRITTEN, and
+// getting it wrong at this end is the root of the last remaining case.
+//
+// A guide's arrival was stored with `arrivalDate.toISOString()`. arrivalDateIn
+// builds LOCAL midnight of the day the traveller named, so that produced, from
+// Denmark in September, "2026-09-05T22:00:00.000Z". The intended day is the
+// 6th. The string says the 5th. It only reads back as the 6th in the timezone
+// that wrote it, which is fine while the person who made a guide is the person
+// reading it, and wrong the moment they share the link.
+//
+// An arrival is a CALENDAR DAY. "I arrive on 6 September" is true in every
+// timezone there is, so it is stored as the day and not as an instant. Read
+// back by dayStart, "2026-09-06" is the 6th everywhere.
+//
+// LEGACY ROWS STILL WORK, which is why this ships without a migration: saved
+// guides written before today hold a full timestamp, and dayStart falls back to
+// reading those as a local day, exactly as the old code did. New guides are
+// unambiguous, old ones are no worse than they were.
+export const dayKey = (v) => {
+  const d = dayStart(v);
+  if (!d) return null;
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
 // Is this calendar day within the range, inclusive at both ends. `today` is a
 // parameter rather than a call to the clock, for the reason eventDates.js
 // already states in its own words: a date helper that reads the clock cannot be

@@ -82,7 +82,7 @@ export const CHARACTERISATION_FIELDS = [
 export const REPORT_FIELDS = [
   "name", "town", "city", "location", "mapHint", "address", "region",
   "date", "dateStart", "dateEnd", "openingHours", "season",
-  "price", "priceNote", "ticketInfo", "ticketsGlance", "extraCosts", "budgetLevel",
+  "price", "priceNote", "ticketInfo", "ticketsGlance", "extraCosts",
   "website", "link", "linkAndroid", "category", "type", "scale",
   "camping", "accommodationTip", "accessibility", "howTo", "howItWorks", "howItsMade",
   "visitorNote", "capacity", "founded",

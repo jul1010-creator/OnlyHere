@@ -82,7 +82,7 @@ export const EDITORIAL_GLANCE = ["tag", "highlight", "crowd", "gemlyxFind"];
 // stops being closed, and nothing downstream is built to notice.
 //
 // They go back to the writer, which is where a judgement belongs.
-export const CLOSED_OR_DERIVED = ["bookingType", "budgetLevel", "location"];
+export const CLOSED_OR_DERIVED = ["bookingType", "location"];
 
 export const EXTRACTABLE_GLANCE = GLANCE_FIELDS
   .filter(f => !NEVER_EXTRACT.includes(f))

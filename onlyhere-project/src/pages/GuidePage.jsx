@@ -16,6 +16,7 @@ import { testTravelerLine, isFerryText } from "../utils/helpers";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
+import { dayStart, dayKey } from "../utils/calendarDay";
 import { shareMessage, shareTitle } from "../utils/share";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
@@ -460,7 +461,9 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
     if (!guide || !Array.isArray(days) || !days.length) return;
     if (!weatherIsStale(guide._weatherFetchedAt)) return;
     let cancelled = false;
-    const arrival = guide._arrivalDate ? new Date(guide._arrivalDate) : null;
+    // dayStart, not new Date: an arrival is stored as a calendar day now, and
+    // the legacy timestamp form still reads as the local day it used to.
+    const arrival = dayStart(guide._arrivalDate);
     const startOffset = arrival
       ? Math.max(0, Math.round((new Date(arrival).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000))
       : 0;
@@ -1356,11 +1359,27 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               })}
             </div>
             {day.glance?.accommodation && (() => {
-              const dayDate = guide._arrivalDate ? new Date(guide._arrivalDate) : null;
+              const dayDate = dayStart(guide._arrivalDate);
               if (dayDate) dayDate.setDate(dayDate.getDate() + ((day.day || dayIdx + 1) - 1));
               const nextDate = dayDate ? new Date(dayDate) : null;
               if (nextDate) nextDate.setDate(nextDate.getDate() + 1);
-              const fmt = (d) => d ? d.toISOString().slice(0, 10) : null;
+              // ── AND toISOString UNDID THE LINE ABOVE IT ──────────
+              // dayStart returns LOCAL midnight of the arrival day, and
+              // toISOString converts that to UTC, which in Denmark is 22:00 the
+              // evening before. So this sent Booking.com checkin=2026-09-05 for
+              // somebody arriving on the 6th, and every later day booked night
+              // N minus one.
+              //
+              // Wrong in Denmark and RIGHT in New York, which is the reverse of
+              // the rest of this family and the reason it survived a seven
+              // timezone sweep: the suite cannot reach a JSX render, and the one
+              // person most likely to catch it by eye is sitting on the single
+              // clock where it reads correctly.
+              //
+              // It also sat three lines under tonight's dayStart fix, on the
+              // same value. dayKey formats from local getters, which is what it
+              // exists for. See utils/calendarDay.js.
+              const fmt = (d) => dayKey(d);
               const adultsMatch = (guide._travelers || "").match(/\d+/);
               const adults = adultsMatch ? adultsMatch[0] : "2";
               const searchTerm = day.glance.recommendedStay || day.glance.stayArea;

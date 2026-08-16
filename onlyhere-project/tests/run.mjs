@@ -64,13 +64,14 @@ writeFileSync(entry, `
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
+  export { dayStart, dayEnd, dayWithin, dayKey } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory, hasFinished, externalHref, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -104,7 +105,7 @@ writeFileSync(entry, `
   export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
   export { TOWN_COORDS } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
-  export { shuffledOrder, identityOrder, advancePos, factAt } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
+  export { shuffledOrder, identityOrder, advancePos, factAt, seededRandom, orderFor, nextSeed } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
   export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
   export { towns as TOWNS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/towns.js"))};
@@ -1667,13 +1668,60 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     is("Danish lukket counts too", closedDays(["Monday: Lukket"]), [1]);
     is("and a line naming no day is ignored", closedDays(["Closed for renovation"]), []);
 
-    const sunday = "2026-09-06T00:00:00.000Z";
+    // ── A CALENDAR DAY, NOT AN INSTANT ──────────────────────────────
+    // This fixture was "2026-09-06T00:00:00.000Z" and it was the last thing in
+    // the suite still failing under TZ=America/New_York, for a reason worth
+    // writing down rather than editing away.
+    //
+    // A guide stored its arrival with `arrivalDate.toISOString()`. arrivalDateIn
+    // builds LOCAL midnight of the day the traveller named, so from Denmark in
+    // September that wrote "2026-09-05T22:00:00.000Z" for the 6th. The string
+    // only reads back as the 6th in the timezone that wrote it. Fine while the
+    // person who built a guide is the person reading it. Wrong the moment they
+    // share the link, and wrong in the suite, which is where it showed up:
+    //
+    //   "a Monday museum visit is caught"   expected Monday, got Sunday
+    //   "a Tuesday visit is fine"           expected null, got a Monday warning
+    //
+    // That is the warning that tells somebody a museum is shut on the day they
+    // planned to go. Off by one it clears the shut day and flags the open one.
+    //
+    // So an arrival is now STORED as the day itself, by dayKey. "6 September" is
+    // the 6th in every timezone there is.
+    const sunday = "2026-09-06";
     is("day 1 of a Sunday arrival is a Sunday", dayOfVisit(sunday, 1), 0);
     is("and day 2 is the Monday", dayOfVisit(sunday, 2), 1);
     // The whole point: a stop scheduled on a day it is shut.
     is("a Monday museum visit is caught", (shutOnVisit(week, sunday, 2) || {}).dayName, "Monday");
     ok("and it carries the date those hours were true on", (shutOnVisit(week, sunday, 2) || {}).checkedOn === "2026-08-11");
     is("a Tuesday visit is fine", shutOnVisit(week, sunday, 3), null);
+    // ── AND THE GUIDES ALREADY SAVED STILL READ ─────────────────────
+    // Rows written before today hold the timestamp form. dayStart falls back to
+    // reading those as a local day, exactly as the old code did, so they are no
+    // worse than they were and no migration is needed. Asserted rather than
+    // assumed, because "it still works for existing data" is the claim that
+    // ships a migration nobody wrote.
+    ok("a legacy timestamp arrival still yields a weekday",
+      Number.isInteger(dayOfVisit("2026-09-06T00:00:00.000Z", 1)));
+    is("and nonsense still yields nothing", dayOfVisit("sometime in September", 1), null);
+    is("as does an absent one", dayOfVisit(null, 1), null);
+    // The storage side, which is where the fix actually lives.
+    is("a day is stored as the day it names", M.dayKey(new Date(2026, 8, 6)), "2026-09-06");
+    is("and a stored day round-trips to the same weekday",
+      dayOfVisit(M.dayKey(new Date(2026, 8, 6)), 1), 0);
+    ok("the guide writes the day rather than an instant",
+      /_arrivalDate: dayKey\(arrivalDate\)/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    // ── AND EVERY READER OF IT GOES THROUGH dayStart ────────────────
+    // Source assertions because these two are inside a React render with no
+    // pure function to call, and mutation testing proved they need them:
+    // putting `new Date(guide._arrivalDate)` back killed nothing. Both derive a
+    // DAY from that value, the weather offset by counting days from today and
+    // the accommodation card by adding the day number, so a raw read puts both
+    // a day out west of Greenwich.
+    const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+    is("no reader parses the stored arrival raw",
+      (gp.match(/new Date\(guide\._arrivalDate\)/g) || []).length, 0);
+    is("and both go through dayStart", (gp.match(/dayStart\(guide\._arrivalDate\)/g) || []).length, 2);
 
     // ── IT REFUSES TO GUESS, WHICH IS MOST OF THE TIME ─────────────
     // A guide that warns about half its stops and stays silent on the rest,
@@ -10343,7 +10391,13 @@ rmSync(dir, { recursive: true, force: true });
 // nobody has looked at recently.
 {
   const { nextEditionYear } = M;
-  const AUG26 = new Date("2026-08-12");
+  // Local components, not new Date("2026-08-12"). The string form is UTC
+  // midnight, which is 11 August in New York, so this fixture's own "today" was
+  // a day early there and the boundary assertions below tested the wrong
+  // boundary. `today` is a parameter on these functions precisely so the
+  // calendar can be fixed, and the fixture was fixing it with the bug the whole
+  // family is about.
+  const AUG26 = new Date(2026, 7, 12);
   is("an edition finished earlier this year rolls to next year", nextEditionYear("2026-06-23", AUG26), 2027);
   is("a date stale by nearly a year does NOT skip an edition", nextEditionYear("2025-09-10", AUG26), 2026);
   is("one stale by years still lands on the next real occurrence", nextEditionYear("2024-01-15", AUG26), 2027);
@@ -13233,16 +13287,21 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // opposite and which matched no filter anywhere.
   ok("bookingType is an enum the UI filters on, so it is not extracted",
      !EXTRACTABLE_GLANCE.includes("bookingType"));
-  // "your honest read given the real price info" in the prompt's own words. No
-  // page states it, and numbersTraceable cannot catch an invented WORD.
-  ok("budgetLevel is a judgement derived from prices, not a value on a page",
+  // ── AND budgetLevel IS GONE ENTIRELY ────────────────────────────
+  // It used to sit on this list as "a judgement derived from prices, not a
+  // value on a page". Oliver, 16 Aug 2026, retired the field: "the average
+  // traveller doesn't know what mid-budget is in Denmark." Budget, Mid-range
+  // and Splurge are defined against Danish norms, so reading one needs the
+  // knowledge the reader came here to get. The Food tabs say real kroner now.
+  // See PRICE_BANDS in utils/helpers.js.
+  ok("budgetLevel is not extractable, because it no longer exists",
      !EXTRACTABLE_GLANCE.includes("budgetLevel"));
   // "Neighbourhood, City": a shape assembled from two facts. An address lands
   // here otherwise, and the town matching reads this field.
   ok("location is a composed shape, not a string to be found",
      !EXTRACTABLE_GLANCE.includes("location"));
-  is("and all three are named rather than quietly absent", CLOSED_OR_DERIVED.sort(),
-     ["bookingType", "budgetLevel", "location"]);
+  is("and both are named rather than quietly absent", CLOSED_OR_DERIVED.sort(),
+     ["bookingType", "location"]);
 
   // Derived, never a second hand-written list. Three lists that had to agree
   // drifted apart in this codebase in one night.
@@ -16546,6 +16605,317 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // "something on the card so there is something on the card" failure with
   // money attached.
   ok("and absent entirely when there is no ticket", /if \(!isTiqetsProductUrl\(dest\)\) return null;/.test(detail));
+}
+
+// ── "IT HAS TO BE RANDOMS, BUT IT HAS TO START ON A FACT" ────────────
+//
+// Oliver, 16 Aug 2026: "the 'facts' that load, constantly start out with H.C.
+// Andersen, and then Ribe, and then the jelling stones.. there is definetenly
+// something coded that makes these prioritised as first."
+//
+// There was, and it was a misreading of him from a week earlier. He had said
+// "it should start on the first fact", meaning the first one it shows rather
+// than mid-swap between two, and the code took it to mean denmarkFacts[0].
+{
+  const { seededRandom, orderFor, nextSeed, factAt, advancePos, shuffledOrder } = M;
+
+  // ── SEEDED, SO A SHUFFLE CAN BE TESTED AT ALL ───────────────────
+  const a = seededRandom(12345), b = seededRandom(12345), c = seededRandom(999);
+  is("the same seed gives the same sequence", [a(), a(), a()], [b(), b(), b()]);
+  ok("a different seed does not", c() !== seededRandom(12345)());
+  const draws = Array.from({ length: 200 }, seededRandom(7));
+  ok("every draw is inside the unit interval", draws.every(x => x >= 0 && x < 1));
+  ok("and they are not all the same number", new Set(draws).size > 150);
+
+  // ── THE ORDER IS A PERMUTATION, NOT A SAMPLE ────────────────────
+  // Walking a permutation is what makes "shouldn't show the same fact twice"
+  // true rather than merely likely, which was his 9 August complaint.
+  const order = orderFor(14, 4242);
+  is("every fact appears exactly once", [...order].sort((x, y) => x - y), Array.from({ length: 14 }, (_, i) => i));
+  is("and the same seed rebuilds it identically", orderFor(14, 4242), order);
+  // Computed during render on every pass, so it has to be stable or the cards
+  // reshuffle under the reader mid-build.
+  is("so recomputing mid-build does not reshuffle", orderFor(14, 4242), orderFor(14, 4242));
+
+  // ── AND IT DOES NOT ALWAYS OPEN ON FACT ZERO ────────────────────
+  // The actual complaint. Across a spread of seeds the first card must vary,
+  // and H.C. Andersen must not be the first card every time.
+  const firsts = Array.from({ length: 60 }, (_, i) => orderFor(14, 1000 + i * 7919)[0]);
+  ok("the first card varies between builds", new Set(firsts).size > 5);
+  ok("and it is not fact zero every time", firsts.filter(x => x === 0).length < firsts.length / 2);
+  // A fresh page load must be as random as a later build. This is the half that
+  // was broken: the old code seeded the first build of a session with the
+  // identity order, and since he reloads between builds the shuffle almost
+  // never ran.
+  const seeds = Array.from({ length: 40 }, () => nextSeed());
+  ok("a new seed is a real number", seeds.every(s => Number.isInteger(s) && s >= 0));
+  ok("and two of them are not the same", new Set(seeds).size > 30);
+
+  // ── LENGTH IS NOT BAKED IN, WHICH WAS THE SECOND BUG ────────────
+  // denmarkFacts GROWS after mount, because liveContent merges published facts
+  // into it. The old state captured the length at mount, and an order captured
+  // at length zero is [], on which factAt returns 0 for every position: fact
+  // zero forever, whatever the timer does.
+  is("an order over no facts is empty", orderFor(0, 1), []);
+  is("and the same seed over a grown list covers all of it",
+    [...orderFor(20, 1)].sort((x, y) => x - y), Array.from({ length: 20 }, (_, i) => i));
+  ok("a list that grew is fully covered rather than stuck on zero",
+    new Set(Array.from({ length: 20 }, (_, p) => factAt(orderFor(20, 55), p, 20))).size === 20);
+  // The old failure mode, kept as an assertion so it cannot come back: an empty
+  // order pins every position to card zero.
+  is("an empty order does pin to zero, which is why length must not be captured early",
+    new Set(Array.from({ length: 8 }, (_, p) => factAt([], p, 14))).size, 1);
+
+  // ── WALKING IT ──────────────────────────────────────────────────
+  is("the position advances and wraps", [0, 1, 2].map(p => advancePos(p, 3)), [1, 2, 0]);
+  is("and a stale longer order still lands on a real card", factAt(orderFor(20, 3), 17, 14) < 14, true);
+  ok("shuffledOrder still takes an injected rand", shuffledOrder(5, () => 0).length === 5);
+
+  // ── WIRED THAT WAY, AND DECIDED BEFORE THE PAINT ────────────────
+  // An effect runs after the browser paints, which is the whole of the flicker
+  // complaint. A useState initialiser and a useMemo both run during render.
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the seed is chosen during render, not in an effect", /useState\(\(\) => nextSeed\(\)\)/.test(appSrc));
+  ok("and the order is derived during render too", /useMemo\(\(\) => orderFor\(denmarkFacts\.length, factSeed\)/.test(appSrc));
+  ok("and useMemo is imported, which a build does not catch", /import \{[^}]*useMemo[^}]*\} from "react"/.test(appSrc));
+  // Nothing may put the identity order back as the opening state.
+  ok("the first build of a session is not the identity order", !/useState\(\(\) => identityOrder/.test(appSrc));
+  // A fresh seed on the way OUT, so two builds in one session differ, and on
+  // the way out specifically because choosing on the way in is the flicker.
+  ok("a new seed is taken as a build closes", /setFactSeed\(nextSeed\(\)\)/.test(appSrc));
+}
+
+// ── THE ALLOW-LIST, GUARDED BY CODE INSTEAD OF BY A COMMENT ──────────
+//
+// studioContent.js carries a comment listing the times its allow-list has
+// silently eaten a feature. As of 16 Aug 2026 that list runs to five: __sources
+// on all 79 published rows, then nearly __hours, __ticket, __corrections, and
+// ticketUrl a few hours ago. Its own words:
+//
+//   "THE RULE, restated because it keeps costing: a field missing from this
+//    allow-list does not reach the database. Adding a field to a prompt is not
+//    shipping it. This function is the only insert path into gemlyx_content."
+//
+// That is a request, and this codebase's first standing rule is that a request
+// has a failure rate while code does not. The file telling you it has been
+// bitten five times was defending itself with prose.
+//
+// So: every field name a prompt asks a model to return must be read by
+// shapeForLive, or be named below as deliberately unstored. Adding a field to a
+// prompt and forgetting the allow-list now fails here rather than six weeks
+// later when somebody notices the column is empty.
+{
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  const content = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+
+  // What the prompts ask for: every "fieldName": key in the JSON shapes they
+  // hand the model.
+  const asked = [...new Set([...prompts.matchAll(/"([a-z][a-zA-Z0-9]*)":/g)].map(m => m[1]))].sort();
+  // What shapeForLive reads off the draft.
+  const read = new Set([...content.matchAll(/\bt[?]?\.([a-zA-Z_][a-zA-Z0-9_]*)/g)].map(m => m[1]));
+
+  // ── ASKED FOR AND DELIBERATELY NOT STORED ───────────────────────
+  // Empty today, and that is the finding: right now the allow-list is complete,
+  // so this test is a ratchet rather than a to-do list.
+  //
+  // If you land here after adding a field to a prompt, you have two honest
+  // options and one dishonest one. Add it to shapeForLive so it reaches the
+  // database, or add it here with a sentence saying why a model is being asked
+  // for something nobody keeps. Do not delete the assertion.
+  const DELIBERATELY_UNSTORED = new Set([]);
+
+  const dropped = asked.filter(f => !read.has(f) && !DELIBERATELY_UNSTORED.has(f));
+  is("every field a prompt asks for survives publish, or is listed as deliberately dropped", dropped, []);
+  // The scan has to actually be finding fields. A regex that silently matched
+  // nothing would make the assertion above pass forever on an empty list, which
+  // is the shape of green this whole suite exists to distrust.
+  ok("and the scan found a real number of them", asked.length > 50);
+  ok("with the ones this has cost before among them",
+    ["desc", "highlight", "gemlyxFind", "tier"].every(f => asked.includes(f) || read.has(f)));
+  // Nothing in the unstored list may also be stored: an entry there is a claim
+  // that a field is thrown away, and a stale one hides a real drop later.
+  is("nothing is listed as dropped while also being kept",
+    [...DELIBERATELY_UNSTORED].filter(f => read.has(f)), []);
+}
+
+// ── THE FIVE THE PURE SUITE COULD NOT REACH ──────────────────────────
+//
+// After the date family was fixed and the suite was green in seven timezones,
+// an independent review found five more. Every one of them was in a .jsx file,
+// which is the layer a suite of pure functions structurally cannot see, and
+// four of the five produced output a Dane never looks at. That is exactly why
+// 5148 green stayed green.
+//
+// The one worth remembering is the first, because it is the opposite of the
+// rest: it was WRONG IN DENMARK and right in New York.
+{
+  const { daysUntil, parseEventDate } = M;
+
+  // ── ONE: toISOString UNDID A dayStart THREE LINES ABOVE IT ──────
+  // GuidePage's "Where to stay" card built its Booking.com checkin with
+  // `dayStart(...)` and then formatted it with `toISOString().slice(0,10)`.
+  // dayStart gives LOCAL midnight; toISOString converts to UTC, which in
+  // Denmark is 22:00 the evening before. So the link pre-filled the night
+  // BEFORE arrival, and every later day booked night N minus one. On the app's
+  // own declared revenue path.
+  const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  is("the booking date is not formatted through UTC",
+    (gp.match(/toISOString\(\)\.slice\(0, 10\)/g) || []).length, 0);
+  ok("it is formatted from local parts instead", /const fmt = \(d\) => dayKey\(d\)/.test(gp));
+  // dayKey is the thing being relied on, so the round trip is asserted rather
+  // than assumed: a local-midnight Date must come back as the day it names.
+  is("a local midnight date keys to its own day", M.dayKey(new Date(2026, 8, 6)), "2026-09-06");
+
+  // ── TWO: THE SAVED GUIDE READ IT A DIFFERENT WAY ────────────────
+  // guideToSave copies _arrivalDate into savedGuides, and the weather check
+  // read it back with `new Date(...).setHours(0,0,0,0)` while GuidePage read it
+  // with dayStart. The two disagreed by a day west of Greenwich, so alerts
+  // compared each day against the forecast for the day before it.
+  const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("no saved-guide reader parses the arrival raw",
+    (appSrc.match(/new Date\(guide\.arrivalDate\)/g) || []).length, 0);
+  ok("the weather offset goes through dayStart", /const arrivalDay = dayStart\(guide\.arrivalDate\);/.test(appSrc));
+
+  // ── THREE: A SIXTH COPY OF THE OVERLAP TEST ─────────────────────
+  // EventMatchCard had its own overlapsTrip, carrying both original faults. It
+  // is the card that says "happening while you're there", so it disagreed with
+  // the preview screen about whether an event was on.
+  const emc = readFileSync(join(root, "src/components/EventMatchCard.jsx"), "utf8");
+  ok("the card uses the shared window", /tripWindow\(\{ arrival: intakeArrival, departure: intakeDeparture \}\)/.test(emc));
+  ok("and the shared overlap test", /overlapsTripWindow\(e, win\) === true/.test(emc));
+  // Comments stripped: the block above quotes the code it replaced, and a scan
+  // that reads its own explanation is the third such false positive tonight.
+  is("with no private date parsing left", (stripNonCode(emc).match(/new Date\(/g) || []).length, 0);
+  // The behaviour that was wrong everywhere, including Denmark: arriving on a
+  // festival's closing day. Asserted against the shared pair the card now uses.
+  const closingDay = M.tripWindow({ arrival: "2026-08-16", departure: "2026-08-18" });
+  is("a traveller arriving on the closing day is told about it",
+    M.overlapsTrip({ date: "2026-08-10", dateEnd: "2026-08-16" }, closingDay), true);
+  // And the one that only broke west of Greenwich: an event starting the day
+  // after they leave is not on while they are there.
+  is("an event starting after departure is not",
+    M.overlapsTrip({ date: "2026-08-19" }, M.tripWindow({ arrival: "2026-08-14", departure: "2026-08-16" })), false);
+
+  // ── FOUR: "Invalid Date" AND NaN ON THE PUBLIC EVENTS GRID ──────
+  // The card badge did `new Date(event.date + "T00:00:00")`, which assumes the
+  // ISO form. eventDates.js states both forms are live in the database. Glue
+  // "T00:00:00" onto "1 September 2026" and you get an Invalid Date, which is
+  // TRUTHY, so the badge rendered and printed the month as "Invalid Date" and
+  // the day as NaN.
+  is("no date is built by string concatenation", (stripNonCode(appSrc).match(/\+ "T00:00:00"/g) || []).length, 0);
+  ok("the badge parses through parseEventDate", /const d = parseEventDate\(event\.date\);/.test(appSrc));
+  is("the worded form parses to a real day", parseEventDate("1 September 2026")?.getDate(), 1);
+  is("and to a real month", parseEventDate("1 September 2026")?.getMonth(), 8);
+  is("an unreadable one is null rather than an Invalid Date", parseEventDate("banana"), null);
+
+  // ── AND THE PILL THAT DISAGREED WITH THE DATE BESIDE IT ─────────
+  // daysUntil compared a UTC-parsed date against the live clock, so the answer
+  // moved with the time of day. In New York at 22:20 it returned -0 for
+  // tomorrow, pilling a festival "Happening now" while the date printed next to
+  // it still said 16 Aug. Whole calendar days now, so it reads the same all day.
+  const AUG15 = new Date(2026, 7, 15, 22, 20);
+  is("tomorrow is one day away, at any hour", daysUntil("2026-08-16", AUG15), 1);
+  is("and still one at breakfast", daysUntil("2026-08-16", new Date(2026, 7, 15, 7, 0)), 1);
+  is("today is zero", daysUntil("2026-08-15", AUG15), 0);
+  is("yesterday is negative", daysUntil("2026-08-14", AUG15), -1);
+  is("a week out is seven", daysUntil("2026-08-22", AUG15), 7);
+  is("the worded form works here too", daysUntil("16 August 2026", AUG15), 1);
+  ok("and an unreadable date is not a number", !Number.isFinite(daysUntil("banana", AUG15)));
+  // ── AND WHY THIS ONE IS A SOURCE ASSERTION ──────────────────────
+  // Putting `new Date(d)` back in place of dayStart kills nothing in UTC or in
+  // New York, because Math.round absorbs any offset under twelve hours: a four
+  // hour shift turns 1.0 into 0.83, which rounds back to 1. The first zone
+  // where it changes the answer is +12, where tomorrow reads as two days away.
+  //
+  // Rather than spawn a third child process on every CI run for one assertion,
+  // the rule is pinned here. If this ever needs replacing, the behavioural
+  // version is the fixture above under TZ=Pacific/Auckland.
+  ok("daysUntil reads a calendar day rather than parsing raw",
+    /const then = dayStart\(d\);/.test(readFileSync(join(root, "src/utils/helpers.js"), "utf8")));
+
+  // ── FIVE: FORECAST TILES LABELLED A DAY EARLY ───────────────────
+  // api/weather.js returns a YYYY-MM-DD key, and the strip parsed it bare then
+  // called toLocaleDateString, so every tile after "Today" carried the previous
+  // weekday west of Greenwich. "2026-08-17" is a Monday; New York rendered Sun.
+  const ws = readFileSync(join(root, "src/components/WeatherStrip.jsx"), "utf8");
+  is("the strip does not parse the forecast key raw", (ws.match(/new Date\(day\.date\)/g) || []).length, 0);
+  ok("it reads the calendar day", /const d = dayStart\(day\.date\)/.test(ws));
+  is("and 17 August 2026 is a Monday", M.dayStart("2026-08-17").getDay(), 1);
+}
+
+// ── "THE AVERAGE TRAVELLER DOESN'T KNOW WHAT MID-BUDGET IS IN
+//     DENMARK" ───────────────────────────────────────────────────────
+//
+// Oliver, 16 Aug 2026, retiring a whole vocabulary in one sentence. Budget,
+// Mid-range and Splurge are defined relative to Denmark, so decoding one needs
+// the knowledge the reader came here to get. The bands were always in kroner
+// behind those words.
+{
+  const { priceBand, priceBandLabel, PRICE_BANDS } = M;
+
+  // ── THE BANDS SAY MONEY ─────────────────────────────────────────
+  is("three bands, all named in kroner", PRICE_BANDS.map(b => b.label),
+    ["Under 100 kr", "100 to 250 kr", "Over 250 kr"]);
+  ok("and none of them is a Denmark-relative adjective",
+    !PRICE_BANDS.some(b => /budget|mid.?range|splurge|cheap|expensive/i.test(b.label)));
+  is("a label is findable by id", priceBandLabel("100-250"), "100 to 250 kr");
+  is("and an unknown id names nothing rather than guessing", priceBandLabel("nonsense"), "");
+
+  // ── THE SAME CUTS AS BEFORE, INCLUDING THE BOUNDARY ─────────────
+  // 250 stays inside the middle band, where the old `avg <= 250` put it. A
+  // silent boundary move would requalify live rows.
+  is("a cheap dish bands low", priceBand("60-80 DKK per dish"), "under-100");
+  is("a normal dinner bands middle", priceBand("120-180 DKK"), "100-250");
+  is("exactly 250 is still the middle band", priceBand("250 DKK"), "100-250");
+  // The other boundary, which mutation testing found unguarded: 100 belongs to
+  // the middle band, since the low one is labelled "Under 100 kr" and a reader
+  // who takes that literally is right.
+  is("exactly 100 is not under 100", priceBand("100 DKK"), "100-250");
+  is("and 99 is", priceBand("99 DKK"), "under-100");
+  is("and 251 is the top", priceBand("251 DKK"), "over-250");
+  is("a tasting menu bands high", priceBand("650 DKK"), "over-250");
+  is("the average is what bands, not the first number", priceBand("50-450 DKK"), "100-250");
+
+  // ── AND UNKNOWN IS null, WHICH IS THE WHOLE POINT ───────────────
+  // The old function returned "Mid-range" for any price with no digits, so
+  // "See website" was filed as a real tier. Reffen, whose own uncertainties say
+  // no reliable prices were found, sat in the Mid-range tab on the strength of
+  // nothing: returned to a reader filtering Mid-range, withheld from one
+  // filtering Budget, on a measurement nobody made.
+  is("See website bands nowhere", priceBand("See website"), null);
+  is("nor does varies by stall", priceBand("Varies by stall"), null);
+  is("nor free text with no number", priceBand("Free to enter, pay per stall"), null);
+  is("nor an empty price", priceBand(""), null);
+  is("nor a missing one", priceBand(null), null);
+
+  // ── AND AN UNPRICED ROW MUST STILL BE VISIBLE ───────────────────
+  // This is the one way the change could go wrong. The old default existed so
+  // an unpriced entry was not hidden from every filter, and that intent has to
+  // survive: null belongs to no band, so it shows under All and is claimed by
+  // nothing. Asserted against the real filter expression rather than described.
+  const bandApp = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the food filter shows everything under All",
+    /foodTab === "All" \|\| priceBand\(f\.price\) === foodTab/.test(bandApp));
+  // Written out: an unpriced row passes the All tab and no other.
+  const shown = (tab, price) => tab === "All" || priceBand(price) === tab;
+  ok("an unpriced row is visible under All", shown("All", "See website"));
+  ok("and appears in no band", !PRICE_BANDS.some(b => shown(b.id, "See website")));
+  ok("a priced row appears in exactly one band",
+    PRICE_BANDS.filter(b => shown(b.id, "120 DKK")).length === 1);
+
+  // ── AND THE FIELD IS GONE EVERYWHERE, NOT JUST THE TABS ─────────
+  // Half a removal is worse than none: a prompt still asking for it spends a
+  // model's attention on an answer nobody reads, and shapeForLive would keep
+  // writing it into published rows.
+  for (const [label, file] of [
+    ["the prompts do not ask for it", "src/utils/studioPrompts.js"],
+    ["publish does not store it", "src/utils/studioContent.js"],
+    ["the paste-ready codegen does not emit it", "src/App.jsx"],
+    ["the audit does not list it", "src/utils/entryAudit.js"],
+    ["the report scope does not list it", "src/utils/checkScope.js"],
+  ]) is(label, (readFileSync(join(root, file), "utf8").match(/budgetLevel/g) || []).length, 0);
+  ok("and deriveBudgetLevel is gone with it",
+    !/deriveBudgetLevel/.test(readFileSync(join(root, "src/utils/helpers.js"), "utf8")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

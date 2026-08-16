@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { dayStart } from "../utils/calendarDay";
 import { C } from "../utils/theme";
 import { weatherIcon } from "../utils/helpers";
 
@@ -35,8 +36,14 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
           {data.forecast?.length > 0 && (
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
               {data.forecast.map((day, i) => {
-                const d = new Date(day.date);
-                const label = i === 0 ? "Today" : d.toLocaleDateString("en", { weekday: "short" });
+                // dayStart, not new Date. The forecast `date` is a YYYY-MM-DD
+                // key from api/weather.js, so a bare parse is UTC midnight and
+                // toLocaleDateString reads local: every tile after "Today" was
+                // labelled with the PREVIOUS weekday for a reader west of
+                // Greenwich. Measured: "2026-08-17", a Monday, rendered "Sun"
+                // in New York. See utils/calendarDay.js.
+                const d = dayStart(day.date);
+                const label = i === 0 ? "Today" : d ? d.toLocaleDateString("en", { weekday: "short" }) : "";
                 return (
                   <div key={day.date} style={{ flexShrink: 0, background: C.bg, borderRadius: 10, padding: "8px 10px", textAlign: "center", minWidth: 56 }}>
                     <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, marginBottom: 4 }}>{label}</div>

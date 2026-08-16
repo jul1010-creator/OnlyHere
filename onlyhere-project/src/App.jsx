@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Routes, Route, useNavigate, useParams } from "react-router-dom";
 
 import { craftItemsFallback, handmadeCraftShops } from "./data/craft";
 import { splitForCheck, CHECK_SCOPE_BLOCK, admissible, checkModeOf, fieldIn } from "./utils/checkScope";
 import { tripWindow } from "./utils/tripEvents";
 import { denmarkFacts } from "./data/denmarkFacts";
-import { shuffledOrder, identityOrder, advancePos, factAt } from "./utils/factRotation";
+import { orderFor, nextSeed, advancePos, factAt } from "./utils/factRotation";
 import { events, majorEvents, vikingEvents } from "./data/events";
 import { towns, TOWN_COORDS } from "./data/towns";
 import { freeEntrance } from "./data/freeEntrance";
@@ -41,7 +41,7 @@ import { cities, allProducts, campingSpots, PRODUCT_COORDS } from "./data/shop";
 import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, hasFinished, externalHref, weatherIcon,
-  isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, deriveBudgetLevel,
+  isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
   getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
@@ -87,12 +87,13 @@ import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
 import { briefThemes } from "./utils/interestFit";
 import { partnerDisclosure } from "./utils/affiliates";
+import { dayKey, dayStart } from "./utils/calendarDay";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, isUndated, UNDATED } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, isUndated, UNDATED, parseEventDate } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { languageBlock, readerLanguage } from "./utils/readerLanguage";
 import { PhotoPlate } from "./components/PhotoPlate";
@@ -837,13 +838,30 @@ function GemlyxApp() {
   // Oliver, 9 Aug 2026: "it shouldn't start with a instant swap from H.C.
   // Andersen. It should start on the first fact." An effect runs after the
   // browser has painted, so choosing the card in one guaranteed a visible
-  // flicker on every single build. The order now exists BEFORE the loading
-  // screen renders (identity for the first build of a session, reshuffled as
-  // each build closes, ready for the next one), and factPos starts at 0, so
-  // the first card painted is the first card of the sequence and nothing is
-  // queued to replace it. See utils/factRotation.js for the repeat half.
-  const [factOrder, setFactOrder] = useState(() => identityOrder(denmarkFacts.length));
+  // flicker on every single build.
+  //
+  // ── AND "THE FIRST FACT" MEANT THE FIRST ONE SHOWN ──────────────
+  // Oliver, 16 Aug 2026, correcting that reading: "I never said I wanted it to
+  // open on fact 1.. I said I didn't want it to go 'inbetween' two facts when
+  // opening." The old code took it literally, started every session on
+  // denmarkFacts[0] and reshuffled only when a build CLOSED. So a fresh page
+  // load always opened on H.C. Andersen, and since he reloads between builds,
+  // the shuffle almost never ran: "constantly start out with H.C. Andersen, and
+  // then Ribe, and then the jelling stones."
+  //
+  // A SEED, NOT A STORED ARRAY, and that is the second half of the fix. The old
+  // state captured denmarkFacts.length at mount, and denmarkFacts GROWS after
+  // mount because liveContent merges published facts into it. An order captured
+  // at length zero is [], and factAt on an empty order returns 0 for every
+  // position: fact zero forever, whatever the timer does.
+  //
+  // The seed has no length in it. The order is derived during RENDER from the
+  // seed and however many facts exist right now, so it is settled before the
+  // first paint (no flicker), it is random from the very first card (what he
+  // asked for), and it is right however late the facts load.
+  const [factSeed, setFactSeed] = useState(() => nextSeed());
   const [factPos, setFactPos] = useState(0);
+  const factOrder = useMemo(() => orderFor(denmarkFacts.length, factSeed), [factSeed, denmarkFacts.length]);
   const factCardIdx = factAt(factOrder, factPos, denmarkFacts.length);
   useEffect(() => {
     if (guideModal !== "loading") return;
@@ -867,10 +885,16 @@ function GemlyxApp() {
     const t = setInterval(() => setFactPos(p => advancePos(p, denmarkFacts.length)), 15000);
     return () => {
       clearInterval(t);
-      // Chosen HERE, on the way out, so the next build already has its order
-      // and its first card the moment it opens. Doing this on the way in is
-      // the flicker.
-      setFactOrder(shuffledOrder(denmarkFacts.length));
+      // A NEW SEED, on the way out, so a second build in the same session is a
+      // different sequence rather than a repeat of the one just watched. It is
+      // done here rather than on the way in for the original reason: choosing
+      // on the way in means choosing after the paint, which is the flicker.
+      //
+      // Unlike the old version this is no longer load bearing. A fresh page
+      // load already gets a random seed from the useState initialiser above, so
+      // the first build of a session is as random as the fifth. This only stops
+      // two builds in one session from matching.
+      setFactSeed(nextSeed());
       setFactPos(0);
     };
   }, [guideModal]);
@@ -4254,7 +4278,7 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         const targetArr = isMajor ? majorEvents : events;
         const targetName = isMajor ? "majorEvents" : "events";
         const nextId = Math.max(0, ...targetArr.map(x => x.id)) + 1;
-        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, budgetLevel: ${J(t.budgetLevel)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
+        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (sType === "free") {
         const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, timeNeeded: ${J(t.timeNeeded)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
@@ -4269,14 +4293,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
       } else if (sType === "food") {
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
       } else if (sType === "foodStreet") {
         // Lands in the SAME foodSpots array as regular Food entries — Food Street is a
         // distinct Studio category to WRITE (its own tailored research/prompt), but the
         // live site's Food page filters restaurants vs. food streets by isFoodStreet on
         // one shared list, not a separate array — see the "Food Streets" tab on /food.
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, budgetLevel: ${J(t.budgetLevel || "")}, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
       } else if (sType === "essential") {
         const nextId = Math.max(0, ...essentials.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`export const essentials = [\` in src/data/essentials.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, category: ${J(t.category || "Transport")}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, howTo: ${J(t.howTo)}, price: ${J(t.price)}, link: ${t.link ? J(t.link) : "null"}${t.linkAndroid ? `, linkAndroid: ${J(t.linkAndroid)}` : ""}, tip: ${J(t.tip)}${t.visitorNote ? `, visitorNote: ${J(t.visitorNote)}` : ""}, verified: ${J(stamp)} },\n\n// 2) VERIFY the price and that the system still works this way before committing. This is the type that goes stale fastest.`;
@@ -8758,7 +8782,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
       endRun();
       endLog();
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: arrivalDate ? arrivalDate.toISOString() : null, _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -9609,8 +9633,15 @@ If the conversation only covers a single day or a few stops with no explicit day
     const checkSavedGuidesWeather = async () => {
       const alerts = [];
       for (const guide of savedGuides.slice(0, 5)) { // cap it — this is a nice-to-have, not worth 20 fetches on every load
-        const startOffset = guide.arrivalDate
-          ? Math.max(0, Math.round((new Date(guide.arrivalDate).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000))
+        // dayStart, not new Date plus setHours. This reads the SAME stored
+        // value GuidePage reads, and the two disagreed by a day west of
+        // Greenwich: GuidePage was fixed tonight and this one was missed, so a
+        // saved guide's weather alerts lined each day up against the forecast
+        // for the day BEFORE it. Alerts fired on the wrong day and real changes
+        // went unreported. See utils/calendarDay.js.
+        const arrivalDay = dayStart(guide.arrivalDate);
+        const startOffset = arrivalDay
+          ? Math.max(0, Math.round((arrivalDay.getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000))
           : null;
         if (startOffset === null || startOffset > 8) continue; // no known date, or beyond the real forecast window — nothing honest to check
         for (let idx = 0; idx < guide.days.length; idx++) {
@@ -10206,8 +10237,22 @@ ${languageBlock()}`;
   // cards — media plate with a date badge, monogram fallback instead of a
   // floating emoji, drawn icons, one-line status pills, whole card tappable.
   const EventCard = ({ event }) => {
-    const d = event.date ? new Date(event.date + "T00:00:00") : null;
-    const away = !event.date ? "" : daysUntil(event.date) <= 0 ? "Happening now" : daysUntil(event.date) === 1 ? "Tomorrow" : `${daysUntil(event.date)} days away`;
+    // ── "Invalid Date" AND NaN, ON THE PUBLIC EVENTS GRID ──────────
+    // This was `new Date(event.date + "T00:00:00")`, which assumes every stored
+    // date is the ISO form. eventDates.js says in its own words that both are
+    // live in this database: drafts write "2026-06-17" AND "17 June 2026".
+    // Gluing "T00:00:00" onto the second gives "1 September 2026T00:00:00",
+    // which is an Invalid Date, and an Invalid Date is TRUTHY. So `{d && ...}`
+    // rendered the badge anyway and printed the month as "Invalid Date" and the
+    // day as NaN, on a public page.
+    //
+    // parseEventDate reads both formats and returns null for one it cannot,
+    // which is what the truthiness check below has always believed it was
+    // getting.
+    const d = parseEventDate(event.date);
+    const days = daysUntil(event.date);
+    const away = !Number.isFinite(days) ? ""
+      : days <= 0 ? "Happening now" : days === 1 ? "Tomorrow" : `${days} days away`;
     return (
       <div onClick={() => setEventDetail(event)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
         style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease, border-color 0.18s ease", willChange: "transform" }}>
@@ -13478,7 +13523,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
               })()}
 
               <div style={{ display: "flex", gap: 0, marginBottom: 18, borderBottom: `1px solid ${C.border}`, flexWrap: "wrap" }}>
-                {[{ id: "All", label: "All" }, { id: "Budget", label: "Budget" }, { id: "Mid-range", label: "Mid-range" }, { id: "Splurge", label: "Splurge" }].map(t => (
+                {/* ── REAL MONEY, NOT A DANISH-RELATIVE ADJECTIVE ──
+                    Oliver, 16 Aug 2026: "the average traveller doesn't know
+                    what mid-budget is in Denmark." Budget, Mid-range and
+                    Splurge are defined against Danish norms, so reading one
+                    needs knowledge the reader came here to get. The bands were
+                    always in kroner behind those words. See PRICE_BANDS. */}
+                {[{ id: "All", label: "All" }, ...PRICE_BANDS].map(t => (
                   <button key={t.id} onClick={() => setFoodTab(t.id)}
                     style={{ flex: 1, background: "none", border: "none", borderBottom: `2px solid ${foodTab === t.id ? C.accent : "transparent"}`, color: foodTab === t.id ? C.text : C.muted, padding: "12px 6px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap" }}>
                     {t.label}
@@ -13490,7 +13541,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   real cards — media plate (photo or monogram), name, meta, price,
                   two-sentence description, whole card tappable, tilt on hover. */}
               <div className="cards-grid">
-                {foodSpots.filter(f => (foodTab === "All" || deriveBudgetLevel(f.price, f.budgetLevel) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet)) && (foodCity === "All" || (f.location || f.city || "").includes(foodCity))).sort(byName).map(spot => (
+                {foodSpots.filter(f => (foodTab === "All" || priceBand(f.price) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet)) && (foodCity === "All" || (f.location || f.city || "").includes(foodCity))).sort(byName).map(spot => (
                   <div key={spot.id} onClick={() => setFoodDetail(spot)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
                     style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease", willChange: "transform" }}>
                     <div style={{ height: 128, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${spot.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>

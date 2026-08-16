@@ -1047,7 +1047,7 @@ export const describePriceTrace = (r) => {
 // and uncertainties.
 export const GLANCE_FIELDS = [
   "nearestStation", "ticketInfo", "camping", "accommodationTip", "travelTime",
-  "budgetLevel", "typicalCosts", "price", "priceNote", "extraCosts", "timeNeeded",
+  "typicalCosts", "price", "priceNote", "extraCosts", "timeNeeded",
   "ticketsGlance", "accessibility", "recommendedStayGlance", "bestTimeGlance",
   "accommodationGlance", "highlight", "tag", "location", "crowd", "bookingType",
 ];
