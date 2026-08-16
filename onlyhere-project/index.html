@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- No maximum-scale, no user-scalable=no. Both were here to stop iOS
+         zooming the page when a field is focused, and the real cause of that is
+         a field rendered under 16px, which is fixed where the field is styled.
+         Meanwhile Android honours maximum-scale exactly as specified, so this
+         line was genuinely stopping Android users from pinching to zoom at all.
+         MDN treats any maximum-scale under 3 as an accessibility failure. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0A0F1E" />
+    <title>Gemlyx. It exists nowhere else.</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+
+    <!-- ── WHAT A GEMLYX LINK LOOKS LIKE WHEN SOMEBODY PASTES IT ──────────
+         Until 8 Aug 2026 there was nothing here at all, so every Gemlyx URL
+         ever shared — a guide, a town, the front page — arrived in WhatsApp,
+         iMessage, Slack or Discord as a bare grey link with no title, no
+         picture and no description. None of those apps run JavaScript; they
+         read these tags and nothing else. This is the baseline card for every
+         page of the site. A saved guide gets its own, built from the guide,
+         by api/guide-preview.js.
+
+         og:image MUST be an absolute URL — the crawler fetches it in a
+         separate request with no page context, so a relative path silently
+         produces a card with no picture. The domain is written once in
+         src/config.js as SITE_ORIGIN and tests/run.mjs checks that this line
+         still agrees with it, so changing the domain fails a test instead of
+         quietly killing every preview. -->
+    <meta name="description" content="Denmark past the three days everybody spends in Copenhagen. Towns, workshops and nights out, each one checked against the place's own sources before it is printed." />
+    <link rel="canonical" href="https://www.gemlyxtravel.com/" />
+    <meta property="og:site_name" content="Gemlyx" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.gemlyxtravel.com/" />
+    <meta property="og:title" content="Gemlyx. It exists nowhere else." />
+    <meta property="og:description" content="Denmark past the three days everybody spends in Copenhagen. Towns, workshops and nights out, each one checked against the place's own sources before it is printed." />
+    <meta property="og:image" content="https://www.gemlyxtravel.com/og-default.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Gemlyx" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Gemlyx. It exists nowhere else." />
+    <meta name="twitter:description" content="Denmark past the three days everybody spends in Copenhagen. Towns, workshops and nights out, each one checked against the place's own sources before it is printed." />
+    <meta name="twitter:image" content="https://www.gemlyxtravel.com/og-default.jpg" />
+
+    <!-- ── PROVING THIS SITE IS HIS, TO TICKETMASTER'S AFFILIATE NETWORK ──
+         Oliver, 13 Aug 2026, halfway through Ticketmaster's application on
+         Impact: "Is this possible? ... It's because the mail won't fking work."
+
+         It was never going to. Impact's first verification method matches the
+         SIGNUP EMAIL'S DOMAIN against the website's domain, and the account is a
+         gmail address while the site is gemlyxtravel.com. Those cannot match, so
+         that route is closed however many times it is retried. This is the
+         second method and the one that fits: a tag in the head of the homepage,
+         which Impact's verifier fetches directly.
+
+         BOTH ATTRIBUTES ON PURPOSE. Impact's own generated snippet uses
+         `value=`, which is not valid on a meta element, while anything reading
+         the page as ordinary HTML looks at `content=`. Carrying both costs
+         nothing and works whichever one their verifier reads.
+
+         Nothing intercepts this page: middleware.js matches only /guide/*,
+         /denmark/* and /sitemap.xml, so a request for the root is served this
+         file straight from Vercel.
+
+         PINNED BY A TEST, because index.html is exactly where a silent
+         regression lives here. The canonical tag on this page pointed at
+         only-here-three.vercel.app for weeks after the domain moved and nothing
+         said so. A verification tag deleted in a later edit would un-verify the
+         partnership the same way, and the first sign would be a commission that
+         stopped arriving. -->
+    <meta name="impact-site-verification" value="87383212-a6cf-40cb-ab5a-d974b44e3187" content="87383212-a6cf-40cb-ab5a-d974b44e3187" />
+    <!-- And the segment exactly as Impact printed it. Their fourth method is
+         "edit content", where a verifier searches the page for the raw string
+         rather than parsing a tag, and a comment is fetched with the HTML while
+         showing a reader nothing. Costs a line and closes the third of the three
+         ways this can be checked.
+         Impact-Site-Verification: 87383212-a6cf-40cb-ab5a-d974b44e3187 -->
+
+    <!-- ── TRAVELPAYOUTS VERIFICATION, AND IT COMES BACK OUT ──────────
+         TEMPORARY. Added 15 Aug 2026 to pass Travelpayouts' site check, and it
+         is meant to be deleted the moment the dashboard says verified. If you
+         are reading this and the site is already verified, delete this block.
+
+         WHY IT IS HERE AT ALL, since a script in this file is the one thing
+         everything else here avoids. Impact, above, verifies with a meta tag
+         and a comment: inert text, no code. Travelpayouts has no equivalent.
+         Their help centre lists WordPress, manual HTML, Wix and Squarespace,
+         and every one of them is the same thing, a script in the head. There is
+         no meta tag, no DNS record and no file upload to use instead.
+
+         WHAT IT LOADS. emrldtp.com is Travelpayouts' Emerald infrastructure and
+         NTYyNzA5 is base64 for 562709, the same partner id as the query string.
+         Emerald's actual product is inserting affiliate links into your pages,
+         adding hover tooltips and placing recommendation blocks that IT picks.
+         Gemlyx must never run that: which places are recommended, and in what
+         order, is editorial, and public/privacy.html now promises a reader in
+         so many words that nothing is ranked higher because it pays.
+
+         SO BEFORE THIS SHIPS, turn every Emerald tool OFF in the Travelpayouts
+         dashboard. This tag is a doorbell, not a monetiser.
+
+         AND THE PRIVACY PAGE IS THE CLOCK. It says Gemlyx sets no cookies of
+         its own and runs no tracking pixels. That stays true only while this is
+         a short verification window, which is the whole reason it is temporary
+         rather than a decision. Deploy, verify, delete, deploy again.
+
+         The wrapper attributes Travelpayouts printed are gone on purpose:
+         nowprocket, data-noptimize, data-cfasync, data-wpfc-render,
+         seraph-accel-crit and data-no-defer are opt-outs for WordPress cache
+         plugins. There is no WordPress here and they were noise. -->
+    <script>
+      (function () {
+        var s = document.createElement("script");
+        s.async = 1;
+        s.setAttribute("data-cmp-ab", "2");
+        s.src = "https://emrldtp.com/NTYyNzA5.js?t=562709";
+        document.head.appendChild(s);
+      })();
+    </script>
+
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #0A0F1E; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
