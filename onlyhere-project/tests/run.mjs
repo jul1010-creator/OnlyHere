@@ -7250,7 +7250,26 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // appeared nowhere. Both lists are derived from ESSENTIAL_CATEGORIES now.
   {
     const { ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES } = M;
-    ok("there are seven categories", ESSENTIAL_CATEGORIES.length === 7);
+    // ── AND THIS COUNTED THEM INSTEAD OF CHECKING THEM ────────────
+    // It read `=== 7` and broke on a correct eighth: Nightlife, added because the
+    // app has three nightlife content types and the practical list behind them had
+    // no shelf for a going-out fact, so Nightpay was filed under Transport next to
+    // the railway app. Fourth assertion today to fail on correct code by pinning a
+    // number.
+    //
+    // The rule was never "seven". It is that the prompt and the page read one list,
+    // so every category is both demanded and rendered, and no two share an anchor.
+    // That holds at eight and at twelve, and a mutation adding a category the page
+    // cannot render still fails it.
+    ok("there is more than a handful", ESSENTIAL_CATEGORIES.length >= 7);
+    is("every category is renderable", ESSENTIAL_CATEGORIES.filter(c => !(c.cat && c.anchor && c.icon && c.color)).map(c => c.cat), []);
+    is("anchors are unique, so no section swallows another",
+      new Set(ESSENTIAL_CATEGORIES.map(c => c.anchor)).size, ESSENTIAL_CATEGORIES.length);
+    is("and names are unique", new Set(ESSENTIAL_CATEGORY_NAMES).size, ESSENTIAL_CATEGORY_NAMES.length);
+    // The one Oliver asked for, named, so removing it is a decision rather than a
+    // slip: three content types point at nightlife and the essentials behind them
+    // need somewhere to live.
+    ok("nightlife has a shelf of its own", ESSENTIAL_CATEGORY_NAMES.includes("Nightlife"));
     ok("the two that used to vanish are there",
       ESSENTIAL_CATEGORY_NAMES.includes("Culture & Etiquette") && ESSENTIAL_CATEGORY_NAMES.includes("Solo Travel"));
     ok("the prompt builds its list from them", /EXACTLY one of: \$\{ESSENTIAL_CATEGORY_NAMES\.join/.test(readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8")));

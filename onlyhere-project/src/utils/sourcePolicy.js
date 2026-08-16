@@ -332,6 +332,24 @@ export const ESSENTIAL_CATEGORIES = [
   { cat: "Transport", anchor: "ess-transport", icon: "\ud83d\ude87", color: "#00838F" },
   { cat: "Payments", anchor: "ess-payments", icon: "\ud83d\udcb3", color: "#2E7D32" },
   { cat: "Sightseeing", anchor: "ess-sightseeing", icon: "\ud83c\udf9f", color: "#B8860B" },
+  // ── AN EIGHTH, AND THE ASYMMETRY IT CLOSES ──────────────────────
+  // Oliver, 16 August 2026: "But what do we do about Nightpay as a category? If
+  // I add more of these.. right now it's at the same row as transport."
+  //
+  // He is right and the gap is structural. The app has a whole nightlife vertical,
+  // three content types of it (night, nightStreet, nightTown), and the practical
+  // list that sits behind them had no shelf for a going-out fact. So Nightpay, an
+  // app for nightlife discounts across eighty-plus bars, was filed under Transport
+  // next to the national railway app, and the next one would have been too.
+  //
+  // NOT Payments, which was the other candidate. Payments is where somebody
+  // worried about their card looks; this is where somebody planning a night out
+  // looks, and that is the reader who needs it.
+  //
+  // One entry is the whole change, which is what the note above this list is for:
+  // the prompt that demands a category and the loop that renders one read the SAME
+  // array, so neither can grow a value the other has never heard of.
+  { cat: "Nightlife", anchor: "ess-nightlife", icon: "\ud83c\udf78", color: "#7A1F3D" },
   { cat: "Connectivity", anchor: "ess-connectivity", icon: "\ud83d\udcf6", color: "#E23B4E" },
   { cat: "Culture & Etiquette", anchor: "ess-culture", icon: "\ud83e\udd1d", color: "#5E35B1" },
   { cat: "Solo Travel", anchor: "ess-solo", icon: "\ud83c\udf7a", color: "#8D6E63" },
