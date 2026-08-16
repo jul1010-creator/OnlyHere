@@ -1,5 +1,6 @@
 import { C } from "../utils/theme";
 import { getEventDate, travelLabel, isUpcoming, isCurrentlyLive, arrivalRow, externalHref, hasFinished } from "../utils/helpers";
+import { byEventDate } from "../utils/eventDates";
 import { relationLine, kindLabel, areasInside } from "../utils/placeKind";
 import { ticketBadge } from "../utils/tickets";
 import { AtAGlanceCard } from "./AtAGlanceCard";
@@ -144,7 +145,10 @@ const eventsForTown = (townName) => {
       const liveA = isCurrentlyLive(a.date, a.dateEnd) ? 0 : 1;
       const liveB = isCurrentlyLive(b.date, b.dateEnd) ? 0 : 1;
       if (liveA !== liveB) return liveA - liveB;
-      return new Date(a.date) - new Date(b.date);
+      // byEventDate, not a second comparator. Same reasoning as the copy in
+      // LiveEventsHeaderStrip: the order this produced was right, and it was
+      // right by accident of both sides being parsed the same wrong way.
+      return byEventDate(a, b);
     });
 };
 

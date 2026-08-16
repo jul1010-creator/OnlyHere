@@ -92,6 +92,31 @@ export const dayKey = (v) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
+// ── COUNTING FORWARD FROM A DAY ──────────────────────────────────────
+//
+// "Day 3 of the trip" is arithmetic on a calendar day, and GuidePage was doing
+// it inline, in one place, on a value it had just built:
+//
+//     const dayDate = dayStart(guide._arrivalDate);
+//     if (dayDate) dayDate.setDate(dayDate.getDate() + ((day.day || dayIdx + 1) - 1));
+//
+// That is correct. It is also a private day calculation living in the same file
+// the sixth copy of the overlap test was found in, and the moment a second
+// reader needs the same number it becomes the copy that drifts. Every previous
+// member of this family began exactly here: one correct inline calculation that
+// never looked for siblings.
+//
+// Built through the constructor rather than setDate, so nothing is mutated and
+// the month rollover is the platform's problem: 30 August plus 3 is 2 September
+// without this file knowing how long August is.
+export const dayPlus = (v, n) => {
+  const d = dayStart(v);
+  if (!d) return null;
+  const step = Number(n);
+  if (!Number.isFinite(step)) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + Math.trunc(step));
+};
+
 // Is this calendar day within the range, inclusive at both ends. `today` is a
 // parameter rather than a call to the clock, for the reason eventDates.js
 // already states in its own words: a date helper that reads the clock cannot be

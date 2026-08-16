@@ -1,10 +1,23 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { C } from "../utils/theme";
+import { dayStart } from "../utils/calendarDay";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+// ── AND THIS WAS A SEVENTH PRIVATE COPY OF dayStart ─────────────────
+// utils/calendarDay.js exists because this same three-line function had been
+// written independently in five places and each one was wrong in a way the
+// others were not. This copy is the mildest of them: the picker only ever hands
+// it a Date, so `new Date(d)` is a clone and setHours does exactly what dayStart
+// does. It is replaced anyway, because "correct as long as nobody passes it a
+// stored date string" is the precondition every other member of this family
+// also satisfied right up until somebody did.
+//
+// The one behaviour difference is the improvement: dayStart returns null for a
+// value it cannot read, where this returned an Invalid Date, and an Invalid Date
+// is truthy and poisons every comparison it touches.
+const startOfDay = (d) => dayStart(d);
 
 // Real, custom-built calendar — past days are structurally disabled (no onClick,
 // greyed out, cursor not-allowed), not just soft-validated like a native

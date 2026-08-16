@@ -21,11 +21,11 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filt
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems } from "./utils/accommodation";
-import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered } from "./utils/discovery";
+import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
@@ -87,7 +87,8 @@ import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
 import { briefThemes } from "./utils/interestFit";
 import { partnerDisclosure } from "./utils/affiliates";
-import { dayKey, dayStart } from "./utils/calendarDay";
+import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
+import { arrivalPoint } from "./utils/arrival";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
 import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from "./utils/listControls";
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
@@ -1622,6 +1623,10 @@ function GemlyxApp() {
   // edition has finished" are two different reasons a list came back shorter,
   // and one number covering both would tell him neither.
   const [discoverCovered, setDiscoverCovered] = useState(0);
+  // And a third reason, from 16 Aug: the run answered a different region than
+  // the one it was aimed at. A sentence rather than a count, because the
+  // interesting part is WHERE it went instead. See describeOffTarget.
+  const [discoverOffTarget, setDiscoverOffTarget] = useState("");
   const [discoverError, setDiscoverError] = useState(null);
   const [discoverPicked, setDiscoverPicked] = useState([]); // names ticked in the pick-list
   // Which content type the current pick-list was discovered FOR. Without this,
@@ -4488,7 +4493,13 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           ...transitParts,
           drivingMins,
           from: "Copenhagen",
-          at: new Date().toISOString().slice(0, 10),
+          // ── AND THIS STAMPED THE UTC DAY, NOT TODAY ──────────
+          // `new Date().toISOString().slice(0, 10)` is the day it is in
+          // Greenwich, which is not the day it is here. In Denmark every stamp
+          // written between 22:00 and midnight carried TOMORROW's date, and
+          // west of Greenwich the window is four hours wide and runs the other
+          // way. dayKey formats from local parts, which is what it is for.
+          at: dayKey(new Date()),
         };
       }
       t.__sources = [...new Set([...founderUrls, ...candidateUrls])].filter(u => {
@@ -4826,8 +4837,49 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           // Deduplicated by hand rather than by pushing blindly: the same line
           // would otherwise be added twice on a draft the correction did not
           // change, and an uncertainty stated twice reads as two problems.
-          const line = describePriceTrace(pt);
+          // ── AND IT NO LONGER GUESSES WHERE THE FIGURE CAME FROM ──
+          // priceSource above already knows whether any page that was actually
+          // read states the figure, and this line was asserting "it came from a
+          // search result or a blog" without asking it. On the paper art museum
+          // draft nothing supported the price at all. Answering with the host,
+          // or with null, is the difference between telling him to go and find
+          // the page and telling him to cut the number.
+          const traced = priceSource(readerText(t), pagesByUrl, rankedSources.map(r => r.host));
+          const line = describePriceTrace(pt, { statedOn: traced ? domainOf(traced.url) : null });
           noteToFounder(line);
+        }
+        // ── AND WHICH KIND OF "NO PRICE" THIS IS ────────────────
+        // Oliver: `"price": "See website"` is weak. For Reffen it is worse than
+        // weak, because Reffen's own site does not publish stall prices either,
+        // so the field sends a reader to a page that cannot answer them.
+        //
+        // Decided here rather than in the prompt, for the reason the region
+        // filter learned this afternoon: the model cannot know whether we read
+        // the operator's page, and this pass already does. See unpricedLine in
+        // utils/entryAudit.js.
+        if ("price" in t && !statesAPrice(t.price)) {
+          const siteChecked = !!String(scrapedSiteText || "").trim();
+          const siteHasPrice = !!ticketPriceOn(scrapedSiteText);
+          t.price = unpricedLine({ siteChecked, siteHasPrice });
+          noteToFounder(describeUnpriced({ siteChecked, siteHasPrice, name: t.name }));
+          note(`What a reader is told about price${suffix}`, {
+            provider: "fetch",
+            detail: "the operator's own page, asked whether it publishes a price at all",
+            outcome: siteHasPrice ? "ok" : siteChecked ? "empty" : "skipped",
+            why: siteChecked ? "" : "the operator's own page was never read, so nobody can say whether it publishes one",
+            got: `the draft states no figure, so the field reads "${t.price}"`,
+            used: true,
+          });
+        }
+
+        // ── AND WHAT THE WHOLE DRAFT IS STANDING ON ─────────────
+        // Oliver, 16 Aug, on this draft's __sources: "one source? What da fk".
+        // Nothing said so. An empty or one-page list is deliberately allowed for
+        // the READER, which is exactly why it was invisible to him. See
+        // evidenceStanding in utils/entryAudit.js.
+        {
+          const standing = evidenceStanding({ sources: t.__sources, ownSite: placesWebsite || t.website || "" });
+          noteToFounder(describeEvidence(standing, { untracedPrices: pt.checked ? pt.untraced.length : 0 }));
         }
 
         // ── AND THE JOURNEY, AGAINST THE ONE THING THAT MEASURED IT ──
@@ -5989,7 +6041,7 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     if (discoverLoading) return;
     const type = typeOverride || studioType;
     setDiscoverForType(type);
-    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0);
+    setDiscoverLoading(true); setDiscoverError(null); setDiscoverResults(null); setDiscoverPicked([]); setDiscoverDropped(0); setDiscoverCovered(0); setDiscoverOffTarget("");
     try {
       const existing = (discoverSourceArrays()[type] || []).map(i => i.name).filter(Boolean);
       const typeLabel = DISCOVER_TYPE_LABEL[type] || "places in Denmark";
@@ -6102,7 +6154,7 @@ For each real candidate found, give its exact name, the town/region it's in (emp
 
 Respond with ONLY a JSON array: [{"name": "...", "region": "...", "hook": "..."}]
 
-TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n${allText.slice(0, 16000)}`,
+TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 16000)}`,
           2200
         ),
         r => !!r.error,
@@ -6125,9 +6177,17 @@ TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n$
       // it dropped, because the line below already promises a list is never
       // silently shorter and that promise only covered the finished editions.
       const { kept: fresh, dropped: covered } = splitAlreadyCovered(candidates, existing);
-      const { kept, dropped } = splitFinishedCandidates(fresh, new Date());
+      const { kept: dated, dropped } = splitFinishedCandidates(fresh, new Date());
+      // ── AND THE THIRD FILTER, FOR THE SAME REASON AS THE FIRST TWO ──
+      // Oliver, 16 Aug: "it told me that more content was needed for south
+      // jutland. I then clicked it.. but this is not south jutland." Five of the
+      // seven were on Funen and one was Randers. The region was in the prompt,
+      // and a prompt is not a filter, which is the identical lesson the two
+      // lines above this one were each written to learn. See splitOffTarget.
+      const { kept, dropped: elsewhere } = splitOffTarget(dated, discoverTarget);
       setDiscoverCovered(covered.length);
       setDiscoverDropped(dropped.length);
+      setDiscoverOffTarget(describeOffTarget(elsewhere, discoverTarget));
       setDiscoverResults(kept);
     } catch (err) {
       setDiscoverError(err?.message || "Discovery failed — try again.");
@@ -6631,7 +6691,7 @@ TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\n\nRaw search results:\n$
           step(); continue;
         }
 
-        const { patched, changed, reverted } = applySweepPatch(row.payload, prop.patch, sweep, { at: new Date().toISOString().slice(0, 10), source: `sweep: ${sweep.id}` });
+        const { patched, changed, reverted } = applySweepPatch(row.payload, prop.patch, sweep, { at: dayKey(new Date()), source: `sweep: ${sweep.id}` });
         if (reverted.length) failed.push(`${prop.name}: tried to change ${reverted.join(", ")}, which this sweep may not touch. Put back.`);
         // Counted and REPORTED rather than absorbed into "Saved N of M". Pressing
         // Save twice used to print "Saved 0 of 40" with an empty failure list,
@@ -7206,9 +7266,18 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     setWeatherPending(days.length);
     // How many days from today the trip's Day 1 actually starts — 0 if arrivalDate is
     // unknown (falls back to the old assume-it-starts-today behavior) or already today.
-    const startOffset = arrivalDate
-      ? Math.max(0, Math.round((new Date(arrivalDate).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000))
-      : 0;
+    // ── AND THIS WAS A FOURTH COPY OF daysUntil ─────────────────
+    // helpers.js already answers "how many whole calendar days from today to
+    // that day", and its own comment explains why the arithmetic below is the
+    // wrong way to do it: a stored date parsed as UTC midnight, compared against
+    // the actual instant now, so the remainder depended on the time of day. It
+    // happens to be harmless here because arrivalDate is built as a local Date a
+    // few hundred lines up, which is exactly how a copy survives: correct today,
+    // wrong the first time somebody passes it the stored dayKey string.
+    //
+    // NaN and zero both mean "assume it starts today", which is the documented
+    // fallback for an arrival nobody could read.
+    const startOffset = Math.max(0, daysUntil(arrivalDate) || 0);
     // Per Oliver's note ("it could give me some information about the weather
     // too... Openweathermap or whatever, is literally made for this"): real
     // per-day forecasts were already being fetched here (Yr.no, not
@@ -7265,8 +7334,17 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // The day this stop is actually on. ONE implementation, shared with the
       // refresh-on-open path in GuidePage, so the two can never drift into
       // disagreeing about the same day the way the walking estimates did.
-      const on = new Date(arrivalDate ? new Date(arrivalDate) : new Date());
-      on.setDate(on.getDate() + idx);
+      // ── AND THE COMMENT ABOVE CLAIMED ONE IMPLEMENTATION ──────
+      // It said "ONE implementation, shared with the refresh-on-open path in
+      // GuidePage, so the two can never drift", above three lines that were a
+      // verbatim second copy of GuidePage's. Both now call the shared primitive,
+      // which is what the sentence was describing.
+      //
+      // It also fixes the no-arrival branch: `new Date(new Date())` carries the
+      // current TIME OF DAY, so a trip with no stated arrival asked for day N's
+      // weather at whatever o'clock the guide was built, rather than for the
+      // calendar day. dayPlus normalises to local midnight and mutates nothing.
+      const on = dayPlus(arrivalDate || new Date(), idx);
       results[idx] = await dayWeather({
         point, date: on, daysOut: forecastIdx,
         fetchJson: (url) => fetch(url).then(r => r.json()).catch(() => null),
@@ -8782,7 +8860,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
       endRun();
       endLog();
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(convoText), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
@@ -8897,8 +8975,11 @@ If the conversation only covers a single day or a few stops with no explicit day
     // six weeks out covers both "next month" and "next season", which are the
     // two cases where an event either is or is not on, and that difference is
     // the entire thing this test exists to exercise.
-    const arriveOn = new Date();
-    arriveOn.setDate(arriveOn.getDate() + 14 + Math.floor(Math.random() * 168));
+    // dayPlus rather than a mutating setDate on a value that still carries the
+    // current time of day. Only the day is read below, so this was never wrong,
+    // and it is the shape the scanner at the end of the suite now refuses:
+    // a copy that is harmless is still the copy the next one gets written from.
+    const arriveOn = dayPlus(new Date(), 14 + Math.floor(Math.random() * 168));
     const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const arrivalPhrase = `${arriveOn.getDate()} ${MONTHS_LONG[arriveOn.getMonth()]}`;
     const month = ` We arrive on ${arrivalPhrase}`;
@@ -9008,6 +9089,20 @@ If the conversation only covers a single day or a few stops with no explicit day
   const guideToSave = () => ({
     id: Date.now(), title: guideModal.title, days: guideModal.days,
     savedAt: new Date().toISOString(), arrivalDate: guideModal._arrivalDate || null,
+    // ── AND NOTHING ELSE, WHICH IS WORTH KNOWING ────────────────
+    // _arrivalPoint is deliberately NOT added here, and the reason is a finding
+    // rather than an omission. Reopening a guide from this list navigates with
+    // `state: { guide: { title: g.title, days: g.days } }`, so everything else
+    // this shape holds is already dropped on the way back in: the weather, the
+    // geocodes, the exact durations, and arrivalDate itself, which survives here
+    // only because checkSavedGuidesWeather reads THIS list rather than the
+    // reopened guide. Adding a field to a shape whose only reader throws it away
+    // would look like the return leg working and then losing it on reopen.
+    //
+    // A shared LINK keeps everything, because that payload spreads the live
+    // guide object. It is the local list that is lossy. Fixing it means agreeing
+    // on one set of field names across the save shape and the render, which is
+    // its own pass and not one to bolt onto this.
   });
   const commitGuideSave = (newGuide) => {
     // Functional, not a read of `savedGuides` from this closure. The old version
@@ -9639,10 +9734,14 @@ If the conversation only covers a single day or a few stops with no explicit day
         // saved guide's weather alerts lined each day up against the forecast
         // for the day BEFORE it. Alerts fired on the wrong day and real changes
         // went unreported. See utils/calendarDay.js.
+        // ── AND THE HALF-FIXED COPY WAS STILL A COPY ──────────────
+        // The dayStart above was last night's fix and it was the right half. The
+        // subtraction under it is still daysUntil written out by hand, which is
+        // the fifth instance of that expression in this codebase. Reading the
+        // stored value correctly and then re-deriving the arithmetic beside it
+        // leaves the same drift risk one line lower down.
         const arrivalDay = dayStart(guide.arrivalDate);
-        const startOffset = arrivalDay
-          ? Math.max(0, Math.round((arrivalDay.getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000))
-          : null;
+        const startOffset = arrivalDay ? Math.max(0, daysUntil(arrivalDay)) : null;
         if (startOffset === null || startOffset > 8) continue; // no known date, or beyond the real forecast window — nothing honest to check
         for (let idx = 0; idx < guide.days.length; idx++) {
           const day = guide.days[idx];
@@ -11794,12 +11893,30 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     {discoverResults && (
                       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
                         {discoverResults.length === 0 ? (
-                          <div style={{ fontSize: 12, color: C.muted }}>Nothing new turned up that isn't already in Gemlyx — try again later, or try the dedicated events search if you're after upcoming dates.</div>
+                          /* ── AND THE EMPTY STATE HAD ONE REASON FOR THREE ──
+                             "Nothing new turned up that isn't already in Gemlyx"
+                             is a specific claim, and after the region filter it
+                             can be false: a run that found seven real places on
+                             Funen while aimed at Sønderjylland has not run out
+                             of candidates, it has missed. Saying the first
+                             sentence there would send him looking for content
+                             that exists and hide a broken search. */
+                          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+                            {discoverOffTarget
+                              ? <>Nothing in {targetById(discoverTarget).label} turned up. {discoverOffTarget} Worth re-running: this is the search missing, not the region being empty.</>
+                              : <>Nothing new turned up that isn't already in Gemlyx — try again later, or try the dedicated events search if you're after upcoming dates.</>}
+                          </div>
                         ) : (
                           <>
-                            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: (discoverDropped || discoverCovered) ? 5 : 10 }}>{discoverResults.length} new candidates, tick what's worth drafting</div>
-                            {/* Never a silently shorter list. Both reasons, separately, because
-                                "already published" and "that edition is over" are different news. */}
+                            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: (discoverDropped || discoverCovered || discoverOffTarget) ? 5 : 10 }}>{discoverResults.length} new candidates, tick what's worth drafting</div>
+                            {/* Never a silently shorter list. Every reason separately, because
+                                "already published", "that edition is over" and "that is not
+                                the region you asked for" are three different pieces of news. */}
+                            {discoverOffTarget && (
+                              <div style={{ fontSize: 10.5, color: "#FFB347", marginBottom: (discoverCovered || discoverDropped) ? 5 : 10, lineHeight: 1.5 }}>
+                                {discoverOffTarget}
+                              </div>
+                            )}
                             {discoverCovered > 0 && (
                               <div style={{ fontSize: 10.5, color: C.muted, marginBottom: discoverDropped ? 5 : 10, lineHeight: 1.5 }}>
                                 {discoverCovered} more {discoverCovered === 1 ? "was" : "were"} left out as already in Gemlyx.

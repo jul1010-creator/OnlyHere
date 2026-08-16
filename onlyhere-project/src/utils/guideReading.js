@@ -1,5 +1,6 @@
-import { isFerryText } from "./helpers";
+import { isFerryText, getEventDate } from "./helpers";
 import { normaliseTicketStatus } from "./tickets";
+import { dayStart, dayPlus, dayWithin } from "./calendarDay";
 // ── READING A GUIDE WHEN YOU HAVE NEVER BEEN TO DENMARK ─────────────
 // Oliver, 7 Aug 2026, asking whether the guide would still be overwhelming to
 // someone who has never been. It would, and not for the reason I had been
@@ -99,6 +100,62 @@ export const stopKind = (name, real) => {
   }
   const src = real && real._src;
   return (src && BY_SOURCE[src]) || null;
+};
+
+// ── WHICH CALENDAR DAY IS DAY N OF THE TRIP ─────────────────────────
+// The one place the trip's own day numbering lives. Day 1 is the arrival day,
+// so day N is arrival plus N minus one, and getting that off by one moves every
+// stop in the guide by a day. It was inline in GuidePage, used once. Two
+// readers now need it, and this codebase's most expensive habit is letting the
+// second reader write its own copy.
+export const tripDayDate = (arrival, dayNumber) => {
+  const n = Number(dayNumber);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return dayPlus(arrival, Math.trunc(n) - 1);
+};
+
+// ── WHEN DOES THIS THING ACTUALLY RUN ───────────────────────────────
+//
+// Oliver, on a guide offering Tivoli's Halloween season: a CORRECT offer looked
+// wrong, and the only way to check it was to leave the site.
+//
+// A stop card printed the name, a one word kind, a time, a town and a note. For
+// a museum that is everything there is to know. For an event it leaves out the
+// only fact that decides whether the stop belongs on that day at all. Halloween
+// at Tivoli is real, it is worth the trip, and it is not on in September, and a
+// reader looking at "Tivoli Halloween · Event · København" has no way to tell
+// which of those they are being offered.
+//
+// So the card says the run window, and it says it through getEventDate, the
+// same reader the Events grid, the detail page, the header strip, the preview
+// screen and the "worth knowing" card all use. A seventh way to format a date
+// range is exactly the shape of bug this file's neighbours spent two days
+// removing.
+//
+// AND IT ANSWERS THE QUESTION HE WAS ACTUALLY ASKING. Printing the window tells
+// a reader when it runs; comparing the window against the day the guide put it
+// on tells them whether the guide got it right. That comparison is the thing
+// that cost a trip to Tivoli's website, it is one call to dayWithin, and it is
+// the difference between a fact on a card and a check.
+//
+// `offWindow` is only ever true when BOTH days are known. An event with no
+// confirmed date is not out of window, it is unmeasured, and saying "not on
+// that day" about a date nobody has published would be inventing a finding.
+export const stopEventWhen = (real, dayDate = null, today = new Date()) => {
+  if (!real || real._src !== "event") return null;
+  const runs = getEventDate(real.date, real.dateEnd, today);
+  const start = dayStart(real.date);
+  // getEventDate says "Dates not confirmed" for an unreadable date, and that
+  // sentence is worth printing on a stop card rather than swallowing: a guide
+  // that placed an event on a specific day without knowing when it runs is a
+  // thing the reader should see, not a blank space where a date should be.
+  if (!start) return { runs, confirmed: false, offWindow: false };
+  const planned = dayDate instanceof Date && Number.isFinite(dayDate.getTime()) ? dayDate : null;
+  return {
+    runs,
+    confirmed: true,
+    offWindow: !!planned && !dayWithin(real.date, real.dateEnd, planned),
+  };
 };
 
 // ── HOW BIG IS DENMARK, ACTUALLY ────────────────────────────────────

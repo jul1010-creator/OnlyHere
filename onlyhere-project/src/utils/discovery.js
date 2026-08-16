@@ -40,6 +40,8 @@
 // in. Ask the data where it is thin and aim there.
 import { PARTS, partOfCountry } from "./geography";
 import { samePlaceName, fold, containsName } from "./danishNames";
+import { KOMMUNER, K } from "../data/kommuner";
+import { TOWN_COORDS } from "../data/towns";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 
@@ -247,7 +249,147 @@ ${withoutGap}`;
   }
   if (!t.part) return base; // "anywhere", so the computed gap stands
 
-  return `SEARCH THIS REGION: ${t.label}, which Danes call ${t.danish}. Every one of the five queries must be aimed there, and the Danish ones must use ${t.danish} rather than the English name, because that is what local pages are written under. Name specific municipalities, islands or towns inside it rather than searching the region as one blob: ${t.hint}. Aarhus, Odense and Aalborg are the ${t.label} equivalents of Copenhagen here, so do not let them absorb more than one of the five queries.
+  // ── AND THIS SENTENCE NAMED ODENSE IN A SØNDERJYLLAND BRIEF ───────
+  // It read "Aarhus, Odense and Aalborg are the ${t.label} equivalents of
+  // Copenhagen here", from a fixed trio, whatever the region. For South Jutland
+  // that is three towns none of which are in it, and one of them is the capital
+  // of Funen, printed in a brief whose whole job is to keep the search out of
+  // Funen. The instruction meant "do not let the biggest town eat the list",
+  // which is true everywhere and needs no names to say.
+  return `SEARCH THIS REGION: ${t.label}, which Danes call ${t.danish}. Every one of the five queries must be aimed there, and the Danish ones must use ${t.danish} rather than the English name, because that is what local pages are written under. Name specific municipalities, islands or towns inside it rather than searching the region as one blob: ${t.hint}. Whichever town inside ${t.label} is the biggest will have absorbed most of the English writing about the region, the way Copenhagen has for the country, so do not let any single town take more than one of the five queries. Nowhere outside ${t.label} counts, however good a find it is.
 
 ${withoutGap}`;
+};
+
+// ── "BUT THIS IS NOT SOUTH JUTLAND" ─────────────────────────────────
+//
+// Oliver, 16 August 2026: "On the guide it told me that more content was needed
+// for south jutland. I then clicked it.. but this is not south jutland."
+//
+// Seven candidates came back. Hindsgavl Halvøen, Odense Havnebad, the twelve
+// Langeland art towers, Øhavsstien and De Vilde Heste are on FUNEN. Randers is
+// East Jutland, 130 km north of the band. One of the seven said nothing about
+// where it is. Not one was in Sønderjylland.
+//
+// EVERYTHING ABOVE THIS LINE IS A PROMPT. framingForTarget writes a clear
+// instruction, a model turns it into five queries, a web search answers them,
+// and a SECOND model reads that raw text and pulls names out of it. An
+// instruction that has to survive two models and a search engine is not a
+// filter, and this pass already knows that about itself twice over:
+// splitAlreadyCovered exists because "do not include these" was in the prompt,
+// and splitFinishedCandidates exists because "skip finished editions" was in the
+// prompt. This is the third instance of one pattern, which is the count at which
+// this codebase stops treating it as a coincidence.
+//
+// AND THE MODEL ALREADY TOLD US. The extraction prompt asks for "the
+// town/region it's in", every candidate carries it, and the row prints it in
+// grey next to the name. Six of the seven declared, in writing, on screen, a
+// place that contradicts the ask. Nobody read the field.
+//
+// THE TEST IS THE TARGET'S OWN TEST. coverageByTarget already decides whether a
+// PUBLISHED row is in a target: the part of the country must match, and the
+// latitude band must hold. A candidate is measured the same way, off the same
+// two fields, so the chip's count and this filter can never disagree about where
+// a region is. That disagreement is the failure mode this file's neighbours have
+// spent two days removing.
+// A landmass named as a WHOLE TOKEN OR A TOKEN'S TAIL, which is a different
+// rule from the one containsName enforces and deliberately so. "Nordjylland" is
+// one token, so a whole-word test for "jylland" does not find it, and the whole
+// point here is that Nordjylland, Sønderjylland and Midtjylland are all Jutland.
+// A tail is safe for these three because nothing in Danish ends in "jylland" or
+// "sjælland" except a name for part of Jutland or Zealand.
+//
+// The short ones stay EXACT, because a tail is exactly how this project got
+// bitten before: "møn" folds to "mon", and "common", "Salomon" and "månen" all
+// end in it. Nordfyn and Sydfyn are kommuner, so tier one below reaches them
+// without needing "fyn" to match a tail.
+const PART_TAILS = [["Jutland", ["jylland", "jutland"]], ["Zealand", ["sjaelland"]]];
+const PART_EXACT = [
+  ["Funen", ["fyn", "funen"]],
+  ["Zealand", ["zealand"]],
+  ["Bornholm", ["bornholm"]],
+  ["Lolland-Falster", ["lolland", "falster", "mon"]],
+];
+
+const tokensOf = (text) => fold(text).replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+
+// ── WHERE DOES A CANDIDATE SAY IT IS ────────────────────────────────
+// Four tiers, most specific first, and null rather than a guess when none of
+// them resolve. Null is the common and correct answer for a candidate whose
+// region field the model left empty, and it must never be read as a refusal:
+// "we could not place it" and "it is somewhere else" are different findings and
+// only one of them is grounds for dropping a real result.
+export const placeFromText = (text) => {
+  const t = clean(text);
+  if (!t) return null;
+  // ONE: a kommune. It carries its own part, its own region and a point the
+  // Danish address register guarantees is inside it, so this tier answers the
+  // latitude band as well as the landmass.
+  for (const r of KOMMUNER) {
+    if (containsName(t, r[K.name])) {
+      return { part: r[K.part], lat: r[K.lat], region: r[K.region], how: `${r[K.name]} Kommune` };
+    }
+  }
+  // TWO: a town we hold a coordinate for, run through the same partOfCountry
+  // every published row goes through.
+  for (const [name, pair] of Object.entries(TOWN_COORDS)) {
+    if (!containsName(t, name)) continue;
+    const lat = Number(pair?.[0]), lon = Number(pair?.[1]);
+    const part = partOfCountry({ __lat: lat, __lon: lon });
+    if (part) return { part, lat, region: "", how: name };
+  }
+  // THREE and FOUR: a landmass, by name or by the tail of a region name. No
+  // point, so a latitude band cannot be answered from here, and the caller
+  // treats that as unmeasured rather than as a pass.
+  const tokens = tokensOf(t);
+  for (const [part, words] of PART_EXACT) {
+    if (tokens.some(tok => words.includes(tok))) return { part, lat: null, region: "", how: part };
+  }
+  for (const [part, tails] of PART_TAILS) {
+    if (tokens.some(tok => tails.some(tail => tok.endsWith(tail)))) return { part, lat: null, region: "", how: part };
+  }
+  return null;
+};
+
+// "fits", "elsewhere" or "unknown". Only "elsewhere" is a finding.
+export const candidateFitsTarget = (candidate, targetId) => {
+  const t = targetById(targetId);
+  // "Wherever it is thinnest" makes no regional claim to break, and the small
+  // islands are not a latitude band or a landmass, so neither is checkable here.
+  // Saying so is better than inventing a verdict for them.
+  if (!t.part) return { verdict: "unknown", where: "", target: t.label };
+  const found = placeFromText(candidate?.region || candidate?.town || candidate?.location || "");
+  if (!found) return { verdict: "unknown", where: "", target: t.label };
+  if (found.part !== t.part) return { verdict: "elsewhere", where: found.how, target: t.label };
+  if (!t.lat) return { verdict: "fits", where: found.how, target: t.label };
+  // Same landmass, band untestable: Sønderjylland named as a bare region gives
+  // Jutland and no point. Unmeasured, so it stays in the list.
+  if (!Number.isFinite(found.lat)) return { verdict: "unknown", where: found.how, target: t.label };
+  return { verdict: t.lat(found.lat) ? "fits" : "elsewhere", where: found.how, target: t.label };
+};
+
+// Hands back what it dropped, and WHY each one went, because the panel already
+// promises a list is never silently shorter and a third reason needs its own
+// sentence rather than being folded into one of the other two.
+export const splitOffTarget = (candidates, targetId) => {
+  const kept = [], dropped = [];
+  for (const c of Array.isArray(candidates) ? candidates : []) {
+    const v = candidateFitsTarget(c, targetId);
+    if (v.verdict === "elsewhere") dropped.push({ ...c, _where: v.where, _target: v.target });
+    else kept.push(c);
+  }
+  return { kept, dropped };
+};
+
+// The sentence the panel prints. Names the places it refused, because "3 were
+// left out" invites the question this line exists to answer, and because a
+// count on its own hides the case worth knowing about: the search returning
+// nothing in the region at all.
+export const describeOffTarget = (dropped, targetId) => {
+  const list = Array.isArray(dropped) ? dropped.filter(Boolean) : [];
+  if (!list.length) return "";
+  const t = targetById(targetId);
+  const where = [...new Set(list.map(d => clean(d._where)).filter(Boolean))];
+  const named = where.length ? ` They are in ${where.length === 1 ? where[0] : `${where.slice(0, -1).join(", ")} and ${where[where.length - 1]}`}.` : "";
+  return `${list.length} ${list.length === 1 ? "was" : "were"} left out for not being in ${t.label} at all.${named} The search was aimed there and answered somewhere else, which is worth knowing about the run rather than about the places.`;
 };

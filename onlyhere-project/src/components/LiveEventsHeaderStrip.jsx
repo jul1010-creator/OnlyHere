@@ -2,6 +2,7 @@ import { useState } from "react";
 import { C } from "../utils/theme";
 import { Ico } from "./Icon";
 import { getEventDate, isConfirmedUpcoming, isCurrentlyLive, isInDenmark } from "../utils/helpers";
+import { byEventDate } from "../utils/eventDates";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { TOWN_COORDS } from "../data/towns";
 import { townKeyFor } from "../utils/guideEnrichment";
@@ -39,7 +40,16 @@ export const LiveEventsHeaderStrip = ({ liveInfo, liveInfoLoading, checkLiveInfo
         const kmA = kmFromUserToTown(a.town) ?? 9999, kmB = kmFromUserToTown(b.town) ?? 9999;
         if (kmA !== kmB) return kmA - kmB;
       }
-      return new Date(a.date) - new Date(b.date);
+      // ── AND THIS WAS A PRIVATE COPY OF byEventDate ────────────
+      // Not a wrong order today, and saying so matters: both sides parse the
+      // same way, so date-only strings sort correctly, and the filter above
+      // means nothing undated reaches here. What the shared comparator adds is
+      // the deterministic tie-break, a Danish-collation name compare, so two
+      // events on one day cannot swap places between renders, plus a defined
+      // answer for an undated row instead of a NaN that makes the comparator
+      // inconsistent. A copy that is right for the wrong reason is how five of
+      // these became six.
+      return byEventDate(a, b);
     });
   const showBoth = currentlyLive.length > 0 && comingSoon.length > 0;
   const activeSegment = segment || (currentlyLive.length > 0 ? "live" : "coming");

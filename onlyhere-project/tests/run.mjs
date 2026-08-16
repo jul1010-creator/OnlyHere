@@ -64,7 +64,7 @@ writeFileSync(entry, `
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
-  export { dayStart, dayEnd, dayWithin, dayKey } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
+  export { dayStart, dayEnd, dayWithin, dayKey, dayPlus } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
@@ -113,7 +113,7 @@ writeFileSync(entry, `
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
   export { verdictInProse, keepProse } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { stayTier, stayTiers, namedProperty, stayProblems, stayTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
+  export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
   export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
@@ -125,17 +125,17 @@ writeFileSync(entry, `
   export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { ENTRY_POINTS } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
-  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
+  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
-  export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
+  export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
-  export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
+  export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
-  export { stopKind, tripScaleLine, tripCharacter, bookingActions } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
+  export { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
   export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
@@ -149,6 +149,7 @@ writeFileSync(entry, `
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
   export { datesFromListings } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
+  export { evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { costContradictions, bareOccurrence, pricesIn, priceForNoun, tracePrices, describePriceTrace, readerText, glanceLeak, glanceProblems, GLANCE_FIELDS, findLeak, curatedFindProblems, selfContradictions, PROSE_FIELDS, cleanGlance, repairGlance, glanceLeakKind, priceSource, ticketPriceOn, findTicketPrice, priceMisses, TICKET_WINDOW } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
 `);
 // ── ESBUILD THROUGH ITS NODE API, NOT ITS BINARY ────────────────────
@@ -1711,17 +1712,29 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       dayOfVisit(M.dayKey(new Date(2026, 8, 6)), 1), 0);
     ok("the guide writes the day rather than an instant",
       /_arrivalDate: dayKey\(arrivalDate\)/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
-    // ── AND EVERY READER OF IT GOES THROUGH dayStart ────────────────
-    // Source assertions because these two are inside a React render with no
-    // pure function to call, and mutation testing proved they need them:
-    // putting `new Date(guide._arrivalDate)` back killed nothing. Both derive a
-    // DAY from that value, the weather offset by counting days from today and
-    // the accommodation card by adding the day number, so a raw read puts both
-    // a day out west of Greenwich.
+    // ── AND EVERY READER OF IT GOES THROUGH A SHARED DAY READER ─────
+    // Source assertions because these are inside a React render with no pure
+    // function to call, and mutation testing proved they need them: putting
+    // `new Date(guide._arrivalDate)` back killed nothing. Each one derives a DAY
+    // from that value, the weather offset by counting days from today and the
+    // stop cards and accommodation card by adding the day number, so a raw read
+    // puts them a day out west of Greenwich.
+    //
+    // COUNTED AS A FRACTION OF EVERY MENTION rather than against a fixed
+    // number. This assertion used to say "and both go through dayStart" and
+    // expected exactly 2, so it broke the moment the accommodation card started
+    // reading the day through tripDayDate, which is the same reader one level
+    // up. A test that has to be edited to add a correct reader teaches the next
+    // pass to edit it, and the edit that quietly lowers the count is how a raw
+    // read gets back in. Phrased this way a fourth reader cannot slip past by
+    // leaving the total alone.
     const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
     is("no reader parses the stored arrival raw",
       (gp.match(/new Date\(guide\._arrivalDate\)/g) || []).length, 0);
-    is("and both go through dayStart", (gp.match(/dayStart\(guide\._arrivalDate\)/g) || []).length, 2);
+    const arrivalMentions = (gp.match(/guide\._arrivalDate/g) || []).length;
+    ok("there is more than one reader of it to disagree", arrivalMentions >= 2);
+    is("and every one goes through dayStart or tripDayDate",
+      (gp.match(/(?:dayStart|tripDayDate)\(guide\._arrivalDate/g) || []).length, arrivalMentions);
 
     // ── IT REFUSES TO GUESS, WHICH IS MOST OF THE TIME ─────────────
     // A guide that warns about half its stops and stays silent on the rest,
@@ -3803,7 +3816,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // A rule the model can forget is not a filter, but the paid call should stop
   // returning them either.
   ok("and the extractor is told as well", /SKIP ANY EVENT WHOSE EDITION HAS ALREADY FINISHED/.test(app13));
-  ok("with today's date, since the rule refers to it", /TODAY'S DATE: \$\{new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\}/.test(app13));
+  // ── AND THE DATE IT IS TOLD IS THE LOCAL ONE ──────────────────
+  // This asserted the toISOString form, which is the day it is in GREENWICH.
+  // The prompt's rule is "skip any event whose edition has already finished",
+  // so the model was handed tomorrow's date every evening after 22:00 in
+  // Denmark, and for four hours a day west of Greenwich. dayKey formats from
+  // local parts.
+  ok("with today's date, since the rule refers to it", /TODAY'S DATE: \$\{dayKey\(new Date\(\)\)\}/.test(app13));
+  ok("and not the day it is in Greenwich", !/TODAY'S DATE: \$\{new Date\(\)\.toISOString/.test(app13));
   // NEVER A SILENTLY SHORTER LIST.
   ok("the panel says how many it removed", /left out because that edition has already finished/.test(app13));
 }
@@ -5665,7 +5685,9 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // description of what was fixed.
   ok("the bare month list is gone", !/We are coming in June/.test(stripNonCode(appSrc)));
   ok("the brief carries a real arrival date", /We arrive on \$\{arrivalPhrase\}/.test(appSrc));
-  ok("and it is in the future", /getDate\(\) \+ 14 \+ Math\.floor/.test(appSrc));
+  // Two to twenty-six weeks out, through the shared primitive rather than a
+  // mutating setDate on a value carrying the current time of day.
+  ok("and it is in the future", /dayPlus\(new Date\(\), 14 \+ Math\.floor/.test(appSrc));
   ok("the profile carries it so the card can show it", /arrivingOn: arrivalPhrase/.test(appSrc));
 
   // THE REAL CHECK: the phrase this builds must parse with the SAME regex
@@ -6072,7 +6094,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("the computed gap is replaced, not stacked", !/COVERAGE GAP, COMPUTED/.test(f));
   // The Copenhagen problem one level down: search "Jutland" and get Aarhus
   // every time.
-  ok("the regional big city is capped too", /do not let them absorb more than one/.test(f));
+  // ── AND THE SENTENCE THAT DID THIS NAMED THE WRONG TOWNS ────────
+  // It read "Aarhus, Odense and Aalborg are the <label> equivalents of
+  // Copenhagen here", from a trio fixed for every region. In a South Jutland
+  // brief that is three towns none of which are in it, one of them the capital
+  // of Funen, printed in the brief whose whole job is keeping the search out of
+  // Funen. The CAP is the part that was right, so the cap is what this asserts;
+  // the block at the end of this file asserts the names are gone.
+  ok("the regional big city is capped too", /more than one of the five queries/.test(f));
+  ok("and the cap does not name another region's towns", !/Odense/.test(f));
 
   // "hell, make me able to search for town-specific events perhaps"
   const t = framingForTarget("anywhere", rows, { typeLabel: "events", town: "Ærøskøbing" });
@@ -10710,8 +10740,18 @@ rmSync(dir, { recursive: true, force: true });
   }
   // Deduplicated, because the gate now runs twice and the same sentence added
   // twice reads as two separate problems with the draft.
+  // ── AND THE NOTE NO LONGER GUESSES THE PROVENANCE ───────────────
+  // This asserted the call shape `describePriceTrace(pt)`, with no second
+  // argument, which is the version that told Oliver four unsourced prices "came
+  // from a search result or a blog". priceSource is computed in the same gate
+  // and already knows whether any page that was read states the figure, so the
+  // note is now answered rather than assumed. Asserted as the call plus the
+  // answer, because passing `statedOn` and always passing a host would be the
+  // same lie with more steps.
   ok("an untraced price goes to a founder note, not into the prose",
-     /const line = describePriceTrace\(pt\);\s*noteToFounder\(line\);/.test(stripNonCode(app)));
+     /const line = describePriceTrace\(pt, \{ statedOn: traced \? domainOf\(traced\.url\) : null \}\);\s*noteToFounder\(line\);/.test(stripNonCode(app)));
+  ok("and the note is told whether a page that was read states it",
+     /const traced = priceSource\(readerText\(t\), pagesByUrl, rankedSources\.map\(r => r\.host\)\);/.test(stripNonCode(app)));
   ok("and the run log records the comparison either way", /note\(`Prices against the official site\$\{suffix\}`/.test(app));
 }
 
@@ -16916,6 +16956,810 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ]) is(label, (readFileSync(join(root, file), "utf8").match(/budgetLevel/g) || []).length, 0);
   ok("and deriveBudgetLevel is gone with it",
     !/deriveBudgetLevel/.test(readFileSync(join(root, "src/utils/helpers.js"), "utf8")));
+}
+
+// ── "A CORRECT TIVOLI HALLOWEEN OFFER LOOKED WRONG" ──────────────────
+//
+// A guide stop card printed a name, a one word kind, a time, a town and a note.
+// For a museum that is the whole story. For an event it omits the only fact that
+// decides whether the stop belongs on the day it is printed on, so Halloween at
+// Tivoli, which is real and worth the trip and not on in September, was
+// indistinguishable from a mistake without leaving the site.
+//
+// Two things are asserted here and they are different claims: that the window is
+// printed, and that the window is CHECKED against the day the planner chose.
+{
+  const { stopEventWhen, tripDayDate, dayPlus, dayStart, getEventDate } = M;
+  const HALLOWEEN = { _src: "event", name: "Halloween i Tivoli", date: "2026-10-09", dateEnd: "2026-11-01" };
+
+  // Nothing that is not an event has a run window, and inventing one for a
+  // restaurant would be worse than the silence this replaces.
+  is("a town stop has no run window", stopEventWhen({ _src: "town", name: "Ribe" }, new Date(2026, 8, 6)), null);
+  is("nor does a restaurant", stopEventWhen({ _src: "food", name: "Reffen" }, new Date(2026, 8, 6)), null);
+  is("nor does an unmatched stop", stopEventWhen(null, new Date(2026, 8, 6)), null);
+
+  // The window itself, and it comes from the SHARED reader. A seventh way to
+  // format a date range is the shape of bug the calendarDay family exists to
+  // stop, so this is asserted as equality with getEventDate rather than against
+  // a hardcoded string that could drift away from every other surface.
+  const onIt = stopEventWhen(HALLOWEEN, new Date(2026, 9, 20));
+  is("an event stop says when it runs", onIt.runs, getEventDate(HALLOWEEN.date, HALLOWEEN.dateEnd));
+  ok("and the window reads as a range", /to/.test(onIt.runs));
+  is("a day inside the window is not flagged", onIt.offWindow, false);
+  is("and it counts as confirmed", onIt.confirmed, true);
+
+  // THE ONE THAT COST A TRIP TO TIVOLI'S WEBSITE. September is outside a
+  // October-to-November season, and until now the page said nothing about it.
+  const inSeptember = stopEventWhen(HALLOWEEN, new Date(2026, 8, 12));
+  is("a day outside the window is flagged", inSeptember.offWindow, true);
+  // Both edges are inside, because a festival's first and last days are days
+  // people go to it. This is the same fault isCurrentlyLive had.
+  is("the opening day is inside", stopEventWhen(HALLOWEEN, new Date(2026, 9, 9)).offWindow, false);
+  is("and the closing day is inside", stopEventWhen(HALLOWEEN, new Date(2026, 10, 1)).offWindow, false);
+  is("the day before it opens is outside", stopEventWhen(HALLOWEEN, new Date(2026, 9, 8)).offWindow, true);
+  is("and the day after it shuts is outside", stopEventWhen(HALLOWEEN, new Date(2026, 10, 2)).offWindow, true);
+
+  // A single day event, stored with no end, is on exactly one day.
+  const oneDay = { _src: "event", date: "2026-08-19" };
+  is("a one day event is on its own day", stopEventWhen(oneDay, new Date(2026, 7, 19)).offWindow, false);
+  is("and off it the day after", stopEventWhen(oneDay, new Date(2026, 7, 20)).offWindow, true);
+
+  // UNMEASURED IS NOT WRONG. An event with no readable date has no window to be
+  // outside of, and flagging it would be inventing a finding. The sentence is
+  // still printed, because a guide that placed an event on a specific day
+  // without knowing when it runs is a thing the reader should see.
+  const undated = stopEventWhen({ _src: "event", date: "" }, new Date(2026, 8, 6));
+  is("an undated event is not confirmed", undated.confirmed, false);
+  is("and is never flagged as off window", undated.offWindow, false);
+  ok("but it still says the date is not confirmed", /not confirmed/i.test(undated.runs));
+  // And with no planned day to compare against, there is no finding either.
+  is("no planned day means no flag", stopEventWhen(HALLOWEEN, null).offWindow, false);
+  is("and an unreadable planned day is the same", stopEventWhen(HALLOWEEN, new Date("nonsense")).offWindow, false);
+
+  // ── DAY N OF THE TRIP, ONCE ─────────────────────────────────────
+  // Day 1 is the arrival day. Off by one here moves every stop in the guide by a
+  // day, which is the whole family this codebase spent two days removing.
+  is("day 1 is the arrival day", M.dayKey(tripDayDate("2026-09-06", 1)), "2026-09-06");
+  is("day 3 is two days later", M.dayKey(tripDayDate("2026-09-06", 3)), "2026-09-08");
+  is("and it rolls over the month", M.dayKey(tripDayDate("2026-08-30", 4)), "2026-09-02");
+  is("day 0 is not a day", tripDayDate("2026-09-06", 0), null);
+  is("nor is a missing one", tripDayDate("2026-09-06", null), null);
+  is("and an unreadable arrival yields nothing", tripDayDate("sometime in September", 2), null);
+  // A legacy timestamp arrival still counts forward as a local day, same
+  // fallback the rest of this family relies on, so guides saved before the
+  // storage change are no worse than they were.
+  ok("a legacy timestamp arrival still counts forward",
+    !!tripDayDate("2026-09-06T00:00:00.000Z", 2));
+
+  // The primitive underneath, including the direction nobody would think to try.
+  is("dayPlus counts forward", M.dayKey(dayPlus("2026-08-30", 3)), "2026-09-02");
+  is("and backward", M.dayKey(dayPlus("2026-09-02", -3)), "2026-08-30");
+  is("zero is the same day", M.dayKey(dayPlus("2026-09-06", 0)), "2026-09-06");
+  is("a bad step yields nothing", dayPlus("2026-09-06", NaN), null);
+  is("and a bad day yields nothing", dayPlus("not a date", 1), null);
+  // It must not mutate its input, which is the trap the inline setDate version
+  // was one shared reference away from.
+  {
+    const base = dayStart("2026-09-06");
+    dayPlus(base, 5);
+    is("dayPlus leaves its input alone", M.dayKey(base), "2026-09-06");
+  }
+
+  // ── AND THE RENDER ACTUALLY CALLS IT ────────────────────────────
+  // A pure function nobody renders is the failure this project keeps paying
+  // for: tripCharacter was dead on every guide ever built while three tests
+  // asserted its output. Source assertions, because a JSX render is the layer
+  // the pure suite cannot reach.
+  const gpWhen = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the stop card asks when the event runs", /const when = stopEventWhen\(real, dayDate\)/.test(gpWhen));
+  ok("and prints the window", /Runs \$\{when\.runs\}/.test(gpWhen));
+  // ── AND THE GATE HAS TO BE THE VALUE, NOT A CONSTANT ──────────
+  // A mutation replacing `{when && (` with `{false && (` survived every other
+  // assertion in this block: the call was still there, the template string was
+  // still there, and the card rendered nothing. Asserting the presence of a
+  // render is not asserting that it can fire.
+  ok("and the render is gated on what it computed", /\{\s*when\s*&&/.test(gpWhen));
+  ok("and says so when the day is outside it", /when\.offWindow \?/.test(gpWhen));
+  // The day is computed once for the whole day render and shared, rather than
+  // rebuilt per reader, which is how the sixth copy of the overlap test got in.
+  is("the day of the trip is computed once", (gpWhen.match(/const dayDate = tripDayDate\(/g) || []).length, 1);
+  is("and the mutating setDate copy is gone",
+    (gpWhen.match(/dayDate\.setDate\(dayDate\.getDate\(\)/g) || []).length, 0);
+  ok("checkout counts forward through the primitive", /const nextDate = dayPlus\(dayDate, 1\)/.test(gpWhen));
+  // The pipeline test panel answered "did they include events" with names only,
+  // which is the same gap read by the one person most likely to catch it.
+  ok("the test panel names the window too", /w\.runs/.test(gpWhen));
+  ok("and flags a day the planner got wrong", /NOT on day \$\{x\.dayNo\}/.test(gpWhen));
+}
+
+// ── "BUT THIS IS NOT SOUTH JUTLAND" ──────────────────────────────────
+//
+// Oliver, 16 August 2026, having clicked the South Jutland discovery chip. The
+// seven candidates he was shown are the fixture below, copied off his screen.
+// Five are on Funen, one is Randers, and one says nothing about where it is.
+//
+// The region was in the prompt. This is the third time this one pass has learned
+// that a prompt is not a filter, after splitAlreadyCovered and
+// splitFinishedCandidates, and the third instance is where a pattern stops being
+// a coincidence.
+{
+  const { candidateFitsTarget, splitOffTarget, describeOffTarget, placeFromText } = M;
+
+  // Straight off the screenshot, region strings exactly as the panel printed them.
+  const HIS_SEVEN = [
+    { name: "Dyrehaverne på Hindsgavl Halvøen", region: "Hindsgavl Peninsula, Fyn" },
+    { name: "Odense Havnebad", region: "Odense" },
+    { name: "De 12 Langelandske kunsttårne", region: "Langeland" },
+    { name: "Øhavsstien", region: "Fyn and the islands" },
+    { name: "De Vilde Heste", region: "Fyn and the islands" },
+    { name: "Randers Kunstmuseum", region: "Randers" },
+    { name: "Det Nye Museum for Papirkonst", region: "" },
+  ];
+  const { kept, dropped } = splitOffTarget(HIS_SEVEN, "south-jutland");
+  is("six of his seven are refused", dropped.length, 6);
+  is("and the one that never said where it is survives", kept.map(k => k.name), ["Det Nye Museum for Papirkonst"]);
+  // Named individually, because a whole-list assertion passes just as well if the
+  // filter is refusing everything for the wrong reason.
+  is("Funen by landmass", candidateFitsTarget({ region: "Hindsgavl Peninsula, Fyn" }, "south-jutland").verdict, "elsewhere");
+  is("Odense by kommune", candidateFitsTarget({ region: "Odense" }, "south-jutland").verdict, "elsewhere");
+  is("Langeland by kommune", candidateFitsTarget({ region: "Langeland" }, "south-jutland").verdict, "elsewhere");
+  // RANDERS IS THE INTERESTING ONE. It is in Jutland, so the landmass agrees with
+  // the target and only the latitude band refuses it. A filter that checked the
+  // part alone would have shown it.
+  is("Randers is on the right landmass", placeFromText("Randers")?.part, "Jutland");
+  is("and is still refused, by the band", candidateFitsTarget({ region: "Randers" }, "south-jutland").verdict, "elsewhere");
+
+  // ── AND IT MUST NOT EAT REAL ONES ───────────────────────────────
+  // A filter that refuses too much is worse than the bug: it would quietly bin
+  // the results of a search that worked.
+  for (const where of ["Tønder", "Sønderborg", "Ribe", "Aabenraa", "Haderslev", "Esbjerg", "Fanø", "Kolding", "Als, Sønderborg", "Vadehavet, Ribe"])
+    is(`${where} is in South Jutland`, candidateFitsTarget({ region: where }, "south-jutland").verdict, "fits");
+  is("Odense answers a Funen run", candidateFitsTarget({ region: "Odense" }, "funen").verdict, "fits");
+  is("Skagen answers a North Jutland run", candidateFitsTarget({ region: "Skagen" }, "north-jutland").verdict, "fits");
+  is("and Skagen does not answer a South Jutland one", candidateFitsTarget({ region: "Skagen" }, "south-jutland").verdict, "elsewhere");
+
+  // ── UNMEASURED IS NOT A REFUSAL ─────────────────────────────────
+  // The whole filter turns on this distinction. "We could not place it" and "it
+  // is somewhere else" are different findings, and only the second one may drop a
+  // real result.
+  is("an empty region field is unknown", candidateFitsTarget({ region: "" }, "south-jutland").verdict, "unknown");
+  is("a village nothing holds a coordinate for is unknown", candidateFitsTarget({ region: "Møgeltønder" }, "south-jutland").verdict, "unknown");
+  // A bare region name gives the landmass and no point, so the band cannot be
+  // answered and the candidate stays. Stated because it looks like a miss and is
+  // a deliberate refusal to guess.
+  is("Sønderjylland alone gives Jutland", placeFromText("Sønderjylland")?.part, "Jutland");
+  is("and no latitude", placeFromText("Sønderjylland")?.lat ?? null, null);
+  is("so it is unmeasured rather than refused", candidateFitsTarget({ region: "Sønderjylland" }, "south-jutland").verdict, "unknown");
+  // The two targets that make no regional claim cannot refuse anything.
+  is("wherever it is thinnest refuses nothing", candidateFitsTarget({ region: "Odense" }, "anywhere").verdict, "unknown");
+  is("nor do the small islands", candidateFitsTarget({ region: "Odense" }, "small-islands").verdict, "unknown");
+  is("a null candidate list is empty rather than a throw", splitOffTarget(null, "south-jutland").kept, []);
+
+  // ── THE NAME TRAPS THIS PROJECT HAS ALREADY PAID FOR ────────────
+  // Every one of these is a real bug from this codebase's own history, re-run
+  // against the new matcher. A short Danish name inside a longer word is how the
+  // preview screen offered an island nobody mentioned and how discovery binned
+  // real candidates as already covered.
+  is("common does not name Møn", placeFromText("a common sight"), null);
+  is("Vejlebrovej does not name Vejle", placeFromText("Vejlebrovej 12"), null);
+  is("Falster is Lolland-Falster and not Als", placeFromText("Falster")?.part, "Lolland-Falster");
+  is("Ærøskøbing places itself", placeFromText("Ærøskøbing")?.part, "Funen");
+  is("and nothing at all places nothing", placeFromText(""), null);
+  // The tail rule is the one that is deliberately looser than containsName, so
+  // the reason it is safe is asserted rather than trusted.
+  is("Nordjylland is Jutland by its tail", placeFromText("Nordjylland")?.part, "Jutland");
+  is("Nordsjælland is Zealand by its tail", placeFromText("Nordsjælland")?.part, "Zealand");
+  is("and a word merely ending in mon is nothing", placeFromText("Salomon"), null);
+
+  // ── THE LIST IS NEVER SILENTLY SHORTER ──────────────────────────
+  // The panel already promises this for the other two filters. The sentence has
+  // to name where the run went instead, because that is the news.
+  const said = describeOffTarget(dropped, "south-jutland");
+  ok("the sentence counts them", /^6 were left out/.test(said));
+  ok("names the target", /South Jutland/.test(said));
+  ok("and names where they actually are", /Funen/.test(said) && /Randers Kommune/.test(said));
+  is("nothing dropped says nothing", describeOffTarget([], "south-jutland"), "");
+
+  // ── AND THE RENDER USES IT ──────────────────────────────────────
+  const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the pass runs the filter", /splitOffTarget\(dated, discoverTarget\)/.test(appD));
+  ok("and reports what it refused", /setDiscoverOffTarget\(describeOffTarget\(elsewhere, discoverTarget\)\)/.test(appD));
+  // The empty state used to claim "nothing new turned up that isn't already in
+  // Gemlyx", which after this filter can be plainly false: a run that found
+  // seven real places on Funen has missed, not run dry.
+  ok("the empty state distinguishes a miss from a dry region", /discoverOffTarget[\s\S]{0,40}\?/.test(appD));
+  ok("and it is reset on every run", /setDiscoverOffTarget\(""\)/.test(appD));
+  // Gated on the sentence itself, for the reason the stop card block above
+  // states: a constant gate passes every other assertion here.
+  ok("the sentence has a render gated on it", /\{\s*discoverOffTarget\s*&&/.test(appD));
+
+  // ── AND THE BRIEF NO LONGER NAMES ODENSE AT SØNDERJYLLAND ───────
+  // The region prompt ended with a fixed trio, "Aarhus, Odense and Aalborg are
+  // the <label> equivalents of Copenhagen here". For South Jutland that is three
+  // towns none of which are in it, and one is the capital of Funen, named in the
+  // brief whose whole job is keeping the search out of Funen.
+  const brief = M.framingForTarget("south-jutland", [], { typeLabel: "places" });
+  ok("the South Jutland brief does not name Odense", !/Odense/.test(brief));
+  ok("nor Aarhus", !/Aarhus/.test(brief));
+  ok("nor Aalborg", !/Aalborg/.test(brief));
+  ok("it still says not to let one town take the list", /more than one of the five queries/.test(brief));
+  ok("and it still names the region in Danish", /Sønderjylland/.test(brief));
+  // The Funen brief may say Odense, because Odense IS in Funen. The rule is
+  // about naming the wrong region's towns, not about the word.
+  ok("a Funen brief still aims at Funen", /Fyn/.test(M.framingForTarget("funen", [], { typeLabel: "places" })));
+}
+
+
+// ── "ONE SOURCE? WHAT DA FK" ─────────────────────────────────────────
+//
+// Oliver, 16 August 2026, on the finished draft for the paper art museum in
+// Hune. Its __sources array held one URL, the museum's own website.
+//
+// The research had not failed. The NAME had disqualified its own sources. The
+// draft is titled "Det Nye Museum for Papirkunst"; the museum is called Museum
+// for Papirkunst, which is also its domain. containsName is a whole-phrase test,
+// correctly so, and every page calling the place by its real name therefore
+// failed to name the place.
+{
+  const { sourceIsAboutPlace, nameCore, evidenceStanding, describeEvidence, describePriceTrace, tracePrices } = M;
+  const NAME = "Det Nye Museum for Papirkunst";
+  const AT = { name: NAME, town: "Hune", url: "https://www.visitjammerbugten.dk/nordjylland/papirkunst" };
+
+  // The three snippets off his own run, all previously refused.
+  ok("the official site's own words are about it",
+    sourceIsAboutPlace("Museum for Papirkunst i Hune viser papirkunst fra hele verden.", AT));
+  ok("so is the tourist board",
+    sourceIsAboutPlace("Oplev Museum for Papirkunst i Hune, Nordjylland.", AT));
+  ok("and so is the news article",
+    sourceIsAboutPlace("Bit Vejle har skabt Museum for Papirkunst, det eneste af sin art i Norden.", AT));
+
+  // ── AND THE WIDENING STOPS WHERE IT SHOULD ──────────────────────
+  // A page about paper art in general is not a page about this museum. The core
+  // is a PHRASE, not a bag of the name's words, which is what keeps this apart
+  // from the alias bug that put Den Gamle By in Aarhus on a card about Ribe.
+  ok("a page about papirkunst in general is not",
+    !sourceIsAboutPlace("Papirkunst er en gammel tradition i Danmark.", AT));
+  ok("nor is a different museum", !sourceIsAboutPlace("Randers Kunstmuseum viser dansk kunst fra 1800.", AT));
+  ok("nor is something unrelated", !sourceIsAboutPlace("A page about somewhere else entirely.", AT));
+
+  // THE TRAP THIS PROJECT HAS ALREADY PAID FOR, re-run against the looser rule.
+  const GAMLE = { name: "Den Gamle By", town: "Aarhus", url: "https://example.dk/x" };
+  ok("the old town hall in Ribe is not Den Gamle By",
+    !sourceIsAboutPlace("Det gamle rådhus i Ribe er værd at se.", GAMLE));
+  ok("but Den Gamle By still is", sourceIsAboutPlace("Den Gamle By i Aarhus er et frilandsmuseum.", GAMLE));
+  ok("and so is it without the article", sourceIsAboutPlace("Gamle By, Aarhus, er et frilandsmuseum.", GAMLE));
+
+  // ── THE CORE ITSELF ─────────────────────────────────────────────
+  // "" when there is nothing to strip, so a name with no leading article behaves
+  // exactly as it did before this change and cannot have been made looser.
+  is("a leading article and new marker come off", nameCore(NAME), "Museum for Papirkunst");
+  is("the short form has nothing to strip", nameCore("Museum for Papirkunst"), "");
+  is("an English article comes off too", nameCore("The Viking Museum"), "Viking Museum");
+  is("so does a Danish one", nameCore("Ny Carlsberg Glyptotek"), "Carlsberg Glyptotek");
+  // Stripping stops before the last distinctive word: dropping "Gamle" would
+  // leave the generic word "By" to match on its own.
+  is("it never strips down to a generic word", nameCore("Den Gamle By"), "Gamle By");
+  is("a one word name has no core", nameCore("Ribe"), "");
+  is("nor does a name with no leading article", nameCore("Odense Havnebad"), "");
+  is("nor does a name with no distinctive word at all", nameCore("En Kop Kaffe"), "");
+  is("and nothing has no core", nameCore(""), "");
+  is("nor does a bare article", nameCore("Det"), "");
+  // The guard against stripping the LAST distinctive word, on the one case that
+  // can reach it. distinctiveWords keeps words of four letters or more, so of
+  // everything strippable only "dette" and "disse" qualify: "Dette Museum" has
+  // "dette" as its only distinctive word, and stripping it would leave the bare
+  // word "Museum" to match every page that contains it.
+  is("it will not strip the only distinctive word it has", nameCore("Dette Museum"), "");
+  ok("so a page merely saying museum is not that place",
+    !sourceIsAboutPlace("The museum opens at ten.", { name: "Dette Museum", town: "Aarhus", url: "https://x.dk" }));
+
+  // ── AND THE FOUR PRICES THAT RESTED ON NOTHING ──────────────────
+  // The old note said they "came from a search result or a blog", which this
+  // function has never known. On his draft the pages that stated them had been
+  // discarded, so there was no blog to go and find.
+  const pt = tracePrices("Entry is 90 DKK for adults and 50 DKK for children.", "The museum shows paper art from around the world.");
+  ok("the prices are untraced against the official site", pt.untraced.length === 2);
+  const unsourced = describePriceTrace(pt, { statedOn: null });
+  ok("with no page behind them the note says what was read", /^NOT IN ANYTHING WE READ:/.test(unsourced));
+  ok("and says nothing else read states them", /no other page this draft read states them/.test(unsourced));
+  ok("and does not send him looking for a blog", !/came from a search result or a blog/.test(unsourced));
+  // ── AND IT OFFERS THREE CAUSES, NOT ONE ───────────────────────
+  // Oliver, 16 Aug, on Gemini: "it was correcting stuff that didn't need
+  // correction, because it was already true." The first version of this note
+  // asserted the source filter had eaten the page. Measured against the museum
+  // that started this, museumforpapirkunst.dk keeps its prices at /dk/besog and
+  // this pass reads the front page, so the likeliest cause is a page nobody
+  // opened and the figures may be right. An audit that says more than it
+  // measured is the failure, whichever model writes it.
+  ok("it names the unfetched prices page first", /page nothing opened/.test(unsourced));
+  ok("the refused-source bug second", /refused by the source filter/.test(unsourced));
+  ok("and cutting the figure only third", /nothing ever stated them/.test(unsourced));
+  ok("and it does not accuse the filter outright", !/which is a bug in the source filter rather than/.test(unsourced));
+  const onAPage = describePriceTrace(pt, { statedOn: "visitjammerbugten.dk" });
+  ok("with a page behind them it names the page", /visitjammerbugten\.dk/.test(onAPage));
+  ok("and does not say nothing read them", !/^NOT IN ANYTHING WE READ/.test(onAPage));
+  // UNDEFINED KEEPS THE OLD WORDING. Every caller that has not been taught to
+  // answer this question must behave exactly as before, or the change would have
+  // made some other note lie.
+  ok("an unasked caller gets the wording it always got",
+    /came from a search result or a blog/.test(describePriceTrace(pt)));
+  is("and the traced case is untouched by all three",
+    [undefined, null, "x.dk"].map(v => describePriceTrace(tracePrices("tickets are 400 kr", "Entré 400 per person"), { statedOn: v })).join("|"),
+    Array(3).fill(describePriceTrace(tracePrices("tickets are 400 kr", "Entré 400 per person"))).join("|"));
+
+  // ── AND A DRAFT STANDING ON ONE PAGE SAYS SO ────────────────────
+  // The reason nothing said so: an empty list is deliberately allowed, for the
+  // reader. That is right for the reader and is exactly why it was invisible.
+  const his = evidenceStanding({ sources: ["http://www.museumforpapirkunst.dk/"], ownSite: "http://www.museumforpapirkunst.dk/" });
+  is("his draft had one host", his.total, 1);
+  is("it was the venue's own", his.hasOwn, true);
+  is("and nothing independent", his.others, 0);
+  const said = describeEvidence(his, { untracedPrices: 4 });
+  ok("the note says the only source is the venue itself", /THE ONLY SOURCE IS THE VENUE'S OWN SITE/.test(said));
+  ok("it counts the prices resting on that", /4 prices in the prose are stated as fact/.test(said));
+  ok("and it names the cause he actually hit", /the name in this draft is the name the rest of the internet uses/.test(said));
+
+  // Empty is its own case and a worse one.
+  const none = describeEvidence(evidenceStanding({ sources: [], ownSite: "x.dk" }), { untracedPrices: 0 });
+  ok("an empty list says nothing is sourced", /^NOTHING IS SOURCED/.test(none));
+  ok("and offers both explanations rather than one", /genuinely unwritten about/.test(none) && /source filter refused/.test(none));
+
+  // ONE INDEPENDENT PAGE is thin but not the same failure, so it gets its own
+  // sentence rather than being folded in with the other two.
+  const one = evidenceStanding({ sources: ["https://own.dk/a", "https://visitjammerbugten.dk/b"], ownSite: "own.dk" });
+  is("one independent host is counted as one", one.others, 1);
+  ok("and says everything turns on a single page", /^ONE INDEPENDENT SOURCE/.test(describeEvidence(one)));
+  ok("and mentions the venue's site alongside it", /plus the venue's own site/.test(describeEvidence(one)));
+
+  // TWO INDEPENDENT PAGES IS AN ORDINARY DRAFT AND GETS NO NOTE. A filter that
+  // fires on everything is a filter he stops reading.
+  const two = evidenceStanding({ sources: ["https://own.dk/a", "https://visitjammerbugten.dk/b", "https://nordjyske.dk/c"], ownSite: "own.dk" });
+  is("two independent hosts", two.others, 2);
+  is("and no note at all", describeEvidence(two, { untracedPrices: 2 }), "");
+  // The same host twice is one source, so eight pages of one site cannot read as
+  // eight. This is the rule __sources already applies to itself and the note has
+  // to agree with it.
+  is("the same host twice is one source",
+    evidenceStanding({ sources: ["https://nordjyske.dk/a", "https://nordjyske.dk/b"], ownSite: "own.dk" }).others, 1);
+  is("a subdomain of the venue's site is still the venue",
+    evidenceStanding({ sources: ["https://shop.own.dk/a"], ownSite: "own.dk" }).others, 0);
+  is("junk in the list is not a source", evidenceStanding({ sources: ["not a url", ""], ownSite: "" }).total, 0);
+  is("and a missing list does not throw", evidenceStanding().total, 0);
+
+  // ── AND THE GATE ATTACHES IT ────────────────────────────────────
+  const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the gate measures what the draft stands on",
+    /const standing = evidenceStanding\(\{ sources: t\.__sources, ownSite: placesWebsite \|\| t\.website \|\| "" \}\);/.test(appE));
+  ok("and hands it to the founder note", /noteToFounder\(describeEvidence\(standing,/.test(appE));
+  // noteToFounder and not uncertainties: __notes is a __ field and shapeForLive
+  // is an allow-list, so this cannot reach a reader.
+  ok("__notes is still not in the publish allow-list",
+    !/__notes/.test(readFileSync(join(root, "src/utils/studioContent.js"), "utf8")));
+}
+
+
+// ── THE APP NAMED KOMBARDO IN PROSE AND COULD NOT OFFER IT ───────────
+//
+// The guide prompt has carried Kombardo Expressen as a frozen fact for weeks,
+// telling the model to name it on "a genuine long-distance crossing between
+// regions". operators.js held DSB, FlixBus and Rejseplanen, so the one operator
+// the app singles out by name was the one a leg chip could not put a link to.
+//
+// Checked 16 Aug 2026 against kombardoexpressen.dk's own front page: Aarhus,
+// Aalborg, København, Randers and Odense, buses taking the ferry as part of the
+// ticket. Handoff 13's warning not to "correct" the prompt held up: its route
+// list, Odense included, is what the operator itself publishes.
+{
+  const { operatorsForLeg, isRegionCrossing, OPERATORS, LONG_LEG_KM } = M;
+  const ids = (o) => operatorsForLeg(o).map(x => x.id);
+  const FAR = LONG_LEG_KM + 50;
+
+  ok("the operator exists at all", !!OPERATORS.kombardo);
+  is("named exactly as the prompt demands", OPERATORS.kombardo.name, "Kombardo Expressen");
+  ok("and never as Expresbus", !/expresbus/i.test(JSON.stringify(OPERATORS.kombardo)));
+  ok("its own site is the link", /kombardoexpressen\.dk/.test(OPERATORS.kombardo.url));
+  // The reason it is a row of its own rather than a note on FlixBus.
+  ok("and it says the ferry is in the ticket", /ferry/.test(OPERATORS.kombardo.what));
+
+  // ── THE CROSSING, WHICH IS THE WHOLE RULE ───────────────────────
+  is("Zealand to Jutland is a crossing", isRegionCrossing("Zealand", "Jutland"), true);
+  is("and so is the way back", isRegionCrossing("Jutland", "Zealand"), true);
+  is("Zealand to Funen is a crossing", isRegionCrossing("Zealand", "Funen"), true);
+  is("Funen to Jutland is a crossing", isRegionCrossing("Funen", "Jutland"), true);
+  // The prompt's own exclusion, in one line: inside one island it is a regional
+  // train, whatever the distance.
+  is("Zealand to Zealand is not", isRegionCrossing("Zealand", "Zealand"), false);
+  is("nor is Jutland to Jutland", isRegionCrossing("Jutland", "Jutland"), false);
+  // Landmasses the operator does not name. Bornholm is left out on purpose: a
+  // crossing to it is a ferry leg that never reaches this test.
+  is("Lolland-Falster is not offered a coach", isRegionCrossing("Zealand", "Lolland-Falster"), false);
+  is("nor is Bornholm", isRegionCrossing("Zealand", "Bornholm"), false);
+  // UNKNOWN IS NOT A CROSSING. A stop that never resolved to a landmass must not
+  // be allowed to look like the far side of the Great Belt.
+  is("an unresolved end is not a crossing", isRegionCrossing("", "Jutland"), false);
+  is("nor two of them", isRegionCrossing("", ""), false);
+  is("and neither is nothing at all", isRegionCrossing(), false);
+
+  // ── AND THE LIST A CHIP ACTUALLY SHOWS ──────────────────────────
+  is("a long crossing offers the coach with the ferry in it",
+    ids({ km: FAR, mode: "transit", fromPart: "Zealand", toPart: "Jutland" }),
+    ["dsb", "flixbus", "kombardo", "rejseplanen"]);
+  is("a long leg inside one island does not",
+    ids({ km: FAR, mode: "transit", fromPart: "Zealand", toPart: "Zealand" }),
+    ["dsb", "flixbus", "rejseplanen"]);
+  // BACKWARD COMPATIBLE. A caller that has not been taught to answer the
+  // geography gets exactly the list it got before, rather than a wrong one.
+  is("a caller that says nothing about geography is unchanged",
+    ids({ km: FAR, mode: "transit" }), ["dsb", "flixbus", "rejseplanen"]);
+  // Everything the file already refused, still refused. A crossing is not a
+  // licence to start naming operators on a ferry or a bike.
+  is("a ferry still names nobody", ids({ km: FAR, mode: "ferry", fromPart: "Zealand", toPart: "Jutland" }), ["rejseplanen"]);
+  is("a drive still names nobody", ids({ km: FAR, mode: "driving", fromPart: "Zealand", toPart: "Jutland" }), []);
+  is("a ride still names nobody", ids({ km: FAR, mode: "bicycling", fromPart: "Zealand", toPart: "Jutland" }), []);
+  is("and a short crossing is still short",
+    ids({ km: LONG_LEG_KM - 1, mode: "transit", fromPart: "Zealand", toPart: "Funen" }), []);
+  is("as is a leg that never measured", ids({ km: null, mode: "transit", fromPart: "Zealand", toPart: "Jutland" }), []);
+
+  // ── AND THE RENDER ASKS THE GEOGRAPHY ───────────────────────────
+  const gpOps = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the chip passes both ends", /fromPart: ferryLeg \? "" : partAtStop\(originName\)/.test(gpOps));
+  ok("and the far end too", /toPart: ferryLeg \? "" : partAtStop\(destName\)/.test(gpOps));
+  // NOT preciseCoord. A town centre answers the landmass question, and requiring
+  // precision would withhold the operator on most legs in the app.
+  ok("the landmass comes from the ordinary resolver",
+    /const c = resolveStopCoordsDetailed\(nm, geo, stopTownOf\(nm\)\);/.test(gpOps));
+  ok("and not from the precise-only one", !/const c = preciseCoord\(nm\)/.test(gpOps));
+
+  // ── AND THE PROMPT AND THE CHIPS NOW AGREE ──────────────────────
+  // The failure this closes is not a missing link, it is two descriptions of one
+  // operator where only one of them existed. If the prompt ever stops naming it,
+  // this table is the copy that drifts.
+  const appK = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the prompt still names it", /Kombardo Expressen/.test(appK));
+  // ── AND THIS ASSERTION READ ITS OWN EXPLANATION ────────────────
+  // First written as !/Expresbus/.test(appK), which fails on a green codebase:
+  // the prompt quotes the wrong spelling in order to ban it, "(exact spelling,
+  // Kombardo EXPRESSEN, never 'Expresbus')". Same trap that has now bitten this
+  // file four times, in the one shape that survives comment stripping, because
+  // the string is inside a live prompt rather than a comment. So it asserts the
+  // CONTEXT: every appearance of the wrong spelling is a prohibition.
+  const wrongSpelling = [...appK.matchAll(/.{0,14}Expresbus/g)].map(m => m[0]);
+  ok("the wrong spelling appears at all, as a ban", wrongSpelling.length > 0);
+  ok("and never as an instruction to use it", wrongSpelling.every(w => /never/i.test(w)));
+}
+
+
+// ── THE LAYER A SUITE OF PURE FUNCTIONS CANNOT REACH ─────────────────
+//
+// Handoff 13's own closing lesson, in its own words: "the fix was complete in
+// the layer the tests reach and absent in the layer they cannot. Grepping for
+// the shape rather than the instance found five copies in utils. It did not
+// occur to me to grep the .jsx files, and that is where the other six were."
+//
+// So this greps the .jsx files, and it does it on every run rather than once.
+// Everything it looks for is a hand-rolled idiom that a shared, tested function
+// now replaces, and every one of them has already been a bug in this codebase:
+//
+//   setHours(0,0,0,0)              dayStart      five copies, five bugs
+//   x.setDate(x.getDate() + n)     dayPlus       a day's weather, twice
+//   (a - b) / 86400000             daysUntil     "Happening now" beside tomorrow
+//   toISOString().slice(0,10)      dayKey        Booking.com booked the night before
+//   new Date(x + "T00:00:00")      dayStart      "Invalid Date" on the events grid
+//   new Date(a.date) - new Date(b) byEventDate   two private comparators
+//
+// IT DOES NOT BAN `new Date(x)` IN GENERAL, and that restraint is the reason it
+// can be strict about the six above. A scan that flagged every date construction
+// would fire on `new Date()` meaning now, on a real instant from Supabase, and on
+// every legitimate clock read in the app, and a scanner that cries wolf gets an
+// allow-list per line and then gets deleted.
+//
+// Comments are stripped first, because four assertions in this file have now
+// failed by reading their own explanation of the bug they were asserting was
+// fixed. The blocks above quote every one of these idioms.
+{
+  const jsxFiles = [];
+  const walkJsx = (d) => readdirSync(d, { withFileTypes: true }).forEach(e => {
+    const full = join(d, e.name);
+    if (e.isDirectory()) { if (e.name !== "node_modules") walkJsx(full); }
+    else if (/\.jsx$/.test(e.name)) jsxFiles.push(full);
+  });
+  walkJsx(join(root, "src"));
+  // A scan over nothing passes, which is the one way this whole block could be
+  // green and worthless.
+  ok("there are .jsx files to scan at all", jsxFiles.length >= 20);
+
+  const BANNED = [
+    [/setHours\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/g, "hand-rolled local midnight", "dayStart from utils/calendarDay.js"],
+    [/\.setDate\(\s*\w+\.getDate\(\)\s*[+-]/g, "hand-rolled day arithmetic", "dayPlus from utils/calendarDay.js"],
+    [/toISOString\(\)\s*\.slice\(\s*0\s*,\s*10\s*\)/g, "a UTC day used as a local one", "dayKey from utils/calendarDay.js"],
+    [/\+\s*"T00:00:00"/g, "a date-only string forced through the local parser", "dayStart from utils/calendarDay.js"],
+    [/new Date\([^)]*\.date\w*\)\s*-\s*new Date\(/g, "a private event comparator", "byEventDate from utils/eventDates.js"],
+  ];
+  // ONE ALLOWED USE, NAMED AND ARGUED. The age of a stored row is the difference
+  // between two INSTANTS, not between two calendar days, so dividing a
+  // millisecond difference by a day is the correct arithmetic there and daysUntil
+  // would be the wrong function. Listed as an exact line rather than as a file,
+  // so a second 86400000 in App.jsx is still a failure.
+  const ALLOWED_DAY_MS = ["const ageDays = (Date.now() - new Date(memRows[0].created_at).getTime()) / 86400000;"];
+
+  const offences = [], dayMsLines = [];
+  for (const full of jsxFiles) {
+    const code = stripNonCode(readFileSync(full, "utf8"));
+    const rel = full.slice(join(root, "").length).replace(/\\/g, "/");
+    for (const [re, what, instead] of BANNED) {
+      for (const m of code.match(re) || []) offences.push(`${rel}: ${what} (${m.trim().slice(0, 40)}) — use ${instead}`);
+    }
+    // EVERY line that divides by a day, collected rather than filtered.
+    //
+    // This was written as a filter with a `continue` past the allowed line, and
+    // mutation testing walked straight through it: replacing the line check with
+    // `if (rel === "src/App.jsx") continue` turned one argued exception into a
+    // licence for the largest file in the app, and the suite stayed green. An
+    // escape hatch that can be widened without failing anything is not an
+    // exception, it is a hole with a comment next to it.
+    //
+    // Collected and compared whole, so the exception is part of the assertion.
+    // Widening it now requires editing the expected value, which is visible in a
+    // diff in a way a changed `continue` is not.
+    for (const line of code.split("\n")) {
+      if (/86400000/.test(line)) dayMsLines.push(`${rel}: ${line.trim()}`);
+    }
+  }
+  is("no .jsx file rolls its own calendar arithmetic", offences, []);
+  is("and exactly one .jsx line divides by a day, the argued one",
+    dayMsLines, [`src/App.jsx: ${ALLOWED_DAY_MS[0]}`]);
+
+  // ── AND THE SCANNER HAS TO BE ABLE TO FAIL ──────────────────────
+  // A regex list is exactly the kind of thing that rots into matching nothing.
+  // Every pattern is fired at a string that must match it, so a typo in one of
+  // them is caught here rather than by the next date bug.
+  const PROOFS = [
+    ["x.setHours(0, 0, 0, 0);", 0],
+    ["on.setDate(on.getDate() + idx);", 1],
+    ['at: new Date().toISOString().slice(0, 10),', 2],
+    ['new Date(event.date + "T00:00:00")', 3],
+    ["return new Date(a.date) - new Date(b.date);", 4],
+  ];
+  PROOFS.forEach(([sample, i]) => {
+    const [re, what] = BANNED[i];
+    ok(`the scanner still catches ${what}`, new RegExp(re.source).test(sample));
+  });
+  ok("and the day-difference check still catches one", /86400000/.test("(a - b) / 86400000"));
+  // The exception is the age of a stored row, which is a difference between two
+  // INSTANTS. Asserted so that if it is ever edited into something else, the word
+  // that justifies it has to go too.
+  ok("the one exception measures instants, not calendar days",
+    ALLOWED_DAY_MS.every(a => a.includes("Date.now()") && a.includes("created_at")));
+
+  // ── AND THE SEVEN THIS SWEEP ACTUALLY REPLACED ──────────────────
+  // Named individually, because "the scan is clean" is also true of a codebase
+  // where somebody rewrote the same idiom in a shape the regex misses.
+  const readJsx = (f) => stripNonCode(readFileSync(join(root, f), "utf8"));
+  const strip = readJsx("src/components/LiveEventsHeaderStrip.jsx");
+  ok("the header strip sorts through the shared comparator", /byEventDate\(a, b\)/.test(strip));
+  ok("the detail page too", /byEventDate\(a, b\)/.test(readJsx("src/components/DetailPage.jsx")));
+  const picker = readJsx("src/components/DateTimePicker.jsx");
+  ok("the picker's startOfDay is dayStart", /const startOfDay = \(d\) => dayStart\(d\)/.test(picker));
+  const appJ = readJsx("src/App.jsx");
+  ok("the build path counts days with daysUntil", /const startOffset = Math\.max\(0, daysUntil\(arrivalDate\) \|\| 0\)/.test(appJ));
+  ok("the saved-guide check too", /const startOffset = arrivalDay \? Math\.max\(0, daysUntil\(arrivalDay\)\) : null/.test(appJ));
+  ok("the build path counts forward with dayPlus", /const on = dayPlus\(arrivalDate \|\| new Date\(\), idx\)/.test(appJ));
+  const gpJ = readJsx("src/pages/GuidePage.jsx");
+  ok("and so does the refresh-on-open path", /const on = dayPlus\(arrival \|\| new Date\(\), i\)/.test(gpJ));
+  ok("which is what its own comment already claimed", /ONE implementation, shared/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+  ok("the reopen path counts days with daysUntil", /const startOffset = arrival \? Math\.max\(0, daysUntil\(arrival\)\) : 0/.test(gpJ));
+  ok("and the provenance label reads a stored day locally", /const d = dayStart\(iso\)/.test(readJsx("src/components/HowWeKnow.jsx")));
+
+  // The behaviour behind the two that were not merely cosmetic, asserted rather
+  // than assumed: with no arrival date, day N's weather must be asked for a
+  // calendar day and not for whatever o'clock the guide happened to be built at.
+  {
+    const noon = new Date(2026, 8, 6, 14, 37, 12);
+    const on = M.dayPlus(noon, 3);
+    is("a day counted from now has no time on it",
+      [on.getHours(), on.getMinutes(), on.getSeconds()], [0, 0, 0]);
+    is("and it is the right day", M.dayKey(on), "2026-09-09");
+  }
+  // And an undated row gets a defined position instead of a NaN comparator.
+  {
+    const rows = [{ name: "B", date: "" }, { name: "A", date: "2026-08-20" }];
+    const sorted = [...rows].sort(M.byEventDate).map(r => r.name);
+    is("an undated event sorts last, not anywhere", sorted, ["A", "B"]);
+  }
+}
+
+
+// ── "NO RETURN LEG" ─────────────────────────────────────────────────
+//
+// The planner builds a path between the points a traveller named and never asks
+// the last question. A guide can end in Aalborg, five and a half hours from the
+// airport it started at, and say nothing at all about getting home.
+//
+// The measurement, and the thing it must NOT do: reorder the trip. routeOrder's
+// own comment argues an open path rather than a loop, because a loop assumes they
+// fly home from the same airport and nothing in a brief says so. That is a reason
+// not to reorder. It was never a reason not to measure.
+{
+  const { returnLeg, describeReturn, routeOrder, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR } = M;
+  const BILLUND = { name: "Billund Airport", lat: 55.740, lon: 9.152 };
+  const AALBORG = { name: "Aalborg", lat: 57.048, lon: 9.919 };
+  const RIBE = { name: "Ribe", lat: 55.328, lon: 8.765 };
+
+  // The case from the handoff, measured.
+  const far = returnLeg({ ordered: [RIBE, AALBORG], from: BILLUND, days: 7 });
+  is("it measures from the last stop", far?.from, "Aalborg");
+  is("back to where they landed", far?.to, "Billund Airport");
+  ok("and the distance is real", far?.km > 140 && far?.km < 160);
+  is("it is needed", far?.needed, true);
+
+  // ── THE ORDER IS UNTOUCHED, WHICH IS THE POINT ──────────────────
+  // Asserted directly, because the tempting version of this feature is to close
+  // the loop, and closing the loop would pull every route toward the airport for
+  // a reason no traveller stated.
+  const route = routeOrder([AALBORG, RIBE], { from: BILLUND });
+  is("the route is still an open path from where they land", route.ordered.map(p => p.name), ["Ribe", "Aalborg"]);
+  is("and measuring the way home does not change it",
+    routeOrder([AALBORG, RIBE], { from: BILLUND }).ordered.map(p => p.name), ["Ribe", "Aalborg"]);
+
+  // ── SILENT WHEN THERE IS NOTHING TO SAY ─────────────────────────
+  // Three ways there is nothing, and none of them may produce a card.
+  is("no arrival point means no finding", returnLeg({ ordered: [AALBORG], from: null, days: 4 }), null);
+  is("no stops means no finding", returnLeg({ ordered: [], from: BILLUND, days: 4 }), null);
+  is("and nothing at all does not throw", returnLeg(), null);
+  // Ending where they started is not a journey, and "0 km back to Billund
+  // Airport" is noise on a page that is already long.
+  const none = returnLeg({ ordered: [{ name: "Billund Airport", lat: 55.740, lon: 9.152 }], from: BILLUND, days: 3 });
+  is("ending where they landed needs no return leg", none?.needed, false);
+  is("and it says nothing", describeReturn(none), "");
+  is("nothing at all says nothing", describeReturn(null), "");
+
+  // ── THE LAST PLACED STOP, NOT THE LAST STOP ─────────────────────
+  // routeOrder puts rows it could not place at the end. Measuring from one of
+  // those answers a different question with a straight face.
+  const withUnplaced = returnLeg({ ordered: [RIBE, AALBORG, { name: "Somewhere nobody geocoded" }], from: BILLUND, days: 7 });
+  is("an unplaced last stop is skipped", withUnplaced?.from, "Aalborg");
+  is("and every stop unplaced means no finding",
+    returnLeg({ ordered: [{ name: "A" }, { name: "B" }], from: BILLUND, days: 3 }), null);
+
+  // ── AND HOW FAR IS TOO FAR DEPENDS ON HOW LONG THEY HAVE ────────
+  // Same reachBand the route ordering uses, so the guide cannot call a distance
+  // comfortable in one place and far in another.
+  const short = returnLeg({ ordered: [AALBORG], from: BILLUND, days: 2 });
+  const long = returnLeg({ ordered: [AALBORG], from: BILLUND, days: 10 });
+  is("the same distance is a stretch on a two day trip", short?.band, REACH_STRETCH);
+  is("and comfortable on a ten day one", long?.band, REACH_COMFORTABLE);
+  ok("the two day sentence says to leave time", /leaving real time/.test(describeReturn(short)));
+  ok("the ten day one does not alarm anybody", /manageable half day/.test(describeReturn(long)));
+
+  // The worst case gets its own sentence, because "most of a day of travelling"
+  // is a different instruction from "leave some time".
+  const across = returnLeg({ ordered: [{ name: "Skagen", lat: 57.724, lon: 10.580 }], from: { name: "the German border at Padborg", lat: 54.830, lon: 9.362 }, days: 2 });
+  is("the length of the country on a short trip is far", across?.band, REACH_FAR);
+  ok("and it says to plan the last day around it", /plan the last day around getting there/.test(describeReturn(across)));
+
+  // Every sentence names both ends and the number, because a warning without the
+  // distance is a mood rather than a fact.
+  // Optional-chained and filtered: a thrown assertion aborts this file and every
+  // later block reads as a pass, which is a trap this evening has now hit twice.
+  for (const leg of [short, long, across, far].filter(Boolean)) {
+    const line = describeReturn(leg);
+    ok(`the sentence names where they end (${leg.from})`, line.includes(leg.from));
+    ok(`and the distance (${leg.km} km)`, line.includes(String(leg.km)));
+  }
+  // And it never uses a dash, in any branch, which is a standing rule for
+  // anything this app prints.
+  for (const leg of [short, long, across, far].filter(Boolean)) {
+    ok(`no dash in the sentence for ${leg.from}`, !/[–—]/.test(describeReturn(leg)));
+  }
+
+  // ── AND IT REACHES A READER ─────────────────────────────────────
+  // The whole failure this closes is a measurement that existed and was never
+  // printed, so the render is asserted as hard as the arithmetic.
+  const gpR = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the guide measures the way home", /const home = returnLeg\(\{ ordered: stops, from: guide\._arrivalPoint \|\| null, days: \(days \|\| \[\]\)\.length \}\)/.test(gpR));
+  ok("and prints the sentence", /const line = describeReturn\(home\);/.test(gpR));
+  ok("gated on there being one", /if \(!line\) return null;/.test(gpR));
+  ok("and it says the distance is not measured", /Straight line distance, not a measured route/.test(gpR));
+  // It is printed AFTER the days rather than inside the last one: it is not part
+  // of the trip, it is what the trip leaves them holding.
+  ok("the card sits outside the day loop", gpR.indexOf("const home = returnLeg(") > gpR.indexOf("{days.map((day, dayIdx) => {"));
+  // Anchored on the button's JSX, not on its label: the label also appears in a
+  // comment at the top of the file, so indexOf found line 37 and the assertion
+  // failed on correct code. Fifth time this file has been caught reading prose
+  // instead of source.
+  ok("and before the save bar", gpR.indexOf("const home = returnLeg(") < gpR.indexOf("onClick={saveGuide} disabled={saving}"));
+
+  // The build path has to attach where they landed, or the card can never fire.
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the build bakes the arrival point onto the guide", /_arrivalPoint: arrivalPoint\(convoText\)/.test(appR));
+  // ── AND THE LOCAL SAVE SHAPE DELIBERATELY DOES NOT CARRY IT ─────
+  // Reopening from the saved list navigates with only { title, days }, so a field
+  // added to that shape would look like the feature working and then lose it on
+  // reopen. The reasoning is in the file rather than in a commit message.
+  ok("and the local save shape says why it does not store it",
+    /_arrivalPoint is deliberately NOT added here/.test(appR));
+  ok("which is checkable: the reopen really does drop everything else",
+    /state: \{ guide: \{ title: g\.title, days: g\.days \} \}/.test(appR));
+}
+
+
+// ── "SEE WEBSITE" IS WEAK, AND FOR REFFEN IT IS WORSE ────────────────
+//
+// Oliver, on a Reffen draft: `"price": "See website"` is weak. Reffen is the case
+// that shows it is not merely weak: Reffen's own site does not publish stall
+// prices either, so the field points a reader at a page that cannot answer them.
+//
+// Two different things were wearing one sentence, and only one of them is honest.
+{
+  const { statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, priceBand } = M;
+
+  is("the two strings are the two answers", [PRICE_UNCHECKED, PRICE_NOT_PUBLISHED], ["See website", "Not published"]);
+
+  // ── WHICH ANSWER, AND IT TURNS ON WHAT WAS READ ─────────────────
+  // The Reffen case: the site was read and it does not publish a price.
+  is("a read site with no price is not published",
+    unpricedLine({ siteChecked: true, siteHasPrice: false }), PRICE_NOT_PUBLISHED);
+  // AND A FAILED FETCH IS NOT EVIDENCE OF ABSENCE. Claiming a page does not
+  // publish a price on the strength of a timeout is the same overreach the price
+  // trace note was corrected for earlier tonight.
+  is("an unread site is still see website",
+    unpricedLine({ siteChecked: false, siteHasPrice: false }), PRICE_UNCHECKED);
+  is("and knowing nothing at all is see website", unpricedLine(), PRICE_UNCHECKED);
+  // A site that DOES publish one means the draft missed it, which is a different
+  // problem and must not be dressed as "not published".
+  is("a site that has a price is not called unpublished",
+    unpricedLine({ siteChecked: true, siteHasPrice: true }), PRICE_UNCHECKED);
+
+  // ── A FIGURE IS A DIGIT, THE SAME TEST priceBand USES ───────────
+  // So a row can never be banded and unpriced at once, which is how "See
+  // website" ended up filed in the Mid-range tab.
+  ok("a range states a price", statesAPrice("60-120 DKK per dish"));
+  ok("and a single figure does", statesAPrice("90 DKK"));
+  ok("see website does not", !statesAPrice(PRICE_UNCHECKED));
+  ok("not published does not", !statesAPrice(PRICE_NOT_PUBLISHED));
+  ok("nor does varies by stall", !statesAPrice("Varies by stall"));
+  ok("nor an empty field", !statesAPrice(""));
+  ok("nor a missing one", !statesAPrice(null));
+  // The two must agree, in both directions, on every one of those.
+  for (const v of ["60-120 DKK", "90 DKK", PRICE_UNCHECKED, PRICE_NOT_PUBLISHED, "Varies by stall", "", null]) {
+    is(`banding agrees with statesAPrice on ${JSON.stringify(v)}`, priceBand(v) !== null, statesAPrice(v));
+  }
+
+  // ── THE NOTE, ONLY FOR THE ANSWER WORTH ACTING ON ───────────────
+  const said = describeUnpriced({ siteChecked: true, siteHasPrice: false, name: "Reffen" });
+  ok("it names the row", /Reffen/.test(said));
+  ok("it says the site does not publish one", /does not publish one either/i.test(said));
+  ok("and it names the real answer his own audit found", /entry is free and you pay per stall/.test(said));
+  is("an unread site produces no note", describeUnpriced({ siteChecked: false }), "");
+  is("and neither does a site that has a price", describeUnpriced({ siteChecked: true, siteHasPrice: true }), "");
+  ok("the note uses no dash", !/[–—]/.test(said));
+
+  // ── AND THE MODEL NO LONGER WRITES THE STAND-IN ─────────────────
+  // The field is a claim about what the operator's page contains. The pass reads
+  // that page; the model does not. A prompt that asks for the claim is asking for
+  // a guess, which is the third instance tonight of the same shape.
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  is("no prompt asks for the stand-in as a price fallback",
+    (prompts.match(/else \\?'See website\\?'/g) || []).length, 0);
+  ok("they ask for an empty field instead", /EMPTY STRING/.test(prompts));
+  ok("and say why the app decides it", /the app decides what a reader is told about a missing price/.test(prompts));
+  // The voice rules recommended the same stand-in, and half a change is worse
+  // than none: a prompt saying "leave it empty" under voice rules saying "write
+  // See website" is a coin flip per draft.
+  const voice = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("the voice rules no longer recommend it for a price", /Never write "See website" in a price field/.test(voice));
+  ok("and its last-resort line points at an empty field", /an empty price field is a last resort/.test(voice));
+
+  // ── AND THE GATE FILLS IT IN FROM WHAT IT READ ──────────────────
+  const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the gate only acts when the draft states no figure", /if \("price" in t && !statesAPrice\(t\.price\)\)/.test(appP));
+  ok("it asks whether the operator's page was read", /const siteChecked = !!String\(scrapedSiteText \|\| ""\)\.trim\(\);/.test(appP));
+  ok("and whether that page states a price", /const siteHasPrice = !!ticketPriceOn\(scrapedSiteText\);/.test(appP));
+  ok("then writes the field", /t\.price = unpricedLine\(\{ siteChecked, siteHasPrice \}\);/.test(appP));
+  ok("and tells him when it is the stronger answer", /noteToFounder\(describeUnpriced\(\{ siteChecked, siteHasPrice, name: t\.name \}\)\)/.test(appP));
+  // Guarded on the field EXISTING, because not every content type has one and
+  // adding a price to a town would be a new field nothing reads.
+  ok("it does not invent the field on a type that has none", /"price" in t/.test(appP));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

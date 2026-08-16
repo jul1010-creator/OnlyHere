@@ -9,15 +9,17 @@ import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
+import { partOfCountry } from "../utils/geography";
 import { journeyFromStored, legSteps, worthShowingLegs } from "../utils/journey";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { askClaude } from "../utils/aiClient";
-import { testTravelerLine, isFerryText } from "../utils/helpers";
-import { stopKind, tripScaleLine, tripCharacter, bookingActions } from "../utils/guideReading";
+import { testTravelerLine, isFerryText, daysUntil } from "../utils/helpers";
+import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from "../utils/guideReading";
 import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
-import { dayStart, dayKey } from "../utils/calendarDay";
+import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { shareMessage, shareTitle } from "../utils/share";
+import { returnLeg, describeReturn, REACH_FAR } from "../utils/routeOrder";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
 // The ONLY place a guide is ever shown, per Oliver ("get rid of the popup") —
@@ -464,15 +466,19 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
     // dayStart, not new Date: an arrival is stored as a calendar day now, and
     // the legacy timestamp form still reads as the local day it used to.
     const arrival = dayStart(guide._arrivalDate);
-    const startOffset = arrival
-      ? Math.max(0, Math.round((new Date(arrival).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000))
-      : 0;
+    // daysUntil, not the subtraction written out again. `new Date(arrival)` was a
+    // clone and the setHours a no-op on a value dayStart had already normalised,
+    // so this read as a raw parse of a stored date while being harmless, which is
+    // the worst of both: it teaches the shape without paying for it.
+    const startOffset = arrival ? Math.max(0, daysUntil(arrival)) : 0;
     (async () => {
       const next = await Promise.all(days.map(async (d, i) => {
         const st = (d.stops || []).map(x => resolveStopCoords(x.name, guide._geo || {}, x.town)).find(Boolean);
         if (!st) return d.weather || null;
-        const on = new Date(arrival || new Date());
-        on.setDate(on.getDate() + i);
+        // The same shared primitive App.jsx's build path uses, so the weather
+        // baked into a guide and the weather refreshed when it is reopened are
+        // computed for the same day. See dayPlus in utils/calendarDay.js.
+        const on = dayPlus(arrival || new Date(), i);
         return await dayWeather({
           point: st, date: on, daysOut: startOffset + i,
           fetchJson: (url) => fetch(url).then(r => r.json()).catch(() => null),
@@ -916,7 +922,21 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           const p = guide._testProfile;
           let plan = null;
           try { plan = guide._testPlan ? JSON.parse(guide._testPlan) : null; } catch { /* skeleton unparseable — show the rest without it */ }
-          const eventStops = (guide.days || []).flatMap(d => d.stops || []).map(s => ({ s, real: lookupRealPlace(s.name) })).filter(x => x.real?._src === "event").map(x => x.s.name);
+          // ── AND A NAME ALONE DOES NOT ANSWER HIS QUESTION ──────
+          // "Did they include events" was answered with a list of names, which
+          // is the same gap the stop cards had: Tivoli Halloween in a September
+          // plan reads as a hit here and is a miss on the ground. The window
+          // comes along, and so does a flag when the day the planner chose is
+          // outside it, because this panel is where that gets noticed.
+          const eventStops = (guide.days || [])
+            .flatMap((d, i) => (d.stops || []).map(s => ({ s, dayNo: d.day || i + 1 })))
+            .map(x => ({ ...x, real: lookupRealPlace(x.s.name) }))
+            .filter(x => x.real?._src === "event")
+            .map(x => {
+              const w = stopEventWhen(x.real, tripDayDate(guide._arrivalDate, x.dayNo));
+              if (!w) return x.s.name;
+              return `${x.s.name} (${w.runs}${w.offWindow ? `, NOT on day ${x.dayNo}` : ""})`;
+            });
           // The brief no longer names towns or "extras", because naming
           // published entries pre-solved the hardest thing the pipeline does.
           // This panel used to read p.towns.join() unguarded, which would have
@@ -962,6 +982,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           const geo = guide._geo || {};
           const exactDurations = guide._exactDurations || {};
           const noRouteFound = guide._noRouteFound || {};
+          // The calendar day this day of the trip falls on, computed ONCE for
+          // the whole day and read by both the stop cards and the "Where to
+          // stay" booking link below. It used to be built inside that booking
+          // block alone, which was fine while it had one reader. See
+          // tripDayDate in utils/guideReading.js for why it is not inline.
+          const dayDate = tripDayDate(guide._arrivalDate, day.day || dayIdx + 1);
           // LINK PARITY FIX (Oliver: "Public transport says 19 minutes... you
           // then check maps, and it's 27"): the in-app duration was fetched
           // with real resolved COORDINATES, but this Google Maps link was built
@@ -1113,7 +1139,25 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             // journey and cannot put them on it. See utils/operators.js for
             // why a ferry gets the national planner and never a company name.
             const ferryLeg = isFerryText(how) || usedMode === "ferry";
-            const ops = operatorsForLeg({ km, mode: ferryLeg ? "ferry" : usedMode, how });
+            // ── WHICH LANDMASS EACH END OF THIS LEG IS ON ──────
+            // Deliberately NOT preciseCoord. A precise coordinate is what the
+            // Maps link needs, because the wrong side of a city is a wrong
+            // journey. A town centre answers "is this stop in Jutland" perfectly
+            // well, and demanding precision here would withhold Kombardo on
+            // every leg whose stops only resolved to their town, which is most
+            // of them. See isRegionCrossing in utils/operators.js.
+            const partAtStop = (nm) => {
+              const c = resolveStopCoordsDetailed(nm, geo, stopTownOf(nm));
+              const lat = Number(c?.lat), lon = Number(c?.lon);
+              return Number.isFinite(lat) && Number.isFinite(lon)
+                ? (partOfCountry({ __lat: lat, __lon: lon }) || "")
+                : "";
+            };
+            const ops = operatorsForLeg({
+              km, mode: ferryLeg ? "ferry" : usedMode, how,
+              fromPart: ferryLeg ? "" : partAtStop(originName),
+              toPart: ferryLeg ? "" : partAtStop(destName),
+            });
             const opsNote = operatorNote({ mode: ferryLeg ? "ferry" : usedMode, how });
             const chip = (
               <a href={routeUrl(originName, destName, estIsImpossibleWalk ? (guide._mode === "bike" ? "bicycling" : guide._mode === "car" ? "driving" : "transit") : usedMode)} target="_blank" rel="noreferrer"
@@ -1293,6 +1337,12 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 // Danish compound names already carry the answer, so this costs
                 // one small tag and no research at all.
                 const kind = stopKind(stop.name, real);
+                // ── AND WHEN IT RUNS, IF IT IS AN EVENT ──────────────
+                // Null for everything that is not one, so a restaurant is
+                // untouched. See stopEventWhen in utils/guideReading.js: this
+                // card was the reason a correct Tivoli Halloween offer looked
+                // wrong and could only be checked by leaving the site.
+                const when = stopEventWhen(real, dayDate);
                 const titleRow = (
                   <>
                     <div style={{ fontSize: real?.photo ? 17 : 15, fontWeight: 600, color: real ? C.gold : C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.2, textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}55` : "none", textUnderlineOffset: 3 }}>{stop.name}{real ? " ↗" : ""}</div>
@@ -1304,6 +1354,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                         <span style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1 }}>
                           {[!real?.photo && stop.arrivalTime, stop.town, stop.suggestedStay].filter(Boolean).join(" · ")}
                         </span>
+                      </div>
+                    )}
+                    {when && (
+                      <div style={{ fontSize: 11.5, color: when.offWindow ? "#FFB347" : C.light, marginTop: 6, fontWeight: when.offWindow ? 700 : 400 }}>
+                        {when.offWindow ? `⚠ Runs ${when.runs}, which is not the day this stop falls on` : `Runs ${when.runs}`}
                       </div>
                     )}
                     {noteBlock}
@@ -1359,10 +1414,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               })}
             </div>
             {day.glance?.accommodation && (() => {
-              const dayDate = dayStart(guide._arrivalDate);
-              if (dayDate) dayDate.setDate(dayDate.getDate() + ((day.day || dayIdx + 1) - 1));
-              const nextDate = dayDate ? new Date(dayDate) : null;
-              if (nextDate) nextDate.setDate(nextDate.getDate() + 1);
+              // dayDate is this day of the trip, computed once at the top of the
+              // day render and shared with the stop cards. Checkout is the next
+              // morning, through the same tested primitive rather than a second
+              // mutating setDate.
+              const nextDate = dayPlus(dayDate, 1);
               // ── AND toISOString UNDID THE LINE ABOVE IT ──────────
               // dayStart returns LOCAL midnight of the arrival day, and
               // toISOString converts that to UTC, which in Denmark is 22:00 the
@@ -1420,6 +1476,42 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           </div>
           );
         })}
+
+        {/* ── AND THEN HOW DO THEY GET HOME ──────────────────────────
+            A guide could end in Aalborg, five and a half hours from the airport
+            it started at, and say nothing at all. The plan runs between the
+            points the traveller named and stops at the last one.
+
+            Printed AFTER every day rather than folded into the last one, because
+            it is not part of the trip: it is what the trip leaves them holding.
+            The ORDER is untouched, deliberately, per the note above routeOrder in
+            utils/routeOrder.js. Silent when they end where they landed, and
+            silent when nothing in the brief said where that was. */}
+        {(() => {
+          const stops = (days || []).flatMap(d => (d.stops || []).map(s => {
+            const c = resolveStopCoords(s.name, guide._geo || {}, s.town);
+            return c ? { name: s.name, lat: c.lat, lon: c.lon } : { name: s.name };
+          }));
+          const home = returnLeg({ ordered: stops, from: guide._arrivalPoint || null, days: (days || []).length });
+          const line = describeReturn(home);
+          if (!line) return null;
+          const far = home.band === REACH_FAR;
+          return (
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: C.surface, border: `1px solid ${far ? "#FFB347" : C.gold}44`, borderRadius: 12, padding: "12px 14px", marginTop: 20, maxWidth: 620 }}>
+              <span style={{ fontSize: 15, flexShrink: 0 }}>{far ? "⚠" : "🧭"}</span>
+              <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                <span style={{ color: far ? "#FFB347" : C.gold, fontWeight: 700 }}>Getting back: </span>
+                <span style={{ color: C.light }}>{line}</span>
+                {/* Said out loud rather than implied. Every other distance on
+                    this page is a measured road journey and this one is not, so
+                    it must not be allowed to look like one. */}
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                  Straight line distance, not a measured route, so treat it as the shape of the problem rather than as a timetable.
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {isUnsaved && (
           // PASS 27 BUG FIX (Oliver: "the Gemlyx Guide is on top of the 'sounds

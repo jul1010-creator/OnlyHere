@@ -189,3 +189,62 @@ export const routeOrder = (places, { from = null, compare = null } = {}) => {
   }
   return { ordered: [...best.order, ...unplaced], legs, totalKm: best.km, from };
 };
+
+// ── AND THEN HOW DO THEY GET HOME ────────────────────────────────────
+//
+// A guide can end in Aalborg, five and a half hours from the airport it started
+// at, and say nothing at all about it. The planner builds a path between the
+// points a traveller named and never asks the last question, which is the one
+// with a flight at the end of it.
+//
+// THIS DOES NOT CHANGE THE ORDER, and that is the whole design. The comment
+// above routeOrder makes the case for an open path rather than a loop: a loop
+// assumes they fly home from the same airport, nothing in a brief says so, and
+// guessing a return leg would pull the whole order toward the start for a reason
+// nobody stated. That reasoning is still right, and it is a reason not to
+// REORDER. It was never a reason not to MEASURE.
+//
+// So the order stays exactly what it was and the distance home becomes a fact
+// printed at the end, which a reader can act on and which costs them nothing if
+// they are flying out of somewhere else.
+//
+// Straight line, like everything else in this file, and the reader is told so.
+// Measuring it properly is a /api/directions call for a leg that is not part of
+// the plan, and the honest version of "about 250 km, allow most of a day" beats a
+// precise number for a journey nobody has committed to.
+export const returnLeg = ({ ordered = [], from = null, days = null } = {}) => {
+  const start = coordsOf(from);
+  if (!start) return null;
+  // The last place that HAS a coordinate, not the last place. routeOrder puts
+  // rows it could not place at the end, and measuring from one of those would
+  // silently answer a different question.
+  const last = [...(Array.isArray(ordered) ? ordered : [])].reverse().find(p => coordsOf(p)) || null;
+  if (!last) return null;
+  const km = kmBetween(last, from);
+  if (km == null) return null;
+  return {
+    from: String(last.name || ""),
+    to: String(from.name || ""),
+    km,
+    band: reachBand(km, days),
+    // Ending where they started is not a return leg, it is no journey at all,
+    // and a card saying "0 km back to Billund Airport" is noise.
+    needed: km > 0,
+  };
+};
+
+// The sentence, computed from the two numbers and never written by a model. Empty
+// when there is nothing worth interrupting a reader for, which is the case this
+// exists to distinguish: a trip ending at the airport it started from has no
+// news, and one ending 250 km away has some.
+export const describeReturn = (leg) => {
+  if (!leg || !leg.needed) return "";
+  const where = leg.to ? `back to ${leg.to}` : "back to where you landed";
+  if (leg.band === REACH_COMFORTABLE) {
+    return `${leg.from} is about ${leg.km} km ${where}, so the journey home is a manageable half day at the end.`;
+  }
+  if (leg.band === REACH_STRETCH) {
+    return `${leg.from} is about ${leg.km} km ${where}. Worth leaving real time for on your last day, or booking a flight out of somewhere closer.`;
+  }
+  return `${leg.from} is about ${leg.km} km ${where}, which is most of a day of travelling. If you are flying home from where you landed, plan the last day around getting there rather than around anything else.`;
+};

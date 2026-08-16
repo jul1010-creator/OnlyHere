@@ -1,0 +1,66 @@
+name: Build Check
+
+# Runs the suite and then a real build on every push and pull request. Catches
+# broken code before Vercel deploys it, and before anyone has to notice manually.
+#
+# THIS FILE CANNOT BE WRITTEN BY A REMOTE TOOL. GitHub protects
+# .github/workflows/ from tokens without the workflow scope, sensibly, since a
+# workflow executes code. So it is handed over as a file and pasted in by hand.
+# If you are reading this in the repo, it is already live.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build the app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: onlyhere-project
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: onlyhere-project/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run the test suite
+        run: node tests/run.mjs
+
+      # ── AND AGAIN ON A CLOCK WEST OF GREENWICH ──────────────────────
+      #
+      # This is the step that was missing, and it is not belt and braces. On 16
+      # August, reverting hasFinished and isUpcoming to UTC date parsing killed
+      # NOTHING in a UTC container: every assertion stayed green while the bug
+      # was back in the file. A timezone bug needs a timezone.
+      #
+      # New York because it is the far side of the family: a stored date parsed
+      # as UTC midnight reads as the previous day there, which is where the
+      # Events grid pilled tomorrow's festival "Happening now" from 20:00 every
+      # evening. Copenhagen catches the mirror cases, and the runner is already
+      # effectively UTC above.
+      #
+      # Both steps block. A suite that runs and does not gate is a decoration.
+      - name: Run the test suite again on a New York clock
+        run: node tests/run.mjs
+        env:
+          TZ: America/New_York
+
+      - name: Build (this is the real check)
+        run: npm run build
+
+      - name: Report success
+        if: success()
+        run: echo "Build passed, safe to deploy."

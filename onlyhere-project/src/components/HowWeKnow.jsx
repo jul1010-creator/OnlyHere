@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
+import { dayStart } from "../utils/calendarDay";
 
 // ── SHOWING THE WORKING (Oliver, 7 Aug 2026) ─────────────────────────
 //
@@ -38,10 +39,23 @@ const hostOf = (url) => {
 // are shown as text and never dressed up as a citation.
 const isLink = (s) => typeof s === "string" && /^https?:\/\//i.test(s);
 
+// ── AND A BARE DAY WOULD PRINT THE DAY BEFORE ───────────────────────
+// Every value this is handed today is a full ISO instant, so a raw parse has
+// always been right and this is not a fix for a live bug. It is a fix for the
+// shape: one module away, openingHours.js writes `checkedOn` as
+// String(fetchedAt).slice(0, 10), a bare day, and the moment anything renders
+// one of those through here, `new Date("2026-08-11")` is UTC midnight and
+// toLocaleDateString reads it locally, so it prints 10 Aug for every reader west
+// of Greenwich. That is finding five of last night's five, verbatim.
+//
+// dayStart is right for both: a bare day is the day it names, and an instant is
+// the local calendar day it fell on, which is what a "last checked" line means.
+// It also returns null rather than an Invalid Date, so the fallback below fires
+// on an unreadable value instead of relying on isNaN coercion.
 const dateLabel = (iso) => {
   if (!iso) return null;
-  const d = new Date(iso);
-  if (isNaN(d)) return typeof iso === "string" ? iso : null;
+  const d = dayStart(iso);
+  if (!d) return typeof iso === "string" ? iso : null;
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 };
 

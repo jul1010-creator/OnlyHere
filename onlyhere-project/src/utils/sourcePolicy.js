@@ -170,6 +170,71 @@ export const nameIsDistinctive = (name) => {
   return words.some(w => !COMMON_NAME_WORDS.has(w));
 };
 
+// ── "ONE SOURCE? WHAT DA FK" ────────────────────────────────────────
+//
+// Oliver, 16 August 2026, on a finished draft for the paper art museum in Hune,
+// whose __sources array held exactly one URL: the museum's own website.
+//
+// The research had not failed. THE NAME HAD DISQUALIFIED ITS OWN SOURCES. The
+// draft is titled "Det Nye Museum for Papirkunst". The museum is called Museum
+// for Papirkunst, which is also its domain, museumforpapirkunst.dk. containsName
+// is a whole-phrase test, correctly so, and every page that calls the place by
+// its real name therefore failed to name the place:
+//
+//   "Museum for Papirkunst i Hune viser papirkunst fra hele verden"   refused
+//   "Oplev Museum for Papirkunst i Hune, Nordjylland"                 refused
+//   "Bit Vejle har skabt Museum for Papirkunst"                       refused
+//
+// The one URL that survived did so through the ownHost line below, which is a
+// shortcut past the relevance test rather than a pass of it. So the count was
+// not one source. It was zero sources and a website.
+//
+// AND THE COST IS NOT THE COUNT. The draft states four prices, 90, 50, 160 and
+// 120 DKK, and its own audit note says none of them appear anywhere in the
+// official site's text. They came off one of the pages above, that page was
+// discarded as irrelevant, and the FIGURE outlived its provenance. An empty
+// source list also reads as "a place too small to have been written about",
+// which the comment beside __sources says in as many words, so nothing anywhere
+// looked wrong.
+//
+// A LEADING ARTICLE IS NOT PART OF WHAT SOMEWHERE IS CALLED. "Det Nye Museum
+// for Papirkunst" and "Museum for Papirkunst" are one museum, and a longer name
+// must not be harder to corroborate than the short one it contains.
+//
+// STRIPPED FROM A CLOSED LIST, AND ONLY FROM THE FRONT. Not "any subset of the
+// words", which would make "Den Gamle By" match "det gamle rådhus", the exact
+// shape of the alias bug that put a museum in Aarhus on a Ribe card. Only a
+// leading run of articles and new/old markers, stopping at the first word that
+// is not one, and only while a distinctive word still survives in the remainder:
+// "Den Gamle By" gives up "Den" and keeps "Gamle By", because dropping "Gamle"
+// would leave the generic word "By" to match on its own.
+const LEADING_WORDS = new Set([
+  "det", "den", "de", "dette", "disse", "en", "et",
+  "the", "a", "an",
+  "ny", "nye", "nyt", "new",
+]);
+
+export const nameCore = (name) => {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  const needed = distinctiveWords(name);
+  if (!needed.length) return "";
+  let out = words;
+  while (out.length > 1 && LEADING_WORDS.has(fold(out[0]))) {
+    const rest = out.slice(1);
+    // Never strip past the last distinctive word: what is left has to still be
+    // the name of something rather than a category. Reachable, and the case that
+    // proves it is not obvious: distinctiveWords keeps any word of four letters
+    // or more, so of everything in LEADING_WORDS only "dette" and "disse"
+    // qualify. "Dette Museum" therefore has "dette" as its ONLY distinctive
+    // word, and without this line the core would be the bare word "Museum",
+    // which would make every page containing it a source.
+    if (!needed.every(w => distinctiveWords(rest.join(" ")).includes(w))) break;
+    out = rest;
+  }
+  const core = out.join(" ");
+  return core === words.join(" ") ? "" : core;
+};
+
 // The corroborating signals, in the order they are worth anything. `ownHost` is
 // the place's own website: a page ON the venue's own domain is about the venue,
 // full stop, and needs no second signal.
@@ -178,7 +243,9 @@ export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = ""
   if (!said.trim()) return false;             // never saw the page, so it is not a source
   const host = normaliseDomain(url);
   if (ownHost && host && host === normaliseDomain(ownHost)) return true;
-  const namesIt = variantsOf(name, { includeSights: true }).some(v => v && containsName(said, v));
+  const core = nameCore(name);
+  const spellings = [...variantsOf(name, { includeSights: true }), ...(core ? [core] : [])];
+  const namesIt = spellings.some(v => v && containsName(said, v));
   if (!namesIt) return false;
   if (nameIsDistinctive(name)) return true;   // the name identifies it on its own
   // An ordinary name has to be corroborated. The town is the strongest signal

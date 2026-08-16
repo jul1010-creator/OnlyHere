@@ -987,7 +987,26 @@ export const priceMisses = (draftText, opts) => {
 // Phrased as what it is. A price that did not come from the site that charges it
 // is not proven wrong, it is unproven, and the honest place for an unproven
 // figure in this product is the uncertainties list rather than the prose.
-export const describePriceTrace = (r) => {
+// ── AND THE UNTRACED LINE GUESSED WHERE THE FIGURE CAME FROM ────────
+//
+// Oliver, 16 August 2026, on the paper art museum draft. The note below told him
+// four prices "came from a search result or a blog rather than from whoever
+// charges it". That is a claim about provenance, and this function has never once
+// known it: all it checks is that the official site does not say the figure. On
+// that draft the truth was worse than the note. The pages that stated the price
+// had been discarded by the relevance filter, because the entry's name carried a
+// "Det Nye" prefix the real museum does not use, so nothing in __sources
+// supported the number at all. See nameCore in sourcePolicy.js.
+//
+// "It came from a blog" invites him to go and find the blog. "No page this draft
+// read states it" tells him to cut the figure. Two different instructions, and
+// the app was giving the first while the second was true.
+//
+// `statedOn` is three-valued on purpose, and UNDEFINED KEEPS THE OLD WORDING, so
+// a caller that has not been taught to answer this cannot be made to lie by the
+// change: a host means a real page that was read states it, null means none does,
+// and undefined means nobody asked.
+export const describePriceTrace = (r, { statedOn = undefined } = {}) => {
   if (!r) return "";
   if (!r.checked) return r.draft.length ? `${r.draft.length} price${r.draft.length === 1 ? "" : "s"} in this draft could not be traced, because ${r.why}.` : "";
   if (!r.draft.length) return "";
@@ -1017,7 +1036,124 @@ export const describePriceTrace = (r) => {
       : `Every price in this draft is stated by a source that was actually read.${listedNote}`;
   }
   const many = r.untraced.length > 1;
-  return `NOT FROM THE OFFICIAL SITE: ${r.untraced.map(showPrice).join(", ")}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text, so ${many ? "they came" : "it came"} from a search result or a blog rather than from whoever charges it. Name the day, the ticket tier and whether it is still buyable, or move ${many ? "them" : "it"} to uncertainties.${listedNote}`;
+  const figures = `${r.untraced.map(showPrice).join(", ")}`;
+  // "NO PAGE WE READ SAYS THIS" is a different instruction from "find the blog it
+  // came from", and it is the stronger of the two, so it gets its own sentence.
+  //
+  // ── AND THE FIRST DRAFT OF THIS SENTENCE MADE THE MISTAKE IT FIXES ─
+  // It read "Do not go looking for the page: if one existed it was already read
+  // and discarded, which is a bug in the source filter." That is one of three
+  // possible causes asserted as the only one, which is exactly the overreach of
+  // the "came from a blog" line it replaces.
+  //
+  // Measured on the museum that started this, 16 Aug: museumforpapirkunst.dk
+  // publishes its prices at /dk/besog, behind a link, and this pass reads the
+  // front page. So those four figures may be exactly right and on the operator's
+  // own site, in a place nothing opened. What is known is only what was read, and
+  // an audit that says more than it measured is the thing this file exists to
+  // stop, whoever is writing it.
+  if (statedOn === null) {
+    return `NOT IN ANYTHING WE READ: ${figures}. ${many ? "These figures are" : "This figure is"} not in the official site's text and no other page this draft read states ${many ? "them" : "it"}, so ${many ? "they have" : "it has"} no source on this row. Three things cause that and they need different answers. The site may keep its prices on a page nothing opened, commonly /priser, /besog or /practical, in which case fetch that page and ${many ? "they are" : "it is"} confirmed. A page that did state ${many ? "them" : "it"} may have been read and then refused by the source filter, which is a bug worth reporting rather than a gap to fill by hand. Or nothing ever stated ${many ? "them" : "it"}, in which case cut ${many ? "them" : "it"}.${listedNote}`;
+  }
+  if (statedOn) {
+    return `NOT FROM THE OFFICIAL SITE: ${figures}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text. ${many ? "They are" : "It is"} stated on ${statedOn}, which is a page this draft read and is not the operator's own. Name the day, the ticket tier and whether it is still buyable.${listedNote}`;
+  }
+  return `NOT FROM THE OFFICIAL SITE: ${figures}. ${many ? "These figures do" : "This figure does"} not appear anywhere in the official site's own text, so ${many ? "they came" : "it came"} from a search result or a blog rather than from whoever charges it. Name the day, the ticket tier and whether it is still buyable, or move ${many ? "them" : "it"} to uncertainties.${listedNote}`;
+};
+
+// ── "SEE WEBSITE" IS WEAK, AND FOR REFFEN IT IS WORSE THAN WEAK ─────
+//
+// Oliver, on a Reffen draft: `"price": "See website"` is weak. He is right, and
+// Reffen is the case that shows it is not merely weak. Reffen's own site does not
+// publish stall prices either, so the field points a reader at a page that cannot
+// answer them. Three words that look like an answer and send somebody on an
+// errand ending where it started.
+//
+// TWO DIFFERENT THINGS WERE WEARING ONE SENTENCE:
+//
+//   we did not read the site        →  "See website" is honest and useful
+//   we read it and it is not there  →  "See website" is a wild goose chase
+//
+// So the string is DECIDED FROM WHAT WAS READ rather than written by the model.
+// The drafting pass already fetches the operator's own page and already asks
+// ticketPriceOn whether it states a figure. Nothing consumed that answer for the
+// price FIELD; it fed the audit note and stopped there.
+//
+// One pair of constants, because two spellings of "Not published" across a
+// prompt, a publish shape and a render is this codebase's favourite bug.
+export const PRICE_UNCHECKED = "See website";
+export const PRICE_NOT_PUBLISHED = "Not published";
+
+// A price field states a price when it contains a digit. Deliberately the same
+// test priceBand applies, so a row can never be both banded and unpriced.
+export const statesAPrice = (v) => /\d/.test(String(v ?? ""));
+
+// Which of the two a reader is told. `siteChecked` means the operator's own page
+// was READ, not that a fetch was attempted: a failed scrape is an unchecked site,
+// and claiming a page does not publish a price on the strength of a timeout is the
+// same overreach as the first draft of the price note above.
+export const unpricedLine = ({ siteChecked = false, siteHasPrice = false } = {}) =>
+  siteChecked && !siteHasPrice ? PRICE_NOT_PUBLISHED : PRICE_UNCHECKED;
+
+// The founder note, and only for the stronger answer. "We could not read the
+// site" is already in the run log and does not need a second line.
+//
+// It ends on Reffen's real answer, which its own audit found and its draft left
+// out: entry is free and you pay per stall. A missing number is not the same as
+// no cost, and that sentence is the one a reader needed.
+export const describeUnpriced = ({ siteChecked = false, siteHasPrice = false, name = "" } = {}) => {
+  if (!siteChecked || siteHasPrice) return "";
+  const who = String(name || "").trim();
+  return `NO PRICE, AND THE SITE DOES NOT PUBLISH ONE EITHER${who ? ` (${who})` : ""}. The field now reads "${PRICE_NOT_PUBLISHED}" rather than "${PRICE_UNCHECKED}", because sending a reader to a page that cannot answer them is worse than telling them nobody publishes it. If the real answer is that entry is free and you pay per stall or per item, that belongs in the entry as a sentence rather than as a missing number.`;
+};
+
+// ── WHAT IS THIS DRAFT STANDING ON ──────────────────────────────────
+//
+// Oliver, 16 August 2026, reading a finished draft's __sources: "one source?
+// What da fk".
+//
+// Nothing in the app had said so. The comment beside __sources reads "AN EMPTY
+// LIST IS ALLOWED. A place too small to have been written about should show no
+// sources rather than eight about somewhere else", which is right for the READER
+// and is exactly why an empty list is invisible to the FOUNDER. A short list has
+// two possible causes that look identical, and they need opposite responses:
+//
+//   the place really is barely written about   →  publish it, that is the brand
+//   the filter threw the pages away            →  fix the filter, redraft
+//
+// So this says which is which where it can, and says plainly that it cannot when
+// it cannot. It is a __note, never a reader-facing field, so there is no cost to
+// saying it on every thin draft rather than only on suspicious ones.
+//
+// THE VENUE'S OWN SITE IS COUNTED SEPARATELY, because it is not corroboration.
+// A museum's own page is the right source for its opening hours and the worst
+// possible source for whether the museum is worth an hour of somebody's day, and
+// a list of one that IS that page reads as "sourced" while being unreviewed.
+export const evidenceStanding = ({ sources = [], ownSite = "" } = {}) => {
+  const host = (u) => { try { return new URL(String(u)).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
+  const own = host(ownSite) || String(ownSite || "").toLowerCase().replace(/^www\./, "");
+  const list = (Array.isArray(sources) ? sources : []).map(u => String(u || "")).filter(Boolean);
+  const hosts = [...new Set(list.map(host).filter(Boolean))];
+  const others = own ? hosts.filter(h => h !== own && !h.endsWith(`.${own}`)) : hosts;
+  return { total: hosts.length, hasOwn: !!own && hosts.length > others.length, others: others.length };
+};
+
+export const describeEvidence = (standing, { untracedPrices = 0 } = {}) => {
+  const s = standing || { total: 0, hasOwn: false, others: 0 };
+  // Two or more independent pages is an ordinary draft and needs no note. The
+  // threshold is on OTHERS rather than on the total, so the venue's own site
+  // plus one blog does not read as two sources.
+  if (s.others >= 2) return "";
+  const priced = untracedPrices > 0
+    ? ` ${untracedPrices} price${untracedPrices === 1 ? "" : "s"} in the prose ${untracedPrices === 1 ? "is" : "are"} stated as fact on top of that.`
+    : "";
+  if (s.total === 0) {
+    return `NOTHING IS SOURCED. __sources is empty, so every sentence in this draft rests on a page nobody kept.${priced} Either the place is genuinely unwritten about, in which case say less, or the source filter refused pages that were about it, which is a bug and not a gap.`;
+  }
+  if (s.others === 0) {
+    return `THE ONLY SOURCE IS THE VENUE'S OWN SITE. Nothing independent was kept, so the opening hours are as good as they get and every judgement in this draft, what it is worth and who it suits, is unreviewed.${priced} Check whether the name in this draft is the name the rest of the internet uses: a title the place does not call itself makes every page about it fail the relevance filter at once.`;
+  }
+  return `ONE INDEPENDENT SOURCE${s.hasOwn ? ", plus the venue's own site" : ""}. Everything here turns on a single page, so a mistake on that page is a mistake in this entry with nothing to catch it.${priced}`;
 };
 
 // ── A GLANCE FIELD IS AN ANSWER, NOT A REPORT ON THE SEARCH ─────────
