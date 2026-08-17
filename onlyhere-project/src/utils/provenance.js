@@ -234,13 +234,40 @@ const READER_RELEVANT = [
 
 // And the ones that are about OUR RESEARCH rather than about the place. These are
 // the ones he pointed at: true, useful internally, and not a fact about the world.
-const ABOUT_THE_RESEARCH = /\b(?:source material|the sources?|in the research|research (?:found|did not)|could not be found|no source|not source-verified|unconfirmed by a primary source|applied from your own correction|no mention|not (?:stated|detailed|specified) in)\b/i;
+const ABOUT_THE_RESEARCH = /\b(?:source material|the sources?|in the research|research (?:found|did not)|could not be found|no source|no mention|not (?:stated|detailed|specified) in)\b/i;
 
+// ── AND OUR OWN BOOKKEEPING, WHICH IS NEVER ABOUT THE PLACE ─────────
+// correction.js pushes two lines into `uncertainties` deliberately, and its own
+// comment says who they are for: "They go where the next reviewer will actually
+// see them." They are an editorial audit trail — what a correction pass raised,
+// what was applied on his authority, what still wants a source.
+//
+// This test comes FIRST, ahead of relevance, and the reason is structural rather
+// than stylistic: both of those lines name a field and quote its value ("price is
+// now 140-145 DKK"), so the relevance test below will always match them, forever.
+// A reader shown "still UNCONFIRMED by a primary source: price is now 140-145
+// DKK" reads the page as admitting its own price is invented — which is his
+// complaint, "People will think the draft is incorrect.. don't include this",
+// arriving through a second door.
+const OUR_OWN_BOOKKEEPING = /\b(?:applied from your own correction|raised in a correction pass|not source-verified|unconfirmed by a primary source|worth a source when one turns up)\b/i;
+
+// RELEVANCE BEATS RESEARCH-TALK, and the reason came out of running this over the
+// seven real drafts he sent on 17 Aug. Henne Kirkeby Kro's uncertainty reads "No
+// public transport route or duration from Copenhagen could be confirmed; the
+// source recommends driving." That is the single most decision-relevant sentence
+// on a two-Michelin-star restaurant in a village on the west coast, and the first
+// version of this dropped it, because it says "the source" and the research-meta
+// test ran first. Three uncertainties on that row and not one reached a reader.
+//
+// A line about getting there is about getting there however it is phrased. What
+// gets dropped ahead of relevance is only the part that is about US.
 export const readerUncertainty = (text) => {
   const t = clean(text);
   if (!t) return "";
+  if (OUR_OWN_BOOKKEEPING.test(t)) return "";
+  if (READER_RELEVANT.some(re => re.test(t))) return t;
   if (ABOUT_THE_RESEARCH.test(t)) return "";
-  return READER_RELEVANT.some(re => re.test(t)) ? t : "";
+  return "";
 };
 
 // Four at most. A reader scanning a page will read two and skim the rest, so a

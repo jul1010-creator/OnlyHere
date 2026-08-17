@@ -50,7 +50,7 @@ export default async function handler(req, res) {
   {
     const who = await resolveUser(req.headers, {
       supabaseUrl: process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co",
-      serviceKey: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "",
+      serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "",
     });
     if (!who.ok) return res.status(who.status).json({ error: who.error });
     if (!isFounder(who.userId, process.env.GEMLYX_FOUNDER_IDS)) {

@@ -322,8 +322,48 @@ export const PRICE_BANDS = [
 // The same three cuts the old function made, spelled out rather than derived
 // from the table, so the boundary at exactly 250 stays where it was: 250 is
 // inside the middle band, as it has always been.
+// ── WHICH NUMBERS IN A PRICE FIELD ARE MONEY ────────────────────────
+//
+// Found 17 Aug 2026 by running his own seven drafts through this. It read EVERY
+// number, averaged them, and banded that:
+//
+//   "3-course lunch menu 795 DKK; 4-course lunch menu 1,095 DKK"
+//      -> numbers 3, 795, 4, 1, 095 -> average 179.6 -> "100 to 250"
+//
+// So Henne Kirkeby Kro, two Michelin stars and 795 kroner for lunch, was filed in
+// the mid-range tab, by the course count and a thousands separator. Kok og Vin's
+// 152-character price sentence bands the same way. On the Food page that is a
+// traveller filtering for a cheap lunch and being shown a destination restaurant.
+//
+// A number is money when a currency follows it, which is exactly how these fields
+// are written: "795 DKK", "425 kr", "1.095 kroner". "3-course" and a comma group
+// are not. When no number carries a currency the old behaviour stands, because a
+// bare "425" in a price field is still a price and refusing to band it would empty
+// the tabs for every entry written before this.
+//
+// A RANGE SHARES ITS CURRENCY, and this cost an existing assertion before it was
+// noticed: "50-450 DKK" writes the unit once, at the end, so reading only the
+// number the currency touches gives 450 and bands a place with 50-kroner dishes
+// over 250. Both ends are money. The second group is the low-end capture.
+const MONEY = /(\d[\d.,]*)\s*(?:[–—-]\s*(\d[\d.,]*)\s*)?(?:dkk|kr\b|kroner|,-)/gi;
+
+// A thousands separator is not a decimal point in Danish, and either way the band
+// only cares about the magnitude: strip the groupings, keep a real decimal.
+const kroner = (raw) => Number(String(raw).replace(/[.,](?=\d{3}\b)/g, "").replace(",", "."));
+
 export const priceBand = (priceStr) => {
-  const nums = (String(priceStr || "").match(/\d+/g) || []).map(Number);
+  const text = String(priceStr || "");
+  const withCurrency = [...text.matchAll(MONEY)]
+    // m[2] is the low end of a range and is undefined on a single figure, which
+    // becomes NaN and is dropped by the finite test below. A `.filter(Boolean)`
+    // stood here first; mutation testing showed removing it changed no result,
+    // so it was reassurance rather than a guard, and it is gone.
+    .flatMap(m => [m[1], m[2]])
+    .map(kroner)
+    .filter(n => Number.isFinite(n));
+  const nums = withCurrency.length
+    ? withCurrency
+    : (text.match(/\d+/g) || []).map(Number);
   if (!nums.length) return null;                 // nothing to band, and that is an answer
   const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
   if (avg < 100) return "under-100";

@@ -28,6 +28,9 @@ import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { shareMessage, shareTitle } from "../utils/share";
 import { returnLeg, describeReturn, REACH_FAR } from "../utils/routeOrder";
+import { GUIDE_RIGHTS_SHORT, copyrightLine } from "../utils/rights";
+import { guideHero, heroCaption } from "../utils/guideHero";
+import { PhotoCredit } from "../components/PhotoCredit";
 
 // ─── GUIDE PAGE ───────────────────────────────────────────────────
 // The ONLY place a guide is ever shown, per Oliver ("get rid of the popup") —
@@ -464,6 +467,13 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
     [libraryTick],
   );
 
+  // The header photograph, up here for the same reason and on the same
+  // libraryTick: lookupRealPlace reads the imported arrays, which are empty on
+  // first paint, so without the tick a guide would render its plain header once
+  // and never pick the picture up. `guide` is in the dependency list because a
+  // shared link resolves it asynchronously too.
+  const hero = useMemo(() => guideHero(guide, lookupRealPlace), [guide, libraryTick]);
+
   // ── EVERY HOOK LIVES ABOVE THE EARLY RETURNS ────────────────────
   // These three used to sit BELOW `if (loading) return` and
   // `if (loadError || !guide) return`, which is a hooks-order violation and it
@@ -769,6 +779,14 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, textDecoration: "none" }}>Email ↗</a>
               </div>
             )}
+            {/* The rule stated where the action is, which is the only place a
+                rule in a terms page ever actually lands. Note that every target
+                this panel offers — the native sheet, WhatsApp, email — is
+                person to person, so the panel and the rule already agree: this
+                is for the people coming with you. */}
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 12, lineHeight: 1.6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+              For the people coming with you. Posting the guide publicly or republishing the text is not allowed.
+            </div>
           </div>
         </div>
       )}
@@ -777,8 +795,55 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
         {/* Redesign pass: kicker + roomier title, and the essentials box became a
             labeled "Before you go" card instead of three anonymous ◆ bullet lines —
             same data, but each line now says what KIND of tip it is at a glance. */}
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>✦ Your Gemlyx guide</div>
-        <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || "Your Denmark Guide"}</div>
+        {/* ── THE PICTURE BEHIND THE TITLE ───────────────────────────
+            Oliver, 17 Aug 2026: "I wonder if we should get a picture of
+            something Danish in the background when the guide is given."
+
+            Right that the page opens on nothing, and the literal version would be
+            wrong: a stock Nyhavn behind a bicycle trip from Aalborg to Skagen is a
+            photograph of somewhere they are not going, unsourced, sitting above a
+            page where every price is traced and every distance measured. So it is
+            their OWN first stop, from a row he published himself, with the credit
+            the licence requires. A different picture on every guide, no research
+            and no new API call. utils/guideHero.js carries the full argument.
+
+            No photograph anywhere in the trip means no header image. Never a stock
+            fallback: that would put a picture of somewhere they are not going on
+            exactly the guides where we know least. */}
+        {hero?.photo && (
+          <div style={{ position: "relative", height: 260, borderRadius: 18, overflow: "hidden", marginBottom: 18, border: `1px solid ${C.border}` }}>
+            <img src={hero.photo} alt={heroCaption(hero) || "A place on this trip"}
+              onError={e => { e.target.style.display = "none"; }}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            {/* A scrim, not a flat overlay: the title sits over the bottom third
+                and text on a photograph without one is unreadable on whichever
+                image happens to be bright exactly there. */}
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,15,30,0.92) 0%, rgba(10,15,30,0.45) 45%, rgba(10,15,30,0.15) 100%)" }} />
+            <div style={{ position: "absolute", left: 18, right: 18, bottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>✦ Your Gemlyx guide</div>
+              <div style={{ fontSize: 34, fontWeight: 500, fontFamily: "'Fraunces', serif", color: "#fff", lineHeight: 1.1, maxWidth: 680, textShadow: "0 2px 18px rgba(0,0,0,0.55)" }}>{guide.title || "Your Denmark Guide"}</div>
+              {/* Said out loud. An unlabelled photograph on a page about where to
+                  go is a decoration; a labelled one is information. */}
+              {heroCaption(hero) && (
+                <div style={{ fontSize: 11, color: "#E8ECF6", opacity: 0.9, marginTop: 7 }}>{heroCaption(hero)}</div>
+              )}
+            </div>
+          </div>
+        )}
+        {/* CC BY and CC BY-SA require attribution reasonably near the work, so a
+            photograph promoted to a header takes its credit up with it. */}
+        {hero?.photo && (
+          <PhotoCredit photo={hero.photo} credit={hero.credit} style={{ marginTop: -10, marginBottom: 16 }} />
+        )}
+
+        {/* Still exactly the old header on any guide whose stops have no
+            photograph between them. */}
+        {!hero?.photo && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>✦ Your Gemlyx guide</div>
+            <div style={{ fontSize: 36, fontWeight: 500, fontFamily: "'Fraunces', serif", color: C.text, lineHeight: 1.1, marginBottom: lightMode ? 10 : 24, maxWidth: 680 }}>{guide.title || "Your Denmark Guide"}</div>
+          </>
+        )}
         {/* So the absence of maps/routes reads as the choice it was, not a bug. */}
         {lightMode && (
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "5px 12px", marginBottom: 24, fontSize: 11, color: C.muted, fontWeight: 600 }}>
@@ -1678,6 +1743,28 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             </div>
           );
         })()}
+
+        {/* ── WHOSE WORDS THESE ARE ──────────────────────────────────
+            Oliver, 17 Aug 2026: "I also want you to write on the pages that I
+            claim copyright on my texts and guides. We need to make it strictly
+            forbidden to share the guides online" / "or publically rather."
+
+            At the foot of the guide, after the trip and after Getting back,
+            because it is about the document and not about the journey. Small and
+            quiet on purpose: a large legal box on a travel guide reads as a
+            threat, gets skipped, and makes the page feel like a licence
+            agreement. Two lines somebody will actually read beat six they will
+            not. The wording, and what it deliberately does NOT claim, is in
+            utils/rights.js. */}
+        <div style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.border}`, maxWidth: 620 }}>
+          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.65 }}>
+            {GUIDE_RIGHTS_SHORT}
+          </div>
+          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, opacity: 0.85 }}>
+            {copyrightLine(new Date().getFullYear())}{" "}
+            <a href="/terms.html" style={{ color: C.gold, textDecoration: "none" }}>Terms</a>
+          </div>
+        </div>
 
         {isUnsaved && (
           // PASS 27 BUG FIX (Oliver: "the Gemlyx Guide is on top of the 'sounds

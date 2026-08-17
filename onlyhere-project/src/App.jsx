@@ -86,7 +86,7 @@ import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommun
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
 import { cityFromLocation } from "./utils/guideEnrichment";
-import { readBrief } from "./utils/tripBrief";
+import { readBrief, briefBlock, nextAsks } from "./utils/tripBrief";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
@@ -9858,6 +9858,10 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [intakePlacePref, setIntakePlacePref] = useState(null);
   const [intakeTravelers, setIntakeTravelers] = useState("");
   const [intakeIncludeSaved, setIntakeIncludeSaved] = useState(false);
+  // Which brief slots Gemlyx has already put a question about. Recorded from what
+  // tripBrief.js told it to ask, so a question asked and not answered stops
+  // blocking instead of being asked forever. See sendAI, "THE BRIEF, COMPUTED".
+  const [briefAsked, setBriefAsked] = useState([]);
   const [intakeFamilyMode, setIntakeFamilyMode] = useState(false);
   const [intakeIncludeEvents, setIntakeIncludeEvents] = useState(false);
   const [detourTab, setDetourTab] = useState("sightseeing");
@@ -10723,6 +10727,48 @@ If the conversation only covers a single day or a few stops with no explicit day
       const monthName = now.toLocaleString("en", { month: "long" });
       const season = getSeason();
 
+      // ── THE BRIEF, COMPUTED, NOT FELT ─────────────────────────────
+      // Oliver, 17 Aug 2026, sending back a conversation of his own:
+      //
+      //   "It needs to require more info. And not bug. Because this is the result
+      //    of lack of info. It gives me a random route."
+      //
+      // What his transcript shows, in order. Gemlyx asked three things in a
+      // paragraph it called "two more things". He answered all three: tight
+      // backpacker, hidden gems, on a bicycle. That reply errored. He typed
+      // "What?". And Gemlyx said:
+      //
+      //   "Haha, no worries, that 'what?' is just you being surprised I asked
+      //    haha, all good, you already answered everything I needed."
+      //
+      // Both halves of that are invented. It made up a reading of his own message,
+      // and then it made up the state of the brief, and then it offered to build.
+      // Readiness was never anything but a feeling the model reported.
+      //
+      // So it is computed here, from HIS turns and the form he filled in, never
+      // from Gemlyx's own replies (utils/tripBrief.js says why that distinction is
+      // load-bearing). The block states what is known, what is missing, and caps
+      // the questions at two; and further down the ready marker is STRIPPED when
+      // the brief is not ready, because a model that can be told a rule in a
+      // prompt has already demonstrated it can talk itself out of one.
+      const travellerTurns = [...aiMessages.filter(m => m.role === "user").map(m => m.text || ""), msg];
+      const brief = readBrief({
+        travellerText: travellerTurns.join("\n"),
+        today: now,
+        asked: briefAsked,
+        intake: {
+          startPoint: intakeStartPoint,
+          arrival: intakeArrival,
+          departure: intakeDeparture,
+          travelers: intakeTravelers,
+          familyMode: intakeFamilyMode,
+          interest: intakeInterest,
+          transport: intakeTransport,
+          budgetText: intakeBudgetText,
+        },
+      });
+      const askedThisTurn = nextAsks(brief).map(s => s.key);
+
       const sysPrompt = `You are Gemlyx — Denmark's insider guide: a genuine local expert who knows this country inside out, and who's warm, friendly, and genuinely eager to help someone have a great trip — like a well-travelled Danish friend, never like a generic AI assistant or customer support script. Never call yourself an AI or a language model. You're a genuinely happy, upbeat guy who loves helping people discover Denmark — let real enthusiasm for a good find show through. A few fitting emojis are welcome where they add warmth (one or two per reply, like a 🚲 next to a bike tip or a 🌊 for a coastal stop) — never a wall of them, never one in every sentence. VARY HOW YOU OPEN AND STRUCTURE EACH REPLY — someone using Gemlyx repeatedly (or across sessions) should never feel like they're getting the same template with different words swapped in; don't default to the same opening phrase, sentence rhythm, or structure every time (e.g. don't always start with "Here's your plan" or always end with the identical closing line) — let your actual personality and enthusiasm come through differently each time, the way a real person would. NEVER USE THESE FILLER PHRASES, THEY ARE HARD BANNED — "Great!", "Certainly!", "Absolutely!", "I'd be happy to help", "You're in for a delightful time", "Let me know if you need anything else", or any close variant of them: they read as generic AI customer-service filler, not a knowledgeable local. Use natural, grounded language instead — "Perfect.", "Got it.", "That's enough to work with.", "I'd actually skip that and do X instead." HAVE REAL OPINIONS, DON'T JUST PLEASE EVERYONE: a real local travel planner recommends things and steers people away from others — say "I'd go with Kronborg over that other museum, it's an easy train ride and fits what you're into" rather than listing three neutral options and letting them pick. If somewhere is genuinely overrated, too far, or not worth the detour for what they want, say so plainly instead of building it into the plan anyway. GET TO THE POINT — most replies should be short and concrete, skip the long preamble before a recommendation. NEVER OFFLOAD YOUR OWN RESEARCH BACK ONTO THE TRAVELER: you have real search results available — never say things like "check if any events align with your dates" or "see what's on while you're there" as a way of avoiding doing that lookup yourself. If something like a seasonal event, festival, or opening-hours detail is genuinely relevant, search it and state the real answer plainly; if nothing specific turns up, just don't mention it at all rather than turning it into homework for the traveler. Today is ${monthName} (${season} season in Denmark). Recommend real things from the lists below, never invent places. When planning multi-day trips, consider the season: winter (Dec-Feb) favors museums/indoor craft and avoids camping or long bike routes; summer (Jun-Aug) is festival season and best for road trips/camping.
 
 BE GENUINELY HELPFUL, NOT JUST BRIEF — people planning a Denmark trip are often spending real money to get here, and a short, thin answer wastes their time more than a slightly longer, actually useful one does. "Concise" means no padding or filler, not "as few words as possible." When you answer, give the specific detail that changes what someone does: realistic costs (actual DKK figures, not just "moderate"), a heads-up if the season/weather makes something worth reconsidering, a genuine transit quirk, a real trade-off between two options. Depth here means more real information, not more adjectives or enthusiasm — the "kill the brochure fluff" rule still fully applies to HOW you write, just not to how much you're willing to actually tell someone.
@@ -10771,6 +10817,13 @@ You also have a web_search tool. Use it whenever someone asks about something th
 
 ${profileForPrompt(userProfile)}
 
+── THE TRIP BRIEF, AS MEASURED RATHER THAN AS YOU FEEL IT ──
+This block is computed from what the traveller has actually typed and from the form they filled in. It is not your impression of the conversation and it overrides your impression of the conversation. Never say you have everything you need unless this block says so, and never say a traveller has already told you something that is not listed as known here.
+
+${briefBlock(brief)}
+
+IF A TURN OF YOURS IS MISSING FROM THIS CONVERSATION, IT NEVER REACHED THEM. A reply of yours that failed to send is removed from the history you see, so you may find two of their messages in a row with nothing of yours between them. That gap is a reply of yours that they never saw. Do not guess what they meant by a short follow-up like "what?" or "huh?" in that position, do not explain their own message back to them, and never treat the exchange as settled because of it. Answer their last real message again, plainly.
+
 ${languageBlock()}`;
 
       const claudeTools = [{
@@ -10783,8 +10836,29 @@ ${languageBlock()}`;
         },
       }];
 
+      // ── AND THE HOLE AN ERROR LEAVES BEHIND ───────────────────────
+      // Stripping the error bubble is right and was a real fix: an error notice
+      // sent back as Gemlyx's own prior turn had it apologising for words it never
+      // said. But strip it and the two turns either side of it become adjacent, so
+      // the model reads two traveller messages in a row with nothing of its own
+      // between them, and it has no way to know a reply went missing.
+      //
+      // That is precisely the hole his transcript fell into. He answered the
+      // question, the reply errored, he typed "What?", and the model — seeing his
+      // answer and then his "What?" back to back — explained his own message to
+      // him and declared the brief complete. A gap with no explanation gets
+      // filled by invention, every time.
+      //
+      // So the gap is named instead of hidden. The note goes in as Gemlyx's turn
+      // because that is whose turn is missing, and the system prompt says what to
+      // do when it sees one.
+      const LOST_REPLY = "(This reply of mine failed to send. They never saw it, so nothing here has been answered yet.)";
       const baseMessages = [
-        ...aiMessages.filter(m => !m.isError).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
+        ...aiMessages
+          .map(m => m.isError
+            ? { role: "assistant", content: LOST_REPLY }
+            : { role: m.role === "assistant" ? "assistant" : "user", content: m.text })
+          .filter(m => !!m.content),
         { role: "user", content: msg },
       ];
 
@@ -10940,6 +11014,30 @@ ${languageBlock()}`;
         } catch (retryErr) {
           console.warn("Gemlyx chat: retry threw.", retryErr);
         }
+      }
+
+      // ── THE MARKER IS NOT THE MODEL'S TO GIVE ─────────────────────
+      // The prompt already spends a paragraph on when the marker may be emitted
+      // ("If you're at all unsure ... that uncertainty itself means: no marker").
+      // The transcript he sent is that paragraph being ignored: it emitted the
+      // marker one turn after an error, having invented both the traveller's
+      // meaning and the state of the brief. So the rule moves out of the prompt
+      // and into code, where it cannot be reasoned with.
+      //
+      // WHAT IS *NOT* DONE HERE: the button is not hidden. isFullPlanText still
+      // offers it whenever the reply reads like a plan, for the reason written at
+      // that call site — "A button shown one turn early costs a tap. A button
+      // never shown costs the whole product." Stripping the marker removes
+      // Gemlyx's CLAIM to be ready. It does not remove the traveller's way out.
+      if (replyText && !brief.ready && isReadyToBuild(replyText)) {
+        console.warn("Gemlyx chat: ready marker withheld, brief incomplete.", { missing: brief.missing });
+        replyText = stripReadyMarker(replyText);
+      }
+      // Recorded from what this turn was TOLD to ask, never parsed back out of the
+      // reply: a slot asked once is not asked again, so an unanswered question
+      // cannot block the build forever. See utils/tripBrief.js.
+      if (replyText && askedThisTurn.length) {
+        setBriefAsked(prev => [...new Set([...prev, ...askedThisTurn])]);
       }
 
       if (replyText) {

@@ -99,6 +99,8 @@ writeFileSync(entry, `
   export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
+  export { guideHero, heroCaption } from ${JSON.stringify(join(root, "src/utils/guideHero.js"))};
   export { MAX_STOPS_ARRIVAL_DAY } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -17507,6 +17509,67 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a priced row appears in exactly one band",
     PRICE_BANDS.filter(b => shown(b.id, "120 DKK")).length === 1);
 
+  // ── A NUMBER IS MONEY WHEN A CURRENCY FOLLOWS IT ────────────────
+  // Found by running the seven drafts he uploaded on 17 Aug through the real
+  // filter. Every price field the food studio writes is a SENTENCE, and this
+  // averaged every digit in it: the course count, and each group either side of
+  // a thousands separator. Henne Kirkeby Kro — two Michelin stars, 795 kr for
+  // lunch — was filed in the 100-to-250 tab. Kok og Vin's two sentences both
+  // landed on 249, one kroner inside the same tab.
+  //
+  // The invariant is stated as an equality rather than a value: a course count
+  // contributes NOTHING, so the band of the sentence is the band of the money
+  // in it. That cannot pass vacuously — if the count is read again, the two
+  // sides diverge.
+  is("a course count changes nothing", priceBand("3-course menu 425 DKK"), priceBand("425 DKK"));
+  is("nor does a party size", priceBand("Table for 2, 795 DKK per person"), priceBand("795 DKK"));
+  is("nor a seasonal note", priceBand("3 courses 395 DKK. Changes monthly, 12 dishes a season"), priceBand("395 DKK"));
+  // ── A RANGE SHARES ITS CURRENCY ─────────────────────────────────
+  // This is the way the money rule could go wrong, and it did: a range writes
+  // the unit once, at the end. Reading only the number the currency touches
+  // gives 450 for "50-450 DKK" and bands a place with 50-kroner dishes over 250.
+  // Caught by an assertion that was already here, which is the argument for
+  // having written it.
+  is("a range reads both ends", priceBand("50-450 DKK"), priceBand("50 DKK to 450 DKK"));
+  is("and the average of the range is the band", priceBand("50-450 DKK"), "100-250");
+  is("an en dash is a range too", priceBand("50–450 DKK"), priceBand("50-450 DKK"));
+  is("spaces round the dash change nothing", priceBand("50 - 450 DKK"), priceBand("50-450 DKK"));
+  is("a low range stays low", priceBand("60-80 DKK per dish"), "under-100");
+  // A thousands separator is a grouping, not a second number and not a decimal.
+  is("a Danish thousands point groups", priceBand("1.095 kr"), priceBand("1095 kr"));
+  is("and so does a comma", priceBand("1,095 kr"), priceBand("1095 kr"));
+  is("but a decimal comma is still a decimal", priceBand("12,50 kr"), "under-100");
+  // A grouping is three digits, never four. This is a malformed price and the
+  // assertion is not about handling it gracefully — it pins what the lookahead
+  // is for, which mutation testing found nothing else did.
+  is("a comma before four digits is not a thousands group", priceBand("1,0955 kr"), "under-100");
+  // And "kr" has to be a word. Danish prices are written next to Danish nouns,
+  // and half of them start with kr-: without the boundary, "2 kringler" reads as
+  // two kroner and drags the average down.
+  is("a Danish noun starting kr- is not a currency",
+     priceBand("2 kringler and coffee, 450 kr"), priceBand("450 kr"));
+  is("and that sentence bands on the money in it", priceBand("2 kringler and coffee, 450 kr"), "over-250");
+  // Every spelling the fields actually use has to count as money, or the
+  // sentence falls back to averaging digits again for that one spelling.
+  for (const written of ["425 DKK", "425 kr", "425 kroner", "425,-", "425 dkk"])
+    is(`${JSON.stringify(written)} is read as money`, priceBand(`3-course menu ${written}`), "over-250");
+
+  // ── HIS FOUR REAL SENTENCES ─────────────────────────────────────
+  // Verbatim from the drafts he sent. Every one of them banded 100-250.
+  for (const real of [
+    "3-course menu 425 DKK",
+    "3-course lunch menu 795 DKK; 4-course lunch menu 1,095 DKK",
+    "Tavern menu: 3 courses 395 DKK; Menu Classique: 3 courses 595 DKK",
+    "Tavlemenu (Blackboard Menu): 3 courses 395 DKK; À la Carte: 3 courses 595 DKK. The Tavlemenu changes monthly according to seasonal regional ingredients.",
+  ]) is(`a destination restaurant does not band mid-range: ${real.slice(0, 32)}…`, priceBand(real), "over-250");
+
+  // ── AND THE ROWS WRITTEN BEFORE THIS STILL BAND ─────────────────
+  // The fallback is not a nicety. Bare numbers are how older rows were written,
+  // and dropping them would empty the tabs for everything already published.
+  is("a bare number still bands", priceBand("425"), "over-250");
+  is("a bare range still bands", priceBand("60-80"), "under-100");
+  is("and a bare mid price still bands", priceBand("120-180"), "100-250");
+
   // ── AND THE FIELD IS GONE EVERYWHERE, NOT JUST THE TABS ─────────
   // Half a removal is worse than none: a prompt still asking for it spends a
   // model's attention on an answer nobody reads, and shapeForLive would keep
@@ -20324,6 +20387,48 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok(`${name} can be narrowed to named accounts`, /isFounder\(who\.userId, process\.env\.GEMLYX_FOUNDER_IDS\)/.test(src));
   });
 
+  // ── AND THE KEY HAS TO BE CALLED WHAT IT IS ACTUALLY CALLED ──────
+  // Oliver, 17 Aug 2026, minutes after the guard shipped:
+  //
+  //   "'Could not verify your session just now.' on instagram uploads."
+  //
+  // That is resolveUser's 503, and in production it fires on one condition: NO
+  // SERVICE KEY. The guard read `SUPABASE_SERVICE_KEY`, a name that exists
+  // nowhere in this project. api/ask.js, which has worked for a week, reads
+  // `SUPABASE_SERVICE_ROLE_KEY`. A plausible variable name was invented instead
+  // of read off the one file that already did this, and it locked the founder out
+  // of his own photo finder with a guard meant to keep strangers out.
+  //
+  // ASSERTED AGAINST ask.js RATHER THAN AGAINST A LITERAL. A hard-coded expected
+  // string would be the same guess again in a different file. This reads the name
+  // out of the endpoint that predates the guard and demands the five agree with
+  // it, so if that one is ever renamed the five fail here instead of in
+  // production.
+  const askSrc = readFileSync(join(root, "api", "ask.js"), "utf8");
+  const askKeys = [...askSrc.matchAll(/process\.env\.(SUPABASE_[A-Z_]*KEY)/g)].map(m => m[1]);
+  ok("ask.js names a service key at all", askKeys.length > 0);
+  const provenKey = askKeys[0];
+  is("and it is the service role key", provenKey, "SUPABASE_SERVICE_ROLE_KEY");
+  STUDIO_ONLY_ENDPOINTS.forEach(name => {
+    const src = readFileSync(join(root, "api", `${name}.js`), "utf8");
+    const line = (src.match(/serviceKey: [^\n]*/) || [""])[0];
+    ok(`${name} reads a service key`, /process\.env\.SUPABASE/.test(line));
+    ok(`${name} uses the name that is actually set (${provenKey})`, line.includes(`process.env.${provenKey}`));
+    // FIRST in the chain, not merely present: a `||` list that reaches the proven
+    // name only after two undefined ones works, but a list that puts an unset
+    // name first is the same mistake waiting for someone to delete a fallback.
+    ok(`${name} tries it first`,
+       line.indexOf(`process.env.${provenKey}`) === line.indexOf("process.env.SUPABASE"));
+    // And it must never fall through to an empty string silently on a name
+    // nobody set, which is exactly how this reached him.
+    ok(`${name} still ends in a defined value`, /\|\| ""/.test(line));
+  });
+  // The URL too, same rule, same file.
+  STUDIO_ONLY_ENDPOINTS.forEach(name => {
+    const src = readFileSync(join(root, "api", `${name}.js`), "utf8");
+    ok(`${name} reads the same SUPABASE_URL ask.js does`, /supabaseUrl: process\.env\.SUPABASE_URL/.test(src));
+  });
+
   // ── AND THE CLIENT HAS TO SEND THE TOKEN, OR STUDIO IS BRICKED ───
   // The dangerous half of this change. Guarding the five and not updating their
   // callers would leave every draft researching nothing, at four in the morning,
@@ -20548,8 +20653,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and forbids volunteering prices nobody asked for", /no volunteering prices/.test(block));
 
   // Filled in, it must STOP.
+  // "we've got a car" added 17 Aug: transport became a blocking slot, because his
+  // broken guide put 92 km between two days for a man on a bicycle and then
+  // recommended a hotel with easy BUS access to the next stop. A fixture called
+  // "everything known" has to include how they get around.
   const full = readBrief({
-    travellerText: HIS_CHAT + "\nWe are into food and design, hotel is booked already, arriving 3 December",
+    travellerText: HIS_CHAT + "\nWe are into food and design, hotel is booked already, arriving 3 December, and we've got a car",
     today: AUG,
   });
   ok("with everything known it is ready", briefReady(full));
@@ -20562,7 +20671,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("not booked reads as not booked",
      readBrief({ travellerText: "we haven't booked anything yet", today: AUG }).known.stay?.value, "not booked");
   // The intake form answers a slot without anybody being asked.
-  const fromForm = readBrief({ travellerText: "hello", intake: { interest: ["food", "design"], stayBooked: true, startPoint: "Billund", travelers: "2 adults", arrival: "2026-12-03", departure: "2026-12-09" }, today: AUG });
+  const fromForm = readBrief({ travellerText: "hello", intake: { interest: ["food", "design"], transport: ["🚗 Car"], stayBooked: true, startPoint: "Billund", travelers: "2 adults", arrival: "2026-12-03", departure: "2026-12-09" }, today: AUG });
   ok("a ticked interest counts", fromForm.known.interests?.source === "intake");
   ok("and the form's dates are precise", fromForm.known.when?.precision === "day");
   is("and the length comes from them", fromForm.known.days?.value, 7);
@@ -20571,6 +20680,193 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // never fill and the chat asks forever.
   BLOCKING_SLOTS.forEach(k => ok(`the ${k} slot is fillable`, !!fromForm.known[k] || k === "budget"));
   is("every slot has a question in Gemlyx's voice", BRIEF_SLOTS.filter(s => !s.ask.trim()).length, 0);
+
+  // ── ASKED ONCE IS NOT ASKED FOREVER ─────────────────────────────
+  // The strict reading of the bucket is a worse bug than the one it fixes.
+  // Nothing reads a bare "no" as an answer about a hotel, so a blocking slot
+  // that is asked and answered informally would stay empty, and the build button
+  // would never come back. He has already reported that failure once, from the
+  // other direction: "perhaps it wasn't visible to him that he could click turn
+  // this into a guide."
+  //
+  // What he actually said the obligation was: "then it is Gemlyx' responsibility
+  // to ASK." So asked-and-unanswered is its own state.
+  const askedAlready = readBrief({ travellerText: HIS_CHAT, today: AUG, asked: ["interests", "stay", "transport", "when"] });
+  ok("a slot asked about stops blocking", askedAlready.ready);
+  is("and is not asked again", nextAsks(askedAlready).length, 0);
+  is("it is reported as unanswered rather than unknown", askedAlready.declined.slice().sort(), ["interests", "stay", "transport"]);
+  ok("nothing asked is still listed as missing",
+     !askedAlready.missing.some(k => ["interests", "stay", "transport"].includes(k)));
+  ok("a vague date asked about once is not chased again", !askedAlready.vague.includes("when"));
+  // And the block says so, so the reply does not speak as though it knew.
+  const askedBlock = briefBlock(askedAlready);
+  ok("the block names them as unanswered", /ALREADY ASKED AND NOT ANSWERED/.test(askedBlock));
+  ok("and tells it to state its assumption out loud", /say out loud what you are assuming/.test(askedBlock));
+  ok("and does not list them as still missing", !/STILL MISSING/.test(askedBlock));
+  // The opposite mistake: a slot asked about but then ANSWERED is known, not
+  // declined, or an answer would be thrown away.
+  const answered = readBrief({
+    travellerText: HIS_CHAT + "\nwe're into food and design, and no we haven't booked a hotel",
+    today: AUG, asked: ["interests", "stay"],
+  });
+  is("an answer outranks having been asked", answered.declined, []);
+  ok("the answer itself is what is recorded", !!answered.known.interests);
+  is("including a negative one", answered.known.stay?.value, "not booked");
+  // Being asked about a slot never invents a value for it.
+  ok("an unanswered slot stays unknown", !askedAlready.known.stay);
+  ok("and unanswered is not the same as ready to plan on",
+     (askedAlready.declined || []).length > 0 && askedAlready.ready);
+}
+
+
+// ── "IT NEEDS TO REQUIRE MORE INFO. AND NOT BUG." ───────────────────
+//
+// Oliver, 17 Aug 2026, with a transcript of his own attached:
+//
+//   "Because this is the result of lack of info. It gives me a random route."
+//
+// The transcript, in order. Gemlyx asked three things in a paragraph it called
+// "two more things". He answered all three: tight backpacker, hidden gems, on a
+// bicycle. That reply errored out. He typed "What?". And Gemlyx replied:
+//
+//   "Haha, no worries, that 'what?' is just you being surprised I asked haha, all
+//    good, you already answered everything I needed."
+//
+// Then it offered the build button, and the guide it built was a random route.
+//
+// Two separate inventions in one sentence: a reading of his own message, and the
+// state of the brief. Both are now decided in code rather than felt in a prompt.
+{
+  const { readBrief, briefBlock, nextAsks } = M;
+  const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const AUG = new Date(2026, 7, 17);
+
+  // ── HIS ACTUAL TURNS, REPLAYED ──────────────────────────────────
+  // Verbatim, and the ferry line is the one that carried the origin.
+  const AALBORG = [
+    "I'm taking the ferry into Aalborg",
+    "It's a tight backpacker to be honest.. and I'd love to see some hidden gems! I'm on a bicycle.",
+    "What?",
+  ].join("\n");
+  const gap = readBrief({ travellerText: AALBORG, today: AUG });
+  ok("it does know where he lands", !!gap.known.origin);
+  ok("and what kind of trip he wants", !!gap.known.interests);
+  ok("and roughly what he will spend", !!gap.known.budget);
+  ok("and how he is getting around", !!gap.known.transport);
+
+  // ── TWO SLOTS THIS CONVERSATION FOUND EMPTY ─────────────────────
+  // Both were filled by his own words and read by nothing, and both were found
+  // by replaying these three lines rather than by reading the code.
+  //
+  // A FERRY IS AN ARRIVAL. Gemlyx's own reply understood it — "Ferry into Aalborg,
+  // nice, that's proper North Jutland arrival" — while the reader that decides
+  // whether the origin is known did not.
+  ok("a ferry arrival fills the origin slot",
+     !!readBrief({ travellerText: "I'm taking the ferry into Aalborg", today: AUG }).known.origin);
+  ok("so does sailing in", !!readBrief({ travellerText: "we sail into Frederikshavn from Norway", today: AUG }).known.origin);
+  ok("and a train in", !!readBrief({ travellerText: "train into Copenhagen from Hamburg", today: AUG }).known.origin);
+  ok("a place named on its own is still not an origin",
+     !readBrief({ travellerText: "I want to see Skagen and Ribe", today: AUG }).known.origin);
+
+  // HIDDEN GEMS IS THE WHOLE PRODUCT. He typed "I'd love to see some hidden gems!"
+  // and the interest vocabulary, written from the app's own theme list rather than
+  // from what a person types, did not contain it.
+  ok("hidden gems is an interest",
+     !!readBrief({ travellerText: "I'd love to see some hidden gems!", today: AUG }).known.interests);
+  ok("so is off the beaten track",
+     !!readBrief({ travellerText: "somewhere off the beaten track please", today: AUG }).known.interests);
+
+  // ── AND A BICYCLE IS NOT AN INTEREST ────────────────────────────
+  // The same rule "kids" taught: a sentence about HOW somebody travels must not
+  // fill the slot for WHAT they came for, or a trip whose shape nobody stated
+  // reads as specified.
+  const onlyBike = readBrief({ travellerText: "I'm on a bicycle", today: AUG });
+  ok("a bicycle fills how they get around", !!onlyBike.known.transport);
+  ok("and does not fill what kind of trip it is", !onlyBike.known.interests);
+  ok("cycling still fills transport", !!readBrief({ travellerText: "we'll be cycling", today: AUG }).known.transport);
+  ok("so does driving", !!readBrief({ travellerText: "we're driving", today: AUG }).known.transport);
+  ok("and no car at all is an answer", !!readBrief({ travellerText: "we have no car", today: AUG }).known.transport);
+  ok("and public transport", !!readBrief({ travellerText: "public transport the whole way", today: AUG }).known.transport);
+  // A MODE NEEDS A VERB, or an attraction fills the slot.
+  ok("a train museum is not a way of getting around",
+     !readBrief({ travellerText: "we want to see the train museum", today: AUG }).known.transport);
+  ok("nor is a bus tour of a brewery",
+     !readBrief({ travellerText: "is there a bus museum in Aarhus", today: AUG }).known.transport);
+  // The form's chips fill it, emoji and all, or the slot is asked for twice.
+  ok("the form's transport chips fill it",
+     readBrief({ travellerText: "hi", intake: { transport: ["🚲 Bike"] }, today: AUG }).known.transport?.source === "intake");
+  // And it blocks, because the prompt has always said it decides the route.
+  ok("how they get around is a blocking slot",
+     M.BLOCKING_SLOTS.includes("transport"));
+  // AND THE THINGS IT CLAIMED TO HAVE AND DID NOT.
+  ok("it does NOT know how long he has", gap.missing.includes("days"));
+  ok("nor when he is coming", gap.missing.includes("when"));
+  ok("nor who is coming", gap.missing.includes("party"));
+  ok("nor whether he has booked anywhere", gap.missing.includes("stay"));
+  ok("so 'you already answered everything I needed' was false", !gap.ready);
+  // Which is the assertion that matters: on this exact conversation, the marker
+  // is not the model's to emit.
+  const wouldStrip = !gap.ready;
+  ok("and the marker is withheld on it", wouldStrip);
+
+  // ── THE GATE IS IN CODE, NOT IN THE PROMPT ──────────────────────
+  // The prompt already spends a paragraph on when the marker may be emitted. The
+  // transcript is that paragraph being ignored. So it is asserted as code.
+  ok("the reply is checked against the brief, not against itself",
+     /if \(replyText && !brief\.ready && isReadyToBuild\(replyText\)\) \{/.test(app));
+  ok("and the marker is actually removed", /replyText = stripReadyMarker\(replyText\);/.test(app));
+  ok("the withholding is logged, so it is debuggable",
+     /ready marker withheld, brief incomplete/.test(app));
+
+  // ── AND THE BUTTON IS STILL NOT HIDEABLE ────────────────────────
+  // This is a guard against fixing this too hard. The 10 Aug note at that call
+  // site stands: "A button shown one turn early costs a tap. A button never shown
+  // costs the whole product." Stripping the marker removes Gemlyx's CLAIM to be
+  // ready; it must not remove the traveller's way out.
+  ok("a reply that reads like a plan still offers the button",
+     /return isReadyToBuild\(lastAssistantMsg\.text\) \|\| isFullPlanText\(lastAssistantMsg\.text\);/.test(app));
+  ok("and the brief is not allowed to gate that",
+     !/isReadyToBuild\(lastAssistantMsg\.text\) && brief/.test(app));
+
+  // ── THE BRIEF IS READ FROM HIS TURNS ONLY ───────────────────────
+  // The reason is the reason previewMatch.js has the same rule: Gemlyx suggests
+  // things, and its own suggestion must never become evidence about him.
+  ok("the traveller's turns are what is read",
+     /const travellerTurns = \[\.\.\.aiMessages\.filter\(m => m\.role === "user"\)\.map\(m => m\.text \|\| ""\), msg\];/.test(app));
+  ok("and the message being sent is included",
+     /travellerText: travellerTurns\.join\("\\n"\)/.test(app));
+  ok("the block reaches the prompt", /\$\{briefBlock\(brief\)\}/.test(app));
+  ok("and it is told the block outranks its impression",
+     /it overrides your impression of the conversation/.test(app));
+  ok("the form's answers are passed in too", /startPoint: intakeStartPoint,/.test(app));
+  ok("including whether it is a family trip", /familyMode: intakeFamilyMode,/.test(app));
+
+  // ── THE HOLE AN ERROR LEAVES ────────────────────────────────────
+  // Stripping the error bubble is right, and it left two of his messages
+  // adjacent with nothing between them. A gap with no explanation gets filled by
+  // invention, which is exactly what "that 'what?' is just you being surprised"
+  // is. So the gap is named.
+  ok("a failed reply becomes a named gap rather than nothing",
+     /\? \{ role: "assistant", content: LOST_REPLY \}/.test(app));
+  ok("the note says they never saw it", /They never saw it, so nothing here has been answered yet/.test(app));
+  ok("and the prompt says what to do with one",
+     /IF A TURN OF YOURS IS MISSING FROM THIS CONVERSATION, IT NEVER REACHED THEM/.test(app));
+  ok("including not explaining their own message back to them",
+     /do not explain their own message back to them/.test(app));
+  // The original fix must survive: the error TEXT itself never goes back.
+  ok("the error text is never sent as a real turn",
+     !/content: m\.text \}\)\)\s*,?\s*\n\s*\{ role: "user", content: msg \}/.test(app));
+
+  // ── AND ASKING IS RECORDED, NOT PARSED ──────────────────────────
+  ok("what was asked is taken from what it was told to ask",
+     /const askedThisTurn = nextAsks\(brief\)\.map\(s => s\.key\);/.test(app));
+  ok("and remembered across turns", /setBriefAsked\(prev => \[\.\.\.new Set\(\[\.\.\.prev, \.\.\.askedThisTurn\]\)\]\)/.test(app));
+  ok("only when a reply actually arrived", /if \(replyText && askedThisTurn\.length\)/.test(app));
+  // Two at a time, so the "two more things" that were three cannot recur.
+  const three = readBrief({ travellerText: "I want to go to Denmark", today: AUG });
+  ok("a bare request fills nothing blocking", three.missing.length >= 4);
+  is("and it may still only ask two things", nextAsks(three).length, 2);
+  ok("the block says how many it may ask", /AT MOST 2 of them/.test(briefBlock(three)));
 }
 
 
@@ -20850,6 +21146,86 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the cooking-method line does not", !kept.some(u => /cooking methods/.test(u)));
   ok("the panel uses the filter", /const uncertainties = readerUncertainties\(item\.uncertainties\);/.test(hwk));
 
+  // ── RELEVANCE BEATS RESEARCH-TALK, NOT THE OTHER WAY ROUND ──────
+  // Found by running his seven real drafts through this. Henne Kirkeby Kro is a
+  // two-Michelin-star restaurant in a village on the west coast of Jutland, and
+  // its single most decision-relevant line is:
+  //
+  //   "No public transport route or duration from Copenhagen could be confirmed;
+  //    the source recommends driving."
+  //
+  // Three uncertainties on that row, and NOT ONE of them reached a reader,
+  // because that line says "the source" and the research-meta test ran first.
+  // Somebody without a car needs that sentence more than any other on the page.
+  //
+  // Stated as an invariant over pairs rather than as one string, so a phrasing
+  // change cannot quietly retire it: a line that is BOTH about a decision and
+  // phrased as research talk is kept, every combination.
+  const HENNE = "No public transport route or duration from Copenhagen could be confirmed; the source recommends driving.";
+  is("the line that stranded a reader survives verbatim", readerUncertainty(HENNE), HENNE);
+  const DECIDING = [
+    "No public transport route from Copenhagen",
+    "The entry price",
+    "Opening hours in winter",
+    "Whether a table has to be booked",
+    "Step-free access",
+  ];
+  const RESEARCH_TALK = [
+    "could not be found in the source material.",
+    "is not stated in the sources.",
+    "the research did not confirm it.",
+    "no source confirms it.",
+  ];
+  for (const head of DECIDING) for (const tail of RESEARCH_TALK) {
+    const line = `${head} ${tail}`;
+    // Both halves have to actually engage, or the pair proves nothing: if the
+    // tail stopped reading as research talk the assertion below would pass on a
+    // filter that tested research-meta first.
+    ok(`the tail is research talk: ${JSON.stringify(tail)}`, readerUncertainty(tail) === "");
+    ok(`kept anyway when it decides something: ${JSON.stringify(line.slice(0, 40))}…`,
+       readerUncertainty(line) === line);
+  }
+  // And the reverse still holds: research talk about nothing a traveller acts on
+  // is still dropped, which is the line he actually pointed at.
+  is("his line is still gone", readerUncertainty(HIS_NOISE), "");
+
+  // ── EXCEPT OUR OWN BOOKKEEPING, WHICH OUTRANKS RELEVANCE ────────
+  // Putting relevance first has one way of going wrong and it went wrong
+  // immediately: correction.js pushes an editorial audit trail into the same
+  // `uncertainties` array, and every one of those lines quotes a FIELD AND ITS
+  // VALUE, so relevance matches them permanently. "Applied from your own
+  // correction and still UNCONFIRMED by a primary source: price is now 140-145
+  // DKK" on a public page is the page calling its own price invented.
+  //
+  // Built from correction.js ITSELF rather than pasted, so rewording the
+  // generator without teaching the filter fails here instead of shipping.
+  const corr = readFileSync(join(root, "src/utils/correction.js"), "utf8");
+  const pushed = [...corr.matchAll(/\.\.\.\w+\.map\(\w+ => `([^`]+)`\)/g)].map(m => m[1]);
+  is("both audit lines are found in the source", pushed.length, 2);
+  for (const tpl of pushed) {
+    // Fill the template the way the real pass fills it: a field and a value, so
+    // the line is exactly as decision-relevant as the real one.
+    const line = tpl
+      .replace(/\$\{[^}]*\.field\}/g, "price")
+      .replace(/\$\{[^}]*\.correctValue\}/g, "140-145 DKK")
+      .replace(/\$\{[^}]*\.says\}/g, "the price is 140-145 DKK, not 120 DKK");
+    ok(`the audit line still names a field: ${line.slice(0, 30)}…`, /price/.test(line));
+    ok(`and a reader never sees it: ${line.slice(0, 30)}…`, readerUncertainty(line) === "");
+  }
+  // Stated once more as the rule, because the pair above is only as good as
+  // correction.js's current wording.
+  is("an applied founder correction is ours, not the reader's",
+     readerUncertainty('Applied from your own correction and still UNCONFIRMED by a primary source: price is now "140-145 DKK". Worth a source when one turns up.'), "");
+  is("and so is an unresolved one",
+     readerUncertainty("Raised in a correction pass and NOT changed, because no primary source settled it: the entry price is 145 DKK."), "");
+  is("and an unsourced assertion label",
+     readerUncertainty("Opening hours: asserted by the founder, not source-verified."), "");
+  // While the world-fact version of the same subject survives, which is the
+  // whole distinction: ours versus the place's.
+  ok("but a missing price is still a fact about the place",
+     !!readerUncertainty("No exact DKK price for the tasting menus was found."));
+  ok("and so is missing transport", !!readerUncertainty(HENNE));
+
   // ── "FIX FILTERS.. THAT IS RIDICULOUS.." ────────────────────────
   // The Food page offered one chip per NEIGHBOURHOOD, from the raw location
   // string: three chips for Copenhagen, two for Aarhus under different sub-labels,
@@ -21093,6 +21469,223 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // to agree about the shape or the field ships and shows nothing.
   is("and the provenance block reads it back",
      M.fieldProvenance(live).find(f => f.field === "price")?.by, "friheden.dk");
+}
+
+
+// ── "I CLAIM COPYRIGHT ON MY TEXTS AND GUIDES" ──────────────────────
+//
+// Oliver, 17 Aug 2026:
+//
+//   "I also want you to write on the pages that I claim copyright on my texts and
+//    guides. We need to make it strictly forbidden to share the guides online."
+//   "or publically rather."
+//
+// The second message is the whole design. "Never share it" and "never share it
+// PUBLICLY" are different products: a guide is built for a trip and a trip has
+// other people on it, so a rule against forwarding it is broken by every honest
+// user on day one, and a term nobody can keep is worth less than none.
+//
+// And a notice that overclaims damages the part of it that is true, on the one
+// page whose whole promise is not being wrong. So these assertions are as much
+// about what it must NOT say as about what it says.
+{
+  const { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } = M;
+  const terms = readFileSync(join(root, "public/terms.html"), "utf8");
+  const robots = readFileSync(join(root, "public/robots.txt"), "utf8");
+  const html = readFileSync(join(root, "index.html"), "utf8");
+  const guidePage = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+
+  // ── THE CLAIM ───────────────────────────────────────────────────
+  is("the holder is named", RIGHTS_HOLDER, "Gemlyx");
+  ok("the line carries a year", /©\s*\d{4}/.test(copyrightLine(2026)));
+  ok("a missing year falls back to this one rather than printing NaN",
+     /©\s*\d{4}/.test(copyrightLine(undefined)) && !/NaN/.test(copyrightLine(undefined)));
+  ok("and a nonsense year does too", !/NaN|© 12 /.test(copyrightLine("banana")));
+  ok("the writing is claimed", /written content is ours/i.test(copyrightLine(2026)));
+
+  // ── WHAT IT REFUSES TO CLAIM ────────────────────────────────────
+  // The facts are not his and the terms page says so in as many words. This is
+  // the assertion that keeps the notice honest: a page that claimed to own an
+  // opening time would be making exactly the kind of unearned claim the rest of
+  // this codebase exists to refuse.
+  ok("the terms say plainly that facts are not owned",
+     /nobody owns those/i.test(terms));
+  ok("and name what actually took the work", /What took the work was checking them/i.test(terms));
+  // The stronger and more apt claim: a verified collection, which IS protected.
+  ok("the collection is claimed under database law", /database law/i.test(terms));
+
+  // ── THE RULE, BOTH HALVES ───────────────────────────────────────
+  ok("the short notice allows taking it on the trip", /take it on your trip/i.test(GUIDE_RIGHTS_SHORT));
+  ok("and sending it to whoever is coming", /coming with you/i.test(GUIDE_RIGHTS_SHORT));
+  ok("and forbids publishing it", /Publishing it is not allowed/i.test(GUIDE_RIGHTS_SHORT));
+  ok("and forbids feeding it to a model", /model/i.test(GUIDE_RIGHTS_SHORT));
+  // "publicly", not "at all" — asserted as an absence, because the failure mode
+  // here is a well-meant tightening into a rule nobody can keep.
+  ok("private sharing is never forbidden anywhere in the notice",
+     !/do not share|never share|sharing is not allowed|no sharing/i.test(GUIDE_RIGHTS_SHORT + GUIDE_RIGHTS_FULL));
+  ok("the full version still allows sending it to travel companions",
+     /travelling with you/i.test(GUIDE_RIGHTS_FULL));
+  ok("and quoting is explicitly fine", /Quoting is fine/i.test(GUIDE_RIGHTS_FULL));
+  ok("the terms agree with the guide notice about publishing",
+     /Your guide is yours\. Publishing it is not\./.test(terms));
+  ok("and the terms no longer say a guide is yours to share, full stop",
+     !/yours to use, print, share and take on your trip/.test(terms));
+  ok("the terms are re-dated, because a rule change that keeps the old date is a lie",
+     /last updated 17 August 2026/.test(terms));
+
+  // ── IT REACHES A READER ─────────────────────────────────────────
+  // A notice in a util nothing renders is not a notice.
+  ok("the guide page shows the notice", /\{GUIDE_RIGHTS_SHORT\}/.test(guidePage));
+  ok("and the copyright line", /\{copyrightLine\(new Date\(\)\.getFullYear\(\)\)\}/.test(guidePage));
+  ok("and links to the terms", /href="\/terms\.html"/.test(guidePage));
+  ok("both come from the one source", /from "\.\.\/utils\/rights"/.test(guidePage));
+  // And at the moment of the action, which is the only place a term ever lands.
+  ok("the share panel states the rule",
+     /Posting the guide publicly or republishing the text is not allowed/.test(guidePage));
+
+  // ── THE MACHINE-READABLE HALF ───────────────────────────────────
+  // This one genuinely does not exist unless it is written: EU law treats silence
+  // as permission for text and data mining.
+  is("the reservation names both kinds", TDM_RESERVATION, "noai, noimageai");
+  ok("the page states it", /<meta name="robots" content="noai, noimageai"/.test(html));
+  ok("and the tdm tag too", /<meta name="tdm-reservation" content="1"/.test(html));
+  ok("robots.txt reserves mining", /TEXT AND DATA MINING IS EXPRESSLY RESERVED/.test(robots));
+  ok("and names the article it relies on", /2019\/790/.test(terms));
+  ["GPTBot", "ClaudeBot", "Google-Extended", "CCBot", "Bytespider", "PerplexityBot"]
+    .forEach(bot => ok(`${bot} is asked not to train on it`,
+      new RegExp(`User-agent: ${bot}\\nDisallow: /`).test(robots)));
+
+  // ── AND THE THING THIS NEARLY BROKE ─────────────────────────────
+  // Disallowing /guide/ is right: a guide URL is unlisted, not a public page.
+  // But the preview card a shared guide shows is built by middleware.js FOR
+  // crawlers, and Facebook's fetcher honours robots.txt — so a blanket rule would
+  // have turned every allowed, private share into a bare link, breaking the
+  // feature while trying to protect it. Named groups override the general one.
+  ok("guide URLs are not crawled as public pages", /^Disallow: \/guide\/$/m.test(robots));
+  ["facebookexternalhit", "WhatsApp", "Twitterbot", "LinkedInBot", "Discordbot"]
+    .forEach(bot => ok(`${bot} can still build the share card`,
+      new RegExp(`User-agent: ${bot}\\nAllow: /`).test(robots)));
+  // The middleware really does serve those crawlers on guide paths, or the
+  // allowances above are protecting nothing.
+  const mw = readFileSync(join(root, "middleware.js"), "utf8");
+  ok("the preview really is served on guide paths", /matcher: \["\/guide\/:path\*"/.test(mw));
+  // And an on-demand fetcher that CITES is deliberately not blocked, because
+  // blocking it removes Gemlyx from where people now search without protecting
+  // anything: it takes nothing and sends readers back.
+  ok("a citing fetcher is left alone", !/User-agent: OAI-SearchBot\nDisallow/.test(robots));
+  // Read with the comment wrapping and the leading # flattened, so a reflowed
+  // line does not fail an assertion about what the file SAYS.
+  const robotsProse = robots.replace(/\n#\s*/g, " ");
+  ok("and the reason is written down", /cite the source/.test(robotsProse));
+  // The sitemap must not advertise what robots.txt hides.
+  ok("the sitemap lists published entries, not guides", /publishedEntries\(\)/.test(mw));
+}
+
+
+// ── "A PICTURE OF SOMETHING DANISH IN THE BACKGROUND" ───────────────
+//
+// Oliver, 17 Aug 2026: "And I wonder if we should get a picture of something
+// Danish in the background when the guide is given."
+//
+// He is right that the page opens on nothing. The literal build is wrong, and the
+// assertions here are mostly about the literal build being refused: a stock Nyhavn
+// behind a bicycle trip from Aalborg to Skagen is an unsourced photograph of
+// somewhere they are not going, on the surface a reader trusts most, above a page
+// where every price is traced and every distance measured.
+//
+// So it is their own first stop. His own screenshots are the argument: day 1
+// opened on a real photo of Aalborg and looked like a product, day 2 had none and
+// looked like a spreadsheet — the material was already in the payload.
+{
+  const { guideHero, heroCaption } = M;
+  const guidePage = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const LIB = {
+    "Aalborg": { name: "Aalborg", photo: "/photos/aalborg.jpg", town: "Aalborg", __photoCredit: { author: "A" } },
+    "Skagen Klitplantage": { name: "Skagen Klitplantage", photo: "/photos/klit.jpg", town: "Skagen" },
+    "Grenen": { name: "Grenen", town: "Skagen" },
+    "Amber pendant": { name: "Amber pendant", photo: "/photos/amber.jpg", _src: "craft" },
+  };
+  const lookup = (n) => LIB[n] || null;
+
+  // ── THE FIRST STOP THAT HAS ONE, IN ORDER ───────────────────────
+  const trip = { days: [{ stops: [{ name: "Grenen" }, { name: "Aalborg" }] }, { stops: [{ name: "Skagen Klitplantage" }] }] };
+  is("the picture is the first stop that has one", guideHero(trip, lookup)?.photo, "/photos/aalborg.jpg");
+  is("and it is named", guideHero(trip, lookup)?.name, "Aalborg");
+  ok("and its credit is carried, because CC BY requires attribution near the work",
+     !!guideHero(trip, lookup)?.credit);
+  // In ORDER: the first place they will actually stand in. Picking "the best"
+  // photo would need a judgement nobody can check.
+  is("a later day never outranks an earlier one",
+     guideHero({ days: [{ stops: [{ name: "Skagen Klitplantage" }] }, { stops: [{ name: "Aalborg" }] }] }, lookup)?.name,
+     "Skagen Klitplantage");
+
+  // ── AND NO PHOTOGRAPH MEANS NO HEADER IMAGE ─────────────────────
+  // The assertion that matters most. A stock fallback would put a picture of
+  // somewhere they are not going on exactly the guides where least is known.
+  is("a trip whose stops have no photo gets nothing",
+     guideHero({ days: [{ stops: [{ name: "Grenen" }] }] }, lookup), null);
+  is("an empty guide gets nothing", guideHero({ days: [] }, lookup), null);
+  is("a missing guide gets nothing", guideHero(null, lookup), null);
+  is("and no lookup at all is safe", guideHero(trip, null), null);
+  is("a stop with no name is skipped", guideHero({ days: [{ stops: [{ name: "  " }, { name: "Aalborg" }] }] }, lookup)?.name, "Aalborg");
+  // AND SKIPPED BEFORE THE LOOKUP, not after it. Mutation testing showed the name
+  // guard was unfalsifiable against an exact-match stub — a blank name found no
+  // row and fell through anyway. lookupRealPlace is a FUZZY matcher, so the real
+  // risk is a blank stop name matching whatever it likes and putting an unrelated
+  // photograph at the top of a guide. Driven with a lookup that answers anything,
+  // which is the pessimistic version of what the real one does.
+  const answersAnything = (n) => (String(n || "").trim() ? LIB[n] || null : { name: "Some Row", photo: "/photos/wrong.jpg" });
+  ok("a blank stop name never reaches the lookup",
+     guideHero({ days: [{ stops: [{ name: "   " }] }] }, answersAnything) === null);
+  is("so an unrelated photo cannot reach the header that way",
+     guideHero({ days: [{ stops: [{ name: "" }, { name: "Aalborg" }] }] }, answersAnything)?.photo, "/photos/aalborg.jpg");
+  // A craft row is a product, and a product shot is not a picture of a trip.
+  is("a craft row is not used as the header",
+     guideHero({ days: [{ stops: [{ name: "Amber pendant" }, { name: "Aalborg" }] }] }, lookup)?.name, "Aalborg");
+  // Nothing here may invent an image path.
+  ok("no stock image is named anywhere in the module",
+     !/nyhavn|unsplash|pexels|stock|default.*\.jpg/i.test(readFileSync(join(root, "src/utils/guideHero.js"), "utf8")
+       .replace(/^\s*\/\/.*$/gm, "")));
+
+  // ── THE CAPTION SAYS WHAT IT IS ─────────────────────────────────
+  // An unlabelled photograph on a page about where to go is a decoration.
+  is("the caption names the place and the town", heroCaption(guideHero(trip, lookup)), "Aalborg");
+  is("a stop in another town says both",
+     heroCaption(guideHero({ days: [{ stops: [{ name: "Skagen Klitplantage" }] }] }, lookup)),
+     "Skagen Klitplantage, Skagen");
+  is("no photo, no caption", heroCaption(null), "");
+  is("and no name, no caption", heroCaption({ photo: "/a.jpg" }), "");
+
+  // ── IT RENDERS, AND IT DEGRADES ─────────────────────────────────
+  ok("the page uses it", /const hero = useMemo\(\(\) => guideHero\(guide, lookupRealPlace\), \[guide, libraryTick\]\);/.test(guidePage));
+  // BOTH of them, counted. The image and its credit are two separate blocks with
+  // the same guard, so a regex that merely finds the string passed happily with
+  // the image block's guard mutated away — the credit block's copy matched. A
+  // count cannot be satisfied by the other one.
+  is("both the image and its credit are guarded on there being a photo",
+     (guidePage.match(/\{hero\?\.photo && \(/g) || []).length, 2);
+  ok("and the image block specifically is guarded",
+     /\{hero\?\.photo && \(\s*\n\s*<div style=\{\{ position: "relative", height: 260/.test(guidePage));
+  ok("the plain header still exists for guides without one", /\{!hero\?\.photo && \(/.test(guidePage));
+  ok("the credit goes up with the photo", /<PhotoCredit photo=\{hero\.photo\} credit=\{hero\.credit\}/.test(guidePage));
+  ok("the caption is rendered", /\{heroCaption\(hero\)\}/.test(guidePage));
+  ok("a broken image hides itself rather than showing a torn icon",
+     /onError=\{e => \{ e\.target\.style\.display = "none"; \}\}\s*\n\s*style=\{\{ width: "100%", height: "100%", objectFit: "cover" \}\} \/>/.test(guidePage));
+  ok("the title is readable over it", /linear-gradient\(to top, rgba\(10,15,30,0\.92\)/.test(guidePage));
+  // AND THE HOOK IS ABOVE THE EARLY RETURNS. Three hooks once sat below the
+  // loading guard and broke every shared guide link in the product.
+  //
+  // Anchored on the guard's real source, `if (loading) {`, and NOT on the phrase
+  // "if (loading) return" — which appears only inside the comments that describe
+  // the old bug, sits above the hooks, and made the first version of this
+  // assertion fail on correct code. An assertion whose anchor is a comment is
+  // testing the prose.
+  const guardAt = guidePage.indexOf("\n  if (loading) {");
+  ok("the loading guard is found in the source", guardAt > 0);
+  ok("the hero hook is declared above it",
+     guidePage.indexOf("const hero = useMemo") < guardAt);
+  ok("as is the map library it shares a tick with",
+     guidePage.indexOf("const mapLibrary = useMemo") < guardAt);
 }
 
 

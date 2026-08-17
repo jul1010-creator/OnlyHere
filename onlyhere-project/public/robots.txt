@@ -14,4 +14,89 @@ Allow: /
 # so it cannot be blocked by path, but the guide builder's scratch URL can be.
 Disallow: /guide/new
 
+# ── AND THE GUIDES THEMSELVES ─────────────────────────────────────────
+# Added 17 Aug 2026. Oliver: "We need to make it strictly forbidden to share the
+# guides online" / "or publically rather."
+#
+# A guide URL is unlisted rather than secret, so it is shareable with the people
+# on the trip and should not be indexed as a public page. Search engines are told
+# not to crawl them at all, which is a different and stronger thing than the
+# noindex meta tag: nothing has to be fetched to be obeyed.
+Disallow: /guide/
+
+# ── BUT THE PREVIEW CARD HAS TO KEEP WORKING ──────────────────────────
+# Sharing a guide with the people on the trip is allowed and is the point of the
+# Share button, and what that share LOOKS like is a card built by middleware.js
+# for exactly these crawlers. Facebook's fetcher honours robots.txt, so a blanket
+# Disallow: /guide/ would have quietly turned every shared guide into a bare
+# link — breaking a feature on purpose while trying to protect it. These groups
+# are named so the rule above does not apply to them.
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: Slackbot-LinkExpanding
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: TelegramBot
+Allow: /
+
+User-agent: Discordbot
+Allow: /
+
+# ── TEXT AND DATA MINING IS EXPRESSLY RESERVED ────────────────────────
+# Under Article 4(3) of EU Directive 2019/790 a rightsholder may reserve mining
+# rights, and unstated the reservation does not exist — silence reads as
+# permission. Stated here, in the page metadata as a noai/tdm-reservation tag, and
+# in prose on /terms.html.
+#
+# The blocks below are the named training crawlers as of August 2026. They are
+# honoured voluntarily, so this list is a courtesy to the ones that honour it and
+# a record of an express reservation against the ones that do not. It will go out
+# of date; the reservation above does not depend on the list being complete.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+# NOT blocked, deliberately: OAI-SearchBot, ChatGPT-User, Perplexity-User and the
+# other on-demand fetchers. Those answer a person who asked a question and cite
+# the source, which sends readers here. Training crawlers take the writing and
+# return nothing. The distinction is the whole point of blocking one and not the
+# other, and blocking both would quietly remove Gemlyx from the places people now
+# actually search.
+
 Sitemap: https://www.gemlyxtravel.com/sitemap.xml

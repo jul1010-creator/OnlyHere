@@ -65,6 +65,8 @@ export const BRIEF_SLOTS = [
     ask: "Who is coming? Ages of any kids matter more than you would think." },
   { key: "interests", label: "what kind of trip", tier: "blocking",
     ask: "What kind of trip is this? Food, history, design, nature, nightlife, or something else entirely." },
+  { key: "transport", label: "how they get around", tier: "blocking",
+    ask: "How are you getting around once you're here? Car, bike, trains and buses, or a mix of them." },
   { key: "stay", label: "whether a hotel is booked", tier: "blocking",
     ask: "Have you booked somewhere to stay already? If you have, the whole plan should sit around it." },
   { key: "budget", label: "budget", tier: "optional",
@@ -101,7 +103,14 @@ const readDays = (text, intakeArrival, intakeDeparture) => {
 // name on its own is NOT read as an origin, because every trip names places and
 // treating the first one as the arrival point is how a plan starts in the wrong
 // half of the country.
-const ORIGIN_RE = /\b(?:fly(?:ing)?|land(?:ing)?|arriv(?:e|ing)|com(?:e|ing)|start(?:ing)?|driv(?:e|ing))\s+(?:in|into|to|from|at)\b|\b(?:airport|lufthavn|kastrup|billund airport)\b/i;
+// A FERRY IS AN ARRIVAL. Added 17 Aug 2026 after replaying his own conversation:
+// he opened with "I'm taking the ferry into Aalborg", Gemlyx's reply read it back
+// correctly ("Ferry into Aalborg, nice, that's proper North Jutland arrival"), and
+// this reader did not fill the slot, because the list held only flying, landing,
+// arriving, coming, starting and driving. Denmark is reached by sea from Norway,
+// Sweden and Germany constantly, and the arrival that is least like Copenhagen is
+// exactly the one this missed.
+const ORIGIN_RE = /\b(?:fly(?:ing)?|land(?:ing)?|arriv(?:e|ing)|com(?:e|ing)|start(?:ing)?|driv(?:e|ing)|ferry|ferries|sail(?:ing)?|cruis(?:e|ing)|train|bus)\s+(?:in|into|to|from|at)\b|\b(?:airport|lufthavn|kastrup|billund airport)\b/i;
 const readOrigin = (text, intakeStartPoint) => {
   if (has(intakeStartPoint)) return { value: clean(intakeStartPoint), source: "intake" };
   return ORIGIN_RE.test(String(text || "")) ? { value: "said in the conversation", source: "said" } : null;
@@ -149,11 +158,22 @@ const readStay = (text, intakeStayBooked) => {
 // the bucket read as complete and the test asserting "it does NOT know what kind
 // of trip this is" went red, which is exactly the failure he reported. Who is in
 // the party is its own slot and it is read by its own reader.
+//
+// ── AND "HIDDEN GEMS" IS THE MOST OBVIOUS ONE THERE IS ──────────────
+// Added 17 Aug 2026. He typed "I'd love to see some hidden gems!" and this filled
+// nothing, on the one product whose stated differentiator is hidden gems. The list
+// was written from the app's theme vocabulary and not from what a person types.
+//
+// "cycling" and "biking" came OUT for the same reason "kids" did. "I'm on a
+// bicycle" is a sentence about HOW SOMEBODY GETS AROUND, and letting it fill the
+// interests slot means a trip whose shape nobody ever stated reads as specified.
+// Transport has its own slot below, and its own reader.
 const INTEREST_WORDS = [
   "food", "eat", "restaurant", "history", "historic", "viking", "museum", "design",
   "architecture", "nature", "hiking", "beach", "island", "nightlife", "bar",
-  "beer", "art", "shopping", "castle", "cycling", "biking", "christmas market",
+  "beer", "art", "shopping", "castle", "christmas market",
   "relax", "quiet", "photography", "music", "festival", "hygge", "spa",
+  "hidden gem", "off the beaten", "local spot", "surf", "wildlife", "birdwatch",
 ];
 const readInterests = (text, intakeInterest) => {
   const ticked = (Array.isArray(intakeInterest) ? intakeInterest : []).map(clean).filter(Boolean);
@@ -161,6 +181,34 @@ const readInterests = (text, intakeInterest) => {
   const s = String(text || "").toLowerCase();
   const found = INTEREST_WORDS.filter(w => new RegExp(`\\b${w}`, "i").test(s));
   return found.length ? { value: found.slice(0, 6).join(", "), source: "said" } : null;
+};
+
+// ── HOW THEY GET AROUND ─────────────────────────────────────────────
+// Added 17 Aug 2026, and it is the slot his broken guide argues hardest for. The
+// route it built put 92 km between the end of day one and the start of day two,
+// with no journey written between them, for a man who had said he was on a
+// bicycle; then the Where to stay line recommended a hotel with "easy bus access"
+// to the next stop. The chat's own prompt has said all along that this must be
+// known "before proposing a route, since it changes everything". It just was not
+// on any list, so nothing checked.
+//
+// A MODE NEEDS A VERB. "The train museum" is not a statement about how somebody
+// travels, and a bare mode word would fill this slot from a sentence about an
+// attraction — the same mistake "kids" made in the interests list. So the pattern
+// wants a movement or possession word next to the mode, or a word that can only
+// be about travelling.
+const TRANSPORT_RE = new RegExp([
+  /\b(?:by|on|in|with|got|have|rent(?:ing|ed)?|hir(?:e|ing|ed)|tak(?:e|ing)|using)\s+(?:a\s+|an\s+|the\s+|my\s+|our\s+)?(?:car|bike|bicycle|cycle|train|bus|coach|camper(?:van)?|motorhome|scooter|foot)\b/.source,
+  /\bpublic transport(?:ation)?\b/.source,
+  /\bon foot\b/.source,
+  /\b(?:cycling|biking|driving|walking|hitchhiking)\b/.source,
+  /\b(?:no|without a) car\b/.source,
+  /\brental car\b/.source,
+].join("|"), "i");
+const readTransport = (text, intakeTransport) => {
+  const ticked = (Array.isArray(intakeTransport) ? intakeTransport : []).map(clean).filter(Boolean);
+  if (ticked.length) return { value: ticked.join(", "), source: "intake" };
+  return TRANSPORT_RE.test(String(text || "")) ? { value: "said in the conversation", source: "said" } : null;
 };
 
 const BUDGET_RE = /\b(?:budget|cheap|tight|afford|splash|plenty of money|money is no|expensive|luxur|\d+\s*(?:dkk|kr|kroner|eur|usd|£|\$))\b/i;
@@ -173,7 +221,23 @@ const readBudget = (text, intakeBudgetText) => {
 // travellerText is THEIR turns joined, never the assistant's. The caller builds
 // it; this file cannot tell whose words it was handed, and a comment is not a
 // guard, so the parameter is named to make a mistake visible at the call site.
-export const readBrief = ({ travellerText = "", intake = {}, today = new Date() } = {}) => {
+// ── AND A SLOT THAT WAS ASKED FOR IS NOT ASKED FOR AGAIN ─────────────
+// `asked` is the slots Gemlyx has already put a question about, recorded at the
+// call site from what this file told it to ask, never parsed back out of the
+// model's own words.
+//
+// It exists because the strict version of this is worse than the bug. Nothing
+// reads a bare "no" as an answer about a hotel booking, so a blocking slot with
+// no answer would block forever: the traveller says no, the slot stays empty, and
+// the button never appears again. That is the failure he already reported once
+// ("perhaps it wasn't visible to him that he could click turn this into a guide")
+// and it is a worse one than planning on a thin brief.
+//
+// So the obligation is the one he actually stated: "then it is Gemlyx'
+// responsibility to ASK." Asked and unanswered is a third state. It does not
+// block, it is never asked twice, and it is reported to the writer as an
+// assumption rather than a fact, which is the honest way to carry a gap.
+export const readBrief = ({ travellerText = "", intake = {}, today = new Date(), asked = [] } = {}) => {
   const t = String(travellerText || "");
   const known = {};
   const set = (key, res) => { if (res) known[key] = res; };
@@ -183,14 +247,18 @@ export const readBrief = ({ travellerText = "", intake = {}, today = new Date() 
   set("when", readWhen(t, intake.arrival, intake.departure, today));
   set("party", readParty(t, intake.travelers, intake.familyMode));
   set("interests", readInterests(t, intake.interest));
+  set("transport", readTransport(t, intake.transport));
   set("stay", readStay(t, intake.stayBooked));
   set("budget", readBudget(t, intake.budgetText));
 
-  const missing = BRIEF_SLOTS.filter(s => s.tier === "blocking" && !known[s.key]).map(s => s.key);
+  const wasAsked = new Set((Array.isArray(asked) ? asked : []).map(clean).filter(Boolean));
+  const unfilled = BRIEF_SLOTS.filter(s => s.tier === "blocking" && !known[s.key]).map(s => s.key);
+  const declined = unfilled.filter(k => wasAsked.has(k));
+  const missing = unfilled.filter(k => !wasAsked.has(k));
   // Known, and not precisely enough. Only `when` can be vague today, and it is
   // the one that costs a wrong event.
-  const vague = known.when?.precision === "month" ? ["when"] : [];
-  return { known, missing, vague, ready: missing.length === 0 };
+  const vague = known.when?.precision === "month" && !wasAsked.has("when") ? ["when"] : [];
+  return { known, missing, declined, vague, ready: missing.length === 0 };
 };
 
 export const briefReady = (brief) => !!brief && brief.missing.length === 0;
@@ -225,6 +293,13 @@ export const briefBlock = (brief) => {
       const k = brief.known[s.key];
       lines.push(`  ${s.label}: ${k.value}${k.source === "intake" ? " (from the form they filled in)" : ""}`);
     });
+  }
+  // Asked, and they did not answer. Named so it is not asked again, and named as
+  // an assumption so the reply does not speak as if it knew.
+  const declinedSlots = BRIEF_SLOTS.filter(s => (brief.declined || []).includes(s.key));
+  if (declinedSlots.length) {
+    lines.push("ALREADY ASKED AND NOT ANSWERED. Do not ask about these again. If one of them changes what you would plan, say out loud what you are assuming:");
+    declinedSlots.forEach(s => lines.push(`  ${s.label}`));
   }
   const asks = nextAsks(brief);
   if (!asks.length) {

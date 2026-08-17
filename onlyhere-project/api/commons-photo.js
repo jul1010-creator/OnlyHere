@@ -309,9 +309,25 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: NOT_FROM_SITE });
   }
   {
+    // ── AND THE NAME OF THE KEY IS THE WHOLE BUG ──────────────────────
+    // Oliver, 17 Aug 2026, minutes after this shipped: "'Could not verify your
+    // session just now.' on instagram uploads."
+    //
+    // That string is `resolveUser`'s 503, and it fires on exactly one condition
+    // reaching production: NO SERVICE KEY. The guard read SUPABASE_SERVICE_KEY,
+    // which is a name that exists nowhere in this project. api/ask.js, which has
+    // worked for a week, reads SUPABASE_SERVICE_ROLE_KEY. I invented a plausible
+    // variable name instead of reading the one file that already did this, and
+    // shut the founder out of his own photo finder with a guard meant to keep
+    // strangers out.
+    //
+    // SUPABASE_SERVICE_ROLE_KEY comes FIRST because it is the one proven to be
+    // set. The other two stay as fallbacks: the anon key is also accepted by
+    // /auth/v1/user alongside a user's JWT, so it is a real fallback and not
+    // decoration. The suite now asserts these names against ask.js's.
     const who = await resolveUser(req.headers, {
       supabaseUrl: process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co",
-      serviceKey: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "",
+      serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "",
     });
     if (!who.ok) return res.status(who.status).json({ error: who.error });
     if (!isFounder(who.userId, process.env.GEMLYX_FOUNDER_IDS)) {
