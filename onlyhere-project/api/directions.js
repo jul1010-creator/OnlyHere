@@ -80,8 +80,20 @@ export default async function handler(req, res) {
   // Google to fall back to fuzzy text geocoding, silently resolving to a
   // completely different, sometimes very distant point. Only append the country
   // hint to genuine place-name text, never to coordinates.
-  const originParam = isCoordPair(origin) ? origin : `${origin}, Denmark`;
-  const destinationParam = isCoordPair(destination) ? destination : `${destination}, Denmark`;
+  // ── AND NOT TWICE, WHICH IT WAS DOING ─────────────────────────────
+  // 17 Aug 2026. guideEnrichment's directionsEndpoint already ends its text
+  // param with ", Denmark", so a guide leg arrived here as "Copenhagen Airport,
+  // Kastrup, Denmark" and left as "Copenhagen Airport, Kastrup, Denmark,
+  // Denmark". This file's own comment two lines up describes what a mangled
+  // param does to Google's geocoder, and utils/geo.js:50 records the case that
+  // proves it: "4230, Denmark, Denmark" resolved to Holbæk instead of Skælskør.
+  const withCountry = (v) => {
+    const t = String(v || "").trim();
+    if (isCoordPair(t)) return t;
+    return /,\s*denmark\s*$/i.test(t) ? t : `${t}, Denmark`;
+  };
+  const originParam = withCountry(origin);
+  const destinationParam = withCountry(destination);
 
   try {
     let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destinationParam)}&mode=${travelMode}&key=${key}`;

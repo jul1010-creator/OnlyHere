@@ -113,6 +113,87 @@ export const stayTier = (text) => {
   return wanted.length ? wanted[0].id : null;
 };
 
+// ── AND WHETHER THAT TIER IS WHAT THEY ASKED FOR ────────────────────
+//
+// Oliver, 17 Aug 2026, reading a guide built from a conversation in which the
+// traveller had said "We got plenty of money": the Where to stay card offered "a
+// budget-friendly Wakeup Copenhagen hostel-style option if watching costs in the
+// pricey capital."
+//
+// Nothing was wrong with the sentence in isolation, and stayTier reads it
+// correctly as a hostel. The defect is that no part of the pipeline compared the
+// recommendation against what the traveller said about money. The enrichment
+// prompt teaches the contrast in the other direction, in its own words: "a tight
+// budget there realistically means a hostel or budget guesthouse, NOT a hotel."
+// Nothing taught it the opposite case, so a family with money got the tight-budget
+// answer and a reason for it that contradicted them to their face.
+//
+// THREE LEVELS AND NOTHING FINER. A number per night would be a claim about
+// Danish prices, which this file has no business making. Tight, middling and
+// generous is all the recommendation needs, and all a sentence can support.
+// Named travellerBudget, not budgetLevel: a per-entry `budgetLevel` field was
+// retired on his instruction ("the average traveller doesn't know what mid-budget
+// is in Denmark") and the suite asserts that name appears nowhere. This is a
+// different question, about what the person said rather than what a place costs,
+// and it gets its own name.
+const BUDGET_LEVELS = [
+  { id: "tight", match: /\b(?:tight|cheap|budget|shoestring|backpack(?:ing|er)?|hostel|as cheap as|saving money|watching (?:the )?(?:costs?|pennies)|low budget|not much (?:money|to spend))\b/i },
+  { id: "generous", match: /\b(?:plenty of money|money is no|no budget limit|splash(?:ing)? out|treat ourselves|luxur(?:y|ious)|high end|five star|5 star|whatever it costs|price is not|don'?t mind (?:the )?(?:cost|price|spending)|happy to spend)\b/i },
+  { id: "middling", match: /\b(?:moderate|mid[- ]?range|middling|reasonable|sensible|comfortable but not|nothing fancy)\b/i },
+];
+
+// Generous is tested before tight on purpose: "plenty of money" contains no tight
+// word, but "we do not mind the cost, nothing fancy though" contains both, and the
+// one that decides the tier is the one about how much they will spend rather than
+// the one about taste.
+export const travellerBudget = (text) => {
+  const t = clean(text);
+  if (!t) return null;
+  const gen = BUDGET_LEVELS.find(b => b.id === "generous");
+  if (gen.match.test(t)) return "generous";
+  const tight = BUDGET_LEVELS.find(b => b.id === "tight");
+  if (tight.match.test(t)) return "tight";
+  const mid = BUDGET_LEVELS.find(b => b.id === "middling");
+  return mid.match.test(t) ? "middling" : null;
+};
+
+// What a level rules OUT, not what it demands. A generous budget does not oblige
+// anybody to book a five star hotel, and plenty of people with money stay in a
+// converted kro on purpose. What it does forbid is being TOLD to save money they
+// said they were not counting.
+const RULED_OUT = {
+  generous: ["hostel", "camping"],
+  tight: ["hotel"],
+};
+
+// The sentence, not just the tier: "budget-friendly" and "if watching costs" are
+// the phrases that make a recommendation an instruction to economise, and they are
+// what contradicted him even where the tier itself might have been defensible.
+const ECONOMISING = /\b(?:budget[- ]friendly|budget option|if watching costs?|to save money|cheaper option|keep costs down|on a budget)\b/i;
+
+export const budgetTierMismatch = (level, accommodationText) => {
+  const lvl = clean(level);
+  const text = clean(accommodationText);
+  if (!lvl || !text) return null;
+  const tier = stayTier(text);
+  const out = RULED_OUT[lvl] || [];
+  if (tier && out.includes(tier)) {
+    return {
+      level: lvl, tier,
+      detail: lvl === "generous"
+        ? `They said money is not the constraint and this recommends a ${tier}. Suggest somewhere that matches what they told you, or say plainly why the ${tier} is genuinely the better choice here.`
+        : `They said the budget is tight and this recommends a ${tier}.`,
+    };
+  }
+  if (lvl === "generous" && ECONOMISING.test(text)) {
+    return {
+      level: lvl, tier: tier || "",
+      detail: "They said money is not the constraint and this tells them to watch what they spend. Drop the economising, or name a real reason that has nothing to do with price.",
+    };
+  }
+  return null;
+};
+
 // The tiers a whole trip recommends. More than one is not automatically wrong:
 // a bike trip through Jutland genuinely mixes campsites and small hotels, and
 // Copenhagen genuinely costs more than Odense. It is worth SEEING, which is
@@ -170,9 +251,28 @@ export const namedProperty = (text) => {
 // ── WHAT IS WRONG WITH THIS TRIP'S BEDS, IN PLAIN WORDS ─────────────
 // Read by the plan check, phrased for a founder, and every line is a fact about
 // the generated text rather than an opinion about where to sleep.
-export const stayProblems = (days) => {
+export const stayProblems = (days, budgetSaid = "") => {
   const out = [];
   const list = Array.isArray(days) ? days : [];
+  // ── AGAINST WHAT THEY TOLD US ABOUT MONEY, FIRST ──────────────────
+  // Before any question about the trip contradicting itself, the simpler one:
+  // does it contradict THEM. His guide recommended a budget hostel to a family who
+  // had just said they had plenty of money, and every check in this file was about
+  // internal consistency, so the guide agreed with itself perfectly.
+  const level = travellerBudget(budgetSaid);
+  if (level) {
+    const seen = new Set();
+    list.forEach((d, i) => {
+      const m = budgetTierMismatch(level, d?.glance?.accommodation);
+      if (!m) return;
+      // One line per distinct complaint, not per day: seven days of the same
+      // mismatch is one problem with the guide, not seven.
+      const key = `${m.tier}|${m.detail}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(`Day ${d?.day || i + 1}: ${m.detail}`);
+    });
+  }
   const tiers = stayTiers(list);
   if (tiers.length > 1) {
     // The reason the tier changed has to be IN the sentence, because the reader

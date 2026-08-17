@@ -21,7 +21,7 @@ import { freeEntrance } from "../data/freeEntrance";
 import { nightlifeSpots } from "../data/nightlife";
 import { foodSpots } from "../data/food";
 import { detectLegMode, haversineKm, isFerryText } from "./helpers";
-import { containsName, variantsOf } from "./danishNames";
+import { containsName, variantsOf, distinctiveWords } from "./danishNames";
 
 // Looks up a stop name against everything real Gemlyx already knows, so a
 // guide can show real price/hours/type instead of just repeating the AI's
@@ -246,6 +246,28 @@ export const coordFitsTown = (coord, town) => {
   const lat = Number(coord?.lat), lon = Number(coord?.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { ok: false, why: "not-a-coordinate" };
   const t = townPointFor(town);
+  // ── WHAT THIS CHECK CANNOT SEE, WRITTEN DOWN RATHER THAN CHANGED ──
+  // 17 Aug 2026, tracing a guide whose first leg was measured from Copenhagen
+  // Airport to a bus stop at BELLA CENTER: a real Google route, at the right
+  // time, to the wrong place. The destination had been stamped precise and sent
+  // as a bare lat,lon.
+  //
+  // Two limits let that through, and neither is fixed here on purpose:
+  //
+  //   1. MAX_TOWN_KM is 50. Bella Center is about 4 km from Copenhagen's town
+  //      point, so a coordinate several kilometres from the intended venue is
+  //      "near-town" and passes. Inside one city this check cannot see an error
+  //      at all.
+  //   2. An unknown town returns ok. "Kastrup" is not a TOWN_COORDS key, so for
+  //      that stop any coordinate is accepted.
+  //
+  // Refusing on an unknown town was tried and reverted: it turns 14 existing
+  // assertions red, and those assertions encode the 10 August fix that made the
+  // precise tier fire at all. Undoing that unattended would trade a wrong point
+  // inside one city for no measured coordinates anywhere. The right fix is a
+  // radius that means "in this town" plus a separate, tighter rule for the one
+  // decision that sends a bare coordinate to Google, and that is his call to
+  // make rather than a 2 am edit.
   if (!t) return { ok: true, why: "nothing-to-check-against" };
   const km = haversineKm({ lat, lon }, { lat: t.lat, lon: t.lon });
   return km > MAX_TOWN_KM
@@ -361,6 +383,121 @@ export const legDistanceKm = (originName, destName, geo = {}, originTown = "", d
 // either it finds the venue and the leg is genuinely measured, or it finds
 // nothing and the leg falls back to an estimate that is labelled as one. A
 // town centre guarantees a confident wrong answer instead of an honest miss.
+// ── WHICH CITY A LOCATION STRING IS IN ───────────────────────────────
+//
+// Oliver, 17 Aug 2026, with a screenshot of the Food page: "Fix filters.. that is
+// ridiculous.."
+//
+// He is right and it is worse than untidy. The row was built as
+//
+//   [...new Set(foodSpots.map(f => f.location || f.city))]
+//
+// and a food entry's `location` is "Neighbourhood, City". So the filter offered
+// one chip per NEIGHBOURHOOD, named the variable `cities`, and the row he
+// photographed reads: Amagerbro Copenhagen, Christianshavn Copenhagen, City centre
+// Aarhus, Frederiksberg Copenhagen, Hald Viborg, Klostertorvet Aarhus C. Three
+// separate chips for Copenhagen, two for Aarhus under different sub-labels, a
+// horizontal scrollbar, and one more chip for every entry he ever publishes.
+// Nobody browsing dinner in Aarhus can find it, which is the one job the filter has.
+//
+// So it groups by city. The last comma-separated part is the city in every Danish
+// address shape the app produces, and the postal-district letter has to come off or
+// "Aarhus C" and "Aarhus" are two cities. townKeyFor then folds København and
+// Copenhagen onto one chip, which is the same reason it exists everywhere else in
+// this file.
+//
+// ONE definition, used by the food filter AND the attractions filter, which had its
+// own KNOWN_CITIES list of ten hardcoded names beside a lookalike cityOf. A second
+// copy of this is how "also" became an island.
+const POSTAL_SUFFIX = /\s+(?:C|K|N|NV|NØ|S|SV|SØ|V|Ø)$/i;
+
+export const cityFromLocation = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  // ── AND THE COUNTRY IS NOT A CITY ────────────────────────────────
+  // A mapHint is a full address: "Café Broløs, Klostertorvet 10, 8000 Aarhus C,
+  // Denmark". Taking the last segment gave a chip labelled Denmark, on a Danish
+  // travel guide, which is the funniest possible version of this bug.
+  const parts = raw.split(",").map(x => x.trim()).filter(Boolean)
+    .filter(x => !/^(?:denmark|danmark|dk)$/i.test(x));
+  const last = (parts.length ? parts[parts.length - 1] : raw).trim();
+  // "8000 Aarhus C" and "1456 København K" both arrive here from a mapHint.
+  const withoutCode = last.replace(/^\d{4}\s+/, "").trim();
+  const bare = withoutCode.replace(POSTAL_SUFFIX, "").trim();
+  // ── AND KØBENHAVN AND COPENHAGEN ARE ONE CHIP ────────────────────
+  // townKeyFor alone answers "København" with "København", so the filter would
+  // have offered both spellings as separate cities, which is the same bug one
+  // spelling along. variantsOf is what townPointFor uses ten lines above for the
+  // identical reason.
+  for (const v of [bare, withoutCode]) {
+    for (const spelling of variantsOf(v)) {
+      const key = townKeyFor(spelling);
+      if (key) return key;
+    }
+  }
+  return bare || withoutCode;
+};
+
+// ── TWO STOPS THAT ARE ONE PLACE ─────────────────────────────────────
+//
+// Oliver, 17 Aug 2026, with a screenshot of "Tivoli Gardens" and "Tivoli
+// Christmas market" on one day and a chip between them reading "No direct route,
+// check Rome2Rio". They are the same grounds; the market is Tivoli after dark,
+// and the entry's own words are "the same grounds transform once the light drops".
+//
+// Google was asked to route from a place to itself, found no transit itinerary,
+// and the no-route branch printed the most alarming line in the file.
+//
+// 300 metres, and the number has a reason: a large site legitimately carries two
+// stops with coordinates a couple of hundred metres apart (a park entrance and a
+// stage inside it), and the shortest walk anybody would ever describe as a leg is
+// longer than that. Under it, there is nothing to travel.
+export const SAME_SPOT_KM = 0.3;
+
+// The distance decides when there is one. NOT through legDistanceKm, which is
+// where the first version of this went wrong: that function deliberately returns
+// null under COLLAPSE_KM, because a sub-50-metre gap between two named stops is
+// its definition of a collapse. The tiny case is precisely the case here, so the
+// points are read directly.
+//
+// Two IMPRECISE points are never called the same spot, however close they look:
+// both fell back to a town centre, the zero is an artefact, and the existing
+// collapse guard already owns that path. Not knowing is not the same as knowing
+// they are one place.
+//
+// With no coordinates at all the name is the only signal, and the rule has to
+// separate two cases that look identical: "Tivoli Gardens" beside "Tivoli
+// Christmas market" is one site, and "Aarhus Domkirke" beside "Aarhus Ø" is a
+// cathedral and a harbour 3 km apart. What tells them apart is what the shared
+// word IS. A shared word that is a TOWN name says nothing, because every stop in
+// a town can carry it. A shared word that is neither a town nor generic is a
+// venue, and two stops naming the same venue are the same place. Louisiana Museum
+// and Louisiana Cafe are one site by the same reasoning.
+export const isSameSpot = (aName, bName, geo, aTown, bTown) => {
+  const a = String(aName || "").trim(), b = String(bName || "").trim();
+  if (!a || !b) return false;
+  if (a.toLowerCase() === b.toLowerCase()) return true;
+  const pa = resolveStopCoordsDetailed(a, geo, aTown);
+  const pb = resolveStopCoordsDetailed(b, geo, bTown);
+  if (pa && pb) {
+    if (!pa.precise || !pb.precise) return false;
+    return kmBetween(pa, pb) <= SAME_SPOT_KM;
+  }
+  // ── AND THE TOWN FILTER HERE WAS DEAD CODE ────────────────────────
+  // It read `.filter(w => !townKeyFor(w))`, to stop "Aarhus Domkirke" beside
+  // "Aarhus Ø" being called one place on the shared word Aarhus. Mutating it away
+  // changed no test, which is how it was found, and then the reason was plain:
+  // this branch only runs when NEITHER name resolved to a coordinate, and
+  // resolveStopCoordsDetailed falls back on townKeyFor(name), so a name
+  // containing a known town always resolves and never reaches here. The filter
+  // could not fire. Removed rather than left in as reassurance, and the case it
+  // was worried about is handled where it actually happens: two names that both
+  // fall back to one town centre are refused above, on the precise flag.
+  const wa = distinctiveWords(a), wb = distinctiveWords(b);
+  if (!wa.length || !wb.length) return false;
+  return wa.some(w => wb.includes(w));
+};
+
 export const directionsEndpoint = (name, coord, town = "") => {
   if (coord && coord.precise && Number.isFinite(Number(coord.lat)) && Number.isFinite(Number(coord.lon))) {
     return { param: `${coord.lat},${coord.lon}`, fromCoords: true };

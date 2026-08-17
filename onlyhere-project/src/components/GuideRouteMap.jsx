@@ -50,11 +50,28 @@ const fetchLegGeometry = async (from, to, mode) => {
 // Above this many stops the map stops shouting every name at once.
 const LABEL_LIMIT = 6;
 
-export const GuideRouteMap = ({ points, legs }) => {
+// ── THE LABEL CSS LIVES HERE NOW ────────────────────────────────────
+// .gemlyx-map-label was only ever defined in App.jsx's inline <style>. Open a
+// shared guide link cold and GuidePage mounts without it, so the tooltip renders
+// unstyled: default Leaflet white box, black text, on exactly the routes with more
+// than six points where the tooltip is the ONLY place a pin's name exists.
+// Injected by the component that uses it, once, so it cannot go missing again.
+const MAP_CSS = `
+.gemlyx-map-label{background:${C.surface};color:${C.text};border:1px solid ${C.border};border-radius:8px;
+  padding:3px 8px;font:700 11px 'Inter',sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.45);white-space:nowrap}
+.gemlyx-map-label::before{border-top-color:${C.border}}
+.gemlyx-near-label{background:transparent;color:${C.light};border:0;box-shadow:none;
+  font:600 10px 'Inter',sans-serif;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.gemlyx-near-label::before{display:none}
+`;
+
+export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, selectedName = "" }) => {
   const holderRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const didFitRef = useRef(false);
+  // The secondary layer of our own nearby places, redrawn on every zoom and pan.
+  const nearLayerRef = useRef(null);
   // The pending invalidateSize frame, so unmount can cancel it. See the note at
   // the requestAnimationFrame call below.
   const rafRef = useRef(null);
@@ -185,9 +202,72 @@ export const GuideRouteMap = ({ points, legs }) => {
           className: "gemlyx-map-label",
         })
         .addTo(group);
-      // Hover is not a thing on a phone, so a tap has to open it too.
-      if (points.length > LABEL_LIMIT) marker.on("click", () => marker.openTooltip());
+      // ── CLICK A PIN AND FLY DOWN TO IT ──────────────────────
+      // Oliver, 17 Aug 2026: "Can you make a design that when you click on one of
+      // them, you instantly fly down to the area? And then it pops up in the right
+      // corner where you read shortly about its location."
+      //
+      // The whole-trip map is the right default and it is unreadable up close:
+      // Copenhagen to Billund in a 320 px box puts nine stops inside one pin's
+      // worth of screen, which is why he could only read four numbers. Flying to a
+      // single pin is the way out of that without giving up the overview, and 15
+      // is the zoom where street names and the neighbours appear.
+      //
+      // flyTo, not setView: the animation is what tells a reader the map moved
+      // rather than reloaded, and it is the difference between an overview and a
+      // close-up feeling like one map or two.
+      marker.on("click", () => {
+        marker.openTooltip();
+        map.flyTo([p.lat, p.lon], 15, { duration: 0.85 });
+        if (onSelect) onSelect(p);
+      });
     });
+    // ── AND OUR OWN PLACES, ONCE YOU ARE CLOSE ENOUGH TO CARE ────
+    // Oliver: "Also make the map look a little more realistic. Having some of our
+    // written tourism attractions written down. It's close to King's Garden. So
+    // that could be shown on the map."
+    //
+    // Drawn small, unnumbered and only at zoom 13 and above, because at trip zoom
+    // they would be exactly the blob the numbered pins already are. Zooming in is
+    // the signal that somebody is looking at one area rather than the week.
+    //
+    // Every one of these is a row he published, plotted from ITS OWN stored
+    // coordinate. Nothing here is a place a model thought was nearby. His own note
+    // on the example was "(I obviously haven't written King's Garden in yet..)",
+    // which is the point: this gets better as the library grows and says less until
+    // then, and it never says anything untrue.
+    const drawNearby = () => {
+      const z = map.getZoom();
+      nearLayerRef.current?.remove();
+      nearLayerRef.current = null;
+      if (z < 13 || !Array.isArray(nearby) || !nearby.length) return;
+      const bounds = map.getBounds();
+      const near = L.layerGroup();
+      nearby
+        .filter(r => Number.isFinite(r?.lat) && Number.isFinite(r?.lon))
+        .filter(r => bounds.contains([r.lat, r.lon]))
+        .slice(0, 12)
+        .forEach(r => {
+          L.marker([r.lat, r.lon], {
+            icon: L.divIcon({
+              className: "gemlyx-near-pin",
+              html: `<div style="width:8px;height:8px;border-radius:50%;background:${C.light};opacity:.85;`
+                  + `border:1px solid rgba(0,0,0,.5);box-shadow:0 1px 4px rgba(0,0,0,.6)"></div>`,
+              iconSize: [8, 8],
+              iconAnchor: [4, 4],
+            }),
+            interactive: false,
+            keyboard: false,
+          })
+            .bindTooltip(r.name, { permanent: true, direction: "right", offset: [6, 0], className: "gemlyx-near-label" })
+            .addTo(near);
+        });
+      near.addTo(map);
+      nearLayerRef.current = near;
+    };
+    drawNearby();
+    map.on("zoomend moveend", drawNearby);
+
     // BUG FIX, same report: padding 28 with no zoom cap meant a day with only
     // 2-3 genuinely close-together stops (common — most days have real stops
     // within the same town) zoomed in tight enough to feel claustrophobic,
@@ -255,15 +335,25 @@ export const GuideRouteMap = ({ points, legs }) => {
     } else {
       map.flyToBounds(extent, { padding: [44, 44], maxZoom: 14, duration: 0.9, easeLinearity: 0.25 });
     }
-    return () => { group.remove(); };
+    return () => {
+      map.off("zoomend moveend", drawNearby);
+      nearLayerRef.current?.remove();
+      nearLayerRef.current = null;
+      group.remove();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points), JSON.stringify(legs), geometry]);
+  }, [JSON.stringify(points), JSON.stringify(legs), geometry, JSON.stringify(nearby)]);
   useEffect(() => () => {
     if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
   }, []);
   if (points.length < 2) return null;
-  return <div ref={holderRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <>
+      <style>{MAP_CSS}</style>
+      <div ref={holderRef} style={{ width: "100%", height: "100%" }} />
+    </>
+  );
 };
 
 // Renders a real, official Instagram post/reel using Instagram's own embed

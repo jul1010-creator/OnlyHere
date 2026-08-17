@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
@@ -7,7 +7,15 @@ import { TypewriterText } from "../components/TypewriterText";
 import { DetailPage } from "../components/DetailPage";
 import { GuideRouteMap } from "../components/GuideRouteMap";
 import { ensureLiveContentLoaded } from "../utils/liveContent";
-import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
+import { previewPools } from "../utils/previewMatch";
+import { placedLibrary, nearbyPublished, describeLocation } from "../utils/nearbyPlaces";
+import { towns } from "../data/towns";
+import { freeEntrance } from "../data/freeEntrance";
+import { foodSpots } from "../data/food";
+import { nightlifeSpots } from "../data/nightlife";
+import { craftItemsFallback } from "../data/craft";
+import { events, majorEvents } from "../data/events";
+import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
 import { partOfCountry } from "../utils/geography";
 import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
@@ -431,6 +439,31 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
     setChatLoading(false);
   };
 
+  // ── THE PIN A READER TAPPED, AND OUR OWN PLACES TO PUT BESIDE IT ──
+  // Declared UP HERE, with every other hook, and the reason is written out at
+  // length below: three hooks once sat under `if (loading) return` and broke every
+  // shared guide link in the product. The suite has guarded that ever since, and it
+  // caught these three within a minute of my writing them in the wrong place.
+  //
+  // mapLibrary is every published row carrying a real coordinate, towns excluded:
+  // "close to Copenhagen" is not a fact worth printing on a pin already in
+  // Copenhagen. previewPools is the same library the preview screen matches
+  // against, so the map cannot show something the rest of the app does not have.
+  //
+  // libraryTick is READ in the memo, not merely set. ensureLiveContentLoaded fills
+  // the imported arrays in place, so the list is empty on first paint and correct a
+  // moment later, and a state variable nothing reads is a re-render that never
+  // happens.
+  const [mapPin, setMapPin] = useState(null);
+  const [libraryTick, setLibraryTick] = useState(0);
+  useEffect(() => { ensureLiveContentLoaded().then(() => setLibraryTick(t => t + 1)).catch(() => {}); }, []);
+  const mapLibrary = useMemo(
+    () => placedLibrary(previewPools({
+      towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
+    })),
+    [libraryTick],
+  );
+
   // ── EVERY HOOK LIVES ABOVE THE EARLY RETURNS ────────────────────
   // These three used to sit BELOW `if (loading) return` and
   // `if (loadError || !guide) return`, which is a hooks-order violation and it
@@ -601,13 +634,31 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   // above a map showing two is the thing that makes a founder distrust the
   // whole page.
   const tripUnplaced = allStops.filter((st, i) => !tripPoints[i]).map(st => st.name);
-  // Placed, but only to the middle of a town. Named rather than counted, since
-  // "one stop is approximate" without saying which one is not actionable.
-  const tripApprox = tripPoints.filter(Boolean).filter(p => p.approx).map(p => p.stopName);
   const tripPlaced = tripPoints.filter(Boolean);
   // Consecutive duplicates are the same place twice (an overnight stop that is
   // also the next morning's start). One pin, not two stacked on each other.
   const tripRoute = tripPlaced.filter((p, i) => i === 0 || Math.abs(p.lat - tripPlaced[i - 1].lat) > 1e-6 || Math.abs(p.lon - tripPlaced[i - 1].lon) > 1e-6);
+  // ── COUNTED OFF WHAT IS DRAWN, NOT OFF WHAT WAS PLACED ────────────
+  // This read tripPoints, i.e. BEFORE the dedupe on the line above, so it could
+  // name a pin that is not on the map. Oliver's screenshot: "2 pins are
+  // approximate: Tivoli Christmas market, Amalienborg", on a map where the second
+  // of any consecutive pair had already been collapsed away. The note counted
+  // stops; the map draws points.
+  const tripApprox = tripRoute.filter(p => p.approx).map(p => p.stopName);
+  // ── AND WHICH PIN A STOP IS, IF IT IS ONE ─────────────────────────
+  // Read off tripRoute itself, so the number under the map and the number ON the
+  // map cannot drift. Two stops in one place collapse to one pin by design, and
+  // both cards then point at that pin, which is the truth: it is one dot.
+  const pinNumber = (stop) => {
+    const name = String(stop?.name || "");
+    if (!name) return null;
+    const at = tripRoute.findIndex(p => String(p.stopName || p.name || "") === name);
+    return at < 0 ? null : at + 1;
+  };
+  // How many stops the dedupe removed, said out loud rather than left as a map
+  // that is quietly shorter than the list. The unplaced note below covers the
+  // other reason a stop is missing; this covers the one nothing mentioned.
+  const tripCollapsed = tripPlaced.length - tripRoute.length;
   const tripLegs = tripRoute.slice(0, -1).map((p, i) => ({
     mode: resolveLegMode(null, guide._mode, p.name, tripRoute[i + 1].name, guide._onlyWalking, tripGeo),
   }));
@@ -809,11 +860,53 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
 
         {!lightMode && tripRoute.length > 1 && (
           <div style={{ marginBottom: 28, maxWidth: 640 }}>
-            <div style={{ height: 320, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}` }}>
-              <GuideRouteMap points={tripRoute} legs={tripLegs} />
+            {/* ── FLY DOWN, AND SAY WHERE YOU LANDED ────────────────────
+                Oliver, 17 Aug 2026: "Can you make a design that when you click on
+                one of them, you instantly fly down to the area? And then it pops up
+                in the right corner where you read shortly about its location."
+
+                The card sits INSIDE the map's box, top right, over the tiles,
+                because the point is that it belongs to the pin you just tapped.
+
+                Not one word of it is written by a model. describeLocation is
+                arithmetic: haversine between this pin and the coordinates of rows
+                he published himself, phrased. On a map, which is the surface a
+                reader trusts most, an invented "close to King's Garden" would be
+                the same class of claim as the restaurant the chat quoted out of a
+                model's memory this morning. The sentence can be dull. It cannot be
+                wrong, and it gets better as his library grows. */}
+            <div style={{ height: 320, borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, position: "relative" }}>
+              <GuideRouteMap
+                points={tripRoute}
+                legs={tripLegs}
+                nearby={mapLibrary}
+                selectedName={mapPin?.name || ""}
+                onSelect={setMapPin}
+              />
+              {mapPin && (
+                <div style={{
+                  position: "absolute", top: 10, right: 10, zIndex: 500, maxWidth: 232,
+                  background: C.scrim, backdropFilter: "blur(6px)",
+                  border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.25, flex: 1 }}>
+                      {mapPin.name}
+                    </div>
+                    <button
+                      onClick={() => setMapPin(null)}
+                      aria-label="Close this pin"
+                      style={{ background: "transparent", border: 0, color: C.muted, fontSize: 15, lineHeight: 1, cursor: "pointer", padding: 2 }}
+                    >×</button>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.light, lineHeight: 1.55, marginTop: 5 }}>
+                    {describeLocation(mapPin, nearbyPublished(mapPin, mapLibrary, { exclude: mapPin.name }), { town: mapPin.town })}
+                  </div>
+                </div>
+              )}
             </div>
             <div style={{ fontSize: 11, color: C.muted, marginTop: 7 }}>
-              The whole route. Every stop below is numbered here in order.
+              The whole route, numbered in order. Tap a pin to fly down to it, and zoom in to see what else of ours is nearby.
             </div>
             {/* Said out loud rather than left as a shorter map. A stop with no
                 coordinate used to vanish from here with nothing to show it
@@ -821,6 +914,11 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             {tripUnplaced.length > 0 && (
               <div style={{ fontSize: 11, color: "#FFB347", marginTop: 5, lineHeight: 1.55 }}>
                 {tripUnplaced.length === 1 ? "One stop is not on this map" : `${tripUnplaced.length} stops are not on this map`}, because we could not place {tripUnplaced.length === 1 ? "it" : "them"} on a coordinate: {tripUnplaced.join(", ")}. {tripUnplaced.length === 1 ? "It is" : "They are"} still in the day-by-day below.
+              </div>
+            )}
+            {tripCollapsed > 0 && (
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 1.5 }}>
+                {tripCollapsed === 1 ? "One stop shares a pin" : `${tripCollapsed} stops share a pin`} with the stop before it, because they are the same place. That is why the highest number here is lower than the number of stops.
               </div>
             )}
             {tripApprox.length > 0 && (
@@ -1034,6 +1132,32 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originText)}&destination=${encodeURIComponent(destText)}&travelmode=${mode}`;
           };
           const legChip = (originName, destName, how) => {
+            // ── TIVOLI TO TIVOLI NEEDS NO TRANSPORT ──────────────
+            // Oliver, 17 Aug 2026, with a screenshot: "Tivoli Gardens" and
+            // "Tivoli Christmas market" as two stops on one day, and between
+            // them a chip reading "No direct route, check Rome2Rio". They are the
+            // same grounds. The Christmas market IS Tivoli after dark, and the
+            // entry's own text says so: "The same grounds transform once the
+            // light drops."
+            //
+            // Nothing below could have caught it. Both stops resolve to the same
+            // point, so Google was asked to route from a place to itself, came
+            // back with no transit itinerary, and the no-route branch printed the
+            // most alarming line in the file.
+            //
+            // Checked on the DISTANCE first, then on the name, because either one
+            // alone misses a case: two stops on one site can carry different
+            // coordinates a hundred metres apart, and two stops with the same
+            // first word can be genuinely far apart ("Aarhus Domkirke" and
+            // "Aarhus Ø"). The distance is the reliable half and the name only
+            // speaks when there is no distance to read.
+            if (isSameSpot(originName, destName, geo, stopTownOf(originName), (day.stops || []).find(s => s.name === destName)?.town)) {
+              return (
+                <div style={{ display: "flex", justifyContent: "center", padding: "2px 0 6px" }}>
+                  <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Same place, nothing to travel</span>
+                </div>
+              );
+            }
             let mode = resolveLegMode(how, guide._mode, originName, destName, guide._onlyWalking, geo);
             // Same-town transit legs are walks even when no coordinates ever
             // resolved (the Ribe VikingeCenter → Ribe Old Town report) — same
@@ -1418,7 +1542,19 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   <div onClick={real ? () => openStopDetail(real) : undefined}
                     style={{ display: "flex", gap: 12, alignItems: "flex-start", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", cursor: real ? "pointer" : "default" }}>
                     <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: `${C.gold}18`, border: `1px solid ${C.gold}33` }}>
-                      <span style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic", fontSize: 16, fontWeight: 500, color: C.gold }}>{(stop.name || "◆").slice(0, 1)}</span>
+                      {/* ── THE NUMBER THE CAPTION PROMISED ────────────
+                          The map's caption has always said "every stop below is
+                          numbered here in order", and nothing below the map was
+                          numbered: this plate showed the first LETTER of the name.
+                          The one function in the file that could print ① is defined
+                          and called from nowhere.
+
+                          pinNumber is the stop's real position among the pins that
+                          were drawn, so tapping pin 4 and finding the fourth card
+                          works. A stop that is not on the map keeps its letter,
+                          because giving it a number would be the promise breaking
+                          in the other direction. */}
+                      <span style={{ fontFamily: "'Fraunces', serif", fontStyle: pinNumber(stop) ? "normal" : "italic", fontSize: 16, fontWeight: pinNumber(stop) ? 800 : 500, color: C.gold }}>{pinNumber(stop) || (stop.name || "◆").slice(0, 1)}</span>
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>{titleRow}</div>
                   </div>

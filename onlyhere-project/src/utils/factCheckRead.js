@@ -333,12 +333,42 @@ const anchorsOf = (finding) => {
 
 const hasAnchor = (text, anchor) => String(text || "").toLowerCase().includes(String(anchor).toLowerCase());
 
+// ── A BARE YEAR IS NOT AN ANCHOR ────────────────────────────────────
+//
+// Oliver, 17 Aug 2026, on two separate drafts in a row. A Café Broløs entry:
+// "THE CORRECTION DID NOT LAND. 1 flagged claim is still in the draft, on the
+// draft's own words: '2026'". A Glassalen entry, the same line with '1863'.
+//
+// Both were false. The finding was about a DATE, so its only anchor was the year,
+// and the year legitimately appears in the entry after the correction: the reception
+// really is in 2026 and the building really is from 1863. The claim was corrected
+// and the anchor survived, because a four digit number is not a fingerprint for a
+// sentence, it is a fingerprint for a number.
+//
+// Worse than useless: it puts "do not read the banner above as a pass" on a draft
+// that passed, twice in one evening, which teaches him to stop reading the line.
+//
+// So a lone year no longer counts. A figure with a UNIT is still an anchor, because
+// "125 DKK" or "90 minutes" surviving a correction genuinely means the value did.
+// Where the year was the only anchor, the finding becomes uncheckable, which is
+// already a state this file has, already reported honestly, and already says to
+// read it by eye.
+const LONE_YEAR = /^(?:1[5-9]\d{2}|20\d{2})$/;
+const anchorIsUseful = (anchor, finding) => {
+  const a = String(anchor || "").trim();
+  if (!LONE_YEAR.test(a)) return true;
+  // A year attached to a unit or a currency in the finding is a value, not a date.
+  return new RegExp(`${a}\\s*(?:dkk|kr|kroner|eur|usd|%|min|mins|minutes|hours?|km|m\\b)`, "i").test(String(finding || ""));
+};
+
 // "gone", "survived" or "uncheckable", and the third is its own answer for the
 // reason readInventedCheck keeps "unreadable" separate: a finding with no figure
 // and no quote of the draft cannot be followed by code, and calling that fixed
 // would be the exact false reassurance this replaces.
 export const claimLanded = (finding, before, after) => {
-  const anchors = anchorsOf(finding).filter(a => hasAnchor(before, a));
+  const anchors = anchorsOf(finding)
+    .filter(a => anchorIsUseful(a, finding))
+    .filter(a => hasAnchor(before, a));
   if (!anchors.length) return { finding, anchors: [], verdict: "uncheckable" };
   const survived = anchors.filter(a => hasAnchor(after, a));
   return { finding, anchors, survived, verdict: survived.length ? "survived" : "gone" };

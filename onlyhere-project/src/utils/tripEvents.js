@@ -90,6 +90,49 @@ export const arrivalDateIn = (text, today = new Date()) => {
   return candidate;
 };
 
+// ── AND A MONTH ON ITS OWN, WHICH IS WHAT PEOPLE ACTUALLY WRITE ─────
+//
+// Oliver, 17 Aug 2026, reading a Detour chat he had just had: "It also showed me
+// comic con in November.. even after talking about Tivoli in december.."
+//
+// The traveller wrote "I'm going to Denmark in December" and "we're here for 7
+// days". DATE_RE above requires a DAY NUMBER beside the month, so "in December"
+// matched nothing, arrivalDateIn returned null, and tripWindow came back
+// `{ days: 7, dated: false }`. dated false means "we do not know when they are
+// here", overlapsTrip then returns null for every event, and the whole date
+// filter stands down. A November convention for a December trip is not the
+// matcher being wrong. It is the matcher being told nothing.
+//
+// A bare month is not a date and it is a hard constraint, which is exactly the
+// argument the lone-date branch below already makes for itself: it rules out an
+// event in a different month, and that is most of the damage. So it produces a
+// window covering the whole month, and it says `precision: "month"` so nothing
+// downstream can present it as a known arrival day.
+//
+// A month already gone means next year, the same call arrivalDateIn makes: in
+// August, "in December" is this December, and in December, "in March" is next
+// March.
+export const monthOnlyIn = (text, today = new Date()) => {
+  const s = String(text || "");
+  // The day-and-month form is handled above and must win, or "12 December"
+  // would be flattened into the whole of December by this function.
+  if (DATE_RE.test(s)) return null;
+  const m = s.match(new RegExp(`\\b(${MONTH_PATTERN})\\b`, "i"));
+  if (!m) return null;
+  const monthIdx = MONTH_NAMES[m[1].toLowerCase()];
+  if (monthIdx === undefined) return null;
+  const now = dayStart(today) || new Date(today.getFullYear(), today.getMonth(), 1);
+  let year = now.getFullYear();
+  // Compared on the month rather than the day, so somebody writing "in August"
+  // on the 17th of August means this month and not next year.
+  if (monthIdx < now.getMonth()) year += 1;
+  const start = new Date(year, monthIdx, 1);
+  // Day 0 of the next month is the last day of this one, and it gets February
+  // and leap years right without a table.
+  const end = new Date(year, monthIdx + 1, 0);
+  return { start, end, month: monthIdx, year };
+};
+
 export const dayCountIn = (text) => {
   const s = String(text || "");
   const digits = s.match(/\b(\d{1,2})\s*(?:-|–|to)?\s*(?:day|days)\b/i);
@@ -123,7 +166,15 @@ export const tripWindow = ({ arrival, departure, convoText, today = new Date() }
   }
   // One lone date and no length is still a real anchor: it rules out an event
   // in a different month, which is most of the damage.
-  if (from) return { start: from, end: from, days: null, dated: true, source: "conversation" };
+  if (from) return { start: from, end: from, days: null, dated: true, source: "conversation", precision: "day" };
+  // A BARE MONTH, which is what people write. `days` stays the length they
+  // spoke, NOT the length of the month: those are two different facts and
+  // conflating them would hand a seven day trip the event budget of a
+  // thirty-one day one. precision says how much of this to trust.
+  const month = monthOnlyIn(convoText, today);
+  if (month) {
+    return { start: month.start, end: month.end, days: spoken || null, dated: true, source: "conversation", precision: "month" };
+  }
   if (spoken) return { start: null, end: null, days: spoken, dated: false, source: "conversation" };
   return null;
 };

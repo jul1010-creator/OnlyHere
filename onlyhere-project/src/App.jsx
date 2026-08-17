@@ -24,7 +24,7 @@ import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInve
 import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
-import { stayProblems } from "./utils/accommodation";
+import { stayProblems, travellerBudget, budgetTierMismatch } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl } from "./utils/placeUrl";
@@ -85,6 +85,8 @@ import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverS
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
+import { cityFromLocation } from "./utils/guideEnrichment";
+import { readBrief } from "./utils/tripBrief";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
@@ -928,6 +930,11 @@ function GemlyxApp() {
   const [factPos, setFactPos] = useState(0);
   const factOrder = useMemo(() => orderFor(denmarkFacts.length, factSeed), [factSeed, denmarkFacts.length]);
   const factCardIdx = factAt(factOrder, factPos, denmarkFacts.length);
+  // Reset per card: a single 404 must not blank the photograph on every fact
+  // after it. Keyed on the index rather than the path, because two cards can
+  // legitimately share a photo and the state should still start clean.
+  const [factPhotoOk, setFactPhotoOk] = useState(true);
+  useEffect(() => { setFactPhotoOk(true); }, [factCardIdx]);
   useEffect(() => {
     if (guideModal !== "loading") return;
     // SYNC FIX (Oliver: "Text and Picture is not always 100% in sync. Picture
@@ -5220,8 +5227,12 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         if ("price" in t && !statesAPrice(t.price)) {
           const siteChecked = !!String(scrapedSiteText || "").trim();
           const siteHasPrice = !!ticketPriceOn(scrapedSiteText);
-          t.price = unpricedLine({ siteChecked, siteHasPrice });
-          noteToFounder(describeUnpriced({ siteChecked, siteHasPrice, name: t.name }));
+          // Whether there is a website to send them to at all. Google's registered
+          // URL counts, and so does one the draft carries; a food entry has no
+          // website field, which is exactly the Café Broløs case.
+          const hasWebsite = /^https?:\/\//i.test(String(t.website || placesWebsite || "").trim());
+          t.price = unpricedLine({ siteChecked, siteHasPrice, hasWebsite });
+          noteToFounder(describeUnpriced({ siteChecked, siteHasPrice, hasWebsite, name: t.name }));
           note(`What a reader is told about price${suffix}`, {
             provider: "fetch",
             detail: "the operator's own page, asked whether it publishes a price at all",
@@ -7890,7 +7901,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // fetchExactDurations reads day.glance.legs[i].how to decide each leg's
   // transport mode, and that was always undefined, so every leg mode on every
   // guide has been a guess from the trip's primary mode. This has to run first.
-  const enrichGuideDays = async (days, travelMode, mixedModes) => {
+  const enrichGuideDays = async (days, travelMode, mixedModes, budgetSays = "") => {
     setGlancePending(days.length);
     const glances = new Array(days.length).fill(null);
     await Promise.all(days.map(async (day, idx) => {
@@ -7907,7 +7918,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         } catch { /* search down, Claude will fall back to safe wording */ }
         const enrichPrompt = `A traveler visits these stops in Denmark in this exact order: ${numbered}. Using ONLY the provided search context plus well-established Danish geography/transit knowledge, respond with ONLY strict JSON:
 {"legs": [${names.length > 1 ? `exactly ${names.length - 1} objects, where legs[0] is how to get from stop 1 to stop 2, legs[1] from stop 2 to stop 3, and so on` : "empty array"}, each: {"how": "e.g. '~10 min by bus' or '~25 min walk' or '~1h by train via Odense'"}], "accommodation": "One specific sentence — name an actual area/neighbourhood to stay in if the context supports it (e.g. 'Stay near Koge harbour for an easy morning ride out'), not a generic 'stay overnight in [town]' with no reason given. CRITICAL: the place you suggest MUST be realistically close to where this day's stops actually are — never suggest a town in a different region or a different island just because it has good general transport links; proximity to THIS day's actual activities always wins over generic transit convenience. Only default to day-trip-from-Copenhagen phrasing if that is genuinely the better call for this specific day. RELOCATION DAYS ARE A SPECIFIC CASE, GET THIS RIGHT: if this day's OWN stops end with genuinely leaving for a new town (a departure/travel leg to somewhere the traveler will actually be based from for the following day(s)), the accommodation for THIS day must reflect where they'll ACTUALLY be sleeping that night — the destination they're traveling to, not the town they started the day in. Never write something like "stay near central Copenhagen" for a day whose last stop is "Departure to Aarhus" — that's recommending accommodation in a city they've already left by evening. Say where they'll really be. ACCOMMODATION TYPE, grounded in the real prices in the search context (never invent a specific price, only use ones actually present in context) and the traveler's stated daily budget: central Copenhagen is expensive — a tight budget there realistically means a hostel or budget guesthouse, not a hotel; the same budget in a smaller town elsewhere in Denmark often comfortably covers a real hotel, since prices outside the capital are typically lower. Weave the TYPE (hostel/hotel/guesthouse) into this sentence when the budget context makes one clearly more realistic than the other; if the budget is generous or genuinely unclear, don't force a type. ONE TRIP, ONE KIND OF TRAVELER — and if a day genuinely departs from that, the sentence has to say why IN THE SENTENCE. Oliver, 9 Aug 2026, on a real guide: \"It suggests hostels, but then gives a specific hotel??? Odd.\" Day 1 said book a hostel near Norreport, Day 3 said a comfortable hotel base in Odense, and on one budget BOTH were correct, because Copenhagen costs far more per night than Odense does. The reader could not know that, because neither sentence said it. Each day is written by its own separate call that cannot see the others, so YOU are the only place this can be caught: if the type you are about to write differs from what the same budget would buy in the capital, name the reason in the same breath (\"your nightly budget goes much further here than in Copenhagen, so a real hotel in the centre is comfortably in range\"). An unexplained jump between hostel and hotel does not read as good local knowledge, it reads as the guide contradicting itself. And the type in this sentence MUST match recommendedStay below: never write hostel here and return a hotel there.", "stayArea": "Just the specific area/neighbourhood/town name from the accommodation sentence above, 2-5 words, no extra description — e.g. 'Koge harbour' or 'central Odense' — used to build a real search link, so it must be an actual, findable place name, never invented.", "recommendedStay": "A REAL, SPECIFIC hotel or hostel name — ONLY if one is explicitly present in the search context, exactly as named there. This is the same never-guess rule as everything else here: if the search context does not name a specific real property, leave this an empty string and let the traveler search themselves — do NOT invent a plausible-sounding hotel name, do NOT reuse a generic chain name unless the context specifically confirms one exists in this area. An empty string is the correct, expected answer most of the time; only fill this when genuinely supported."}
-Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
+Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommend somewhere that contradicts it, and never tell them to economise when they have said they are not counting. A real guide he read offered "a budget-friendly hostel-style option if watching costs" to a family who had just said they had plenty of money. If the honest answer happens to be a cheaper place anyway, give a reason that is about the place and not about their wallet. ` : ""}always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no real map data): use realistic speeds — walking ~5 km/h (roughly 12 min/km), cycling ~15 km/h, city driving ~30 km/h even accounting for a short trip. Never guess something like "1 min by car" for two stops that aren't genuinely at the same address — sharing a city name is NOT the same as being adjacent (a campsite on the edge of a city and a museum in its center are commonly several km apart even though both say "Aarhus"). If you're not confident of the real distance between two specific stops, say "Check the route" rather than guessing a number that could be wrong by an order of magnitude. ${mixedModes ? `The traveler explicitly wants a MIX of ${mixedModes.map(m => m.toUpperCase()).join(" AND ")} across this trip — do NOT default every leg to one of them. For EACH leg, pick whichever of those mentioned modes is actually the realistic, sensible choice given the real distance and geography (e.g. "~15 min walk" for two stops in the same town even on a mostly-bike trip, "~1h20 by train" for a long cross-country hop even on a mostly-transit trip, "~30 min by bike" for a short countryside stretch). Genuinely vary the mode leg-by-leg based on what makes sense, not on which mode was mentioned first — mixing is the expected, correct output here, not an edge case.` : travelMode ? `The traveler's PRIMARY mode is ${travelMode.toUpperCase()} — use it for most legs (e.g. "~45 min by bike", "~30 min drive"${travelMode === "public transport" ? ', by train/bus' : ''}), and accommodation advice must fit it (bike = realistic daily distances, overnight stops matter more). BUT if a specific leg genuinely can't be done that way — most commonly a crossing to an island with no bridge (Bornholm, Ærø, Samsø, etc.), or two stops close enough to just walk — say so plainly and use the real mode for THAT leg instead (e.g. "~1h15 by ferry", "~10 min walk"), don't force the primary mode onto a leg where it doesn't actually work. Mixing modes across a trip is normal and expected, not an error.` : "If the transport mode is unknown, prefer public transport phrasing."} If two stops are in the same town or area, walking is usually right. If a leg is genuinely unclear, use "Check Rejseplanen for this leg" — never invent a confident time. Each value under 12 words.`;
         // RETRIED (Oliver, again: "no accommodation recommendations (Booking)"):
         // this single call is the only source of the Where to stay card and the
         // per-leg how-texts, and it previously got exactly one attempt — one
@@ -9001,7 +9012,7 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
               buildStage("Rebalancing the days", 29);
               try {
                 const fixRes = await askOpenAI(
-                  `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
+                  `This itinerary skeleton has specific, checkable problems. Fix them and return the corrected skeleton.\n\nPROBLEMS:\n${planProblemsForPrompt(verdict.problems)}\n\nHOW TO FIX EACH KIND:\n- A day with too few stops: add real places in or near that day's town, from the conversation, never invented.\n- The same place on two days: that is where they are STAYING. Keep it once, and give the other day its own places in that town or nearby.\n- Too few different places overall: the trip is thinner than the number of days it claims. Add real ones from the conversation.\n- A day that covers too much ground: move a stop to a neighbouring day, or drop the one that forces the long haul. A day that is mostly transit is a day the trip did not have.\n- A crowded arrival day: they land, queue at passport control, collect bags, cross the city and check in before any of it. Keep the two best things and move the rest to a later day. Do not compensate by overfilling day two.\n\nSame JSON shape, nothing else: {"days": [{"day": 1, "stops": [{"name": "...", "town": "...", "arrivalTime": "..."}]}]}. Only real place names from the conversation.\n\nCurrent skeleton:\n${JSON.stringify(skeleton)}\n\nConversation:\n${convoText}`,
                   1200
                 );
                 if (!fixRes.error && fixRes.text) {
@@ -9295,7 +9306,24 @@ If the conversation only covers a single day or a few stops with no explicit day
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
 
       buildStage("Working out where to stay and how you get around", 90);
-      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes);
+      // ── AND WHAT THEY SAID ABOUT MONEY REACHES IT ─────────────────
+      // Oliver, 17 Aug 2026, on a guide built for a family who had told the chat
+      // "We got plenty of money": the Where to stay card offered them "a
+      // budget-friendly hostel-style option if watching costs in the pricey
+      // capital." The one call that writes that card had never been told anything
+      // about their budget, so it guessed, and it guessed the opposite.
+      //
+      // Read from the TRAVELLER'S turns and the intake field, never from Gemlyx's
+      // replies, for the same reason interests are: the app suggests things, and
+      // its own suggestion must not become evidence about them. See utils/tripBrief.js.
+      const budgetSaid = readBrief({
+        travellerText: (aiMessages || []).slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n"),
+        intake: { budgetText: intakeBudgetText },
+      }).known.budget;
+      const budgetSays = budgetSaid
+        ? (budgetSaid.source === "intake" ? budgetSaid.value : `${travellerBudget(intakeBudgetText) || travellerBudget((aiMessages || []).slice(1).filter(m => m.role === "user").map(m => m.text || "").join(" ")) || "not stated plainly"}`)
+        : "";
+      const glances = await enrichGuideDays(parsed.days, travelMode, mixedModes, budgetSays);
       parsed.days = parsed.days.map((d, i) => (glances[i] ? { ...d, glance: glances[i] } : d));
 
       buildStage("Verifying exact locations and routes", 95);
@@ -9333,7 +9361,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // already been checked and accepted. The beds are decided by a different
       // stage from the route, one call per day, in parallel, and until now
       // nothing read all of those answers together. See utils/accommodation.js.
-      planProblems = [...planProblems, ...stayProblems(parsed.days)];
+      planProblems = [...planProblems, ...stayProblems(parsed.days, budgetSays)];
       // ── AND A TICK IS A PROMISE, SO IT IS CHECKED ────────────────
       // Both prompts above were TOLD the chosen events are fixed points, and a
       // request has a failure rate while code does not. This is the check that
@@ -14032,8 +14060,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           {/* ── CRAFT ────────────────────────────────────────── */}
           {/* ── FREE & BOOKING (merged) ─────────────────────────── */}
           {tab === "attractions" && (() => {
-            const KNOWN_CITIES = ["Copenhagen", "Aarhus", "Aalborg", "Odense", "Esbjerg", "Randers", "Kolding", "Horsens", "Vejle", "Roskilde"];
-            const cityOf = (item) => item.city || KNOWN_CITIES.find(c => (item.location || "").includes(c)) || "Other";
+            // ── ONE DEFINITION, SHARED WITH THE FOOD FILTER ──────
+            // This was a hardcoded list of ten city names beside a lookalike
+            // cityOf, so an attraction in Ribe or on Ærø was filed under "Other"
+            // and the two pages disagreed about what a city is. cityFromLocation
+            // reads the address shape instead of matching a list, so a town nobody
+            // remembered to add still gets its own chip.
+            const cityOf = (item) => cityFromLocation(item.city || item.location) || "Other";
             const combined = [
               ...freeEntrance.map(a => ({ ...a, _kind: "free", _price: "Free", _city: cityOf(a) })),
               ...craftItems.map(c => ({ ...c, _kind: "craft", _price: c.price || "See website", _city: cityOf(c) })),
@@ -14381,7 +14414,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   every card. Towns are taken from the food entries themselves, so
                   a pill exists exactly when there is something behind it. */}
               {(() => {
-                const cities = [...new Set(foodSpots.map(f => f.location || f.city).filter(Boolean))].sort(daCompare);
+                // ── BY CITY, NOT BY NEIGHBOURHOOD ──────────────────
+                // Oliver, 17 Aug 2026: "Fix filters.. that is ridiculous.." This
+                // read the raw `location`, which is "Neighbourhood, City", so the
+                // row offered three chips for Copenhagen and two for Aarhus and
+                // grew by one with every entry published. See cityFromLocation.
+                const cities = [...new Set(foodSpots.map(f => cityFromLocation(f.location || f.city)).filter(Boolean))].sort(daCompare);
                 if (cities.length < 2) return null;
                 return (
                   <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch" }}>
@@ -14411,7 +14449,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   real cards — media plate (photo or monogram), name, meta, price,
                   two-sentence description, whole card tappable, tilt on hover. */}
               <div className="cards-grid">
-                {foodSpots.filter(f => (foodTab === "All" || priceBand(f.price) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet)) && (foodCity === "All" || (f.location || f.city || "").includes(foodCity))).sort(byName).map(spot => (
+                {foodSpots.filter(f => (foodTab === "All" || priceBand(f.price) === foodTab) && (foodKind === "All" || (foodKind === "Food Streets" ? f.isFoodStreet : !f.isFoodStreet)) && (foodCity === "All" || cityFromLocation(f.location || f.city) === foodCity)).sort(byName).map(spot => (
                   <div key={spot.id} onClick={() => setFoodDetail(spot)} onMouseMove={tiltMove} onMouseLeave={tiltLeave}
                     style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "transform 0.18s ease", willChange: "transform" }}>
                     <div style={{ height: 128, position: "relative", overflow: "hidden", background: `radial-gradient(120% 90% at 18% 0%, ${spot.color}2E 0%, transparent 60%), radial-gradient(100% 80% at 90% 100%, #23181F 0%, transparent 55%), ${C.bg}` }}>
@@ -15577,7 +15615,10 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
   return (
     <div className="app-root" style={{ fontFamily: "'Inter', sans-serif", background: C.bg, width: "100%", color: C.text, position: "relative", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400..700&display=swap');
+        /* The font link lives in index.html now, in the head, where the
+           browser's preload scanner can find it before any JavaScript runs. It
+           was an @import here, inside a style tag React renders, which put it
+           four requests deep behind a 1.4 MB bundle. See the comment there. */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.bg}; }
         ::-webkit-scrollbar { width: 0; }
@@ -16600,7 +16641,28 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               #F2EBDA card background as letterboxing). photoPos still applied
                               so contain's own centering matches, but it no longer needs to
                               fight a crop. */}
-                          <img src={fact.photo} alt={fact.name} style={{ width: 210, height: 170, objectFit: "contain", objectPosition: fact.photoPos || "center", display: "block" }} />
+                          {/* ── AND A CARD WITH NO PHOTO IS NOT A BROKEN CARD ──
+                              Oliver, 17 Aug 2026, with a screenshot of the loading
+                              screen: a fact card reading "Denmark's cycle lanes"
+                              with the browser's broken-image icon where the
+                              photograph should be, on the very first screen of a
+                              guide build.
+
+                              This <img> rendered whatever `photo` said, and a
+                              Studio-published fact can carry an empty one or a path
+                              to a file that was never added. All seven of the
+                              hardcoded facts point at files that are not in public/
+                              either. React prints no error for a 404 image, so the
+                              only symptom was the icon.
+
+                              A guard and an onError, because those are two different
+                              failures: nothing to show, and something that turned out
+                              not to be there. Both end the same way, with the card
+                              showing its text and no hole. onError clears the state
+                              rather than hiding the node, so the credit line below
+                              goes with it: crediting a photograph nobody can see is
+                              its own small absurdity. */}
+                          {factPhotoOk && String(fact.photo || "").trim() ? <img src={fact.photo} onError={() => setFactPhotoOk(false)} alt={fact.name} style={{ width: 210, height: 170, objectFit: "contain", objectPosition: fact.photoPos || "center", display: "block" }} /> : null}
                         </div>
                         {/* ── CREDIT THE PHOTO WHERE IT IS SHOWN ──────────
                             Oliver, 8 Aug 2026: "remember to show credit to
@@ -16617,7 +16679,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             including the ones shot by Oliver himself. Sits below
                             the polaroid rather than inside its cream chin, where
                             muted grey on #F2EBDA would be unreadable. */}
-                        <PhotoCredit photo={fact.photo} align="center" style={{ marginTop: -8, marginBottom: 14 }} />
+                        {factPhotoOk && <PhotoCredit photo={fact.photo} align="center" style={{ marginTop: -8, marginBottom: 14 }} />}
                       </div>
                       <div style={{ fontSize: 13.5, color: isHistory ? "#BBA778" : C.light, lineHeight: 1.65, fontFamily: isHistory ? "'Fraunces', serif" : "'Inter', sans-serif" }}>
                         {fact.fact}

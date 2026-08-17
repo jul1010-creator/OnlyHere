@@ -28,6 +28,27 @@
 import { haversineKm } from "./helpers";
 
 export const MIN_STOPS_MIDDLE_DAY = 2;
+
+// ── AND THE ARRIVAL DAY HAS A CEILING, NOT A FLOOR ──────────────────
+//
+// Oliver, 17 Aug 2026, reading a seven day guide that opened with a 09:00 landing
+// at Kastrup: "And Comic Con at the second you reach Copenhagen? Sounds like a
+// wild plan. You need to make first day be a relaxing day."
+//
+// Every rule in this file until now was a MINIMUM. The edge days were exempted
+// from the minimum, which is right, and nothing anywhere said they should be
+// lighter. So the planner filled day one exactly as hard as a Wednesday: land,
+// clear passport control and baggage, cross the city, check in, and then a full
+// programme, on the day with the least energy and the most that can go wrong.
+//
+// TWO, not one, and the arrival day only. One would be a rule about how little a
+// day may hold, which is the opposite mistake and would make a 06:00 arrival
+// waste a whole day. Two things after a flight is a real afternoon.
+//
+// The departure day is deliberately NOT capped: leaving at 21:00 is a full free
+// day, and how much of it is usable is a question about the flight, which the
+// plan does not know.
+export const MAX_STOPS_ARRIVAL_DAY = 2;
 // Straight-line, so this is deliberately generous: real roads are longer, and a
 // ferry makes the gap between the number and the day even bigger. 120 km as the
 // crow flies is already most of a day once you have parked, waited and walked.
@@ -124,6 +145,15 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
     const isEdge = i === 0 || i === list.length - 1;
     if (!isEdge && n < MIN_STOPS_MIDDLE_DAY) {
       problems.push({ code: "THIN_DAY", day: dayNo, detail: `Day ${dayNo} has only ${n} stop. A day in the middle of a trip needs at least ${MIN_STOPS_MIDDLE_DAY}.` });
+    }
+    // The arrival day, and only when the trip is long enough to have somewhere
+    // else to put things. On a two day trip, cutting day one is cutting the trip.
+    if (i === 0 && list.length >= 3 && n > MAX_STOPS_ARRIVAL_DAY) {
+      problems.push({
+        code: "CROWDED_ARRIVAL",
+        day: dayNo,
+        detail: `Day ${dayNo} is the arrival day and holds ${n} stops. Keep at most ${MAX_STOPS_ARRIVAL_DAY}: they land, get through the airport, cross the city and check in before any of this. Move the rest to a later day.`,
+      });
     }
   });
 

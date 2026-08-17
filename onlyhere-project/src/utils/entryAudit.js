@@ -1085,6 +1085,25 @@ export const describePriceTrace = (r, { statedOn = undefined } = {}) => {
 // prompt, a publish shape and a render is this codebase's favourite bug.
 export const PRICE_UNCHECKED = "See website";
 export const PRICE_NOT_PUBLISHED = "Not published";
+// ── AND A THIRD, BECAUSE "SEE WEBSITE" NEEDS A WEBSITE ──────────────
+//
+// Oliver, 17 Aug 2026, on a Café Broløs draft: `"See website"???`
+//
+// The branch was right and the sentence was still useless. That café is days old,
+// its only readable sources were a magazine piece and two company-registry pages,
+// no operator site was read, so siteChecked was false and the field correctly fell
+// to "See website". The entry has NO WEBSITE IN IT. The field told a reader to go
+// and look at a page the entry never gives them.
+//
+// Three states, not two, because there are three things that can be true:
+//   Not published   we read the operator's page and it states no price.
+//   See website     we did not read it, and here is the site, go and look.
+//   Price unknown   we did not read it and there is no site to send you to.
+//
+// Named for what it is about, which is OUR knowledge rather than the operator's
+// behaviour. Saying "Not published" here would assert something about a café
+// nobody has checked.
+export const PRICE_UNKNOWN = "Price unknown";
 
 // A price field states a price when it contains a digit. Deliberately the same
 // test priceBand applies, so a row can never be both banded and unpriced.
@@ -1094,8 +1113,11 @@ export const statesAPrice = (v) => /\d/.test(String(v ?? ""));
 // was READ, not that a fetch was attempted: a failed scrape is an unchecked site,
 // and claiming a page does not publish a price on the strength of a timeout is the
 // same overreach as the first draft of the price note above.
-export const unpricedLine = ({ siteChecked = false, siteHasPrice = false } = {}) =>
-  siteChecked && !siteHasPrice ? PRICE_NOT_PUBLISHED : PRICE_UNCHECKED;
+export const unpricedLine = ({ siteChecked = false, siteHasPrice = false, hasWebsite = false } = {}) => {
+  if (siteChecked && !siteHasPrice) return PRICE_NOT_PUBLISHED;
+  // "See website" is an instruction, and an instruction needs somewhere to go.
+  return hasWebsite ? PRICE_UNCHECKED : PRICE_UNKNOWN;
+};
 
 // The founder note, and only for the stronger answer. "We could not read the
 // site" is already in the run log and does not need a second line.
@@ -1103,9 +1125,16 @@ export const unpricedLine = ({ siteChecked = false, siteHasPrice = false } = {})
 // It ends on Reffen's real answer, which its own audit found and its draft left
 // out: entry is free and you pay per stall. A missing number is not the same as
 // no cost, and that sentence is the one a reader needed.
-export const describeUnpriced = ({ siteChecked = false, siteHasPrice = false, name = "" } = {}) => {
-  if (!siteChecked || siteHasPrice) return "";
+export const describeUnpriced = ({ siteChecked = false, siteHasPrice = false, name = "", hasWebsite = false } = {}) => {
   const who = String(name || "").trim();
+  // The new third case gets its own note, because it is the one where the entry
+  // itself is thin rather than the operator being quiet, and the fix is different:
+  // find the operator's page, or say in the prose what the money actually works
+  // like here.
+  if (!siteChecked && !hasWebsite) {
+    return `NO PRICE AND NO WEBSITE${who ? ` (${who})` : ""}. The field reads "${PRICE_UNKNOWN}" rather than "${PRICE_UNCHECKED}", because telling a reader to see a website this entry does not give them is not an answer. If the operator has a page, put it in the website field and redraft; if they genuinely have none, say so in the prose along with whatever is known about what things cost.`;
+  }
+  if (!siteChecked || siteHasPrice) return "";
   return `NO PRICE, AND THE SITE DOES NOT PUBLISH ONE EITHER${who ? ` (${who})` : ""}. The field now reads "${PRICE_NOT_PUBLISHED}" rather than "${PRICE_UNCHECKED}", because sending a reader to a page that cannot answer them is worse than telling them nobody publishes it. If the real answer is that entry is free and you pay per stall or per item, that belongs in the entry as a sentence rather than as a missing number.`;
 };
 

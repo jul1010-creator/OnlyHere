@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
 import { dayLabel } from "../utils/calendarDay";
+import { readerCorrections, readerUncertainties } from "../utils/provenance";
 
 // ── SHOWING THE WORKING (Oliver, 7 Aug 2026) ─────────────────────────
 //
@@ -70,7 +71,18 @@ export const HowWeKnow = ({ item }) => {
   if (!item) return null;
 
   const corrections = Array.isArray(item.__corrections) ? item.__corrections : [];
-  const uncertainties = (Array.isArray(item.uncertainties) ? item.uncertainties : []).filter(u => typeof u === "string" && u.trim());
+  // ── ONLY THE OPEN QUESTIONS THAT CHANGE A DECISION ────────────────
+  // Oliver, 17 Aug 2026, on this section: "only include things that are very
+  // relevant.. Like 'Specific dishes, techniques, or signature ingredients on the
+  // tasting menus aren't detailed in the source material.' who the fk cares..."
+  //
+  // The drafting prompt asks for an uncertainty per unconfirmed fact, which is
+  // right, and it produces a list that is right for Studio and wrong here: the two
+  // lines about money and hours end up buried under five about how thin the
+  // research was. Filtered to money, time, getting in, getting there and whether
+  // the thing exists, and capped, because a reader will read two and skim the rest.
+  // Studio still sees all of them. See readerUncertainties in utils/provenance.js.
+  const uncertainties = readerUncertainties(item.uncertainties);
   const official = isLink(item.website) ? item.website : null;
 
   // Nothing real to show means nothing shown. See rule 1 above.
@@ -190,16 +202,28 @@ export const HowWeKnow = ({ item }) => {
           {corrections.length > 0 && (
             <div style={{ marginBottom: uncertainties.length ? 16 : 0 }}>
               <div style={label}>What we corrected</div>
-              {corrections.slice().reverse().map((c, i) => (
+              {/* ── THE CHECKER'S VOICE NEVER REACHES A READER ──────
+                  Oliver, 17 Aug 2026, highlighting a line on the live Aro page:
+                  "howItsMade · was: The draft incorrectly states diners can choose
+                  three, four, five, or seven courses". His verdict: "People will
+                  think the draft is incorrect.. don't include this."
+
+                  Two things were wrong. The label said "was:" and the text was
+                  never the old value: nothing stores that, so this printed the
+                  CHECKER'S finding, written for Studio, under a label promising a
+                  fact. And a visitor reading "the draft incorrectly states" on a
+                  published page concludes the page is wrong, which is the exact
+                  opposite of what this panel exists to say.
+
+                  What a reader gets now is the part that is a trust signal and is
+                  entirely true: which field was checked, against which page, on
+                  which day. Studio keeps the full text. See readerCorrections. */}
+              {readerCorrections(item).slice().reverse().map((c, i) => (
                 <div key={i} style={{ fontSize: 12, color: C.light, lineHeight: 1.6, marginBottom: 9 }}>
                   <span style={{ color: C.text, fontWeight: 700 }}>{c.field}</span>
-                  {c.was ? <span style={{ color: C.muted }}> · was: {c.was}</span> : null}
-                  <div style={{ marginTop: 2 }}>
-                    {isLink(c.source)
-                      ? <a href={c.source} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{hostOf(c.source)} ↗</a>
-                      : <span style={{ color: C.muted, fontStyle: "italic" }}>{c.source}</span>}
-                    {c.at ? <span style={{ color: C.muted }}> · {dateLabel(c.at)}</span> : null}
-                  </div>
+                  <span style={{ color: C.muted }}> · checked against </span>
+                  <a href={c.source} target="_blank" rel="noreferrer" style={{ color: C.gold, textDecoration: "none", fontWeight: 700 }}>{hostOf(c.source)} ↗</a>
+                  {c.at ? <span style={{ color: C.muted }}> · {dateLabel(c.at)}</span> : null}
                 </div>
               ))}
             </div>

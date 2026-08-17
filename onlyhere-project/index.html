@@ -9,10 +9,35 @@
          line was genuinely stopping Android users from pinching to zoom at all.
          MDN treats any maximum-scale under 3 as an accessibility failure. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0A0F1E" />
+    <!-- ── THE WARM THEME IS THE DEFAULT, SO THIS HAS TO BE ITS COLOUR ──
+         This read #0A0F1E, which is the DARK theme's background. The default is
+         warm, #12100B, and applyTheme corrects this tag at runtime, so the only
+         thing wrong was the first frame: the phone's browser chrome painted navy
+         and then changed. Small, and it is the very first pixel of the product
+         anybody sees. -->
+    <meta name="theme-color" content="#12100B" />
     <title>Gemlyx. It exists nowhere else.</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- ── THE TYPEFACE WAS LOADING FOUR LEVELS DEEP ────────────────────
+         17 Aug 2026. Fraunces is referenced 89 times in this app and was being
+         requested by an @import inside a <style> tag that REACT RENDERS. So the
+         chain was: HTML, then 1.4 MB of JavaScript, then parse, then mount, then
+         a style tag appears, then a request to fonts.googleapis.com, then a
+         second request to fonts.gstatic.com for the actual font file. The browser
+         cannot see any of it in the HTML, so it cannot start early, and every
+         heading in the app rendered in a fallback serif until the whole chain
+         finished. On a phone on mobile data that is the first impression.
+         @import is also the slowest form of this even in a real stylesheet.
+
+         In the head now, where the preload scanner finds it before a line of
+         JavaScript has run. The gstatic preconnect matters as much as the
+         googleapis one and was missing: googleapis serves the CSS, gstatic
+         serves the font binaries, and they are different hosts to resolve.
+         crossorigin is required on the gstatic one or the connection is not
+         reused for the font fetch. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400..700&display=swap" />
 
     <!-- ── WHAT A GEMLYX LINK LOOKS LIKE WHEN SOMEBODY PASTES IT ──────────
          Until 8 Aug 2026 there was nothing here at all, so every Gemlyx URL

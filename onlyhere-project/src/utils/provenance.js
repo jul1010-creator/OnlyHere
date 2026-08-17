@@ -141,6 +141,123 @@ export const correctionProvenance = (payload) => {
   return out;
 };
 
+// ── WHAT A READER MAY BE SHOWN, WHICH IS NOT THIS ───────────────────
+//
+// Oliver, 17 Aug 2026, highlighting a line on the live Aro page in the reader's own
+// "How we know this" panel:
+//
+//   howItsMade · was: The draft incorrectly states diners can choose three, four,
+//   five, or seven courses; there is no four-course option.
+//
+//   "People will think the draft is incorrect.. don't include this."
+//
+// He is right twice over.
+//
+// FIRST, THE LABEL IS A LIE. It says "was:" and the text is not the old value. It
+// is the CHECKER'S FINDING, written in the checker's voice, for Studio. Nothing
+// ever stored the previous value, so the panel has been printing an argument about
+// the draft under a label promising a fact about the past.
+//
+// SECOND, AND WORSE, IT READS AS A CONFESSION. A visitor lands on the page,
+// reads "The draft incorrectly states", and concludes the page in front of them is
+// wrong. It says the opposite of what it was built to say: the correction is the
+// thing that makes the page trustworthy, and printing the accusation makes it
+// evidence against itself.
+//
+// So the checker's voice never reaches a reader. What a reader gets is the part
+// that is actually a trust signal and is entirely true: which field was checked,
+// against which page, on which day. Studio keeps the full text, where an argument
+// about a draft is exactly what somebody needs.
+const CHECKER_VOICE = /\b(?:the draft|the entry|this draft|this entry)\b|\b(?:incorrectly|wrongly|falsely)\s+(?:states|says|claims|lists)\b|\b(?:understates|overstates|omits|fails to|should be (?:specified|stated|corrected)|needs to be (?:fixed|corrected|changed)|was not published because)\b/i;
+
+export const isCheckerVoice = (text) => CHECKER_VOICE.test(String(text || ""));
+
+// One correction, as a reader may see it, or null when there is nothing showable.
+// A correction with no source is dropped as well: an unsourced change shown to a
+// visitor as evidence is not evidence, and "asserted by the founder" is a sentence
+// for Studio rather than for the public page.
+export const readerCorrection = (c) => {
+  const field = clean(c?.field);
+  const source = clean(c?.source);
+  if (!field || !source) return null;
+  if (!/^https?:\/\//i.test(source)) return null;
+  return { field, source, at: day(c?.at) };
+};
+
+export const readerCorrections = (payload) => {
+  const list = Array.isArray(payload?.__corrections) ? payload.__corrections : [];
+  const out = [];
+  const seen = new Set();
+  list.forEach(c => {
+    const r = readerCorrection(c);
+    if (!r) return;
+    // One line per field and source. Four separate findings about the category,
+    // all traced to guide.michelin.com on the same day, is one thing that
+    // happened and it read as four.
+    const key = `${r.field}|${r.source}`.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(r);
+  });
+  return out;
+};
+
+// ── AND WHICH OPEN QUESTIONS A READER ACTUALLY CARES ABOUT ──────────
+//
+// Oliver, 17 Aug 2026, on the reader-facing "What we could not confirm":
+//
+//   "only include things that are very relevant.. Like 'Specific dishes,
+//    techniques, or signature ingredients on the tasting menus aren't detailed in
+//    the source material.' who the fk cares..."
+//
+// He is right, and the reason that line got there is worth naming: the drafting
+// prompt asks for an uncertainty per unconfirmed fact, and the model dutifully
+// reports what it could not find, INCLUDING facts nobody was going to act on. That
+// list is genuinely useful in Studio, where it says where the research is thin. On
+// the public page it buries the two lines that matter under five that do not, and
+// the section that exists to build trust starts reading as a disclaimer.
+//
+// THE TEST IS WHETHER IT CHANGES A DECISION. A traveller deciding whether to go is
+// deciding about money, time, getting in, getting there, and whether the thing
+// exists at all. Those earn a place. "We could not find out which techniques the
+// kitchen uses" does not, however true it is.
+const READER_RELEVANT = [
+  /\b(?:price|prices|pricing|cost|costs|dkk|kr\b|kroner|fee|entry|ticket|tickets|free)\b/i,
+  /\b(?:hours|opening|closes|closed|open|season|seasonal|winter|summer|weekday|weekend)\b/i,
+  // book, booked, booking: \bbook\b does not match "booked", and "whether a table
+  // has to be booked ahead is unconfirmed" is exactly the line this pattern is for.
+  /\b(?:book(?:ed|ing)?|reserv(?:e|ed|ation)|sold out|queue|wait(?:ing)?|capacity|full)\b/i,
+  /\b(?:date|dates|when|running|runs|cancelled|postponed|permanently|still (?:open|running|operating))\b/i,
+  /\b(?:address|located|location|how to get|transport|train|bus|ferry|parking|walk(?:ing)? distance|accessib|wheelchair|step-free)\b/i,
+  /\b(?:danish only|in danish|language|english)\b/i,
+];
+
+// And the ones that are about OUR RESEARCH rather than about the place. These are
+// the ones he pointed at: true, useful internally, and not a fact about the world.
+const ABOUT_THE_RESEARCH = /\b(?:source material|the sources?|in the research|research (?:found|did not)|could not be found|no source|not source-verified|unconfirmed by a primary source|applied from your own correction|no mention|not (?:stated|detailed|specified) in)\b/i;
+
+export const readerUncertainty = (text) => {
+  const t = clean(text);
+  if (!t) return "";
+  if (ABOUT_THE_RESEARCH.test(t)) return "";
+  return READER_RELEVANT.some(re => re.test(t)) ? t : "";
+};
+
+// Four at most. A reader scanning a page will read two and skim the rest, so a
+// longer list makes the important ones less likely to be read, not more.
+export const READER_UNCERTAINTY_LIMIT = 4;
+
+export const readerUncertainties = (list, { limit = READER_UNCERTAINTY_LIMIT } = {}) => {
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach(u => {
+    const kept = readerUncertainty(u);
+    if (!kept) return;
+    if (out.some(x => x.toLowerCase() === kept.toLowerCase())) return;
+    out.push(kept);
+  });
+  return out.slice(0, Math.max(0, limit));
+};
+
 // The entry's own reading list. Reported as what it is: the pages the research
 // pass kept, not evidence for any particular sentence.
 export const entrySources = (payload, { limit = 8 } = {}) =>
