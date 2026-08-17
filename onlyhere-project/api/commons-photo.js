@@ -298,7 +298,26 @@ const uniq = (list) => {
   return out;
 };
 
+import { requestIsFromSite, NOT_FROM_SITE, resolveUser, isFounder } from "../src/utils/apiGuard.js";
+
 export default async function handler(req, res) {
+  // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
+  // Studio calls this and nothing else does, so it gets both halves: the request
+  // has to come from the site, and it has to carry a real Supabase session.
+  // See src/utils/apiGuard.js.
+  if (!requestIsFromSite(req.headers)) {
+    return res.status(403).json({ error: NOT_FROM_SITE });
+  }
+  {
+    const who = await resolveUser(req.headers, {
+      supabaseUrl: process.env.SUPABASE_URL || "https://vpxfahjnerkkkoueovhl.supabase.co",
+      serviceKey: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "",
+    });
+    if (!who.ok) return res.status(who.status).json({ error: who.error });
+    if (!isFounder(who.userId, process.env.GEMLYX_FOUNDER_IDS)) {
+      return res.status(403).json({ error: "This account cannot run Studio research." });
+    }
+  }
   const { q, limit, article, category } = req.query;
   if (!q || !String(q).trim()) return res.status(400).json({ error: "q required" });
 

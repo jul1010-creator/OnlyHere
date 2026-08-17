@@ -63,6 +63,7 @@
 // between this and an integration that silently blanks half the library.
 
 import { fold } from "./danishNames";
+import { citationUrls } from "./aiClient";
 
 // ── ONE VOCABULARY, BECAUSE THERE WERE THREE ────────────────────────
 // Found while wiring this up, and it is the same failure as every other one
@@ -577,7 +578,9 @@ export const ticketHuntUrls = (result) => {
   // Only if it gave nothing usable. A citation list is every page it read,
   // including the ones it read and rejected, so it is a wider and weaker net
   // than the answer and is used as such.
-  if (!out.length) (Array.isArray(result?.citations) ? result.citations : []).forEach(add);
+  // citationUrls: these are {title, url} objects, and String(object) is
+  // "[object Object]", so this fallback silently found nothing every time.
+  if (!out.length) citationUrls(result).forEach(add);
   return out;
 };
 

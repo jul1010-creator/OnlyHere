@@ -76,6 +76,38 @@ export const askClaude = async (prompt, maxTokens = 500, model = "claude-sonnet-
   return out;
 };
 
+// ── EVERY CONSUMER OF THESE CITATIONS WAS READING THEM WRONG ────────
+//
+// Oliver, 17 Aug 2026: "Can you make the '✦ Argue with this draft' tell me what
+// sources it used?" It could not, and the reason was not that nobody had tried.
+//
+// api/perplexity.js maps Perplexity's search_results into objects, `{title, url}`,
+// and has done since it was written. THREE separate places then filtered that
+// array with `typeof u === "string"`:
+//
+//   StudioAssistant.jsx  the "I looked it up just now" answer, which printed
+//                        "Sources: ..." only when the list was non-empty, so it
+//                        never printed sources at all.
+//   sweeps.js            sources[field] for a researched sweep value, always "".
+//   tickets.js           the citation fallback, where String({}) is
+//                        "[object Object]" and fails the http test silently.
+//
+// Every one of them looked like a working feature and returned nothing, which is
+// this codebase's signature failure. One reader now, here, beside the call that
+// produces the shape, so a fourth consumer cannot invent a fourth wrong guess.
+// Strings are still accepted, because Perplexity's own `citations` field is a
+// flat list of URLs and the endpoint concatenates both shapes.
+export const citationUrls = (result, { limit = 8 } = {}) => {
+  const list = Array.isArray(result?.citations) ? result.citations : [];
+  const out = [];
+  list.forEach(c => {
+    const url = String((typeof c === "string" ? c : c?.url) || "").trim().split("#")[0];
+    if (!/^https?:\/\//i.test(url)) return;
+    if (!out.includes(url)) out.push(url);
+  });
+  return out.slice(0, Math.max(0, limit));
+};
+
 export const askPerplexity = async (prompt) => {
   try {
     const res = await fetch("/api/perplexity", {

@@ -1148,6 +1148,27 @@ function GemlyxApp() {
     if (!tok) throw new Error("Your Studio login has expired. Log out and back in.");
     return { apikey: SUPABASE_KEY, Authorization: `Bearer ${tok}` };
   };
+  // ── AND THE SAME TOKEN, FOR OUR OWN GUARDED ROUTES ───────────────
+  // 17 Aug 2026. api/scan-source, places-hours, places-locate, tickets and
+  // commons-photo now require a real Supabase session, because until tonight
+  // anybody on the internet could spend Firecrawl credits and Places Enterprise
+  // calls by POSTing to them. See src/utils/apiGuard.js.
+  //
+  // No apikey here, unlike studioAuth: those five are our own serverless
+  // functions rather than PostgREST, and they resolve the bearer token with
+  // Supabase themselves.
+  //
+  // It does NOT throw. studioAuth throws because a Supabase write that cannot be
+  // authenticated must fail loudly as a login problem. These are research calls
+  // inside a long draft, every one of them already wrapped in a try that treats a
+  // failure as "this lookup found nothing", so throwing here would turn an expired
+  // login into a draft that silently researched less. An absent header reaches the
+  // endpoint, comes back 401 with a message about signing in, and the existing
+  // error handling shows it.
+  const routeAuth = () => {
+    const tok = studioSession?.access_token;
+    return tok ? { Authorization: `Bearer ${tok}` } : {};
+  };
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState(null);
@@ -1469,7 +1490,7 @@ function GemlyxApp() {
   const findCommonsPhotos = async (row, query) => {
     setPhotoFinder({ rowId: row.id, query, results: null, loading: true, error: null });
     try {
-      const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&limit=8`);
+      const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&limit=8`, { headers: routeAuth() });
       const data = await res.json();
       if (data.error) setPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
       // sources/subject/resolved come back so the panel can say WHICH lookup
@@ -1802,7 +1823,7 @@ function GemlyxApp() {
     if (!term) { setDraftPhotoFinder({ query: "", results: [], loading: false, error: "Type what to search Wikimedia for." }); return; }
     setDraftPhotoFinder({ query: term, results: null, loading: true, error: null });
     try {
-      const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(term)}&limit=8`);
+      const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(term)}&limit=8`, { headers: routeAuth() });
       const data = await res.json();
       if (data.error) setDraftPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
       // sources/subject come back so the panel can say WHICH lookup found these,
@@ -2086,7 +2107,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     if (!url || scanLoading) return;
     setScanLoading(true); setScanError(null); setScanResults(null);
     try {
-      const pageRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
+      const pageRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`, { headers: routeAuth() });
       let pageData;
       try {
         pageData = await pageRes.json();
@@ -2303,7 +2324,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // only time it is worth anything.
       if (!coords) {
         try {
-          const pr = await fetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}`);
+          const pr = await fetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}`, { headers: routeAuth() });
           const pd = await pr.json();
           if (pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon)) {
             coords = { lat: pd.lat, lon: pd.lon };
@@ -3602,7 +3623,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // asking for, so that is what the list says.
       if (PLACES_WITH_A_LISTING.includes(sType)) {
         try {
-          const hoursRes = await fetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`);
+          const hoursRes = await fetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`, { headers: routeAuth() });
           const hoursData = await hoursRes.json();
           // ── AN ERROR BODY IS NOT AN ANSWER ──────────────────────────
           // Overnight audit, 12 Aug. Neither hoursRes.ok nor hoursData.error was
@@ -3902,7 +3923,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         const ticketPages = [];
         for (const url of toFetch) {
           try {
-            const scanRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
+            const scanRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`, { headers: routeAuth() });
             const scanData = await scanRes.json();
             // ── THE LIST THAT DECIDES WHETHER FIRECRAWL IS WORTH PAYING FOR ──
             // A read that failed was indistinguishable from one that returned a
@@ -4011,7 +4032,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // operator is the reason that distinction is load-bearing.
         for (const l of ticketPages.slice(0, MAX_TICKET_PAGES)) {
           try {
-            const tRes = await fetch(`/api/scan-source?url=${encodeURIComponent(l.href)}`);
+            const tRes = await fetch(`/api/scan-source?url=${encodeURIComponent(l.href)}`, { headers: routeAuth() });
             const tData = await tRes.json();
             const priced = tData.text ? ticketPriceOn(tData.text) : null;
             note(`Ticket agent: ${domainOf(l.href)}`, {
@@ -4085,7 +4106,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               for (const u of huntUrls.slice(0, MAX_TICKET_PAGES)) {
                 if (pagesByUrl[u]) continue;                 // already read on this run
                 try {
-                  const hRes = await fetch(`/api/scan-source?url=${encodeURIComponent(u)}`);
+                  const hRes = await fetch(`/api/scan-source?url=${encodeURIComponent(u)}`, { headers: routeAuth() });
                   const hData = await hRes.json();
                   const found = hData.text ? ticketPriceOn(hData.text) : null;
                   const real = found && found.kind !== "concession-only";
@@ -4254,7 +4275,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       let ticketText = "";
       if (sType === "festival") {
         try {
-          const tr = await fetch(`/api/tickets?name=${encodeURIComponent(name)}`);
+          const tr = await fetch(`/api/tickets?name=${encodeURIComponent(name)}`, { headers: routeAuth() });
           const td = await tr.json();
           if (td?.error) {
             note("Ticket status from Ticketmaster", {
@@ -4588,14 +4609,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
       } else if (sType === "food") {
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
       } else if (sType === "foodStreet") {
         // Lands in the SAME foodSpots array as regular Food entries — Food Street is a
         // distinct Studio category to WRITE (its own tailored research/prompt), but the
         // live site's Food page filters restaurants vs. food streets by isFoodStreet on
         // one shared list, not a separate array — see the "Food Streets" tab on /food.
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, timeNeeded: ${J(t.timeNeeded)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
       } else if (sType === "essential") {
         const nextId = Math.max(0, ...essentials.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`export const essentials = [\` in src/data/essentials.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, category: ${J(t.category || "Transport")}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, howTo: ${J(t.howTo)}, price: ${J(t.price)}, link: ${t.link ? J(t.link) : "null"}${t.linkAndroid ? `, linkAndroid: ${J(t.linkAndroid)}` : ""}, tip: ${J(t.tip)}${t.visitorNote ? `, visitorNote: ${J(t.visitorNote)}` : ""}, verified: ${J(stamp)} },\n\n// 2) VERIFY the price and that the system still works this way before committing. This is the type that goes stale fastest.`;
@@ -6752,7 +6773,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         const where = p.town || p.city || p.location || p.region || "";
         const query = `${p.name}${where && !p.name.includes(where) ? ` ${where}` : ""} Denmark`;
         try {
-          const r = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&article=${encodeURIComponent(p.name)}&category=${encodeURIComponent(p.name)}&limit=1`);
+          const r = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&article=${encodeURIComponent(p.name)}&category=${encodeURIComponent(p.name)}&limit=1`, { headers: routeAuth() });
           const d = await r.json();
           const hit = (d.results || [])[0];
           if (!hit || !hit.url) { notFound.push(p.name); }
@@ -7468,9 +7489,67 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         // it is the same value the draft was written against. Writing it for
         // every type makes the map appear on those pages by itself, and makes
         // "what else is near this" possible at all.
-        if (Number.isFinite(studioFrozenGeo.lat) && Number.isFinite(studioFrozenGeo.lon)) {
-          shaped.__lat = studioFrozenGeo.lat;
-          shaped.__lon = studioFrozenGeo.lon;
+        // ── AND IT MUST NOT OVERWRITE HIS OWN CORRECTION ───────────
+        // Oliver, 17 Aug 2026, on a Pizza by WH draft: "Ithe Map hint won't let me
+        // publish.."
+        //
+        // He could not publish it and there was nothing he could do about it. The
+        // pipeline had geocoded a pizza place in COPENHAGEN for a stand inside
+        // Tivoli Friheden in Aarhus, so studioFrozenGeo held a coordinate 159 km
+        // from the town the entry names, and the whole run was measured from it:
+        // the journey came back as fourteen minutes on the 5C from Rådhuspladsen
+        // to Amagerbro.
+        //
+        // The correction pass caught the pin and said so in the entry's own
+        // uncertainties. The gate below then refused the publish and told him to
+        // "fix lat and lon in the draft above, or clear them both". BOTH of those
+        // are impossible on a food entry, for two reasons stacked on each other:
+        //
+        //   1. shapeForLive only declares __lat/__lon on the TOWN branch, so any
+        //      coordinate he types into the draft JSON is dropped by the
+        //      allow-list before it ever reaches this line. Seventh time that
+        //      allow-list has eaten a field.
+        //   2. These two lines then wrote the frozen coordinate back in
+        //      unconditionally, so clearing it did nothing either.
+        //
+        // A gate whose instructions cannot be followed is not a gate, it is a
+        // wall, and the comment under it promises "blocking is never a dead end".
+        //
+        // So the frozen coordinate now FILLS A GAP instead of winning. His edited
+        // value takes precedence, because he is the one who can open a map and
+        // look. And a frozen coordinate that fails the map check is not stored at
+        // all: it is dropped along with the journey and the arrival point measured
+        // from it, which is exactly the "fall back to the town centre honestly"
+        // outcome the gate's own message offers, reached without needing him to
+        // know a trick. Dropping it is said out loud, twice, because a silent
+        // removal of a measured value is its own unaccountable edit.
+        const editedCoord = placeCoords(shaped);
+        const frozenCoord = Number.isFinite(studioFrozenGeo.lat) && Number.isFinite(studioFrozenGeo.lon)
+          ? { lat: studioFrozenGeo.lat, lon: studioFrozenGeo.lon } : null;
+        if (!editedCoord && frozenCoord) {
+          shaped.__lat = frozenCoord.lat;
+          shaped.__lon = frozenCoord.lon;
+          // Measured from a coordinate this entry is not going to keep? Then it is
+          // not a measurement of this place. Checked on the shape as it now
+          // stands, so the town it is compared against is the published one.
+          if (blockingCoordProblems(shaped, studioType).length > 0) {
+            const why = blockingCoordProblems(shaped, studioType).map(p => p.detail).join(" ");
+            delete shaped.__lat;
+            delete shaped.__lon;
+            // The journey and the arrival point were both derived from that point,
+            // so keeping either would publish a route to somewhere else. His draft
+            // had fourteen minutes on a Copenhagen bus attached to an Aarhus
+            // pizzeria, which is the artifact this removes.
+            const hadJourney = !!shaped.__journey;
+            delete shaped.__journey;
+            if ("nearestStation" in shaped) shaped.nearestStation = "";
+            note("The measured coordinate was refused", {
+              provider: "fetch", detail: "checked against the town this entry names, before the insert",
+              outcome: "empty", used: false,
+              why: `${why} It was not stored, and the ${hadJourney ? "journey and arrival point measured from it were dropped with it" : "arrival point measured from it was dropped with it"}. The page falls back to the town centre, which is honest, rather than to a pin in the wrong city.`,
+            });
+            ui(setStudioInventedWarning, inventedWarning = `${inventedWarning ? `${inventedWarning}\n\n` : ""}THE MAP PIN WAS DROPPED, NOT PUBLISHED WRONG. ${why} Nothing was stored for lat, lon${hadJourney ? ", the journey" : ""} or the arrival point, so this page shows the town centre instead of a pin. If you know the real coordinate, put it in "__lat" and "__lon" and publish again: your value is used as it is now, and is no longer overwritten.`);
+          }
         }
       }
       // ── THE COORDINATE GATE ─────────────────────────────────────
@@ -12237,7 +12316,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 onClick={async () => {
                                   setFactError(null);
                                   try {
-                                    const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(d.subject + " Denmark")}&limit=1`);
+                                    const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(d.subject + " Denmark")}&limit=1`, { headers: routeAuth() });
                                     const data = await res.json();
                                     const hit = (data.results || [])[0];
                                     if (!hit) { setFactError(`No freely licensed photo found for "${d.subject}".`); return; }

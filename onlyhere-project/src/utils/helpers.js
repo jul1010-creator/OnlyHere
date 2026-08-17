@@ -566,14 +566,31 @@ export const nextWeekdayTimestamp = (dayOfWeek, hour) => {
 // language probability (which is how a "Half day" ended up attached to a
 // hot dog stand with no seats). Applied AFTER the draft, keyed off the
 // category the AI itself determined, overriding whatever it guessed.
+//
+// ── AND FOOD LOST IT ALTOGETHER, 17 AUG 2026 ──────────────────────
+// Oliver: "At food, let's get rid of the 'time needed' section.. it's stupid
+// tbh." He is right, and the reason is stronger than stupid. These were the
+// branches that stood here:
+//
+//   if (/hot dog|stand|kiosk/.test(c)) return "15 to 30 mins";
+//   if (/bakery|café|coffee/.test(c))  return "30 to 45 mins";
+//   return "60 to 90 mins";
+//   if (studioType === "foodStreet")   return "60 to 120 mins";
+//
+// So the figure a reader saw on a food entry was never researched. The writer's
+// estimate was asked for, paid for, and then overwritten by one of four constants
+// picked by matching a word in the category, and every food street in the country
+// showed the same "60 to 120 mins" because that branch never even read the
+// category. A constant rendered as a fact about one place, in an At a Glance card
+// beside a real price and a real neighbourhood, is the invented number this app
+// exists to refuse. It is also unfixable rather than wrong: how long a meal takes
+// is decided by the person eating it.
+//
+// Gone from the prompt, from shapeForLive, from the codegen, from the card, and
+// these two branches with it. `free` keeps its mapping, because a castle really
+// does take longer than a public square and that is a fact about the place.
 export const stayDurationForCategory = (studioType, category) => {
   const c = (category || "").toLowerCase();
-  if (studioType === "food") {
-    if (/hot dog|stand|kiosk|food truck|street food|takeaway/.test(c)) return "15 to 30 mins"; // no seats, eaten standing
-    if (/bakery|café|coffee|ice cream/.test(c)) return "30 to 45 mins";
-    return "60 to 90 mins"; // casual dining / restaurant chains / pub strips — a real sit-down meal, not a quick bite
-  }
-  if (studioType === "foodStreet") return "60 to 120 mins"; // grazing across multiple vendors, longer than a single sit-down meal
   if (studioType === "free") {
     if (/palace|slot|castle|museum|exhibition/.test(c)) return "2 to 3 hours"; // historic interiors, real exhibitions
     if (/square|plaza|torv|park|garden|viewpoint/.test(c)) return "30 to 45 mins"; // outdoor public spaces, a look-around not a tour

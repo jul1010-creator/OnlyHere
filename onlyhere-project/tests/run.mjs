@@ -94,6 +94,9 @@ writeFileSync(entry, `
   export { seasonalNotes, timesIn, reconcileHours, hoursForPrompt, NO_HOURS_ON_PAGE, closedDays, dayOfVisit, shutOnVisit } from ${JSON.stringify(join(root, "src/utils/openingHours.js"))};
   export { sweepRow, sweepAll, deepCheckPlan, checkAge, stampCheck, CHECKABLE_FIELDS, RULES_VERSION, SEVERITY } from ${JSON.stringify(join(root, "src/utils/factSweep.js"))};
   export { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog, OUTCOMES } from ${JSON.stringify(join(root, "src/utils/runLog.js"))};
+  export { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance } from ${JSON.stringify(join(root, "src/utils/provenance.js"))};
+  export { ALLOWED_ORIGINS, originOf, isAllowedOrigin, requestIsFromSite, NOT_FROM_SITE, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } from ${JSON.stringify(join(root, "src/utils/apiGuard.js"))};
+  export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
@@ -9191,8 +9194,19 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // ORDER IS THE WHOLE POINT. Gating before the frozen-geo override would judge
   // the model's guess when a real geocode was about to replace it, and gating
   // after the insert would be a log line.
-  ok("the gate runs after the real geocode has had its chance",
-     code2.indexOf("shaped.__lat = studioFrozenGeo.lat") < code2.indexOf("const coordBlockers"));
+  //
+  // ── AND THIS ASSERTION PASSED VACUOUSLY FOR AN HOUR ─────────────
+  // It read `code2.indexOf("shaped.__lat = studioFrozenGeo.lat") < code2.indexOf("const coordBlockers")`.
+  // When the override was rewritten on 17 Aug the left-hand string stopped
+  // existing, indexOf returned -1, and -1 is less than everything, so the
+  // assertion went green on a file that no longer contained the line it was about.
+  // Both markers are found FIRST now, and the ordering claim is made only once
+  // they are, which is the shape every indexOf ordering test in here needs.
+  const overrideAt = code2.indexOf("shaped.__lat = frozenCoord.lat");
+  const gateAt = code2.indexOf("const coordBlockers");
+  ok("the frozen-geo override is still in the file", overrideAt > 0);
+  ok("and so is the gate", gateAt > 0);
+  ok("the gate runs after the real geocode has had its chance", overrideAt < gateAt);
   // And before the row is written. The insert URL inside publishDraft is the
   // anchor, not the word "gemlyx_content", which appears all over this file.
   const insertAt = appSrc2.indexOf("const url = isEditing ? `${SUPABASE_URL}/rest/v1/gemlyx_content?id=eq.${editingId}`");
@@ -9202,6 +9216,77 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // whose pin has been wrong for weeks would make the gate the problem.
   ok("an edit is not blocked", /if \(!isEditing\) \{/.test(code2.slice(code2.indexOf("const coordBlockers"), code2.indexOf("const coordBlockers") + 900)));
   ok("but it is still said out loud", /Publishing an edit with a coordinate that fails the map check:/.test(appSrc2));
+
+  // ── AND THE GATE WAS A WALL, 17 AUG 2026 ────────────────────────
+  // Oliver, on a Pizza by WH draft: "Ithe Map hint won't let me publish.."
+  //
+  // The pipeline had geocoded a pizza place in Copenhagen for a stand inside
+  // Tivoli Friheden in Aarhus, so the frozen coordinate sat 159 km from the town
+  // the entry names and the journey was measured as fourteen minutes on the 5C
+  // from Rådhuspladsen. The gate correctly refused, and told him to fix lat and lon
+  // in the draft or clear them both. NEITHER WAS POSSIBLE:
+  //
+  //   1. shapeForLive declared __lat/__lon on the town branch only, so anything he
+  //      typed was dropped by the allow-list before the gate saw it.
+  //   2. The override then wrote the frozen coordinate back unconditionally.
+  //
+  // A gate whose instructions cannot be followed is a wall, and the comment under
+  // this one promises blocking is never a dead end. Both halves asserted, because
+  // fixing either alone leaves him stuck.
+  const shapeSrc = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  ok("the shape carries a coordinate for every type, not just towns",
+     /const coord = placeCoords\(t\);/.test(shapeSrc));
+  ok("using the helper rather than a fresh pair of Number calls",
+     /import \{ placeCoords \} from "\.\/guideEnrichment";/.test(shapeSrc));
+  M.CONTENT_TYPES.filter(t => t !== "essential").forEach(t => {
+    const withCoord = M.shapeForLive(t, {
+      name: "Pizza by WH", desc: "x", vibeLocation: "x", characterAndFit: "x", what: "x",
+      __lat: 56.1419, __lon: 10.1975,
+    });
+    // BOTH halves. The first version of this checked __lat only, and a mutant
+    // that carried the latitude and dropped the longitude walked straight through
+    // it, which is a pin on the right parallel in the North Sea.
+    is(`a ${t} keeps the latitude he typed`, withCoord && withCoord.__lat, 56.1419);
+    is(`and the longitude with it on a ${t}`, withCoord && withCoord.__lon, 10.1975);
+  });
+  // Cleared means cleared. The two keys are absent rather than null, so "he
+  // removed it" and "nothing measured it" store the same thing, which is the
+  // truth in both cases: no pin.
+  const noCoord = M.shapeForLive("food", { name: "Pizza by WH", vibeLocation: "x" });
+  ok("and a food entry with none carries neither key", !("__lat" in noCoord) && !("__lon" in noCoord));
+  ok("an unreadable coordinate is not stored as a number",
+     !("__lat" in M.shapeForLive("food", { name: "x", vibeLocation: "y", __lat: "somewhere", __lon: "else" })));
+
+  // The override fills a gap now. His edited value wins, because he is the one
+  // who can open a map and look at it.
+  ok("the frozen coordinate only fills a gap", /if \(!editedCoord && frozenCoord\) \{/.test(code2));
+  ok("reading his edit through the same helper", /const editedCoord = placeCoords\(shaped\);/.test(code2));
+  // And a frozen coordinate that fails the check is dropped rather than dead-ending
+  // the publish, which is the outcome the gate's own message already offers.
+  const overrideRegion = appSrc2.slice(
+    appSrc2.indexOf("const editedCoord = placeCoords(shaped);"),
+    appSrc2.indexOf("// ── THE COORDINATE GATE"));
+  ok("the override region was found", overrideRegion.length > 400);
+  // THE CONDITION, not just the body. `if (false)` and `if (true)` both leave
+  // every delete and every note below them intact, so an assertion that reads only
+  // the body cannot tell "stored a pin 159 km away" from "threw away every pin in
+  // the app". Both of those mutants survived the first version of this block.
+  ok("the drop is conditional on the map check failing",
+     /\n\s*if \(blockingCoordProblems\(shaped, studioType\)\.length > 0\) \{/.test(overrideRegion));
+  ok("a failing measurement is not stored", /delete shaped\.__lat;\s*\n\s*delete shaped\.__lon;/.test(overrideRegion));
+  // The journey and the arrival point were measured FROM that point, so keeping
+  // either publishes a route to somewhere else. Fourteen minutes on a Copenhagen
+  // bus, attached to an Aarhus pizzeria, is the artifact this removes.
+  ok("nor is the journey measured from it", /delete shaped\.__journey;/.test(overrideRegion));
+  ok("nor the arrival point", /if \("nearestStation" in shaped\) shaped\.nearestStation = "";/.test(overrideRegion));
+  // Anchored on the CALL at the start of its line, both of them. Matching the
+  // string alone passes against `if (false) note(...)`, which is the same mutant
+  // that survived the listing refusal earlier today: the words stay in the file
+  // and nothing runs.
+  ok("and the removal is in the run log",
+     /\n\s*note\("The measured coordinate was refused", \{/.test(overrideRegion));
+  ok("and on the screen he is looking at",
+     /\n\s*ui\(setStudioInventedWarning, inventedWarning = `\$\{inventedWarning[^\n]*THE MAP PIN WAS DROPPED, NOT PUBLISHED WRONG\./.test(overrideRegion));
 
   // Wired to the panel too, because the gate cannot reach a row already stored,
   // and those are the ones on the live site right now.
@@ -10635,16 +10720,91 @@ rmSync(dir, { recursive: true, force: true });
 
   // Every branch, because the one that shipped was not the first one.
   const stays = [
-    stayDurationForCategory("food", "hot dog stand"),
-    stayDurationForCategory("food", "bakery"),
-    stayDurationForCategory("food", "restaurant"),
-    stayDurationForCategory("foodStreet", ""),
     stayDurationForCategory("free", "castle"),
     stayDurationForCategory("free", "square"),
     stayDurationForCategory("free", "anything else"),
   ];
   is("no stay duration carries one either", stays.filter(s => BANNED.test(String(s))), []);
   ok("and they still say something", stays.every(s => !s || /\d/.test(String(s))));
+
+  // ── FOOD HAS NO TIME NEEDED, 17 AUG 2026 ────────────────────────
+  // Oliver: "At food, let's get rid of the 'time needed' section.. it's stupid
+  // tbh." The figure was never researched. The writer's estimate was asked for,
+  // paid for, and overwritten by one of four constants chosen by matching a word
+  // in the category, and the foodStreet branch did not read the category at all,
+  // so every market in Denmark showed the same number.
+  //
+  // Asserted at every site, because this field was written in five places and a
+  // removal that misses one leaves the prompt paying for a value nothing renders.
+  is("a restaurant gets no stay duration at all", stayDurationForCategory("food", "restaurant"), null);
+  is("nor a hot dog stand", stayDurationForCategory("food", "hot dog stand"), null);
+  is("nor a bakery", stayDurationForCategory("food", "bakery"), null);
+  is("nor a food street", stayDurationForCategory("foodStreet", ""), null);
+  // And the one that stays, because a castle really does take longer than a
+  // square and that is a fact about the place rather than about the visitor.
+  // Asserted as three DIFFERENT answers, not as three truthy ones: with the castle
+  // branch disabled every attraction still gets the generic "1 to 2 hours", so a
+  // truthiness check passes on a function that has stopped distinguishing anything.
+  const castle = stayDurationForCategory("free", "castle");
+  const square = stayDurationForCategory("free", "square");
+  const generic = stayDurationForCategory("free", "anything else");
+  ok("an attraction keeps its mapping", !!castle);
+  is("and the three answers are still three answers", new Set([castle, square, generic]).size, 3);
+
+  // The other four sites. A removal that misses one leaves the prompt paying for
+  // a value nothing renders, or the card rendering a value nothing sets.
+  const foodBase = { name: "Gasoline Grill", vibeLocation: "x", timeNeeded: "60 to 90 mins" };
+  ok("shapeForLive drops it from a restaurant", !("timeNeeded" in M.shapeForLive("food", foodBase)));
+  ok("and from a food street", !("timeNeeded" in M.shapeForLive("foodStreet", foodBase)));
+  ok("an attraction still carries it", "timeNeeded" in M.shapeForLive("free", { name: "Rundetaarn", desc: "x", timeNeeded: "2 to 3 hours" }));
+  // Sliced from the START of each JSON spec, not from the category key: a
+  // reinstated "timeNeeded" sits between {"name"} and "category", so a region
+  // beginning at the category never contained the thing being looked for and the
+  // assertion passed against a prompt that was asking for it again.
+  const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
+  const promptFor = (marker) => {
+    const at = prompts.indexOf(marker);
+    if (at < 0) return "";
+    const from = prompts.lastIndexOf("Respond with ONLY strict JSON", at);
+    return prompts.slice(from < 0 ? at : from, prompts.indexOf("uncertainties", at));
+  };
+  const restaurantSpec = promptFor('"category": "e.g. Bakery');
+  const marketSpec = promptFor(`"category": "e.g. 'Food market'`);
+  ok("the restaurant spec was found", /"vibeLocation"/.test(restaurantSpec));
+  ok("the market spec was found", /"vibeLocation"/.test(marketSpec));
+  ok("the restaurant prompt stops asking for it", !/timeNeeded/.test(restaurantSpec));
+  ok("and the market prompt too", !/timeNeeded/.test(marketSpec));
+  // ── AND THIS ONE WAS A REGEX THAT COULD NEVER MATCH ─────────────
+  // It read /const foodSpots = \[[^]]*?timeNeeded/. In JavaScript `[^]]` is not
+  // "any character except ]": the parser reads `[^]` as "any character at all" and
+  // then a literal `]`, so the pattern demanded a `]` immediately before
+  // timeNeeded and could never fire. The assertion was green against a codegen
+  // that wrote the field. Sliced by index instead, which cannot be misread.
+  const app15 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const foodCodegens = [];
+  for (let at = app15.indexOf("const foodSpots = ["); at > 0; at = app15.indexOf("const foodSpots = [", at + 1)) {
+    foodCodegens.push(app15.slice(at, app15.indexOf("blogBody: [", at)));
+  }
+  is("both food codegens were found", foodCodegens.length, 2);
+  is("and neither writes it", foodCodegens.filter(c => /timeNeeded/.test(c)), []);
+  // The card. Sliced FROM the JSX guard, deliberately: the comment above it
+  // explains the removal and contains the words "Time Needed", which is the
+  // comment trap this suite has been caught by before.
+  // And anchored on the At a Glance card itself, not on the type guard: there are
+  // TWO `kind === "food"` blocks and the first is the chips row of category and
+  // price. The first version of this assertion sliced from that one, ran forward
+  // into the event card, and reported no Time Needed row from a region that never
+  // contained the food card at all. The "is a real region" line below is what
+  // caught it, which is the only reason it is written.
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  const cardAt = dp.search(/\{kind === "food" && \(\s*<AtAGlanceCard/);
+  const foodCard = dp.slice(cardAt, dp.indexOf("]} />", cardAt));
+  ok("the food card is a real region", foodCard.length > 80 && /label: "Price"/.test(foodCard));
+  ok("and has no Time Needed row", !/Time Needed/.test(foodCard));
+  ok("nor reads the field at all", !/item\.timeNeeded/.test(foodCard));
+  // Still there for attractions, which is the row he did not ask about.
+  const freeAt = dp.indexOf('{(kind === "free" || kind === "attraction") && (');
+  ok("an attraction still shows one", /Time Needed/.test(dp.slice(freeAt, dp.indexOf("]} />", freeAt))));
 
   // ── THE DURABLE HALF ────────────────────────────────────────────
   // Behaviour above covers the eight that were there. This covers the ninth,
@@ -19988,6 +20148,304 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and neither reads as plagiarism or as an accusation",
      !/wrong|lying|fake/i.test(describeListingRefusal("Jomfru Ane Gade", "Aalborg", "Bar Ane")));
 }
+
+
+// ── "PERHAPS INSTALL SOME SECURITY WHILE I'M BLACK OUT" ────────────
+//
+// Oliver, 17 Aug 2026, going for a nap. The audit: of fourteen serverless
+// functions, exactly ONE checked anything. api/ask.js resolves a bearer token. The
+// other thirteen answered anybody, which made a POST to /api/anthropic a working
+// request to Claude on his card from anywhere on the internet, at 8192 tokens a
+// call, in a loop.
+{
+  const { originOf, isAllowedOrigin, requestIsFromSite, STUDIO_ONLY_ENDPOINTS, resolveUser, isFounder } = M;
+
+  // ── WHICH ORIGINS ARE HIS ────────────────────────────────────────
+  ok("the live domain is allowed", isAllowedOrigin("https://gemlyxtravel.com/studio"));
+  ok("and the www of it", isAllowedOrigin("https://www.gemlyxtravel.com/"));
+  ok("and the vite dev server", isAllowedOrigin("http://localhost:5173/"));
+  ok("and the original deployment his friend tested on", isAllowedOrigin("https://only-here-three.vercel.app/"));
+  ok("and a preview build of this project", isAllowedOrigin("https://onlyhere-project-git-main.vercel.app"));
+  // ── AND THE ONE THAT WAS A HOLE IN MY OWN FIRST DRAFT ────────────
+  // The preview rule was [a-z0-9-]+\.vercel\.app, and anybody can put a page on
+  // vercel.app in two minutes. The response would be unreadable to them, since
+  // nothing here sends CORS headers, but the call still lands and is still billed.
+  ok("somebody else's vercel deployment is not", !isAllowedOrigin("https://attacker.vercel.app"));
+  // The lookalike, which is the oldest trick in this particular book.
+  ok("a lookalike domain is refused", !isAllowedOrigin("https://gemlyxtravel.com.evil.example"));
+  ok("and a subdomain of a lookalike", !isAllowedOrigin("https://api.gemlyxtravel.com.evil.example"));
+  ok("plain http on the live domain is refused", !isAllowedOrigin("http://gemlyxtravel.com"));
+  ok("nonsense is refused", !isAllowedOrigin("not a url"));
+  ok("and nothing at all", !isAllowedOrigin(""));
+  is("the origin is read without its path", originOf("https://gemlyxtravel.com/a/b?c=d"), "https://gemlyxtravel.com");
+
+  // ── THE CHECK ITSELF ─────────────────────────────────────────────
+  ok("a browser on the site passes on Origin", requestIsFromSite({ origin: "https://gemlyxtravel.com" }));
+  ok("and on Referer alone, which is what a same-origin GET may send",
+     requestIsFromSite({ referer: "https://gemlyxtravel.com/denmark/ribe" }));
+  ok("a wrong Origin fails even with a right Referer, because Origin cannot be forged by page script",
+     !requestIsFromSite({ origin: "https://attacker.example", referer: "https://gemlyxtravel.com/" }));
+  // THE WHOLE POINT. curl sends neither header, and allowing that case would have
+  // left every endpoint exactly as exposed as it was before tonight.
+  ok("a request with neither header is refused", !requestIsFromSite({}));
+  ok("and nothing at all is refused", !requestIsFromSite(null));
+  // Vercel hands a plain object; a Request hands a Headers with .get. Both work.
+  ok("a Headers object is read too",
+     requestIsFromSite(new Map([["origin", "https://gemlyxtravel.com"]])));
+
+  // ── AND THE FIVE THAT NEED A REAL SESSION ────────────────────────
+  const okFetch = async () => ({ ok: true, json: async () => ({ id: "user-1", email: "o@example.com" }) });
+  const noFetch = async () => ({ ok: false, json: async () => ({}) });
+  const boom = async () => { throw new Error("network"); };
+  const cfg = { supabaseUrl: "https://s.example", serviceKey: "k" };
+  is("no token is a 401", (await resolveUser({}, cfg)).status, 401);
+  is("a bare token with no Bearer prefix is a 401", (await resolveUser({ authorization: "abc" }, cfg)).status, 401);
+  is("a token Supabase rejects is a 401",
+     (await resolveUser({ authorization: "Bearer t" }, { ...cfg, fetchImpl: noFetch })).status, 401);
+  is("Supabase being unreachable is a 503, not a pass",
+     (await resolveUser({ authorization: "Bearer t" }, { ...cfg, fetchImpl: boom })).status, 503);
+  is("a missing service key is a 503, not a pass",
+     (await resolveUser({ authorization: "Bearer t" }, { supabaseUrl: "https://s.example", serviceKey: "" })).status, 503);
+  const good = await resolveUser({ authorization: "Bearer t" }, { ...cfg, fetchImpl: okFetch });
+  ok("a real session passes", good.ok);
+  is("and says who it was", good.userId, "user-1");
+  // A response with no id is not a session, however cheerful the status code.
+  is("an ok response with no id is still a 401",
+     (await resolveUser({ authorization: "Bearer t" }, { ...cfg, fetchImpl: async () => ({ ok: true, json: async () => ({}) }) })).status, 401);
+
+  // Unset means any signed-in account, because Studio is already behind a login
+  // and locking himself out at four in the morning is the likelier accident.
+  ok("with no allow-list, any account passes", isFounder("user-1", ""));
+  ok("with one, a listed account passes", isFounder("user-1", "user-1, user-2"));
+  ok("and an unlisted one does not", !isFounder("user-9", "user-1, user-2"));
+
+  // ── EVERY ENDPOINT, DERIVED FROM THE FOLDER ──────────────────────
+  // Walked from readdirSync, not from a list written here. A list in this file is
+  // the same defect as the four hand-written type gates found earlier today: the
+  // fifteenth endpoint is the one that gets forgotten, and it would be forgotten
+  // silently.
+  const apiFiles = readdirSync(join(root, "api")).filter(f => f.endsWith(".js")).sort();
+  ok("there are endpoints to check", apiFiles.length >= 14);
+  apiFiles.forEach(f => {
+    const src = readFileSync(join(root, "api", f), "utf8");
+    const name = f.replace(/\.js$/, "");
+    // The cron endpoint carries its own shared secret and is called by Vercel
+    // rather than by a browser, so an Origin check would break it.
+    if (name === "update-events-check") {
+      ok(`${name} is protected by its own key`, /UPDATE_EVENTS_SECRET/.test(src));
+      return;
+    }
+    // ask.js already resolved a token before tonight and needs no origin check to
+    // be safe, but it gets asserted for the token rather than waved through.
+    if (name === "ask") {
+      ok(`${name} requires a session`, /auth\/v1\/user/.test(src));
+      return;
+    }
+    ok(`${name} refuses a request that is not from the site`,
+       /if \(!requestIsFromSite\(req\.headers\)\) \{/.test(src));
+    ok(`${name} says why in the body`, /NOT_FROM_SITE/.test(src));
+  });
+  STUDIO_ONLY_ENDPOINTS.forEach(name => {
+    const src = readFileSync(join(root, "api", `${name}.js`), "utf8");
+    ok(`${name} also requires a Studio session`, /const who = await resolveUser\(req\.headers, \{/.test(src));
+    ok(`${name} returns the status resolveUser chose`, /return res\.status\(who\.status\)\.json\(\{ error: who\.error \}\)/.test(src));
+    ok(`${name} can be narrowed to named accounts`, /isFounder\(who\.userId, process\.env\.GEMLYX_FOUNDER_IDS\)/.test(src));
+  });
+
+  // ── AND THE CLIENT HAS TO SEND THE TOKEN, OR STUDIO IS BRICKED ───
+  // The dangerous half of this change. Guarding the five and not updating their
+  // callers would leave every draft researching nothing, at four in the morning,
+  // while he is asleep.
+  const app16 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("there is a helper for it", /const routeAuth = \(\) => \{/.test(app16));
+  ok("which does not throw, because these calls sit inside try blocks that treat a failure as an empty lookup",
+     /return tok \? \{ Authorization: `Bearer \$\{tok\}` \} : \{\};/.test(app16));
+  STUDIO_ONLY_ENDPOINTS.forEach(name => {
+    const calls = app16.split(`fetch(\`/api/${name}`).slice(1);
+    ok(`${name} is called at least once`, calls.length > 0);
+    const missing = calls.filter(c => !/^[^;]{0,400}routeAuth\(\)/.test(c));
+    is(`every ${name} call carries the session`, missing.length, 0);
+  });
+}
+
+// ── ANYTHING BELOW THE SUMMARY IS NOT A TEST ──────────────────────
+// Two blocks written on 17 Aug were appended to the END of this file, after the
+// line that prints the count and after the process.exit on failure. They ran,
+// their assertions incremented the counters, and nothing printed them: the total
+// stayed on the number it had before they existed, and a FAILURE in either would
+// have been recorded into `fails` and never shown, with the exit code already
+// decided. Caught by the count not moving when sixteen assertions were added.
+// Everything now sits above the report, which is the only place an assertion
+// counts for anything.
+
+// ── "TELL ME WHAT SOURCES IT USED" ─────────────────────────────────
+//
+// Oliver, 17 Aug 2026: "Can you make the '✦ Argue with this draft' tell me what
+// sources it used?"
+//
+// He asked a version of this on 11 Aug too, about the drafting rather than the
+// arguing: "Does the 'draft argument' section also save the sources?" That one
+// was recorded and deleted by the publish allow-list. This one was never built at
+// all, and the comment in runAsk said so out loud: "an answer from the entry is
+// silent about where it came from."
+//
+// THE DESIGN CONSTRAINT IS THE WHOLE TEST. The assistant is handed the entry as
+// JSON, so it can see __sources, and it has opened none of those pages. Asked to
+// attribute, it produces "according to visitaarhus.com", which is a guess wearing
+// a citation's clothes and is worse than silence because it is checkable. So
+// nothing in this block may come from a model.
+{
+  const { fieldProvenance, correctionProvenance, entrySources, untracedFields, describeProvenance, citationUrls } = M;
+
+  // His own Pizza by WH draft, trimmed to the fields that carry an origin.
+  const PIZZA = {
+    name: "Pizza by WH",
+    price: "140-145 DKK per pizza",
+    travelTime: "22 mins",
+    __priceSource: { url: "https://friheden.dk/oplev-friheden/mad-og-drikke/pizza-by-wh", host: "friheden.dk", price: "135-135", at: "2026-08-17T16:02:51.794Z" },
+    __journey: { total: 22, at: "2026-08-17" },
+    __sources: [
+      "https://friheden.dk/oplev-friheden/mad-og-drikke/pizza-by-wh",
+      "https://www.grubhub.com/delivery/ny-copenhagen/pizza",
+      "not a url",
+    ],
+    __corrections: [
+      { at: "2026-08-17", field: "price", was: "x", source: "asserted by the founder, not source-verified" },
+      { at: "2026-08-17", field: "mapHint", was: "y", source: "live routing measurement" },
+    ],
+  };
+
+  // ── FIELD BY FIELD, READ OUT OF THE PAYLOAD ──────────────────────
+  const fields = fieldProvenance(PIZZA);
+  is("the price names the host it was read from", fields.find(f => f.field === "price")?.by, "friheden.dk");
+  is("and the day it was read", fields.find(f => f.field === "price")?.at, "2026-08-17");
+  is("the journey names the service that measured it", fields.find(f => f.field === "the journey from Copenhagen")?.by, "Google Maps");
+  ok("a field with no recorded origin is not invented", !fields.some(f => f.field === "opening hours"));
+  is("nothing at all is safe", fieldProvenance(null), []);
+  // The machine marker is said in words, because a person reads this deciding
+  // whether to trust a number.
+  is("google-places is named as what it is",
+     fieldProvenance({ __hours: { hours: ["Monday: 11-22"], source: "google-places", fetchedAt: "2026-08-11T00:00:00Z" } })[0].by,
+     "Google's own business listing");
+
+  // ── A CORRECTION IS NOT A SOURCE ─────────────────────────────────
+  // The most important line in the block: a field standing on his own say-so must
+  // never read as one standing on a page, least of all to him in a month.
+  const corr = correctionProvenance(PIZZA);
+  is("his own assertion is labelled as his own",
+     corr.find(c => c.field === "price")?.by, "asserted by the founder, not source-verified");
+  is("and a measurement as a measurement",
+     corr.find(c => c.field === "mapHint")?.by, "live routing measurement");
+  is("repeats of one field and one authority collapse", correctionProvenance({
+    __corrections: [
+      { field: "price", source: "asserted by the founder, not source-verified" },
+      { field: "price", source: "asserted by the founder, not source-verified" },
+    ],
+  }).length, 1);
+
+  // ── THE READING LIST, AS A READING LIST ──────────────────────────
+  is("only real urls are listed", entrySources(PIZZA).length, 2);
+  is("and nothing is silently dropped from a good list", entrySources({ __sources: ["https://a.dk", "https://b.dk"] }).length, 2);
+
+  // ── AND THE HALF THAT IS WORTH MORE THAN THE CITATIONS ───────────
+  // A field the entry states with nothing recorded behind it. This is what stops
+  // the block being decorative.
+  is("a traced price and a measured journey leave nothing untraced", untracedFields(PIZZA), []);
+  is("a price with nothing behind it is named",
+     untracedFields({ price: "140 DKK" }), ["price"]);
+  is("a stated travel time with no measured journey is named",
+     untracedFields({ travelTime: "2h 30min" }), ["travel time"]);
+  is("a field the entry does not state is not named", untracedFields({}), []);
+
+  // ── THE BLOCK ───────────────────────────────────────────────────
+  const fromEntry = describeProvenance(PIZZA, { answeredFrom: "entry" });
+  ok("an answer from the entry says no search was run", /No new search was run/.test(fromEntry));
+  ok("and says so before anything else", fromEntry.indexOf("WHERE THIS ANSWER CAME FROM") === 0);
+  ok("the reading list is described as a reading list, not as evidence",
+     /not evidence for any one sentence/.test(fromEntry));
+  ok("his own assertion appears in it", /asserted by the founder/.test(fromEntry));
+  // AND THE UNTRACED WARNING HAS TO REACH THE BLOCK, not just the function.
+  // untracedFields was asserted on its own and the line that prints it was not, so
+  // a mutant that computed the list correctly and never showed it survived.
+  const untracedBlock = describeProvenance({ name: "x", price: "140 DKK", travelTime: "2h" });
+  ok("a field with nothing behind it is named in the block",
+     /NO RECORDED SOURCE, so do not settle an argument with these: price, travel time\./.test(untracedBlock));
+  ok("and a fully traced entry carries no such line", !/NO RECORDED SOURCE/.test(fromEntry));
+  const fromLookup = describeProvenance(PIZZA, { answeredFrom: "lookup", lookupUrls: ["https://friheden.dk/x", "javascript:void(0)"] });
+  ok("a live answer says it went and looked", /a live search run just now/.test(fromLookup));
+  ok("and lists the page it opened", /https:\/\/friheden\.dk\/x/.test(fromLookup));
+  ok("but not a javascript url", !/javascript:/.test(fromLookup));
+  ok("an entry with no reading list says that plainly",
+     /kept no reading list at all/.test(describeProvenance({ name: "x" })));
+  // It must never read as though the model chose a source for a sentence.
+  ok("nothing in the block claims a page supports a claim",
+     !/according to|source for this|based on/i.test(fromEntry));
+
+  // ── AND THE READER THAT MADE ALL THREE CONSUMERS EMPTY ───────────
+  // api/perplexity.js maps search_results into {title, url} objects. Three places
+  // filtered that array with `typeof u === "string"`, so all three printed nothing
+  // while looking like working features.
+  is("an object citation yields its url",
+     citationUrls({ citations: [{ title: "Friheden", url: "https://friheden.dk/a" }] }), ["https://friheden.dk/a"]);
+  is("a bare string still works, because the endpoint concatenates both shapes",
+     citationUrls({ citations: ["https://friheden.dk/b"] }), ["https://friheden.dk/b"]);
+  is("a fragment is trimmed so two links to one page are one source",
+     citationUrls({ citations: ["https://a.dk/x#top", "https://a.dk/x"] }), ["https://a.dk/x"]);
+  is("a javascript url is refused", citationUrls({ citations: [{ url: "javascript:alert(1)" }] }), []);
+  is("and nothing at all is safe", citationUrls(null), []);
+  is("the list is bounded", citationUrls({ citations: Array.from({ length: 30 }, (_, i) => `https://a.dk/${i}`) }).length, 8);
+
+  // Wired, at all three sites, because the bug was three copies of one wrong guess.
+  const sa = readFileSync(join(root, "src/components/StudioAssistant.jsx"), "utf8");
+  ok("the argue answer carries the block",
+     /say\("gemlyx", `\$\{answer\}\\n\\n\$\{describeProvenance\(target, \{ answeredFrom: "entry" \}\)\}`/.test(sa));
+  ok("the lookup answer carries it too", /answeredFrom: "lookup", lookupUrls: cites/.test(sa));
+  ok("and the assistant uses the shared reader", /const cites = citationUrls\(research, \{ limit: 5 \}\);/.test(sa));
+  // Through stripNonCode, because the comment explaining the fix quotes the
+  // broken line verbatim and this assertion matched my own comment on the first
+  // run. Third time tonight, and the suite's own note about the comment trap has
+  // been sitting in this file since 10 Aug.
+  ok("no site filters citations as strings any more",
+     !/typeof u === "string"/.test(stripNonCode(sa) + stripNonCode(readFileSync(join(root, "src/utils/sweeps.js"), "utf8"))));
+  ok("a sweep records the page it researched from",
+     /const url = citationUrls\(res\)\[0\] \|\| "";/.test(readFileSync(join(root, "src/utils/sweeps.js"), "utf8")));
+  ok("and the ticket fallback reads them as objects",
+     /if \(!out\.length\) citationUrls\(result\)\.forEach\(add\);/.test(readFileSync(join(root, "src/utils/tickets.js"), "utf8")));
+}
+
+// ── THE PRICE'S OWN SOURCE, EIGHTH FIELD THIS ALLOW-LIST HAS EATEN ──
+//
+// Found 17 Aug 2026 while building the provenance block. App.jsx writes
+// __priceSource = { url, host, price, at } onto the draft the moment a price is
+// read off a real page, and the word "priceSource" did not appear in
+// studioContent.js once, so the most argued-over field in the app carried a
+// dated, traceable origin on the draft and lost it at publish on every row.
+{
+  const draft = {
+    name: "Pizza by WH", vibeLocation: "x", price: "140-145 DKK per pizza",
+    __priceSource: { url: "https://friheden.dk/x", host: "friheden.dk", price: "135-135", at: "2026-08-17T16:02:51.794Z" },
+  };
+  const live = M.shapeForLive("food", draft);
+  is("the price source survives publish", live.__priceSource.host, "friheden.dk");
+  is("with the price the page actually showed", live.__priceSource.price, "135-135");
+  is("and the day it was read", live.__priceSource.at, "2026-08-17T16:02:51.794Z");
+  // A source with no URL is not a source. Absent rather than an empty shell, on
+  // the same terms as __hours and __ticket.
+  ok("a priceSource with no url is not stored",
+     !("__priceSource" in M.shapeForLive("food", { name: "x", vibeLocation: "y", __priceSource: { price: "135" } })));
+  ok("and a draft that never read a price carries no field",
+     !("__priceSource" in M.shapeForLive("food", { name: "x", vibeLocation: "y" })));
+  // Every type, because the price argument is not specific to food.
+  M.CONTENT_TYPES.forEach(t => {
+    const row = M.shapeForLive(t, { ...draft, desc: "x", characterAndFit: "x", what: "x", category: "x" });
+    ok(`a ${t} keeps its price source`, !row || row.__priceSource?.host === "friheden.dk");
+  });
+  // AND THE READER OF IT. The provenance block is the consumer, so the two have
+  // to agree about the shape or the field ships and shows nothing.
+  is("and the provenance block reads it back",
+     M.fieldProvenance(live).find(f => f.field === "price")?.by, "friheden.dk");
+}
+
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

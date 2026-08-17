@@ -554,11 +554,24 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             arrivalRow(item.nearestStation),
           ]} />
         )}
+        {/* ── NO TIME NEEDED ON FOOD ────────────────────────────────
+            Oliver, 17 Aug 2026: "At food, let's get rid of the 'time needed'
+            section.. it's stupid tbh."
+
+            The row read item.timeNeeded, and that value never came from research:
+            stayDurationForCategory overwrote the writer's own estimate with one of
+            four constants keyed off a word in the category, and every food street
+            in the country received the same one. Removed HERE as well as at the
+            three write sites, because a published row keeps whatever it was
+            published with. The field stays harmlessly in old payloads and stops
+            reaching a reader today, rather than after a re-draft of every entry.
+
+            Restaurants and markets both, since for a market the figure was a
+            single nationwide constant and said even less than the guess. */}
         {kind === "food" && (
           <AtAGlanceCard rows={[
             { icon: "🍽️", label: "Serves", value: item.category },
             { icon: "💰", label: "Price", value: item.price },
-            { icon: "⏱️", label: "Time Needed", value: item.timeNeeded },
             { icon: "📍", label: "Neighbourhood", value: item.location },
           ]} />
         )}

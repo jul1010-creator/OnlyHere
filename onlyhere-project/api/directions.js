@@ -50,7 +50,15 @@ const decodePolyline = (encoded) => {
   return sane ? points : null;
 };
 
+import { requestIsFromSite, NOT_FROM_SITE } from "../src/utils/apiGuard.js";
+
 export default async function handler(req, res) {
+  // ── SECURITY, 17 AUG 2026 ─────────────────────────────────────────
+  // This endpoint answered anybody until tonight. See src/utils/apiGuard.js for
+  // what that meant in practice and why a login gate would break the product.
+  if (!requestIsFromSite(req.headers)) {
+    return res.status(403).json({ error: NOT_FROM_SITE });
+  }
   const { origin, destination, mode, departure_time, avoid } = req.query;
   if (!origin || !destination) {
     return res.status(400).json({ error: "origin and destination required" });

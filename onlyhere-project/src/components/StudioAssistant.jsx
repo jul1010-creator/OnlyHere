@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { C } from "../utils/theme";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
-import { askClaude, askPerplexity, parseClaudeJSON } from "../utils/aiClient";
+import { askClaude, askPerplexity, parseClaudeJSON, citationUrls } from "../utils/aiClient";
 import { auditEntry, auditAll } from "../utils/entryAudit";
 import { correctEntry, editEntry, routeMessage, offersCorrection, ASK_PROMPT, LOOKUP_PROMPT, NOT_IN_ENTRY, SWEEP_PROMPT } from "../utils/correction";
 import { SWEEPS, sweepById } from "../utils/sweeps";
 import { STUDIO_VOICE } from "../utils/studioContent";
 import { departureParam } from "../utils/helpers";
+import { describeProvenance } from "../utils/provenance";
 
 // ── The founder's assistant, on every page ──────────────────────────
 // Oliver, 6 Aug 2026: "Is it possible to install some sort of assistant for the
@@ -276,7 +277,19 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
     // reader must always be able to tell which one they are holding.
     const answer = (res.text || "").trim();
     if (!answer.startsWith(NOT_IN_ENTRY)) {
-      say("gemlyx", answer, (studioMode && offersCorrection(message)) ? { retryAs: message } : {});
+      // ── "TELL ME WHAT SOURCES IT USED" ────────────────────────────
+      // Oliver, 17 Aug 2026. The comment above used to end "an answer from the
+      // entry is silent about where it came from", and silence was the wrong
+      // choice: an answer with no provenance and an answer with excellent
+      // provenance arrive looking identical, so he had no way to tell which
+      // argument he was allowed to act on.
+      //
+      // Generated in code from the stored payload, never by the model. It has
+      // the __sources array in front of it and has opened none of those pages,
+      // so asking it to attribute would produce "according to visitaarhus.com",
+      // which is a guess wearing a citation's clothes. See utils/provenance.js.
+      say("gemlyx", `${answer}\n\n${describeProvenance(target, { answeredFrom: "entry" })}`,
+          (studioMode && offersCorrection(message)) ? { retryAs: message } : {});
       return;
     }
     setStage({ label: "Not in the entry. Looking it up" });
@@ -291,8 +304,13 @@ export const StudioAssistant = ({ session, item, kind, draft, draftKind, onDraft
       `Answer the question below using ONLY the fresh research provided. Be short and direct. If the research does not actually settle it, say so plainly rather than hedging into a non-answer. Never use an em dash or an en dash.\n\nQuestion: ${message}\n\nFresh research:\n${research.text}`,
       500
     );
-    const cites = (research.citations || []).slice(0, 3).filter(u => typeof u === "string");
-    say("gemlyx", `Not in the entry, so I looked it up just now.\n\n${written.error ? research.text : written.text}${cites.length ? `\n\nSources: ${cites.join("  ")}` : ""}`);
+    // Citations are objects with a title and a url from api/perplexity.js, and
+    // were being filtered with `typeof u === "string"`, which threw every one of
+    // them away and printed no sources at all on the path whose whole point is
+    // that it went and looked. Both shapes accepted now.
+    const cites = citationUrls(research, { limit: 5 });
+    say("gemlyx", `Not in the entry, so I looked it up just now.\n\n${written.error ? research.text : written.text}`
+      + `\n\n${describeProvenance(target, { answeredFrom: "lookup", lookupUrls: cites })}`);
   };
 
   // ── "OR TALKING TO AN AI THAT ARE ABLE TO DO TINY CHANGES WITH THEM ALL" ──

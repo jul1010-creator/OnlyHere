@@ -60,6 +60,7 @@
 import { enforceScope } from "./correction";
 import { PLACE_KINDS } from "./placeKind";
 import { PLACE_THEMES, cleanThemes, MAX_THEMES } from "./placeThemes";
+import { citationUrls } from "./aiClient";
 
 const clean = (v) => String(v == null ? "" : v).trim();
 const lower = (v) => clean(v).toLowerCase();
@@ -530,7 +531,9 @@ export const proposeSweep = async ({ sweep, rows, knownPlaces, deps = {} }) => {
       const res = await askPerplexity(RESEARCH_PROMPT(p.name, sweep.question, lastNeed));
       if (!res.error && res.text) {
         const found = cleanPatch(parseLooseFields(res.text, lastNeed), lastNeed, places);
-        const url = (res.citations || []).find(u => typeof u === "string") || "";
+        // citationUrls, not a string filter: the citations are objects and this
+        // line recorded an empty source for every researched sweep value.
+        const url = citationUrls(res)[0] || "";
         for (const f of Object.keys(found)) { patch[f] = found[f]; marks[f] = MARKS.research; evidence[f] = clean(res.text).slice(0, 200); sources[f] = url; }
       }
     }
