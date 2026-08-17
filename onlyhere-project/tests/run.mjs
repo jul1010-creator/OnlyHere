@@ -44,7 +44,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, journeyAgencies, JOURNEY_SOURCE } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
@@ -145,6 +145,8 @@ writeFileSync(entry, `
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
   export { shapeForLive, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } from ${JSON.stringify(join(root, "src/utils/echoCheck.js"))};
+  export { CHOICE_LIMIT, cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, subjectCore, listingMatchesSubject, describeListingRefusal } from ${JSON.stringify(join(root, "src/utils/placeChoice.js"))};
   export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
@@ -189,6 +191,50 @@ try {
 }
 const M = await import("file://" + bundle);
 const { arrivalRow, transitDepartureAnchor, departureParam, auditEntry, auditAll, mergeSaves, licenseUrl, creditIsRequired } = M;
+
+// ── READING A TYPE GATE BY ITS VALUE, NOT BY ITS SPELLING ──────────
+//
+// Oliver, 17 Aug 2026: "check if all of them start with places and end with
+// directions. Because that is important."
+//
+// FOUR hand-written type lists in the draft pipeline, and nightStreet was missing
+// from all four: the journey, the official-site search, the 3am transport check
+// and Google's business listing. One list copied four times, so one omission
+// became four. Every assertion that guarded them matched a LITERAL, which is why
+// they all passed while the hole was there: the spelling was correct, the
+// membership was not.
+//
+// So the lists are derived in App.jsx now, and this reads them by EVALUATING the
+// derivation against the real CONTENT_TYPES. An assertion can then say "every
+// place type is in this gate", which is the actual invariant, and a tenth content
+// type is covered the day it is registered rather than the day somebody
+// remembers four call sites.
+// Each list is evaluated in the order it is declared, with the ones before it in
+// scope, so a list derived from another list resolves without this file holding a
+// copy of anything. A copy in here would be the same defect one level up.
+const TYPE_LIST_NAMES = [
+  "PLACE_TYPES_WITH_A_JOURNEY",
+  "PLACES_THAT_ARE_ONE_BUSINESS",
+  "PLACES_THAT_ARE_AN_AREA",
+  "NIGHTLIFE_TYPES",
+  "PLACES_WITH_A_LISTING",
+];
+const typeListsIn = (src) => {
+  const scope = { CONTENT_TYPES: M.CONTENT_TYPES };
+  const rhs = {};
+  for (const n of TYPE_LIST_NAMES) {
+    rhs[n] = (src.match(new RegExp(`const ${n} = ([^\\n]*);`)) || [])[1] || "";
+    const keys = Object.keys(scope);
+    try {
+      const got = new Function(...keys, `return ${rhs[n]}`)(...keys.map(k => scope[k]));
+      // A crash is not a failure here, but neither is it a pass: an unreadable or
+      // non-array right-hand side becomes the empty list and every membership
+      // assertion below it goes red.
+      scope[n] = Array.isArray(got) ? got : [];
+    } catch { scope[n] = []; }
+  }
+  return { ...scope, rhs };
+};
 
 // ── arrivalRow: label the arrival point for what it IS ─────────────
 // Bug: every content type was hardcoded to "🚆 Nearest Station", so
@@ -1229,16 +1275,147 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     // Asserted on the LIST rather than on the call sites, and then on the call
     // sites using the list, because the defect was never one gate being wrong.
     // It was two gates disagreeing.
-    const journeyTypes = (appSrc3.match(/const PLACE_TYPES_WITH_A_JOURNEY = \[([^\]]*)\]/) || [])[1] || "";
-    ["town", "festival", "free", "booking", "food", "foodStreet", "night", "nightTown"].forEach(t =>
-      ok(`a ${t} entry gets its journey measured`, journeyTypes.includes(`"${t}"`)));
+    //
+    // Oliver, 17 Aug 2026, on the Studio type list: "check if all of them start
+    // with places and end with directions. Because that is important."
+    //
+    // They did not. The list had EIGHT of the ten types and nightStreet was the
+    // one missing, so a bar street got no transport search, no arrival point and
+    // no measured journey. Same hole as the four-versus-eight drift above, one
+    // type further down, and it was still a HAND-WRITTEN list both times: night
+    // and nightTown were appended when they were added and nightStreet, sitting
+    // between them, was skipped.
+    //
+    // So this no longer reads the spelling of a literal. It EVALUATES the
+    // derivation against the real CONTENT_TYPES, which makes the assertion
+    // "every type is a place except an essential" rather than "these eight
+    // strings appear". A tenth type is covered the day it is registered.
+    const lists3 = typeListsIn(appSrc3);
+    const journeyRhs = lists3.rhs.PLACE_TYPES_WITH_A_JOURNEY;
+    const journeyTypes = lists3.PLACE_TYPES_WITH_A_JOURNEY;
+    M.CONTENT_TYPES.filter(t => t !== "essential").forEach(t =>
+      ok(`a ${t} entry gets its journey measured`, journeyTypes.includes(t)));
     // Not a place, so not a journey. This one is deliberate and stays out.
-    ok("an essential is not a place and gets no journey", !journeyTypes.includes('"essential"'));
+    ok("an essential is not a place and gets no journey", !journeyTypes.includes("essential"));
+    // And the whole point of deriving it: nothing else may be dropped, so the
+    // list is exactly CONTENT_TYPES minus the one exclusion, in its order.
+    is("the list is every content type except that one", journeyTypes, M.CONTENT_TYPES.filter(t => t !== "essential"));
+    // Derived, not enumerated. A literal that happens to be complete today is
+    // what produced the hole twice: it passes now and rots the next time a type
+    // is added. So the expression must READ CONTENT_TYPES, and it may name at
+    // most the single type it excludes.
+    ok("and it is derived from CONTENT_TYPES rather than typed out", /CONTENT_TYPES/.test(journeyRhs));
+    is("naming only the type it leaves out", (journeyRhs.match(/"[^"]*"/g) || []), ['"essential"']);
     // THREE gates, not two. The third was the journey research search, and this
     // assertion is what found it: it was written expecting two and went red.
     is("all three gates read the one list", (appSrc3.match(/PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\)/g) || []).length, 3);
     ok("and none keeps a hand-written copy of it",
        !/\["town", "festival", "free", "booking"\]\.includes\(sType\)/.test(appSrc3));
+    // And the measuring gate needs a destination as well as a type. Without the
+    // coordinate in the condition the block relies on a TypeError inside its own
+    // try to stop it, which is fine today and stops being fine the moment
+    // somebody writes frozenGeo?.lat: Google would then be asked to route to
+    // "undefined,undefined" and the failure would arrive as a paid empty answer.
+    ok("and the journey is only measured when there is a coordinate to measure to",
+       /PLACE_TYPES_WITH_A_JOURNEY\.includes\(sType\) && frozenGeo\b/.test(appSrc3));
+
+    // ── AND THE THREE OTHER LISTS IN THE SAME PIPELINE ────────────
+    // Reading every type gate in the draft function to answer his question found
+    // three more hand-written lists, and nightStreet was missing from all three.
+    // Not four mistakes: one list copied four times.
+    //
+    // The partition is the assertion that matters. Every place type is either one
+    // business at one address or an area, because that is what decides which
+    // lookup can answer a question about it, and a new content type therefore
+    // cannot be silently absent from both.
+    const business3 = lists3.PLACES_THAT_ARE_ONE_BUSINESS;
+    const area3 = lists3.PLACES_THAT_ARE_AN_AREA;
+    is("every place type is either a business or an area",
+       [...business3, ...area3].slice().sort(), M.CONTENT_TYPES.filter(t => t !== "essential").slice().sort());
+    is("and never both", business3.filter(t => area3.includes(t)), []);
+    ok("an essential is neither, because it is not a place",
+       !business3.includes("essential") && !area3.includes("essential"));
+    // The two streets are areas. This is the whole point: a street has no
+    // business listing, so the official-site search is the only tool it has, and
+    // it was the one type of entry never running it.
+    ["town", "festival", "nightTown", "foodStreet", "nightStreet"].forEach(t =>
+      ok(`a ${t} gets the official-site search, because Google has no listing for it`, area3.includes(t)));
+    ["food", "night", "free", "booking"].forEach(t =>
+      ok(`a ${t} does not, because its own listing is a better answer`, !area3.includes(t)));
+    ok("and the search gate reads the derived list",
+       /if \(PLACES_THAT_ARE_AN_AREA\.includes\(sType\)\) \{/.test(appSrc3));
+    ok("with a query shaped for a street rather than for a festival programme",
+       /sType === "foodStreet" \|\| sType === "nightStreet"/.test(appSrc3));
+
+    // ── DERIVED, WHICH IS A DIFFERENT CLAIM FROM CORRECT ──────────
+    // A hand-written list that is complete TODAY passes every membership
+    // assertion above and is still the defect: the tenth content type joins
+    // CONTENT_TYPES and not the copy. So each list has to be an expression over
+    // another list, and it may only spell out the types it deliberately excludes.
+    // PLACES_THAT_ARE_ONE_BUSINESS is the single exception and is written by hand
+    // on purpose, because it is the real distinction in the set; the partition
+    // assertion above is what stops a type from falling out of both halves.
+    const derived3 = (rhs) => /CONTENT_TYPES|PLACE_TYPES_WITH_A_JOURNEY|PLACES_THAT_ARE_ONE_BUSINESS/.test(rhs);
+    const literals3 = (rhs) => (rhs.match(/"[^"]*"/g) || []);
+    ok("the area list is an expression, not a list of names", derived3(lists3.rhs.PLACES_THAT_ARE_AN_AREA));
+    is("and spells out no type at all", literals3(lists3.rhs.PLACES_THAT_ARE_AN_AREA), []);
+    ok("the nightlife list is an expression", derived3(lists3.rhs.NIGHTLIFE_TYPES));
+    is("and spells out no type either", literals3(lists3.rhs.NIGHTLIFE_TYPES), []);
+    ok("the listing list is an expression", derived3(lists3.rhs.PLACES_WITH_A_LISTING));
+    is("naming only the town it leaves out", literals3(lists3.rhs.PLACES_WITH_A_LISTING), ['"town"']);
+
+    // Nightlife: derived from the naming convention, so a night-anything type
+    // joins by being called what it is called.
+    const night3 = lists3.NIGHTLIFE_TYPES;
+    is("every nightlife type gets the 3am transport check",
+       night3.slice().sort(), M.CONTENT_TYPES.filter(t => /^night/.test(t)).slice().sort());
+    ok("a bar street included, which is the entry that question is most about", night3.includes("nightStreet"));
+    ok("and nothing that is not nightlife", night3.every(t => /^night/.test(t)));
+    ok("the check reads it", /if \(NIGHTLIFE_TYPES\.includes\(sType\)\) \{/.test(appSrc3));
+    // AND IT HAS TO FIND A CITY. The city came only from the venue's own name
+    // containing one, so for a bar or a street the check silently never ran.
+    ok("the city falls back to the town this draft is about",
+       /KNOWN_CITIES\.find\(c => samePlaceName\(c, draftTown\)\)/.test(appSrc3));
+    ok("and to the town's own name when it is not one of the ten",
+       /\|\| String\(draftTown \|\| ""\)\.trim\(\);/.test(appSrc3));
+    ok("reusing the coordinate this draft already paid for",
+       /const held = placed && placed\.precise/.test(appSrc3));
+
+    // The business listing: everything but a town, which has no single listing.
+    const listing3 = lists3.PLACES_WITH_A_LISTING;
+    M.CONTENT_TYPES.filter(t => t !== "essential" && t !== "town").forEach(t =>
+      ok(`Google's listing is asked for on a ${t}`, listing3.includes(t)));
+    ok("not on a town, whose name is a region rather than a business", !listing3.includes("town"));
+    ok("nor on an essential", !listing3.includes("essential"));
+    ok("and the gate reads the derived list",
+       /if \(PLACES_WITH_A_LISTING\.includes\(sType\)\) \{/.test(appSrc3));
+    // ── AND ASKING IS NOT THE SAME AS USING ───────────────────────
+    // The listing arrives as data.places[0] with no check that it is about the
+    // subject, and what is taken from it is the strongest material in the
+    // pipeline. For a street that is whichever business Google ranks first.
+    ok("a listing is checked against the subject before anything is taken from it",
+       /if \(!listingMatchesSubject\(name, draftTown, hoursData\.name\)\) \{/.test(appSrc3));
+    ok("and the refusal says which listing it was, not just that there was none",
+       /why: describeListingRefusal\(name, draftTown, hoursData\.name\)/.test(appSrc3));
+    // Anchored on the CALL rather than on the string: `if (false) decide(...)`
+    // leaves the string in the file and satisfies a looser match, which is the
+    // mutant this assertion exists to kill.
+    ok("recorded as a decision, so the log shows the material was declined",
+       /\n\s*decide\("whether Google's listing is about this place", \{/.test(appSrc3));
+    // AND IT HAS TO STOP THERE. Without the throw the refusal is a log entry and
+    // the block reads the website, the address and the hours from the listing it
+    // just declined, which is worse than not checking: it would say in the log
+    // that nothing was taken.
+    // Sliced FROM the refusal, and the end marker searched from there too: that
+    // comment's first line in the file is an inline one on the placesWebsite
+    // declaration a hundred lines earlier, so an unanchored indexOf returns a
+    // backwards range and an empty region, which asserts nothing at all.
+    const refusalAt3 = appSrc3.indexOf("if (!listingMatchesSubject");
+    const refusal3 = appSrc3.slice(refusalAt3, appSrc3.indexOf("// Google's registered URL for this business", refusalAt3));
+    ok("the refusal region is a real region", refusal3.length > 200);
+    ok("and the refusal stops the block rather than falling through into the material",
+       /throw new Error\("places-hours already noted"\);/.test(refusal3));
+
     ok("and Studio can read the trace back", /const logs = recentLogs\(\);/.test(appSrc3));
     ok("with a way to get it out of the browser", /Copy the full trace/.test(appSrc3));
 
@@ -3677,8 +3854,15 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // MENTION it and have to pick. Google's listing is the URL the owner
   // registered. That lookup listed five types and left out the one he has spent
   // the day on.
-  ok("Google is asked about events now", /\["free", "booking", "food", "foodStreet", "night", "festival", "nightTown"\]\.includes\(sType\)/.test(app14));
-  ok("and about nightlife towns", /"festival", "nightTown"\]\.includes\(sType\)/.test(app14));
+  // ── AND THESE TWO ASSERTIONS WERE PART OF THE PROBLEM ─────────────
+  // Both matched the LITERAL list, so both passed for weeks while nightStreet was
+  // missing from it. An assertion that reads a spelling cannot fail when the
+  // spelling is right and the membership is wrong, which is the only failure this
+  // gate has ever had. Read by value now, from the same derivation the app uses.
+  const listing14 = typeListsIn(app14).PLACES_WITH_A_LISTING;
+  ok("Google is asked about events now", listing14.includes("festival"));
+  ok("and about nightlife towns", listing14.includes("nightTown"));
+  ok("and about a bar street, which was missing the whole time", listing14.includes("nightStreet"));
 
   // THE ADDRESS WAS BEING THROWN AWAY. The endpoint has returned it all along.
   ok("the endpoint has always returned an address", /address: place\.formattedAddress \|\| "",/.test(papi));
@@ -7918,7 +8102,24 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // priced 140 to 165 DKK, which is where the wrong price came from; an Aalborg
   // category listing on Billetlugen; and Billetto's homepage.
   ok("a vouched domain is no longer waved through", !/founderUrls\.includes\(u\)/.test(code));
-  ok("the official site is still exempt", /if \(placesWebsite && u === placesWebsite\) return true;/.test(code));
+  // ── THE EXEMPTION IS FROM RELEVANCE, NOT FROM BEING READ ─────────
+  // 17 Aug, on the Heidi's draft: the row shipped with one source,
+  // heidisbierbar.dk, and its own run log says that URL came back EMPTY twice.
+  // The site is a JavaScript shell with no words in it, confirmed by hand.
+  //
+  // The exemption is still right. The official site does not have to prove it is
+  // about the place. It does have to have been read, or the entry claims
+  // provenance it does not have under a heading promising how we know, which is
+  // the "1 source? What da fk" complaint with the source removed as well.
+  ok("the official site is still exempt from proving it is about the place",
+     /if \(placesWebsite && u === placesWebsite\) return readSomething\(u\);/.test(code));
+  ok("and it is not exempt from having been read",
+     /const readSomething = \(u\) =>\s*\n\s*!!String\(pagesByUrl\[u\][\s\S]{0,20}\)\.trim\(\) \|\| !!String\(urlSaidWhat\.get\(u\)[\s\S]{0,20}\)\.trim\(\);/.test(code));
+  // Either kind of reading counts: a page the scanner got text out of, or a
+  // search snippet. Requiring only one of the two would drop half the sources on
+  // every draft, which is the regression this test exists to describe.
+  ok("a scanned page counts as read", /pagesByUrl\[u\]/.test(code));
+  ok("and so does a search snippet", /urlSaidWhat\.get\(u\)/.test(code));
   // Which is only safe because the vouched results now record what they said,
   // the same as every other result. Without that they would all fail the
   // no-snippet rule and vanish.
@@ -15543,7 +15744,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("a German browser is picked up", readerLanguage({ language: "de-AT" })?.name, "German");
   is("with the tag it was given", readerLanguage({ language: "de-AT" })?.tag, "de-AT");
   is("the block is empty for English", languageBlock({ language: "en-GB" }), "");
-  ok("and real for German", languageBlock({ language: "de-DE" }).includes("GERMAN"));
+  ok("and real for German", languageBlock({ language: "de-DE" }).includes("German"));
 
   // ── AND IT NEVER TRANSLATES A PLACE NAME ────────────────────────
   // The rule that makes this useful rather than dangerous. "Nordtor Station"
@@ -15555,9 +15756,29 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("a name is never translated", /NEVER TRANSLATE A NAME/.test(de));
   ok("stations are named specifically", /station/i.test(de));
   ok("and so are prices in DKK", /DKK/.test(de));
-  // What they TYPED beats a browser setting. A Dane on a German laptop who
-  // writes in English gets English, with no language picker needed.
-  ok("what they wrote in beats the browser setting", /match the language THEY used/.test(de));
+  // ── WHAT THEY TYPED LEADS, AND THAT IS AN ORDERING CLAIM ─────────
+  // 17 Aug: a friend on a Danish phone typed English into the Detour chat and
+  // was answered in Danish. Both halves of the right rule were already in the
+  // block. The problem was which one shouted: it opened with "ANSWER IN DANISH."
+  // in capitals and put the correction in a clause after it.
+  //
+  // So this asserts the ORDER, not the presence. A version that carries both
+  // sentences in the losing order passes a presence test and reproduces the bug.
+  ok("the typed language is the rule, in capitals", /^MATCH THE TRAVELLER'S OWN LANGUAGE\./.test(de));
+  ok("and it says it outranks the rest of the block", /outranks everything else/.test(de));
+  ok("the browser setting is named as a hint", /Treat that as a hint for a first reply and nothing more/.test(de));
+  ok("it comes after the rule, not before it",
+     de.indexOf("MATCH THE TRAVELLER'S OWN LANGUAGE") < de.indexOf("Their browser is set to"));
+  // No shouted language name to latch onto. This is the exact string that won the
+  // fight it was never meant to be in.
+  ok("nothing shouts a language at the model", !/ANSWER IN GERMAN/.test(de));
+  // English typed on a German phone gets English, said in as many words.
+  ok("English typed is English answered", /If they write in English, reply in English/.test(de));
+  // And the one case the hint still decides, or this overcorrects: the intake
+  // form's options are the app's own English labels, so a Danish traveller who
+  // has only ticked boxes has not written anything.
+  ok("ticked boxes are not a language the traveller chose", /form of ticked options/.test(de));
+  ok("and then the hint decides", /does the hint decide, and then reply in German/.test(de));
 
   // ── WIRED, AT EVERY READER FACING SURFACE ───────────────────────
   const appL = readFileSync(join(root, "src/App.jsx"), "utf8");
@@ -18849,6 +19070,71 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("the printed day is the day stored", dayLabel("2026-08-14"), "14 Aug 2026");
   ok("and the stamp carries it", journeyStamp(J, TODAY).includes("14 Aug 2026"));
 
+  // ── WHO RAN THE TRIP, WHICH IS A LICENCE TERM ────────────────────
+  // Google's Directions policy requires an application displaying these results
+  // to show "the names and URLs of the transit agencies that supply the trip
+  // results". api/directions.js has captured the agency NAME since 6 August;
+  // journeyParts dropped it building the leg, the allow-list never named it, and
+  // the card rendered a measured Google journey with no attribution at all.
+  {
+    const { journeyParts, journeyAgencies, JOURNEY_SOURCE, shapeForLive } = M;
+    const STEPS = [
+      { mode: "transit", vehicle: "HEAVY_RAIL", line: "IC 137", from: "København H", to: "Odense St.", mins: 82,
+        agencies: [{ name: "DSB", url: "https://www.dsb.dk/" }] },
+      { mode: "transit", vehicle: "BUS", line: "470R", from: "Odense St.", to: "Esbjerg", mins: 40,
+        agencies: [{ name: "Sydtrafik", url: "https://www.sydtrafik.dk/" }] },
+      { mode: "walking", mins: 8 },
+    ];
+    const parts = journeyParts(STEPS, 150);
+    is("the leg carries who runs it", parts?.legs?.[0]?.agencies?.[0]?.name, "DSB");
+    is("and their url, which is the half that gets dropped", parts?.legs?.[0]?.agencies?.[0]?.url, "https://www.dsb.dk/");
+    is("both operators come out of a two-leg journey", journeyAgencies(parts).map(a => a.name), ["DSB", "Sydtrafik"]);
+    // Deduplicated by name: a four-leg DSB journey is one operator, and printing
+    // it four times reads as clutter rather than as attribution.
+    is("one operator across four legs is named once",
+       journeyAgencies(journeyParts([
+         { mode: "transit", vehicle: "HEAVY_RAIL", line: "A", mins: 10, agencies: [{ name: "DSB", url: "https://www.dsb.dk/" }] },
+         { mode: "transit", vehicle: "HEAVY_RAIL", line: "B", mins: 10, agencies: [{ name: "DSB", url: "https://www.dsb.dk/" }] },
+       ], 20)).length, 1);
+    // A name with no link is still printed. The requirement is names and urls,
+    // and half of it met honestly beats a name suppressed because the feed had no
+    // link for it.
+    // Read DIRECTLY, not through journeyParts: that function filters nameless
+    // agencies out when it builds the leg, so routing this through it tests the
+    // upstream filter twice and this reader not at all.
+    is("a nameless url is not an operator", journeyAgencies({ legs: [{ agencies: [{ name: "", url: "https://x.dk" }] }] }), []);
+    is("nor is a blank one", journeyAgencies({ legs: [{ agencies: [{ name: "   " }] }] }), []);
+    is("and journeyParts drops it before that anyway",
+       journeyParts([{ mode: "transit", vehicle: "BUS", mins: 5, agencies: [{ name: "", url: "https://x.dk" }] }], 5)?.legs?.[0]?.agencies, []);
+    is("an operator with no link is still named",
+       journeyAgencies(journeyParts([{ mode: "transit", vehicle: "BUS", mins: 5, agencies: [{ name: "Movia" }] }], 5)), [{ name: "Movia", url: "" }]);
+    ok("and a junk link is not printed as one",
+       journeyAgencies(journeyParts([{ mode: "transit", vehicle: "BUS", mins: 5, agencies: [{ name: "Movia", url: "javascript:alert(1)" }] }], 5))[0]?.url === "");
+    is("a journey nobody recorded an operator for names none", journeyAgencies({ legs: [{ line: "A" }] }), []);
+    is("and nothing at all is safe", journeyAgencies(null), []);
+    ok("the attribution says which service measured it", /Google Maps/.test(JOURNEY_SOURCE));
+
+    // THE ALLOW-LIST, in the same edit that created the field. This file has
+    // eaten a feature five times by not naming one.
+    const shaped = shapeForLive("free", {
+      name: "Koldinghus", city: "Kolding", desc: "d", special: "s", whoFor: "w", realityCheck: "r", thingsToKnow: [],
+      __journey: { ...parts, from: "Copenhagen", at: "2026-08-17" },
+    });
+    is("the operator survives publish", shaped?.__journey?.legs?.[0]?.agencies?.[0]?.name, "DSB");
+    is("with the url", shaped?.__journey?.legs?.[0]?.agencies?.[0]?.url, "https://www.dsb.dk/");
+    // Bounded, like every other list on this shape.
+    is("and the list is bounded", shapeForLive("free", {
+      name: "X", city: "Y", desc: "d", special: "s", whoFor: "w", realityCheck: "r", thingsToKnow: [],
+      __journey: { total: 10, at: "2026-08-17", legs: [{ vehicle: "train", mins: 10, agencies: Array.from({ length: 9 }, (_, i) => ({ name: `A${i}` })) }] },
+    })?.__journey?.legs?.[0]?.agencies?.length, 3);
+
+    // And the capture itself, or every future draft carries a name with no link.
+    const dir = readFileSync(join(root, "api/directions.js"), "utf8");
+    ok("the endpoint captures the agency url", /url: String\(a\?\.url \|\| ""\)\.trim\(\)/.test(dir));
+    ok("as pairs, so a name cannot end up beside the wrong link", /agencies: \(line\.agencies \|\| \[\]\)/.test(dir));
+    ok("and the old joined name string is left alone", /agency: \(line\.agencies \|\| \[\]\)\.map\(a => a\.name\)/.test(dir));
+  }
+
   // ── AND IT IS ON THE PAGE ────────────────────────────────────────
   // A card nothing renders is what this whole block is about. Three days of
   // measured journeys were stored by a writer whose own comment said something
@@ -18872,8 +19158,31 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the legs are printed", /\{steps\.map\(\(st, i\) =>/.test(jc));
   // The stamp above all of them: it is what makes the rest publishable, and a
   // card that computes a date and shows none is the __hours mistake with extra
-  // steps.
-  ok("and the date is printed", />\{stamp\}</.test(jc));
+  // steps. The stamp shares its line with the source attribution as of 17 Aug,
+  // so it is no longer the only thing between the tags.
+  ok("and the date is printed", /\{stamp\}\s*\n?\s*<\/div>/.test(jc));
+
+  // ── WHO RAN IT AND WHO MEASURED IT ───────────────────────────────
+  // Google's Directions policy: an application displaying these results "must
+  // display the names and URLs of the transit agencies that supply the trip
+  // results", and its attribution must be visible wherever the data is. Until
+  // 17 Aug this card showed a measured Google journey with neither, which is a
+  // licence term rather than a nicety, and the card is the thing that put the
+  // data on screen in the first place.
+  ok("the source is named on the card", /\{JOURNEY_SOURCE\}/.test(jc));
+  ok("and the operators are named", /journeyAgencies\(parts\)/.test(jc));
+  // Computed is not shown. The gate and the loop are both asserted, because
+  // wrapping the block in a false condition leaves the call sitting there.
+  ok("the operators are on screen, not just in a const", /\{agencies\.length > 0 && \(/.test(jc));
+  ok("and every one of them is printed", /\{agencies\.map\(\(a, i\) =>/.test(jc));
+  ok("with their own links, which is the half that is easy to drop",
+     /a\.url\s*\n?\s*\? <a href=\{a\.url\}/.test(jc));
+  // The guide renders the same leg list off its own live measurement, so it
+  // needs the same line. One of the two carrying it is the version that looks
+  // done and is not.
+  const gpJ = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the guide's leg list says it too", /\{JOURNEY_SOURCE\}/.test(gpJ));
+  ok("and names the operators there as well", /journeyAgencies\(journey\)/.test(gpJ));
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
   // Anchored on the whole line, not on the tag. `{false && <JourneyCard ... />}`
   // contains the tag and renders nothing, and that mutant survived a version of
@@ -19354,6 +19663,330 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     ok("food places and food streets are linked", /<EntryLink type=\{spot\.isFoodStreet \? "foodStreet" : "food"\}/.test(appU));
     ok("bars and bar streets are linked", /<EntryLink type=\{spot\.isStreet \? "nightStreet" : "night"\}/.test(appU));
   }
+}
+
+// ── DID WE WRITE IT, OR DID WE MOVE IT ──────────────────────────────
+//
+// Oliver, 17 Aug 2026: "do you rewrite it properly so we do not getting plagiat?"
+//
+// The pipeline had a good argument and no measurement. Page text is fetched for
+// targeted extraction, search results are kept as a title and a snippet, an
+// OpenAI pass turns those into notes, and Claude writes prose from the notes, so
+// a published sentence is two abstraction layers from any source's wording and
+// nothing raw is stored on the row. Every part of that is true and none of it was
+// checked. The invented-claim pass proves the OPPOSITE direction, that a claim
+// traces back to the research, and a sentence can trace back perfectly while
+// being the source's own sentence with two words changed.
+{
+  const { longestEcho, echoWords, isNameEcho, echoInDraft, describeEcho, ECHO_RUN } = M;
+  // The real case, from his own Jomfru Ane Gade draft and the pages behind it.
+  const SRC = "Jomfru Ane Gade is often described as the longest street in the country made up entirely of drinking venues, and it fills from Thursday night onward.";
+  const LIFTED = "It is the longest street in the country made up entirely of drinking venues, which is why people come.";
+  const OWN = "Nearly every storefront on the strip is a bar, a club or a late kitchen, and that is what earns the reputation.";
+
+  is("a lifted clause is found, with its own length", longestEcho(LIFTED, SRC)?.run, 12);
+  is("and quoted, because a person has to judge it", longestEcho(LIFTED, SRC)?.words,
+     "the longest street in the country made up entirely of drinking venues");
+  is("prose that shares only ideas is not a run", longestEcho(OWN, SRC)?.run, 0);
+  // Case and Danish letters cannot hide a copy, and re-punctuating is not a
+  // rewrite: both sides are folded and stripped before comparing.
+  is("case is not a rewrite", longestEcho(LIFTED.toUpperCase(), SRC)?.run, 12);
+  is("nor is punctuation", longestEcho("It is, the longest; street in the country made up entirely of drinking venues!", SRC)?.run, 12);
+  is("nor is a Danish letter", longestEcho("gaden er den længste gade i landet med udelukkende vaerts huse", "her er den laengste gade i landet med udelukkende vaerts huse i byen")?.run, 10);
+  // Short of the threshold is not a finding. Seven words of ordinary travel
+  // phrasing collide by accident; eight in a row do not.
+  is("seven shared words is not reported", longestEcho("made up entirely of drinking venues in town", SRC)?.run, 0);
+  is("nothing against nothing is nothing", longestEcho("", SRC)?.run, 0);
+  is("and nothing to compare against is nothing", longestEcho(LIFTED, "")?.run, 0);
+  // ── WHOLE WORDS ONLY, AND THE FIXTURE HAS TO PROVE IT ────────────
+  // Without the padding on both ends, "venue" matches inside "venues" and the run
+  // reads one word longer than it is. That needs a draft whose run ENDS on a word
+  // the source only contains as a prefix, or the assertion passes either way: the
+  // first version of this used a fixture that shared nothing at all and proved
+  // nothing.
+  {
+    const WHOLE = "it is made up entirely of drinking venues from end to end";
+    is("a run must end on a whole word", longestEcho("it is made up entirely of drinking venue", WHOLE)?.run, 0);
+    is("and the same run ending on the real word is found", longestEcho("it is made up entirely of drinking venues", WHOLE)?.run, 8);
+  }
+  // The same run shifted along by one word is the same finding.
+  is("one run is reported once", (() => {
+    const hits = echoInDraft({ desc: LIFTED }, { "https://a.dk": SRC });
+    return hits.length;
+  })(), 1);
+
+  // ── A PLACE'S OWN NAME IS NOT A COPIED SENTENCE ──────────────────
+  // The one false positive worth building for. "Det Nye Museum for Papirkunst i
+  // Hjørring" is seven words before anything is copied, and of course a page
+  // about it contains that name too. Flagging it would teach the reader of this
+  // report to ignore the report.
+  {
+    // The shared run has to be EIGHT words or more or there is no finding to
+    // excuse, and the first version of this test used a seven-word name: it
+    // passed with the guard deleted, which is the whole thing it exists to check.
+    const NAMESRC = "Det Nye Museum for Papirkunst i Hjoerring is a small museum.";
+    const NAMEDRAFT = "Det Nye Museum for Papirkunst i Hjoerring is a small museum you can see in an hour.";
+    is("a shared run that is only the name is not a finding",
+       echoInDraft({ desc: NAMEDRAFT }, { "https://b.dk": NAMESRC }, { name: "Det Nye Museum for Papirkunst" }), []);
+    is("and it really is a run, so the guard is what dropped it",
+       longestEcho(NAMEDRAFT, NAMESRC)?.run, 11);
+    ok("said plainly by the reader that decides it",
+       isNameEcho("det nye museum for papirkunst i hjoerring is a small museum", "Det Nye Museum for Papirkunst"));
+    // ── AND THE GUARD DOES NOT SWALLOW A REAL COPY ─────────────────
+    // A run that STARTS with the name and continues into somebody else's
+    // sentence is a copy. The name's words come out, and what is left has to be
+    // short on its own before it is excused: "shorter than the whole run" would
+    // excuse everything, since a name always removes at least one word.
+    const NAMED_COPY = "Jomfru Ane Gade is the longest street in the country made up entirely of drinking venues.";
+    ok("a real copy that begins with the name is still found",
+       echoInDraft({ desc: NAMED_COPY }, { "https://b.dk": NAMED_COPY }, { name: "Jomfru Ane Gade" }).length > 0);
+    is("and it is reported at its real length",
+       echoInDraft({ desc: NAMED_COPY }, { "https://b.dk": NAMED_COPY }, { name: "Jomfru Ane Gade" })[0]?.run, 16);
+    ok("with no name given, nothing is excused", !isNameEcho("the longest street in the country", ""));
+  }
+
+  // ── EVERY WRITTEN FIELD, INCLUDING THE BULLETS ───────────────────
+  // A lifted bullet is exactly as much of a problem as a lifted sentence, and
+  // Things to Know is an array.
+  {
+    const hits = echoInDraft(
+      { desc: OWN, thingsToKnow: ["Nothing here", LIFTED] },
+      { "https://a.dk": SRC, "https://c.dk": "unrelated words entirely" },
+    );
+    is("a bullet is checked too", hits[0]?.field, "thingsToKnow");
+    is("and the url it matches is named", hits[0]?.url, "https://a.dk");
+    is("a source it does not match is not reported", hits.filter(h => h.url === "https://c.dk"), []);
+    // ── WORST FIRST, AND THE FIELD NAMES ARE CHOSEN TO PROVE IT ────
+    // The long run sits in the alphabetically LAST field. With it in the first
+    // one, a version sorted by field name rather than by length still names the
+    // right group and the assertion proves nothing.
+    {
+      const two = echoInDraft(
+        { alpha: "it fills up from Thursday night onward and stays that way", zeta: LIFTED },
+        { "https://a.dk": "it fills up from Thursday night onward and stays that way until closing", "https://b.dk": SRC },
+      );
+      is("two real findings", two.length, 2);
+      is("the longest run leads, not the first field alphabetically", two[0]?.field, "zeta");
+      is("and it is the longer of the two", two[0]?.run, 12);
+    }
+  }
+  // Measured fields are the caller's job to exclude (App.jsx passes
+  // writtenFields), and an empty input is not an error.
+  is("no sources means nothing to compare", echoInDraft({ desc: LIFTED }, {}), []);
+  is("no fields means nothing to compare", echoInDraft(null, { "https://a.dk": SRC }), []);
+  is("a Map is read as well as an object", echoInDraft({ desc: LIFTED }, new Map([["https://a.dk", SRC]])).length, 1);
+
+  // ── IT REPORTS, IT DOES NOT SENTENCE ─────────────────────────────
+  // Copyright protects expression and not facts, and where the line falls is a
+  // judgement a person makes with the words in front of them.
+  {
+    const line = describeEcho(echoInDraft({ desc: LIFTED }, { "https://a.dk": SRC }));
+    ok("the run is quoted", /"the longest street in the country made up entirely of drinking venues"/.test(line));
+    ok("the field is named", /in desc/.test(line));
+    ok("the url is named", /https:\/\/a\.dk/.test(line));
+    ok("and it says facts arriving intact are fine", /Facts arrive intact and that is fine/.test(line));
+    ok("it never calls anything plagiarism", !/plagiar|steal|stolen|infring/i.test(line));
+    ok("a clean draft is told so plainly", /Nothing here is lifted/.test(describeEcho([])));
+  }
+  is("the threshold is eight words", ECHO_RUN, 8);
+  // fold maps ø to o and æ to ae, the same way every other reader in this
+  // codebase does: Ærø is aero everywhere, not aeroe.
+  is("folding keeps Danish letters as letters", echoWords("Ærø's gade"), ["aero", "s", "gade"]);
+
+  // ── AND IT RUNS ON EVERY DRAFT ───────────────────────────────────
+  const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the gate runs against what the writer wrote", /const echoes = echoInDraft\(writtenFields\(t\), urlSaidWhat, \{ name \}\);/.test(appE));
+  ok("and the finding reaches the founder's notes", /noteToFounder\(describeEcho\(echoes\)\);/.test(appE));
+  ok("with a step in the run log either way", /Wording against the sources\$\{suffix\}/.test(appE));
+  // writtenFields and not the whole draft: a measured field is supposed to match
+  // its source exactly, and asking whether a station name is original is the
+  // category error the fact-checker made on 12 August.
+  ok("the measured fields are not judged for originality", !/echoInDraft\(t,/.test(appE));
+}
+
+// ── "DO YOU MEAN..." ────────────────────────────────────────────────
+//
+// Oliver, 17 Aug 2026: "you can also make it ask me, if it's not sure, 'do you
+// mean..' like if multiple searches pop up."
+//
+// He arrived at it from the other end. His Heidi's draft was typed "Heidi's
+// (Aalborg)", and that parenthetical is a disambiguator he invented by hand
+// because nothing offered him one. It is also what broke the run: the searches
+// used that literal string, the relevance filter refused everything, and the
+// entry shipped with one source that could not be read.
+//
+// THE POINT OF THESE TESTS IS THE NOT-ASKING. A planner that asks a question it
+// could have answered is the paperwork feeling he complained about this morning
+// in the Detour chat, and the cost of asking too often is that he stops reading.
+{
+  const { cleanCandidates, sameSubject, sameCandidate, needsChoosing, choicesFor, describeChoosing, applyChoice, choiceNote, CHOICE_LIMIT } = M;
+  const CHAIN = [
+    { name: "Heidi's Bier Bar Aalborg", address: "Jomfru Anes Gård 5, 9000 Aalborg, Denmark", town: "Aalborg", lat: 57.05, lon: 9.92 },
+    { name: "Heidi's Bier Bar Aarhus", address: "Åboulevarden 12, 8000 Aarhus, Denmark", town: "Aarhus", lat: 56.15, lon: 10.21 },
+    { name: "Heidi's Bier Bar København", address: "Vestergade 18, 1456 København, Denmark", town: "København", lat: 55.68, lon: 12.57 },
+  ];
+
+  // ── WHEN IT MUST ASK ─────────────────────────────────────────────
+  // One name, three cities. This is most of the real cases and the whole reason
+  // a bare name cannot settle it.
+  ok("a chain in three cities is a real question", needsChoosing("Heidi's", CHAIN));
+  is("and all three are offered", choicesFor("Heidi's", CHAIN).length, 3);
+  ok("the towns are named, because the town is what distinguishes them",
+     /in Aalborg, Aarhus, København/.test(describeChoosing("Heidi's", CHAIN)));
+  // Two genuinely different subjects in one town is also a question.
+  ok("two different places in one town is a question", needsChoosing("Ribe", [
+    { name: "Ribe Domkirke", town: "Ribe", lat: 55.32, lon: 8.76 },
+    { name: "Ribe VikingeCenter", town: "Ribe", lat: 55.30, lon: 8.77 },
+  ]));
+
+  // ── WHEN IT MUST NOT ─────────────────────────────────────────────
+  const ONE = [{ name: "Heidi's Bier Bar Aalborg", address: "Jomfru Anes Gård 5, 9000 Aalborg", town: "Aalborg", lat: 57.05, lon: 9.92 }];
+  ok("one candidate is never a question", !needsChoosing("Heidi's (Aalborg)", ONE));
+  ok("nor is none at all", !needsChoosing("Nowhere", []));
+  // The same bar listed twice by Google in one town is a duplicate, not a choice.
+  ok("the same place listed twice is not a question", !needsChoosing("Jomfru Ane Gade", [
+    { name: "Jomfru Ane Gade", town: "Aalborg", lat: 57.05, lon: 9.92 },
+    { name: "Jomfru Ane Gade Aalborg", town: "Aalborg", lat: 57.051, lon: 9.921 },
+  ]));
+  is("and the duplicate is not shown twice either", choicesFor("Jomfru Ane Gade", [
+    { name: "Jomfru Ane Gade", town: "Aalborg", lat: 57.05, lon: 9.92 },
+    { name: "Jomfru Ane Gade Aalborg", town: "Aalborg", lat: 57.051, lon: 9.921 },
+  ]).length, 1);
+
+  // ── THE SUBJECT TEST, WHICH THE REST RESTS ON ────────────────────
+  // A person typing into a box produces a partial name, not a variant. "Heidi's"
+  // is "Heidi's Bier Bar Aalborg" with less of its own name.
+  ok("a partial name is the same subject", sameSubject("Heidi's", "Heidi's Bier Bar Aalborg"));
+  ok("and a known variant still is", sameSubject("Copenhagen", "København"));
+  // Whole words on both sides, or every short Danish name matches half the country.
+  ok("a name inside a longer word is not the same subject", !sameSubject("Ribe", "Ribers Hus"));
+  ok("nor are two unrelated places", !sameSubject("Ribe Domkirke", "Ribe VikingeCenter"));
+  ok("nothing is not a subject", !sameSubject("", "Heidi's"));
+  // A town beats a name: the same words in two towns are two places.
+  ok("the same name in two towns is two places",
+     !sameCandidate({ name: "Heidi's Bier Bar", town: "Aalborg" }, { name: "Heidi's Bier Bar", town: "Aarhus" }));
+  ok("and with no town given, the name decides",
+     sameCandidate({ name: "Heidi's Bier Bar" }, { name: "Heidi's Bier Bar Aalborg" }));
+
+  // ── WHAT REACHES THE DRAFT ───────────────────────────────────────
+  // The name, the town and the coordinate move together. A name from one listing
+  // beside a coordinate from another is how a draft describes one place and maps
+  // a different one.
+  {
+    const applied = applyChoice("Heidi's (Aalborg)", CHAIN[0]);
+    is("the chosen name replaces the typed one", applied.name, "Heidi's Bier Bar Aalborg");
+    is("with its town", applied.town, "Aalborg");
+    is("and its coordinate", applied.coords, { lat: 57.05, lon: 9.92 });
+    ok("and it knows the name changed", applied.resolved);
+    // A silent rename is what the drafting rules already forbid: "note the
+    // correction in uncertainties rather than silently repeating it".
+    ok("so the draft can say so", /typed as "Heidi's \(Aalborg\)" and published under "Heidi's Bier Bar Aalborg"/.test(choiceNote("Heidi's (Aalborg)", applied)));
+    // Choosing none of them keeps everything as typed, and says nothing.
+    const kept = applyChoice("Heidi's (Aalborg)", null);
+    is("none of these keeps the typed name", kept.name, "Heidi's (Aalborg)");
+    is("with no coordinate borrowed from a guess", kept.coords, null);
+    is("and no note about a name that did not change", choiceNote("Heidi's (Aalborg)", kept), "");
+    // A name that resolves to itself is not a correction either.
+    ok("an exact match earns no note", !applyChoice("Heidi's Bier Bar Aalborg", CHAIN[0]).resolved);
+  }
+
+  // ── THE CANDIDATES ARE CLEANED BEFORE ANY OF THIS ────────────────
+  // A row with no coordinate cannot be chosen: it would resolve to nothing.
+  is("a candidate with no location is dropped", cleanCandidates([{ name: "X" }]), []);
+  is("and one with no name", cleanCandidates([{ lat: 1, lon: 2 }]), []);
+  is("the list is bounded", cleanCandidates(Array.from({ length: 20 }, (_, i) => ({ name: `P${i}`, lat: 1, lon: 2 }))).length, CHOICE_LIMIT);
+  is("five is the limit", CHOICE_LIMIT, 5);
+  is("and nothing at all is safe", cleanCandidates(null), []);
+
+  // ── AND THE QUESTION COSTS NOTHING TO ASK ────────────────────────
+  // Google bills Text Search per REQUEST on this field mask, not per result, so
+  // five candidates is the same call at the same price as one. The single result
+  // was never a cost decision, it was an assumption that the first hit is right.
+  const loc = readFileSync(join(root, "api/places-locate.js"), "utf8");
+  ok("the endpoint asks for five", /maxResultCount: 5/.test(loc));
+  ok("and returns them all", /candidates,/.test(loc));
+  ok("with the top hit still where every existing caller reads it",
+     /found: true,\s*\n\s*name: p\.displayName\?\.text/.test(loc));
+  ok("a candidate with no location never leaves the endpoint", /\.filter\(x => x\?\.location\)/.test(loc));
+  // Still the cheap field mask. Adding an hours field here would move every call
+  // in the file onto the enterprise tier, which is why the route is separate.
+  ok("and it is still the cheap field mask", !/openingHours/.test(loc));
+
+  // ── THE SAME QUESTION ABOUT A LISTING NOBODY CHOSE ───────────────
+  // Found 17 Aug while checking his Studio types. /api/places-hours returns
+  // data.places[0] blind and the draft takes the official website, the verified
+  // address, the verified opening hours and a coordinate from it. For a venue that
+  // is right. For a STREET, Google returns whichever business on it ranks first,
+  // and foodStreet has been in that gate for weeks.
+  const { subjectCore, listingMatchesSubject, describeListingRefusal } = M;
+
+  // The listing that IS the place, in both directions of fullness.
+  ok("a listing with more of its own name is the same place",
+     listingMatchesSubject("Heidi's", "Aalborg", "Heidi's Bier Bar"));
+  ok("a listing with less of it is too",
+     listingMatchesSubject("Gasoline Grill Copenhagen", "Copenhagen", "Gasoline Grill"));
+  // His own placeholder text says "Place name + city, e.g. Rundetaarn Copenhagen",
+  // so the typed name carries a town the listing will not have. Comparing those
+  // two literally refuses a correct listing, which is why the town comes off.
+  ok("the town he typed does not make the listing a stranger",
+     listingMatchesSubject("Rundetaarn Copenhagen", "Copenhagen", "Rundetårn"));
+  ok("and the Danish spelling of that town does not either",
+     listingMatchesSubject("Rundetaarn København", "København", "Rundetårn"));
+  // ── AND THE CASE THAT NEEDS THE TOWN GONE ────────────────────────
+  // A typed name with an extra word matches on its own: containment runs over the
+  // shorter side, so "Rundetaarn Copenhagen" finds "Rundetårn" with no help. It is
+  // when BOTH sides carry an extra word that the town has to come off first, and
+  // Google appending the branch's street is the everyday version of that.
+  ok("a branch suffix on Google's side and a town on his still match",
+     listingMatchesSubject("Gasoline Grill Copenhagen", "Copenhagen", "Gasoline Grill Landgreven"));
+  ok("and a listing that renames the place around its own name",
+     listingMatchesSubject("Rundetaarn Copenhagen", "Copenhagen", "Rundetårn Tower"));
+  ok("his parenthetical disambiguator comes off as well",
+     listingMatchesSubject("Heidi's (Aalborg)", "Aalborg", "Heidi's Bier Bar Aalborg"));
+
+  // ── AND THE ONE THIS EXISTS FOR ──────────────────────────────────
+  ok("a bar on the street is not the street",
+     !listingMatchesSubject("Jomfru Ane Gade Aalborg", "Aalborg", "Bar Ane"));
+  ok("a restaurant on the food street is not the food street",
+     !listingMatchesSubject("Jægergårdsgade Aarhus", "Aarhus", "Restaurant Domestic"));
+  ok("and the street itself, when Google has it, is",
+     listingMatchesSubject("Jomfru Ane Gade Aalborg", "Aalborg", "Jomfru Ane Gade"));
+  // A listing with no name cannot be checked, so it cannot be used.
+  ok("a nameless listing is refused", !listingMatchesSubject("Reffen", "Copenhagen", ""));
+  ok("and so is a listing for nothing typed", !listingMatchesSubject("", "", "Anything"));
+
+  // ── THE CORE, AND WHERE IT REFUSES TO STRIP ──────────────────────
+  is("the town comes off what he typed", subjectCore("Rundetaarn Copenhagen", "Copenhagen"), "Rundetaarn");
+  is("in either spelling", subjectCore("Rundetaarn Copenhagen", "København"), "Rundetaarn");
+  is("and the parenthetical with it", subjectCore("Heidi's (Aalborg)", "Aalborg"), "Heidi's");
+  // A parenthetical is his own note to himself and is never part of a registered
+  // name, so it comes off whether or not it happens to be the town. Asserted on a
+  // DISTRICT, because when the brackets hold the town the town-strip removes them
+  // anyway and the assertion would pass with the bracket handling deleted.
+  is("a parenthetical that is not the town comes off too",
+     subjectCore("Café Retro (Christianshavn)", "Copenhagen"), "Café Retro");
+  // "Aalborg Zoo" minus its town is "Zoo", which would match a zoo in any city,
+  // so the core is refused and the full name is compared instead. This is the
+  // assertion that stops the fix from being worse than the bug.
+  is("a name that is only its town plus a generic word keeps the town",
+     subjectCore("Aalborg Zoo", "Aalborg"), "Aalborg Zoo");
+  ok("so a zoo in another city is not this zoo",
+     !listingMatchesSubject("Aalborg Zoo", "Aalborg", "Aarhus Zoo"));
+  ok("while the right one still matches", listingMatchesSubject("Aalborg Zoo", "Aalborg", "Aalborg Zoo"));
+  is("with no town to strip, nothing is stripped", subjectCore("Reffen", ""), "Reffen");
+  is("and nothing typed stays nothing", subjectCore("", "Aalborg"), "");
+
+  // ── AND THE LOG HAS TO TELL THE TWO APART ────────────────────────
+  // "Google had nothing" and "Google had something about a different place" are
+  // different facts, and only one of them says anything about this place.
+  ok("the refusal names the listing it refused",
+     /"Bar Ane"/.test(describeListingRefusal("Jomfru Ane Gade", "Aalborg", "Bar Ane")));
+  ok("and says nothing was taken from it",
+     /no website, no address, no hours, no coordinate/.test(describeListingRefusal("Jomfru Ane Gade", "Aalborg", "Bar Ane")));
+  ok("a nameless listing reads as its own case",
+     /came back with no name/.test(describeListingRefusal("Reffen", "", "")));
+  ok("and neither reads as plagiarism or as an accusation",
+     !/wrong|lying|fake/i.test(describeListingRefusal("Jomfru Ane Gade", "Aalborg", "Bar Ane")));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

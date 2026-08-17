@@ -106,9 +106,33 @@ export const readerLanguage = (nav) => {
 // spends most of its effort keeping Danish OUT of reader-facing fields
 // (glanceExtract.js, looksUntranslated), and the one thing that must stay
 // Danish is a name somebody has to read off a building.
+// ── AND THE ORDER OF THESE TWO SENTENCES WAS THE BUG ────────────────
+//
+// 17 Aug 2026. A friend of Oliver's tested the Detour chat on a Danish phone,
+// typed "More simple and in copenhagen" in English, and was answered in Danish.
+// Then the app built him an English guide, because this block is attached to one
+// prompt and the guide is not translated at all.
+//
+// Both halves of the right rule were already in here. The problem was which one
+// shouted. The block opened with "ANSWER IN DANISH." in capitals and put "match
+// the language THEY used" in a subordinate clause after it, so the browser
+// setting won a fight it was never meant to be in.
+//
+// A browser tag says where a DEVICE is configured. It does not say which
+// language the person holding it chose to write in, and half of Denmark's
+// phones are set to Danish while their owners type to a travel site in English.
+// So the typed language leads now, in capitals, and the tag is named as the hint
+// it is. Nothing else in this file changed.
+//
+// THE TICK-BOX CASE IS THE ONE EXCEPTION, and it has to be stated or this
+// overcorrects: the intake form's options are the app's own English labels, so a
+// Danish traveller who has only ticked boxes has not written anything, and
+// reading those labels as "they chose English" would be the same mistake in the
+// other direction.
 export const answerInLanguage = (lang) => {
   if (!lang?.name) return "";
-  return `ANSWER IN ${lang.name.toUpperCase()}. The traveller's browser is set to ${lang.tag}, so write your reply in ${lang.name}. If they write to you in a different language, match the language THEY used instead: what they typed is better evidence than a browser setting.
+  return `MATCH THE TRAVELLER'S OWN LANGUAGE. Read their most recent message and reply in the language THEY wrote it in. That rule outranks everything else in this block.
+Their browser is set to ${lang.tag}, which suggests ${lang.name}. Treat that as a hint for a first reply and nothing more: it says where a device is configured, not which language the person chose to write in. If they write in English, reply in English. If they switch language halfway through, switch with them. Only when the sole thing they have sent is a form of ticked options, with no sentence of their own anywhere, does the hint decide, and then reply in ${lang.name}.
 NEVER TRANSLATE A NAME. Place names, town names, station and stop names, street names, ferry routes and the names of festivals and venues stay exactly as they are written in Danish or English, because the traveller has to match them against a sign, a departure board or a ticket machine that will not be translated. Prices stay in DKK with the figure unchanged. Write the sentence around the name in ${lang.name}; leave the name alone.`;
 };
 

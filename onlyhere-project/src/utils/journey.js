@@ -109,6 +109,22 @@ export const journeyParts = (steps, totalMinutes) => {
     legs: rides.map(s => ({
       vehicle: vehicleWord(s.vehicle), line: s.line || "",
       from: s.from || "", to: s.to || "", mins: mins(s),
+      // ── WHO RUNS IT, WHICH IS A LICENCE TERM AND ALSO USEFUL ────────
+      // 17 Aug 2026. Google's Directions policy requires an application
+      // displaying these results to "display the names and URLs of the transit
+      // agencies that supply the trip results", and this function was dropping
+      // the agency on the floor: api/directions.js has captured the name since 6
+      // August and the leg it built here never carried it.
+      //
+      // It is worth having for its own sake too. "train IC 137 to Odense St."
+      // becomes something a traveller can act on when it says DSB and links to
+      // the timetable, and this app already believes that: operators.js exists to
+      // name an operator per leg, by inference, from the towns. This is the same
+      // answer from the source that actually knows.
+      agencies: (Array.isArray(s.agencies) ? s.agencies : [])
+        .map(a => ({ name: String(a?.name || "").trim(), url: String(a?.url || "").trim() }))
+        .filter(a => a.name)
+        .slice(0, 3),
     })),
     vehicles: [...new Set(rides.map(s => vehicleWord(s.vehicle)).filter(Boolean))],
   };
@@ -761,6 +777,41 @@ export const journeyDriving = (parts) => {
   if (!Number.isFinite(m) || m <= 0) return "";
   return `${hm(m)} by car`;
 };
+
+// ── WHO RAN THE TRIP, ONCE, WITH THEIR LINKS ────────────────────────
+// Google's Directions policy: an application displaying these results "must
+// display the names and URLs of the transit agencies that supply the trip
+// results". So this is not a nicety, it is the condition on showing the journey
+// at all, and it is also the most useful line on the card for anybody who wants
+// a timetable.
+//
+// Deduplicated by name, because a four-leg journey on DSB is one agency and
+// printing it four times reads as clutter rather than as attribution. A name
+// with no URL is still printed: the requirement is names AND urls, and half of
+// the requirement met honestly beats a name suppressed because Google's feed
+// happened to omit a link.
+//
+// EMPTY FOR EVERY ROW DRAFTED BEFORE 17 AUG, and that is the honest state of
+// them: the agency was never stored, so nobody knows who ran those trips. The
+// card handles that by naming Google as the source and nobody else.
+export const journeyAgencies = (parts) => {
+  const seen = new Set();
+  const out = [];
+  (Array.isArray(parts?.legs) ? parts.legs : []).forEach(l => {
+    (Array.isArray(l?.agencies) ? l.agencies : []).forEach(a => {
+      const name = String(a?.name || "").trim();
+      if (!name || seen.has(name.toLowerCase())) return;
+      seen.add(name.toLowerCase());
+      out.push({ name, url: /^https?:\/\//i.test(String(a?.url || "").trim()) ? String(a.url).trim() : "" });
+    });
+  });
+  return out;
+};
+
+// The attribution itself, in the words the policy asks for. Google's guidelines
+// accept the text "Google Maps" where the logo is impractical, and this is the
+// same sentence on every card so a reader learns what it means once.
+export const JOURNEY_SOURCE = "Route and times measured with Google Maps.";
 
 // ── THE DATE, WHICH IS WHAT MAKES THE REST PUBLISHABLE ──────────────
 // `today` is a parameter and not a call to the clock, for the reason

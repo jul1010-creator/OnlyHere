@@ -55,7 +55,17 @@ export default async function handler(req, res) {
         // whole reason the route is separate.
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
       },
-      body: JSON.stringify({ textQuery, languageCode: "da", regionCode: "DK", maxResultCount: 1 }),
+      // ── FIVE INSTEAD OF ONE, AND IT COSTS THE SAME ────────────────
+      // Oliver, 17 Aug 2026: "you can also make it ask me, if it's not sure, 'do
+      // you mean..' like if multiple searches pop up."
+      //
+      // Text Search is billed per REQUEST on this basic field mask, not per
+      // result, so asking for five candidates is the same call at the same price
+      // as asking for one. The single result was not a cost decision, it was an
+      // assumption that the first hit is the right one, and his Heidi's draft is
+      // what that assumption costs when it is wrong: a full research pass, 167
+      // seconds, on a bar whose name the searches could not match.
+      body: JSON.stringify({ textQuery, languageCode: "da", regionCode: "DK", maxResultCount: 5 }),
     });
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || "Places text search failed" });
@@ -65,6 +75,21 @@ export default async function handler(req, res) {
     // route rather than as "Google does not know this one". The caller falls
     // back to the town centre and says so in the run log.
     if (!p?.location) return res.status(200).json({ found: false });
+    // ── THE TOP HIT STAYS EXACTLY WHERE IT WAS ────────────────────────
+    // Every caller of this route reads name/lat/lon/address/town off the top
+    // level, so those keep meaning what they meant. `candidates` is additive: a
+    // caller that does not know about it behaves as it did before, and the one
+    // that does can ask which place was meant.
+    const candidates = (data.places || [])
+      .filter(x => x?.location)
+      .map(x => ({
+        name: x.displayName?.text || "",
+        address: x.formattedAddress || "",
+        town: townFromAddress(x.formattedAddress),
+        lat: x.location.latitude,
+        lon: x.location.longitude,
+      }))
+      .filter(x => x.name);
     return res.status(200).json({
       found: true,
       name: p.displayName?.text || "",
@@ -72,6 +97,7 @@ export default async function handler(req, res) {
       town: townFromAddress(p.formattedAddress),
       lat: p.location.latitude,
       lon: p.location.longitude,
+      candidates,
     });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });

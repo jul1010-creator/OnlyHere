@@ -133,6 +133,23 @@ export default async function handler(req, res) {
         vehicle: (line.vehicle?.type || "").toUpperCase(),      // BUS, HEAVY_RAIL, FERRY, ...
         line: line.short_name || line.name || "",
         agency: (line.agencies || []).map(a => a.name).filter(Boolean).join(", "),
+        // ── AND THE AGENCY'S OWN URL, WHICH IS A LICENCE TERM ─────────
+        // 17 Aug 2026. The joined name string above has been kept since 6 Aug
+        // and it is not enough on its own. Google's Directions policy says, in
+        // as many words, that an application displaying these results "must
+        // display the names and URLs of the transit agencies that supply the
+        // trip results". The URL was in the same `agencies` array the names come
+        // out of, and nothing asked for it.
+        //
+        // Kept as an array of objects rather than a second joined string,
+        // because a name and its link have to stay attached to each other: two
+        // parallel comma-joined strings is how a bus company ends up linking to
+        // a railway. The old `agency` string stays exactly as it was, so
+        // everything reading it is untouched.
+        agencies: (line.agencies || [])
+          .map(a => ({ name: String(a?.name || "").trim(), url: String(a?.url || "").trim() }))
+          .filter(a => a.name)
+          .slice(0, 3),
         from: td.departure_stop?.name || "",
         to: td.arrival_stop?.name || "",
         departure: td.departure_time?.text || "",

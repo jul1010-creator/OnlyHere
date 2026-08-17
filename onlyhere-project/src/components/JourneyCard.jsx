@@ -1,5 +1,5 @@
 import { C } from "../utils/theme";
-import { storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, legSteps, arrivalStop } from "../utils/journey";
+import { storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, legSteps, arrivalStop, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
 
 // ── HOW YOU ACTUALLY GET THERE ────────────────────────────────────────
 //
@@ -43,6 +43,7 @@ export const JourneyCard = ({ item }) => {
   const driving = journeyDriving(parts);
   const getOff = arrivalStop(parts);
   const steps = legSteps(parts);
+  const agencies = journeyAgencies(parts);
 
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 18px", marginBottom: 22 }}>
@@ -92,11 +93,38 @@ export const JourneyCard = ({ item }) => {
         </div>
       )}
 
-      {/* THE DATE, AND WHY IT IS THE LAST THING RATHER THAN THE FIRST. It is not
-          a disclaimer to bury: it is what makes everything above it publishable,
-          and a reader who has just read a route is standing exactly where they
-          need to be told when somebody measured it. */}
-      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.6, marginTop: 10 }}>{stamp}</div>
+      {/* ── WHO RAN IT, AND WHO MEASURED IT ──────────────────────────
+          This is the licence and the useful line at once. Google's Directions
+          policy says an application displaying these results "must display the
+          names and URLs of the transit agencies that supply the trip results",
+          and that its own attribution must be visible wherever the data is,
+          which for a page with no Google map on it means saying so in words.
+          Until 17 Aug this card showed the journey with neither.
+
+          It is also the thing a traveller wants next. A route is only actionable
+          once you know whose timetable to open, and the agency link is that.
+
+          Rows drafted before 17 Aug carry no agency, because nothing stored one.
+          They get the source line and no operator, which is the honest version:
+          nobody knows who ran those trips. */}
+      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.6, marginTop: 10 }}>
+        {agencies.length > 0 && (
+          <span>
+            Run by{" "}
+            {agencies.map((a, i) => (
+              <span key={a.name}>
+                {i > 0 ? ", " : ""}
+                {a.url
+                  ? <a href={a.url} target="_blank" rel="noreferrer" style={{ color: C.light, textDecoration: "underline" }}>{a.name}</a>
+                  : a.name}
+              </span>
+            ))}
+            {". "}
+          </span>
+        )}
+        {JOURNEY_SOURCE}{" "}
+        {stamp}
+      </div>
     </div>
   );
 };

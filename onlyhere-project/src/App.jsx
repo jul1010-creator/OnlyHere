@@ -84,6 +84,7 @@ import { GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, glanceFieldsFor,
 import { sourceRulesBlock, directSourceSearches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, normaliseDomain, cleanNote, cleanPlace, blockCost, scopeTier, parseTypes, serialiseTypes, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL, srcForType, SRC_FOR_TYPE, PLACE_SOURCES, ESSENTIAL_CATEGORIES, sourceIsAboutPlace, nameIsDistinctive, isNeverOwnSite, isNeverASource } from "./utils/sourcePolicy";
 import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommunerIn, danishAddressIn } from "./utils/regions";
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
+import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoice";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
@@ -97,6 +98,7 @@ import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditPr
 import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, isUndated, UNDATED, parseEventDate } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { languageBlock, readerLanguage } from "./utils/readerLanguage";
+import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
 import { PhotoPlate } from "./components/PhotoPlate";
 import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
@@ -201,7 +203,63 @@ If you cannot confirm the crossing duration from the operator, leave it out enti
 // attraction, a bookable thing, a restaurant, a food street, a bar, a nightlife
 // town: yes, all of them. `essential` is deliberately absent and stays absent,
 // because buying a SIM card is not a place and has no journey.
-const PLACE_TYPES_WITH_A_JOURNEY = ["town", "festival", "free", "booking", "food", "foodStreet", "night", "nightTown"];
+// ── EVERY PLACE, WHICH MEANS EVERY TYPE BUT ONE ─────────────────────
+//
+// Oliver, 17 Aug 2026: "I want you to go through all these studios, and check if
+// all of them start with places and end with directions. Because that is
+// important."
+//
+// He was right to ask. This list had eight of the ten types, and the missing one
+// was nightStreet: a bar street got no transport search, no arrival point and no
+// measured journey, while foodStreet, sitting two entries along, got all three.
+// Those two are the same kind of thing, which is what settles it as an oversight
+// rather than a decision. Jomfru Ane Gade and Gothersgade were both drafted
+// without a journey for this reason.
+//
+// The comments at the three call sites tell the story of how it happened. Each
+// one records `night` and `nightTown` being added after somebody noticed the same
+// gap for those, and each time nightStreet was one line further down the same
+// list and was not.
+//
+// SO IT IS DERIVED NOW, NOT TYPED. Every content type is a place except an
+// essential, which is a rule about payment or tickets and has no address at all,
+// so the list is CONTENT_TYPES minus that one and a new type joins it by
+// existing. A hand-written list is what produced the hole, twice.
+const PLACE_TYPES_WITH_A_JOURNEY = CONTENT_TYPES.filter(t => t !== "essential");
+
+// ── AND THREE MORE LISTS IN THE SAME PIPELINE, SAME HOLE ────────────
+//
+// Checking his question properly meant reading every type gate in the draft
+// function, not just the journey one. There were three others, all hand-written,
+// and nightStreet was missing from all three: the official-site search, the
+// night-transport check, and Google's business listing. Four lists, one omission,
+// which is not four mistakes. It is one hand-written list copied four times.
+//
+// So the shapes of place are named ONCE here, and each is derived so that a new
+// content type cannot quietly be left out of one of them.
+
+// A single business at a single address: Google holds a listing with a
+// registered website, an address and real opening hours, and that listing is a
+// better answer than any search. This is the only list still written by hand,
+// because it is the only real distinction in the set, and the partition below is
+// asserted against CONTENT_TYPES so a new type has to be classified.
+const PLACES_THAT_ARE_ONE_BUSINESS = ["free", "booking", "food", "night"];
+
+// Everything else with an address: a town, an event, a street, a nightlife town.
+// Google has no single listing for these, so a dedicated official-site search is
+// the best tool available, and that search is where they were being skipped.
+const PLACES_THAT_ARE_AN_AREA = PLACE_TYPES_WITH_A_JOURNEY.filter(t => !PLACES_THAT_ARE_ONE_BUSINESS.includes(t));
+
+// Nightlife, and derived from the naming convention rather than typed: every
+// nightlife type in this codebase is called night-something. nightStreet was the
+// one missing from the 3am transport check, which is the one check where a bar
+// street and a bar are the same question.
+const NIGHTLIFE_TYPES = CONTENT_TYPES.filter(t => /^night/.test(t));
+
+// A listing is worth ASKING Google for on anything but a town, whose name maps
+// to a region rather than to a business. Whether the answer is worth USING is a
+// separate question, and it now gets asked: see listingMatchesSubject.
+const PLACES_WITH_A_LISTING = PLACE_TYPES_WITH_A_JOURNEY.filter(t => t !== "town");
 
 const FACT_CHECK_SCOPE_RULES = `SCOPE, AND THIS OVERRIDES EVERYTHING ELSE HERE: only report a correction that is about the EXACT same thing the draft is about. A real fact about a similar-but-different thing is not a correction, and offering it as one is worse than staying silent, because a correction gets trusted and applied.
 This has already caused a real, confirmed near-miss: a draft about one specific ferry route was "corrected" using the sailing time of a DIFFERENT route to the same island. Both durations were genuinely real. Applying the correction would have reverted an entry that had already been fixed.
@@ -2614,7 +2672,16 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // from Google's own listing (see the Places lookup below), which is a
       // registered URL rather than a search guess. A town or festival has no
       // business listing, so a dedicated search is the best available tool.
-      if (["town", "festival", "nightTown"].includes(sType)) {
+      //
+      // ── AND A STREET HAS NO BUSINESS LISTING EITHER ──────────────
+      // 17 Aug 2026. This list read ["town", "festival", "nightTown"], and by
+      // its own reasoning directly above, the two street types belong in it: a
+      // food street and a bar street are areas, not businesses, so Google has no
+      // single registered URL for them. They were therefore the only place types
+      // in the app getting NEITHER this search NOR a usable listing, which is
+      // most of why he said "the streets are for some reason quite wrong."
+      // Derived from the partition at the top of this file now.
+      if (PLACES_THAT_ARE_AN_AREA.includes(sType)) {
         try {
           const oq = sType === "town"
             // For a town the useful "official site" is rarely the town itself.
@@ -2622,6 +2689,12 @@ Say which answer came from which source, so a fact from a vouched page and a fac
             // ferry, the bus operator. Those are what decide a getting-there or
             // opening-hours claim, and those are what kept getting missed.
             ? `"${name}" Denmark official website attraction castle museum church opening hours tickets`
+            : (sType === "foodStreet" || sType === "nightStreet")
+            // Same logic as the town, one scale down. A street's authority is
+            // the venues ON it plus the city's own page about it, and those are
+            // what settle an opening hour or a closing time. Asking a street for
+            // "tickets programme practical info" would have found nothing.
+            ? `"${name}" Denmark street which bars restaurants venues are on it official websites opening hours`
             : `"${name}" Denmark official website tickets programme practical info`;
           const oRes = await fetch(`/api/search?q=${encodeURIComponent(oq)}`);
           const oData = await oRes.json();
@@ -3127,13 +3200,36 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // transport genuinely differs between them, same as UK transport stopping
       // earlier on weeknights than Fri/Sat.
       let transportFindings = "";
-      if (sType === "night" || sType === "nightTown") {
+      // ── NIGHTLIFE, WHICH IS EVERY night-SOMETHING TYPE ───────────
+      // This read `sType === "night" || sType === "nightTown"`, so a BAR STREET
+      // never got the one check that exists for "can I get home at 3am", which is
+      // the question a bar street is entirely about.
+      if (NIGHTLIFE_TYPES.includes(sType)) {
         const KNOWN_CITIES = ["Copenhagen", "Aarhus", "Aalborg", "Odense", "Esbjerg", "Randers", "Kolding", "Horsens", "Vejle", "Roskilde"];
-        const detectedCity = KNOWN_CITIES.find(c => name.includes(c));
+        // ── AND IT ALMOST NEVER FOUND A CITY ────────────────────────
+        // The city came only from the venue's OWN NAME containing it. "Jomfru Ane
+        // Gade" does not contain "Aalborg" and "Studenterhuset" does not contain
+        // "Aarhus", so for an individual bar or a street this block silently did
+        // nothing at all. It fired for nightTown, whose name IS the city, which
+        // is exactly why it looked like it was working.
+        //
+        // draftTown is resolved hundreds of lines above, before the research, and
+        // it is the town this draft is actually about. samePlaceName so a draft
+        // that says København still finds Copenhagen in the list.
+        const detectedCity = KNOWN_CITIES.find(c => name.includes(c))
+          || KNOWN_CITIES.find(c => samePlaceName(c, draftTown))
+          || String(draftTown || "").trim();
         if (detectedCity) {
           try {
+            // The origin is the coordinate this draft already paid for, when it
+            // is the place itself rather than a town centre. Re-geocoding the
+            // name here was a second Nominatim call for an answer already held,
+            // and on a miss it silently skipped the check.
+            const held = placed && placed.precise ? { lat: placed.lat, lon: placed.lon } : null;
             const [originRes, destRes] = await Promise.all([
-              fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name + ", Denmark")}&format=json&limit=1&countrycodes=dk`).then(r => r.json()),
+              held
+                ? Promise.resolve([{ lat: held.lat, lon: held.lon }])
+                : fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name + ", Denmark")}&format=json&limit=1&countrycodes=dk`).then(r => r.json()),
               fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(detectedCity + " Station, Denmark")}&format=json&limit=1&countrycodes=dk`).then(r => r.json()),
             ]);
             if (originRes?.[0] && destRes?.[0]) {
@@ -3499,7 +3595,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // A festival is not a permanent business, so Google will not have all of
       // them. It has plenty: the big ones, and anything at a fixed venue. When
       // it has nothing the call returns nothing and costs one lookup.
-      if (["free", "booking", "food", "foodStreet", "night", "festival", "nightTown"].includes(sType)) {
+      //
+      // ── AND IT IS DERIVED NOW, MINUS THE ONE REAL EXCLUSION ─────
+      // 17 Aug 2026. Still hand-written, still missing nightStreet, with
+      // foodStreet sitting inside it. Everything but a town has a listing worth
+      // asking for, so that is what the list says.
+      if (PLACES_WITH_A_LISTING.includes(sType)) {
         try {
           const hoursRes = await fetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`);
           const hoursData = await hoursRes.json();
@@ -3527,6 +3628,45 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             });
             // Marked, so the catch below does not log a second, vaguer note for
             // the same failure. Same pattern the permanent-closure stop uses.
+            throw new Error("places-hours already noted");
+          }
+          // ── AND IS THIS LISTING EVEN ABOUT THIS PLACE ───────────────
+          // Nothing here ever asked. /api/places-hours returns data.places[0]
+          // blind, and everything below it is the strongest material in the
+          // pipeline: the official website, which deliberately bypasses the
+          // domain matcher; the VERIFIED ADDRESS; the VERIFIED OPENING HOURS; and
+          // a re-derived coordinate that overwrites the frozen facts.
+          //
+          // For one business at one address that is right. For a STREET it is
+          // not, and foodStreet has been in this gate for weeks: a text search
+          // for "Jægergårdsgade Aarhus" returns whichever business on that street
+          // Google ranks first, and one restaurant's hours were then publishable
+          // as the street's verified hours. From inside this block a wrong
+          // listing and a right one are the same shape of answer, so the log
+          // could not show it either.
+          //
+          // A REFUSAL CAN BE WRONG, AND IT IS STILL THE RIGHT WAY ROUND. Google
+          // may hold a real listing under a name this cannot recognise: "Rømø
+          // Sandskulpturfestival" against a listing called "Sand Sculpture
+          // Festival Rømø" is one compound Danish word against three English
+          // ones. Refusing costs one lookup and is written into the log. Accepting
+          // a wrong one publishes another business's opening hours as this place's
+          // verified hours. And the types most likely to be refused here, the
+          // areas and the events, are exactly the ones that now get the dedicated
+          // official-site search above, so the two cover each other.
+          if (!listingMatchesSubject(name, draftTown, hoursData.name)) {
+            note("Opening hours and address", {
+              provider: "google", detail: "Places Text Search for the business listing",
+              outcome: "empty", used: false,
+              got: String(hoursData.name || "no name"),
+              why: describeListingRefusal(name, draftTown, hoursData.name),
+            });
+            decide("whether Google's listing is about this place", {
+              winner: "nothing",
+              loser: `Google's listing for "${String(hoursData.name || "").slice(0, 60)}"`,
+              rule: "A listing is only usable when its own name is the name of the thing being drafted. A search for a street returns a business on it.",
+              value: `${name} (${sType})`,
+            });
             throw new Error("places-hours already noted");
           }
           // Google's registered URL for this business, the authoritative answer
@@ -4597,8 +4737,32 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       //
       // sourceIsAboutPlace asks for corroboration instead, and only from names
       // that need it. "Ny Carlsberg Glyptotek" still identifies itself.
+      // ── AND A PAGE NOBODY COULD READ IS NOT HOW WE KNOW ANYTHING ──
+      // Oliver, 17 Aug 2026, on the Heidi's draft: "Seems like something is
+      // wrong here..." The row shipped with exactly one source,
+      // heidisbierbar.dk, and two steps of its own run log say that URL came
+      // back EMPTY, twice. Confirmed by hand afterwards: the site is a
+      // JavaScript shell that serves a viewport tag and no words, which is the
+      // same thing Gemlyx's own pages did to crawlers until yesterday.
+      //
+      // So the entry claimed provenance it did not have, under a heading that
+      // promises how we know. That is the "1 source? What da fk" complaint with
+      // the source removed as well.
+      //
+      // The cause is one line below this comment. The official site was waved
+      // through unconditionally, and the comment under it already stated the
+      // right rule for everything else: "No snippet at all means we never saw
+      // what the page says, and we do not conclude a fact from a failed lookup.
+      // It is not a source." The bypass answered "is this about the place",
+      // correctly, and accidentally answered "did we learn anything from it" too.
+      //
+      // Relevance and readability are two questions. The official site still does
+      // not have to prove it is about the place, and it does have to have been
+      // read: either a page the scanner got text out of, or a search snippet.
+      const readSomething = (u) =>
+        !!String(pagesByUrl[u] || "").trim() || !!String(urlSaidWhat.get(u) || "").trim();
       const mentionsThisPlace = (u) => {
-        if (placesWebsite && u === placesWebsite) return true;
+        if (placesWebsite && u === placesWebsite) return readSomething(u);
         // No snippet at all means we never saw what the page says, and we do not
         // conclude a fact from a failed lookup. It is not a source.
         // The town, from wherever this type keeps it. A night row has no `town`
@@ -5072,6 +5236,36 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
               ? `${fit.onSubject} of ${fit.heard} pages read mention the subject; ${fit.reference} of ${fit.total} hosts are encyclopedias`
               : "no page text to read",
             used: !fit.subjectUnsourced,
+          });
+          // ── AND WHETHER WE WROTE IT OR MOVED IT ─────────────────────
+          // Oliver, 17 Aug 2026: "do you rewrite it properly so we do not
+          // getting plagiat?"
+          //
+          // There was a good argument and no measurement. Page text is fetched
+          // for targeted extraction, search results are kept as a snippet, an
+          // OpenAI pass turns them into notes and Claude writes from the notes,
+          // so a sentence is two layers from any source's wording and nothing
+          // raw is stored on the row. All true, and none of it checked.
+          //
+          // The invented-claim pass proves the opposite direction: that a claim
+          // traces back to the research. A sentence can trace back perfectly
+          // while being the source's own sentence with two words changed.
+          //
+          // writtenFields, so only what the WRITER wrote is judged. A measured
+          // field is supposed to match its source exactly, and asking whether a
+          // station name is original is the category error the fact-checker made
+          // on 12 August. The name is passed in because a place's own name is
+          // seven words of unavoidable overlap, not a copied sentence.
+          const echoes = echoInDraft(writtenFields(t), urlSaidWhat, { name });
+          noteToFounder(describeEcho(echoes));
+          note(`Wording against the sources${suffix}`, {
+            provider: "fetch",
+            detail: `every written field against what each page said, looking for a run of ${ECHO_RUN} words or more`,
+            outcome: echoes.length ? "empty" : "ok",
+            got: echoes.length
+              ? `${echoes.length} shared ${echoes.length === 1 ? "run" : "runs"}, longest ${echoes[0].run} words in ${echoes[0].field}`
+              : `no run of ${ECHO_RUN} words or more appears in any source we read`,
+            used: true,
           });
         }
 

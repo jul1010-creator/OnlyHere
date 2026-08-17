@@ -309,6 +309,17 @@ export const shapeForLive = (type, t) => {
         legs: (Array.isArray(jp.legs) ? jp.legs : []).slice(0, 8).map(l => ({
           vehicle: String(l?.vehicle || ""), line: String(l?.line || ""),
           from: String(l?.from || ""), to: String(l?.to || ""), mins: Number(l?.mins) || 0,
+          // ── AND THE AGENCY, ADDED IN THE SAME EDIT THAT CREATED IT ──
+          // The rule this file has learned five times: a field a draft computes
+          // and this allow-list does not name never reaches the database. This
+          // one is not optional either. Google's Directions policy requires an
+          // application displaying these results to show "the names and URLs of
+          // the transit agencies that supply the trip results", so dropping it
+          // here would leave the journey card unable to meet the condition on
+          // showing the journey at all.
+          agencies: (Array.isArray(l?.agencies) ? l.agencies : []).slice(0, 3).map(a => ({
+            name: String(a?.name || ""), url: String(a?.url || ""),
+          })).filter(a => a.name),
         })),
         drivingMins: Number.isFinite(Number(jp.drivingMins)) ? Number(jp.drivingMins) : null,
         from: String(jp.from || "Copenhagen"),

@@ -10,7 +10,7 @@ import { ensureLiveContentLoaded } from "../utils/liveContent";
 import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
 import { partOfCountry } from "../utils/geography";
-import { journeyFromStored, legSteps, worthShowingLegs } from "../utils/journey";
+import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
 import { askClaude } from "../utils/aiClient";
 import { testTravelerLine, isFerryText, daysUntil } from "../utils/helpers";
@@ -1213,6 +1213,30 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                       : "This journey includes a ferry crossing."}
                   </div>
                 )}
+                {/* ── WHO RAN IT, AND WHO MEASURED IT ──────────────────
+                    The same licence line the place page carries, for the same
+                    reason: this leg list is Google Directions data, and its
+                    policy asks for a visible attribution plus "the names and
+                    URLs of the transit agencies that supply the trip results".
+                    A guide has no Google map on it either, so it is said in
+                    words here too. See utils/journey.js for the readers. */}
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+                  {journeyAgencies(journey).length > 0 && (
+                    <span>
+                      Run by{" "}
+                      {journeyAgencies(journey).map((a, ai) => (
+                        <span key={a.name}>
+                          {ai > 0 ? ", " : ""}
+                          {a.url
+                            ? <a href={a.url} target="_blank" rel="noreferrer" style={{ color: C.light, textDecoration: "underline" }}>{a.name}</a>
+                            : a.name}
+                        </span>
+                      ))}
+                      {". "}
+                    </span>
+                  )}
+                  {JOURNEY_SOURCE}
+                </div>
               </div>
             );
             if (!ops.length && !legList) return chip;
