@@ -297,7 +297,13 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
     try {
       const list = JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]");
       if (list.some(g => g && g.id === guideId)) { setKeptAlready(true); return; }
-      const updated = [{ id: guideId, title: guide.title, days: guide.days, savedAt: new Date().toISOString() }, ...list].slice(0, 20);
+      // arrivalDate is the one field the LIST itself reads rather than the guide:
+      // App.jsx's checkSavedGuidesWeather walks the saved rows and lines each day
+      // up against the forecast from it. Without it a kept guide is skipped
+      // silently and its owner never hears that the rain moved. The trip itself
+      // does not need to be copied here, because a string id means the full
+      // payload is already in gemlyx_guides and openSavedGuide routes to it.
+      const updated = [{ id: guideId, title: guide.title, days: guide.days, savedAt: new Date().toISOString(), arrivalDate: guide._arrivalDate || null }, ...list].slice(0, 20);
       localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated));
       setKeptAlready(true);
     } catch { /* a full or blocked localStorage is not worth an error message here */ }
@@ -369,7 +375,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
       // has a real shareable link and should route straight to /guide/:id.
       try {
         const bookmarks = JSON.parse(localStorage.getItem("gemlyx_saved_guides") || "[]");
-        const updated = [{ id, title: guide.title, days: guide.days, savedAt: new Date().toISOString() }, ...bookmarks].slice(0, 20);
+        const updated = [{ id, title: guide.title, days: guide.days, savedAt: new Date().toISOString(), arrivalDate: guide._arrivalDate || null }, ...bookmarks].slice(0, 20);
         localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated));
       } catch { /* bookmark list is a convenience, never block the real save over it */ }
       // The guide travels WITH the navigation for two reasons. It skips the

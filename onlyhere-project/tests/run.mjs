@@ -44,7 +44,7 @@ const dir = mkdtempSync(join(tmpdir(), "gemlyx-test-"));
 const entry = join(dir, "entry.js");
 const bundle = join(dir, "bundle.mjs");
 writeFileSync(entry, `
-  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
+  export { legSteps, journeyFromStored, worthShowingLegs, journeyParts, journeyBlock, vehicleWord, arrivalStop, transitProblems, journeyDurations, absenceClaims, lastLegProblems, SHORT_WALK_MINUTES, guideLogisticsProblems, legMinutesIn, closedButPlanned, storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp } from ${JSON.stringify(join(root, "src/utils/journey.js"))};
   export { normaliseDomain, cleanNote, cleanSource, sourcesFor, sourceRulesBlock, cleanPlace, placeMatches, blockCost, directSourceSearches, domainVariants, placeMightMatch, sourcesToSearch, MAX_DIRECT_SEARCHES, PARTS_OF_COUNTRY, CONTENT_TYPES, TYPE_LABEL } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { variantsOf, otherNameFor, samePlaceName, searchNames, PLACE_NAMES, SIGHT_NAMES, containsName, distinctiveWords, GENERIC_PLACE_WORDS, foundAt, matchVariantsOf, GENERIC_ALIASES } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { NIGHTLIFE_CITIES, townOfLocation, groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, streetForSpot, barsOnStreet, nightlifeForTown } from ${JSON.stringify(join(root, "src/utils/nightlife.js"))};
@@ -62,9 +62,9 @@ writeFileSync(entry, `
   export { KOMMUNER, K } from ${JSON.stringify(join(root, "src/data/kommuner.js"))};
   export { TICKET_HUNT_PROMPT, ticketHuntUrls } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { bookingUrl, airbnbUrl, STAY_DISCLOSURE, affiliateActive, ticketmasterUrl, isTicketmasterUrl, ticketmasterActive, ticketDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
-  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
+  export { isTiqetsUrl, tiqetsUrl, tiqetsBrowseUrl, tiqetsActive, tiqetsDisclosure, carRentalUrl, carRentalActive, isPartnerLink, partnerDisclosure, partnerMerchant, linkLabel } from ${JSON.stringify(join(root, "src/utils/affiliates.js"))};
   export { isTiqetsProductUrl, tiqetsPageKind, ticketMatches, pickTicketUrl, describeTicketSearch, ticketQuery } from ${JSON.stringify(join(root, "src/utils/ticketLink.js"))};
-  export { dayStart, dayEnd, dayWithin, dayKey, dayPlus } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
+  export { dayStart, dayEnd, dayWithin, dayKey, dayPlus, dayLabel } from ${JSON.stringify(join(root, "src/utils/calendarDay.js"))};
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
@@ -75,7 +75,7 @@ writeFileSync(entry, `
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
-  export { mergeSaves } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
+  export { mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING } from ${JSON.stringify(join(root, "src/utils/userSaves.js"))};
   export { licenseUrl, creditIsRequired } from ${JSON.stringify(join(root, "src/utils/imageCredits.js"))};
   export { STUDIO_VOICE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
   export { hostMatchesName, officialSiteFromCandidates } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -107,7 +107,7 @@ writeFileSync(entry, `
   export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt, seededRandom, orderFor, nextSeed } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
-  export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
+  export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY, ENTRY_KINDS, segForType, kindForSeg, typesForSeg, entryUrlPath, parseEntryUrl, isEntryUrl } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
   export { towns as TOWNS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/towns.js"))};
   export { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, averageFor, describe, describeAverage, recentRuns, currentRun, __reset } from ${JSON.stringify(join(root, "src/utils/apiCost.js"))};
   export { swipeAxis, dragOffset, swipeCommits, swipeTarget, SLOP_PX, AXIS_BIAS, COMMIT_FRACTION, FLICK_SPEED, EDGE_DRAG } from ${JSON.stringify(join(root, "src/utils/swipe.js"))};
@@ -138,13 +138,14 @@ writeFileSync(entry, `
   export { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
   export { stripDashes, stripDashesDeep } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { routeTowns, countStops, orderedStops, shareSummary, shareMessage, shareTitle, metaDescription, hasMeasuredTravel, escapeHtml } from ${JSON.stringify(join(root, "src/utils/share.js"))};
-  export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
+  export { buildPreviewHtml, injectMeta, isCrawler, guideIdFromPath, articleBlocks, articleHtml, worthServing, structuredData, injectArticle } from ${JSON.stringify(join(root, "src/utils/linkPreview.js"))};
   export { SITE_ORIGIN } from ${JSON.stringify(join(root, "src/config.js"))};
   export { placeKindOf, kindLabel, isArea, baseTownFor, relationLine, collapseToParent, areasInside, dayTripsFrom, PLACE_KINDS } from ${JSON.stringify(join(root, "src/utils/placeKind.js"))};
   export { SWEEP_INTENT, SWEEP_PROMPT } from ${JSON.stringify(join(root, "src/utils/correction.js"))};
   export { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, parentheticalHint, deterministicTaxonomy, quoteIsInEntry, entryText, cleanPatch, looksLikePlaceName, dropSelfReferences, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, proposeSweep, parseLooseFields, MARKS, weakestMark, openFields } from ${JSON.stringify(join(root, "src/utils/sweeps.js"))};
   export { readFactCheck, describeFactCheck, relabel, admitsNotFound, rootOf, withRoots, datesIn, datesConfirmedBy, CONTRADICTED, UNVERIFIED, readInventedCheck, researchForCheck, RESEARCH_CHECK_CAP, INVENTED_CHECK_FORMAT, correctionLanded, claimLanded, describeCorrection } from ${JSON.stringify(join(root, "src/utils/factCheckRead.js"))};
-  export { shapeForLive, isPublisherNote, PUBLISHER_NOTE } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { shapeForLive, isPublisherNote, PUBLISHER_NOTE, cleanCredit } from ${JSON.stringify(join(root, "src/utils/studioContent.js"))};
+  export { headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } from ${JSON.stringify(join(root, "src/utils/sameness.js"))};
   export { EXTRACTABLE_GLANCE, EDITORIAL_GLANCE, NEVER_EXTRACT, CLOSED_OR_DERIVED, glanceFieldsFor, numbersTraceable, GLANCE_EXTRACT_PROMPT, readGlanceExtract, mergeGlance, describeGlance, staleUncertainties, describeStale } from ${JSON.stringify(join(root, "src/utils/glanceExtract.js"))};
   export { DANISH_MARKERS, danishWordsIn, looksUntranslated, looksDanishPage, hasEnglishVersion, languageBarrier } from ${JSON.stringify(join(root, "src/utils/languageBarrier.js"))};
   export { readerLanguage, languageName, answerInLanguage, languageBlock } from ${JSON.stringify(join(root, "src/utils/readerLanguage.js"))};
@@ -1734,8 +1735,20 @@ is("missing licence does not require credit", creditIsRequired({}), false);
       (gp.match(/new Date\(guide\._arrivalDate\)/g) || []).length, 0);
     const arrivalMentions = (gp.match(/guide\._arrivalDate/g) || []).length;
     ok("there is more than one reader of it to disagree", arrivalMentions >= 2);
-    is("and every one goes through dayStart or tripDayDate",
-      (gp.match(/(?:dayStart|tripDayDate)\(guide\._arrivalDate/g) || []).length, arrivalMentions);
+    // ── A COPY IS NOT A READ, WHICH IS WHY THIS IS A SUBTRACTION ────
+    // 16 Aug: the saved-guide row started carrying the arrival date so the
+    // weather check can find it, which added two mentions that hand the stored
+    // string on untouched. Those are not readers and nothing about them can be
+    // off by a day. Under the old phrasing, which expected every mention to be
+    // wrapped, correct code went red and the obvious repair was to lower a
+    // count, which is precisely the edit that lets a raw read back in. So what
+    // is asserted is the thing that matters: nothing turns this value into a day
+    // except the shared reader. A new use is a copy, a wrapped read, or a
+    // failure.
+    const arrivalRead = (gp.match(/(?:dayStart|tripDayDate)\(guide\._arrivalDate/g) || []).length;
+    const arrivalCopied = (gp.match(/guide\._arrivalDate \|\| null/g) || []).length;
+    ok("some of them really are readers", arrivalRead >= 2);
+    is("and nothing else touches it at all", arrivalMentions - arrivalRead - arrivalCopied, 0);
 
     // ── IT REFUSES TO GUESS, WHICH IS MOST OF THE TIME ─────────────
     // A guide that warns about half its stops and stays silent on the rest,
@@ -7777,7 +7790,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("a cold arrival retries as live content lands", /\}, \[townSlug, liveContentVersion\]\)/.test(app));
   ok("closing a town page puts them inside the app", /window\.location\.pathname\.startsWith\(`\/\$\{COUNTRY\}\/`\)/.test(app));
 
-  ok("the middleware gives a town page its own card", /const townMatch = new RegExp/.test(mw));
+  // ── ONE BRANCH FOR EVERY KIND, NOT A TOWN REGEX ──────────────────
+  // 16 Aug: this matched a single path segment, so it served towns and nothing
+  // else. The five kinds that gained an address that night would have fallen
+  // through to the site's own card with this sitting here looking like it covered
+  // them. Asserted as the shared reader rather than as a pattern, because the
+  // vocabulary lives in utils/placeUrl.js and a list of literals here would be
+  // the copy that drifts from it.
+  ok("the middleware reads any entry address through the shared reader", /const entryRoute = parseEntryUrl\(url\.pathname\);/.test(mw));
+  ok("a town still goes through the town lookup", /entryRoute\.kind === "town"\s*\n?\s*\? await findTown\(entryRoute\.slug\)/.test(mw));
+  ok("and every other kind through the typed one", /: await findEntry\(entryRoute\.seg, entryRoute\.slug\);/.test(mw));
   ok("built from the entry's own words", /town\.desc \|\| town\.highlight/.test(mw));
   ok("with an absolute image, since a crawler fetches it", /\$\{SITE_ORIGIN\}\$\{town\.photo \|\| "\/og-default\.jpg"\}/.test(mw));
   ok("a town it cannot find falls through to the site card", /if \(!town\) return next\(\);/.test(mw));
@@ -7785,7 +7807,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // allowlist hides it from every bot not on the list, which is most of them.
   ok("the sitemap is served ahead of the crawler gate",
      mw.indexOf('url.pathname === "/sitemap.xml"') < mw.indexOf('if (!isCrawler(request.headers.get("user-agent"))) return next();'));
-  ok("and lists the published towns, not only the hardcoded ones", /type=eq\.town&published=eq\.true/.test(mw));
+  // ── AND IT LISTS EVERY KIND NOW, WITH TWO REFUSALS ───────────────
+  // This asked for towns only, which is why the live sitemap listed 33 URLs while
+  // the site held several times that many researched entries.
+  ok("the sitemap asks for every published row", /gemlyx_content\?select=type,payload&published=eq\.true&order=id\.desc/.test(mw));
+  // A type with no page in the app gets no URL: an entry pointing at an address
+  // that renders nothing is a promise the site cannot keep.
+  ok("a row whose type has no page is not listed", /if \(!name \|\| !entryUrlPath\(r\?\.type, name\)\) return;/.test(mw));
+  // And a stub is not a page. Telling a search engine about a hundred of them is
+  // the "many pages without adding value" shape from Google's own policy, which
+  // is the thing this was meant to avoid rather than a step towards it.
+  ok("and neither is a row with no real paragraph in it", /if \(!worthServing\(r\.payload\)\) return;/.test(mw));
   // The sitemap lives in edge middleware rather than api/. The original reason
   // given was a 12-function Hobby cap; that number is not in Vercel's current
   // docs and the account is on Pro now. Middleware is still the right home,
@@ -9023,7 +9055,14 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // appear, so there is no branch to reintroduce by accident.
   ok("saving does not know whether anyone is signed in", !/userSession/.test(saveFn));
   ok("and never opens the auth sheet", !/setAuthOpen/.test(saveFn));
-  ok("it just saves, on one path", /commitGuideSave\(guideToSave\(\)\)/.test(saveFn));
+  // ONE PATH, asserted as one call rather than as one spelling. It used to read
+  // commitGuideSave(guideToSave()) on a single line; the row is now built first
+  // so a shape it refused to build can be reported instead of pushed into the
+  // list as null. That is the same one path with a guard on it, and a test that
+  // pins the spelling of a line makes the guard look like a regression.
+  ok("the row comes from the shared save shape", /const row = guideToSave\(\);/.test(saveFn));
+  is("and there is exactly one save call in it", (saveFn.match(/commitGuideSave\(/g) || []).length, 1);
+  ok("it just saves, on one path", /commitGuideSave\(row\);/.test(saveFn));
   // The heart on a place has always worked this way. The point is that the two
   // now agree, so this asserts the older one has not drifted the other way.
   const heartFn = appSrc.slice(appSrc.indexOf("const toggleSavePlace = (kind, item, townName)"), appSrc.indexOf("// Resolve a guide stop name to real coordinates"));
@@ -12250,8 +12289,17 @@ rmSync(dir, { recursive: true, force: true });
   const mwRaw = readFileSync(join(root, "middleware.js"), "utf8");
   ok("the content loader orders its fetch",
      /gemlyx_content\?select=\*&published=eq\.true&order=id\.desc/.test(liveRaw));
-  is("and the middleware orders BOTH of its town lookups the same way",
-     (mwRaw.match(/gemlyx_content\?select=payload&type=eq\.town&published=eq\.true&order=id\.desc/g) || []).length, 2);
+  // ── EVERY LOOKUP IN THE FILE, NOT THE TWO THAT USED TO BE HERE ───
+  // Both middleware queries used to be the same town-only string and this counted
+  // them. There are three now, one of them typed, so what is asserted is the
+  // invariant: no fetch of the content table anywhere in the file is unordered.
+  // Unordered, this lookup and the app's own loader can land on different rows
+  // for the same slug, and five towns have duplicate published rows today.
+  {
+    const contentFetches = mwRaw.match(/gemlyx_content\?[^`]*/g) || [];
+    ok("the middleware fetches the content table more than once", contentFetches.length >= 2);
+    is("and every one of them is ordered", contentFetches.filter(q => !q.includes("order=id.desc")), []);
+  }
   // Every published row is cleaned on the way in, which is what reaches the 55
   // dashes already live without a redraft.
   ok("published payloads are cleaned of dashes as they load",
@@ -16520,6 +16568,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const paid = ESSENTIALS_FOR_TEST.filter(e => isPartnerLink(e.link));
   is("exactly one essentials row carries a paid link", paid.length, 1);
   is("and it is the tickets one", paid[0]?.category, "Sightseeing");
+  // ── AND IT SAYS SO IN ITS OWN WORDS ──────────────────────────────
+  // Oliver, 16 Aug 2026: "can you please point out that this is one of our
+  // affiliates? Just so people is aware of why we use this random lesser known
+  // page." The line under the button is the disclosure and it is not the answer
+  // to his question. The answer is WHY this reseller, and that belongs in the
+  // row's own prose, where somebody wondering about an unfamiliar name is
+  // actually reading. Asserted for every paid row rather than for this one, so
+  // the second one cannot ship without it.
+  paid.forEach(row => ok(`the ${row.name} row states the partnership in its own words`,
+    /\bpartner\b/i.test(`${row.desc || ""} ${row.howTo || ""} ${row.tip || ""}`)));
+  // And still tells the reader to check the official site, which is the half
+  // that keeps the paid link honest rather than merely disclosed.
+  paid.forEach(row => ok(`the ${row.name} row still points at the official site first`,
+    /own site|official site/i.test(`${row.howTo || ""} ${row.tip || ""}`)));
   // id 5 is the Copenhagen Card, which Tiqets also sells. It still points at
   // the official site: quietly rewriting an existing recommendation into a paid
   // one is the thing the front of this app exists not to do.
@@ -16536,7 +16598,45 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // rel gains sponsored and nofollow when it is tracked. That is what Google
   // asks for on a paid link and is the difference between an affiliate link and
   // an undisclosed ad.
-  ok("and marks a tracked link sponsored", /rel=\{note \? "noreferrer sponsored nofollow" : "noreferrer"\}/.test(appSrc));
+  ok("and marks a tracked link sponsored", /const rel = note \? "noreferrer sponsored nofollow" : "noreferrer";/.test(appSrc));
+  // ── AND EVERY BRANCH GETS IT, WHICH IS THE BUG THAT WAS HERE ─────
+  // 16 Aug: the disclosure and the sponsored rel were computed INSIDE one of
+  // three branches, and a plain web link never takes that branch. So the Tiqets
+  // row printed a tracked reseller link with nothing under it, labelled OFFICIAL
+  // SITE. Both are computed above the branches now, and this asserts the shape
+  // rather than a count: every link in the row carries the rel, so a fourth
+  // branch cannot be added without it.
+  {
+    const start = appSrc.indexOf("{item.link && (() => {");
+    const block = appSrc.slice(start, appSrc.indexOf("})()}", start));
+    ok("the essentials link block was found", start > 0 && block.length > 400);
+    is("every link in the row carries the same rel",
+      (block.match(/rel=\{rel\}/g) || []).length, (block.match(/<a href=/g) || []).length);
+    // The label is a claim about whose site it is. Tiqets is not the official
+    // site of Tivoli, and this branch said it was.
+    ok("no branch calls a tracked link the official site", !/Official site ↗/.test(block));
+    ok("the label comes from the link itself", /const label = linkLabel\(item\.link\);/.test(block));
+    // COMPUTED IS NOT PRINTED. A disclosure read into a const and never
+    // rendered is a paid link with nothing under it, which is what was on the
+    // page this morning.
+    ok("and the disclosure is actually printed",
+      /\{note && <div style=\{\{[^}]*\}\}>\{note\}<\/div>\}/.test(block));
+  }
+  {
+    const { linkLabel, partnerMerchant } = M;
+    const TIQ = "https://tiqets.tpx.li/gjhkxmoh?trs=562709";
+    is("a tracked reseller link names the reseller", linkLabel(TIQ), "Book on Tiqets");
+    is("and the merchant comes out of the host", partnerMerchant(TIQ), "Tiqets");
+    is("an untracked link is the official site", linkLabel("https://www.tivoli.dk"), "Official site");
+    // A programme nobody has written down gets the honest generic answer rather
+    // than a capitalised subdomain, which would print "Gjhkxmoh" as a merchant.
+    is("an unknown programme is named as a partner, not guessed at", linkLabel("https://gjhkxmoh.tpx.li/abc"), "Partner site");
+    is("and no merchant is invented for it", partnerMerchant("https://gjhkxmoh.tpx.li/abc"), "");
+    // A lookalike host is not a partner link, so it must not be named as one.
+    is("a merchant name in an ordinary host names nothing", partnerMerchant("https://tiqets.example.com/x"), "");
+    is("and it is still the official site", linkLabel("https://tiqets.example.com/x"), "Official site");
+    is("nothing is the official site of nothing in particular", linkLabel(""), "Official site");
+  }
   const guideSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
   ok("the guide offers tickets", /tiqetsBrowseUrl\(\)/.test(guideSrc));
   ok("and discloses it", /partnerDisclosure\(href\)/.test(guideSrc));
@@ -17591,7 +17691,17 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and so does the refresh-on-open path", /const on = dayPlus\(arrival \|\| new Date\(\), i\)/.test(gpJ));
   ok("which is what its own comment already claimed", /ONE implementation, shared/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
   ok("the reopen path counts days with daysUntil", /const startOffset = arrival \? Math\.max\(0, daysUntil\(arrival\)\) : 0/.test(gpJ));
-  ok("and the provenance label reads a stored day locally", /const d = dayStart\(iso\)/.test(readJsx("src/components/HowWeKnow.jsx")));
+  // ── THE FORMATTER MOVED, AND THE CHAIN IS ASSERTED WHOLE ─────────
+  // This used to look for dayStart(iso) inside HowWeKnow. On 16 Aug the
+  // formatting became dayLabel in calendarDay.js, because journey.js needed the
+  // same "16 Aug 2026" under a stored timetable and a util cannot import a
+  // component. Rewriting this to look one level down would prove the component
+  // calls SOMETHING; what has to stay true is that the something reads the day
+  // through dayStart, so both links are asserted rather than the goalpost moved.
+  ok("the provenance label prints through the shared printer", /return dayLabel\(iso\) \|\| /.test(readJsx("src/components/HowWeKnow.jsx")));
+  ok("and no longer formats a stored day itself", !/toLocaleDateString/.test(readJsx("src/components/HowWeKnow.jsx")));
+  ok("and the shared printer formats the day dayStart built",
+    /export const dayLabel = \(v\) => \{\s*const d = dayStart\(v\);/.test(readJsx("src/utils/calendarDay.js")));
 
   // The behaviour behind the two that were not merely cosmetic, asserted rather
   // than assumed: with no arrival date, day N's weather must be asked for a
@@ -17715,14 +17825,27 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The build path has to attach where they landed, or the card can never fire.
   const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the build bakes the arrival point onto the guide", /_arrivalPoint: arrivalPoint\(convoText\)/.test(appR));
-  // ── AND THE LOCAL SAVE SHAPE DELIBERATELY DOES NOT CARRY IT ─────
-  // Reopening from the saved list navigates with only { title, days }, so a field
-  // added to that shape would look like the feature working and then lose it on
-  // reopen. The reasoning is in the file rather than in a commit message.
-  ok("and the local save shape says why it does not store it",
-    /_arrivalPoint is deliberately NOT added here/.test(appR));
-  ok("which is checkable: the reopen really does drop everything else",
-    /state: \{ guide: \{ title: g\.title, days: g\.days \} \}/.test(appR));
+  // ── AND THE LOCAL SAVE NOW CARRIES IT ───────────────────────────
+  // These two assertions used to say the opposite, and they were right at the
+  // time: the save shape deliberately did not store _arrivalPoint, because
+  // reopening rebuilt the guide from a title and a day count and would have
+  // dropped it anyway, so storing it would have looked like the return leg
+  // working and then losing it on reopen. Both halves of that are gone as of 16
+  // Aug. A test defending a reversed decision is how a reversal gets quietly
+  // undone, so they are replaced rather than deleted or left to rot.
+  //
+  // The return leg is measured FROM the arrival point. If a save loses it, a
+  // reopened guide loses the way home, which is the reader-facing version of
+  // this and the reason it is asserted here rather than only in userSaves.
+  is("a saved trip keeps where they arrived, so the way home survives a reopen",
+    M.guideFromSavedRow(M.savedGuideRow({ _arrivalPoint: "Copenhagen Airport", days: [{ day: 1 }] }, { id: 1 }))?._arrivalPoint,
+    "Copenhagen Airport");
+  // Read as CODE, not as text. The old shape is quoted in a comment in App.jsx
+  // explaining what it cost, and a negative that reads prose cannot tell the
+  // difference between a bug and a note about a bug. Sixth time this file has
+  // been caught doing that, so this one goes through stripNonCode.
+  ok("and no reopen path rebuilds a guide from two fields",
+    !/state: \{ guide: \{ title: g\.title, days: g\.days \} \}/.test(stripNonCode(appR)));
 }
 
 
@@ -18198,6 +18321,1039 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Only offered for the dated types: a bar street does not happen in a month, and
   // a control that changes nothing is worse than no control.
   ok("the picker is only shown for dated types", /\["festival", "nightTown"\]\.includes\(studioType\)/.test(appM));
+}
+
+
+// ── "THE STREETS ARE FOR SOME REASON QUITE WRONG" ────────────────────
+//
+// Oliver, 16 August 2026, on a Jomfru Ane Gade draft whose __sources was EMPTY
+// while step 7 of its own run log had ranked eight pages: a Danish Wikipedia
+// article, two TripAdvisor pages and five GetYourGuide ones.
+//
+// He had typed "Jomfru ane gadee". Every snippet was tested for containing that,
+// no page on earth contains it, so every source was refused.
+//
+// AND THE APP HAD THE RIGHT NAME BEFORE IT SEARCHED. Step 1, at 0.8 seconds:
+// Google Places "found it as Jomfru Ane Gade, 9000 Aalborg". That went into a log
+// string. The draft's own uncertainties then say the spelling "was corrected to
+// the street's actual name", so the writer knew too. Two parts of the pipeline had
+// it and the one filter that needed it had the typo.
+//
+// NOT A STREET PROBLEM, which is what he asked. The typed name is the cause, so
+// every type is exposed the same way, food streets included.
+{
+  const { sourceIsAboutPlace, nameCore } = M;
+  const TYPED = "Jomfru ane gadee";
+  const RESOLVED = "Jomfru Ane Gade";
+  const AT = { name: TYPED, town: "Aalborg", url: "https://example.dk/x" };
+  const REAL = [
+    "Jomfru Ane Gade er en gade i Aalborg med et stort antal barer og natklubber.",
+    "Jomfru Ane Gade, Aalborg: see reviews of bars and nightclubs on the street.",
+    "Nightlife tour of Jomfru Ane Gade in Aalborg.",
+  ];
+
+  // The state he was in: nothing counts, so __sources comes back empty.
+  for (const said of REAL) {
+    ok(`the typo alone refuses a real page (${said.slice(0, 28)})`, !sourceIsAboutPlace(said, AT));
+  }
+  // And with the name Google resolved, every one of them counts.
+  for (const said of REAL) {
+    ok(`the resolved name accepts it (${said.slice(0, 28)})`, sourceIsAboutPlace(said, { ...AT, alsoKnownAs: [RESOLVED] }));
+  }
+  // WITHOUT LETTING ANYTHING ELSE IN. The widening is one extra spelling, not a
+  // looser test, so a page about another town is still refused.
+  ok("a page about somewhere else is still refused",
+    !sourceIsAboutPlace("Bars and clubs in central Odense.", { ...AT, alsoKnownAs: [RESOLVED] }));
+  ok("and a page naming neither spelling is refused",
+    !sourceIsAboutPlace("A guide to Danish drinking culture.", { ...AT, alsoKnownAs: [RESOLVED] }));
+
+  // ── IT COMPOSES WITH THIS MORNING'S FIX ─────────────────────────
+  // nameCore strips a leading article, and it has to apply to the RESOLVED
+  // spelling too, or the two fixes would each work alone and not together.
+  is("the resolved name gets a core as well", nameCore("Den Gamle Jomfru Ane Gade"), "Gamle Jomfru Ane Gade");
+  ok("so a resolved name with an article still matches its core",
+    sourceIsAboutPlace("Gamle Jomfru Ane Gade i Aalborg", { name: "typo", town: "Aalborg", url: "https://x.dk", alsoKnownAs: ["Den Gamle Jomfru Ane Gade"] }));
+
+  // ── AND DISTINCTIVENESS IS JUDGED ON THE REAL NAME ──────────────
+  // A typo can look distinctive while naming nothing. "Trainn" would pass
+  // nameIsDistinctive and identify no page, and the ordinary-word rule has to be
+  // applied to the spelling a page actually used.
+  ok("an ordinary resolved name still needs corroboration",
+    !sourceIsAboutPlace("Denmark rail passes: taking the train around Denmark is easy.",
+      { name: "Trainn", town: "Aarhus", url: "https://www.ricksteves.com/x", alsoKnownAs: ["Train"] }));
+  ok("but the town corroborates it",
+    sourceIsAboutPlace("Train ligger i Århus C.", { name: "Trainn", town: "Aarhus", url: "https://example.dk/x", alsoKnownAs: ["Train"] }));
+  // ── AND THE HOST FALLBACK READS THE MATCHED SPELLING TOO ────────
+  // The last resort accepts a page when the HOST carries a distinctive word from
+  // the name. Fed an unmatched spelling it accepts on a word the page never used:
+  // here the typo "Trainn" is distinctive and sits in the host, while the page only
+  // ever said "train". A mutation swapping matched for typed survived until this
+  // existed, because nothing tested that branch with two spellings.
+  ok("a distinctive word from a spelling the page never used does not corroborate",
+    !sourceIsAboutPlace("Denmark rail passes: taking the train around Denmark is easy.",
+      { name: "Trainn", town: "Aarhus", url: "https://trainn.dk/passes", alsoKnownAs: ["Train"] }));
+  // While the venue's own distinctive name in its own host still does.
+  ok("but a matched distinctive name in the host still does",
+    sourceIsAboutPlace("Se koncerter og køb billetter til Papirkunst.",
+      { name: "Papirkunst", town: "Hune", url: "https://papirkunst.dk/" }));
+
+  // ── UNMEASURED IS STILL UNMEASURED ──────────────────────────────
+  is("no snippet is still not a source", sourceIsAboutPlace("", { ...AT, alsoKnownAs: [RESOLVED] }), false);
+  ok("an empty alsoKnownAs behaves exactly as before", !sourceIsAboutPlace(REAL[0], { ...AT, alsoKnownAs: [] }));
+  ok("and junk in it changes nothing", !sourceIsAboutPlace(REAL[0], { ...AT, alsoKnownAs: ["", null, "  "] }));
+
+  // ── NOT A STREET PROBLEM: EVERY TYPE GOES THROUGH ONE FILTER ─────
+  // His question was whether this affects food streets. The filter is shared, the
+  // cause is the typed name, so the answer is the same for every type.
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("there is exactly one relevance filter for all types",
+    (appT.match(/return sourceIsAboutPlace\(urlSaidWhat\.get\(u\)/g) || []).length, 1);
+  ok("and it is given the resolved name",
+    /alsoKnownAs: placesName && placesName !== name \? \[placesName\] : \[\]/.test(appT));
+  ok("which is kept rather than only logged", /if \(pd\.name\) placesName = String\(pd\.name\)\.trim\(\);/.test(appT));
+  ok("declared before the lookup that fills it",
+    appT.indexOf("let placesName = \"\";") < appT.indexOf("if (pd.name) placesName ="));
+  ok("and before the filter that reads it",
+    appT.indexOf("let placesName = \"\";") < appT.indexOf("alsoKnownAs: placesName &&"));
+  // Only when it DIFFERS, so an exact typing adds no redundant spelling.
+  ok("it is only passed when it differs from what was typed",
+    /placesName !== name \?/.test(appT));
+}
+
+// ── "PUBLISH SAVES IT WITH THE REST", WHICH IT DID NOT ─────────────
+// The draft photo panel was built on 15 Aug and its own label promised this.
+// shapeForLive threw every photo away on all nine types, because six branches
+// overwrite `photo` with a template path built from the name and three name no
+// photo field at all, and every branch rebuilds blogBody from the prose fields,
+// which deleted the picture blocks and the credits attached to them.
+//
+// That is the fifth feature this one allow-list has eaten. The file carries four
+// comments about the previous four, so these assertions are per-type on purpose:
+// a carry that works on eight types and not the ninth is the exact shape of the
+// bug, and a loop is the only thing that catches it.
+{
+  const { shapeForLive, cleanCredit } = M;
+  const REAL = "https://media.gemlyx.dk/drafts/town/ribe-0.jpg";
+  const WIKI = "https://upload.wikimedia.org/wikipedia/commons/a/ab/Ribe.jpg";
+  const CREDIT = { photographer: "Ib Rasmussen", source: "wikimedia", sourceUrl: "https://commons.wikimedia.org/wiki/File:Ribe.jpg", license: "CC BY-SA 3.0" };
+  // Every type string the Studio can publish. food and foodStreet share a branch
+  // and are both listed anyway, because the branch reads the type.
+  const TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "booking", "essential"];
+  const draftOf = (extra) => ({
+    name: "Ribe", town: "Ribe", city: "Ribe", desc: "d", characterAndFit: "c", whatToDo: "w",
+    gettingThereReality: "g", thingsToKnow: [], vibeLocation: "v", whoFor: "f", realityCheck: "r",
+    special: "s", atmosphere: "a", whoItsFor: "wi", howTo: "h", ...extra,
+  });
+
+  // ── THE TEMPLATE PATH IS NOT A PHOTOGRAPH ────────────────────────
+  // Measured across the live table on 7 Aug: 53 rows carry a local hero path and
+  // 52 of those files do not exist, because the codegen writes the path and
+  // leaves adding the file as a manual step. So an absolute URL wins, and
+  // nothing else does.
+  is("a town draft with no photo keeps the template path",
+     shapeForLive("town", draftOf({}))?.photo, "/towns/ribe.jpg");
+  is("an uploaded photo replaces it",
+     shapeForLive("town", draftOf({ photo: REAL }))?.photo, REAL);
+  is("and a relative path in the draft never beats the template",
+     shapeForLive("town", draftOf({ photo: "/towns/ribe.jpg" }))?.photo, "/towns/ribe.jpg");
+  is("nor does a guessed filename", shapeForLive("town", draftOf({ photo: "ribe.jpg" }))?.photo, "/towns/ribe.jpg");
+  // A protocol-relative or javascript: URL is not an image URL. The test is
+  // http/https and the anchor is the start of the string.
+  is("nor a protocol-relative one", shapeForLive("town", draftOf({ photo: "//evil/x.jpg" }))?.photo, "/towns/ribe.jpg");
+  is("nor a script URL", shapeForLive("town", draftOf({ photo: "javascript:alert(1)" }))?.photo, "/towns/ribe.jpg");
+  // THE NINTH BRANCH, which is where this bug has landed four times before.
+  // free, night and essential name no photo field, so the hero can only reach
+  // the database as a shared field.
+  const missedTypes = TYPES.filter(ty => shapeForLive(ty, draftOf({ photo: WIKI }))?.photo !== WIKI);
+  is("every type carries a real hero, not just the six with a photo field", missedTypes, []);
+
+  // ── THE CREDIT IS THE HALF THAT IS NOT COSMETIC ──────────────────
+  // CC BY and CC BY-SA only permit republishing WITH attribution, so a hero that
+  // reached the database without its credit is a licence breach. DetailPage
+  // renders __photoCredit under the hero and block.credit under a body picture.
+  is("the hero credit survives publish",
+     shapeForLive("town", draftOf({ photo: WIKI, __photoCredit: CREDIT }))?.__photoCredit?.photographer, "Ib Rasmussen");
+  is("with the licence it was granted under",
+     shapeForLive("town", draftOf({ photo: WIKI, __photoCredit: CREDIT }))?.__photoCredit?.license, "CC BY-SA 3.0");
+  is("and the file page it came from",
+     shapeForLive("town", draftOf({ photo: WIKI, __photoCredit: CREDIT }))?.__photoCredit?.sourceUrl, CREDIT.sourceUrl);
+  // Only ever with a hero. A credit sitting on a row whose hero is the template
+  // path would be attributing a photograph nobody can see to somebody who did
+  // not take the one on screen.
+  ok("a credit with no real hero is not carried",
+     !("__photoCredit" in shapeForLive("town", draftOf({ __photoCredit: CREDIT }))));
+  ok("nor with a relative hero",
+     !("__photoCredit" in shapeForLive("town", draftOf({ photo: "/towns/ribe.jpg", __photoCredit: CREDIT }))));
+  ok("and a photo with no credit carries no empty credit object",
+     !("__photoCredit" in shapeForLive("town", draftOf({ photo: REAL }))));
+
+  // ── THE BODY PICTURES, WHICH THE REBUILD DELETED ─────────────────
+  const withPics = shapeForLive("town", draftOf({
+    blogBody: [
+      { type: "heading", content: "Invented By A Model" },
+      { type: "image", src: WIKI, credit: CREDIT, caption: "Ribe by night" },
+      { type: "image", src: "/local/nope.jpg" },
+      { type: "image", src: REAL },
+    ],
+  }));
+  const pics = (withPics?.blogBody || []).filter(b => b?.type === "image");
+  is("the picture blocks survive publish", pics.length, 2);
+  is("the credit rides on the block", pics[0]?.credit?.photographer, "Ib Rasmussen");
+  is("so does Wikimedia's own description", pics[0]?.caption, "Ribe by night");
+  is("a block with no absolute src is dropped", pics.filter(b => b.src === "/local/nope.jpg").length, 0);
+  // The prose is still rebuilt from the fields. That is what stops a model
+  // inventing a heading, and it is the reason the pictures had to be carried
+  // separately rather than by trusting the draft's array.
+  ok("a heading the draft invented does not reach the page",
+     !JSON.stringify(withPics?.blogBody || []).includes("Invented By A Model"));
+  ok("and the real headings are still generated",
+     JSON.stringify(withPics?.blogBody || []).includes("What to Do in Ribe"));
+  // AFTER the prose, which layoutBody in DetailPage depends on: it looks for the
+  // trailing run of images and deals them back in beside the paragraphs. An
+  // image in the middle of the array is treated as author-placed and left alone.
+  {
+    const blocks = withPics?.blogBody || [];
+    const firstPic = blocks.findIndex(b => b?.type === "image");
+    const lastProse = blocks.map((b, i) => (b?.type === "heading" || b?.type === "paragraph" || b?.type === "bullets") ? i : -1).reduce((a, b) => Math.max(a, b), -1);
+    ok("the pictures land after the last paragraph", firstPic > lastProse);
+  }
+  is("and they are bounded",
+     shapeForLive("town", draftOf({ blogBody: Array.from({ length: 12 }, (_, i) => ({ type: "image", src: `https://media.gemlyx.dk/${i}.jpg` })) }))
+       ?.blogBody.filter(b => b?.type === "image").length, 8);
+  // Nothing to carry adds nothing, same rule as __sources and __hours.
+  ok("a draft with no pictures publishes exactly as before",
+     !(shapeForLive("town", draftOf({}))?.blogBody || []).some(b => b?.type === "image"));
+
+  // ── ONE CREDIT SHAPE, WRITTEN BY THREE DIFFERENT PANELS ──────────
+  is("an empty credit is nothing rather than four blank strings", cleanCredit({ photographer: "", license: "" }), null);
+  is("junk is not a credit", cleanCredit("wikimedia"), null);
+  is("nor is nothing", cleanCredit(null), null);
+  // A public-domain file has no author and is still worth crediting: the reader
+  // is better served by "Public domain" under the picture than by nothing.
+  is("a licence with no author is still a credit", cleanCredit({ license: "CC0" })?.license, "CC0");
+  is("and the four fields are the ones the renderer reads",
+     Object.keys(cleanCredit(CREDIT) || {}), ["photographer", "source", "sourceUrl", "license"]);
+}
+
+// ── THE WIKI HALF OF THE DRAFT PHOTO PANEL ─────────────────────────
+// Oliver, 16 Aug 2026: the panel "needs to add the wiki section". For most
+// Danish subjects Commons is the only place a usable photograph exists, so this
+// is the normal way to get a hero and not a fallback.
+{
+  const appW = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const scw = readFileSync(join(root, "src/utils/studioContent.js"), "utf8");
+  // The SEARCH half is shared with the Media panel: same endpoint, so the same
+  // server-side licence filtering. Nothing here re-implements the licence rules.
+  ok("the draft finder calls the same licence-checked endpoint",
+     /const findDraftCommonsPhotos = async \(query\) => \{[\s\S]{0,600}\/api\/commons-photo\?q=\$\{encodeURIComponent\(term\)\}/.test(appW));
+  // The WRITE half is what differs, and it is the reason the published finder
+  // could not be reused: patchContentPayload PATCHes WHERE id = row.id, and a
+  // draft has no id.
+  const useDraft = appW.slice(appW.indexOf("const useDraftCommonsPhoto = (hit) => {"), appW.indexOf("const useDraftCommonsPhoto = (hit) => {") + 2600);
+  ok("the pick lands in the draft text, which is what Publish reads", /setStudioDraftText\(JSON\.stringify\(next, null, 2\)\)/.test(useDraft));
+  ok("and it never tries to PATCH a row that does not exist yet", !/patchContentPayload/.test(useDraft));
+  // ONE WRITE, IMAGE AND CREDIT TOGETHER. A picture whose credit arrives in a
+  // later step is one refresh away from being published without the right to.
+  ok("the credit is in the same object as the src",
+     /const block = \{ type: "image", src, credit,/.test(useDraft));
+  ok("the hero credit is set only when this picture became the hero",
+     /\.\.\.\(heroAlready \? \{\} : \{ __photoCredit: credit \}\),/.test(useDraft));
+  ok("the caption is Wikimedia's own description, and only if he asked for it",
+     /useCommonsCaption && hit\?\.caption \? \{ caption: hit\.caption \} : \{\}/.test(useDraft));
+  ok("tracking params are stripped before storing", /String\(hit\?\.url \|\| ""\)\.split\("\?"\)\[0\]/.test(useDraft));
+  // A draft that does not parse must not be silently replaced by one that does.
+  ok("an unparseable draft stops the write", /catch \{ setDraftPhotoError\("The draft JSON below does not parse/.test(useDraft));
+
+  // ── THE PANEL AND THE PUBLISHER MUST AGREE ON WHAT A HERO IS ─────
+  // If this panel called a relative path a hero and shapeForLive did not, the
+  // photo would look attached right up until it silently was not.
+  ok("the panel's hero test is an absolute URL",
+     /const heroAlready = \/\^https\?:\\\/\\\/\/i\.test\(String\(draft\?\.photo \|\| ""\)\.trim\(\)\)/.test(useDraft));
+  ok("and publish applies the identical rule",
+     /const heroUrl = \/\^https\?:\\\/\\\/\/i\.test\(String\(t\?\.photo \|\| ""\)\.trim\(\)\)/.test(scw));
+
+  // ── IT IS ACTUALLY ON SCREEN ─────────────────────────────────────
+  // A function nothing renders is the failure mode this suite has caught four
+  // times: the call existed, the effect did not.
+  // ANCHORED ON THE DRAFT PANEL'S OWN HANDLER, not on the label alone. The Media
+  // panel next door carries a button with exactly the same words, so a version of
+  // this that only looked for the label passed with the drafting button deleted.
+  // That is the same way "Looks good, save my guide" was once proved by a comment.
+  ok("the button is in the drafting panel",
+     /findDraftCommonsPhotos\(draftPhotoFinder[\s\S]{0,700}🔎 Find on Wikimedia\s*\n\s*<\/button>/.test(appW));
+  ok("it searches the draft's own name", /onClick=\{\(\) => findDraftCommonsPhotos\(draftPhotoFinder \? \(document\.getElementById\("cmq-draft"\)\?\.value \|\| nameOf\) : nameOf\)\}/.test(appW));
+  ok("the results panel is gated on the finder's own state", /\{draftPhotoFinder && \(/.test(appW));
+  ok("and every result offers the pick that writes it in", /onClick=\{\(\) => useDraftCommonsPhoto\(hit\)\}/.test(appW));
+  // THE NAME ALONE is the default query. The endpoint resolves a Wikipedia
+  // article and a Commons category from it, and those are the only two sources
+  // whose results are known to be about the right subject. "Ribe Denmark" makes
+  // both miss and leaves the blind text search answering on its own.
+  ok("the default query is the name, not the name padded with the country",
+     /const nameOf = String\(parsedDraft\?\.name \|\| studioDraft\?\.name \|\| ""\)\.trim\(\);/.test(appW));
+  ok("and the panel warns when only the text search answered",
+     /Only the blind text search found anything\. No Wikipedia article and no Commons category matched "\$\{draftPhotoFinder\.query\}"/.test(appW));
+}
+
+// ── A SAVED TRIP THAT CAME BACK AS A TITLE AND A DAY COUNT ─────────
+// The saved-guide row held four fields and opening one rebuilt a guide from two
+// of them, so somebody planned a trip, saved it, opened it the next morning and
+// got the days back with every measured thing in them gone: the weather, the
+// geocodes, the exact durations, the arrival date, the travellers, the walking
+// preference. The code even carried a comment explaining that adding a fifth
+// field would be pointless because the reopen threw everything away anyway.
+//
+// The two functions are tested AS A PAIR, which is the only test that matters
+// here: the bug was never inside either side, it was that the two sides were
+// different shapes and nothing compared them.
+{
+  const { savedGuideRow, guideFromSavedRow, savedGuideHasLink, GUIDE_SCAFFOLDING } = M;
+  // Everything a real guideModal carries, from the setGuideModal call in App.jsx.
+  const TRIP = {
+    _gid: "g7", _mode: "transit", _onlyWalking: false, _lightMode: false, _travelers: "2",
+    _grounded: true, _convoText: "four days, we like food", _arrivalDate: "2026-09-14",
+    _arrivalPoint: "Copenhagen Airport", _geo: { Ribe: { lat: 55.32, lon: 8.76 } },
+    _weatherFetchedAt: "2026-08-16T10:00:00.000Z", _exactDurations: { "Ribe|Esbjerg": "31 mins" },
+    _noRouteFound: {}, title: "Four Days West", essentials: [{ name: "Rejsekort" }],
+    days: [{ day: 1, stops: [{ name: "Ribe", town: "Ribe" }], weather: { risk: "low" } }],
+  };
+  const row = savedGuideRow(TRIP, { id: 1755300000000, savedAt: "2026-08-16T12:00:00.000Z" });
+
+  // ── THE ROUND TRIP, WHICH IS THE WHOLE POINT ─────────────────────
+  is("a saved trip comes back as the same trip", guideFromSavedRow(row), TRIP);
+  // Named one by one as well, because a deep equal that starts passing for the
+  // wrong reason (both sides empty) is the classic way this kind of test rots.
+  is("the geocodes survive a save", guideFromSavedRow(row)?._geo?.Ribe?.lat, 55.32);
+  is("so do the measured durations", guideFromSavedRow(row)?._exactDurations?.["Ribe|Esbjerg"], "31 mins");
+  is("so does the arrival date", guideFromSavedRow(row)?._arrivalDate, "2026-09-14");
+  is("so does where they arrive", guideFromSavedRow(row)?._arrivalPoint, "Copenhagen Airport");
+  is("so does the weather and when it was checked", guideFromSavedRow(row)?._weatherFetchedAt, "2026-08-16T10:00:00.000Z");
+  is("so do the travellers", guideFromSavedRow(row)?._travelers, "2");
+  is("so does the walking preference", guideFromSavedRow(row)?._onlyWalking, false);
+  is("and the essentials", guideFromSavedRow(row)?.essentials?.length, 1);
+
+  // ── THE THREE LIST FIELDS ARE THE LIST'S, NOT THE TRIP'S ─────────
+  is("the row keeps the id the list keys on", row?.id, 1755300000000);
+  is("and when it was saved", row?.savedAt, "2026-08-16T12:00:00.000Z");
+  // The row's identity is the row's. A guide that ever grows a field called `id`
+  // must not take it over: the list keys on this, the delete matches on it, and
+  // savedGuideHasLink decides which door the row opens by its type, so a stray
+  // string in there would send a local guide to a /guide/:id that does not exist.
+  is("a guide carrying its own id does not become the row's identity",
+     savedGuideRow({ ...TRIP, id: "not-a-real-row" }, { id: 42, savedAt: "x" })?.id, 42);
+  // checkSavedGuidesWeather walks the LIST, not a reopened guide, so this one is
+  // written twice under two names on purpose.
+  is("the arrival date is on the row itself for the weather check", row?.arrivalDate, "2026-09-14");
+  ok("and none of the three come back as part of the trip",
+     !["id", "savedAt", "arrivalDate"].some(k => k in (guideFromSavedRow(row) || {})));
+
+  // ── SCAFFOLDING IS NOT PART OF A TRIP ────────────────────────────
+  // Same strip as a shared link's payload. A reopened guide reads as unsaved, so
+  // _testProfile would put the dashed gold "Pipeline test" box back on screen
+  // describing a traveller who does not exist.
+  const withTest = savedGuideRow({ ...TRIP, _testProfile: { who: "nobody" }, _testPlan: "{}", _planProblems: ["a note to him"] }, { id: 5, savedAt: "x" });
+  is("the pipeline test profile is never saved", withTest?._testProfile, undefined);
+  is("nor the skeleton plan", withTest?._testPlan, undefined);
+  is("nor the gates' notes to the founder", withTest?._planProblems, undefined);
+  is("and the list of what gets stripped is the one the shared link uses",
+     GUIDE_SCAFFOLDING, ["_testProfile", "_testPlan", "_planProblems"]);
+  ok("stripping does not disturb the rest of the trip", guideFromSavedRow(withTest)?._geo?.Ribe?.lat === 55.32);
+
+  // ── A ROW SAVED BEFORE ANY OF THIS STILL OPENS ───────────────────
+  // Every guide already saved on a real phone has exactly these five fields.
+  const OLD = { id: 1755200000000, title: "Old Trip", days: [{ day: 1, stops: [] }], savedAt: "2026-08-10T00:00:00.000Z", arrivalDate: "2026-08-20" };
+  is("an old row still gives back its title", guideFromSavedRow(OLD)?.title, "Old Trip");
+  is("and its days", guideFromSavedRow(OLD)?.days?.length, 1);
+  // The one thing worth carrying across: the same value under the name the render
+  // reads. Without it the day dates, the event run-date check and the return leg
+  // have nothing to measure from.
+  is("and its arrival date arrives under the name the page reads", guideFromSavedRow(OLD)?._arrivalDate, "2026-08-20");
+  // The trip's own value wins, because that is the one the guide was built with.
+  is("a trip that has its own arrival date keeps it",
+     guideFromSavedRow({ ...OLD, _arrivalDate: "2026-09-01" })?._arrivalDate, "2026-09-01");
+  is("and a row with no date at all invents none", guideFromSavedRow({ ...OLD, arrivalDate: null })?._arrivalDate, undefined);
+
+  // ── A STRING ID MEANS SUPABASE HAS THE WHOLE THING ───────────────
+  ok("a guide saved through the page has a link", savedGuideHasLink({ id: "k3f9a1b7c2d" }));
+  ok("a locally saved one does not", !savedGuideHasLink({ id: 1755300000000 }));
+  ok("nor does a row with no id", !savedGuideHasLink({}));
+  ok("nor one with a blank string", !savedGuideHasLink({ id: "   " }));
+  ok("nor nothing at all", !savedGuideHasLink(null));
+
+  // ── REFUSALS, SO NOTHING HALF-FORMED REACHES THE LIST ────────────
+  // A row with no id is invisible on screen, undeletable, and dropped by
+  // mergeSaves on the next login.
+  is("a guide with no id is not a row", savedGuideRow(TRIP, {}), null);
+  is("nor is one with an empty id", savedGuideRow(TRIP, { id: "" }), null);
+  is("nothing is not a row", savedGuideRow(null, { id: 1 }), null);
+  is("and neither is an array", savedGuideRow([1, 2], { id: 1 }), null);
+  // A row with no days is not a trip: the list itself renders g.days.length and
+  // checkSavedGuidesWeather walks g.days without checking.
+  is("a row with no days does not open", guideFromSavedRow({ id: 1, title: "x" }), null);
+  is("nor one with an empty day list", guideFromSavedRow({ id: 1, title: "x", days: [] }), null);
+  is("nor a string pretending to be a row", guideFromSavedRow("nope"), null);
+
+  // ── AND THE WIRING, WHICH IS WHERE THE OLD SHAPE WAS WRITTEN ─────
+  const appS = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the save uses the shared shape", /const guideToSave = \(\) => savedGuideRow\(guideModal, \{ id: Date\.now\(\), savedAt: new Date\(\)\.toISOString\(\) \}\);/.test(appS));
+  ok("and refuses to commit a row it could not build", /if \(!row\) \{ setToast\("Could not save this guide/.test(appS));
+  // THE INLINE OBJECT LITERAL IS GONE. This is the assertion that actually
+  // guards the bug: it was one `{ title: g.title, days: g.days }` in a click
+  // handler, and it can be written again in a second by anyone adding a second
+  // place to open a guide from. Read as code, because the shape it forbids is
+  // quoted in a comment nearby explaining what it cost.
+  ok("no click handler rebuilds a guide from two fields",
+     !/state: \{ guide: \{ title: g\.title, days: g\.days \} \}/.test(stripNonCode(appS)));
+  ok("the list opens a row through the one reader", /onClick=\{\(\) => openSavedGuide\(g\)\}/.test(appS));
+  ok("a row with a real link goes to its own url", /if \(savedGuideHasLink\(g\)\) \{ navigate\(`\/guide\/\$\{g\.id\}`\); return; \}/.test(appS));
+  ok("and a local one is handed the whole trip", /navigate\("\/guide\/new", \{ state: \{ guide: trip \} \}\);/.test(appS));
+  // The guide page's own bookmark writes are the other producer of these rows.
+  const gpS = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  is("both bookmark writes carry the arrival date the weather check needs",
+     (gpS.match(/arrivalDate: guide\._arrivalDate \|\| null/g) || []).length, 2);
+  // The strip on a shared payload has to keep matching GUIDE_SCAFFOLDING, or the
+  // local list and the link start carrying different trips again.
+  ok("and a shared link strips the same three fields",
+     /\(\(\{ _testProfile, _testPlan, _planProblems, \.\.\.rest \}\) => rest\)\(guide\)/.test(gpS));
+
+  // ── A REFUSED WRITE NO LONGER ANNOUNCES A SAVE ───────────────────
+  // Safari in private mode throws on setItem. The catch swallowed it and the
+  // toast underneath still said "Saved on this device".
+  ok("the write records whether it worked", /catch \{ stored = false; \}/.test(appS));
+  ok("and a signed-out person is told the truth about it",
+     /This browser refused to store the guide, so it will be gone when you close the tab/.test(appS));
+  ok("while a signed-in one is told the account still has it",
+     /Saved to your account\. This browser would not store a local copy\./.test(appS));
+}
+
+// ── THE ONE MEASUREMENT IN THE PIPELINE, FINALLY ON A PAGE ──────────
+//
+// Oliver, 16 Aug 2026, asking what the page needs. Every row drafted since 13
+// August carries a measured itinerary from Copenhagen: every leg with its
+// vehicle, line and two stops, the named interchanges, the walking, the waiting
+// and the car time. The writer's comment says it is stored and "reader-facing
+// only when something chooses to render it". Nothing chose, for three days.
+//
+// What is tested here is not the layout, it is every sentence the card prints,
+// because each one is a claim about a journey and the whole file it lives in
+// exists because a duration was printed without saying what it measured.
+{
+  const { storedJourney, journeyReach, journeyChanges, journeyBreakdown, journeyDriving, journeyStamp, legSteps, arrivalStop, dayLabel } = M;
+  // The shape shapeForLive stores, as it comes off a real Esbjerg draft.
+  const J = {
+    total: 191, onBoard: 158, onFoot: 12, waiting: 21, changes: 1,
+    interchanges: ["Odense St."],
+    legs: [
+      { vehicle: "train", line: "IC 137", from: "København H", to: "Odense St.", mins: 82 },
+      { vehicle: "train", line: "RE 5320", from: "Odense St.", to: "Esbjerg St.", mins: 76 },
+    ],
+    drivingMins: 168, from: "Copenhagen", at: "2026-08-14",
+  };
+  const TODAY = new Date(2026, 7, 16);   // 16 Aug 2026, local, as the page would see it
+
+  // ── THE GATE: NO DATE, NO CARD ───────────────────────────────────
+  // The rule __hours is already stored under. A timetable stated as current with
+  // no date attached is something true when it was written quietly aging into
+  // something false, and a line number that no longer exists sends somebody to a
+  // platform rather than merely misinforming them.
+  ok("a dated journey with legs is renderable", !!storedJourney(J));
+  is("one with no date is not", storedJourney({ ...J, at: "" }), null);
+  is("nor one whose date cannot be read", storedJourney({ ...J, at: "not a day" }), null);
+  is("nor a journey with no legs", storedJourney({ ...J, legs: [] }), null);
+  is("nor one whose legs are empty shells", storedJourney({ ...J, legs: [{}, { mins: 0 }] }), null);
+  is("nor one with no total", storedJourney({ ...J, total: 0 }), null);
+  is("nor one whose total is not a number", storedJourney({ ...J, total: "quick" }), null);
+  is("and nothing at all is not a journey", storedJourney(null), null);
+  is("nor a string", storedJourney("2h"), null);
+
+  // ── EVERY FIGURE NAMES WHAT IT MEASURES ──────────────────────────
+  // This is the rule the whole of journey.js exists for: 1h50 is true door to
+  // door and false for the train, and a sentence that does not say which cannot
+  // be checked and reads as wrong to anyone who has taken the train.
+  is("the headline says door to door", journeyReach(J), "3h 11min from Copenhagen, door to door");
+  ok("and it never says train", !/train/i.test(journeyReach(J)));
+  is("where it came from defaults to Copenhagen rather than nowhere", journeyReach({ ...J, from: "" }), "3h 11min from Copenhagen, door to door");
+  is("a journey with no total says nothing", journeyReach({ ...J, total: null }), "");
+  is("and nothing says nothing", journeyReach(null), "");
+
+  // ── A CHANGE IS NAMED ONLY WHEN EVERY CHANGE HAS A NAME ──────────
+  // interchanges drops the blanks Google sometimes returns, so it can be shorter
+  // than the count. Naming two of three reads as the complete list and somebody
+  // stands on the wrong platform at the change nobody mentioned.
+  is("one change, named", journeyChanges(J), "One change, at Odense St.");
+  // "St." is the Danish abbreviation for station. journeyBlock strips a trailing
+  // full stop before handing these to a model, which is right for a prompt and
+  // wrong for a reader: a page that prints "Odense St" has mangled the name of
+  // the platform somebody is standing on looking for a sign.
+  is("a station name is printed exactly as it was measured",
+     journeyChanges({ ...J, interchanges: ["Odense St."] }), "One change, at Odense St.");
+  // Which means the card cannot join this sentence to the next with a period.
+  ok("so the card joins it to the car time with a separator",
+     / · " : ""\}About \{driving\}/.test(readFileSync(join(root, "src/components/JourneyCard.jsx"), "utf8")));
+  is("two changes, both named", journeyChanges({ ...J, changes: 2, interchanges: ["Odense St.", "Fredericia"] }), "Two changes, at Odense St. then Fredericia");
+  ok("and journeyBlock still strips it for the prompt, which is a different job",
+     /interchanges\.map\(x => x\.replace\(\/\\\.\$\/, ""\)\)/.test(readFileSync(join(root, "src/utils/journey.js"), "utf8")));
+  is("two changes, one name, so neither is named", journeyChanges({ ...J, changes: 2, interchanges: ["Odense St."] }), "Two changes");
+  is("a change with no name at all is still stated", journeyChanges({ ...J, interchanges: [] }), "One change");
+  is("and blanks do not count as names", journeyChanges({ ...J, interchanges: ["", "  "] }), "One change");
+  is("a direct journey says so", journeyChanges({ ...J, changes: 0, interchanges: [] }), "Direct, no changes");
+  is("a count past the words it has still prints", journeyChanges({ ...J, changes: 9, interchanges: [] }), "9 changes");
+  is("nothing says nothing", journeyChanges(null), "");
+
+  // ── THE WALK IS TWO WALKS, AND MUST NEVER READ AS ONE ────────────
+  // journeyParts sums the walk at BOTH ends into one figure, so "12min walking"
+  // on its own would be read as "the station is 12 minutes away" and acted on.
+  is("the breakdown splits the journey into its named parts", journeyBreakdown(J), "2h 38min on board, 12min walking, both ends together, 21min waiting and connecting");
+  ok("and the walk says both ends", /both ends together/.test(journeyBreakdown(J)));
+  is("a part that was not measured has no phrase", journeyBreakdown({ ...J, onFoot: 0, waiting: 0 }), "2h 38min on board");
+  is("and a journey with nothing measured says nothing", journeyBreakdown({ ...J, onBoard: 0, onFoot: 0, waiting: 0 }), "");
+
+  // The car comparison, when Google gave one. Sometimes it means admitting the
+  // train loses, which is the kind of thing this app says out loud.
+  is("the car time is offered", journeyDriving(J), "2h 48min by car");
+  is("and absent when nobody measured it", journeyDriving({ ...J, drivingMins: null }), "");
+  is("or when it is zero, which is not a drive", journeyDriving({ ...J, drivingMins: 0 }), "");
+
+  // ── WHERE YOU GET OFF, WHICH IS THE USEFUL LINE ──────────────────
+  // The last leg's destination, so it is where the journey puts you down, not
+  // the nearest transit stop by distance. That question once answered with a car
+  // ferry slip to two islands for a festival in the middle of Skælskør.
+  is("the card can say where you get off", arrivalStop(storedJourney(J)), "Esbjerg St.");
+
+  // ── THE STEP LIST IS THE GUIDE'S, NOT A SECOND ONE ───────────────
+  // legSteps has rendered the guide's own live measurement since 13 August, so a
+  // leg reads the same in a guide and on a page, and there is one renderer to fix.
+  {
+    const steps = legSteps(storedJourney(J));
+    is("every ride is a step", steps.filter(s => s.kind === "ride").length, 2);
+    is("the line leads, because it is what is on the front of the train", steps[0]?.text, "train IC 137 to Odense St.");
+    is("the walk and the wait come last as totals", steps.slice(-2).map(s => s.kind), ["walk", "wait"]);
+  }
+
+  // ── THE DATE, WHICH IS WHAT MAKES THE REST PUBLISHABLE ───────────
+  is("the stamp says when it was measured", journeyStamp(J, TODAY), "Measured on 14 Aug 2026. Timetables change, so check departures before you travel.");
+  ok("and it always tells the reader to check", /check departures before you travel/.test(journeyStamp(J, TODAY)));
+  // The threshold is the one the codebase already chose for a fact off a page.
+  // A timetable is not a different question.
+  is("an old measurement says how old, and stops calling itself a timetable",
+     journeyStamp({ ...J, at: "2026-01-05" }, TODAY),
+     "Measured on 5 Jan 2026, over 6 months ago. Treat it as the rough shape of the trip and not as a timetable.");
+  ok("just inside six months still reads as current", /check departures/.test(journeyStamp({ ...J, at: "2026-03-01" }, TODAY)));
+  is("no date, no stamp", journeyStamp({ ...J, at: "" }, TODAY), "");
+  is("and an unreadable clock still names the day", journeyStamp(J, "not a date"), "Measured on 14 Aug 2026.");
+
+  // ── THE STAMP READS THE SAME DAY IN EVERY TIMEZONE ───────────────
+  // The stored value is a calendar day written by dayKey, and it is printed from
+  // the local parts dayStart builds. Formatting the raw value would print 13 Aug
+  // for every reader west of Greenwich, which is finding five of the five that
+  // created calendarDay.js.
+  is("the printed day is the day stored", dayLabel("2026-08-14"), "14 Aug 2026");
+  ok("and the stamp carries it", journeyStamp(J, TODAY).includes("14 Aug 2026"));
+
+  // ── AND IT IS ON THE PAGE ────────────────────────────────────────
+  // A card nothing renders is what this whole block is about. Three days of
+  // measured journeys were stored by a writer whose own comment said something
+  // would choose to render it.
+  const jc = readFileSync(join(root, "src/components/JourneyCard.jsx"), "utf8");
+  ok("the card gates on the shared reader", /const parts = storedJourney\(item\?\.__journey\);/.test(jc));
+  ok("and renders nothing without one", /if \(!parts\) return null;/.test(jc));
+  ok("no date means no card, twice over", /if \(!reach \|\| !stamp\) return null;/.test(jc));
+  ok("every sentence comes from the util, not from the layout",
+     ["journeyReach(parts)", "journeyChanges(parts)", "journeyBreakdown(parts)", "journeyDriving(parts)", "journeyStamp(parts)", "legSteps(parts)", "arrivalStop(parts)"]
+       .every(call => jc.includes(call)));
+  // COMPUTED IS NOT SHOWN. Every one of these is printed, asserted separately
+  // from being called, because a value read into a const and never rendered is
+  // the exact failure the .jsx sweep found four times: the call existed, the
+  // effect did not.
+  ok("the headline is printed", />\{reach\}</.test(jc));
+  ok("the change sentence is printed", />\s*\{changes\}/.test(jc));
+  ok("the breakdown is printed", />\{breakdown\}</.test(jc));
+  ok("the car time is printed", /About \{driving\}</.test(jc));
+  ok("where you get off is printed", />\{getOff\}</.test(jc));
+  ok("the legs are printed", /\{steps\.map\(\(st, i\) =>/.test(jc));
+  // The stamp above all of them: it is what makes the rest publishable, and a
+  // card that computes a date and shows none is the __hours mistake with extra
+  // steps.
+  ok("and the date is printed", />\{stamp\}</.test(jc));
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  // Anchored on the whole line, not on the tag. `{false && <JourneyCard ... />}`
+  // contains the tag and renders nothing, and that mutant survived a version of
+  // this assertion that only looked for the element.
+  ok("the detail page renders it", /\n        <JourneyCard item=\{item\} \/>\n/.test(dp));
+  ok("under the article rather than above it", dp.indexOf("<JourneyCard") > dp.indexOf("{item.blogBody && item.blogBody.length > 0 && ("));
+  ok("and before the map, so getting there comes before where it is",
+     dp.indexOf("<JourneyCard") < dp.indexOf("<PlaceMiniMap"));
+  // The writer has to keep writing it, and the allow-list has to keep letting it
+  // through, or the card is correct and permanently empty.
+  const appJn = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the draft still measures and stores the journey", /t\.__journey = \{/.test(appJn));
+  ok("with the day it was measured on", /at: dayKey\(new Date\(\)\),/.test(appJn));
+  ok("and publish still carries it", /if \(journey\) out = \{ \.\.\.out, __journey: journey \};/.test(readFileSync(join(root, "src/utils/studioContent.js"), "utf8")));
+}
+
+// ── EVERY PAGE OF A TYPE IS THE SAME PAGE, AND NOTHING COULD SEE IT ──
+//
+// Oliver, 16 Aug 2026: "Google hides pages that are too 'AI-generated'. And
+// apparently my blogs are not safe from this (according to Gemini)."
+//
+// The premise needed checking before anything was built on it, and Google's own
+// wording is narrower than the worry: the spam policy names SCALED CONTENT
+// ABUSE, "when many pages are generated for the primary purpose of manipulating
+// search rankings and not helping users", and its separate generative-AI page
+// says how content is made is not the test. No detector is looking for the word
+// "vibrant".
+//
+// What a system can see across a whole site is SAMENESS, and the policy's
+// thin-affiliate section says the shape out loud: "cookie-cutter sites or
+// templates with the same or similar content replicated within the same site".
+//
+// Which is what this site guarantees by construction, and these assertions are
+// the measurement rather than the opinion. shapeForLive builds blogBody from a
+// fixed heading list per type, so THE ENTIRE PUBLISHED HISTORY of a type shares
+// one skeleton. Every scanner here reads one draft at a time and none of them
+// could ever have seen it.
+{
+  const { shapeForLive, headingSkeleton, skeletonKey, openingKey, spreadBy, skeletonSpread, openingSpread, describeSameness, samenessReport } = M;
+
+  // ── THE ENTRY'S OWN NAME IS NOT VARIETY ──────────────────────────
+  // Before this, towns reported three distinct skeletons out of three and every
+  // other type reported one, so towns looked like the healthy type. Their first
+  // heading is "What to Do in ${name}": the identical template with a word
+  // substituted. A measurement that scores a name as variety sends the next pass
+  // looking in the wrong place.
+  is("a heading keeps its shape and loses the name",
+     headingSkeleton({ name: "Ribe", blogBody: [{ type: "heading", content: "What to Do in Ribe" }] }), ["What to Do in {name}"]);
+  is("whatever case it was written in",
+     headingSkeleton({ name: "ribe", blogBody: [{ type: "heading", content: "What to Do in RIBE" }] }), ["What to Do in {name}"]);
+  // Whole words only, or a town called "By" guts every heading containing it.
+  is("a name inside another word is left alone",
+     headingSkeleton({ name: "By", blogBody: [{ type: "heading", content: "Bygning and Byen" }] }), ["Bygning and Byen"]);
+  // A real Danish name carries dots and brackets, which are regex, not letters.
+  is("a name with punctuation does not break the reader",
+     headingSkeleton({ name: "Nørresundby (Aalborg)", blogBody: [{ type: "heading", content: "Around Nørresundby (Aalborg)" }] }), ["Around {name}"]);
+  // \b is defined on ASCII word characters, so it finds a boundary in the middle
+  // of every Danish name with æ, ø or å in it. This is the case that proves the
+  // reader is not using it.
+  is("a name ending in a Danish letter is matched whole",
+     headingSkeleton({ name: "Ærø", blogBody: [{ type: "heading", content: "Around Ærø" }] }), ["Around {name}"]);
+  is("and not when it is the head of a longer word",
+     headingSkeleton({ name: "Ærø", blogBody: [{ type: "heading", content: "Ærøskøbing harbour" }] }), ["Ærøskøbing harbour"]);
+  is("a name twice in one heading is replaced twice",
+     headingSkeleton({ name: "Ribe", blogBody: [{ type: "heading", content: "Ribe and Ribe" }] }), ["{name} and {name}"]);
+  is("only headings count", headingSkeleton({ name: "X", blogBody: [{ type: "paragraph", content: "a" }, { type: "heading", content: "B" }, { type: "bullets", items: ["c"] }] }), ["B"]);
+  is("order is kept, because order is most of what a template is",
+     headingSkeleton({ blogBody: [{ type: "heading", content: "B" }, { type: "heading", content: "A" }] }), ["B", "A"]);
+  is("an entry with no body has no skeleton", headingSkeleton({ name: "X" }), []);
+  is("and nothing at all is safe to measure", headingSkeleton(null), []);
+  is("the key is one comparable string", skeletonKey({ blogBody: [{ type: "heading", content: "A" }, { type: "heading", content: "B" }] }), "A > B");
+
+  // ── THE OPENING WORDS, THE OTHER HALF OF A FINGERPRINT ───────────
+  is("an opening is the first few words", openingKey({ desc: "Tucked into the marsh, this is the oldest town." }), "tucked into the marsh");
+  // "Ribe is one of" and "Skagen is one of" are the same opening.
+  is("and the entry's own name is not part of it", openingKey({ name: "Ribe", desc: "Ribe is one of the oldest towns." }), "is one of the");
+  is("a description too short to compare has no opening", openingKey({ desc: "Small town." }), "");
+  is("nothing is not an opening", openingKey(null), "");
+
+  // ── THE COUNTING ─────────────────────────────────────────────────
+  {
+    // The repeated skeleton is deliberately the one that sorts LAST
+    // alphabetically. With "H1" twice and "H2" once, a version of this that
+    // ordered by key rather than by count would still name the right group, and
+    // the assertion would have proved nothing.
+    const rows = [
+      { payload: { name: "A", blogBody: [{ type: "heading", content: "Zebra" }] } },
+      { payload: { name: "B", blogBody: [{ type: "heading", content: "Zebra" }] } },
+      { payload: { name: "C", blogBody: [{ type: "heading", content: "Anchor" }] } },
+      { payload: { name: "D", blogBody: [] } },
+    ];
+    const sp = skeletonSpread(rows);
+    is("every row is counted", sp?.pages, 4);
+    is("a page with no skeleton is not grouped with the others", sp?.unkeyed, 1);
+    is("the groups are the distinct skeletons", sp?.distinct, 2);
+    is("the most repeated one is named, not the first alphabetically", sp?.largest?.key, "Zebra");
+    is("with the names in it, so the report can be acted on", sp?.largest?.names, ["A", "B"]);
+    // The share is of the pages that COULD be compared. Averaging in the
+    // skeletonless ones would quietly turn two different problems into one
+    // number that describes neither.
+    is("the share is of what was comparable", sp?.share, 2 / 3);
+    // A payload passed bare, not wrapped in a row, reads the same. Published
+    // rows arrive both ways in this codebase.
+    is("a bare payload is a row too", skeletonSpread([{ name: "A", blogBody: [{ type: "heading", content: "H1" }] }])?.largest?.count, 1);
+  }
+
+  // ── IT REPORTS, IT DOES NOT SENTENCE ─────────────────────────────
+  // Google publishes no threshold. A function here claiming one would be
+  // inventing the exact kind of fact this codebase refuses to invent, so the
+  // sentence counts and stops.
+  {
+    const line = describeSameness(skeletonSpread([
+      { payload: { name: "A", blogBody: [{ type: "heading", content: "H1" }] } },
+      { payload: { name: "B", blogBody: [{ type: "heading", content: "H1" }] } },
+    ]));
+    ok("the sentence says how many and what of", /2 of the 2 pages carry the identical heading sequence \(100%\): H1\./.test(line));
+    ok("and it never claims a penalty", !/spam|penal|deindex|de-index|ban|blacklist/i.test(line));
+    is("a set with nothing to compare says nothing", describeSameness(skeletonSpread([])), "");
+    ok("and genuine variety is reported as variety",
+       /No two of the 2 pages share a heading sequence\./.test(describeSameness(skeletonSpread([
+         { payload: { name: "A", blogBody: [{ type: "heading", content: "H1" }] } },
+         { payload: { name: "B", blogBody: [{ type: "heading", content: "H2" }] } },
+       ]))));
+  }
+
+  // ── AND HERE IS THE ACTUAL STATE OF THE SITE ─────────────────────
+  // Three deliberately different drafts per type, through the only insert path
+  // into gemlyx_content, and then counted. Every type collapses to ONE skeleton,
+  // so this is not a tendency in the writing, it is arithmetic in the shaper.
+  //
+  // THESE ASSERTIONS ARE A RECORD, NOT A GOAL. The day the section list is made
+  // to vary by what the research actually supports, this block goes red, and it
+  // should be REWRITTEN THEN, deliberately, to assert the new spread. Anyone
+  // lowering a number here to get green is undoing the fix on purpose.
+  {
+    const TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "nightTown", "booking", "essential"];
+    const draft = (i) => ({
+      name: ["Ribe", "Skagen", "Mariager"][i], town: ["Ribe", "Skagen", "Mariager"][i], city: ["Ribe", "Skagen", "Mariager"][i],
+      desc: ["Marsh town, the oldest in the country.", "Dunes at the very top of Jutland.", "A tiny harbour on a fjord."][i],
+      characterAndFit: "c", whatToDo: "w", gettingThereReality: "g", thingsToKnow: ["a", "b", "c"],
+      vibeLocation: "v", whoFor: "f", realityCheck: "r", special: "s", atmosphere: "a", whoItsFor: "wi",
+      howTo: "h", bestNights: "bn", walkIt: "w2", afterDark: "ad", bestTime: "bt", beforeDark: "bd",
+      howItsMade: "him", whenEnter: "we", crowd: "cr",
+    });
+    const rows = [];
+    TYPES.forEach(type => [0, 1, 2].forEach(i => {
+      const payload = shapeForLive(type, draft(i));
+      if (payload) rows.push({ type, payload });
+    }));
+    is("every type shaped three pages", rows.length, TYPES.length * 3);
+    const report = samenessReport(rows);
+    const varied = report.types.filter(t => t.skeleton.distinct > 1).map(t => t.type);
+    is("no type varies its skeleton at all, on any entry, ever", varied, []);
+    // Named individually as well, so the day one of them is fixed the failure
+    // says which one rather than "the list changed".
+    TYPES.forEach(type => {
+      const t = report.types.find(x => x.type === type);
+      is(`every ${type} page carries one heading sequence`, t?.skeleton?.distinct, 1);
+    });
+    // AND TWO PAIRS OF TYPES SHARE ONE WITH EACH OTHER, which is the same
+    // problem one level up: an attraction page and a workshop page are
+    // structurally indistinguishable, as are a restaurant and a food street.
+    const keyFor = (type) => report.types.find(t => t.type === type)?.skeleton?.largest?.key;
+    is("an attraction and a workshop are the same page", keyFor("free"), keyFor("booking"));
+    is("a restaurant and a food street too", keyFor("food"), keyFor("foodStreet"));
+    // The one that reads worst out loud.
+    is("and this is the sequence every attraction on the site carries",
+       keyFor("free"), "Being There > Who It's For > The Reality Check > Things to Know");
+  }
+}
+
+// ── A PAGE WITH NO WORDS IN IT ──────────────────────────────────────
+//
+// The other half of the same night's audit. Every entry on this site is fetched
+// from Supabase by JavaScript after first paint, and the crawler response was
+// meta tags on an empty shell: a correct title and description over a page
+// containing no sentence about the place. Checked against production before any
+// of this was written, a fetch of /denmark/billund had no Billund text in it.
+//
+// Googlebot does render JavaScript, so this was not invisible. It was the
+// weakest form of visible there is, and everything else that reads pages now,
+// every answer engine and every crawler without a renderer, got the empty one.
+{
+  const { articleBlocks, articleHtml, worthServing, structuredData, injectArticle } = M;
+  // A realistic length, because that is what the threshold below is about. The
+  // drafting prompt asks for 260 to 390 words across the sections, so a fixture
+  // of two short sentences would prove the opposite of what it looks like.
+  const TOWN = {
+    name: "Ribe", region: "South Jutland", photo: "/towns/ribe.jpg",
+    desc: "The oldest town in Denmark, and small enough to walk end to end before lunch. What is left of the medieval street plan is still the street plan, so the walk is the attraction rather than a way of getting between attractions.",
+    blogBody: [
+      { type: "heading", content: "What to Do in Ribe" },
+      { type: "paragraph", content: "The cathedral tower is the one climb worth doing, and the view from the top is the marsh rather than the town. On a clear afternoon you can see the sea wall and, in autumn, the starlings that gather over the meadows before dusk. The rest of the centre takes an hour at a slow pace, and the museum by the river is the only indoor stop that needs more than twenty minutes." },
+      { type: "heading", content: "The Reality Check" },
+      { type: "paragraph", content: "Everything closes early and the town is genuinely quiet by nine, which is the point for some people and a disappointment for others. There is one street of restaurants and it fills up in July." },
+      { type: "heading", content: "Things to Know" },
+      { type: "bullets", items: ["The museum shuts at four", "Parking is free past the station", "The tower closes in bad weather with no notice"] },
+      { type: "image", src: "https://upload.wikimedia.org/x.jpg", credit: { photographer: "Ib", license: "CC BY-SA 3.0" } },
+    ],
+  };
+
+  // ── THE ORDER IS THE ENTRY'S OWN ORDER ───────────────────────────
+  is("the article is the page, in the page's order",
+     articleBlocks(TOWN).map(b => b.tag), ["h1", "p", "h2", "p", "h2", "p", "h2", "ul"]);
+  is("the name is the heading", articleBlocks(TOWN)[0]?.text, "Ribe");
+  is("bullets stay a list", articleBlocks(TOWN).find(b => b.tag === "ul")?.items?.length, 3);
+  // An image cannot be reproduced here without also reproducing the credit its
+  // licence requires, so it is left out entirely rather than half included.
+  ok("a picture is not smuggled in without its credit", !/upload\.wikimedia/.test(articleHtml(TOWN)));
+  ok("and the html carries the real sentences", /The cathedral tower is the one climb worth doing/.test(articleHtml(TOWN)));
+  ok("with the bullets as list items", /<li>The museum shuts at four<\/li>/.test(articleHtml(TOWN)));
+
+  // ── NOTHING IS ADDED, WHICH IS THE ONLY REASON THIS IS SAFE ──────
+  // Cloaking is "presenting different content to users and search engines with
+  // the intent to manipulate", and its named example is inserting text only when
+  // the requester is a search engine. So every string in the output has to come
+  // from the payload. Asserted by rebuilding the expected text from the fields
+  // rather than by matching a fixed string, so a sentence written for a crawler
+  // could not be added without this failing.
+  {
+    const said = articleBlocks(TOWN).flatMap(b => (b.items ? b.items : [b.text]));
+    const fromRow = [TOWN.name, TOWN.desc, ...TOWN.blogBody.flatMap(b => b.type === "bullets" ? b.items : [b.content]).filter(Boolean)];
+    is("every line in the article is a line from the row", said.filter(s => !fromRow.includes(s)), []);
+  }
+  // Escaped, because a description is model output and a stray < would close the
+  // article early and put the rest of the payload on the page as markup.
+  ok("the text is escaped", /&lt;script&gt;/.test(articleHtml({ ...TOWN, desc: "<script>x</script> the oldest town in Denmark and worth the walk from the station on a quiet morning" })));
+  // Every text path, not just the paragraph one. A bullet is model output too.
+  ok("and so is every bullet",
+     /<li>&lt;b&gt;four&lt;\/b&gt;<\/li>/.test(articleHtml({ ...TOWN, blogBody: [...TOWN.blogBody, { type: "bullets", items: ["<b>four</b>"] }] })));
+
+  // ── A THIN PAGE IS NOT WORTH SERVING ─────────────────────────────
+  // One heading and nothing else is the empty shell with extra steps, and
+  // publishing that to a crawler is how a site earns the "thin" it is avoiding.
+  ok("a real entry is worth serving", worthServing(TOWN));
+  ok("a name on its own is not", !worthServing({ name: "Ribe" }));
+  ok("nor a name and a heading", !worthServing({ name: "Ribe", blogBody: [{ type: "heading", content: "What to Do" }] }));
+  ok("nor a one-line stub", !worthServing({ name: "Ribe", desc: "A town." }));
+  is("and nothing worth serving means no article at all", articleHtml({ name: "Ribe" }), "");
+  is("nothing at all is safe", articleHtml(null), "");
+
+  // ── STRUCTURED DATA, WHICH THE SITE HAD NONE OF ──────────────────
+  // Zero occurrences of application/ld+json anywhere before tonight, while
+  // Google's generative-AI guidance asks for accuracy "across all content
+  // elements, including metadata and structured data".
+  {
+    const ld = structuredData(TOWN, { url: "https://www.gemlyxtravel.com/denmark/ribe", image: "https://www.gemlyxtravel.com/towns/ribe.jpg", origin: "https://www.gemlyxtravel.com", region: "South Jutland" });
+    ok("it is a script block", /^<script type="application\/ld\+json">/.test(ld));
+    const data = JSON.parse(ld.replace(/^<script[^>]*>/, "").replace(/<\/script>$/, "").replace(/\\u003c/g, "<"));
+    is("it says what the page is", data?.["@type"], "Article");
+    is("with the entry's own name", data?.headline, "Ribe");
+    is("and its own words", data?.description, TOWN.desc);
+    is("published by Gemlyx", data?.publisher?.name, "Gemlyx");
+    is("about a place in Denmark", data?.about?.address?.addressCountry, "DK");
+    is("in the region the row names", data?.about?.address?.addressRegion, "South Jutland");
+    is("pointing at its own url", data?.mainEntityOfPage?.["@id"], "https://www.gemlyxtravel.com/denmark/ribe");
+    // NO DATES, and this is the honest part. The middleware selects `payload`
+    // and nothing else, so nobody here knows when the row was made or changed. A
+    // datePublished from today's clock would be the same lie as an undated
+    // timetable, which this codebase spent the day refusing to print.
+    ok("and it claims no date nobody knows", !/date(Published|Modified|Created)/i.test(ld));
+    // A </script> inside a value would end the block early and spill the rest of
+    // the payload onto the page as text.
+    ok("a script tag in the data cannot close the block",
+       !/<\/script>/.test(structuredData({ ...TOWN, desc: "</script><b>x</b>" }, { url: "u" }).replace(/<\/script>$/, "")));
+    is("no name means no block", structuredData({ desc: "x" }, { url: "u" }), "");
+    is("and no url means no block", structuredData(TOWN, {}), "");
+  }
+
+  // ── AND IT LANDS IN THE REAL SHELL ───────────────────────────────
+  // Against the actual index.html, not a fixture. A regex that does not match
+  // what the build emits would leave this whole change silently doing nothing,
+  // which is the failure mode this suite has caught four times in other files.
+  {
+    const shell = readFileSync(join(root, "index.html"), "utf8");
+    const out = injectArticle(shell, { article: articleHtml(TOWN), jsonLd: structuredData(TOWN, { url: "https://x/y", origin: "https://x" }) });
+    ok("the article is inside the root container", /<div id="root"><article>/.test(out));
+    ok("the words are in the html", /oldest town in Denmark/.test(out));
+    ok("the structured data is in the head", /<script type="application\/ld\+json">[\s\S]*<\/head>/.test(out));
+    // INSIDE #root and nowhere else, because createRoot().render() replaces the
+    // container's children on mount. Text a person cannot see but a crawler can
+    // is hidden text, which is its own spam policy and a worse problem than the
+    // one this solves.
+    ok("nothing is left outside the container for a person never to see",
+       out.indexOf("<article>") > out.indexOf('<div id="root">')
+       && out.indexOf("</article>") < out.indexOf("</div>", out.indexOf('<div id="root">')));
+    // A shell that already has children is not this function's to overwrite.
+    ok("a container that is already full is left alone",
+       !/<article>/.test(injectArticle('<html><head></head><body><div id="root"><p>already here</p></div></body></html>', { article: "<article>x</article>" })));
+    is("no article means the shell is unchanged", injectArticle(shell, {}), shell);
+  }
+
+  // ── THE WIRING ───────────────────────────────────────────────────
+  const mw = readFileSync(join(root, "middleware.js"), "utf8");
+  ok("the town response carries the article", /article: articleHtml\(town\),/.test(mw));
+  ok("and the structured data", /jsonLd: structuredData\(town, \{ url: townUrl, image: townImage, origin: SITE_ORIGIN, region: town\.region \}\)/.test(mw));
+  ok("built from the payload the card already fetched, so it costs no request",
+     mw.indexOf("const town = await findTown(") < mw.indexOf("article: articleHtml(town)"));
+  ok("and the meta tags still go out with it", /const withMeta = injectMeta\(shell, \{/.test(mw));
+}
+
+// ── AN ADDRESS FOR EVERYTHING THAT IS NOT A TOWN ────────────────────
+//
+// Oliver, 16 Aug 2026, awake at two in the morning: "cant sleep. Just get the
+// things done." The thing was the finding underneath his Google question: the
+// whole site was 33 URLs, /denmark plus 32 towns, because the route table and
+// the sitemap knew about one content type. Every attraction, festival,
+// restaurant, food street, bar, bar street and workshop ever published existed
+// only inside the app, at no address at all.
+{
+  const { ENTRY_KINDS, segForType, kindForSeg, typesForSeg, entryUrlPath, parseEntryUrl, isEntryUrl, sitemapXml, placeSlug } = M;
+
+  // ── THE SEGMENT IS THE PUBLIC WORD ───────────────────────────────
+  // A URL is the most permanent thing a site publishes. Studio calls these types
+  // `free` and `booking`; a person looking for Koldinghus is not looking for a
+  // free, and /denmark/free/koldinghus would be the internal vocabulary leaking
+  // into the one place it can never be taken back from.
+  is("an attraction is an attraction", segForType("free"), "attraction");
+  is("a workshop is a workshop", segForType("booking"), "workshop");
+  is("a festival is an event", segForType("festival"), "event");
+  ok("and no segment is an internal type name",
+     ENTRY_KINDS.every(k => !["free", "booking", "festival", "night", "nightStreet", "foodStreet"].includes(k.seg)));
+  // A town's path carries no segment, so it answers "" rather than null, and the
+  // two are different answers: "" means an address with no segment, null means no
+  // address at all.
+  is("a town has a path but no segment", segForType("town"), "");
+  is("a type with no page has no segment", segForType("nightTown"), null);
+  is("nor does an essential", segForType("essential"), null);
+  is("nor does something invented", segForType("wormhole"), null);
+
+  // ── ONE SEGMENT CAN COVER TWO TYPES ──────────────────────────────
+  // A food street is a food place and a bar street is a nightlife place, which is
+  // how the app already treats them: same pool, same setter.
+  is("a street rides with its siblings", typesForSeg("food"), ["food", "foodStreet"]);
+  is("and so does a bar street", typesForSeg("nightlife"), ["night", "nightStreet"]);
+  is("a food street's own address is the food one", segForType("foodStreet"), "food");
+  is("and a bar street's is the nightlife one", segForType("nightStreet"), "nightlife");
+  is("an unknown segment covers no types, rather than all of them", typesForSeg("everything"), []);
+  is("and names no kind", kindForSeg("everything"), null);
+
+  // ── THE PATHS ────────────────────────────────────────────────────
+  is("a town keeps the address it is already indexed under", entryUrlPath("town", "Ribe"), "/denmark/ribe");
+  is("an attraction gets its own", entryUrlPath("free", "Koldinghus"), "/denmark/attraction/koldinghus");
+  is("a bar street too", entryUrlPath("nightStreet", "Jomfru Ane Gade"), "/denmark/nightlife/jomfru-ane-gade");
+  // Danish letters fold the same way everywhere in this codebase: ae, o, aa.
+  is("Danish letters fold the way this codebase folds them, aero and not aeroe",
+     entryUrlPath("free", "Ærø Museum"), "/denmark/attraction/aero-museum");
+  // NULL RATHER THAN A GUESS. A link to a page that does not exist is worse than
+  // no link, and a sitemap full of them is worse still.
+  is("a type with no page has no address", entryUrlPath("essential", "Nightpay"), null);
+  is("and neither does a nameless row", entryUrlPath("free", ""), null);
+
+  // ── READING ONE BACK ─────────────────────────────────────────────
+  is("a town address reads as a town", parseEntryUrl("/denmark/ribe"), { seg: "", kind: "town", slug: "ribe" });
+  is("an attraction address reads as one", parseEntryUrl("/denmark/attraction/koldinghus"), { seg: "attraction", kind: "free", slug: "koldinghus" });
+  is("a trailing slash is the same address", parseEntryUrl("/denmark/attraction/koldinghus/")?.slug, "koldinghus");
+  is("a query string is not part of it", parseEntryUrl("/denmark/attraction/koldinghus?utm_source=x")?.slug, "koldinghus");
+  is("nor is a hash", parseEntryUrl("/denmark/attraction/koldinghus#/free/koldinghus")?.slug, "koldinghus");
+  is("an encoded slug is decoded once", parseEntryUrl("/denmark/attraction/aer%C3%B8-museum")?.slug, "aero-museum");
+  // A segment nobody publishes is not an entry, so the app opens the front page
+  // rather than a blank one and the middleware serves the site's own card.
+  is("an unknown segment is not an entry", parseEntryUrl("/denmark/wormhole/x"), null);
+  is("nor is a third segment", parseEntryUrl("/denmark/attraction/koldinghus/extra"), null);
+  is("nor another country", parseEntryUrl("/sweden/ribe"), null);
+  is("nor the country page itself", parseEntryUrl("/denmark"), null);
+  is("nor the root", parseEntryUrl("/"), null);
+  ok("and the guard says so", isEntryUrl("/denmark/attraction/koldinghus") && !isEntryUrl("/guide/abc123"));
+
+  // ── THE ROUND TRIP, WHICH IS THE ONE THAT MATTERS ────────────────
+  // Every type that has an address must survive being written into a URL and read
+  // back out of one. A mismatch here is a page that is linked, listed in the
+  // sitemap, crawled, and then opens as the front page.
+  {
+    const NAMES = ["Ribe", "Jomfru Ane Gade", "Ærø Museum", "Koldinghus", "Sankt Hans Aften", "Nørresundby (Aalborg)"];
+    const TYPES = ["town", "festival", "free", "food", "foodStreet", "night", "nightStreet", "booking"];
+    const broken = [];
+    TYPES.forEach(type => NAMES.forEach(name => {
+      const path = entryUrlPath(type, name);
+      if (!path) { broken.push(`${type}/${name}: no path`); return; }
+      const back = parseEntryUrl(path);
+      if (!back) { broken.push(`${type}/${name}: ${path} does not read back`); return; }
+      if (back.slug !== placeSlug(name)) broken.push(`${type}/${name}: slug became ${back.slug}`);
+      if (back.seg !== segForType(type)) broken.push(`${type}/${name}: segment became ${back.seg}`);
+    }));
+    is("every address round trips", broken, []);
+  }
+
+  // ── THE SITEMAP CARRIES THEM ALL ─────────────────────────────────
+  {
+    const xml = sitemapXml("https://x.dk", [
+      { type: "town", name: "Ribe" },
+      { type: "free", name: "Koldinghus" },
+      { type: "nightStreet", name: "Jomfru Ane Gade" },
+      { type: "essential", name: "Nightpay" },
+      { type: "free", name: "Koldinghus" },
+      "Skagen",
+    ]);
+    ok("the country page is in it", xml.includes("<loc>https://x.dk/denmark</loc>"));
+    ok("a town is in it", xml.includes("<loc>https://x.dk/denmark/ribe</loc>"));
+    ok("an attraction is in it", xml.includes("<loc>https://x.dk/denmark/attraction/koldinghus</loc>"));
+    ok("a bar street is in it", xml.includes("<loc>https://x.dk/denmark/nightlife/jomfru-ane-gade</loc>"));
+    // A type with no page is left out rather than pointing at nothing.
+    ok("a type with no page is not in it", !/nightpay/i.test(xml));
+    // The old shape still works, or a signature change would have silently
+    // dropped every town on the day it shipped.
+    ok("a bare name is still a town", xml.includes("<loc>https://x.dk/denmark/skagen</loc>"));
+    is("and nothing is listed twice", (xml.match(/denmark\/attraction\/koldinghus/g) || []).length, 1);
+  }
+
+  // ── THE APP CAN OPEN EVERY ONE OF THEM ───────────────────────────
+  // The URL vocabulary is useless if the app has no pool for a kind: the page
+  // would be crawled, indexed, opened, and show the front door. Asserted across
+  // the two files, because this is exactly the "works for eight of nine types"
+  // shape that has cost this codebase four separate features.
+  {
+    const appU = readFileSync(join(root, "src/App.jsx"), "utf8");
+    ok("there is one route for every kind", /<Route path=\{`\/\$\{COUNTRY\}\/:entrySeg\/:entrySlug`\} element=\{<GemlyxApp \/>\} \/>/.test(appU));
+    ok("the route sits after the town one, so a town still wins",
+       appU.indexOf(":townSlug`} element") < appU.indexOf(":entrySeg/:entrySlug`} element"));
+    ok("the arrival is read through the shared reader", /const kind = kindForSeg\(entrySeg\);/.test(appU));
+    // ── ASSERTED INSIDE EACH EFFECT, NOT ACROSS THE FILE ───────────
+    // "ENTRY_SETTERS[kind]?.(found)" appears in the hash handler as well, so a
+    // version of this that searched the whole file passed with either one of the
+    // two arrival paths gutted. Both mutants survived it. Each region is sliced
+    // out and asserted on its own.
+    {
+      const typedStart = appU.indexOf("const entryRouteDone = useRef(false);");
+      const typed = appU.slice(typedStart, appU.indexOf("}, [entrySeg, entrySlug, liveContentVersion]);", typedStart));
+      ok("the typed arrival was found", typedStart > 0 && typed.length > 200);
+      ok("it goes straight to the place rather than the front door", /setEntered\(true\);/.test(typed));
+      ok("and opens through the setter map the app already had", /ENTRY_SETTERS\[kind\]\?\.\(found\);/.test(typed));
+      const hashStart = appU.indexOf("const deepLinkDone = useRef(false);");
+      const hashFx = appU.slice(hashStart, appU.indexOf("}, [liveContentVersion]);", hashStart));
+      ok("the older hash arrival still opens through it too", /ENTRY_SETTERS\[kind\]\?\.\(found\);/.test(hashFx));
+    }
+    ok("retrying as live content lands, like the two effects above it",
+       /\}, \[entrySeg, entrySlug, liveContentVersion\]\)/.test(appU));
+    // Every kind in the vocabulary has a pool in that effect, and the pools are
+    // read out of the source rather than assumed.
+    const poolBlock = appU.slice(appU.indexOf("const pools = {", appU.indexOf("const kind = kindForSeg(entrySeg);")));
+    const pooled = (poolBlock.slice(0, poolBlock.indexOf("};")).match(/^\s*(\w+):/gm) || []).map(x => x.trim().replace(":", ""));
+    is("no kind is left without a pool", ENTRY_KINDS.map(k => k.kind).filter(k => !pooled.includes(k)), []);
+    // A bar street opens through the nightlife setter, so the nightlife pool has
+    // to hold the streets as well as the venues.
+    ok("the nightlife pool holds the streets too", /nightlife: \[\.\.\.nightlifeSpots, \.\.\.nightlifeStreets\]/.test(poolBlock));
+    // ── AND THE ADDRESS BAR STOPS ARGUING WITH ITSELF ──────────────
+    // A cold arrival at /denmark/ribe opened the town and then the hash push put
+    // "#/town/ribe" on top of it, so the one visitor who came from a search
+    // result ended up at /denmark/ribe#/town/ribe.
+    ok("an entry opened by its own address gets no hash on top",
+       /if \(isEntryUrl\(window\.location\.pathname\)\) return;/.test(appU));
+
+    // ── AND SOMETHING FINALLY LINKS TO THEM ────────────────────────
+    // Making the URLs exist was half of it. `townPath` was imported into this
+    // file and called zero times, there was no <a href> to any place page
+    // anywhere in the app, and nothing navigated to one either, so the sitemap
+    // was the only door. A page nothing links to gets crawled late and treated
+    // as unimportant however good it is.
+    const el = readFileSync(join(root, "src/components/EntryLink.jsx"), "utf8");
+    ok("the link is a real anchor with a real href", /<a\s*\n?\s*href=\{href\}/.test(el));
+    ok("built from the shared path builder", /const href = entryUrlPath\(type, name\);/.test(el));
+    // A type with no page renders no anchor: a link to nowhere is worse than none.
+    ok("a type with no page renders no link", /if \(!href\) return children \?\? null;/.test(el));
+    // THE TITLE AND NOT THE CARD, because every card carries a heart button and
+    // interactive content inside an anchor is invalid HTML. The title is also the
+    // better link: its text is the place's name, which is the anchor text a
+    // search engine wants.
+    ok("a plain click still belongs to the app", /e\.preventDefault\(\);/.test(el));
+    ok("but a modified click opens the real url in a tab",
+       /if \(e\.metaKey \|\| e\.ctrlKey \|\| e\.shiftKey \|\| e\.altKey \|\| e\.button !== 0\) return;/.test(el));
+    ok("and it looks like the text it replaced", /color: "inherit", textDecoration: "none"/.test(el));
+    // Used on the lists a person actually browses, one per content type that has
+    // a page. Counted rather than spot-checked, because the value of this is
+    // coverage: one linked list leaves the rest of the site orphaned.
+    is("every place list links its titles", (appU.match(/<EntryLink type=/g) || []).length, 6);
+    ok("towns are linked", /<EntryLink type="town" name=\{town\.name\}>/.test(appU));
+    ok("attractions and workshops are linked", /<EntryLink type=\{item\._kind === "free" \? "free" : "booking"\}/.test(appU));
+    ok("food places and food streets are linked", /<EntryLink type=\{spot\.isFoodStreet \? "foodStreet" : "food"\}/.test(appU));
+    ok("bars and bar streets are linked", /<EntryLink type=\{spot\.isStreet \? "nightStreet" : "night"\}/.test(appU));
+  }
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

@@ -117,6 +117,29 @@ export const dayPlus = (v, n) => {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + Math.trunc(step));
 };
 
+// ── AND PRINTING ONE ─────────────────────────────────────────────────
+//
+// "16 Aug 2026". Third member of this family and the first that a reader sees,
+// so it is here for the reason the file already gives twice: HowWeKnow.jsx had
+// its own copy, journey.js needed the same thing for the "measured on" stamp
+// under a timetable, and a component cannot be imported by a util. Two
+// formatters is the copy that drifts.
+//
+// Formatted from the LOCAL parts dayStart built, which is what makes a stored
+// day print as the same day everywhere. The alternative, toLocaleDateString on a
+// raw parse, prints the day before for every reader west of Greenwich, and that
+// is not hypothetical: it is finding five of the five that created this file.
+//
+// An INSTANT still prints the local calendar day it fell on, which is correct
+// for a "last checked at" line and is deliberately not the same in every
+// timezone. Only a day-only value is invariant, because only a day-only value
+// names a day.
+export const dayLabel = (v) => {
+  const d = dayStart(v);
+  if (!d) return null;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+};
+
 // Is this calendar day within the range, inclusive at both ends. `today` is a
 // parameter rather than a call to the clock, for the reason eventDates.js
 // already states in its own words: a date helper that reads the clock cannot be

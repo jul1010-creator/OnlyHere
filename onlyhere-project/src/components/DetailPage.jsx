@@ -12,6 +12,7 @@ import { PlaceMiniMap } from "./PlaceMiniMap";
 import { bookingUrl, airbnbUrl, STAY_DISCLOSURE, ticketmasterUrl, ticketDisclosure, tiqetsUrl, tiqetsDisclosure } from "../utils/affiliates";
 import { isTiqetsProductUrl } from "../utils/ticketLink";
 import { HowWeKnow } from "./HowWeKnow";
+import { JourneyCard } from "./JourneyCard";
 import { events, majorEvents, vikingEvents } from "../data/events";
 import { freeEntrance } from "../data/freeEntrance";
 import { foodSpots } from "../data/food";
@@ -637,6 +638,19 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             Placed directly under the article, where someone who has just read a
             claim is standing when they wonder where it came from. */}
         <HowWeKnow item={item} />
+
+        {/* ── AND HOW YOU GET THERE, WHICH WAS MEASURED AND NEVER SHOWN ──
+            Oliver, 16 Aug 2026, asking what the page needs. Every entry drafted
+            since 13 August carries a full measured itinerary from Copenhagen and
+            nothing has ever rendered it. See JourneyCard for what was sitting in
+            the database, and utils/journey.js for why every figure in it names
+            what it measures.
+
+            Placed between the provenance block and the map: what it is, where
+            the claims came from, how to reach it, then where it sits. It renders
+            nothing at all on an entry with no measured journey or no date on
+            one, which today is every row published before 13 August. */}
+        <JourneyCard item={item} />
 
         {/* Where this actually is, and what else is around it. Renders only
             when the entry carries real coordinates; TOWN_COORDS is the fallback

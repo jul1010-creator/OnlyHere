@@ -145,3 +145,141 @@ export const injectMeta = (html, { guide, url, image }) => {
   if (title) out = out.replace(/<title>[\s\S]*?<\/title>/, () => `<title>${title}</title>`);
   return out;
 };
+
+// ── AND THE PAGE ITSELF, WHICH A CRAWLER HAS NEVER SEEN ──────────────
+//
+// Oliver, 16 Aug 2026: "Google hides pages that are too 'AI-generated'... my
+// blogs are not safe from this."
+//
+// Checked before building anything on it, the premise is narrower than the
+// worry. Google's spam policy names SCALED CONTENT ABUSE, "many pages generated
+// for the primary purpose of manipulating search rankings and not helping
+// users", and its generative-AI page says how content was made is not the test.
+//
+// What the audit found instead is worse and more fixable. Every entry on this
+// site is fetched from Supabase by JavaScript after first paint, and the crawler
+// response built above is META TAGS ONLY. So a reader that does not run the app
+// gets a correct title, a correct description, a correct canonical, and a page
+// with no words in it. Verified against the live site: a fetch of
+// /denmark/billund comes back with no sentence about Billund in it anywhere.
+//
+// Googlebot does render JavaScript, so this is not "invisible". It is the
+// weakest form of visible there is: rendering is a second, slower, best-effort
+// pass, and everything else that reads pages now, every AI answer engine and
+// every crawler without a renderer, sees the empty version.
+//
+// ── THE ONE RULE THIS OBEYS, AND IT IS THE ONLY REASON IT IS SAFE ────
+// Cloaking, in Google's own words, is "presenting different content to users and
+// search engines with the intent to manipulate search rankings and mislead
+// users", and its named example is "inserting text or keywords into a page only
+// when the user agent that is requesting the page is a search engine".
+//
+// So this adds NOTHING. Not a keyword, not a summary, not a sentence written for
+// a crawler. It emits the entry's own name, its own description and its own
+// blogBody, in their own order, which is exactly what DetailPage renders for a
+// person from the same payload. If those two ever diverge, this is the bug and
+// not the feature, which is why the test asserts the fields rather than the
+// output. Serving the same HTML to everybody would remove the question entirely
+// and is the follow-up: it needs the middleware to stop falling through for
+// people, and that file's safety rule says a person always gets the app.
+const BODY_CAP = 24000;      // an entry is a few thousand characters; this is a runaway guard
+
+// The blocks a page is made of, in order, in the shape a renderer wants. Kept
+// separate from the HTML so the ordering can be tested without parsing tags.
+export const articleBlocks = (payload) => {
+  const out = [];
+  const name = String(payload?.name || "").trim();
+  if (name) out.push({ tag: "h1", text: name });
+  const desc = String(payload?.desc || "").trim();
+  if (desc) out.push({ tag: "p", text: desc });
+  (Array.isArray(payload?.blogBody) ? payload.blogBody : []).forEach(b => {
+    if (!b || typeof b !== "object") return;
+    if (b.type === "heading" && String(b.content || "").trim()) out.push({ tag: "h2", text: String(b.content).trim() });
+    else if (b.type === "paragraph" && String(b.content || "").trim()) out.push({ tag: "p", text: String(b.content).trim() });
+    else if (b.type === "bullets" && Array.isArray(b.items)) {
+      const items = b.items.map(i => String(i || "").trim()).filter(Boolean);
+      if (items.length) out.push({ tag: "ul", items });
+    }
+    // An image block carries a caption a person sees, and the picture itself
+    // cannot be reproduced here without also reproducing its credit, which the
+    // licence requires and this function has no room for. So images are left
+    // out entirely rather than half-included.
+  });
+  return out;
+};
+
+// A page needs to be worth reading before it is worth serving. One heading and
+// nothing else is the empty shell with extra steps, and publishing that to a
+// crawler is how a site earns the "thin" it is trying to avoid.
+export const worthServing = (payload) => {
+  const blocks = articleBlocks(payload);
+  const words = blocks.reduce((n, b) => n + (b.items ? b.items.join(" ") : b.text).split(/\s+/).filter(Boolean).length, 0);
+  return blocks.some(b => b.tag === "p" || b.tag === "ul") && words >= 60;
+};
+
+export const articleHtml = (payload) => {
+  if (!worthServing(payload)) return "";
+  const parts = articleBlocks(payload).map(b => {
+    if (b.tag === "ul") return `<ul>${b.items.map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`;
+    return `<${b.tag}>${escapeHtml(b.text)}</${b.tag}>`;
+  });
+  const body = parts.join("\n");
+  return `<article>\n${body.length > BODY_CAP ? `${body.slice(0, BODY_CAP)}\n` : body}\n</article>`;
+};
+
+// ── AND WHAT THE PAGE IS, IN A FORM A MACHINE READS ──────────────────
+// Google's generative-AI guidance asks for quality and accuracy "across all
+// content elements, including metadata and structured data", and this site has
+// none at all: zero occurrences of application/ld+json anywhere.
+//
+// EVERY FIELD IS SOMETHING THE ROW ACTUALLY KNOWS. No dates, and that is
+// deliberate: the middleware selects `payload` and nothing else, so nobody here
+// knows when the row was created or last changed, and a datePublished invented
+// from today's clock would be the same class of lie as an undated timetable. Add
+// created_at to that select and the dates can follow honestly.
+export const structuredData = (payload, { url, image, origin, region } = {}) => {
+  const name = String(payload?.name || "").trim();
+  if (!name || !url) return "";
+  const desc = String(payload?.desc || "").replace(/\s+/g, " ").trim();
+  const data = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: name,
+    ...(desc ? { description: desc.length > 300 ? `${desc.slice(0, 297)}...` : desc } : {}),
+    ...(image ? { image } : {}),
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    author: { "@type": "Organization", name: "Gemlyx", ...(origin ? { url: origin } : {}) },
+    publisher: { "@type": "Organization", name: "Gemlyx", ...(origin ? { url: origin } : {}) },
+    about: {
+      "@type": "Place",
+      name,
+      address: { "@type": "PostalAddress", addressCountry: "DK", ...(region ? { addressRegion: String(region) } : {}) },
+    },
+  };
+  // </script> inside a JSON string would end the block early and put the rest of
+  // the payload on the page as text. Escaping the slash is the standard fix and
+  // leaves the JSON valid.
+  const json = JSON.stringify(data).replace(/</g, "\\u003c");
+  return `<script type="application/ld+json">${json}</script>`;
+};
+
+// ── PUTTING IT IN THE SHELL ──────────────────────────────────────────
+// The article goes INSIDE #root, not beside it. ReactDOM.createRoot().render()
+// replaces the container's children on mount, so a person who does run the app
+// sees this for the moment before React takes over and never sees it twice.
+// Anywhere else on the page it would still be there afterwards, and text that a
+// person cannot see but a crawler can is hidden text, which is its own spam
+// policy and a worse problem than the one this solves.
+export const injectArticle = (html, { article = "", jsonLd = "" } = {}) => {
+  let out = String(html || "");
+  if (jsonLd && out.includes("</head>")) out = out.replace("</head>", () => `  ${jsonLd}\n  </head>`);
+  if (article) {
+    // The built shell's own div, exactly as Vite emits it. Matched loosely on
+    // attribute order and whitespace, because a build tool is free to change
+    // either, and an empty-container match only: a shell that already has
+    // children is not this file's to overwrite.
+    const empty = /<div\s+id="root"\s*>\s*<\/div>/;
+    if (empty.test(out)) out = out.replace(empty, () => `<div id="root">${article}</div>`);
+  }
+  return out;
+};

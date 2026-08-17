@@ -36,8 +36,8 @@
 
 import { next } from "@vercel/edge";
 import { SUPABASE_URL, SUPABASE_KEY, SITE_ORIGIN } from "./src/config.js";
-import { isCrawler, guideIdFromPath, injectMeta } from "./src/utils/linkPreview.js";
-import { placeSlug, findBySlug, sitemapXml, COUNTRY } from "./src/utils/placeUrl.js";
+import { isCrawler, guideIdFromPath, injectMeta, articleHtml, structuredData, injectArticle, worthServing } from "./src/utils/linkPreview.js";
+import { placeSlug, findBySlug, sitemapXml, COUNTRY, parseEntryUrl, entryUrlPath, typesForSeg } from "./src/utils/placeUrl.js";
 import { towns as hardcodedTowns } from "./src/data/towns.js";
 
 // Guide URLs, town pages, and the sitemap. Everything else on the site keeps
@@ -73,19 +73,40 @@ export const config = { matcher: ["/guide/:path*", "/denmark/:path*", "/sitemap.
 // which we could not confirm exist, and that is the same rule this project
 // applies to every Places and Directions lookup: never conclude a fact from a
 // failed lookup.
-const townNames = async () => {
-  const names = hardcodedTowns.map(t => t?.name).filter(Boolean);
+// ── AND EVERY OTHER PUBLISHED PAGE, AS OF 16 AUG ────────────────────
+// This asked for towns only, which is why the live sitemap listed 33 URLs while
+// the site held several times that many researched entries. One query for
+// everything now, and the type comes back with the payload so each row can be
+// turned into the right address.
+//
+// TWO FILTERS, AND BOTH REFUSE RATHER THAN GUESS:
+//
+//   entryUrlPath returns null for a type with no page in the app (a nightlife
+//   town, an essential), so those are never listed. A sitemap entry pointing at
+//   an address that renders nothing is a promise the site cannot keep.
+//
+//   worthServing refuses a row with no real paragraph in it. Telling a search
+//   engine about a hundred stubs is the "many pages without adding value" shape
+//   from Google's own scaled-content policy, which is the thing this whole night
+//   was about avoiding, not a step towards it.
+const publishedEntries = async () => {
+  const entries = hardcodedTowns.map(t => t?.name).filter(Boolean).map(name => ({ type: "town", name }));
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&type=eq.town&published=eq.true&order=id.desc`,
+      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=type,payload&published=eq.true&order=id.desc`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) },
     );
     if (res.ok) {
       const rows = await res.json();
-      if (Array.isArray(rows)) rows.forEach(r => { if (r?.payload?.name) names.push(r.payload.name); });
+      if (Array.isArray(rows)) rows.forEach(r => {
+        const name = r?.payload?.name;
+        if (!name || !entryUrlPath(r?.type, name)) return;
+        if (!worthServing(r.payload)) return;
+        entries.push({ type: r.type, name });
+      });
     }
   } catch { /* a short sitemap is honest; an invented one is not */ }
-  return names;
+  return entries;
 };
 
 // The real built index.html, so a crawler response is a working page and not a
@@ -122,9 +143,26 @@ const cardResponse = (html) => new Response(html, {
 const findTown = async (slug) => {
   const local = findBySlug(hardcodedTowns, slug);
   if (local) return local;
+  return findEntry("", slug);
+};
+
+// ── AND THE SAME LOOKUP FOR EVERY OTHER KIND ────────────────────────
+// One function, one query, whatever the segment. `types` comes from
+// utils/placeUrl.js rather than from a list here, so the URL vocabulary is
+// declared once: a segment can cover two Studio types (a food street is a food
+// place, a bar street is a nightlife place) and PostgREST takes both in one `in`
+// filter. An empty segment is a town, which keeps the two paths on one code path.
+//
+// order=id.desc for the reason above: five towns have duplicate published rows,
+// findBySlug returns the first match, and unordered this lookup and the app's own
+// loader could each land on a different row for the same slug.
+const findEntry = async (seg, slug) => {
+  const types = seg ? typesForSeg(seg) : ["town"];
+  if (!types.length) return null;
   try {
+    const filter = types.length === 1 ? `type=eq.${types[0]}` : `type=in.(${types.join(",")})`;
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&type=eq.town&published=eq.true&order=id.desc`,
+      `${SUPABASE_URL}/rest/v1/gemlyx_content?select=payload&${filter}&published=eq.true&order=id.desc`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(2500) },
     );
     if (!res.ok) return null;
@@ -147,7 +185,7 @@ export default async function middleware(request) {
     // anywhere in the app for a crawler to follow. Making the URLs exist does
     // not make them discoverable; something has to list them, and this is it.
     if (url.pathname === "/sitemap.xml") {
-      return new Response(sitemapXml(SITE_ORIGIN, await townNames()), {
+      return new Response(sitemapXml(SITE_ORIGIN, await publishedEntries()), {
         status: 200,
         headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400" },
       });
@@ -156,12 +194,20 @@ export default async function middleware(request) {
     // A person: hand straight back to the app. This is the overwhelming
     // majority of requests and it costs one regex.
     if (!isCrawler(request.headers.get("user-agent"))) return next();
-    // ── A TOWN PAGE'S OWN CARD ────────────────────────────────────────
-    // Same rule as the guide branch below: a town we cannot find gets the
+    // ── AN ENTRY PAGE'S OWN CARD, WHATEVER KIND IT IS ─────────────────
+    // Same rule as the guide branch below: an entry we cannot find gets the
     // site's card rather than a card describing a page that is not there.
-    const townMatch = new RegExp(`^/${COUNTRY}/([^/]+)/?$`).exec(url.pathname);
-    if (townMatch) {
-      const town = await findTown(decodeURIComponent(townMatch[1]));
+    //
+    // ONE BRANCH FOR ALL SIX KINDS as of 16 Aug. This matched a single path
+    // segment, so it served towns and nothing else, and the five kinds that
+    // gained an address that night would have fallen through to the site card
+    // with the town branch sitting right here looking like it covered them.
+    // parseEntryUrl reads both shapes and hands back which kind it is.
+    const entryRoute = parseEntryUrl(url.pathname);
+    if (entryRoute) {
+      const town = entryRoute.kind === "town"
+        ? await findTown(entryRoute.slug)
+        : await findEntry(entryRoute.seg, entryRoute.slug);
       if (!town) return next();
       const shell = await fetchShell(url.origin);
       if (!shell) return next();
@@ -169,13 +215,43 @@ export default async function middleware(request) {
       // The entry's own words, never a template. With nothing to say we say the
       // plain true thing rather than inventing a description for it.
       const desc = String(town.desc || town.highlight || `${town.name} in ${where}, on Gemlyx.`).replace(/\s+/g, " ").trim();
-      return cardResponse(injectMeta(shell, {
-        title: `${town.name}, Denmark`,
+      const townUrl = `${SITE_ORIGIN}${entryUrlPath(entryRoute.kind === "town" ? "town" : (typesForSeg(entryRoute.seg)[0] || ""), town.name) || `/${COUNTRY}/${placeSlug(town.name)}`}`;
+      // A relative photo path has to become absolute: a crawler fetches the
+      // image from wherever the tag says, and a bare /towns/x.jpg is nowhere.
+      const townImage = /^https?:\/\//i.test(town.photo || "") ? town.photo : `${SITE_ORIGIN}${town.photo || "/og-default.jpg"}`;
+      // A town's title is unchanged, because 32 of them are indexed under it. For
+      // everything else the locality earns its place: "Jomfru Ane Gade, Aalborg"
+      // answers where before a reader has to open anything, and a bar name on its
+      // own followed by "Denmark" answers nothing.
+      const locality = entryRoute.kind === "town" ? "" : String(town.town || town.city || "").trim();
+      const withMeta = injectMeta(shell, {
+        title: locality && locality !== town.name ? `${town.name}, ${locality}` : `${town.name}, Denmark`,
         description: desc.length > 200 ? `${desc.slice(0, 197)}...` : desc,
-        url: `${SITE_ORIGIN}/${COUNTRY}/${placeSlug(town.name)}`,
-        // A relative photo path has to become absolute: a crawler fetches the
-        // image from wherever the tag says, and a bare /towns/x.jpg is nowhere.
-        image: /^https?:\/\//i.test(town.photo || "") ? town.photo : `${SITE_ORIGIN}${town.photo || "/og-default.jpg"}`,
+        url: townUrl,
+        image: townImage,
+      });
+      // ── AND THE WORDS, WHICH THIS RESPONSE HAS NEVER CARRIED ──────
+      //
+      // Until tonight this was meta tags on an empty shell: a correct title and
+      // a correct description over a page with no sentence about the town in it.
+      // Every word of an entry arrives from Supabase after first paint, so
+      // anything that reads the page without running the app, which is every
+      // crawler without a renderer and every AI answer engine there now is, saw
+      // nothing whatsoever. Checked against the live site before writing this: a
+      // fetch of /denmark/billund contains no sentence about Billund anywhere.
+      //
+      // NOTHING IS ADDED HERE. The article is the row's own name, description
+      // and blogBody, in their own order, which is what DetailPage renders for a
+      // person out of this same payload. Google's cloaking rule is about
+      // presenting DIFFERENT content to a crawler, and its named example is
+      // inserting text only when the requester is a search engine. Serving the
+      // same words is the opposite of that. If these two ever diverge, one of
+      // them is a bug, which is why the test asserts the fields and not a string.
+      //
+      // It costs nothing: findTown already fetched this payload for the card.
+      return cardResponse(injectArticle(withMeta, {
+        article: articleHtml(town),
+        jsonLd: structuredData(town, { url: townUrl, image: townImage, origin: SITE_ORIGIN, region: town.region }),
       }));
     }
 

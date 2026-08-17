@@ -27,7 +27,7 @@ import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGat
 import { stayProblems } from "./utils/accommodation";
 import { discoveryFraming, framingForTarget, coverageByTarget, DISCOVERY_TARGETS, targetById, splitAlreadyCovered, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from "./utils/discovery";
 import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
-import { placeSlug, townPath, findBySlug, COUNTRY } from "./utils/placeUrl";
+import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
 import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES } from "./utils/pageScan";
@@ -86,7 +86,7 @@ import { REGION_NAMES, regionAt, regionOf, kommuneNameAt, describeRegion, kommun
 import { otherNameFor, variantsOf, containsName, samePlaceName, distinctiveWords } from "./utils/danishNames";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
-import { partnerDisclosure } from "./utils/affiliates";
+import { partnerDisclosure, linkLabel } from "./utils/affiliates";
 import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
 import { arrivalPoint } from "./utils/arrival";
 import { groupSpotsByTown, spotsForTown, townPageFor, nightlifeTownList, nightlifeForTown, barsOnStreet, townOfLocation } from "./utils/nightlife";
@@ -98,6 +98,7 @@ import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, 
 import { languageBarrier } from "./utils/languageBarrier";
 import { languageBlock, readerLanguage } from "./utils/readerLanguage";
 import { PhotoPlate } from "./components/PhotoPlate";
+import { EntryLink } from "./components/EntryLink";
 import { AuthSheet } from "./components/AuthSheet";
 import { ProfileSheet } from "./components/ProfileSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
@@ -109,7 +110,7 @@ import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventT
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
 import { classifyFerry, ferryFindings, FERRY } from "./utils/transport";
 import { getSession, getStoredSession, captureRedirectSession, signOut as authSignOut, deleteMyData } from "./utils/auth";
-import { fetchCloudSaves, pushCloudSaves, mergeSaves } from "./utils/userSaves";
+import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSavedRow, savedGuideHasLink } from "./utils/userSaves";
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
 import { placeKindOf, kindLabel, isArea, PLACE_KINDS, KIND_LABEL } from "./utils/placeKind";
@@ -478,7 +479,12 @@ function GemlyxApp() {
   const navigate = useNavigate();
   // Set when this render came from /denmark/<town>. Read by the effect near the
   // hash deep-link handler further down, which owns opening it.
-  const { townSlug } = useParams();
+  //
+  // entrySeg and entrySlug come from the route added on 16 Aug for everything
+  // that is not a town: /denmark/attraction/<slug> and its four siblings. Same
+  // ownership, one effect down there, so there is one place that turns an address
+  // into an open entry rather than one per type.
+  const { townSlug, entrySeg, entrySlug } = useParams();
   useEffect(() => { console.log("Gemlyx", APP_VERSION); }, []);
   // Belt-and-suspenders for hero video autoplay — React's `muted` JSX prop doesn't
   // always set the real DOM `.muted` property before the browser's autoplay-eligibility
@@ -1711,6 +1717,90 @@ function GemlyxApp() {
     setDraftPhotoBusy(false);
   };
 
+  // ── THE OTHER HALF OF THAT PANEL: WIKIMEDIA, WHILE DRAFTING ─────────
+  // Oliver, 16 Aug 2026, looking at the photo panel above the JSON editor: it
+  // "needs to add the wiki section".
+  //
+  // He is describing the same gap the upload half had. The Media panel next door
+  // has had a Commons finder since 6 Aug, the Facts panel has a one-tap version
+  // of it, and the drafting panel had neither, so a picture found on Wikimedia
+  // could only be attached to an entry AFTER publishing it. For most Danish
+  // subjects Commons is the only place a usable photograph exists at all, which
+  // makes it the normal way to get a hero rather than a fallback.
+  //
+  // findCommonsPhotos above cannot be reused, for exactly the reason the Media
+  // panel could not: every write in it ends in patchContentPayload, which PATCHes
+  // gemlyx_content WHERE id = row.id, and a draft has no id. The SEARCH half is
+  // shared and untouched (same endpoint, same server-side licence filtering, same
+  // structured credit), so what is new here is only where the result lands: the
+  // draft in memory, through studioDraftText, which is what Publish reads.
+  //
+  // Kept as its own state rather than reusing photoFinder, which is keyed by
+  // rowId. Two panels sharing one piece of state is how the assistant ended up
+  // pasting draft A's payload into draft B.
+  const [draftPhotoFinder, setDraftPhotoFinder] = useState(null);   // { query, results, loading, error, sources, subject }
+  const findDraftCommonsPhotos = async (query) => {
+    const term = String(query || "").trim();
+    if (!term) { setDraftPhotoFinder({ query: "", results: [], loading: false, error: "Type what to search Wikimedia for." }); return; }
+    setDraftPhotoFinder({ query: term, results: null, loading: true, error: null });
+    try {
+      const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(term)}&limit=8`);
+      const data = await res.json();
+      if (data.error) setDraftPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
+      // sources/subject come back so the panel can say WHICH lookup found these,
+      // the same warning the published panel shows: a search that matched no
+      // article and no category has fallen through to the blind text search, and
+      // that is how four Rhine barges once ended up under a royal palace.
+      else setDraftPhotoFinder(f => ({ ...f, loading: false, results: data.results || [], sources: data.sources || [], subject: data.subject || null }));
+    } catch (e) {
+      setDraftPhotoFinder(f => ({ ...f, loading: false, error: String(e?.message || e) }));
+    }
+  };
+  // ONE WRITE, IMAGE AND CREDIT TOGETHER, and this is not a style preference. A
+  // CC BY or CC BY-SA file may only be republished WITH attribution, so a picture
+  // that reached the draft while its credit arrived in some later step is one
+  // refresh away from being published without the right to publish it. Commons
+  // returns both in the same response, which is the whole reason this endpoint
+  // exists rather than a search engine, so there is no reason to split them.
+  const useDraftCommonsPhoto = (hit) => {
+    let draft;
+    try { draft = JSON.parse(studioDraftText); }
+    catch { setDraftPhotoError("The draft JSON below does not parse, so there is nothing to attach the photo to. Fix it first."); return; }
+    // Wikimedia appends utm tracking params to thumbnail URLs. Harmless, but they
+    // make the stored value ugly and can break an exact-match lookup later.
+    const src = String(hit?.url || "").split("?")[0];
+    if (!src) { setDraftPhotoError("That result had no usable image URL."); return; }
+    const credit = { ...(hit?.credit || {}) };
+    const block = { type: "image", src, credit, ...(useCommonsCaption && hit?.caption ? { caption: hit.caption } : {}) };
+    // ── THE HERO TEST IS THE SAME ONE PUBLISH USES ──────────────────
+    // An absolute URL is a real picture, from the bucket or from Commons.
+    // Anything else in `photo` is a path somebody guessed at, and shapeForLive
+    // applies this identical rule when deciding whether the draft's hero beats
+    // the type template. The two have to agree: if this panel called a relative
+    // path a hero and publish did not, the photo would look attached right up
+    // until it silently was not.
+    const heroAlready = /^https?:\/\//i.test(String(draft?.photo || "").trim());
+    const next = {
+      ...draft,
+      photo: heroAlready ? draft.photo : src,
+      // __photoCredit is what DetailPage renders under the hero. Set only when
+      // this picture actually became the hero, so a credit can never end up
+      // attributing somebody else's photograph.
+      ...(heroAlready ? {} : { __photoCredit: credit }),
+      blogBody: [...(Array.isArray(draft?.blogBody) ? draft.blogBody : []), block],
+    };
+    setStudioDraft(next);
+    setStudioDraftText(JSON.stringify(next, null, 2));
+    setDraftEditError(null);
+    setDraftPhotoError(null);
+    setDraftPhotoFinder(null);
+    // Public-domain and CC0 files legitimately have no nameable author, so the
+    // toast falls through to the licence rather than saying "credited to
+    // undefined", which is what the published panel's version does today.
+    setToast(`Added, credited to ${credit.photographer || credit.license || "Wikimedia Commons"}`);
+    setTimeout(() => setToast(null), 3000);
+  };
+
   // ── A DRAFT YOU ALREADY HAVE, PUT BACK ──────────────────────────────
   // Oliver, 14 Aug 2026, having deleted a good draft and been handed a fixed
   // copy of it: "Well, I can't put it in anywhere.."
@@ -2077,6 +2167,14 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     // from the moment it shipped. It now has to live even higher, because the
     // location lookup below runs before that block exists at all.
     let draftTown = "";
+    // ── AND THE NAME A LOOKUP RESOLVES, KEPT ────────────────────────
+    // Beside draftTown because it has the same lifetime: found before the
+    // research runs, needed long after it. Oliver's Jomfru Ane Gade draft came
+    // back with an EMPTY __sources while its own run log listed eight ranked
+    // pages, because he had typed "Jomfru ane gadee" and every snippet was tested
+    // for that. Google Places answered "Jomfru Ane Gade, 9000 Aalborg" at 0.8
+    // seconds and the answer was used to build a log string and dropped.
+    let placesName = "";
     // ── WHERE IT IS, BEFORE ANYTHING IS SEARCHED ──────────────────────
     //
     // Oliver, 13 Aug 2026: "So when doing research, make maps be one of the
@@ -2152,6 +2250,9 @@ Say which answer came from which source, so a fact from a vouched page and a fac
           if (pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon)) {
             coords = { lat: pd.lat, lon: pd.lon };
             via = `Google Places, which found it as "${String(pd.address || pd.name || name).slice(0, 90)}"`;
+            // KEPT, not only logged. This is the spelling the rest of the internet
+            // uses, and the relevance filter is the one thing that needs it.
+            if (pd.name) placesName = String(pd.name).trim();
             if (pd.town && !draftTown) draftTown = pd.town;
           }
         } catch { /* named in the log below, never fatal: a draft with no coordinate still runs */ }
@@ -4506,6 +4607,9 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         // invisible to the preview screen this morning.
         return sourceIsAboutPlace(urlSaidWhat.get(u), {
           name,
+          // The spelling Google resolved, when it differs from the typed one. A
+          // typo in the Studio box used to empty the whole source list.
+          alsoKnownAs: placesName && placesName !== name ? [placesName] : [],
           town: (t && (t.town || t.city)) || townOfLocation(t && t.location) || studioTown || "",
           url: u,
           ownHost: placesWebsite || (t && t.website) || "",
@@ -8264,6 +8368,13 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!openEntryNow || !openEntryKind) return;
+    // ── UNLESS THE ADDRESS ALREADY NAMES THIS ENTRY ───────────────
+    // A cold arrival at /denmark/ribe opened the town and then this pushed
+    // "#/town/ribe" on top of it, so the one visitor who came from a search
+    // result ended up at /denmark/ribe#/town/ribe: the same page wearing two
+    // addresses. Now that every type has a real path, the hash is for entries
+    // opened by tapping inside the app and nothing else.
+    if (isEntryUrl(window.location.pathname)) return;
     const path = entryPath(openEntryNow, openEntryKind);
     if (window.location.hash !== path) window.history.pushState({ gxEntry: true }, "", path);
   }, [openEntryNow, openEntryKind]);
@@ -8347,6 +8458,41 @@ Rules: always prefix times with ~. TIME SANITY CHECK FOR ANY GUESSED LEG (no rea
     setEntered(true);                // straight to the place, not the front door
     setTownDetail(found);
   }, [townSlug, liveContentVersion]);
+
+  // ── AND ARRIVING ON EVERYTHING ELSE ─────────────────────────────────
+  //
+  // The same effect for the five kinds that gained an address on 16 Aug. Written
+  // once rather than five times, because the pools and the setters are already
+  // declared as maps in this file and a per-type copy of this is five chances to
+  // forget one.
+  //
+  // POOLS: the same arrays discoverSourceArrays uses, and a street lives with its
+  // siblings on purpose. A bar street opens through setNightlifeDetail today
+  // (see the nightlife town view), and a food street sits inside foodSpots, so the
+  // URL segment covers both and the lookup searches both.
+  //
+  // Re-runs on liveContentVersion for the reason the two effects above do: the
+  // arrays fill from Supabase after first paint, so the first pass finds nothing
+  // and a visitor from a search result would sit on the front page wondering what
+  // they were promised.
+  const entryRouteDone = useRef(false);
+  useEffect(() => {
+    if (!entrySeg || !entrySlug || entryRouteDone.current) return;
+    const kind = kindForSeg(entrySeg);
+    if (!kind) return;               // not a segment this site publishes
+    const pools = {
+      event: [...events, ...majorEvents, ...vikingEvents],
+      free: freeEntrance,
+      food: foodSpots,
+      nightlife: [...nightlifeSpots, ...nightlifeStreets],
+      craft: craftItems,
+    };
+    const found = findBySlug(pools[kind] || [], entrySlug);
+    if (!found) return;              // still loading, try again on the next version
+    entryRouteDone.current = true;
+    setEntered(true);
+    ENTRY_SETTERS[kind]?.(found);
+  }, [entrySeg, entrySlug, liveContentVersion]);
 
   // Looks up a stop name against everything real Gemlyx already knows, so the guide
   // shows real price/hours/type instead of just repeating the AI's own prose.
@@ -9235,42 +9381,62 @@ If the conversation only covers a single day or a few stops with no explicit day
   // anywhere. When they do sign in later, the cloud merge re-reads localStorage
   // and carries the guide up with everything else, which is what it was always
   // for. See utils/accountNudge.js for when an account gets mentioned instead.
-  const guideToSave = () => ({
-    id: Date.now(), title: guideModal.title, days: guideModal.days,
-    savedAt: new Date().toISOString(), arrivalDate: guideModal._arrivalDate || null,
-    // ── AND NOTHING ELSE, WHICH IS WORTH KNOWING ────────────────
-    // _arrivalPoint is deliberately NOT added here, and the reason is a finding
-    // rather than an omission. Reopening a guide from this list navigates with
-    // `state: { guide: { title: g.title, days: g.days } }`, so everything else
-    // this shape holds is already dropped on the way back in: the weather, the
-    // geocodes, the exact durations, and arrivalDate itself, which survives here
-    // only because checkSavedGuidesWeather reads THIS list rather than the
-    // reopened guide. Adding a field to a shape whose only reader throws it away
-    // would look like the return leg working and then losing it on reopen.
-    //
-    // A shared LINK keeps everything, because that payload spreads the live
-    // guide object. It is the local list that is lossy. Fixing it means agreeing
-    // on one set of field names across the save shape and the render, which is
-    // its own pass and not one to bolt onto this.
-  });
+  // ── AND NOW IT SAVES THE TRIP, NOT A TITLE AND A DAY COUNT ──────────
+  //
+  // What was here saved four fields and carried a comment explaining that adding
+  // a fifth would be pointless, because reopening navigated with
+  // `state: { guide: { title: g.title, days: g.days } }` and dropped everything
+  // else anyway: the weather, the geocodes, the measured durations, the arrival
+  // date, the travellers, the walking preference. A person planned a trip, saved
+  // it, opened it the next morning and got the same days with every measured
+  // thing in them gone. The comment called it "its own pass". This is that pass.
+  //
+  // ONE SET OF FIELD NAMES, WHICH IS THE WHOLE FIX. The saved row IS the guide,
+  // with three list fields on top of it (id, savedAt, arrivalDate). No shape is
+  // translated into another shape anywhere, so there is nothing left for the two
+  // sides to disagree about, and a field added to the guide tomorrow survives a
+  // save without anybody remembering to come here.
+  //
+  // THE SHAPE ITSELF LIVES IN utils/userSaves.js, next to mergeSaves, with the
+  // function that reads it back. Not here, because the bug was that the writing
+  // and the reading were in two different places and neither could be checked
+  // against the other. The strip of the Random-guide scaffolding is the same one
+  // GuidePage's saveGuide applies to a shared link's payload.
+  const guideToSave = () => savedGuideRow(guideModal, { id: Date.now(), savedAt: new Date().toISOString() });
   const commitGuideSave = (newGuide) => {
     // Functional, not a read of `savedGuides` from this closure. The old version
     // read the closure copy, which is exactly how the pending-save claim and the
     // cloud merge managed to drop each other's writes. One save path now, so it
     // should be the safe form of the write rather than the convenient one.
-    let after = [];
+    let after = [], stored = true;
     setSavedGuides(prev => {
       after = [newGuide, ...prev].slice(0, 20);
-      try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(after)); } catch { /* ignore */ }
+      // ── A REFUSED WRITE USED TO SAY "SAVED ON THIS DEVICE" ────────
+      // The row now carries the whole trip rather than a title and a day count,
+      // which is the point of the change above, so the one thing this write can
+      // fail on has grown. It can already fail today: Safari in private mode
+      // throws on setItem, as does a browser with storage blocked. The catch
+      // swallowed it and the toast underneath still announced a save, which is
+      // the exact shape of lie the pipeline work has spent a week removing from
+      // the drafts. So the failure is carried out of here and said out loud.
+      try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(after)); } catch { stored = false; }
       return after;
     });
     // The toast says what actually happened. "Guide saved" was true either way
     // and told a signed-out person nothing about where it went, which is the one
     // thing worth knowing when it lives on one device.
-    setToast(userSession
-      ? "📖 Guide saved to your account"
-      : "📖 Saved on this device");
-    setTimeout(() => setToast(null), 2200);
+    //
+    // A signed-in person whose browser refused the write has not lost anything:
+    // the cloud push reads this same state a second later. A signed-out one has,
+    // as soon as the tab closes, and that is worth interrupting them for.
+    setToast(!stored
+      ? (userSession
+          ? "📖 Saved to your account. This browser would not store a local copy."
+          : "⚠ This browser refused to store the guide, so it will be gone when you close the tab. Sign in to keep it.")
+      : userSession
+        ? "📖 Guide saved to your account"
+        : "📖 Saved on this device");
+    setTimeout(() => setToast(null), stored ? 2200 : 4200);
   };
   const saveCurrentGuide = () => {
     if (!guideModal || guideModal === "loading") return;
@@ -9281,13 +9447,50 @@ If the conversation only covers a single day or a few stops with no explicit day
       return;
     }
     // No branch on the session. That IS the change.
-    commitGuideSave(guideToSave());
+    const row = guideToSave();
+    // savedGuideRow refuses anything it cannot make a real row out of, and a null
+    // pushed into the list would be a row with no id: invisible on screen,
+    // undeletable, and dropped by mergeSaves on the next login.
+    if (!row) { setToast("Could not save this guide. Nothing was lost, try again."); setTimeout(() => setToast(null), 2600); return; }
+    commitGuideSave(row);
   };
 
   const deleteSavedGuide = (id) => {
     const updated = savedGuides.filter(g => g.id !== id);
     setSavedGuides(updated);
     try { localStorage.setItem("gemlyx_saved_guides", JSON.stringify(updated)); } catch { /* ignore */ }
+  };
+
+  // ── AND THE OTHER HALF: OPENING ONE ─────────────────────────────────
+  //
+  // Two kinds of row live in this list and until now both were opened the same
+  // way, which threw the trip away twice over.
+  //
+  //   A STRING ID means a real row in gemlyx_guides, saved by GuidePage, with a
+  //   shareable link and the COMPLETE payload already in the database. Its own
+  //   comment says so: "The string id (not a Date.now() number) is what tells
+  //   Home's list this entry has a real shareable link and should route straight
+  //   to /guide/:id." Nothing ever read the id to find out. So a guide that had
+  //   every measured thing in it sitting in Supabase was reopened from four
+  //   local fields, and the share panel, which only exists on a saved guide,
+  //   could not be reached from the list at all.
+  //
+  //   A NUMBER ID is local only, from the button on the guide itself. Nothing
+  //   else has this trip, so the payload has to come out of the row, which is
+  //   what guideToSave now writes.
+  //
+  // OLD ROWS STILL WORK, and this is the part worth being careful about: a row
+  // saved before today holds only id, title, days, savedAt and arrivalDate.
+  // Spreading it gives exactly the title and days the old code passed, so the
+  // worst case is unchanged behaviour rather than a crash. The one thing carried
+  // across for them is the arrival date, under the name the render reads, since
+  // it is the same value written twice under two names and the return leg and
+  // the day dates are dead without it.
+  const openSavedGuide = (g) => {
+    if (savedGuideHasLink(g)) { navigate(`/guide/${g.id}`); return; }
+    const trip = guideFromSavedRow(g);
+    if (!trip) return;
+    navigate("/guide/new", { state: { guide: trip } });
   };
 
   // Custom route builder (nearbyTownsRanked/toggleRouteStop/generateRouteSummary/
@@ -12637,8 +12840,18 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             door could not simply be reused: every action in it
                             PATCHes a row by id, and a draft has no id. */}
                         {(() => {
-                          const heroOf = (() => { try { return JSON.parse(studioDraftText)?.photo || ""; } catch { return studioDraft?.photo || ""; } })();
+                          const parsedDraft = (() => { try { return JSON.parse(studioDraftText) || {}; } catch { return studioDraft || {}; } })();
+                          const heroOf = parsedDraft?.photo || "";
+                          // The NAME alone is the default search, not name plus
+                          // town plus Denmark. The endpoint uses this string to
+                          // resolve a Wikipedia article and a Commons category,
+                          // and those two are the only sources whose results are
+                          // known to be about the right subject; padding the
+                          // query is what makes both of them miss and leaves the
+                          // blind text search answering on its own.
+                          const nameOf = String(parsedDraft?.name || studioDraft?.name || "").trim();
                           return (
+                            <>
                             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
                               <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: C.text, cursor: draftPhotoBusy ? "default" : "pointer", opacity: draftPhotoBusy ? 0.6 : 1, fontFamily: "'Inter', sans-serif" }}>
                                 {draftPhotoBusy ? "Uploading…" : "🖼 Add photos"}
@@ -12650,11 +12863,92 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   onClick={e => { e.currentTarget.value = ""; }}
                                   onChange={e => uploadDraftPhotos(e.target.files)} />
                               </label>
+                              {/* ── AND THE WIKI HALF, SAME PANEL (Oliver, 16 Aug) ──
+                                  Not a second panel and not a different search:
+                                  the same endpoint the Media panel calls, with
+                                  the same licence filtering done server-side, so
+                                  everything listed is already free to publish
+                                  with the attribution shown on the card. */}
+                              <button onClick={() => findDraftCommonsPhotos(draftPhotoFinder ? (document.getElementById("cmq-draft")?.value || nameOf) : nameOf)}
+                                disabled={draftPhotoBusy}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.gold}66`, borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: C.gold, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                🔎 Find on Wikimedia
+                              </button>
                               {heroOf
                                 ? <img src={heroOf} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: `1px solid ${C.border}` }} />
                                 : <span style={{ fontSize: 10.5, color: C.muted }}>No hero photo yet. The first one you add becomes it.</span>}
                               <span style={{ fontSize: 10, color: C.muted }}>Uploads to the media bucket now and lands in the JSON below. Publish saves it with the rest.</span>
                             </div>
+                            {draftPhotoFinder && (
+                              <div style={{ marginBottom: 8, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
+                                <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                                  <input defaultValue={draftPhotoFinder.query} id="cmq-draft"
+                                    onKeyDown={e => { if (e.key === "Enter") findDraftCommonsPhotos(e.currentTarget.value); }}
+                                    placeholder="What to search Wikimedia for…"
+                                    style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, color: C.text, outline: "none", fontFamily: "'Inter', sans-serif" }} />
+                                  <button onClick={() => findDraftCommonsPhotos(document.getElementById("cmq-draft")?.value || nameOf)}
+                                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.light, borderRadius: 100, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Search</button>
+                                  <button onClick={() => setDraftPhotoFinder(null)}
+                                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "6px 10px", fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>✕</button>
+                                </div>
+                                <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: C.light, marginBottom: 8, cursor: "pointer" }}>
+                                  <input type="checkbox" checked={useCommonsCaption} onChange={e => setUseCommonsCaption(e.target.checked)} style={{ accentColor: C.gold, cursor: "pointer" }} />
+                                  Save Wikimedia's own description as the caption
+                                </label>
+                                {draftPhotoFinder.loading && <div style={{ fontSize: 11.5, color: C.muted }}>Searching Wikimedia…</div>}
+                                {draftPhotoFinder.error && <div style={{ fontSize: 11, color: "#FFB347", lineHeight: 1.5 }}>{draftPhotoFinder.error}</div>}
+                                {draftPhotoFinder.results?.length === 0 && !draftPhotoFinder.error && (
+                                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
+                                    Nothing usable found. Commons had no freely licensed photo for that search, or every match was non-commercial, no-derivatives, or had no nameable author. Try a different wording.
+                                  </div>
+                                )}
+                                {/* ── WHICH LOOKUPS ACTUALLY ANSWERED ──────────
+                                    The same warning the published panel carries.
+                                    A search that matched no article and no
+                                    category has fallen through to the blind text
+                                    search, and nothing it returns has been judged
+                                    to be about this place at all. */}
+                                {draftPhotoFinder.results?.length > 0 && draftPhotoFinder.sources?.length > 0 && (() => {
+                                  const live = draftPhotoFinder.sources.filter(sc => sc.used > 0);
+                                  const dead = draftPhotoFinder.sources.filter(sc => sc.found === 0);
+                                  const off = draftPhotoFinder.sources.reduce((n2, sc) => n2 + (sc.offSubject || 0), 0);
+                                  const onlySearch = live.length === 1 && live[0].source === "Commons search";
+                                  return (
+                                    <div style={{ fontSize: 10, color: onlySearch ? "#FFB347" : C.muted, lineHeight: 1.55, marginBottom: 8 }}>
+                                      {onlySearch
+                                        ? `Only the blind text search found anything. No Wikipedia article and no Commons category matched "${draftPhotoFinder.query}", so nothing here has been judged to be about the right place. Try the name on its own.`
+                                        : `From: ${live.map(sc => `${sc.source} (${sc.used})`).join(", ")}.`}
+                                      {dead.length > 0 && !onlySearch && <span> Found nothing: {dead.map(sc => sc.source).join(", ")}.</span>}
+                                      {off > 0 && <span> {off} text-search {off === 1 ? "result" : "results"} never mentioned {draftPhotoFinder.subject ? `"${draftPhotoFinder.subject}"` : "the subject"} and {off === 1 ? "was" : "were"} dropped.</span>}
+                                    </div>
+                                  );
+                                })()}
+                                {draftPhotoFinder.results?.length > 0 && (
+                                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
+                                    {draftPhotoFinder.results.map(hit => (
+                                      <div key={hit.url} style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", background: C.surface }}>
+                                        <img src={hit.url} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: 78, objectFit: "cover", display: "block" }} />
+                                        <div style={{ padding: "6px 7px" }}>
+                                          {/* The description first, because "Ringkøbing
+                                              Kirkegård" tells you what the picture is and
+                                              "DSC00575.jpg" does not. */}
+                                          {hit.caption && <div title={hit.caption} style={{ fontSize: 10, color: C.text, fontWeight: 700, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.caption}</div>}
+                                          <div title={hit.title} style={{ fontSize: 9.5, color: hit.caption ? C.muted : C.text, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.title}</div>
+                                          <div style={{ fontSize: 8.5, color: hit.source === "Commons search" ? "#FFB347" : C.muted, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.source === "Commons search" ? "⚠ text search" : hit.source}</div>
+                                          <div style={{ fontSize: 9.5, color: C.light, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hit.credit?.photographer || hit.credit?.source || ""}</div>
+                                          <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>{hit.credit?.license}</div>
+                                          <button onClick={() => useDraftCommonsPhoto(hit)} disabled={draftPhotoBusy}
+                                            style={{ width: "100%", background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "4px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                                            Use this
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            </>
                           );
                         })()}
                         {draftPhotoError && <div style={{ fontSize: 11, color: "#FFB347", marginBottom: 8 }}>{draftPhotoError}</div>}
@@ -13421,7 +13715,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Your Saved Guides</div>
                   {savedGuides.map(g => (
-                    <div key={g.id} onClick={() => navigate("/guide/new", { state: { guide: { title: g.title, days: g.days } } })}
+                    <div key={g.id} onClick={() => openSavedGuide(g)}
                       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: C.text }}><Ico name="book" size={14} color={C.gold} /> {g.title}</div>
@@ -13724,7 +14018,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </button>
                         </div>
 
-                        <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{item.name}</div>
+                        <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type={item._kind === "free" ? "free" : "booking"} name={item.name}>{item.name}</EntryLink></div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>
                           {dotJoin(item._kind === "craft" ? item.location : item.city, item._kind === "craft" ? travelLabel(userCoords, item.location, item.travelTime) : "", item.priceNote)}
                           {craftSort === "near" && isInDenmark(userCoords) ? (() => { const km = townKmFromUser(item._kind === "craft" ? item.location : item.city); return km != null ? ` · 📍 ${km < 10 ? km.toFixed(1) : Math.round(km)} km away` : ""; })() : ""}
@@ -13858,7 +14152,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     </div>
                     <div style={{ padding: "13px 15px 15px" }}>
                       <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>{spot.category} · {spot.location}</div>
-                      <div style={{ fontSize: 18, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, marginBottom: 6 }}>{spot.name}</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15, marginBottom: 6 }}><EntryLink type={spot.isFoodStreet ? "foodStreet" : "food"} name={spot.name}>{spot.name}</EntryLink></div>
                       <div style={{ fontSize: 12.5, color: C.light, lineHeight: 1.6 }}>{(spot.desc || "").slice(0, 110)}{(spot.desc || "").length > 110 ? "…" : ""}</div>
                     </div>
                   </div>
@@ -13916,7 +14210,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                   <span style={{ fontSize: 22 }}>{spot.emoji}</span>
                   <div>
-                    <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}>{spot.name}</div>
+                    <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.15 }}><EntryLink type={spot.isStreet ? "nightStreet" : "night"} name={spot.name}>{spot.name}</EntryLink></div>
                     <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{spot.category} · {spot.location}</div>
                   </div>
                 </div>
@@ -14189,7 +14483,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                           </div>
                           <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>🏙 Major City</div>
                         </div>
-                        <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
+                        <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="town" name={town.name}>{town.name}</EntryLink></div>
                         <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{town.region}</div>
                         <CardChips town={town} />
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
@@ -14342,7 +14636,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         );
                       })()}
                     </div>
-                    <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
+                    <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="town" name={town.name}>{town.name}</EntryLink></div>
                     <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{dotJoin(placeKindOf(town) === "village" ? "Village" : "", town.region, travelLabel(userCoords, town, town.travelTime))}</div>
                     <CardChips town={town} />
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
@@ -14411,7 +14705,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                     same dot as its parent. */}
                                 {parent && <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,15,30,0.8)", color: C.muted, fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100 }}>◇ In {parent}</div>}
                               </div>
-                              <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}>{town.name}</div>
+                              <div style={{ fontSize: 21, fontWeight: 600, color: C.text, fontFamily: "'Fraunces', serif", marginTop: 12, lineHeight: 1.1 }}><EntryLink type="town" name={town.name}>{town.name}</EntryLink></div>
                               <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, marginTop: 4 }}>{parent ? `${kindLabel(town)} in ${parent}` : `${kindLabel(town)} · no parent set`}</div>
                               <CardChips town={town} />
                     <div style={{ fontSize: 11, color: C.gold, fontWeight: 700, marginTop: 7 }}>{town.tag}</div>
@@ -14820,57 +15114,72 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{item.howTo}</div>
                       </div>
                       <div style={{ fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: item.link ? 8 : 0 }}>💡 {item.tip}</div>
-                      {item.link && (
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {/* ── AND A WEBSITE IS NOT AN APP STORE ──────────
-                          `link` is asked for in the prompt as "the official URL",
-                          and this rendered it as an iOS store badge whatever it
-                          was. So a drafted essential showed a company homepage
-                          under "Download on the App Store", or, when the research
-                          found no URL at all, showed nothing: which is what
-                          happened to Nightpay while DSB App, a hardcoded row with
-                          a real store URL typed in by hand, looked fine.
-                          Decided by the host now, the same way the paid-link
-                          branch below already decides. See storeKindOf. */}
-                      {storeKindOf(item.link) === "web" && !item.linkAndroid ? (
-                        <a href={externalHref(item.link)} target="_blank" rel="noreferrer"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
-                          Official site ↗
-                        </a>
-                      ) : item.linkAndroid ? (
-                        <>
-                          <StoreBadge type={storeKindOf(item.link) === "android" ? "android" : "ios"} href={item.link} />
-                          <StoreBadge type="android" href={item.linkAndroid} />
-                        </>
-                      ) : (
-                        // ── AND A PAID LINK SAYS SO, HERE TOO ──────────
-                        // This renders whatever sits in a data row's `link`,
-                        // and one row now points through Tiqets. A tracked
-                        // link with nothing under it is the exact thing
+                      {item.link && (() => {
+                        // ── ONE DISCLOSURE FOR THE ROW, NOT ONE PER BRANCH ──
+                        //
+                        // Oliver, 16 Aug 2026, on the Tiqets row: "can you please
+                        // point out that this is one of our affiliates? Just so
+                        // people is aware of why we use this random lesser known
+                        // page."
+                        //
+                        // Both halves of that were broken and the second one is
+                        // worse. The disclosure and the sponsored rel were
+                        // written into the third branch below, and a web link
+                        // never reaches it, so a tracked link to a reseller
+                        // printed with nothing under it. That is the exact thing
                         // public/privacy.html promises does not happen.
                         //
-                        // Decided by the link's HOST rather than by a flag on
-                        // the row, so adding a second paid link to
-                        // data/essentials.js needs nobody to remember this.
-                        // rel gains sponsored and nofollow when it is tracked,
-                        // which is what Google asks for on a paid link and is
-                        // the difference between an affiliate link and an
-                        // undisclosed ad.
-                        (() => {
-                          const note = partnerDisclosure(item.link);
-                          return (
-                            <div>
-                              <a href={item.link} target="_blank" rel={note ? "noreferrer sponsored nofollow" : "noreferrer"}
-                                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, color: C.light, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-                                🌐 Website ↗
-                              </a>
-                              {note && <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 5, maxWidth: 320 }}>{note}</div>}
+                        // And the button said OFFICIAL SITE. Tiqets is not the
+                        // official site of Tivoli. A missing disclosure is an
+                        // omission; that label is a false statement about who
+                        // the reader is about to buy from, which is the one thing
+                        // this app is built to never do. linkLabel names the
+                        // merchant instead, which is also the actual answer to
+                        // his question: the reader can see it is Tiqets before
+                        // they click, not after.
+                        //
+                        // Computed ONCE, above every branch, so a fourth branch
+                        // cannot be added without it. rel carries sponsored and
+                        // nofollow whenever the link is tracked, which is what
+                        // Google asks for and is the difference between an
+                        // affiliate link and an undisclosed ad.
+                        const note = partnerDisclosure(item.link);
+                        const label = linkLabel(item.link);
+                        const rel = note ? "noreferrer sponsored nofollow" : "noreferrer";
+                        return (
+                          <div>
+                            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                              {/* ── AND A WEBSITE IS NOT AN APP STORE ──────────
+                                  `link` is asked for in the prompt as "the official URL",
+                                  and this rendered it as an iOS store badge whatever it
+                                  was. So a drafted essential showed a company homepage
+                                  under "Download on the App Store", or, when the research
+                                  found no URL at all, showed nothing: which is what
+                                  happened to Nightpay while DSB App, a hardcoded row with
+                                  a real store URL typed in by hand, looked fine.
+                                  Decided by the host, the same way the label above
+                                  is. See storeKindOf. */}
+                              {storeKindOf(item.link) === "web" && !item.linkAndroid ? (
+                                <a href={externalHref(item.link)} target="_blank" rel={rel}
+                                  style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "7px 14px", fontSize: 12, fontWeight: 700, color: C.gold, textDecoration: "none" }}>
+                                  {label} ↗
+                                </a>
+                              ) : item.linkAndroid ? (
+                                <>
+                                  <StoreBadge type={storeKindOf(item.link) === "android" ? "android" : "ios"} href={item.link} />
+                                  <StoreBadge type="android" href={item.linkAndroid} />
+                                </>
+                              ) : (
+                                <a href={externalHref(item.link)} target="_blank" rel={rel}
+                                  style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.surface, color: C.light, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                                  🌐 {label} ↗
+                                </a>
+                              )}
                             </div>
-                          );
-                        })()
-                      )}
-                    </div>
-                  )}
+                            {note && <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginTop: 6, maxWidth: 320 }}>{note}</div>}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -16622,6 +16931,23 @@ export default function Gemlyx() {
           can close it and be inside the real thing rather than at a dead end. */}
       <Route path={`/${COUNTRY}`} element={<GemlyxApp />} />
       <Route path={`/${COUNTRY}/:townSlug`} element={<GemlyxApp />} />
+      {/* ── AND AN ADDRESS FOR EVERYTHING THAT IS NOT A TOWN ─────────
+          16 Aug 2026. The audit found the whole site was 33 URLs, /denmark and
+          32 towns, because this table knew about one content type. Every
+          attraction, festival, restaurant, food street, bar, bar street and
+          workshop was inside the app at no address at all.
+
+          ONE ROUTE FOR ALL FIVE KINDS rather than five routes, because the
+          segment vocabulary lives in utils/placeUrl.js and a list of literals
+          here is the copy that drifts from it. Same component, same as the town
+          route: the entry opens over the app, so somebody arriving from a search
+          result can close it and be inside the real thing.
+
+          The order matters. React Router picks the more specific pattern, so
+          /denmark/ribe still reaches :townSlug and /denmark/attraction/x does
+          not. A segment nobody recognises falls through parseEntryUrl and opens
+          the front page rather than a blank one. */}
+      <Route path={`/${COUNTRY}/:entrySeg/:entrySlug`} element={<GemlyxApp />} />
       <Route path="/guide/new" element={<GuidePage />} />
       <Route path="/guide/:guideId" element={<GuidePage />} />
     </Routes>

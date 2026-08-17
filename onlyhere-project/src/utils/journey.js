@@ -40,6 +40,12 @@
 
 import { durationsIn } from "./claimCheck";
 import { containsName } from "./danishNames";
+// The stored journey's date is a calendar DAY, written by dayKey, so it is read
+// and printed by the same file that wrote it. See journeyStamp at the end.
+import { dayStart, dayLabel } from "./calendarDay";
+// One threshold for "too old to state as current", shared with the page reader
+// rather than redeclared here. See journeyStamp.
+import { MAX_FACT_AGE_MONTHS } from "./pageScan";
 
 const mins = (s) => (Number.isFinite(Number(s?.mins)) ? Number(s.mins) : 0);
 
@@ -645,4 +651,140 @@ export const worthShowingLegs = (parts) => {
   if (rides.length > 1) return true;                       // a change is always worth stating
   if (rides.some(l => l.line || l.to)) return true;        // a line or a stop to look for
   return false;
+};
+
+// ── AND THE PLACE PAGE, WHICH HAS NEVER SHOWN ANY OF IT ─────────────
+//
+// Oliver, 16 Aug 2026, asking what the page needs. This is the answer that was
+// already paid for and never delivered.
+//
+// Every row drafted since 13 August carries a measured journey from Copenhagen:
+// every leg in order with its vehicle, its line and its two stops, the named
+// interchange stations, the walking, the waiting, and how long the same trip
+// takes by car. The writer's own comment in App.jsx says it is stored and
+// "reader-facing only when something chooses to render it". Nothing chose. It
+// has been sitting in gemlyx_content, on every entry drafted since, seen by
+// nobody at all.
+//
+// "How do I get there from Copenhagen, and where do I get off" is the question
+// almost every traveller in this country has, and no aggregator answers it for a
+// harbour town of nine hundred people. Gemlyx measured it. Showing it costs no
+// API call and no research pass, which makes it the cheapest real thing there is
+// to add to a page.
+//
+// THE STEP LIST IS NOT RE-IMPLEMENTED. legSteps above already turns these legs
+// into lines, and the guide has rendered them since 13 August off its own live
+// measurement, so the stored shape goes through the same reader. What a place
+// page needs and a guide does not is the SENTENCES around it: a leg inside a
+// planned trip is a different claim from "this is how you reach this place, and
+// this is when somebody checked".
+//
+// EVERY ONE OF THESE RETURNS "" RATHER THAN A HEDGE, so the card is built from
+// the sentences that exist and a figure nobody measured has none.
+const COUNT_WORDS = ["no", "one", "two", "three", "four", "five", "six"];
+const upperFirst = (s) => String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
+
+// THE GATE. A stored journey is renderable only when it has a real total, at
+// least one leg, and a DATE.
+//
+// The date is not a nicety, and this is the rule __hours is already stored
+// under: an hours array with no date is a claim that quietly ages into a lie,
+// and a timetable is worse, because a line number that no longer exists sends
+// somebody to a platform rather than merely misinforming them. So a journey
+// nobody can date is not shown. Rows drafted before `at` existed render nothing,
+// which is the honest outcome: nobody knows when they were measured.
+export const storedJourney = (j) => {
+  if (!j || typeof j !== "object") return null;
+  const total = Number(j.total);
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const legs = (Array.isArray(j.legs) ? j.legs : []).filter(l => l && (Number(l.mins) > 0 || l.line || l.to));
+  if (!legs.length) return null;
+  if (!dayStart(j.at)) return null;
+  return { ...j, total, legs };
+};
+
+// Door to door, and it says so. This is the figure travelTime takes and the one
+// people compare against a car, and it is NOT the time on the train: it includes
+// the walk at both ends and the wait for the departure. A number this size with
+// nothing naming what it measures reads as a train time and makes the trip look
+// slow, which is the misreading this whole file exists because of.
+export const journeyReach = (parts) => {
+  if (!parts) return "";
+  const total = Number(parts.total);
+  if (!Number.isFinite(total) || total <= 0) return "";
+  const from = String(parts.from || "").trim() || "Copenhagen";
+  return `${hm(total)} from ${from}, door to door`;
+};
+
+// ── NAMED ONLY WHEN EVERY CHANGE HAS A NAME ─────────────────────────
+// interchanges drops the blanks Google sometimes returns, so it can be shorter
+// than `changes`. Naming two of three reads as the complete list, and somebody
+// stands on the wrong platform at the change nobody mentioned. So either every
+// change is named or the count stands on its own.
+export const journeyChanges = (parts) => {
+  if (!parts) return "";
+  const changes = Math.max(0, Math.trunc(Number(parts.changes) || 0));
+  if (changes === 0) return "Direct, no changes";
+  // ── A NAME IS PRINTED AS IT WAS MEASURED ────────────────────────
+  // journeyBlock above strips a trailing full stop before handing these to a
+  // model, which is right for a prompt sentence and wrong for a reader: "St." is
+  // the Danish abbreviation for station, so stripping it turns Odense St. into
+  // Odense St, and a page that mangles the name of the platform somebody is
+  // looking for has broken the one thing it was there to do. The double full
+  // stop that strip exists to avoid is handled where it belongs, in the card,
+  // which joins this sentence to the next with a separator rather than a period.
+  const names = (Array.isArray(parts.interchanges) ? parts.interchanges : [])
+    .map(s => String(s || "").trim()).filter(Boolean);
+  const word = COUNT_WORDS[changes] || String(changes);
+  const label = `${word} change${changes === 1 ? "" : "s"}`;
+  return names.length === changes ? `${upperFirst(label)}, at ${names.join(" then ")}` : upperFirst(label);
+};
+
+// Where the walking figure comes from matters more than the figure. journeyParts
+// sums the walk at BOTH ends into one number, so this must never be allowed to
+// read as "the station is 12 minutes away", which is the shape a traveller will
+// assume and act on.
+export const journeyBreakdown = (parts) => {
+  if (!parts) return "";
+  const bits = [];
+  if (Number(parts.onBoard) > 0) bits.push(`${hm(parts.onBoard)} on board`);
+  if (Number(parts.onFoot) > 0) bits.push(`${hm(parts.onFoot)} walking, both ends together`);
+  if (Number(parts.waiting) > 0) bits.push(`${hm(parts.waiting)} waiting and connecting`);
+  return bits.join(", ");
+};
+
+// The car comparison, when Google gave one. It is the first question after "how
+// long by train", and answering it honestly sometimes means admitting the train
+// loses, which is the kind of thing this app is supposed to say out loud.
+export const journeyDriving = (parts) => {
+  const m = Number(parts?.drivingMins);
+  if (!Number.isFinite(m) || m <= 0) return "";
+  return `${hm(m)} by car`;
+};
+
+// ── THE DATE, WHICH IS WHAT MAKES THE REST PUBLISHABLE ──────────────
+// `today` is a parameter and not a call to the clock, for the reason
+// calendarDay.js and eventDates.js both give: a date helper that reads the clock
+// cannot be tested against a fixed calendar.
+//
+// The threshold is MAX_FACT_AGE_MONTHS, imported rather than redeclared, because
+// the codebase has already decided what "too old to state as current" means for
+// a fact off a page and a timetable is not a different question. The month
+// arithmetic uses the same average-month divisor factAge uses, for the same
+// reason: two definitions of a month drift apart.
+//
+// The day is printed by dayLabel, which formats the LOCAL parts of a day-only
+// string, so it reads the same in every timezone. Formatting the raw value
+// instead would print the day before west of Greenwich, which is the bug
+// calendarDay.js exists because of.
+export const journeyStamp = (parts, today = new Date()) => {
+  const day = dayStart(parts?.at);
+  if (!day) return "";
+  const when = `Measured on ${dayLabel(parts.at)}`;
+  const now = today instanceof Date ? today : new Date(today);
+  if (!Number.isFinite(now.getTime())) return `${when}.`;
+  const months = (now.getTime() - day.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+  return months >= MAX_FACT_AGE_MONTHS
+    ? `${when}, over ${MAX_FACT_AGE_MONTHS} months ago. Treat it as the rough shape of the trip and not as a timetable.`
+    : `${when}. Timetables change, so check departures before you travel.`;
 };

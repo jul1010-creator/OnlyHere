@@ -293,21 +293,60 @@ export const nameCore = (name) => {
 // The corroborating signals, in the order they are worth anything. `ownHost` is
 // the place's own website: a page ON the venue's own domain is about the venue,
 // full stop, and needs no second signal.
-export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = "" } = {}) => {
+// ── AND A TYPO EMPTIED A SOURCE LIST TOO ────────────────────────────
+//
+// Oliver, 16 August 2026, on a Jomfru Ane Gade draft: "The streets are for some
+// reason quite wrong." Its __sources was EMPTY, and step 7 of that same run had
+// already ranked eight pages: a Danish Wikipedia article, two TripAdvisor pages
+// and five GetYourGuide ones.
+//
+// The name he typed was "Jomfru ane gadee". Every snippet was tested for
+// containing that, no page on earth contains it, so every source was refused.
+//
+// AND THE APP HAD THE RIGHT NAME BEFORE IT SEARCHED. Step 1, at 0.8 seconds:
+// Google Places "found it as Jomfru Ane Gade, 9000 Aalborg". That resolved name
+// was used to build a log string and thrown away. The draft's own uncertainties
+// then say "The input spelling 'Jomfru ane gadee' was corrected to the street's
+// actual name", so the WRITER knew as well. Two parts of the pipeline had the
+// real name and the one filter that needed it had the typo.
+//
+// Third instance today of the same shape: nameCore this morning, sourceFit this
+// afternoon, and now this. The measurement existed and nothing read it.
+//
+// `alsoKnownAs` is for exactly that: other spellings something upstream RESOLVED,
+// not spellings guessed here. Passing Google's own answer is no more trusting
+// than the app already is, since it takes the coordinate from the same lookup.
+export const sourceIsAboutPlace = (snippet, { name, town, url = "", ownHost = "", alsoKnownAs = [] } = {}) => {
   const said = String(snippet || "");
   if (!said.trim()) return false;             // never saw the page, so it is not a source
   const host = normaliseDomain(url);
   if (ownHost && host && host === normaliseDomain(ownHost)) return true;
-  const core = nameCore(name);
-  const spellings = [...variantsOf(name, { includeSights: true }), ...(core ? [core] : [])];
-  const namesIt = spellings.some(v => v && containsName(said, v));
-  if (!namesIt) return false;
-  if (nameIsDistinctive(name)) return true;   // the name identifies it on its own
+  // Every resolved spelling gets the same treatment as the typed one, core and
+  // all, so "Jomfru Ane Gade" from Google Places carries the same weight as what
+  // was typed and a leading-article variant of it still works.
+  const typed = [String(name || ""), ...(Array.isArray(alsoKnownAs) ? alsoKnownAs : [])]
+    .map(v => String(v || "").trim()).filter(Boolean);
+  const spellings = [...new Set(typed.flatMap(v => {
+    const core = nameCore(v);
+    return [...variantsOf(v, { includeSights: true }), ...(core ? [core] : [])];
+  }))];
+  // WHICH spellings the page used, not merely whether one of them did. The
+  // difference decides the next line, and getting it wrong accepted a railway
+  // page: "Trainn" is a typo of an ordinary-word venue name and is itself
+  // distinctive, so judging distinctiveness on ANY supplied spelling let the typo
+  // vouch for a page that only ever said "train". Caught by the test on its first
+  // run, on the same venue the ordinary-word rule was written for.
+  const matched = spellings.filter(v => v && containsName(said, v));
+  if (!matched.length) return false;
+  // Distinctive on the spelling the page used. A name that identifies itself
+  // needs no second signal; a typo of an ordinary word identifies nothing and
+  // never gets to claim it does.
+  if (matched.some(v => nameIsDistinctive(v))) return true;
   // An ordinary name has to be corroborated. The town is the strongest signal
   // and the one always available; the host containing a distinctive word from
   // the name is the second.
   if (town && variantsOf(town).some(v => v && containsName(said, v))) return true;
-  const distinct = distinctiveWords(name).filter(w => !COMMON_NAME_WORDS.has(w));
+  const distinct = matched.flatMap(v => distinctiveWords(v)).filter(w => !COMMON_NAME_WORDS.has(w));
   if (distinct.length && host && distinct.some(w => host.includes(w))) return true;
   return false;
 };

@@ -279,3 +279,58 @@ export const partnerDisclosure = (url) =>
   isPartnerLink(url)
     ? "Partner link. Gemlyx may earn a small commission, at no cost to you and with no change to the price."
     : "";
+
+// ── AND "OFFICIAL SITE" IS A CLAIM ABOUT WHOSE SITE IT IS ───────────
+//
+// Oliver, 16 Aug 2026, on the Tiqets row in Essentials: "can you please point
+// out that this is one of our affiliates? Just so people is aware of why we use
+// this random lesser known page."
+//
+// He is right, and the missing disclosure was only half of it. The button under
+// that row read OFFICIAL SITE and pointed at tiqets.tpx.li, which is a tracked
+// link to a reseller. Tiqets is not the official site of Tivoli, and a label
+// saying so is not an omission, it is a false statement about who the reader is
+// about to buy from. This whole app exists to not do that.
+//
+// The disclosure existed and the label did not reach it: the Essentials renderer
+// grew a THIRD branch for web links on 15 August, and the partner disclosure and
+// the sponsored rel lived in the branch a web link never takes. Same shape as
+// every other bug in this codebase this week, one level down.
+//
+// SO THE LABEL ANSWERS THE QUESTION THE READER IS ACTUALLY ASKING, which is his
+// own words: why is this a page I have never heard of. It names the merchant when
+// the merchant is nameable and says "partner site" when it is not, and it never
+// claims to be the official anything unless the link is untracked.
+//
+// AN ALLOW-LIST, for the reason every list in this codebase is one. A network
+// short link is <programme>.tpx.li, so the first label of the host IS the
+// merchant, and capitalising whatever happens to be there would print "Gjhkxmoh"
+// the first time a programme is named differently. A merchant nobody has written
+// down gets the honest generic label.
+const PARTNER_MERCHANTS = {
+  tiqets: "Tiqets",
+  booking: "Booking.com",
+  ticketmaster: "Ticketmaster",
+  discovercars: "DiscoverCars",
+  rentalcars: "Rentalcars",
+  getrentacar: "GetRentacar",
+  kiwi: "Kiwi.com",
+  aviasales: "Aviasales",
+};
+
+export const partnerMerchant = (url) => {
+  if (!isPartnerLink(url)) return "";
+  const h = hostOf(url);
+  if (!h) return "";
+  const first = h.split(".")[0].toLowerCase();
+  // A bare programme host with no subdomain names nothing: booking.com?aid= is
+  // recognised as paid by its parameter and its first label is the merchant
+  // itself, which is fine, and impact.com is the network with no merchant in it.
+  return PARTNER_MERCHANTS[first] || "";
+};
+
+export const linkLabel = (url) => {
+  if (!isPartnerLink(url)) return "Official site";
+  const who = partnerMerchant(url);
+  return who ? `Book on ${who}` : "Partner site";
+};

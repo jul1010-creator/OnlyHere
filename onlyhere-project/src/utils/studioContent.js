@@ -19,6 +19,28 @@ export const bbBullets = (heading, raw) => {
   return `      { type: "heading", content: ${J(heading)} },\n      { type: "bullets", items: ${JSON.stringify(items)} },`;
 };
 export const bbData = (pairs) => pairs.filter(([, body]) => body).flatMap(([h, body]) => [{ type: "heading", content: h }, { type: "paragraph", content: body }]);
+// ── A PHOTO CREDIT, IN THE FOUR FIELDS EVERY READER EXPECTS ─────────
+// The same four saveMediaCredit writes and PhotoCredit renders, so a credit
+// arriving from Wikimedia's structured metadata, typed by hand in the Media
+// panel, or carried on a draft through publish all end up as one shape.
+//
+// null rather than an object of empty strings when there is nothing, because
+// "no credit" and "a credit we forgot to fill in" have to stay different: the
+// first is a photograph Oliver took, the second is a licence problem.
+//
+// A licence with no nameable photographer is still a credit worth keeping. CC0
+// and public domain files legitimately have neither, and the reader is better
+// served by "Public domain" under the picture than by nothing.
+export const cleanCredit = (c) => {
+  if (!c || typeof c !== "object") return null;
+  const out = {
+    photographer: String(c.photographer || "").trim().slice(0, 120),
+    source: String(c.source || "").trim().slice(0, 80),
+    sourceUrl: String(c.sourceUrl || "").trim().slice(0, 400),
+    license: String(c.license || "").trim().slice(0, 80),
+  };
+  return Object.values(out).some(Boolean) ? out : null;
+};
 // "Things to Know" must be exactly 3 bullets per the editorial template. The AI
 // should return an array, but defensively handle a string too (split on newlines).
 export const bulletsBlock = (heading, raw) => {
@@ -299,6 +321,61 @@ export const shapeForLive = (type, t) => {
     .slice(-20)
     .map(c => ({ at: String(c.at || ""), field: String(c.field), was: String(c.was || ""), source: String(c.source || "") }));
 
+  // ── AND THE PHOTOS, WHICH WERE THE FIFTH ────────────────────────
+  //
+  // Oliver, 15 Aug 2026, asking for the photo panel that now sits above the JSON
+  // editor: "when making the draft, I'd like to be able to put in pictures.
+  // Instead of doing it only in manage published." It was built, it uploads to
+  // the media bucket, it writes the URL into the draft, and its own label says
+  // "Publish saves it with the rest."
+  //
+  // Publish did not. This function threw every one of them away, on all nine
+  // types, for the two reasons the comment at the top of the file has now been
+  // written four times about:
+  //
+  //   THE HERO. Six branches set `photo` to a template path built from the name,
+  //   /towns/x.jpg or /events/x.jpg, and never look at what the draft carries.
+  //   The other three (free, night, essential) name no photo field at all, so an
+  //   allow-list drops it. Either way the picture he chose was replaced by a path
+  //   to a file that, measured across the live table on 7 Aug, does not exist 52
+  //   times out of 53.
+  //
+  //   THE BODY IMAGES. blogBody is rebuilt from the prose fields in every branch.
+  //   That is correct and stays: this function owns the structure of an entry, so
+  //   a model cannot invent a heading. But the picture blocks are not prose, and
+  //   rebuilding the array deleted them along with the credit attached to them.
+  //
+  // So photos are carried HERE, once, as shared fields, rather than in nine type
+  // branches where the ninth gets forgotten. Same place and same terms as
+  // __sources, __hours, __ticket and __journey above.
+  //
+  // ONLY AN ABSOLUTE URL COUNTS, and that is what separates a real picture from
+  // a template path. Nothing in the drafting prompt asks a model for `photo`, so
+  // a value in that field can only have come from the uploader or the Wikimedia
+  // finder, and both of those produce an http URL. A relative path in there is
+  // either the codegen template or a guess, and neither should beat the branch.
+  //
+  // THE CREDIT RIDES WITH THE IMAGE, in the same write, never as a second step.
+  // A CC BY or CC BY-SA file legally requires attribution, so an image that
+  // reached the database without its credit would be a licence breach and not a
+  // cosmetic gap. __photoCredit is what DetailPage renders under the hero and
+  // block.credit is what it renders under a body picture, so both are carried in
+  // the shape those two readers already expect.
+  const heroUrl = /^https?:\/\//i.test(String(t?.photo || "").trim()) ? String(t.photo).trim() : "";
+  const pictures = (Array.isArray(t?.blogBody) ? t.blogBody : [])
+    .filter(b => b && b.type === "image" && /^https?:\/\//i.test(String(b.src || "").trim()))
+    .slice(0, 8)
+    .map(b => {
+      const credit = cleanCredit(b.credit);
+      return {
+        type: "image",
+        src: String(b.src).trim(),
+        ...(credit ? { credit } : {}),
+        ...(b.caption ? { caption: String(b.caption).slice(0, 400) } : {}),
+      };
+    });
+  const heroCredit = heroUrl ? cleanCredit(t?.__photoCredit) : null;
+
   // ── NOT EVERY UNCERTAINTY IS FOR A READER ───────────────────────
   // The pipeline writes instructions to HIM into the same array: "STOP, DO NOT
   // PUBLISH", "PIPELINE CONTRADICTION, FIX BEFORE PUBLISHING", the note about
@@ -350,5 +427,15 @@ export const shapeForLive = (type, t) => {
   }
   if (journey) out = { ...out, __journey: journey };
   if (corrections.length) out = { ...out, __corrections: corrections };
+  // The hero replaces the template path rather than sitting beside it, because
+  // two candidates for one slot is how the published panel ended up choosing a
+  // 404 over a real photograph for 52 rows.
+  if (heroUrl) out = { ...out, photo: heroUrl };
+  if (heroCredit) out = { ...out, __photoCredit: heroCredit };
+  // Appended AFTER the prose, which is where layoutBody in DetailPage.jsx wants
+  // them: it looks for the trailing run of images and deals them back in beside
+  // the paragraphs, so a picture ends up floated next to writing instead of
+  // stacked at the bottom. Inserting them into the middle here would defeat that.
+  if (pictures.length) out = { ...out, blogBody: [...(Array.isArray(out.blogBody) ? out.blogBody : []), ...pictures] };
   return readerFacing.length ? { ...out, uncertainties: readerFacing } : out;
 };

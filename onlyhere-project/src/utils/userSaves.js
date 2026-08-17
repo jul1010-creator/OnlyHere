@@ -56,6 +56,72 @@ export const pushCloudSaves = async (session, places, guides) => {
   } catch { return false; }
 };
 
+// ── ONE SHAPE FOR A SAVED GUIDE, WRITTEN ONCE AND READ ONCE ─────────
+//
+// The saved-guide list held four fields, and opening a row rebuilt a guide from
+// two of them. So a person planned a trip, saved it, came back the next morning
+// and got the days back with everything measured in them gone: the weather, the
+// geocodes, the exact durations, the arrival date, how many travellers, whether
+// they were walking. The save shape and the render shape were two different
+// shapes and the translation between them was a `{ title, days }` object literal
+// written inline in a click handler.
+//
+// These two functions are that translation, in one place, as a pair. The point
+// is not tidiness. It is that a shape mismatch is invisible until somebody
+// reopens a trip and reads it carefully, and a pair of functions can be tested
+// against each other in a second: put a guide in, take the same guide out.
+//
+// THE ROW IS THE GUIDE, plus three fields belonging to the list rather than to
+// the trip. Nothing is hand-picked, so a field added to a guide tomorrow
+// survives a save without anybody remembering this file exists.
+//
+// SCAFFOLDING IS NOT PART OF A TRIP. _testProfile and _testPlan describe a
+// Random-guide pipeline run, which is for the founder and nobody else, and
+// _planProblems are the logistics gates' findings written in the pipeline's own
+// voice ("this suggests a bus for the last leg, and the last leg was MEASURED at
+// 8 minutes on foot"). The same three are stripped from a shared link's payload
+// in GuidePage's saveGuide, and this list is read by the same page, so the two
+// strips are deliberately identical.
+export const GUIDE_SCAFFOLDING = ["_testProfile", "_testPlan", "_planProblems"];
+
+export const savedGuideRow = (guide, { id, savedAt } = {}) => {
+  if (!guide || typeof guide !== "object" || Array.isArray(guide)) return null;
+  // An id is the row's identity: the list keys on it, the delete matches on it,
+  // and mergeSaves above drops any row without one. A save with no id is not a
+  // save, so it is refused here rather than written and lost later.
+  if (id == null || id === "") return null;
+  const row = {};
+  Object.keys(guide).forEach(k => { if (!GUIDE_SCAFFOLDING.includes(k)) row[k] = guide[k]; });
+  row.id = id;
+  row.savedAt = savedAt || new Date().toISOString();
+  // ALSO on the row and not only inside the trip, because this is the one field
+  // the LIST reads rather than the guide: checkSavedGuidesWeather walks the
+  // saved rows and lines each day up against the forecast from it.
+  row.arrivalDate = guide._arrivalDate || null;
+  return row;
+};
+
+export const guideFromSavedRow = (row) => {
+  if (!row || typeof row !== "object" || !Array.isArray(row.days) || row.days.length === 0) return null;
+  const { id, savedAt, arrivalDate, ...trip } = row;
+  // A ROW SAVED BEFORE THE FULL SHAPE EXISTED still opens, and this is the only
+  // thing worth carrying across for it: arrivalDate and _arrivalDate are the
+  // same value written under two names, and without it the day dates, the event
+  // run-date check and the return leg all have nothing to measure from. The
+  // trip's own value wins where it has one, since that is the one the guide was
+  // built with.
+  if (!trip._arrivalDate && arrivalDate) trip._arrivalDate = arrivalDate;
+  return trip;
+};
+
+// A STRING ID MEANS THERE IS A REAL ROW BEHIND IT, in gemlyx_guides, holding the
+// complete payload with a shareable link. GuidePage's own comment said the id
+// was what told this list to route straight to /guide/:id, and nothing ever read
+// it, so the one kind of saved guide that had everything was reopened from four
+// local fields. A number id is Date.now() from the button on the guide itself,
+// and nothing but the row has that trip.
+export const savedGuideHasLink = (row) => typeof row?.id === "string" && !!row.id.trim();
+
 // MERGE, NEVER OVERWRITE, on first login.
 //
 // The failure this exists to prevent: somebody plans a trip on their phone, then

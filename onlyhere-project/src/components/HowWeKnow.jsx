@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C } from "../utils/theme";
-import { dayStart } from "../utils/calendarDay";
+import { dayLabel } from "../utils/calendarDay";
 
 // ── SHOWING THE WORKING (Oliver, 7 Aug 2026) ─────────────────────────
 //
@@ -52,11 +52,17 @@ const isLink = (s) => typeof s === "string" && /^https?:\/\//i.test(s);
 // the local calendar day it fell on, which is what a "last checked" line means.
 // It also returns null rather than an Invalid Date, so the fallback below fires
 // on an unreadable value instead of relying on isNaN coercion.
+//
+// ── AND THE FORMATTING MOVED, 16 AUG ────────────────────────────────
+// journey.js needed the same "16 Aug 2026" for the measured-on stamp under a
+// stored timetable, and a util cannot import a component. This was the only copy
+// and it is now dayLabel in calendarDay.js, next to the three readers it belongs
+// with. What stays here is the FALLBACK, which is this file's own decision: an
+// unreadable value is shown as it was stored rather than swallowed, because a
+// provenance block that quietly drops a date is the one thing it must not do.
 const dateLabel = (iso) => {
   if (!iso) return null;
-  const d = dayStart(iso);
-  if (!d) return typeof iso === "string" ? iso : null;
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return dayLabel(iso) || (typeof iso === "string" ? iso : null);
 };
 
 export const HowWeKnow = ({ item }) => {
