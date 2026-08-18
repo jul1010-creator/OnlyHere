@@ -99,11 +99,13 @@ writeFileSync(entry, `
   export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
   export { guideHero, heroCaption } from ${JSON.stringify(join(root, "src/utils/guideHero.js"))};
+  export { outOfBudget, preferAffordable, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
   export { MAX_STOPS_ARRIVAL_DAY } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
-  export { isSameSpot, SAME_SPOT_KM, cityFromLocation } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
-  export { travellerBudget, budgetTierMismatch } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
+  export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
   export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
@@ -135,8 +137,8 @@ writeFileSync(entry, `
   export { previewCoverage, describeCoverage, arrivalPoint, targetForCoords, AIRPORTS, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_NOTHING_SAID, COVERAGE_UNANSWERED } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
   export { stayRangeIn, stayRangeInBody, stayGlanceDays, stayContradiction, restatesBody, restatementFindings, meaningfulWords, RESTATEMENT } from ${JSON.stringify(join(root, "src/utils/draftShape.js"))};
   export { searchTypeFor } from ${JSON.stringify(join(root, "src/utils/previewCoverage.js"))};
-  export { ENTRY_POINTS } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
-  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
+  export { ENTRY_POINTS, arrivalPoint as arrivalPointRaw } from ${JSON.stringify(join(root, "src/utils/arrival.js"))};
+  export { routeOrder, reachBand, haversineKm, coordsOf, kmBetween, REACH_COMFORTABLE, REACH_STRETCH, REACH_FAR, returnLeg, describeReturn, travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable, preferPassing, overnightMove, describeOvernightMove } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { tripWindow, tripEvents, eventPickLimit, overlapsTrip, eventWindow, hasEnded, overlapDays, interestScore, arrivalDateIn, dayCountIn, daysBetween, describePicks, monthOnlyIn, MAX_EVENT_PICKS, MAX_EVENTS_SHOWN } from ${JSON.stringify(join(root, "src/utils/tripEvents.js"))};
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
@@ -14899,7 +14901,33 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ok("and a region row says which region", /In \{place\._viaRegion\}/.test(preview));
   ok("and a town says what is inside it", /place\._holds > 0/.test(preview));
   ok("the trip's own length reaches the matcher", /days: win\?\.days \?\? null/.test(preview));
-  ok("and so does what they said they were into", /wanted, themes \}\);/.test(preview) && /const wanted = wantedCategories\(saidByTraveller, intakeInterest\)/.test(preview));
+  ok("and so does what they said they were into",
+     /wanted, themes,/.test(preview) && /const wanted = wantedCategories\(saidByTraveller, intakeInterest\)/.test(preview));
+  // ── AND HOW THEY ARE GETTING AROUND ─────────────────────────────
+  // 17 Aug: a two day bicycle trip out of Aalborg was offered Billund and
+  // Copenhagen, 400 km away. Read from the chips and from their own turns, never
+  // from Gemlyx's replies, exactly like `wanted` and `themes`.
+  ok("the mode reaches the matcher", /wanted, themes, mode,/.test(preview));
+  // ── AND WHAT THEY SAID ABOUT MONEY ──────────────────────────────
+  // "geranium is NOT mid-range.. so remember to make food places include in
+  // budget." Nothing in the matcher had ever read a price.
+  ok("the budget reaches the matcher too", /mode, budget \}\)/.test(preview));
+  ok("and it is read from the budget box and their own words",
+     /travellerBudget\(\[intakeBudgetText, saidByTraveller\]\.filter\(Boolean\)\.join\("\\n"\)\)/.test(preview));
+  ok("the budget box is a prop", /intakeBudgetText = "",/.test(preview));
+  // ── READ THROUGH THE BRIEF, NOT OVER THE WHOLE TRANSCRIPT ───────
+  // 18 Aug, from an adversarial review. travelModeKey tests the modes in speed
+  // order across all the text it is handed, so "we are renting a car and we love
+  // hiking" came back "walk" and capped the offered towns at fifteen kilometres a
+  // day for a driving trip — while the brief slot, which reads the mode off the
+  // SENTENCE that stated it, said car. One screen, two answers.
+  ok("and it is read through the brief, off the sentence that stated it",
+     /const mode = readBrief\(\{\s*\n\s*travellerText: saidByTraveller,\s*\n\s*intake: \{ transport: intakeTransport \},\s*\n\s*\}\)\.known\.transport\?\.mode \|\| null;/.test(preview));
+  ok("and the whole transcript is never handed to the mode reader",
+     !/travelModeKey\(saidByTraveller\)/.test(preview));
+  ok("and never from Gemlyx's own replies",
+     !/travelModeKey\(convoText\)/.test(preview));
+  ok("the chips are a prop, so the screen is not guessing", /intakeTransport = \[\],/.test(preview));
   // ── AND WHICH ONES, WHICH IS THE SECOND HALF ────────────────────
   // Oliver, 15 Aug 2026, on a brief that said markets and modern design and
   // came back with a palace, a city museum and a classical sculpture gallery:
@@ -16372,6 +16400,142 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   is("and the far end of the country is out", reachBand(300, 2), REACH_FAR);
   is("an unknown distance is neither near nor far", reachBand(null, 5), REACH_STRETCH);
 
+  // ── AND ON WHAT THEY ARE TRAVELLING IN ──────────────────────────
+  // Oliver, 17 Aug 2026, on a guide built from "ferry into Aalborg, on a bicycle,
+  // tight backpacker, hidden gems". The screen offered him Billund, Copenhagen,
+  // Ribe and Esbjerg. Copenhagen is about 400 km from Aalborg.
+  //
+  // The cause is in the comment three lines above reachBand: "roughly an hour of
+  // Danish driving per day of trip". An hour of driving is 70 km, an hour of
+  // cycling is 15, and nothing had ever told this which one he was doing.
+  const { travelModeKey, modeReachKm, MODE_DAY_KM, preferReachable } = M;
+  is("a bicycle is a bicycle however it is written", travelModeKey("🚲 Bike"), "bike");
+  ["bicycle", "on a bike", "we'll be cycling", "bikes"].forEach(s =>
+    is(`${JSON.stringify(s)} folds to bike`, travelModeKey(s), "bike"));
+  is("a car is a car", travelModeKey("🚗 Car"), "car");
+  is("and driving is too", travelModeKey("we're driving"), "car");
+  is("trains and buses are one answer", travelModeKey("mostly trains"), "public transport");
+  is("nothing said is null", travelModeKey(""), null);
+  is("and an unrecognised answer is null, not a guess", travelModeKey("teleportation"), null);
+  // EVERY PATTERN IS BOUNDED, because this reads free conversation text and
+  // Denmark supplies the false positives itself.
+  is("Carlsberg is not a car", travelModeKey("we want to visit Carlsberg"), null);
+  is("and a brewery is not a mode", travelModeKey("a brewery tour"), null);
+  // SLOWEST WINS ON A TIE: reading a bike trip as a train trip is the expensive
+  // direction, because it is the one that puts Copenhagen back on a route out of
+  // Aalborg. The other way round only offers less than it could.
+  is("bikes plus trains is a bike trip",
+     travelModeKey("we'll bring the bikes and take the train for the long bits"), "bike");
+
+  // ── HIS ACTUAL TRIP, MEASURED ───────────────────────────────────
+  // Two days, on a bicycle, out of Aalborg. Half the days can go on getting there
+  // and back, so nothing beyond 60 km is part of this trip.
+  is("a day on a bicycle is 60 km", MODE_DAY_KM.bike, 60);
+  is("two days of it reaches 60 km", modeReachKm(2, "bike"), 60);
+  is("Skagen at 92 km is out of reach on a two day bike trip", reachBand(92, 2, "bike"), REACH_FAR);
+  is("and Copenhagen at 400 km certainly is", reachBand(400, 2, "bike"), REACH_FAR);
+  is("Billund at 180 km too", reachBand(180, 2, "bike"), REACH_FAR);
+  ok("while something genuinely close is not", reachBand(20, 2, "bike") !== REACH_FAR);
+  // Not a blanket veto on cycling: a week really does reach further.
+  ok("a week on a bicycle reaches Skagen", reachBand(92, 7, "bike") !== REACH_FAR);
+  // THE MODE ONLY EVER TIGHTENS. A car cannot make Bornholm nearer than the
+  // existing curve says, and an unknown mode must leave today's answers alone —
+  // that is what stops this change moving every route in the product.
+  is("an unknown mode changes nothing", reachBand(155, 2, null), reachBand(155, 2));
+  is("nor does an unrecognised one", reachBand(155, 2, "hot air balloon"), reachBand(155, 2));
+  ["walk", "bike", "public transport", "car", "camper", "tent"].forEach(mode => {
+    [1, 2, 4, 7, 14].forEach(days => [20, 92, 155, 300, 500].forEach(km => {
+      ok(`${mode}/${days}d/${km}km is never looser than with no mode`,
+         reachBand(km, days, mode) <= reachBand(km, days));
+    }));
+  });
+  is("and a car keeps the old answer on a week", reachBand(155, 7, "car"), REACH_COMFORTABLE);
+
+  // ── FAR IS A REASON TO LEAVE IT OUT, NOT JUST TO RANK LOWER ─────
+  // Ranking cannot express "this is not possible": with four slots to fill, last
+  // still gets offered. But it must not empty the screen either, so the far ones
+  // top up when there are too few reachable ones.
+  const nearOnes = [{ n: "a" }, { n: "b" }], farOnes = [{ n: "y" }, { n: "z" }];
+  const bandOf = (x) => (x.n === "y" || x.n === "z" ? REACH_FAR : REACH_COMFORTABLE);
+  is("with enough reachable ones, the far ones are dropped",
+     preferReachable([...nearOnes, ...farOnes], { keepAtLeast: 2, bandOf }).map(x => x.n).join(""), "ab");
+  is("with too few, they top up rather than leaving a gap",
+     preferReachable([...nearOnes, ...farOnes], { keepAtLeast: 3, bandOf }).map(x => x.n).join(""), "aby");
+  is("and reachable always comes first",
+     preferReachable([...farOnes, ...nearOnes], { keepAtLeast: 4, bandOf }).map(x => x.n).join(""), "abyz");
+  is("nothing reachable at all still returns something, rather than an empty screen",
+     preferReachable(farOnes, { keepAtLeast: 2, bandOf }).map(x => x.n).join(""), "yz");
+  is("no band test means no filtering, rather than an empty list",
+     preferReachable(nearOnes, { keepAtLeast: 2 }).length, 2);
+  is("and nothing at all is safe", preferReachable(null, { keepAtLeast: 2, bandOf }), []);
+
+  // ── AND THE MATCHER REALLY DOES DROP THEM ───────────────────────
+  // The rule above is correct and useless if the matcher never applies it, which
+  // is the failure previewMatch.js has documented four separate times.
+  // ── AND THE TEST HAS TO BE ABOUT THE FILTER ─────────────────────
+  // The first version of this was vacuous and mutation testing said so: with a two
+  // day trip the region limit is 2, so the SORT alone dropped a far town and the
+  // assertion passed with the filter torn out.
+  //
+  // The real case is the one where ranking cannot help, and it is not a contrived
+  // one — it is Copenhagen. Tier is the FIRST score term, above reach, deliberately
+  // and correctly ("a Can't miss town must never be dropped for being thirty km
+  // further"). So a top-tier city 400 km away sorts ABOVE the small towns next
+  // door, and no amount of ranking will keep it off a bicycle trip. Only a filter
+  // will.
+  //
+  // HIS REAL TRIP: two days. So the region limit is 2, four of the six towns are
+  // genuinely within reach so the top-up cannot smuggle Copenhagen back in, and
+  // Copenhagen is tiered "Can't miss" against the locals' "Worth considering",
+  // which is the true state of the library and the reason ranking cannot help.
+  //
+  // AND THE DISTANCE IS 223 KM, NOT THE 400 I FIRST WROTE HERE. Aalborg to
+  // Copenhagen is about 400 km by road and 223 as a great circle across the
+  // Kattegat, and routeOrder measures the great circle on purpose (twelve
+  // Directions calls on a screen that promises to be instant). Writing the road
+  // figure into a test made an assertion that failed on correct code, so it is
+  // written down: the number this file reasons about is straight-line.
+  const AALBORG_BIKE = "user: I'm taking the ferry into Aalborg. It's a tight backpacker to be honest.. and I'd love to see some hidden gems! I'm on a bicycle. Two days. We want to see North Jutland.";
+  const reachPools = [
+    { name: "Copenhagen", _src: "town", tier: "Can't miss", lat: 55.6761, lon: 12.5683, isMajorCity: true, region: "North Jutland" },
+    { name: "Skagen", _src: "town", tier: "Worth considering", lat: 57.7211, lon: 10.5836, region: "North Jutland" },
+    { name: "Nibe", _src: "town", tier: "Worth considering", lat: 56.9833, lon: 9.6386, region: "North Jutland" },
+    { name: "Hals", _src: "town", tier: "Worth considering", lat: 56.9950, lon: 10.3106, region: "North Jutland" },
+    { name: "Hjallerup", _src: "town", tier: "Worth considering", lat: 57.1667, lon: 10.1500, region: "North Jutland" },
+    { name: "Sæby", _src: "town", tier: "Worth considering", lat: 57.3339, lon: 10.5292, region: "North Jutland" },
+  ];
+  const named = (mode) => M.matchedPlaces(AALBORG_BIKE, reachPools, { days: 2, mode }).map(p => p.name);
+  const onBike = named("bike");
+  const noMode = named(null);
+  ok("something is still offered, because an empty screen is the worse bug", onBike.length > 0);
+  is("the ferry arrival resolves to Aalborg",
+     M.arrivalPointRaw(AALBORG_BIKE, { townPoint: M.townPointFor })?.name, "Aalborg");
+  is("and it knows they came by sea",
+     M.arrivalPointRaw(AALBORG_BIKE, { townPoint: M.townPointFor })?.by, "sea");
+  // ── AND A COORDINATE IS LOOKED UP, NEVER INVENTED ───────────────
+  // The one way this pass could be worse than the gap it fills: a town nobody has
+  // a coordinate for getting a plausible point in the middle of Denmark, which
+  // would put every reach calculation on a number nobody measured. Mutation
+  // testing found nothing checking it.
+  is("a town with no coordinate gives no arrival",
+     M.arrivalPointRaw("we take the ferry into Nowhershavn", { townPoint: M.townPointFor }), null);
+  is("and neither does a real sentence with no resolver",
+     M.arrivalPointRaw(AALBORG_BIKE), null);
+  is("a bare place name is still not an arrival",
+     M.arrivalPointRaw("user: I want to see Skagen and Ribe", { townPoint: M.townPointFor }), null);
+  // The airport pass keeps its priority: a brief naming both landed at the airport.
+  is("flying into Billund beats a ferry mentioned later",
+     M.arrivalPointRaw("We fly into Billund, then take the ferry to Aalborg later", { townPoint: M.townPointFor })?.by, "air");
+  ok("a town 223 km away is not offered to a cyclist on two days", !onBike.includes("Copenhagen"));
+  // THE ASSERTION THAT MAKES THE ONE ABOVE MEAN ANYTHING: with no mode stated, the
+  // same call DOES offer it, top tier first. So the filter is what dropped it, and
+  // this pair cannot both pass on a matcher that never filters.
+  ok("and with no mode stated the same call still offers it", noMode.includes("Copenhagen"));
+  ok("which is what proves the mode did the work", !onBike.includes("Copenhagen") && noMode.includes("Copenhagen"));
+  // And it is not filtering by tier or by name: the reachable towns survive.
+  // And it is not filtering by tier or by name: the towns next door survive.
+  ok("the towns next door are still offered", onBike.some(n => ["Nibe", "Hals", "Hjallerup", "Sæby"].includes(n)));
+
   // ── AND IT IS THE MATCHER THAT USES IT ──────────────────────────
   // The rule above is correct and useless if the ranking never calls it, which
   // is the failure previewMatch.js has already documented four times.
@@ -16838,8 +17002,34 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // handed the held-back rows under the instruction "THE SCREEN THIS SENTENCE
   // SITS ON SHOWS EXACTLY THESE PAGES AND NOTHING ELSE".
   const appSrc = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the line is built from the same narrowing the screen uses",
-    /\}\), \{ days, wanted, themes \}\);/.test(appSrc));
+  // ── COMPARED AS KEY SETS, NOT AS A LITERAL ──────────────────────
+  // This was `/\}\), \{ days, wanted, themes \}\);/`, and on 17 Aug it did its
+  // job and then showed its weakness in the same minute: adding `mode` to BOTH
+  // call sites failed it, because the literal named the three options that
+  // existed when it was written. A test that fails when the drift it guards
+  // against is fixed is a test that gets edited to shut it up.
+  //
+  // The invariant is not "these three options". It is that the line and the
+  // screen pass THE SAME options — one narrowing, described twice. So both
+  // option objects are read out of the two files and their keys compared. Adding
+  // a fourth to one file and not the other is what fails now, which is the thing
+  // that actually breaks the product.
+  const optionKeys = (src, re) => {
+    const m = src.match(re);
+    if (!m) return null;
+    return m[1].split(",").map(s => s.split(":")[0].trim()).filter(Boolean).sort();
+  };
+  const previewSrc = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  const lineOpts = optionKeys(appSrc, /\}\), \{ (days[^}]*) \}\);/);
+  const screenOpts = optionKeys(previewSrc, /previewPools\(\{[^}]*\}\), \{ (days[^}]*) \}\)/);
+  ok("the line's matcher call is found", !!lineOpts);
+  ok("and the screen's is too", !!screenOpts);
+  is("the line is built from the same narrowing the screen uses",
+     (lineOpts || []).join(","), (screenOpts || []).join(","));
+  // And it is still the full set, so neither file can satisfy the equality above
+  // by both of them dropping something.
+  ["days", "wanted", "themes", "mode", "budget"].forEach(k =>
+    ok(`${k} is part of that narrowing`, (lineOpts || []).includes(k)));
   ok("and it reads the intake interests, as the screen does",
     /briefThemes\(forMatch, intakeInterest\)/.test(appSrc));
 
@@ -18293,7 +18483,31 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The whole failure this closes is a measurement that existed and was never
   // printed, so the render is asserted as hard as the arithmetic.
   const gpR = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
-  ok("the guide measures the way home", /const home = returnLeg\(\{ ordered: stops, from: guide\._arrivalPoint \|\| null, days: \(days \|\| \[\]\)\.length \}\)/.test(gpR));
+  ok("the guide measures the way home", /const home = returnLeg\(\{ ordered: stops, from: guide\._arrivalPoint \|\| null, days: \(days \|\| \[\]\)\.length,/.test(gpR));
+  // ── AND ON WHAT THEY ARE TRAVELLING IN ──────────────────────────
+  // 18 Aug, from an adversarial review: this printed "the journey home is a
+  // manageable half day at the end" over 84 km back to Aalborg on a trip whose
+  // stated mode was a bicycle. More than a full day of riding, called manageable,
+  // on the page that promises nothing is asserted that nobody measured.
+  ok("and knows how they are travelling", /days: \(days \|\| \[\]\)\.length, mode: guide\._mode \|\| null \}\)/.test(gpR));
+  {
+    const SKAGEN_HOME = [{ name: "Skagen", lat: 57.7211, lon: 10.5836 }];
+    const AAL = { lat: 57.048, lon: 9.919, name: "Aalborg" };
+    const byBike = M.returnLeg({ ordered: SKAGEN_HOME, from: AAL, days: 7, mode: "bike" });
+    const byCar = M.returnLeg({ ordered: SKAGEN_HOME, from: AAL, days: 7, mode: "car" });
+    ok("85 km home on a bicycle is not called a manageable half day",
+       !/manageable half day/.test(M.describeReturn(byBike)));
+    ok("it is six hours on a bike, and says so", /6 hours on a bike/.test(M.describeReturn(byBike)));
+    ok("and that that is the last day", /full day of travelling/.test(M.describeReturn(byBike)));
+    ok("the same distance by car is not the day", !/full day of travelling/.test(M.describeReturn(byCar)));
+    ok("and is timed as a car", /by car/.test(M.describeReturn(byCar)));
+    // NO MODE, NO CHANGE. The old sentence stands exactly where nothing was said,
+    // which is what stops this moving every guide already built.
+    is("no stated mode keeps the previous wording",
+       M.describeReturn(M.returnLeg({ ordered: SKAGEN_HOME, from: AAL, days: 7 })),
+       "Skagen is about 85 km back to Aalborg, so the journey home is a manageable half day at the end.");
+    ok("and no duration is invented there", !/hours?/.test(M.describeReturn(M.returnLeg({ ordered: SKAGEN_HOME, from: AAL, days: 7 }))));
+  }
   ok("and prints the sentence", /const line = describeReturn\(home\);/.test(gpR));
   ok("gated on there being one", /if \(!line\) return null;/.test(gpR));
   ok("and it says the distance is not measured", /Straight line distance, not a measured route/.test(gpR));
@@ -20785,7 +20999,20 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and does not fill what kind of trip it is", !onlyBike.known.interests);
   ok("cycling still fills transport", !!readBrief({ travellerText: "we'll be cycling", today: AUG }).known.transport);
   ok("so does driving", !!readBrief({ travellerText: "we're driving", today: AUG }).known.transport);
-  ok("and no car at all is an answer", !!readBrief({ travellerText: "we have no car", today: AUG }).known.transport);
+  // ── AND A NEGATED MODE IS NOT A MODE ────────────────────────────
+  // This assertion used to be `!!known.transport` — truthy only — and it passed
+  // happily while the value was "car", the exact inversion, on the sentence
+  // somebody writes precisely to say they are NOT driving. Found 18 Aug by an
+  // adversarial review. A truthy check on a field whose VALUE is the thing at stake
+  // is not a test.
+  is("no car at all states no mode, rather than the mode it denies",
+     readBrief({ travellerText: "we have no car", today: AUG }).known.transport, undefined);
+  is("nor does not renting one",
+     readBrief({ travellerText: "we are not renting a car", today: AUG }).known.transport, undefined);
+  is("and a car park is a place, not a way of travelling",
+     readBrief({ travellerText: "Does the hotel have a car park?", today: AUG }).known.transport, undefined);
+  is("while an actual car still counts",
+     readBrief({ travellerText: "we are renting a car", today: AUG }).known.transport?.mode, "car");
   ok("and public transport", !!readBrief({ travellerText: "public transport the whole way", today: AUG }).known.transport);
   // A MODE NEEDS A VERB, or an attraction fills the slot.
   ok("a train museum is not a way of getting around",
@@ -20806,8 +21033,10 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("so 'you already answered everything I needed' was false", !gap.ready);
   // Which is the assertion that matters: on this exact conversation, the marker
   // is not the model's to emit.
-  const wouldStrip = !gap.ready;
-  ok("and the marker is withheld on it", wouldStrip);
+  // The stripping itself is asserted against the source below; this line only
+  // records the input to it, and it used to restate `!gap.ready` under a label
+  // claiming to test the strip. Named for what it is.
+  ok("so on this conversation the brief is what withholds the marker", !gap.ready);
 
   // ── THE GATE IS IN CODE, NOT IN THE PROMPT ──────────────────────
   // The prompt already spends a paragraph on when the marker may be emitted. The
@@ -21547,7 +21776,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // This one genuinely does not exist unless it is written: EU law treats silence
   // as permission for text and data mining.
   is("the reservation names both kinds", TDM_RESERVATION, "noai, noimageai");
-  ok("the page states it", /<meta name="robots" content="noai, noimageai"/.test(html));
+  ok("the page states it", /<meta name="robots" content="[^"]*noai, noimageai"/.test(html));
+  // ── AND IT DOES NOT QUIETLY TURN OFF SEARCH ─────────────────────
+  // The reservation shares a slot with the directive that decides whether Gemlyx
+  // is in search at all. Absence of noindex does mean indexable, so the two AI
+  // tokens alone were almost certainly harmless — and "almost certainly" is the
+  // wrong standard for the tag holding 117 pages on a site with no organic
+  // traffic yet. Found by auditing the live site.
+  const robotsMeta = (html.match(/<meta name="robots" content="([^"]*)"/) || [])[1] || "";
+  ok("the robots tag exists", !!robotsMeta);
+  ok("and says index explicitly", /\bindex\b/.test(robotsMeta));
+  ok("and follow explicitly", /\bfollow\b/.test(robotsMeta));
+  ok("and never says noindex", !/\bnoindex\b/.test(robotsMeta));
+  ok("nor nofollow", !/\bnofollow\b/.test(robotsMeta));
+  is("there is exactly one robots meta, so two cannot disagree",
+     (html.match(/<meta name="robots"/g) || []).length, 1);
   ok("and the tdm tag too", /<meta name="tdm-reservation" content="1"/.test(html));
   ok("robots.txt reserves mining", /TEXT AND DATA MINING IS EXPRESSLY RESERVED/.test(robots));
   ok("and names the article it relies on", /2019\/790/.test(terms));
@@ -21686,6 +21929,569 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
      guidePage.indexOf("const hero = useMemo") < guardAt);
   ok("as is the map library it shares a tick with",
      guidePage.indexOf("const mapLibrary = useMemo") < guardAt);
+}
+
+
+
+// ── THREE THINGS HE SPOTTED WHILE READING ONE GUIDE ─────────────────
+//
+// Oliver, 17 Aug 2026, three messages inside ten minutes:
+//
+//   "I think you need to make it explicit where these places are.. like 'JOJO'..
+//    nobody knows that is in Aarhus.."
+//   "And it's not exactly a 'day-trip' from Copenhagen.."
+//   "geranium is NOT mid-range.. so remember to make food places include in budget."
+//
+// One theme runs through all three: the app already held the answer and nothing
+// asked it. The town was on the published row. The distance was measurable. The
+// price was in the field.
+{
+  const { stopTown, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim,
+          describeDayTripClaim, DAY_TRIP_FRACTION, outOfBudget, preferAffordable,
+          budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS, priceBand, travellerBudget } = M;
+
+  // ── "NOBODY KNOWS THAT IS IN AARHUS" ────────────────────────────
+  // The town lives in a different field on every content type, which is why the
+  // card that read only `stop.town` printed a bare name.
+  is("the plan's own town wins when it has one", stopTown({ town: "Skagen" }, { city: "Aarhus" }), "Skagen");
+  is("an event row keeps it in town", stopTown({}, { town: "Ribe" }), "Ribe");
+  is("an attraction row keeps it in city", stopTown({}, { city: "Aarhus" }), "Aarhus");
+  is("a restaurant row keeps it in a location string",
+     stopTown({}, { location: "Klostertorvet 10, 8000 Aarhus C" }), "Aarhus");
+  is("and JOJO is in Aarhus", stopTown({ name: "JOJO" }, { name: "JOJO", location: "Aarhus C" }), "Aarhus");
+  is("a full postal address in a mapHint resolves too",
+     stopTown({}, { mapHint: "JOJO, Klostertorvet 10, 8000 Aarhus C, Denmark" }), "Aarhus");
+  // AND IT NEVER PRINTS A COUNTRY, which cityFromLocation exists to prevent.
+  ok("Denmark is never the answer", !/denmark/i.test(stopTown({}, { mapHint: "Somewhere, Denmark" })));
+  // No row and no town is empty rather than a guess off the name.
+  is("nothing known is empty", stopTown({ name: "JOJO" }, null), "");
+  is("and a missing stop is safe", stopTown(null, null), "");
+  // A street address is never printed raw as a label.
+  ok("an address is reduced to its city",
+     !/\d/.test(stopTown({}, { location: "Klostertorvet 10, 8000 Aarhus C" })));
+  // The card and the geocoder read the same answer, or the chip and the Maps link
+  // disagree about where a stop is.
+  const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the card's meta line uses it", /townLabel, stop\.suggestedStay\]/.test(gp));
+  ok("and it is computed from the matched row", /const townLabel = stopTown\(stop, real\);/.test(gp));
+  ok("and the route resolution uses it too", /const fromRow = s \? stopTown\(s, lookupRealPlace\(name\)\) : "";/.test(gp));
+  ok("the bare field is no longer read on its own in the meta line", !/, stop\.town, stop\.suggestedStay\]/.test(gp));
+
+  // ── "NOT EXACTLY A DAY-TRIP FROM COPENHAGEN" ────────────────────
+  // Not the model going off script: the accommodation prompt invites this phrasing
+  // in as many words, and nothing measured whether it was true.
+  is("out, a while there, and back is a third of a day's travel", DAY_TRIP_FRACTION, 3);
+  is("a day trip by car is about 100 km each way", dayTripRadiusKm("car"), 100);
+  is("by bike it is 20", dayTripRadiusKm("bike"), 20);
+  is("and an unstated mode is not read as a car",
+     dayTripRadiusKm(null), dayTripRadiusKm("public transport"));
+  // Aarhus from Copenhagen is 185 km, about three hours of train each way.
+  ok("Aarhus is not a day trip from Copenhagen by train", !dayTripHonest({ kmFromBase: 185, mode: "public transport" }));
+  ok("nor by car", !dayTripHonest({ kmFromBase: 185, mode: "car" }));
+  ok("Roskilde is", dayTripHonest({ kmFromBase: 32, mode: "public transport" }));
+  ok("and Helsingør is", dayTripHonest({ kmFromBase: 46, mode: "public transport" }));
+  ok("Aarhus is not one on a bicycle either", !dayTripHonest({ kmFromBase: 185, mode: "bike" }));
+  // AN UNMEASURED CLAIM IS NOT ACCEPTED. Number(null) is 0 and Number("") is 0, so
+  // the first version of this made every unmeasurable claim the most honest one
+  // there is — the exact inversion of the rule. Caught by a smoke test, pinned here.
+  [null, undefined, "", "unknown", NaN, [], true, false, -5].forEach(v =>
+    ok(`an unmeasured distance (${JSON.stringify(v)}) is not a day trip`, !dayTripHonest({ kmFromBase: v, mode: "car" })));
+  is("zero really is zero, though", dayTripHonest({ kmFromBase: 0, mode: "bike" }), true);
+
+  // What the sentence claims, read narrowly so a correct sentence is never edited.
+  is("the claim names its base", dayTripClaim("Stay central and take easy day trips from Copenhagen."), "Copenhagen");
+  is("a hyphen is the same claim", dayTripClaim("a day-trip from Copenhagen"), "Copenhagen");
+  is("so is out of", dayTripClaim("day trips out of Aarhus"), "Aarhus");
+  is("a two word town survives", dayTripClaim("day trips from Nykøbing Falster"), "Nykøbing Falster");
+  is("no claim is null", dayTripClaim("Stay near Skagen harbour for the dunes."), null);
+  is("and mentioning a day is not a claim", dayTripClaim("Give this a full day."), null);
+  is("nothing at all is safe", dayTripClaim(null), null);
+
+  // ── AND THE REPAIR IS A CUT, NEVER A REWRITE ────────────────────
+  // The rest of the sentence is a real recommendation about a real area. Replacing
+  // the false clause with a truer-sounding one would be this file inventing travel
+  // advice, which is the whole thing the product refuses to do.
+  is("the clause comes out and the recommendation stays",
+     withoutDayTripClaim("Stay near Copenhagen Central, with easy day trips from Copenhagen, so you only unpack once."),
+     "Stay near Copenhagen Central, so you only unpack once.");
+  is("a sentence that is ONLY the claim goes entirely",
+     withoutDayTripClaim("Take day trips from Copenhagen."), "");
+  is("a sentence with no claim is untouched",
+     withoutDayTripClaim("Stay near Skagen harbour for the dunes."),
+     "Stay near Skagen harbour for the dunes.");
+  // AND UNTOUCHED MEANS RETURNED EARLY, not run through the repair and happening to
+  // survive it. Mutation testing found the early return unfalsifiable on the long
+  // sentence above, because the cuts are no-ops when there is no claim. A SHORT
+  // sentence is where the difference shows: the "less than four words left" rule
+  // exists to delete a sentence that is only a false claim, and without the guard it
+  // deletes a perfectly good short one instead.
+  is("a short sentence with no claim survives", withoutDayTripClaim("Stay central."), "Stay central.");
+  is("and a three word one does too", withoutDayTripClaim("Book ahead here."), "Book ahead here.");
+  ok("no invented replacement is ever added",
+     !/instead|however|although|better/i.test(withoutDayTripClaim("Stay near Copenhagen Central, with easy day trips from Copenhagen, so you only unpack once.")));
+  ok("the cut sentence still ends in a full stop",
+     /\.$/.test(withoutDayTripClaim("Stay near Copenhagen Central, with easy day trips from Copenhagen, so you only unpack once.")));
+  ok("and there is no stranded comma",
+     !/,\s*\./.test(withoutDayTripClaim("Stay near Copenhagen Central, with easy day trips from Copenhagen, so you only unpack once.")));
+  // He is told, rather than repaired behind his back.
+  ok("the note names the town, the distance and the limit",
+     /Copenhagen/.test(describeDayTripClaim({ town: "Copenhagen", kmFromBase: 185, mode: "public transport" }))
+     && /185 km/.test(describeDayTripClaim({ town: "Copenhagen", kmFromBase: 185, mode: "public transport" }))
+     && /83 km/.test(describeDayTripClaim({ town: "Copenhagen", kmFromBase: 185, mode: "public transport" })));
+  ok("and an unmeasurable one says so instead of inventing a figure",
+     /could not be measured/.test(describeDayTripClaim({ town: "Copenhagen", kmFromBase: null, mode: "car" })));
+  is("no claim, no note", describeDayTripClaim({}), "");
+
+  // ── "GERANIUM IS NOT MID-RANGE" ─────────────────────────────────
+  // The small half was priceBand averaging every digit, fixed earlier tonight. The
+  // large half is that nothing had ever read a price when choosing what to offer.
+  const GERANIUM = { name: "Geranium", _src: "food", price: "Tasting menu 2,800 DKK" };
+  const SHACK = { name: "a harbour shack", _src: "food", price: "Smørrebrød 65 DKK" };
+  const UNPRICED = { name: "somewhere new", _src: "food", price: "See website" };
+  is("a three star tasting menu bands over 250", priceBand(GERANIUM.price), "over-250");
+  ok("and a tight budget rules it out", outOfBudget(GERANIUM, "tight"));
+  ok("while the shack is fine", !outOfBudget(SHACK, "tight"));
+  // A GENEROUS BUDGET RULES OUT NOTHING. Plenty of people with money eat at a
+  // harbour shack on purpose, and being handed only expensive places is its own
+  // failure.
+  is("a generous budget rules nothing out", BUDGET_RULES_OUT.generous, []);
+  ok("so Geranium is not withheld from one", !outOfBudget(GERANIUM, "generous"));
+  ok("nor is the shack", !outOfBudget(SHACK, "generous"));
+  ok("no stated budget rules nothing out", !outOfBudget(GERANIUM, null));
+  // AN UNKNOWN PRICE IS NOT AN EXPENSIVE ONE. Treating null as over-250 would hide
+  // every entry whose price nobody has checked yet, which is a large part of the
+  // library and the opposite of the fix.
+  is("See website bands nowhere", priceBand(UNPRICED.price), null);
+  ok("so an unpriced row is never called over budget", !outOfBudget(UNPRICED, "tight"));
+  // Only the kinds where a price is what a visit costs.
+  is("food and nightlife are the priced kinds", PRICED_KINDS, ["food", "nightlife"]);
+  ok("a town is never out of budget", !outOfBudget({ name: "Copenhagen", _src: "town", price: "2,800 DKK" }, "tight"));
+  ok("nor is an attraction", !outOfBudget({ name: "ARoS", _src: "free", price: "2,800 DKK" }, "tight"));
+
+  // And the section is never emptied: an honest line beats a blank panel.
+  is("affordable ones win outright when there are enough",
+     preferAffordable([GERANIUM, SHACK], { level: "tight", keepAtLeast: 1 }).map(r => r.name), ["a harbour shack"]);
+  is("and the expensive one tops up when there is nothing else",
+     preferAffordable([GERANIUM], { level: "tight", keepAtLeast: 1 }).map(r => r.name), ["Geranium"]);
+  is("with no stated budget nothing is reordered",
+     preferAffordable([GERANIUM, SHACK], { level: null, keepAtLeast: 2 }).map(r => r.name), ["Geranium", "a harbour shack"]);
+  // If it is shown anyway it says so, rather than arriving as tonight's dinner.
+  ok("an over budget row carries a warning", !!budgetWarning(GERANIUM, "tight"));
+  is("and an affordable one carries none", budgetWarning(SHACK, "tight"), "");
+
+  // ── AND THE MATCHER APPLIES IT ──────────────────────────────────
+  const TIGHT = "user: Four days in Copenhagen. It's a tight backpacker to be honest, I want real food places.";
+  is("the brief reads as tight", travellerBudget(TIGHT), "tight");
+  const pools = [
+    { name: "Copenhagen", _src: "town", lat: 55.6761, lon: 12.5683, isMajorCity: true, region: "Zealand" },
+    { ...GERANIUM, location: "Copenhagen" },
+    { ...SHACK, location: "Copenhagen" },
+  ];
+  const out = M.matchedPlaces(TIGHT, pools, { days: 4, budget: "tight" });
+  const ger = out.find(p => p.name === "Geranium");
+  const shack = out.find(p => p.name === "a harbour shack");
+  ok("Geranium still reaches the screen, because hiding it tells them less", !!ger);
+  ok("but it is held behind the door", ger?._notAsked === true);
+  is("and the door says why", ger?._held, "budget");
+  ok("and it carries the line the card shows", !!ger?._overBudget);
+  ok("while the affordable place is offered outright", shack && !shack._notAsked);
+  // With no budget stated, today's behaviour stands.
+  const openBudget = M.matchedPlaces(TIGHT, pools, { days: 4, budget: null });
+  ok("no stated budget holds nothing back on price",
+     openBudget.find(p => p.name === "Geranium")?._held !== "budget");
+}
+
+
+
+// ── "AND THEN THE ROUTE IS EVEN WORSE…" ─────────────────────────────
+//
+// The numbers off his own guide, 17 Aug 2026:
+//
+//   2 DAYS · 3 STOPS · 2 TOWNS · 92 KM OF TRAVEL
+//   Your route: Aalborg → Skagen
+//   Day 1  Arrival in Aalborg, 11:00
+//   Day 2  North to Skagen, first stop 15:00
+//
+// Ninety-two kilometres between the end of one day and the start of the next, on a
+// bicycle, and nothing on the page between them. Not a bad estimate. No journey at
+// all: day 2 opens at three in the afternoon in a town five to six hours of riding
+// away. The stat bar counted the kilometres and the itinerary never spent them.
+//
+// One line caused it: a leg is the gap between two stops IN A DAY, so the largest
+// journey of the trip was the one gap nothing looked at.
+{
+  const { overnightMove, describeOvernightMove, MODE_DAY_KM, REACH_FAR } = M;
+  const AALBORG = { lat: 57.048, lon: 9.919 };
+  const SKAGEN = { lat: 57.7211, lon: 10.5836 };
+  const NEARBY = { lat: 57.10, lon: 9.95 };
+
+  // ── HIS TRIP, MEASURED ──────────────────────────────────────────
+  const move = overnightMove({ from: AALBORG, to: SKAGEN, fromName: "Aalborg", toName: "Skagen", days: 2, mode: "bike" });
+  ok("the journey between two days exists at all", !!move);
+  ok("and it is the real distance, not a guess", move.km > 70 && move.km < 110);
+  is("the mode is carried with it", move.mode, "bike");
+  // THE TEST THAT WOULD HAVE CAUGHT IT: 92 km on a bicycle is not a transfer.
+  ok("92 km on a bicycle eats the day", move.eatsTheDay);
+  ok("and the same distance by car does not",
+     !overnightMove({ from: AALBORG, to: SKAGEN, days: 2, mode: "car" }).eatsTheDay);
+  ok("nor by train", !overnightMove({ from: AALBORG, to: SKAGEN, days: 2, mode: "public transport" }).eatsTheDay);
+  // ── AND THE BAR IS TWO THIRDS, NOT THE WHOLE DAY ────────────────
+  // Asserted in the GAP, because Aalborg to Skagen clears both bars and so proves
+  // neither: 85 km is over two thirds of a bike day AND over a whole one. Mutation
+  // testing found that out. A 45 km ride is where the two differ, and it is the
+  // realistic case — most of a day in the saddle, and a plan that calls it a
+  // transfer has taken the day away without saying so.
+  is("two thirds of a day's cycling is the bar", Math.round(MODE_DAY_KM.bike * (2 / 3)), 40);
+  ok("45 km on a bike eats the day",
+     overnightMove({ from: AALBORG, to: { lat: 57.048, lon: 10.66 }, days: 4, mode: "bike" }).eatsTheDay);
+  ok("and 25 km does not",
+     !overnightMove({ from: AALBORG, to: { lat: 57.048, lon: 10.33 }, days: 4, mode: "bike" }).eatsTheDay);
+
+  // ── AND IT SAYS SO IN WORDS ─────────────────────────────────────
+  const said = describeOvernightMove(move);
+  // 85 km, not the 92 on his screenshot: that figure is road distance and this is
+  // the great circle, for the reason written above haversineKm. Second time tonight
+  // a road figure written into a test failed on correct code, so it is stated
+  // rather than left as a magic number.
+  ok("the sentence names the distance", /\b8\d km\b/.test(said));
+  is("and it is the great circle, not the road", move.km, 85);
+  ok("and where they are going", /Skagen/.test(said));
+  ok("and how long on a bike", /on a bike/.test(said));
+  // THE DURATION ITSELF, or the pace table can be replaced with a car's speed and
+  // nothing notices: 85 km is six hours of cycling, not one.
+  ok("and the hours are a bicycle's hours", /roughly 6 hours/.test(said));
+  ok("a car covers the same ground in a fraction of that",
+     /roughly 1 hour|under an hour and a half/.test(
+       describeOvernightMove(overnightMove({ from: AALBORG, to: SKAGEN, toName: "Skagen", days: 2, mode: "car" }))));
+  ok("and that it is the day rather than a transfer inside it", /most of a day/.test(said));
+  ok("no fake precision to the minute", !/\bminutes?\b/.test(said));
+
+  // A short hop reads as a short hop, not as a warning.
+  const hop = overnightMove({ from: AALBORG, to: NEARBY, toName: "Nibe", days: 4, mode: "bike" });
+  ok("a short move does not eat the day", !hop.eatsTheDay);
+  ok("and reads as a morning", /start(?:ing)? early/.test(describeOvernightMove(hop)));
+
+  // ── AND NOTHING IS INVENTED WHEN NOTHING IS KNOWN ───────────────
+  is("the same place is not a journey",
+     overnightMove({ from: AALBORG, to: AALBORG, days: 2, mode: "bike" }), null);
+  is("a missing coordinate is not a journey",
+     overnightMove({ from: AALBORG, to: null, days: 2, mode: "bike" }), null);
+  is("and neither is nothing at all", overnightMove({}), null);
+  is("no move, no sentence", describeOvernightMove(null), "");
+  // NO MODE, NO DURATION. The distance is still worth saying; an invented pace is
+  // not, and this is the page where every other number is measured.
+  const noMode = overnightMove({ from: AALBORG, to: SKAGEN, toName: "Skagen", days: 2, mode: null });
+  const noModeSaid = describeOvernightMove(noMode);
+  ok("the distance is still stated with no mode", /km/.test(noModeSaid));
+  ok("but no duration is invented", !/hours?|hour and a half/.test(noModeSaid));
+  ok("and no mode is invented either", !/by car|on a bike|by train/.test(noModeSaid));
+  ok("it is never called measured", noMode.measured === false);
+
+  // ── AND IT REACHES THE PAGE ─────────────────────────────────────
+  // The rule is worthless if the day never renders it, which is the failure this
+  // whole file exists to catch.
+  const gpSrc = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  ok("the day looks at the next day's first stop", /const nextDay = days\[dayIdx \+ 1\];/.test(gpSrc));
+  ok("and at its own last one", /const lastHere = \(day\.stops \|\| \[\]\)\.filter\(s => s\?\.name\)\.slice\(-1\)\[0\];/.test(gpSrc));
+  ok("it builds the move", /const move = overnightMove\(\{/.test(gpSrc));
+  // COUNTED. `{line}` appears three times in this file (the test-traveller panel,
+  // this block, and the return leg), so a bare presence check passed with this
+  // block's render deleted — the "second occurrence elsewhere in the file" shape,
+  // found by an adversarial review on 18 Aug. Anchored to its own scrim instead.
+  ok("and renders the sentence", /<span style=\{\{ color: C\.light \}\}>\{line\}<\/span>\s*\n\s*\{\/\* Same honesty as Getting back/.test(gpSrc));
+  // THE GUARD, EXACTLY. A source scan for the presence of a variable cannot catch
+  // that guard being inverted, and mutation testing proved it: flipping `!line` to
+  // `line` hides the block on every guide that has one and changed no assertion.
+  ok("and it renders when there IS a line, not when there is not",
+     /const line = describeOvernightMove\(move\);\s*\n\s*if \(!line\) return null;/.test(gpSrc));
+  ok("a missing coordinate bails out rather than guessing one",
+     /if \(!a \|\| !b\) return null;/.test(gpSrc));
+  ok("the trip's own mode is what it uses", /mode: guide\._mode,/.test(gpSrc));
+  ok("a heavy move is marked", /const heavy = move\.eatsTheDay \|\| move\.band === REACH_FAR;/.test(gpSrc));
+  ok("and the estimate says it is an estimate",
+     /Straight line distance, not a measured route, so treat it as the shape of the day/.test(gpSrc));
+  // Silent on a simple guide, which has no measured legs at all by design.
+  ok("a simple guide draws none of this", /\{!lightMode && \(\(\) => \{\s*\n\s*const nextDay/.test(gpSrc));
+  // And the towns come from the same resolver the cards use, so the block and the
+  // card cannot disagree about where a stop is.
+  ok("the towns come from stopTown", /const fromT = stopTown\(lastHere, lookupRealPlace\(lastHere\.name\)\);/.test(gpSrc));
+}
+
+
+
+// ── "MAKE ME ABLE TO SEND YOU A REPORT OF MY CHATS" ─────────────────
+//
+// Oliver, 17 Aug 2026. He asked once, it did not get built, and the cost showed up
+// the same night: diagnosing "you already answered everything I needed" took a
+// pasted transcript and ten screenshots inside an ODT, and the fact that actually
+// explained it — that his answer's reply had FAILED and been stripped from the
+// history the model reads — appeared in none of them. It had to be inferred from
+// the shape of the conversation.
+//
+// So the assertions here are mostly about the four things a copy-paste cannot
+// carry, because a report that only holds what a screenshot holds is not worth a
+// button.
+{
+  const { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename,
+          turnReport, briefTimeline, intakeReport } = M;
+  const AUG = new Date(2026, 7, 17);
+
+  // HIS ACTUAL CONVERSATION, including the failure.
+  const CHAT = [
+    { role: "user", text: "I'm taking the ferry into Aalborg" },
+    { role: "assistant", text: "Ferry into Aalborg, nice. Just need two more things: what's the budget looking like, and what pulls you in most?" },
+    { role: "user", text: "It's a tight backpacker to be honest.. and I'd love to see some hidden gems! I'm on a bicycle." },
+    { role: "assistant", text: "Hit a snag on my end — try sending that again.", isError: true },
+    { role: "user", text: "What?" },
+    { role: "assistant", text: "Haha, no worries, all good, you already answered everything I needed.\n[[GEMLYX_READY_TO_BUILD]]" },
+  ];
+  const rep = buildChatReport({ at: "2026-08-17T23:20:00.000Z", messages: CHAT, today: AUG });
+
+  is("the file says what it is", rep.kind, CHAT_REPORT_KIND);
+  is("and which version wrote it", rep.version, CHAT_REPORT_VERSION);
+  is("the filename carries the moment", chatReportFilename("2026-08-17T23:20:00.000Z"), "gemlyx-chat-2026-08-17_23-20-00.json");
+
+  // ── THE FOUR THINGS A PASTE CANNOT CARRY ────────────────────────
+  // 1. WHICH REPLY FAILED. The cause of the worst bug of the night, invisible in
+  //    a screenshot and stripped out of the history the model sees.
+  is("the failed reply is counted", rep.summary.failedReplies, 1);
+  ok("and flagged on the turn itself", rep.turns[3].isError === true);
+  ok("while a real reply is not", rep.turns[1].isError === false);
+
+  // 2. WHETHER IT CLAIMED TO BE READY WHILE THE BRIEF WAS NOT.
+  ok("the ready claim is recorded even though the bubble hides the marker", rep.turns[5].claimedReady === true);
+  is("and the contradiction is one number, not an argument", rep.summary.readyClaimsWhileIncomplete, 1);
+  ok("because the brief was not actually ready", rep.summary.briefReady === false);
+
+  // 3. WHAT THE BRIEF HELD, TURN BY TURN. "It didn't know what kind of trip we
+  //    were looking for" becomes a field instead of a debate.
+  ok("there is a line per traveller turn", rep.briefTimeline.length === 3);
+  ok("and it knows what he had said by the end", !!rep.brief.slots.find(s => s.key === "interests")?.value);
+  ok("and what it still did not know", rep.summary.stillMissing.includes("days"));
+  ok("the next question it would ask is written down", rep.brief.wouldAskNext.length > 0);
+  ok("with the wording it would use", /\?/.test(rep.brief.wouldAskNext[0].ask));
+  // The timeline has to actually MOVE, or it is one answer copied three times.
+  ok("the brief grows as he says more",
+     rep.briefTimeline[0].missing.length > rep.briefTimeline[2].missing.length);
+
+  // 4. WHAT WAS READ OFF IT, so a report and the preview screen cannot disagree.
+  is("the mode it planned on", rep.read.mode, "bike");
+  is("and the budget", rep.read.budget, "tight");
+
+  // ── THE TEXT IS KEPT IN FULL ────────────────────────────────────
+  // A truncated transcript is how a diagnosis goes wrong, which is the whole point
+  // of the file.
+  is("nothing is clipped", rep.turns[2].text, CHAT[2].text);
+  is("and the length is stated too", rep.turns[2].chars, CHAT[2].text.replace(/\s+/g, " ").trim().length);
+  is("the turn's place in the conversation is kept", rep.turns[4].i, 4);
+
+  // ── AND WHAT IS DELIBERATELY LEFT OUT ───────────────────────────
+  // The rule previewReport.js set: a debug file is exactly where personal prose
+  // ends up living forever. The intake is recorded as WHETHER it was filled, plus
+  // the parsed value, never as the sentence somebody typed.
+  const withIntake = intakeReport({
+    budgetText: "we are on a really tight budget, about 400 kr a day between us",
+    travelers: "me and Sofie", startPoint: "Aalborg", interest: ["food"], transport: ["🚲 Bike"],
+  });
+  is("the budget is a level, not a sentence", withIntake.budgetLevel, "tight");
+  ok("the sentence itself is gone", !JSON.stringify(withIntake).includes("400 kr"));
+  ok("and so is a companion's name", !JSON.stringify(withIntake).includes("Sofie"));
+  ok("nor a typed start point, which can be a home address", withIntake.startPoint === true);
+  is("but that the box was filled is recorded", withIntake.travelers, true);
+  // Every field that could hold prose is a boolean or a parsed value. Asserted as a
+  // rule over the whole object rather than field by field, so a field added later
+  // is covered by this too.
+  Object.entries(withIntake).forEach(([k, v]) => {
+    if (k === "transport") return;                      // chips, not prose
+    ok(`${k} is not free text`, typeof v !== "string" || ["tight", "middling", "generous"].includes(v));
+  });
+  is("and the transport chips are kept, because they are not prose", withIntake.transport.length, 1);
+  // Same rule over the whole report.
+  const priv = buildChatReport({
+    at: "2026-08-17T23:20:00.000Z", messages: CHAT, today: AUG,
+    intake: { budgetText: "tight, about 400 kr a day", travelers: "me and Sofie" },
+  });
+  ok("no free text from the form reaches the file", !JSON.stringify(priv.intake).includes("Sofie"));
+  ok("nor the budget sentence", !JSON.stringify(priv.intake).includes("400 kr"));
+
+  // ── AND IT SURVIVES AN EMPTY OR BROKEN CHAT ─────────────────────
+  const empty = buildChatReport({ at: "", messages: [], today: AUG });
+  is("an empty chat still produces a valid report", empty.kind, CHAT_REPORT_KIND);
+  is("with no turns", empty.summary.turns, 0);
+  ok("and nothing invented about readiness", empty.summary.readyClaimsWhileIncomplete === 0);
+  is("nothing at all is safe", buildChatReport().kind, CHAT_REPORT_KIND);
+  is("a junk turn does not throw", turnReport(null, 0).role, "user");
+  is("and neither does a junk list", briefTimeline(null).length, 0);
+
+  // ── AND THE BUTTON EXISTS, BEHIND THE LOGIN ─────────────────────
+  const appSrc2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the report is built from the real conversation", /messages: aiMessages,/.test(appSrc2));
+  // COUNTED, not merely present. `asked: briefAsked` appears in sendAI too, so a
+  // regex that only asks "is this string anywhere" passed happily with the report's
+  // copy torn out — mutation testing found that. Two call sites, two occurrences:
+  // the live chat gate and the report.
+  is("and from what it had already asked, in both places that need it",
+     (appSrc2.match(/asked: briefAsked,/g) || []).length, 2);
+  ok("and the intake is passed", /transport: intakeTransport,\s*\n\s*budgetText: intakeBudgetText,/.test(appSrc2));
+  ok("it downloads a file rather than needing an endpoint", /downloadReport\(report, chatReportFilename\(at\)\);/.test(appSrc2));
+  ok("the button says how many turns it will export", /Export this chat as a report \(\$\{aiMessages\.length\} turns\)/.test(appSrc2));
+  ok("and is disabled on an empty chat", /disabled=\{!aiMessages\.length\}/.test(appSrc2));
+  // Behind the Studio login: it is a debug tool, not a traveller feature. Asserted
+  // by position — it sits inside the founder panel, after its opening guard.
+  const studioAt = appSrc2.indexOf('{isStudio && studioSession && (');
+  const buttonAt = appSrc2.indexOf("Export this chat as a report");
+  ok("the studio panel is found", studioAt > 0);
+  ok("and the export button is inside it", buttonAt > studioAt);
+}
+
+
+
+// ── WHAT AN ADVERSARIAL REVIEW FOUND, 18 AUG 2026 ───────────────────
+//
+// Oliver: "clean up for any bugs you might have overlooked or get Fable to look at
+// your work." It did, and it found fifteen. Every one below was reproduced by
+// running the real module before it was fixed, and every one is pinned here.
+//
+// The theme is worth naming, because it is the same theme as the bugs the night
+// started with: a pattern that matched more than the sentence it was written for.
+{
+  const { travellerBudget, readBrief, arrivalPointRaw, townPointFor, travelModeKey,
+          returnLeg, describeReturn, fieldProvenance, priceBand, stripDashes,
+          buildChatReport, briefTimeline } = M;
+  const AUG = new Date(2026, 7, 17);
+
+  // ── 1. "BUDGET" ON ITS OWN IS NOT A TIGHT BUDGET ────────────────
+  // The worst of the fifteen: the tight pattern contained the bare word "budget",
+  // so a traveller saying their budget was generous had every expensive restaurant
+  // held behind a card reading "Above the budget you mentioned", and the
+  // accommodation prompt was told they were counting kroner.
+  is("a generous budget reads as generous", travellerBudget("our budget is generous"), "generous");
+  is("and a big one", travellerBudget("big budget for this trip"), "generous");
+  is("and one that is not an issue", travellerBudget("our budget is not an issue"), "generous");
+  is("a tight one still reads as tight", travellerBudget("we are on a tight budget"), "tight");
+  is("and his own words do", travellerBudget("It's a tight backpacker to be honest"), "tight");
+  is("and a low budget", travellerBudget("low budget"), "tight");
+  // A FIGURE IS NOT A TIER. "3000 kr a day" is a number with no rule attached, and
+  // null rules nothing out, which is the honest answer.
+  is("a bare daily figure states no tier", travellerBudget("daily budget around 3000 kr"), null);
+  is("and no mention of money at all states none", travellerBudget("four days in Aarhus"), null);
+
+  // ── 2. AN ARRIVAL IS "INTO", NOT "TO" ───────────────────────────
+  // The pass written hours earlier accepted "to", which is how people describe a
+  // journey INSIDE a trip — and worse, it read Gemlyx's own suggestions, so the
+  // route order and the reach filter anchored on a town the app had proposed.
+  is("his own sentence still resolves",
+     arrivalPointRaw("I'm taking the ferry into Aalborg", { townPoint: townPointFor })?.name, "Aalborg");
+  is("a mid-trip transfer is not an arrival",
+     arrivalPointRaw("On day 3 we will take the bus to Skagen", { townPoint: townPointFor }), null);
+  is("and neither is a suggestion Gemlyx made",
+     arrivalPointRaw("you could take the train to Ribe", { townPoint: townPointFor }), null);
+  is("a train INTO somewhere still is",
+     arrivalPointRaw("train into Copenhagen from Hamburg", { townPoint: townPointFor })?.name, "Copenhagen");
+
+  // ── 3. "BOOKED" HAS TO BE ABOUT SOMEWHERE TO SLEEP ──────────────
+  // A blocking slot satisfied by the most common sentence in travel chat, after
+  // which the brief block orders the model never to ask about it again.
+  const stayOf = (t) => readBrief({ travellerText: t, today: AUG }).known.stay?.value;
+  is("booking flights is not booking a hotel", stayOf("We booked our flights already"), undefined);
+  is("nor is a sold-out festival", stayOf("Roskilde Festival is fully booked, sadly"), undefined);
+  is("a booked hotel is", stayOf("we have booked a hotel"), "booked");
+  is("and an apartment", stayOf("we booked an apartment"), "booked");
+  is("and staying at a named place", stayOf("staying at the Radisson"), "booked");
+  is("not booked still reads as not booked", stayOf("we haven't booked anything yet"), "not booked");
+
+  // ── 4. A NEGATED MODE IS NOT A MODE ─────────────────────────────
+  // The sentence somebody writes precisely to say they are NOT driving, returning
+  // "car". The worst possible inversion, and a truthy-only assertion let it ship.
+  const modeOf = (t) => readBrief({ travellerText: t, today: AUG }).known.transport?.mode;
+  is("no car states no mode", modeOf("we have no car"), undefined);
+  is("nor does refusing to rent one", modeOf("we are not renting a car"), undefined);
+  is("a car park is a place", modeOf("Does the hotel have a car park?"), undefined);
+  is("a car museum is an attraction", modeOf("We are interested in car museums"), undefined);
+  is("walking distance is a question, not a mode", modeOf("Is Nyhavn within walking distance?"), undefined);
+  is("but renting a car is a car", modeOf("we are renting a car"), "car");
+  is("and his bicycle is a bicycle", modeOf("I'm on a bicycle"), "bike");
+  // AND THE MODE COMES OFF THE SENTENCE THAT STATED IT, not off the whole
+  // transcript in speed order — which is how a driving trip was planned as a walk.
+  is("a driving trip that mentions hiking is a driving trip",
+     modeOf("We are renting a car and we love hiking and nature"), "car");
+  is("while travelModeKey over loose text still prefers the slower one, by design",
+     travelModeKey("We are renting a car and we love hiking"), "walk");
+  // travelModeKey ITSELF, not only through the brief. tripBrief scrubs its own text
+  // before matching, so assertions that go through readBrief pass even with the
+  // scrub inside travelModeKey torn out — mutation testing found that, and this is
+  // the direct test that closes it.
+  is("travelModeKey alone refuses a negated mode", travelModeKey("we have no car"), null);
+  is("and a car park", travelModeKey("does the hotel have a car park?"), null);
+  is("and a car museum", travelModeKey("we are interested in car museums"), null);
+  is("and walking distance", travelModeKey("is Nyhavn within walking distance?"), null);
+  // SLOWEST WINS, asserted where the order actually decides it: a sentence holding
+  // BOTH a walk and a bike. Reading a walking trip as a ride quadruples the reach.
+  is("walking plus bikes is a walking trip", travelModeKey("mostly walking, might rent bikes one day"), "walk");
+  is("and a tent plus a camper is planned at the slower one", travelModeKey("a tent and sometimes a camper"), "tent");
+  is("bikes plus a train is still a bike trip", travelModeKey("the bikes, and the train for long stretches"), "bike");
+  // AND A MATCHED SENTENCE WITH NO MODE IN IT FILLS NOTHING. Reachable: TRANSPORT_RE
+  // knows hitchhiking and travelModeKey does not, so the slot must stay empty rather
+  // than record that something was said.
+  is("hitchhiking states no mode this file can plan on", modeOf("we are hitchhiking around"), undefined);
+
+  // ── 5. THE THIRD Number() COERCION ──────────────────────────────
+  // Number(null) is 0 and 0 is finite, so a stored journey with a null total
+  // produced a citation reading "measured, not estimated" for a measurement nobody
+  // made — in the file whose entire job is provenance.
+  is("a null journey total cites nothing", fieldProvenance({ __journey: { total: null } }), []);
+  is("nor an empty one", fieldProvenance({ __journey: { total: "" } }), []);
+  is("nor a zero", fieldProvenance({ __journey: { total: 0 } }), []);
+  ok("a real measurement still cites",
+     fieldProvenance({ __journey: { total: 84 } }).some(f => f.how === "measured, not estimated"));
+
+  // ── 6. "A MANAGEABLE HALF DAY" IS A DRIVER'S SENTENCE ───────────
+  // Printed over 85 km back to Aalborg on a bicycle trip.
+  const SK = [{ name: "Skagen", lat: 57.7211, lon: 10.5836 }];
+  const AAL = { lat: 57.048, lon: 9.919, name: "Aalborg" };
+  ok("the ride home is timed as a ride",
+     /6 hours on a bike/.test(describeReturn(returnLeg({ ordered: SK, from: AAL, days: 7, mode: "bike" }))));
+  ok("and never called a manageable half day",
+     !/manageable half day/.test(describeReturn(returnLeg({ ordered: SK, from: AAL, days: 7, mode: "bike" }))));
+  ok("the same distance by car is not the whole day",
+     !/full day of travelling/.test(describeReturn(returnLeg({ ordered: SK, from: AAL, days: 7, mode: "car" }))));
+
+  // ── 8. THE PIPELINE REWRITES DASHES BEFORE priceBand SEES THEM ──
+  // stripDashesDeep runs over every published payload at read time, so the dash
+  // range the money pattern was written against largely does not survive to the
+  // tab. Measured: the same row banded differently either side of that rewrite.
+  is("the dash form and the stripped form band the same",
+     priceBand(stripDashes("50–450 DKK")), priceBand("50-450 DKK"));
+  is("and both are the middle band", priceBand("50 to 450 DKK"), "100-250");
+  is("a written-out range with the unit twice still works", priceBand("50 DKK to 450 DKK"), "100-250");
+
+  // ── 10 & 11. TWO PATTERNS THAT MATCHED MORE THAN THEIR SENTENCE ─
+  const originOf = (t) => readBrief({ travellerText: t, today: AUG }).known.origin?.value;
+  is("asking what a bus costs is not stating where you start",
+     originOf("How long is the bus to Skagen from Aalborg?"), undefined);
+  is("nor is asking about a train fare", originOf("Is the train to Odense expensive?"), undefined);
+  ok("while a ferry INTO somewhere still is", !!originOf("I'm taking the ferry into Aalborg"));
+  ok("and flying into somewhere", !!originOf("we fly into Billund"));
+  const interestsOf = (t) => readBrief({ travellerText: t, today: AUG }).known.interests?.value;
+  is("Spain is not a spa", interestsOf("We are coming from Spain"), undefined);
+  is("and Barcelona is not a bar", interestsOf("We flew home via Barcelona"), undefined);
+  ok("while a real spa is", !!interestsOf("we want a spa day"));
+  ok("and eating is still food", !!interestsOf("we love eating out"));
+  ok("and castles still count in the plural", !!interestsOf("we want to see castles"));
+
+  // ── 12. THE NUMBER NAMED AFTER THE INCIDENT REPORTED ZERO FOR IT ─
+  // The first version judged every ready-claim against the FINAL brief, so a marker
+  // emitted on an empty brief read as fine once the traveller went on to say more.
+  const EARLY = [
+    { role: "user", text: "plan me something" },
+    { role: "assistant", text: "Here you go.\n[[GEMLYX_READY_TO_BUILD]]" },
+    { role: "user", text: "I fly into Billund on 3 December for 7 days with my wife, we love food, we have a car, hotel is booked" },
+  ];
+  is("a marker emitted on an empty brief is counted, whatever came after",
+     buildChatReport({ messages: EARLY, today: AUG }).summary.readyClaimsWhileIncomplete, 1);
+  // And nothing is declined before it could have been asked.
+  is("turn zero declines nothing",
+     briefTimeline([{ role: "user", text: "hi" }], { asked: ["stay", "interests"] })[0].declined, []);
 }
 
 

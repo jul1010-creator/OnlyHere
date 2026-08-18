@@ -13,7 +13,9 @@ import { saysWord, fitsBrief } from "./interestFit";
 // for the measurement that prompted both: 416 km shown against 279 km possible,
 // on a brief that had asked for two bases.
 import { arrivalPoint } from "./arrival";
-import { routeOrder, reachBand, kmBetween } from "./routeOrder";
+import { townPointFor } from "./guideEnrichment";
+import { outOfBudget, budgetWarning } from "./budgetFit";
+import { routeOrder, reachBand, kmBetween, preferReachable, REACH_STRETCH } from "./routeOrder";
 
 // ── WHAT THE PREVIEW SCREEN ACTUALLY HOLDS ON A CONVERSATION ────────
 //
@@ -365,13 +367,24 @@ const TOO_WEAK_FOR_A_REGION_PICK = "nearby";
 // top of this screen ended up describing a different trip from the list under
 // it. See interestFit.js for what a theme is and why a category gate on its
 // own put a palace in front of somebody who asked for markets.
-export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null } = {}) => {
+// `mode` is how they are getting around, folded to a key by travelModeKey, and it
+// arrives from the caller for the same reason `days` does: the screen already
+// reads it off the traveller's own turns and the intake chips, and two callers
+// deriving it separately is how one part of the app ends up planning a bicycle
+// trip while another plans a drive. Null means unknown, and unknown changes
+// nothing about today's behaviour.
+export const matchedPlaces = (convoText, pools, { days = null, wanted = null, themes = null, mode = null, budget = null } = {}) => {
   // ── WHERE THEY LAND ─────────────────────────────────────────────
   // Read once, at the top, because two things below need it: the region pass
   // ranks by how reachable a town is from here, and the towns are handed back
   // in travel order from here. Null for a brief that names no arrival, and null
   // changes nothing, which is every brief before today.
-  const from = arrivalPoint(convoText);
+  // townPoint injected, so a ferry into a Danish port resolves to a real
+  // coordinate. Without it "I'm taking the ferry into Aalborg" returned no arrival
+  // at all, and every piece of reasoning that starts from where they land — the
+  // route order, the reach band, the return leg — quietly stood down. See the
+  // Danish-arrival pass in utils/arrival.js.
+  const from = arrivalPoint(convoText, { townPoint: townPointFor });
   const text = String(convoText || "");
   const seen = new Set();
   const matched = [];
@@ -513,7 +526,7 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
         // km is nothing on seven days and most of a day on two.
         score: [
           TIER_RANK[tierOf(p)?.id] ?? 0,
-          from ? reachBand(kmBetween(from, p), days) : 1,
+          from ? reachBand(kmBetween(from, p), days, mode) : 1,
           Math.min(held, 5),
           interestHit(p),
           p.isMajorCity ? 1 : 0,
@@ -524,7 +537,23 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       for (let i = 0; i < a.score.length; i++) if (b.score[i] !== a.score[i]) return b.score[i] - a.score[i];
       return String(a.p.name).localeCompare(String(b.p.name));
     });
-    for (const c of candidates.slice(0, regionPickLimit(days))) {
+    // ── AND OUT OF REACH IS A REASON TO LEAVE IT OUT ────────────────
+    // Oliver, 17 Aug 2026, on a two day bicycle trip from a ferry into Aalborg:
+    // the screen offered Billund, Copenhagen, Ribe and Esbjerg. Copenhagen is
+    // about 400 km away. Everything above this line was working: the band ranked
+    // it last. Ranking cannot express "this is not possible", and with four slots
+    // to fill, last still gets offered.
+    //
+    // NOT A DELETION. A limit's worth of reachable towns wins outright; the far
+    // ones are only used to top up when there are not enough, because a preview
+    // with nothing on it is a worse product than one honest stretch. See
+    // preferReachable in routeOrder.js.
+    const limit = regionPickLimit(days);
+    const reachable = preferReachable(candidates, {
+      keepAtLeast: limit,
+      bandOf: (c) => (from ? reachBand(kmBetween(from, c.p), days, mode) : REACH_STRETCH),
+    });
+    for (const c of reachable.slice(0, limit)) {
       seen.add(c.key);
       // `_holds` so the card can say what is under it rather than looking like
       // a bare name, and so a screen that is all towns is visibly all towns.
@@ -570,9 +599,26 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       // (see rankOffers), because the door was the other half of the same
       // complaint.
       const fit = fitsBrief(p, themes);
-      const held = !askedCategory || !fit.fits;
+      // ── AND WHAT IT COSTS IS PART OF WHETHER IT FITS ──────────────
+      // Oliver, 17 Aug 2026: "geranium is NOT mid-range.. so remember to make
+      // food places include in budget."
+      //
+      // Nothing in this function had ever read a price. Towns are ranked on tier,
+      // reach, held content and interest, and then every food row in a matched
+      // town went on the screen without once asking what a meal costs. So a
+      // traveller whose own words were "it's a tight backpacker to be honest" was
+      // handed the most expensive restaurant in the country, and the screen had no
+      // idea it had done anything strange.
+      //
+      // BEHIND THE DOOR, NOT DELETED, and that is deliberate rather than lazy: it
+      // is the same treatment a category they did not ask about gets, ten lines
+      // above. A tight budget in Copenhagen still wants to know Geranium exists;
+      // it just must not be offered as if it were tonight's dinner. An unknown
+      // price is never treated as an expensive one — see utils/budgetFit.js.
+      const overBudget = outOfBudget(p, budget);
+      const held = !askedCategory || !fit.fits || overBudget;
       matched.push(held
-        ? { ...p, _notAsked: true, _held: askedCategory ? "fit" : "category", _fit: fit }
+        ? { ...p, _notAsked: true, _held: overBudget ? "budget" : (askedCategory ? "fit" : "category"), _fit: fit, ...(overBudget ? { _overBudget: budgetWarning(p, budget) } : {}) }
         : { ...p, _fit: fit });
     }
   }

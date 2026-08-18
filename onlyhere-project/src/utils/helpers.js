@@ -345,7 +345,13 @@ export const PRICE_BANDS = [
 // noticed: "50-450 DKK" writes the unit once, at the end, so reading only the
 // number the currency touches gives 450 and bands a place with 50-kroner dishes
 // over 250. Both ends are money. The second group is the low-end capture.
-const MONEY = /(\d[\d.,]*)\s*(?:[–—-]\s*(\d[\d.,]*)\s*)?(?:dkk|kr\b|kroner|,-)/gi;
+// "N TO M" IS THE SAME RANGE, and it is the shape the pipeline actually produces:
+// stripDashesDeep runs over every published payload at read time and rewrites
+// "50–450 DKK" to "50 to 450 DKK", so the dash form this was written against
+// largely does not survive to the tab. Found 18 Aug by an adversarial review, which
+// measured it: the dash form banded 100-250 and the stripped form banded over-250,
+// on the same row.
+const MONEY = /(\d[\d.,]*)\s*(?:(?:[–—-]|to)\s*(\d[\d.,]*)\s*)?(?:dkk|kr\b|kroner|,-)/gi;
 
 // A thousands separator is not a decimal point in Danish, and either way the band
 // only cares about the magnitude: strip the groupings, keep a real decimal.

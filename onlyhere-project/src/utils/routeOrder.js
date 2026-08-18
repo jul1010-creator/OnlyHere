@@ -79,17 +79,153 @@ export const REACH_COMFORTABLE = 2;
 export const REACH_STRETCH = 1;
 export const REACH_FAR = 0;
 
-export const reachBand = (km, days) => {
+// ── AND ON WHAT THEY ARE TRAVELLING IN ──────────────────────────────
+// Oliver, 17 Aug 2026, on a guide built from "ferry into Aalborg, on a bicycle,
+// tight backpacker, hidden gems":
+//
+//   "It gives me a random route." / "And then the route is even worse…"
+//
+// The picker offered him Billund, Copenhagen, Ribe and Esbjerg. Copenhagen is
+// about 400 km from Aalborg. The reason nothing objected is written three lines
+// above: "roughly an hour of Danish driving per day of trip". An hour of driving
+// is 70 km and an hour of cycling is 15, and this function could not tell the
+// difference, because it was never told which one he was doing.
+//
+// A DAY'S TRAVEL, BY MODE. Deliberately generous at the top of each: the number
+// is what somebody CAN do in a day if the day is mostly travelling, not what is
+// pleasant. The bike figure is the one that matters here and it sits just above
+// the chat prompt's own rule for bike trips ("keep daily distances realistic,
+// under ~50 km"), because this decides whether a place is offered at all and the
+// day plan decides whether it is comfortable.
+export const MODE_DAY_KM = {
+  walk: 15,
+  bike: 60,
+  "public transport": 250,
+  car: 300,
+  camper: 250,
+  tent: 60,
+};
+
+// The strings that reach this come from the intake chips and from free text, so
+// they are folded rather than matched exactly: "🚲 Bike", "bicycle", "cycling"
+// and "on a bike" are one answer.
+//
+// EVERY PATTERN IS BOUNDED, and the reason is a real Danish false positive:
+// unbounded /car/ matches Carlsberg, and unbounded /bus/ matches Busted. This is
+// handed free-form conversation text, so an unbounded pattern here would decide a
+// traveller was driving because they mentioned a brewery.
+//
+// SLOWEST WINS ON A TIE. A message saying "we'll bring the bikes and take the
+// train for the long bits" is a bike trip that uses trains, and getting that
+// backwards is the expensive direction: reading a bike trip as a train trip puts
+// Copenhagen back on a route out of Aalborg, while reading a train trip as a bike
+// trip only offers less than it could.
+// ── A NEGATED MODE IS NOT A MODE ─────────────────────────────────────
+// Found 18 Aug 2026 by an adversarial review. "We have no car" returned "car" —
+// the exact inversion, and the worst possible one, because it is the sentence
+// somebody writes precisely to say they are NOT driving. Same for "we're not
+// renting a car" and "without a car". A negation is stripped before anything is
+// matched, so those sentences state no mode at all, which is the truth: knowing
+// somebody has no car does not tell you whether they take trains or ride.
+const NEGATED = /\b(?:no|not|without|don'?t|doesn'?t|won'?t|cannot|can'?t|never)\b[^.,;!?]{0,24}?\b(?:cars?|bikes?|bicycles?|trains?|buses|bus|driving|drive|renting|rent)\b/gi;
+
+// And a few compounds that contain a mode word and are not about travelling. A car
+// park is a place, a car museum is an attraction, a train station is a landmark as
+// often as a departure.
+// The plural and the possessive too: "car museums" is the sentence somebody
+// actually writes, and the singular-only list missed it. And "walking distance" is
+// a QUESTION about a hotel, not a statement about how a trip is travelled — it was
+// filling the mode slot with "walk" and capping the offered towns at fifteen
+// kilometres a day.
+const NOT_TRAVEL = /\b(?:car parks?|carparks?|car museums?|bus museums?|train museums?|railway museums?|motor museums?|bike shops?|bicycle shops?|car hire desks?|car ferry terminals?|walking distance|walking tours?|bike rental shops?)\b/gi;
+
+// Exported because tripBrief has to scrub the SAME text before it decides whether a
+// sentence states a mode at all. Two copies of "no car is not a car" is two chances
+// to disagree, and this one already shipped an inversion once.
+export const withoutNonModes = (text) =>
+  String(text || "").toLowerCase().replace(NEGATED, " ").replace(NOT_TRAVEL, " ");
+
+export const travelModeKey = (mode) => {
+  const t = withoutNonModes(mode);
+  if (!t.trim()) return null;
+  // SLOWEST FIRST, in speed order, which is what the rule below actually requires.
+  // The first version listed bike before walk and camper before tent, so "mostly
+  // walking, might rent bikes one day" planned at 60 km a day instead of 15 — the
+  // expensive direction by this function's own argument. Found 18 Aug by review.
+  if (/\b(?:walk\w*|on foot|hik\w*)\b/.test(t)) return "walk";
+  if (/\b(?:tents?|camping)\b/.test(t)) return "tent";
+  if (/\b(?:bicycles?|bikes?|biking|cycl\w*)\b/.test(t)) return "bike";
+  if (/\b(?:trains?|buses|busses|bus|coach(?:es)?|public transport\w*|transit|rejseplan\w*|dsb)\b/.test(t)) return "public transport";
+  if (/\b(?:campers?|campervans?|motorhomes?|caravans?)\b/.test(t)) return "camper";
+  if (/\b(?:cars?|driv\w*|rental|rent a car|hire)\b/.test(t)) return "car";
+  return null;
+};
+
+// How far out a place can sit and still be part of THIS trip. Half the days can
+// go on getting there and getting back, which is already the generous reading.
+export const modeReachKm = (days, mode) => {
+  const key = travelModeKey(mode);
+  const perDay = key ? MODE_DAY_KM[key] : null;
+  if (!perDay) return null;                       // mode unknown: no extra ceiling
+  const d = Number(days);
+  const budget = Number.isFinite(d) && d > 0 ? d : 3;
+  return (perDay * budget) / 2;
+};
+
+export const reachBand = (km, days, mode) => {
   if (km == null) return REACH_STRETCH;   // unknown is not far, and not near
   const d = Number(days);
   const budget = Number.isFinite(d) && d > 0 ? d : 3;
   // Roughly an hour of Danish driving per day of trip, capped so a fortnight
   // does not make the whole country "comfortable" and stop discriminating.
-  const near = Math.min(90 + budget * 25, 260);
-  const reach = Math.min(near * 2, 420);
+  let near = Math.min(90 + budget * 25, 260);
+  let reach = Math.min(near * 2, 420);
+  // The mode can only ever make this TIGHTER, never wider. A car does not make
+  // Bornholm nearer than the existing curve says, and an unknown mode keeps
+  // today's behaviour exactly, which is what stops this change from moving every
+  // route in the product.
+  const ceiling = modeReachKm(budget, mode);
+  if (ceiling != null) {
+    reach = Math.min(reach, ceiling);
+    near = Math.min(near, ceiling / 2);
+  }
   if (km <= near) return REACH_COMFORTABLE;
   if (km <= reach) return REACH_STRETCH;
   return REACH_FAR;
+};
+
+// ── AND FAR IS A REASON TO LEAVE IT OUT, NOT JUST TO RANK IT LOWER ──
+// The band was only ever a sort key, so Copenhagen came LAST on a two day bicycle
+// trip and was still offered. Sorting cannot fix "this is not possible".
+//
+// BUT IT MUST NOT EMPTY THE SCREEN. A two day bike trip out of Aalborg may have
+// very little of ours inside 60 km, and a preview with nothing on it is a worse
+// product than a preview with one honest stretch on it. So the out-of-reach ones
+// are not deleted, they are demoted behind every reachable one and only used to
+// top up: reachable first, always, and the far ones only if there is room left.
+//
+// `keepAtLeast` is what "room left" means, and the caller passes its own limit so
+// this file does not need to know about regionPickLimit.
+// The partition itself is general, because the same shape came up twice within the
+// hour: "prefer the ones that pass, but never hand back an empty screen" is the
+// rule for distance AND for a traveller's budget (see utils/budgetFit.js). One
+// implementation, so the two cannot drift on the part that matters, which is what
+// happens when there are not enough passing items.
+export const preferPassing = (items, { keepAtLeast = 0, passes } = {}) => {
+  const list = Array.isArray(items) ? items : [];
+  if (typeof passes !== "function") return list;
+  const good = [], rest = [];
+  list.forEach(it => (passes(it) ? good : rest).push(it));
+  // No early return for "enough good ones". There was one, and mutation testing
+  // showed removing it changed no result: with good.length >= keepAtLeast the slice
+  // below is slice(0, 0), which is empty, so the one expression already covers both
+  // cases. It was reassurance rather than a guard.
+  return [...good, ...rest.slice(0, Math.max(0, keepAtLeast - good.length))];
+};
+
+export const preferReachable = (items, { keepAtLeast = 0, bandOf } = {}) => {
+  if (typeof bandOf !== "function") return Array.isArray(items) ? items : [];
+  return preferPassing(items, { keepAtLeast, passes: (it) => bandOf(it) !== REACH_FAR });
 };
 
 // ── THE ORDER ───────────────────────────────────────────────────────
@@ -212,7 +348,13 @@ export const routeOrder = (places, { from = null, compare = null } = {}) => {
 // Measuring it properly is a /api/directions call for a leg that is not part of
 // the plan, and the honest version of "about 250 km, allow most of a day" beats a
 // precise number for a journey nobody has committed to.
-export const returnLeg = ({ ordered = [], from = null, days = null } = {}) => {
+// `mode` added 18 Aug 2026 by an adversarial review: this printed "the journey home
+// is a manageable half day at the end" over 84 km back to Aalborg on a trip whose
+// stated mode was a bicycle — more than a full day of riding, called manageable, on
+// a page whose promise is that nothing is asserted that nobody measured. The band
+// was computed two-argument while overnightMove, written the same night, was given
+// the mode. Absent mode leaves the previous wording exactly as it was.
+export const returnLeg = ({ ordered = [], from = null, days = null, mode = null } = {}) => {
   const start = coordsOf(from);
   if (!start) return null;
   // The last place that HAS a coordinate, not the last place. routeOrder puts
@@ -226,7 +368,10 @@ export const returnLeg = ({ ordered = [], from = null, days = null } = {}) => {
     from: String(last.name || ""),
     to: String(from.name || ""),
     km,
-    band: reachBand(km, days),
+    band: reachBand(km, days, mode),
+    // Carried so the sentence can be written in their own mode. Without it the
+    // wording is a driver's wording, whatever the trip is.
+    mode: travelModeKey(mode),
     // Ending where they started is not a return leg, it is no journey at all,
     // and a card saying "0 km back to Billund Airport" is noise.
     needed: km > 0,
@@ -240,6 +385,25 @@ export const returnLeg = ({ ordered = [], from = null, days = null } = {}) => {
 export const describeReturn = (leg) => {
   if (!leg || !leg.needed) return "";
   const where = leg.to ? `back to ${leg.to}` : "back to where you landed";
+  // ── AND "HALF A DAY" IS A DRIVER'S SENTENCE ────────────────────────
+  // Found 18 Aug 2026 by an adversarial review. This printed "the journey home is
+  // a manageable half day at the end" over 85 km back to Aalborg on a trip whose
+  // stated mode was a bicycle. The band is defensible — one riding day out of
+  // seven — but the WORDING is not: it names a duration, in a fixed phrase written
+  // for somebody in a car, on the page whose promise is that nothing is asserted
+  // that nobody measured. When the mode is known the hours are computed from it,
+  // the same table describeOvernightMove uses; when it is not, the old sentence
+  // stands unchanged.
+  const kmh = leg.mode ? MODE_KMH[leg.mode] : null;
+  if (kmh) {
+    const hours = leg.km / kmh;
+    const spoken = hours < 1.5 ? "under an hour and a half" : `${Math.round(hours)} hours`;
+    const how = leg.mode === "public transport" ? "by train and bus" : leg.mode === "bike" ? "on a bike" : `by ${leg.mode}`;
+    const weight = hours >= 5
+      ? "That is a full day of travelling, so plan the last day around getting there rather than around anything else."
+      : "Worth leaving real time for on your last day.";
+    return `${leg.from} is about ${leg.km} km ${where}, roughly ${spoken} ${how}. ${weight}`;
+  }
   if (leg.band === REACH_COMFORTABLE) {
     return `${leg.from} is about ${leg.km} km ${where}, so the journey home is a manageable half day at the end.`;
   }
@@ -247,4 +411,78 @@ export const describeReturn = (leg) => {
     return `${leg.from} is about ${leg.km} km ${where}. Worth leaving real time for on your last day, or booking a flight out of somewhere closer.`;
   }
   return `${leg.from} is about ${leg.km} km ${where}, which is most of a day of travelling. If you are flying home from where you landed, plan the last day around getting there rather than around anything else.`;
+};
+
+// ── AND THE JOURNEY BETWEEN TWO DAYS ────────────────────────────────
+//
+// Oliver, 17 Aug 2026, on the guide his own conversation produced:
+//
+//   "The route is not true.. like the train and bus 2-3 minutes each???"
+//   "And then the route is even worse…"
+//
+// The measured numbers on that page:
+//
+//   2 DAYS · 3 STOPS · 2 TOWNS · 92 KM OF TRAVEL
+//   Your route: Aalborg → Skagen
+//   Day 1  Arrival in Aalborg, 11:00
+//   Day 2  North to Skagen, first stop 15:00
+//
+// Ninety-two kilometres between the end of one day and the start of the next, on a
+// bicycle, and the page shows NOTHING between them. Not a bad estimate, not a
+// wrong mode: no journey at all. Day 2 simply opens at three in the afternoon in a
+// town five to six hours of riding away.
+//
+// The reason is one line in GuidePage: `const nextStop = day.stops[stopIdx + 1]`.
+// A leg is the gap between two stops IN A DAY, so the largest journey in the whole
+// trip was the one gap nothing was looking at. The stat bar counted the kilometres
+// correctly and the itinerary never spent them.
+//
+// ── AND IT IS STATED AS AN ESTIMATE, BECAUSE IT IS ONE ──────────────
+// Straight line, same as returnLeg above, and for the same reason: the measured
+// road legs come from the Directions API per pair and this is a great circle. On a
+// page where every other number is measured, an unmeasured one has to say so or it
+// borrows a credibility it did not earn.
+export const overnightMove = ({ from = null, to = null, fromName = "", toName = "", days = null, mode = null } = {}) => {
+  const km = kmBetween(from, to);
+  if (km == null || km < 1) return null;         // same place, or nothing to measure
+  const key = travelModeKey(mode);
+  const perDay = key ? MODE_DAY_KM[key] : null;
+  return {
+    km,
+    mode: key,
+    fromName: String(fromName || "").trim(),
+    toName: String(toName || "").trim(),
+    // Most of a day's travel, by the mode they actually stated. This is the test
+    // that would have caught 92 km on a bicycle, and it is deliberately a fraction
+    // rather than the whole day: a move that eats two thirds of the daylight is
+    // the day, whatever the itinerary calls it.
+    eatsTheDay: perDay != null && km >= perDay * (2 / 3),
+    band: reachBand(km, days, mode),
+    measured: false,
+  };
+};
+
+// Hours, at the mode's own pace, and rounded the way somebody planning a morning
+// rounds. Never minutes: a straight line quoted to the minute is a false precision
+// and this is not a timetable.
+const MODE_KMH = { walk: 4.5, bike: 15, "public transport": 60, car: 70, camper: 65, tent: 4.5 };
+
+export const describeOvernightMove = (move) => {
+  if (!move || !move.km) return "";
+  const where = move.toName ? `to ${move.toName}` : "to the next day's first stop";
+  const head = `About ${move.km} km ${where}`;
+  const key = move.mode;
+  const kmh = key ? MODE_KMH[key] : null;
+  if (!kmh) {
+    // No mode stated, so no duration is invented. The distance alone is still the
+    // thing the page was missing.
+    return `${head}. Worth planning the morning around, and worth knowing before you book anything.`;
+  }
+  const hours = move.km / kmh;
+  const spoken = hours < 1.5 ? "under an hour and a half" : `${Math.round(hours)} hours`;
+  const how = key === "public transport" ? "by train and bus" : key === "bike" ? "on a bike" : `by ${key}`;
+  if (move.eatsTheDay) {
+    return `${head}, roughly ${spoken} ${how}. That is most of a day of travelling, so this is the day rather than a transfer inside it.`;
+  }
+  return `${head}, roughly ${spoken} ${how}. Worth starting early enough that the first stop is not a rush.`;
 };

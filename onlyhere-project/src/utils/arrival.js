@@ -107,7 +107,52 @@ const cuedMention = (text, spelling, cue, near) => {
   return at.some(i => cue.test(hay.slice(Math.max(0, i - near), i)));
 };
 
-export const arrivalPoint = (convoText) => {
+
+// ── A TRAVELLING VERB, THEN "INTO", THEN A CAPITALISED PLACE ─────────
+// Narrow on purpose. "into" and "to" after a mode of travel is how somebody says
+// where they land; a bare place name is not, and reading every capitalised word as
+// an arrival is how a plan starts in the wrong half of the country. The mode is
+// carried out with the name so the result can say HOW they arrive, which the
+// return leg and the first day both want to know.
+// ── AND "INTO", NOT "TO" ─────────────────────────────────────────────
+// Found 18 Aug 2026 by an adversarial review, on the pass written hours earlier.
+// The first version accepted `in|into|to|at`, and "to" is how people describe a
+// journey INSIDE a trip:
+//
+//   "On day 3 we will take the bus to Skagen"     -> arrival: Skagen
+//   "you could take the train to Ribe"            -> arrival: Ribe
+//
+// The second one is worse than the first, because it came out of GEMLYX'S OWN
+// REPLY. The whole route order, the reach filter and the reader-facing distance
+// badges were then anchored on a town Gemlyx had suggested and nobody had said
+// they were arriving at — the exact mistake previewMatch.js documents for
+// interests and themes, arriving through the arrival reader instead.
+//
+// "into" is the discriminator, and it is not a trick: English marks arrival at a
+// destination with it. "Ferry into Aalborg" is where the trip begins; "bus to
+// Skagen" is a leg of it. His own sentence used "into", which is why this pass
+// exists at all. A trip that only ever says "to" gets no arrival, which is where
+// this stood yesterday and is the safe direction.
+const DANISH_ARRIVAL_RE = /\b(?:ferry|ferries|sail(?:ing)?|cruis(?:e|ing)|train|bus|coach|driv(?:e|ing)|flight|fly(?:ing)?)\b[^.!?]{0,24}?\binto\s+([A-ZÆØÅ][\wÆØÅæøå'’-]*(?:\s+[A-ZÆØÅ][\wÆØÅæøå'’-]*)?)/g;
+
+const ARRIVAL_BY = [
+  [/\b(?:ferry|ferries|sail|sailing|cruise|cruising)\b/i, "sea"],
+  [/\b(?:flight|fly|flying)\b/i, "air"],
+];
+
+const danishArrivalMentions = (text) => {
+  const out = [];
+  const hay = String(text || "");
+  for (const m of hay.matchAll(DANISH_ARRIVAL_RE)) {
+    const name = String(m[1] || "").trim();
+    if (!name) continue;
+    const how = ARRIVAL_BY.find(([re]) => re.test(m[0]));
+    out.push({ name, cue: how ? how[1] : "land" });
+  }
+  return out;
+};
+
+export const arrivalPoint = (convoText, { townPoint = null } = {}) => {
   const text = String(convoText || "");
   if (!text.trim()) return null;
   for (const air of AIRPORTS) {
@@ -122,6 +167,39 @@ export const arrivalPoint = (convoText) => {
     for (const city of door.from) {
       if (!cuedMention(text, city, OVERLAND_CUE, 60)) continue;
       return { code: door.code, name: door.name, lat: door.lat, lon: door.lon, said: city, by: "land" };
+    }
+  }
+  // ── AND A FERRY INTO A DANISH PORT IS AN ARRIVAL ──────────────────
+  //
+  // Oliver, 17 Aug 2026, first line of the conversation he sent back:
+  //
+  //   "I'm taking the ferry into Aalborg"
+  //
+  // and then, of the guide it produced: "It gives me a random route."
+  //
+  // This is the deepest cause of that, deeper than the reach filter or the mode.
+  // The two passes above answer "which airport" and "which foreign city did you
+  // come FROM", and his sentence is neither: a ferry arriving at a DANISH town.
+  // So arrivalPoint returned null, `from` was null, and every piece of reasoning
+  // in the product that starts from where they land stood down — the route order,
+  // the reach band, the return leg. The route was not badly ordered. It had no
+  // start.
+  //
+  // Third time this exact gap has turned up tonight, in three files: tripBrief's
+  // ORIGIN_RE knew flying and driving but not sailing, the interests vocabulary
+  // did not contain "hidden gems", and here. Denmark is reached by sea from
+  // Norway, Sweden and Germany constantly, and the arrival that looks least like
+  // Copenhagen is the one every reader of a sentence missed.
+  //
+  // THE COORDINATE IS LOOKED UP, NEVER INVENTED. `townPoint` is injected so this
+  // file keeps no library of its own and cannot drift from the one the rest of the
+  // app uses; with no resolver, or a town nobody has a coordinate for, this
+  // returns null exactly as before rather than guessing a point.
+  if (typeof townPoint === "function") {
+    for (const { name, cue } of danishArrivalMentions(text)) {
+      const pt = townPoint(name);
+      if (!pt) continue;
+      return { code: null, name, lat: pt.lat, lon: pt.lon, said: name, by: cue };
     }
   }
   return null;

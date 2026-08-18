@@ -15,7 +15,7 @@ import { foodSpots } from "../data/food";
 import { nightlifeSpots } from "../data/nightlife";
 import { craftItemsFallback } from "../data/craft";
 import { events, majorEvents } from "../data/events";
-import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar } from "../utils/guideEnrichment";
+import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar, stopTown } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
 import { partOfCountry } from "../utils/geography";
 import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
@@ -27,7 +27,7 @@ import { BOOKING_AFFILIATE_ID } from "../config";
 import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { shareMessage, shareTitle } from "../utils/share";
-import { returnLeg, describeReturn, REACH_FAR } from "../utils/routeOrder";
+import { returnLeg, describeReturn, REACH_FAR, overnightMove, describeOvernightMove } from "../utils/routeOrder";
 import { GUIDE_RIGHTS_SHORT, copyrightLine } from "../utils/rights";
 import { guideHero, heroCaption } from "../utils/guideHero";
 import { PhotoCredit } from "../components/PhotoCredit";
@@ -1167,7 +1167,16 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           // (real data or this guide's own geocode — NOT the town-center
           // fallback), the link now uses it, so Maps opens the same journey the
           // chip's number came from.
-          const stopTownOf = (name) => (day.stops || []).find(s => s.name === name)?.town || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
+          // stopTown, not `.town` alone, for the reason written at the card's
+          // meta line: the plan fills `town` when it happens to, and our own
+          // published row knows the answer either way. This feeds the Maps links
+          // and the coordinate resolution, so a stop the plan left untowned was
+          // being geocoded on a bare name.
+          const stopTownOf = (name) => {
+            const s = (day.stops || []).find(x => x.name === name);
+            const fromRow = s ? stopTown(s, lookupRealPlace(name)) : "";
+            return fromRow || (dayIdx > 0 ? days[dayIdx - 1]?.stops?.slice(-1)[0]?.town : null);
+          };
           // ── AND "PRECISE" HAS TO MEAN PRECISE ─────────────────────
           // This promised "NOT the town-center fallback" in its own comment and
           // then returned whatever row lookupRealPlace matched, town centres
@@ -1562,16 +1571,27 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 // card was the reason a correct Tivoli Halloween offer looked
                 // wrong and could only be checked by leaving the site.
                 const when = stopEventWhen(real, dayDate);
+                // ── WHERE IT IS, AND THE APP ALREADY KNEW ────────────
+                // Oliver, 17 Aug 2026: "I think you need to make it explicit
+                // where these places are.. like 'JOJO'.. nobody knows that is in
+                // Aarhus.."
+                //
+                // This line read `stop.town` alone, and the guide writer fills
+                // that when it happens to. When it did not, the card printed a
+                // bare name — while the published row underneath, the one he
+                // wrote, carried the town all along in whichever of four fields
+                // its content type uses. See stopTown in utils/guideEnrichment.js.
+                const townLabel = stopTown(stop, real);
                 const titleRow = (
                   <>
                     <div style={{ fontSize: real?.photo ? 17 : 15, fontWeight: 600, color: real ? C.gold : C.text, fontFamily: "'Fraunces', serif", lineHeight: 1.2, textDecoration: real ? "underline" : "none", textDecorationColor: real ? `${C.gold}55` : "none", textUnderlineOffset: 3 }}>{stop.name}{real ? " ↗" : ""}</div>
-                    {(kind || stop.town || stop.suggestedStay || (!real?.photo && stop.arrivalTime)) && (
+                    {(kind || townLabel || stop.suggestedStay || (!real?.photo && stop.arrivalTime)) && (
                       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 6 }}>
                         {kind && (
                           <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: C.gold, background: `${C.gold}16`, border: `1px solid ${C.gold}33`, borderRadius: 100, padding: "2px 8px" }}>{kind}</span>
                         )}
                         <span style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: 1.1 }}>
-                          {[!real?.photo && stop.arrivalTime, stop.town, stop.suggestedStay].filter(Boolean).join(" · ")}
+                          {[!real?.photo && stop.arrivalTime, townLabel, stop.suggestedStay].filter(Boolean).join(" · ")}
                         </span>
                       </div>
                     )}
@@ -1704,6 +1724,60 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                 </div>
               );
             })()}
+
+            {/* ── AND THE JOURNEY TO TOMORROW ────────────────────────
+                Oliver, 17 Aug 2026: "the route is even worse…"
+
+                His guide read: 2 DAYS · 3 STOPS · 92 KM OF TRAVEL, Aalborg →
+                Skagen. Day 1 ends in Aalborg. Day 2 opens at 15:00 in Skagen,
+                ninety-two kilometres away, on a bicycle, with NOTHING drawn
+                between them. Not a wrong estimate — no journey at all.
+
+                The cause is one line above: `day.stops[stopIdx + 1]`. A leg is
+                the gap between two stops IN A DAY, so the single largest journey
+                of the trip was the one gap nothing looked at. The stat bar
+                counted those kilometres and the itinerary never spent them.
+
+                Rendered at the FOOT of the day rather than the head of the next
+                one, because it is the thing that has to happen before tomorrow
+                starts, and it belongs next to where they are sleeping. Silent
+                when the next day begins where this one ended, which is most
+                trips. See overnightMove in utils/routeOrder.js. */}
+            {!lightMode && (() => {
+              const nextDay = days[dayIdx + 1];
+              const lastHere = (day.stops || []).filter(s => s?.name).slice(-1)[0];
+              const firstThere = (nextDay?.stops || []).filter(s => s?.name)[0];
+              if (!lastHere || !firstThere) return null;
+              const fromT = stopTown(lastHere, lookupRealPlace(lastHere.name));
+              const toT = stopTown(firstThere, lookupRealPlace(firstThere.name));
+              const a = resolveStopCoords(lastHere.name, geo, fromT);
+              const b = resolveStopCoords(firstThere.name, geo, toT);
+              if (!a || !b) return null;
+              const move = overnightMove({
+                from: a, to: b, fromName: lastHere.name, toName: toT || firstThere.name,
+                days: days.length, mode: guide._mode,
+              });
+              const line = describeOvernightMove(move);
+              if (!line) return null;
+              const heavy = move.eatsTheDay || move.band === REACH_FAR;
+              return (
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: C.surface, border: `1px solid ${heavy ? "#FFB347" : C.gold}44`, borderRadius: 12, padding: "12px 14px", marginTop: 14, maxWidth: 620 }}>
+                  <span style={{ fontSize: 15, flexShrink: 0 }}>{heavy ? "⚠" : "→"}</span>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                    <span style={{ color: heavy ? "#FFB347" : C.gold, fontWeight: 700 }}>
+                      Getting to Day {nextDay.day || dayIdx + 2}:{" "}
+                    </span>
+                    <span style={{ color: C.light }}>{line}</span>
+                    {/* Same honesty as Getting back, and for the same reason:
+                        every other distance on this page is a measured road
+                        journey and this one is not. */}
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                      Straight line distance, not a measured route, so treat it as the shape of the day rather than as a timetable.
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           );
         })}
@@ -1723,7 +1797,7 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
             const c = resolveStopCoords(s.name, guide._geo || {}, s.town);
             return c ? { name: s.name, lat: c.lat, lon: c.lon } : { name: s.name };
           }));
-          const home = returnLeg({ ordered: stops, from: guide._arrivalPoint || null, days: (days || []).length });
+          const home = returnLeg({ ordered: stops, from: guide._arrivalPoint || null, days: (days || []).length, mode: guide._mode || null });
           const line = describeReturn(home);
           if (!line) return null;
           const far = home.band === REACH_FAR;

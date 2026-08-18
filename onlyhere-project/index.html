@@ -32,8 +32,19 @@
          "noai, noimageai" is what the crawlers that honour anything actually
          read. It is a request, not a fence, and it is worth having for the ones
          that do honour it and as evidence of an express reservation for the ones
-         that do not. -->
-    <meta name="robots" content="noai, noimageai" />
+         that do not.
+
+         AND "index, follow" IS STATED EXPLICITLY, which is not decoration. The
+         first version of this tag carried the two AI tokens ALONE, in the
+         standard `robots` slot — the same slot that controls whether Gemlyx
+         appears in search at all. Absence of noindex does mean indexable, so
+         that version was almost certainly harmless; "almost certainly" is not a
+         good enough answer on the tag that decides whether a search engine keeps
+         117 pages, on a site with no organic traffic yet. Spelling out the
+         positive directives costs nothing and leaves no room for a strict parser
+         to read a list with no recognised directive in it and do something
+         creative. Found by auditing the live site tonight. -->
+    <meta name="robots" content="index, follow, noai, noimageai" />
     <meta name="tdm-reservation" content="1" />
 
     <title>Gemlyx. It exists nowhere else.</title>

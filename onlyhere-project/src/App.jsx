@@ -88,6 +88,9 @@ import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoi
 import { cityFromLocation } from "./utils/guideEnrichment";
 import { readBrief, briefBlock, nextAsks } from "./utils/tripBrief";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
+import { travelModeKey } from "./utils/routeOrder";
+import { buildChatReport, chatReportFilename } from "./utils/chatReport";
+import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
 import { dayKey, dayStart, dayPlus } from "./utils/calendarDay";
@@ -10340,9 +10343,17 @@ If the conversation only covers a single day or a few stops with no explicit day
     const days = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText: forMatch })?.days ?? null;
     const wanted = wantedCategories(forMatch);
     const themes = briefThemes(forMatch, intakeInterest);
+    // `mode` too, and for the reason this whole comment block is about: the line
+    // and the list have to be describing one trip. The preview screen filters
+    // towns by what is reachable on a bicycle now, so a line written without the
+    // mode would go back to promising places the list no longer holds.
+    const modeForWhy = travelModeKey((intakeTransport || []).join(", "))
+      || travelModeKey(aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n"));
+    const saidByTravellerForWhy = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
+    const budgetForWhy = travellerBudget([intakeBudgetText, saidByTravellerForWhy].filter(Boolean).join("\n"));
     const matchedForWhy = matchedPlaces(forMatch, previewPools({
       towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents,
-    }), { days, wanted, themes });
+    }), { days, wanted, themes, mode: modeForWhy, budget: budgetForWhy });
     // _notAsked as well as _leaving. A row held back is a row not on the
     // screen, and naming one of those is the same failure as naming one they
     // told you they are leaving.
@@ -11468,6 +11479,46 @@ ${languageBlock()}`;
                     <button onClick={generateRandomGuide} disabled={guideModal === "loading"}
                       style={{ width: "100%", background: "none", border: `1px dashed ${C.gold}66`, color: C.gold, borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", marginBottom: 12 }}>
                       {guideModal === "loading" ? "Building…" : "🎲 Random guide (test the pipeline)"}
+                    </button>
+
+                    {/* ── "MAKE ME ABLE TO SEND YOU A REPORT OF MY CHATS" ──
+                        Oliver, 17 Aug 2026. He asked once, it did not get built,
+                        and the cost showed up the same night: diagnosing "you
+                        already answered everything I needed" took a pasted
+                        transcript and ten screenshots, and the fact that actually
+                        explained it — that his answer's reply had FAILED and been
+                        stripped from the history — was in none of them. It had to
+                        be inferred.
+
+                        Behind the Studio login, because it is a debug tool rather
+                        than a traveller feature, and next to the pipeline test
+                        button for the same reason. Writes a file; no endpoint, no
+                        deploy. See utils/chatReport.js for what is in it and what
+                        is deliberately left out. */}
+                    <button
+                      onClick={() => {
+                        const at = new Date().toISOString();
+                        const report = buildChatReport({
+                          at,
+                          messages: aiMessages,
+                          asked: briefAsked,
+                          buildStarted: !!guideModal,
+                          intake: {
+                            arrival: intakeArrival,
+                            departure: intakeDeparture,
+                            startPoint: intakeStartPoint,
+                            travelers: intakeTravelers,
+                            familyMode: intakeFamilyMode,
+                            interest: intakeInterest,
+                            transport: intakeTransport,
+                            budgetText: intakeBudgetText,
+                          },
+                        });
+                        downloadReport(report, chatReportFilename(at));
+                      }}
+                      disabled={!aiMessages.length}
+                      style={{ width: "100%", background: "none", border: `1px dashed ${C.border}`, color: aiMessages.length ? C.light : C.muted, borderRadius: 10, padding: "9px 14px", fontSize: 11.5, fontWeight: 700, cursor: aiMessages.length ? "pointer" : "default", fontFamily: "'Inter', sans-serif", marginBottom: 12 }}>
+                      {aiMessages.length ? `📄 Export this chat as a report (${aiMessages.length} turns)` : "📄 Export this chat — nothing said yet"}
                     </button>
 
                     {sourcesOpen && (
@@ -16491,6 +16542,8 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           intakeArrival={intakeArrival}
           intakeDeparture={intakeDeparture}
           intakeInterest={intakeInterest}
+          intakeTransport={intakeTransport}
+          intakeBudgetText={intakeBudgetText}
           pickedEvents={pickedEvents}
           setPickedEvents={setPickedEvents}
           pickedExtras={pickedExtras}

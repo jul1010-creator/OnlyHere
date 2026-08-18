@@ -6,6 +6,8 @@ import { tripWindow, tripEvents, describePicks } from "../utils/tripEvents";
 import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/interestFit";
 import { cardLine } from "../utils/cardLine";
 import { buildPreviewReport, downloadReport, reportFilename } from "../utils/previewReport";
+import { readBrief } from "../utils/tripBrief";
+import { travellerBudget } from "../utils/accommodation";
 import { previewCoverage, describeCoverage, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_UNANSWERED } from "../utils/previewCoverage";
 import { AskGemlyx } from "./AskGemlyx";
 
@@ -147,6 +149,11 @@ export const GuidePreviewScreen = ({
   intakeArrival = "",
   intakeDeparture = "",
   intakeInterest = [],
+  // The transport chips, for the same reason the dates and interests are here:
+  // this screen decides which towns get offered, and until tonight it decided
+  // that without knowing whether the traveller had a car or a bicycle.
+  intakeTransport = [],
+  intakeBudgetText = "",
   pickedEvents = null,
   setPickedEvents = () => {},
   // The places the traveller added back from a section their brief did not ask
@@ -238,7 +245,34 @@ export const GuidePreviewScreen = ({
   // same reason `wanted` is, and never from Gemlyx's replies: the app
   // suggesting a museum must not become evidence that they asked for one.
   const themes = briefThemes(saidByTraveller, intakeInterest);
-  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes });
+  // ── AND HOW THEY ARE GETTING AROUND ───────────────────────────────
+  // Oliver, 17 Aug 2026, after a two day bicycle trip out of a ferry into
+  // Aalborg came back offering Billund and Copenhagen: "It gives me a random
+  // route." Copenhagen is about 400 km from Aalborg. Nothing on this screen had
+  // any idea he was on a bicycle, so nothing could object.
+  //
+  // Read from the traveller's OWN turns and the intake chips, exactly like
+  // `wanted` and `themes` above and for the identical reason: Gemlyx mentioning
+  // a train must never become evidence that they are taking one. Null when they
+  // have not said, and null leaves this screen exactly as it was.
+  // Through readBrief, not travelModeKey over the whole transcript. An adversarial
+  // review on 18 Aug found the difference: travelModeKey tests the modes in speed
+  // order across ALL the text, so "we are renting a car and we love hiking" came
+  // back "walk" and capped the offered towns at fifteen kilometres a day for a
+  // driving trip — while the brief slot, which reads the mode off the SENTENCE that
+  // stated it, correctly said car. Two parts of one screen disagreeing about the
+  // same trip, which is the failure this file's own comments keep naming.
+  const mode = readBrief({
+    travellerText: saidByTraveller,
+    intake: { transport: intakeTransport },
+  }).known.transport?.mode || null;
+  // ── AND WHAT THEY SAID ABOUT MONEY ────────────────────────────────
+  // Oliver, 17 Aug 2026: "geranium is NOT mid-range.. so remember to make food
+  // places include in budget." Read from their own turns and the budget box, same
+  // rule as everything else on this screen. Null when they have not said, and null
+  // rules nothing out.
+  const budget = travellerBudget([intakeBudgetText, saidByTraveller].filter(Boolean).join("\n"));
+  const matched = matchedPlaces(convoText, previewPools({ towns, freeEntrance, foodSpots, nightlifeSpots, craftItemsFallback, events, majorEvents }), { days: win?.days ?? null, wanted, themes, mode, budget });
   // Group into the fixed category order above, each capped independently.
   // Two sections ("Major Cities"/"Towns") now share src:"town" and are
   // told apart by their own `match` predicate — apply it on top of the

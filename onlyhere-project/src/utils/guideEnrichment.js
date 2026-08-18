@@ -438,6 +438,42 @@ export const cityFromLocation = (value) => {
   return bare || withoutCode;
 };
 
+// ── AND WHERE A STOP IS, SAID OUT LOUD ───────────────────────────────
+//
+// Oliver, 17 Aug 2026, reading a guide of his own:
+//
+//   "I think you need to make it explicit where these places are.. like 'JOJO'..
+//    nobody knows that is in Aarhus.."
+//
+// He is right, and the maddening part is that the app already knows. The guide
+// writer fills `town` on a stop when it happens to, and when it does not, the card
+// printed the bare name — while the published row that stop resolves to, a row he
+// wrote himself, carries the location in one of four different fields depending on
+// the content type: `town` on an event, `city` on an attraction, `location` on a
+// restaurant or bar, and a full postal address in `mapHint`. Nothing read any of
+// them.
+//
+// So this asks in order: what did the plan say, then what does our own row say. It
+// never guesses from the name, and it never returns a country — cityFromLocation
+// above throws Denmark away for exactly this reason.
+//
+// AN ADDRESS IS NOT A LABEL. `location` on a food row is a street address, so it
+// goes through cityFromLocation instead of being printed raw: "Klostertorvet 10,
+// 8000 Aarhus C" under a card name is noise, "Aarhus" is the answer.
+export const stopTown = (stop, row) => {
+  const said = String(stop?.town || "").trim();
+  if (said) return said;
+  for (const field of ["town", "city"]) {
+    const v = String(row?.[field] || "").trim();
+    if (v) return v;
+  }
+  for (const field of ["location", "mapHint"]) {
+    const v = cityFromLocation(row?.[field]);
+    if (v) return v;
+  }
+  return "";
+};
+
 // ── TWO STOPS THAT ARE ONE PLACE ─────────────────────────────────────
 //
 // Oliver, 17 Aug 2026, with a screenshot of "Tivoli Gardens" and "Tivoli

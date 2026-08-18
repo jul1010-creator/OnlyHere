@@ -94,8 +94,22 @@ export const fieldProvenance = (payload) => {
     });
   }
 
+  // ── AND A NULL TOTAL IS NOT A MEASUREMENT OF ZERO ──────────────────
+  // Number(null) is 0, and 0 is finite. So a stored journey carrying `total: null`
+  // — which journey.js writes when a Directions payload has steps but no
+  // durationMinutes, and studioContent.js carries through — satisfied this test and
+  // pushed a citation reading "measured, not estimated" for a measurement nobody
+  // made. In the file whose entire job is provenance, on the panel he asked to show
+  // its sources.
+  //
+  // Third instance of this exact coercion found in one night: two in
+  // accommodation.js (fixed with a shared measuredKm) and this one, found by an
+  // adversarial review that was told to go looking for a third. The render path was
+  // already guarded (journeyFromStored drops total <= 0); this path was not.
   const journey = p.__journey;
-  if (journey?.at || Number.isFinite(Number(journey?.total))) {
+  const journeyMinutes = journey && journey.total != null && journey.total !== ""
+    ? Number(journey.total) : NaN;
+  if (journey?.at || (Number.isFinite(journeyMinutes) && journeyMinutes > 0)) {
     out.push({
       field: "the journey from Copenhagen",
       by: "Google Maps",

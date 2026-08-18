@@ -1,3 +1,8 @@
+// MODE_DAY_KM and travelModeKey are imported, not re-derived: how far a mode goes
+// in a day is decided in routeOrder.js, and a second copy of those numbers is how
+// two parts of a product end up disagreeing about the same trip.
+import { MODE_DAY_KM, travelModeKey } from "./routeOrder";
+
 // ── "IT SUGGESTS HOSTELS, BUT THEN GIVES A SPECIFIC HOTEL??? ODD" ───
 //
 // Oliver, 9 Aug 2026, reading one guide:
@@ -136,9 +141,29 @@ export const stayTier = (text) => {
 // is in Denmark") and the suite asserts that name appears nowhere. This is a
 // different question, about what the person said rather than what a place costs,
 // and it gets its own name.
+// ── "BUDGET" ON ITS OWN IS NOT A TIGHT BUDGET ────────────────────────
+// Found 18 Aug 2026 by an adversarial review of the night's work, and it is the
+// worst kind of bug this codebase can have: the product quoting a traveller's own
+// words back at them, wrongly.
+//
+// The tight pattern contained the bare word `budget`. So "our budget is generous",
+// "big budget for this trip" and "our daily budget is around 3000 kr" all read as
+// TIGHT. Three consequences, all real code paths: the preview held every expensive
+// restaurant behind a card reading "Above the budget you mentioned" — a printed
+// claim about what they said, saying the opposite of what they said; the
+// accommodation prompt was told "WHAT THEY SAID ABOUT MONEY: tight", recreating
+// the hostel-for-a-rich-family bug this whole file was written to fix; and
+// budgetTierMismatch emitted the flatly false sentence "They said the budget is
+// tight".
+//
+// So `budget` only counts when something next to it says SMALL, and the generous
+// list learned the ordinary ways people say the opposite. A bare "our budget is
+// 3000 kr a day" now reads as no stated level at all, which is the honest answer:
+// a figure without a currency-per-day rule attached is not a tier, and null rules
+// nothing out.
 const BUDGET_LEVELS = [
-  { id: "tight", match: /\b(?:tight|cheap|budget|shoestring|backpack(?:ing|er)?|hostel|as cheap as|saving money|watching (?:the )?(?:costs?|pennies)|low budget|not much (?:money|to spend))\b/i },
-  { id: "generous", match: /\b(?:plenty of money|money is no|no budget limit|splash(?:ing)? out|treat ourselves|luxur(?:y|ious)|high end|five star|5 star|whatever it costs|price is not|don'?t mind (?:the )?(?:cost|price|spending)|happy to spend)\b/i },
+  { id: "tight", match: /\b(?:tight|cheap|shoestring|backpack(?:ing|er)?|hostel|as cheap as|saving money|watching (?:the )?(?:costs?|pennies)|not much (?:money|to spend))\b|\b(?:low|small|tight|limited|modest|strict)\s+budget\b|\bbudget\s+(?:is\s+)?(?:tight|small|low|limited|modest)\b|\bon a budget\b|\bbudget[- ]friendly\b/i },
+  { id: "generous", match: /\b(?:plenty of money|money is no|no budget limit|splash(?:ing)? out|treat ourselves|luxur(?:y|ious)|high end|five star|5 star|whatever it costs|price is not|don'?t mind (?:the )?(?:cost|price|spending)|happy to spend)\b|\b(?:big|large|generous|healthy|decent|good|no real)\s+budget\b|\bbudget\s+(?:is\s+)?(?:generous|big|large|healthy|not an issue|no (?:issue|object|problem))\b/i },
   { id: "middling", match: /\b(?:moderate|mid[- ]?range|middling|reasonable|sensible|comfortable but not|nothing fancy)\b/i },
 ];
 
@@ -326,4 +351,127 @@ export const stayTierMismatch = (accommodationText, recommendedStayName) => {
   const said = stayTier(accommodationText);
   const named = stayTier(recommendedStayName);
   return !!said && !!named && said !== named;
+};
+
+// ── "IT'S NOT EXACTLY A DAY-TRIP FROM COPENHAGEN" ────────────────────
+//
+// Oliver, 17 Aug 2026, on a guide of his own, in the same breath as noticing that
+// a stop called JOJO never said which town it was in.
+//
+// The phrasing is not the model inventing something. It is invited: the
+// accommodation prompt in enrichGuideDays says, in as many words, "Only default to
+// day-trip-from-Copenhagen phrasing if that is genuinely the better call for this
+// specific day." Nothing measures whether it is. So the sentence can put a
+// traveller in Copenhagen for a day in Aarhus, 185 km and about three hours of
+// train away, each way.
+//
+// ── WHAT MAKES A DAY TRIP A DAY TRIP ─────────────────────────────────
+// Out, a real amount of time at the place, and back, inside one day. So the
+// one-way limit is not a day's travel, it is about a THIRD of one: two thirds of
+// the day's travel budget is spent on the return journey and the rest of the day
+// has to be worth going for.
+//
+// The numbers fall out of MODE_DAY_KM, so there is one place in the app that
+// decides how far a mode goes in a day and this is not a second one:
+//
+//   car                300 / 3 = 100 km      Roskilde yes, Aarhus no
+//   public transport   250 / 3 =  83 km      Helsingør yes, Odense marginal, Aarhus no
+//   bike                60 / 3 =  20 km      the next town, and that is honest
+//
+// Aarhus from Copenhagen is 185 km. It fails on every mode, which is the answer he
+// gave in one line.
+export const DAY_TRIP_FRACTION = 3;
+
+export const dayTripRadiusKm = (mode) => {
+  const key = travelModeKey(mode);
+  const perDay = key ? MODE_DAY_KM[key] : null;
+  // No mode stated: use the slowest thing anybody drives, because claiming a day
+  // trip is the risky direction and an unstated mode is not permission to assume
+  // a car.
+  const base = perDay != null ? perDay : MODE_DAY_KM["public transport"];
+  return base / DAY_TRIP_FRACTION;
+};
+
+// The town a day-trip claim is anchored on, or null when the sentence makes no
+// such claim. Deliberately narrow: it reads the shape the prompt actually invites
+// ("a day trip from X", "day-trip from X", "as a day trip out of X") and nothing
+// looser, because a false positive here silently edits a correct sentence.
+// A DOT IS ONLY PART OF A NAME MID-WORD. The first version allowed "." anywhere in
+// the town, so "day trips from Copenhagen." came back as "Copenhagen." — with the
+// sentence's own full stop welded on, ready to be compared against a real town name
+// and never match. A dot is kept only where a word character follows it ("St.
+// Kongensgade"), never at the end.
+const NAME_CHAR = "[\\wÆØÅæøå'’-]";
+const NAME_PART = `[A-ZÆØÅ]${NAME_CHAR}*(?:\\.${NAME_CHAR}+)*`;
+const DAY_TRIP_RE = new RegExp(`\\bday[\\s-]?trips?\\s+(?:from|out of)\\s+(${NAME_PART}(?:\\s+${NAME_PART})?)`);
+
+export const dayTripClaim = (text) => {
+  const m = String(text || "").match(DAY_TRIP_RE);
+  if (!m) return null;
+  // Trailing words that are not part of a place name.
+  const town = String(m[1] || "").replace(/\s+(?:for|to|and|with|is|are|if|so|then|which|where|because)$/i, "").trim();
+  return town || null;
+};
+
+// Is the claim true. `kmFromBase` is measured by the caller, because this file has
+// no library and no geocoder and inventing one here would be a second source of
+// truth about where places are.
+//
+// AN UNMEASURED CLAIM IS NOT ACCEPTED. Returning "fine, we could not check" would
+// make every unresolvable town a licence to say day trip, which is the behaviour
+// being fixed. Unknown reads as not established.
+// ── ONE GUARD, BECAUSE THIS TRAP CAUGHT ME TWICE ─────────────────────
+// Number(null) is 0. So is Number(""), Number([]) and Number(false). Both functions
+// below started life with `Number.isFinite(Number(km))`, and both of them therefore
+// read a MISSING distance as "zero kilometres away" — making an unmeasurable claim
+// the single most honest one there is, the exact inversion of the rule each of them
+// is for. The first was found by a smoke test, the second by an assertion written
+// against the first. Two copies of a check is two chances to get it wrong, so there
+// is one, and it returns null rather than a number nobody measured.
+const measuredKm = (v) => {
+  if (v == null || v === "" || typeof v === "boolean" || Array.isArray(v)) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+export const dayTripHonest = ({ kmFromBase = null, mode = null } = {}) => {
+  const km = measuredKm(kmFromBase);
+  if (km == null) return false;
+  return km <= dayTripRadiusKm(mode);
+};
+
+// ── AND THE REPAIR IS A CUT, NEVER A REWRITE ─────────────────────────
+// The clause comes out and nothing goes in its place. That matters: the rest of
+// the sentence is a real recommendation about a real area, and replacing the false
+// clause with a truer-sounding one would be this file inventing travel advice,
+// which is the whole thing this product refuses to do. A shorter honest sentence
+// beats a longer plausible one.
+export const withoutDayTripClaim = (text) => {
+  const raw = String(text || "");
+  if (!dayTripClaim(raw)) return raw;
+  const cut = raw
+    // ", with easy day trips from Copenhagen" and " and take day trips out of X"
+    .replace(/[,;]?\s*(?:and\s+|with\s+)?(?:easy\s+|simple\s+|straightforward\s+)?day[\s-]?trips?\s+(?:from|out of)\s+[^,.;]*/i, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;])/g, "$1")
+    .replace(/[,;]\s*\./g, ".")
+    .trim();
+  // If the cut leaves nothing a reader can act on, the whole sentence goes: an
+  // accommodation card with no card is better than a fragment.
+  const words = cut.replace(/[^\wÆØÅæøå\s]/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (words.length < 4) return "";
+  return /[.!?]$/.test(cut) ? cut : `${cut}.`;
+};
+
+// What to tell him in Studio rather than silently repairing behind his back. The
+// guide gets the cut sentence; this is the line that says a cut happened.
+export const describeDayTripClaim = ({ town, kmFromBase, mode } = {}) => {
+  if (!town) return "";
+  const km = measuredKm(kmFromBase);
+  const radius = Math.round(dayTripRadiusKm(mode));
+  const how = travelModeKey(mode) || "public transport";
+  if (km == null) {
+    return `The stay line called this a day trip from ${town}, and the distance could not be measured, so the claim was removed rather than left standing.`;
+  }
+  return `The stay line called this a day trip from ${town}, which is ${Math.round(km)} km away. A day trip by ${how} is about ${radius} km each way, so the claim was removed.`;
 };

@@ -46,6 +46,7 @@
 // traveller asked for museums.
 import { arrivalDateIn, dayCountIn, monthOnlyIn, daysBetween } from "./tripEvents";
 import { dayStart } from "./calendarDay";
+import { travelModeKey, withoutNonModes } from "./routeOrder";
 
 const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 const has = (v) => !!clean(v);
@@ -110,7 +111,19 @@ const readDays = (text, intakeArrival, intakeDeparture) => {
 // arriving, coming, starting and driving. Denmark is reached by sea from Norway,
 // Sweden and Germany constantly, and the arrival that is least like Copenhagen is
 // exactly the one this missed.
-const ORIGIN_RE = /\b(?:fly(?:ing)?|land(?:ing)?|arriv(?:e|ing)|com(?:e|ing)|start(?:ing)?|driv(?:e|ing)|ferry|ferries|sail(?:ing)?|cruis(?:e|ing)|train|bus)\s+(?:in|into|to|from|at)\b|\b(?:airport|lufthavn|kastrup|billund airport)\b/i;
+// ── AND THE VEHICLE WORDS ONLY COUNT WITH "INTO" ─────────────────────
+// Found 18 Aug 2026 by an adversarial review. Adding ferry/train/bus to the verb
+// list also let "How long is the bus to Skagen from Aalborg?" and "Is the train to
+// Odense expensive?" fill the origin slot — an ordinary question about getting
+// around, satisfying the one slot the system prompt calls NON-NEGOTIABLE, so the
+// gate stopped asking where the trip starts.
+//
+// The verbs (fly, land, arrive, come, start, drive) are already arrival language
+// and keep their looser preposition set. The NOUNS are not: a bus is a bus whether
+// you are arriving on one or asking what it costs, so they need "into", which is
+// the word English uses for arriving somewhere. Same discriminator as
+// utils/arrival.js, for the same reason, found by the same review.
+const ORIGIN_RE = /\b(?:fly(?:ing)?|land(?:ing)?|arriv(?:e|ing)|com(?:e|ing)|start(?:ing)?|driv(?:e|ing))\s+(?:in|into|to|from|at)\b|\b(?:ferry|ferries|sail(?:ing)?|cruis(?:e|ing)|train|bus|coach)\s+into\b|\b(?:airport|lufthavn|kastrup|billund airport)\b/i;
 const readOrigin = (text, intakeStartPoint) => {
   if (has(intakeStartPoint)) return { value: clean(intakeStartPoint), source: "intake" };
   return ORIGIN_RE.test(String(text || "")) ? { value: "said in the conversation", source: "said" } : null;
@@ -136,7 +149,25 @@ const readParty = (text, intakeTravelers, familyMode) => {
 // and the Where to stay lines are worth writing. The conversation he read
 // recommended a budget hostel to a family who had just said they had plenty of
 // money, and it had no idea whether they had already booked anything.
-const BOOKED_RE = /\b(?:already |we(?:'ve| have) )?(?:booked|reserved|got a (?:hotel|room|place)|staying at|airbnb (?:booked|sorted)|hotel is (?:booked|sorted))\b/i;
+// ── AND "BOOKED" HAS TO BE ABOUT SOMEWHERE TO SLEEP ──────────────────
+// Found 18 Aug 2026 by an adversarial review. This matched a bare "booked", so
+// "We booked our flights already" and "Roskilde Festival is fully booked, sadly"
+// both filled the hotel slot — and because the slot is BLOCKING and the brief block
+// says "Never ask about any of these again, in any wording", the gate then refused
+// to ask about a hotel that did not exist and anchored the plan on it. The most
+// common sentence in travel chat, satisfying the slot he added specifically because
+// "that is quite an important factor".
+//
+// A booking word now needs a place to sleep next to it, or the phrasing that can
+// only be about lodging ("staying at", "we have a place"). Everything else is not
+// an answer about accommodation, and not-an-answer is the honest state: the gate
+// asks once and then stops (see `asked`), so a false positive costs a wrong plan
+// while a miss costs one short question.
+const SLEEPS = "hotel|hostel|room|rooms|place|places|apartment|flat|airbnb|bnb|b&b|guesthouse|guest house|kro|inn|cabin|cottage|campsite|camping spot|somewhere to stay|accommodation|lodging";
+const BOOKED_RE = new RegExp(
+  `\\b(?:book(?:ed)?|reserved|got|have|sorted)\\s+(?:a\\s+|an\\s+|our\\s+|the\\s+|my\\s+)?(?:${SLEEPS})\\b`
+  + `|\\b(?:${SLEEPS})\\s+(?:is|are)\\s+(?:already\\s+)?(?:booked|sorted|reserved)\\b`
+  + `|\\bstaying (?:at|in) (?:the|a|an)\\b`, "i");
 const NOT_BOOKED_RE = /\b(?:not (?:booked|yet)|nothing booked|no hotel|haven'?t booked|need (?:a hotel|somewhere)|looking for (?:a hotel|somewhere)|open to suggestions on (?:hotels?|where to stay))\b/i;
 const readStay = (text, intakeStayBooked) => {
   if (intakeStayBooked === true) return { value: "booked", source: "intake" };
@@ -179,7 +210,16 @@ const readInterests = (text, intakeInterest) => {
   const ticked = (Array.isArray(intakeInterest) ? intakeInterest : []).map(clean).filter(Boolean);
   if (ticked.length) return { value: ticked.join(", "), source: "intake" };
   const s = String(text || "").toLowerCase();
-  const found = INTEREST_WORDS.filter(w => new RegExp(`\\b${w}`, "i").test(s));
+  // ── AND A PREFIX IS NOT A WORD ─────────────────────────────────────
+  // Found 18 Aug 2026 by an adversarial review. This anchored the START of a word
+  // and not the end, so "We are coming from Spain" filled the blocking interests
+  // slot with "spa", and "we flew home via Barcelona" with "bar" — printed into the
+  // brief block as "what kind of trip: spa", after which the gate stops asking. The
+  // exact failure the slot exists to prevent, arriving through the reader.
+  //
+  // An ordinary English suffix is still the same interest ("eat"/"eating",
+  // "castle"/"castles"), so those are allowed and nothing else is.
+  const found = INTEREST_WORDS.filter(w => new RegExp(`\\b${w}(?:s|es|ing|ed)?\\b`, "i").test(s));
   return found.length ? { value: found.slice(0, 6).join(", "), source: "said" } : null;
 };
 
@@ -202,13 +242,45 @@ const TRANSPORT_RE = new RegExp([
   /\bpublic transport(?:ation)?\b/.source,
   /\bon foot\b/.source,
   /\b(?:cycling|biking|driving|walking|hitchhiking)\b/.source,
-  /\b(?:no|without a) car\b/.source,
+  // "no car" was an alternative here and is gone: the text is scrubbed of negations
+  // before this pattern runs (withoutNonModes), so it could never match, and a
+  // branch that cannot fire is reassurance rather than a rule.
   /\brental car\b/.source,
 ].join("|"), "i");
+// `mode` is the folded key, and it is the field everything downstream actually
+// wants: previewMatch will not offer a place 400 km away to somebody on a
+// bicycle, and it cannot ask that question of the string "said in the
+// conversation". travelModeKey is imported rather than rewritten here — a second
+// copy of this vocabulary is how two parts of the app end up disagreeing about
+// what a traveller said.
 const readTransport = (text, intakeTransport) => {
   const ticked = (Array.isArray(intakeTransport) ? intakeTransport : []).map(clean).filter(Boolean);
-  if (ticked.length) return { value: ticked.join(", "), source: "intake" };
-  return TRANSPORT_RE.test(String(text || "")) ? { value: "said in the conversation", source: "said" } : null;
+  if (ticked.length) {
+    const joined = ticked.join(", ");
+    return { value: joined, mode: travelModeKey(joined), source: "intake" };
+  }
+  // ── SCRUBBED FIRST, AND A MODE OR NOTHING ──────────────────────────
+  // Found 18 Aug 2026 by an adversarial review. Three sentences filled this
+  // blocking slot wrongly: "we have no car" (which says they are NOT driving),
+  // "we are not renting a car" (the negation sat outside the match), and "does the
+  // hotel have a car park?" (a place, not a journey). Filling a blocking slot is
+  // what stops the gate asking, so a false positive here means the trip is planned
+  // on a mode nobody stated — and in the first two cases, on the opposite of what
+  // they said.
+  //
+  // The same scrubber travelModeKey uses, on the text, BEFORE the pattern runs. And
+  // the slot only fills when a real mode comes out of it: "we have no car" is a
+  // true statement that names no mode, and not-a-mode is not an answer to "how are
+  // you getting around".
+  const said = withoutNonModes(text);
+  if (!TRANSPORT_RE.test(said)) return null;
+  // Read the mode from the SENTENCE that stated it, not from the whole
+  // conversation: a message about a train museum three turns earlier must not
+  // decide the mode of the trip. TRANSPORT_RE already requires a movement word
+  // next to the mode, so its own match is the honest place to read from.
+  const stated = (said.match(TRANSPORT_RE) || [])[0] || said;
+  const mode = travelModeKey(stated);
+  return mode ? { value: mode, mode, source: "said" } : null;
 };
 
 const BUDGET_RE = /\b(?:budget|cheap|tight|afford|splash|plenty of money|money is no|expensive|luxur|\d+\s*(?:dkk|kr|kroner|eur|usd|£|\$))\b/i;
