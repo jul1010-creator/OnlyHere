@@ -90,6 +90,7 @@ import { readBrief, briefBlock, nextAsks } from "./utils/tripBrief";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
 import { travelModeKey } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
+import { openingThread, withTestBrief, withoutTestBrief } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
 import { briefThemes , essentialsForTrip, essentialsBlock } from "./utils/interestFit";
 import { partnerDisclosure, linkLabel } from "./utils/affiliates";
@@ -9642,7 +9643,11 @@ If the conversation only covers a single day or a few stops with no explicit day
     // which is the whole point. What the pipeline panel shows is who the test
     // traveler is, not a list of answers handed to it in advance.
     randomTestProfileRef.current = { brief, days, interests, ...testProfile };
-    setAiMessages(prev => [prev[0], { role: "user", text: brief }]);
+    // withTestBrief, not [prev[0], brief]: on an empty thread that expression is
+    // [undefined, brief], and a hole in this array is a white screen on the next
+    // render. It also tags the brief so closing the preview can remove it by
+    // identity instead of by position. utils/chatThread.js has the full sequence.
+    setAiMessages(prev => withTestBrief(prev, brief));
     setPendingRandomGuideMode(mode);
     setGuideModal("preview");
   };
@@ -9806,9 +9811,12 @@ If the conversation only covers a single day or a few stops with no explicit day
   const [craftStatus, setCraftStatus] = useState(null);
   const [emailSignup, setEmailSignup] = useState("");
   const [emailSubmitted, setEmailSubmitted] = useState(false);
-  const [aiMessages, setAiMessages] = useState([
-    { role: "assistant", text: "Hi! I'm your Local Assist ◆ Tell me where you're heading — or what you're after — and I'll find you something that exists nowhere else." }
-  ]);
+  // openingThread rather than an inline literal, because `prev[0]` was read back
+  // as "the greeting" in generateRandomGuide and nothing guaranteed it was still
+  // there. See utils/chatThread.js: on 18 Aug an empty thread made that read
+  // `undefined` and put a hole in the messages array, which crashes every
+  // consumer in the app.
+  const [aiMessages, setAiMessages] = useState(openingThread);
   // Which assistant message index has already finished its typewriter reveal
   // (or never needed one, like the opening greeting) — see
   // components/TypewriterText.jsx. Only the newest assistant reply streams in;
@@ -16578,7 +16586,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
           onSearchArea={(finding) => {
             if (finding?.searchTarget) setDiscoverTarget(finding.searchTarget);
             setDiscoverTown("");
-            if (pendingRandomGuideMode) { setPendingRandomGuideMode(null); setAiMessages(prev => prev.slice(0, -1)); }
+            if (pendingRandomGuideMode) { setPendingRandomGuideMode(null); setAiMessages(withoutTestBrief); }
             setGuideModal(null);
             setToast(`🔭 Searching ${finding?.target?.label || "where coverage is thinnest"}`);
             setTimeout(() => setToast(null), 2600);

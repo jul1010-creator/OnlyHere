@@ -99,6 +99,7 @@ writeFileSync(entry, `
   export { citationUrls } from ${JSON.stringify(join(root, "src/utils/aiClient.js"))};
   export { THEMES, THEME_ORDER, DEFAULT_THEME } from ${JSON.stringify(join(root, "src/utils/theme.js"))};
   export { BRIEF_SLOTS, BLOCKING_SLOTS, readBrief, briefReady, nextAsks, briefBlock, MAX_ASKS_AT_ONCE } from ${JSON.stringify(join(root, "src/utils/tripBrief.js"))};
+  export { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } from ${JSON.stringify(join(root, "src/utils/chatThread.js"))};
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
   export { guideHero, heroCaption } from ${JSON.stringify(join(root, "src/utils/guideHero.js"))};
@@ -22492,6 +22493,100 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // And nothing is declined before it could have been asked.
   is("turn zero declines nothing",
      briefTimeline([{ role: "user", text: "hi" }], { asked: ["stay", "interests"] })[0].declined, []);
+}
+
+
+
+// ── "WHEN I CLICK 'GENERATE PIPELINE' TWICE IN A ROW, THE PAGE CRASHES" ──
+//
+// Oliver, 18 Aug 2026. Reproduced as a sequence of the real state updates before
+// anything was changed, which is the only way to test this — the bug lives in the
+// ORDER of three setState calls, and no single function was wrong:
+//
+//   start                 ["assistant"]
+//   after click 1         ["assistant","user"]
+//   after clicking the X  []
+//   after click 2         [undefined,"user"]
+//   render                TypeError: Cannot read properties of undefined
+//
+// Three defects stacked. The ✕ is a DOM child of the backdrop and both carried
+// onClick={closePreview} with no stopPropagation, so one click ran it twice. The
+// close removed the fabricated brief BY POSITION, so running twice ate the opening
+// greeting too. And the pipeline button rebuilt the thread as `[prev[0], brief]`,
+// which on an empty array is a HOLE — and every consumer in this app reads m.role
+// without optional chaining.
+{
+  const { GREETING, openingThread, withTestBrief, withoutTestBrief, threadIsSound, TEST_BRIEF } = M;
+
+  // ── THE SEQUENCE, RUN AS A SEQUENCE ─────────────────────────────
+  // Not three separate unit tests: each function is fine on its own, and it was
+  // the order that crashed the page.
+  let msgs = openingThread();
+  const set = (fn) => { msgs = fn(msgs); };
+  ok("the thread opens sound", threadIsSound(msgs));
+  set(prev => withTestBrief(prev, "brief 1"));
+  ok("click one is sound", threadIsSound(msgs));
+  is("and holds the greeting and the brief", msgs.length, 2);
+  // ONE CLICK ON ✕, TWO CALLS. This is what the DOM actually did.
+  set(withoutTestBrief); set(withoutTestBrief);
+  ok("closing twice leaves a sound thread", threadIsSound(msgs));
+  is("and the greeting survives", msgs.length, 1);
+  is("which is the greeting", msgs[0].role, "assistant");
+  set(prev => withTestBrief(prev, "brief 2"));
+  ok("the second click is sound, which is the crash", threadIsSound(msgs));
+  // The render that used to throw.
+  let threw = null;
+  try { msgs.filter(m => m.role === "user"); } catch (e) { threw = e; }
+  is("and the render no longer throws", threw, null);
+  // Ten more rounds, because "twice" was only where he happened to stop.
+  for (let i = 0; i < 10; i++) {
+    set(prev => withTestBrief(prev, `brief ${i}`));
+    set(withoutTestBrief); set(withoutTestBrief); set(withoutTestBrief);
+    ok(`round ${i} is still sound`, threadIsSound(msgs));
+  }
+  is("and after all of it the thread is just the greeting", msgs.length, 1);
+
+  // ── A HOLE IS THE THING THAT MUST BE IMPOSSIBLE ─────────────────
+  // The invariant, over every input the transitions can be handed, rather than
+  // over the two cases this file happened to think of.
+  [[], null, undefined, [null], [undefined], [null, undefined], "nonsense", [{}]].forEach((junk, i) => {
+    ok(`withTestBrief cannot produce a hole from junk ${i}`, threadIsSound(withTestBrief(junk, "b")));
+    ok(`withoutTestBrief cannot produce a hole from junk ${i}`, threadIsSound(withoutTestBrief(junk)));
+  });
+  ok("an empty thread still gets a greeting back", withoutTestBrief([])[0].role === "assistant");
+  ok("and withTestBrief falls back to the real greeting", withTestBrief([], "b")[0].text === GREETING.text);
+  // threadIsSound has to actually catch the shape that crashed, or it is decoration.
+  ok("a hole is not sound", !threadIsSound([GREETING, undefined]));
+  ok("an empty thread is not sound", !threadIsSound([]));
+  ok("a message with no role is not sound", !threadIsSound([{ text: "hi" }]));
+
+  // ── REMOVED BY IDENTITY, NOT BY POSITION ────────────────────────
+  // The position version ate whatever happened to be last. A real message that
+  // arrived while the preview was open is exactly what that would be.
+  const withReal = [...withTestBrief(openingThread(), "test brief"), { role: "user", text: "a real message" }];
+  const after = withoutTestBrief(withReal);
+  ok("a real message survives closing the preview", after.some(m => m.text === "a real message"));
+  ok("and the fabricated brief does not", !after.some(m => m[TEST_BRIEF]));
+  is("nothing else is touched", after.length, 2);
+  ok("the brief is tagged, which is what makes that possible",
+     withTestBrief(openingThread(), "b")[1][TEST_BRIEF] === true);
+
+  // ── AND THE THREE FIXES ARE ACTUALLY WIRED ──────────────────────
+  const appT = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const prevT = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("the pipeline button writes through the guarded transition",
+     /setAiMessages\(prev => withTestBrief\(prev, brief\)\);/.test(appT));
+  ok("and the crashing expression is gone", !/setAiMessages\(prev => \[prev\[0\]/.test(appT));
+  ok("the thread starts from one place", /useState\(openingThread\)/.test(appT));
+  ok("nothing slices the thread by position any more",
+     !/setAiMessages\(prev => prev\.slice\(0, -1\)\)/.test(appT) && !/setAiMessages\(prev => prev\.slice\(0, -1\)\)/.test(prevT));
+  ok("the preview closes by identity", /setAiMessages\(withoutTestBrief\);/.test(prevT));
+  // THE ✕ STOPS THE EVENT. Without this the close runs twice, and while the
+  // transitions above are now idempotent, a handler firing twice per click is a
+  // bug in its own right and the next thing added to it will not be idempotent.
+  ok("the close button stops the click reaching the backdrop",
+     /<button onClick=\{e => \{ e\.stopPropagation\(\); closePreview\(\); \}\} aria-label="Close"/.test(prevT));
+  ok("and the backdrop still closes on its own click", /\}\} onClick=\{closePreview\}>/.test(prevT));
 }
 
 

@@ -7,6 +7,7 @@ import { briefThemes, rankOffers, offerReason, OFFER_LIMIT } from "../utils/inte
 import { cardLine } from "../utils/cardLine";
 import { buildPreviewReport, downloadReport, reportFilename } from "../utils/previewReport";
 import { readBrief } from "../utils/tripBrief";
+import { withoutTestBrief } from "../utils/chatThread";
 import { travellerBudget } from "../utils/accommodation";
 import { previewCoverage, describeCoverage, COVERAGE_THIN, COVERAGE_MATCHER, COVERAGE_UNANSWERED } from "../utils/previewCoverage";
 import { AskGemlyx } from "./AskGemlyx";
@@ -350,16 +351,29 @@ export const GuidePreviewScreen = ({
   // message for a traveller. Null whenever the preview found something.
   const coverage = testProfile ? previewCoverage({ matched, library, convoText, themes, days: win?.days ?? null, wanted }) : null;
 
+  // ── AND CLOSING HAS TO BE IDEMPOTENT ──────────────────────────────
+  // One click on ✕ runs this TWICE: the button is a DOM child of the backdrop
+  // and both carry onClick={closePreview}, and the button did not stop the
+  // event bubbling. Both calls read the same stale pendingRandomGuideMode from
+  // their closure, so both passed the guard, and `slice(0, -1)` ran twice —
+  // taking the fabricated brief AND the opening greeting. The thread was then
+  // empty, and the next click on the pipeline test button wrote
+  // `[undefined, brief]` into it and crashed the page.
+  //
+  // Two changes, and both are needed. The ✕ stops propagating (below), so this
+  // runs once. And the removal is by IDENTITY rather than by position, so
+  // running it twice is harmless and a real message that arrived in between is
+  // never the thing eaten. See utils/chatThread.js.
   const closePreview = () => {
     if (pendingRandomGuideMode) {
       setPendingRandomGuideMode(null);
-      setAiMessages(prev => prev.slice(0, -1));
+      setAiMessages(withoutTestBrief);
     }
     setGuideModal(null);
   };
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", overflowY: "auto", padding: "60px 16px 40px" }} onClick={closePreview}>
-      <button onClick={closePreview} aria-label="Close"
+      <button onClick={e => { e.stopPropagation(); closePreview(); }} aria-label="Close"
         style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", color: C.light, width: 40, height: 40, borderRadius: "50%", fontSize: 16, cursor: "pointer", zIndex: 951 }}>✕</button>
       <div style={{ maxWidth: 560, margin: "0 auto" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8, textAlign: "center" }}>Here's what's coming up</div>
