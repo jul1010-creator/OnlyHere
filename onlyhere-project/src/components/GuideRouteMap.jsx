@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
+import { tileConfig } from "../utils/mapTiles";
 import { C } from "../utils/theme";
 import { departureParam } from "../utils/helpers";
 
@@ -103,10 +104,17 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
     if (!holderRef.current || points.length < 2) return;
     if (!mapRef.current) {
       const map = L.map(holderRef.current, { zoomControl: false, dragging: true, scrollWheelZoom: false }).setView([points[0].lat, points[0].lon], 8);
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19, className: "gemlyx-tiles",
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      }).addTo(map);
+      // ── THE BASEMAP IS A CHOICE, MADE IN ONE PLACE ──────────────
+      // Oliver, 18 Aug 2026, with the Stamen Watercolor endpoint in hand: "so
+      // where do I put this then?" Here, and in two other components, each with
+      // its own maxZoom and its own attribution — so it lives in
+      // utils/mapTiles.js now and all three read it. See that file for why a
+      // basemap is three properties rather than a URL, and in particular why
+      // the dark inversion filter must not run over painted tiles.
+      //
+      // "chart" on the guide, because this is the map a traveller keeps. The
+      // Studio map and the little map on a place page stay dark.
+      L.tileLayer(tileConfig("chart").url, tileConfig("chart")).addTo(map);
       L.control.zoom({ position: "bottomleft" }).addTo(map);
       mapRef.current = map;
       // BUG FIX (Oliver: "leaflet maps look bad, too zoomed in and poor

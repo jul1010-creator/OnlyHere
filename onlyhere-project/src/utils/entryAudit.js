@@ -18,7 +18,11 @@
 // Every finding names WHAT is wrong and WHERE, so the answer is never just
 // "this one looks bad".
 
-import { scanForAITells, fillerWordCounts } from "./helpers";
+import { scanForAITells, fillerWordCounts, haversineKm } from "./helpers";
+// townPointFor, so the station check measures against the same town library the
+// map, the route order and the weather all use. A second table of Danish town
+// coordinates in this file would disagree with that one within a week.
+import { townPointFor } from "./guideEnrichment";
 import { claimConflicts, implausibleWalks } from "./claimCheck";
 // Every coordinate rule, including the schema-example pair that used to be
 // declared here as two loose constants. One file owns them now, because the
@@ -27,8 +31,9 @@ import { claimConflicts, implausibleWalks } from "./claimCheck";
 import { coordProblems } from "./coordCheck";
 // fold, because a Danish word ending in é, ø, æ or å cannot carry a \b word
 // boundary in JavaScript. See TICKET_WORD.
-import { fold } from "./danishNames";
+import { fold, variantsOf, GENERIC_PLACE_WORDS } from "./danishNames";
 import { isReferenceHost } from "./pageScan";
+import { tierOf, TIERS } from "./placeThemes";
 import { QUERY_WORDS } from "./sourcePolicy";
 import { stayContradiction, restatementFindings } from "./draftShape";
 
@@ -457,6 +462,63 @@ export const auditEntry = (row) => {
   if (ns && (/;|\.\s+\S|,.*,/.test(ns) || ns.split(/\s+/).length > 6 || ns.length > 48
              || /\b(check|likely|probably|see |consult|rejseplanen|google maps|no train|unknown|varies)\b/i.test(ns))) {
     add("high", "nearest stop", `The Nearest Station field holds a sentence rather than a name: "${ns.slice(0, 70)}". It renders straight after the label, so it reads as the stop's name. Put the name there or leave it empty, and explain the journey in the prose.`);
+  }
+
+  // ── AND A STATION IN A DIFFERENT TOWN IS NOT THE NEAREST ONE ──────
+  // Oliver, 18 Aug 2026, with a draft on screen: town "Copenhagen", nearestStation
+  // "Slagelse". Seventy-six kilometres apart, in the same object, and nothing
+  // objected — the sentence check above passes because "Slagelse" is a perfectly
+  // well-formed station name. It is just not that entry's station.
+  //
+  // Measured, not asserted: both names go through the town library the rest of the
+  // app uses, and the distance is the great circle between them. So this can only
+  // ever fire on a station that IS a town Gemlyx knows, which is most of the ones a
+  // model writes here ("Slagelse", "Ribe", "Odense") and none of the ones it cannot
+  // check ("Nørreport" resolves to nothing, and reports nothing rather than
+  // guessing).
+  //
+  // 25 km, because a real nearest station genuinely can be in the next town for a
+  // village entry — Kliplev's is in Aabenraa — and that is a legitimate answer,
+  // while a figure this size cannot be reached on foot from the place and is
+  // therefore worth a human look either way. CRITICAL because a traveller plans
+  // their arrival from this field.
+  // ── AN UNRANKED ENTRY IS NOT PUBLISHABLE ──────────────────────────
+  // Oliver, 18 Aug 2026: "the tier part should NEVER be left out."
+  //
+  // The tier is the one field that is entirely Gemlyx's own judgement, and it is
+  // what every card, the region picker and the preview's ranking all read. An
+  // entry without one is not a thin entry, it is an entry nobody has decided
+  // about, sitting on a page that exists to give an opinion.
+  //
+  // CRITICAL, and specifically because of what used to happen instead:
+  // shapeForLive read `t.tier || "Worth Considering"`, so an unjudged entry was
+  // silently given a rank by a logical or. Removing that default is what makes
+  // this check necessary and what makes it possible.
+  //
+  // Only for the types that HAVE a tier. Asked of the value rather than of a list
+  // of type names: a type whose draft carries the field must fill it, and one that
+  // never carries it is not being scolded for a field it does not have.
+  if ("tier" in p) {
+    const ranked = tierOf(p);
+    const said = String(p.tier ?? "").trim();
+    if (!said) {
+      add("critical", "tier", `No tier. This is Gemlyx's own judgement about whether the place is worth planning around, and it is what the cards, the region picker and the preview all rank on. Pick one of: ${TIERS.map(t => t.label).join(", ")}.`);
+    } else if (!ranked) {
+      add("critical", "tier", `The tier reads "${said.slice(0, 40)}", which is not one Gemlyx recognises, so tierOf returns null and every card shows no rank at all. Use one of: ${TIERS.map(t => t.label).join(", ")}.`);
+    }
+  }
+
+  const nsTown = ns ? townPointFor(ns) : null;
+  const entryTown = townPointFor(p.town || p.city || "");
+  // No `nsTown.key !== entryTown.key` guard: mutation testing showed removing it
+  // changed no result, and it cannot — two identical keys resolve to one point, so
+  // the distance is zero and the threshold below already declines. It was a
+  // short-circuit dressed as a rule.
+  if (nsTown && entryTown) {
+    const apart = haversineKm({ lat: nsTown.lat, lon: nsTown.lon }, { lat: entryTown.lat, lon: entryTown.lon });
+    if (Number.isFinite(apart) && apart > 25) {
+      add("critical", "nearest stop", `The Nearest Station is ${Math.round(apart)} km from the town this entry names: it says ${entryTown.key} and the station is in ${nsTown.key}. One of the two is wrong, and a traveller plans their arrival off this field. If the station is right the town is wrong, which usually means the research was about a different place.`);
+    }
   }
 
   // Critical rather than high: a traveller reading the glance row budgets from
@@ -1242,6 +1304,79 @@ export const sourceFit = (urls, { type = "", saidByUrl = null } = {}) => {
     // nothing we read may mention the subject.
     subjectUnsourced: living && hosts.length > 0 && heard.length > 0 && onSubject.length === 0,
   };
+};
+
+// ── AND WHETHER ANY PAGE MENTIONS THE THING BY NAME ─────────────────
+//
+// Oliver, 18 Aug 2026, with a festival draft on screen:
+//
+//   "This was something called 'Folk', which doesn't even exist. If the name is
+//    wrong, and it doesn't exist, then just delete it."
+//   "the 'Folk' was something Perplexity found via web search btw."
+//
+// That last line is the whole diagnosis. The model did not invent a name out of
+// nothing: THE RESEARCH RETURNED A DIFFERENT SUBJECT. Perplexity searched, came
+// back with pages about something called Folk, and the draft went out named "TOV
+// Festival" — a name that appears in not one of the sources under it.
+//
+// sourceFit above cannot catch that, and it is worth being precise about why
+// rather than widening it and hoping. It asks whether the pages are about the
+// TYPE: for a festival that is "festival musik lineup". Pages about Folk contain
+// every one of those words, so subjectUnsourced comes back FALSE and the draft
+// reads as properly researched. The type was right. The subject was wrong.
+//
+// So this asks the other question, which nothing asked: does the entry's own NAME
+// appear in anything we read.
+//
+// ── DISTINCTIVE WORDS, NOT THE WHOLE STRING ─────────────────────────
+// "Restaurant Glassalen" is written as "Glassalen" by half the internet, and
+// requiring the full name would flag a correct draft. So it is the identifying
+// part of the name that has to appear, not the whole label.
+//
+// AND THE FLOOR IS THREE CHARACTERS, NOT distinctiveWords' FOUR. Found by running
+// this against his actual draft: "TOV Festival" produced NO words at all, because
+// "TOV" is three letters and "festival" is in GENERIC_PLACE_WORDS. The check could
+// not fire on the exact name that prompted it. distinctiveWords is left alone —
+// isSameSpot depends on its four-character rule and widening it there would start
+// merging stops — so the floor is lowered here only, where the whole-word match
+// below makes a three-letter word safe: " tov " cannot match inside another word.
+// Two characters would not be safe and is not offered.
+//
+// ── AND IT NEVER FIRES ON SILENCE ───────────────────────────────────
+// Same three-condition discipline as subjectUnsourced, for the same reason: not
+// knowing what a page said is not evidence it said nothing. No pages read, or a
+// name with no distinctive word in it at all, and this reports nothing.
+export const nameFit = (urls, { name = "", saidByUrl = null } = {}) => {
+  const list = (Array.isArray(urls) ? urls : []).map(u => String(u || "")).filter(Boolean);
+  const said = (u) => String(
+    (saidByUrl && typeof saidByUrl.get === "function" ? saidByUrl.get(u) : saidByUrl?.[u]) ?? ""
+  );
+  const heard = list.filter(u => said(u).trim());
+  // Every spelling of the name, so "Møgeltønder" and "Mogeltonder" are one name.
+  const identifying = (v) => fold(v)
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= 3 && !GENERIC_PLACE_WORDS.has(w));
+  const wanted = [...new Set(variantsOf(String(name || "")).flatMap(identifying))];
+  const spaced = (v) => ` ${fold(v).replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const naming = heard.filter(u => {
+    const hay = spaced(said(u));
+    return wanted.some(w => hay.includes(` ${w} `));
+  });
+  return {
+    heard: heard.length,
+    naming: naming.length,
+    words: wanted,
+    // Not one page we read mentions the thing this draft is called. That is not a
+    // thin draft, it is a draft about something else.
+    nameUnsourced: heard.length > 0 && wanted.length > 0 && naming.length === 0,
+  };
+};
+
+export const describeNameFit = (fit) => {
+  const f = fit || {};
+  if (!f.nameUnsourced) return "";
+  return `NOT ONE SOURCE MENTIONS THIS NAME. ${f.heard} page${f.heard === 1 ? "" : "s"} were read and none of them contains ${f.words.length === 1 ? f.words[0] : f.words.join(" or ")}. The research found a subject and it was not this one, so the name is either wrong or the thing does not exist. Do not fix the fields: delete the draft and search again for the real name.`;
 };
 
 export const describeSourceFit = (fit, { type = "" } = {}) => {

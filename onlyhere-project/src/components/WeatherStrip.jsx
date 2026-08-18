@@ -29,7 +29,7 @@ export const WeatherStrip = ({ label, weatherKey, lat, lon, weather, weatherLoad
 
           {data.warnings?.length > 0 && data.warnings.map((w, i) => (
             <div key={i} style={{ background: "#3D2A0A", border: "1px solid #FFB347", borderRadius: 10, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#FFB347", lineHeight: 1.5 }}>
-              ◷ {w.type}: {w.detaljer}
+              ◷ {w.type}: {w.detail}
             </div>
           ))}
 

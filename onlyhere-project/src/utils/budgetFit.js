@@ -33,7 +33,6 @@
 // as over-250: that would quietly hide every entry whose price nobody has checked
 // yet, which is a large part of the library and the opposite of the fix.
 import { priceBand } from "./helpers";
-import { preferPassing } from "./routeOrder";
 
 // The bands a level will not be handed. Keyed by the same ids priceBand returns.
 export const BUDGET_RULES_OUT = {
@@ -57,15 +56,17 @@ export const outOfBudget = (row, level) => {
   return rules.includes(band);
 };
 
-// Prefer what they can afford, and never hand back an empty section: the top-up
-// rule is preferPassing's, shared with the distance filter, because "prefer the
-// ones that pass but do not return nothing" is one rule and two copies of it would
-// disagree the first time either was touched.
-export const preferAffordable = (rows, { level = null, keepAtLeast = 0 } = {}) => {
-  const list = Array.isArray(rows) ? rows : [];
-  if (!level || !(BUDGET_RULES_OUT[level] || []).length) return list;
-  return preferPassing(list, { keepAtLeast, passes: (r) => !outOfBudget(r, level) });
-};
+// preferAffordable was here and is GONE. It was written on 17 Aug alongside
+// outOfBudget, on the assumption the matcher would want to rank a section by
+// affordability — and then the matcher used outOfBudget directly, because holding
+// an over-budget place behind the door is a better answer than reordering it, and
+// nothing ever called this. Exported, tested, unreachable: the same pattern this
+// file's neighbours keep being caught by, and deleting it is the same call made
+// about a redundant filter and a redundant early return the same night.
+//
+// preferPassing in routeOrder.js is still the shared top-up rule and is still used
+// by the distance filter. If a section ever does need ranking by price, it is two
+// lines against that, written the day it is needed.
 
 // ── AND IF IT IS SHOWN ANYWAY, IT SAYS SO ────────────────────────────
 // The top-up above means an expensive place can still reach a tight budget's

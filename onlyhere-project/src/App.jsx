@@ -113,6 +113,8 @@ import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
 import { partOfCountry, partsPresent, matchesSearch } from "./utils/geography";
+import { tileCss } from "./utils/mapTiles";
+import { dayCrossings, tripWeatherWarning } from "./utils/weatherWarn";
 import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf } from "./utils/placeThemes";
 import { EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts } from "./utils/eventTypes";
 import { SWEEPS, sweepById, selectRows, applyCap, knownPlacesFor, proposeSweep, applySweepPatch, buildSnapshot, readSnapshot, snapshotFilename, MARKS } from "./utils/sweeps";
@@ -3949,6 +3951,18 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               why: scanData.read || "",
               used: !!scanData.text,
             });
+            // ── READ AFTER THE BLOCK THAT DECLARED IT ────────────
+            // `tier` is destructured inside this if, and the ticket collection sixty
+            // lines down reads it OUTSIDE — so every scan whose page returned ticket
+            // links threw ReferenceError in the middle of the research pipeline.
+            // Found 18 Aug by scope analysis and not by anything failing loudly: the
+            // throw lands in the per-source catch below, which logs "one scan failed
+            // — keep going". The pipeline has been quietly losing ticket pages.
+            //
+            // Hoisted rather than moved: a page that could not be READ can still have
+            // had ticket links found on it, and null !== "old" keeps those, which is
+            // the behaviour that collection was written for.
+            let pageTier = null;
             if (scanData.text) {
               // ── WHICH OF THE THREE STRINGS THIS PAGE IS ALLOWED INTO ──
               // The operator's own words, a calendar or reseller listing, or
@@ -3956,6 +3970,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               // first two may ever CORROBORATE a price or a date, and only the
               // first is what the log is permitted to call the official site.
               const { tier, era, age } = scrapeTier(url, scanData.text, Date.now());
+              pageTier = tier;
               pagesByUrl[url] = scanData.text;
               const listing = tier === "listing";
               if (tier === "old") {
@@ -4011,7 +4026,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             // Collected here and followed after the loop, rather than inside
             // it, so a nested fetch cannot make one slow agent hold up the
             // remaining sources.
-            if (tier !== "old" && Array.isArray(scanData.tickets)) {
+            if (pageTier !== "old" && Array.isArray(scanData.tickets)) {
               for (const l of scanData.tickets) {
                 if (!ticketPages.some(x => x.href === l.href) && !toFetch.includes(l.href)) ticketPages.push({ ...l, from: url });
               }
@@ -6205,12 +6220,17 @@ Removing a sentence is always allowed and never needs a replacement. A shorter h
       const code = body && typeof body === "object" && !Array.isArray(body) ? String(body.code || "") : "";
       const msg = body && typeof body === "object" && !Array.isArray(body) ? String(body.message || "") : "";
       if (res.ok && Array.isArray(body)) {
-        ui(setResearchMemory, { status: "ok" });
+        // setResearchMemory directly, not through `ui`: that wrapper is a local of
+        // the draft pipeline ("do not write shared UI state when this run is
+        // queued") and does not exist in this function. This is a probe the founder
+        // presses by hand — there is no queue, so the guard has nothing to guard,
+        // and it threw ReferenceError instead. Found 18 Aug by scope analysis.
+        setResearchMemory({ status: "ok" });
         setResearchProbe({ state: "done", ok: true, line: `HTTP 200. The table is readable and holds ${body.length === 3 ? "3 or more" : body.length} remembered ${body.length === 1 ? "entry" : "entries"}. Nothing to fix.` });
         return;
       }
       const kind = supabaseFailure(res.status, body);
-      ui(setResearchMemory, { status: kind, detail: `HTTP ${res.status}${code ? ` ${code}` : ""}` });
+      setResearchMemory({ status: kind, detail: `HTTP ${res.status}${code ? ` ${code}` : ""}` });
       setResearchProbe({ state: "done", line: `HTTP ${res.status}${code ? ` · ${code}` : ""}${msg ? ` · ${msg.slice(0, 140)}` : ""}` });
     } catch (e) {
       setResearchProbe({ state: "done", line: `The request never completed: ${String(e.message || e).slice(0, 140)}` });
@@ -7563,7 +7583,17 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
               outcome: "empty", used: false,
               why: `${why} It was not stored, and the ${hadJourney ? "journey and arrival point measured from it were dropped with it" : "arrival point measured from it was dropped with it"}. The page falls back to the town centre, which is honest, rather than to a pin in the wrong city.`,
             });
-            ui(setStudioInventedWarning, inventedWarning = `${inventedWarning ? `${inventedWarning}\n\n` : ""}THE MAP PIN WAS DROPPED, NOT PUBLISHED WRONG. ${why} Nothing was stored for lat, lon${hadJourney ? ", the journey" : ""} or the arrival point, so this page shows the town centre instead of a pin. If you know the real coordinate, put it in "__lat" and "__lon" and publish again: your value is used as it is now, and is no longer overwritten.`);
+            // ── AND A LOCAL THAT WAS NEVER DECLARED ───────────────
+            // `inventedWarning` is a local of the DRAFT PIPELINE, and so is the `ui`
+            // wrapper; neither exists in publishDraft. This line read one and assigned
+            // the other, so in a module (strict mode) it threw ReferenceError the
+            // moment a coordinate was refused during a publish — exactly when the
+            // founder most needs to be told why. Found 18 Aug by scope analysis.
+            //
+            // An updater rather than a local: appending to state by reading a variable
+            // is how the second warning in one publish overwrites the first, and the
+            // blank line in this message exists because they are meant to stack.
+            setStudioInventedWarning(prev => `${prev ? `${prev}\n\n` : ""}THE MAP PIN WAS DROPPED, NOT PUBLISHED WRONG. ${why} Nothing was stored for lat, lon${hadJourney ? ", the journey" : ""} or the arrival point, so this page shows the town centre instead of a pin. If you know the real coordinate, put it in "__lat" and "__lon" and publish again: your value is used as it is now, and is no longer overwritten.`);
           }
         }
       }
@@ -7626,7 +7656,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         setPublishStatus(null);
         setDraftEditError(
           `Not published, because an event with no date is not an event. Fill "dateStart" in the draft above${shaped.dateEnd ? "" : ` (and "dateEnd" if it runs more than one day)`} and publish again.` +
-          (draft?._dateWasStripped
+          ((editedDraft?._dateWasStripped || studioDraft?._dateWasStripped)
             ? ` This draft HAD a date and the past-date check removed it, which it does when the run has already finished. If the festival is still to come, the date the writer found was wrong; if it is running now, put the real dates in and it will publish.`
             : ` Nothing in the research stated one. The operator's own site and the ticket listings are the two places worth looking.`)
         );
@@ -7782,7 +7812,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
   // every day of every one of the last eight saved guides, because this wrote
   // into GemlyxApp's state after the route had already destroyed GemlyxApp.
   // Returns its results now so the caller can bake them on before navigating.
-  const fetchGuideWeather = async (days, arrivalDate, freshGeo = {}) => {
+  // `travelMode` added 18 Aug 2026 and it is not optional garnish: 12 m/s of
+  // wind is a footnote in a car and the entire character of a day on a bike, and
+  // the warnings this now builds are mode-aware for exactly that reason. Passing
+  // it here rather than reading a ref keeps this function callable from a test.
+  const fetchGuideWeather = async (days, arrivalDate, freshGeo = {}, travelMode = null) => {
     setWeatherPending(days.length);
     // How many days from today the trip's Day 1 actually starts — 0 if arrivalDate is
     // unknown (falls back to the old assume-it-starts-today behavior) or already today.
@@ -7812,6 +7846,11 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
     // there's a single, reliable "every day has now been checked" point to
     // build that summary from, instead of no way to know when the last one lands.
     const results = new Array(days.length).fill(null);
+    // The SAME points the forecast was fetched for, kept rather than recomputed.
+    // A second resolver here would be the fifth duplicated coordinate lookup
+    // this codebase has found, and it would be the one that disagrees: the
+    // crossing warning has to be about the place the wind was measured at.
+    const points = new Array(days.length).fill(null);
     const note = await Promise.allSettled(days.map(async (day, idx) => {
       const forecastIdx = startOffset + idx;
       // ── PAST THE HORIZON IS A DIFFERENT QUESTION, NOT SILENCE ──
@@ -7851,6 +7890,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         return key ? { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] } : null;
       }).find(Boolean);
       if (!point) return;
+      points[idx] = point;
       // The day this stop is actually on. ONE implementation, shared with the
       // refresh-on-open path in GuidePage, so the two can never drift into
       // disagreeing about the same day the way the walking estimates did.
@@ -7879,10 +7919,37 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         // know how many days the TRIP has to be able to say it covered fewer.
         return normalsNote(results, when, days.length);
       }
-      const rainyDayNums = results.map((w, i) => (w?.source === FORECAST && w?.risk === "high" ? i + 1 : null)).filter(Boolean);
-      if (rainyDayNums.length === 0) return null; // nothing genuinely worth flagging, rather than a generic "check the forecast" filler line
+      // ── THE MEASURED WARNINGS COME FIRST ──────────────────────
+      // Oliver, 18 Aug 2026: "it shows the weather forecast, but nothing else.
+      // Surely it's able to give some warnings+"
+      //
+      // Wind in m/s, rain in millimetres, the cold-and-wet pair, frost, heat,
+      // and the Great Belt crossing on the day it actually happens. Every one
+      // cites its own number. See utils/weatherWarn.js.
+      //
+      // The crossing needs to know which landmass each day is on, and it asks
+      // the coordinates the forecast was FETCHED for, not a fresh lookup — so
+      // the wind in the warning and the place in the warning are the same place.
+      const parts = points.map(pt => (pt ? partOfCountry({ __lat: pt.lat, __lon: pt.lon }) : null));
+      const warned = tripWeatherWarning(results, { mode: travelMode, crossings: dayCrossings(parts) });
+      // Which days are wet AT ALL, minus the ones a warning above already
+      // covered by name. risk goes high at 1mm and the rain warning starts at
+      // 4mm, so this sentence still carries something the warnings do not — but
+      // repeating a day the warnings already named would read as the guide
+      // telling you the same thing twice in a vaguer way.
+      const namedAlready = new Set();
+      (warned.match(/Days? [\d, ]*\d/g) || []).forEach(seg => {
+        (seg.match(/\d+/g) || []).forEach(n => namedAlready.add(Number(n)));
+      });
+      const rainyDayNums = results
+        .map((w, i) => (w?.source === FORECAST && w?.risk === "high" ? i + 1 : null))
+        .filter(n => n && !namedAlready.has(n));
+      // nothing genuinely worth flagging, rather than a generic "check the
+      // forecast" filler line
+      if (!warned && rainyDayNums.length === 0) return null;
       const dayList = rainyDayNums.length === 1 ? `Day ${rainyDayNums[0]}` : `Days ${rainyDayNums.slice(0, -1).join(", ")} and ${rainyDayNums[rainyDayNums.length - 1]}`;
-      return `Real forecast currently shows rain likely on ${dayList}, worth packing a light rain layer.`;
+      const rainLine = rainyDayNums.length ? `Real forecast currently shows rain likely on ${dayList}, worth packing a light rain layer.` : "";
+      return [warned, rainLine].filter(Boolean).join(" ");
     }).finally(() => setWeatherPending(0));
     return { weatherByDay: results, weatherNote: note };
   };
@@ -9356,7 +9423,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       // The forecast, also baked on rather than posted to a component that is
       // about to stop existing. Cheap: one /api/weather call per distinct day.
       buildStage("Checking the forecast", 98);
-      const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate, freshGeo);
+      const { weatherByDay, weatherNote } = await fetchGuideWeather(parsed.days, arrivalDate, freshGeo, travelMode);
       parsed.days = parsed.days.map((d, i) => (weatherByDay[i] ? { ...d, weather: weatherByDay[i] } : d));
       // ── "IT SUGGESTS HOSTELS, BUT THEN GIVES A SPECIFIC HOTEL???" ──
       // Runs HERE and not with the other plan checks, because it needs
@@ -9809,6 +9876,18 @@ If the conversation only covers a single day or a few stops with no explicit day
 
 
   const [craftStatus, setCraftStatus] = useState(null);
+  // ── STATE THAT WAS NEVER DECLARED AT ALL ──────────────────────────
+  // Found 18 Aug 2026 by real scope analysis: @babel/traverse over every file,
+  // asking which referenced identifiers resolve to no binding anywhere.
+  // `craftForm` and `setCraftForm` are read in six places — the booking modal's
+  // four inputs, the submit handler and the mailto fallback — and declared in
+  // none. Opening the craft booking modal threw ReferenceError and the
+  // ErrorBoundary turned it into a white screen, on the one flow in this app
+  // that is meant to earn money.
+  //
+  // The four keys are not a guess: the modal renders exactly these by key, and
+  // the submit handler reads the same four.
+  const [craftForm, setCraftForm] = useState({ name: "", email: "", interest: "", visit: "" });
   const [emailSignup, setEmailSignup] = useState("");
   const [emailSubmitted, setEmailSubmitted] = useState(false);
   // openingThread rather than an inline literal, because `prev[0]` was read back
@@ -14238,7 +14317,32 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // that only filtered half the list (see below).
             const ATTRACTION_FACETS = [
               { key: "city", label: "City",
-                options: [{ value: "All", label: "All" }, ...KNOWN_CITIES.filter(c => combined.some(i => i._city === c)).map(c => ({ value: c, label: c }))],
+                // ── "I CAN'T GET ONTO THE BLOGS.. THE PAGE CRASHES" ──
+                // Oliver, 18 Aug 2026, with the console: `ReferenceError:
+                // KNOWN_CITIES is not defined`.
+                //
+                // Mine, from the filter work the night before. This read a
+                // KNOWN_CITIES array that is declared at line 3240 — inside an
+                // `if (NIGHTLIFE_TYPES.includes(sType))` block, in a different
+                // function entirely. A legal identifier at parse time, so Vite
+                // built it and the suite passed; a ReferenceError the moment this
+                // page rendered, which the ErrorBoundary turned into a white
+                // screen. The one page nobody had opened since.
+                //
+                // AND THE HARDCODED LIST WAS THE WRONG ANSWER ANYWAY. Ten names,
+                // so an attraction published in Skagen or Ribe got no chip at all
+                // — the same "a filter that quietly does not cover half the list"
+                // failure this very block was written to fix. Derived from the
+                // rows instead, exactly as the Food and Nightlife pages already
+                // do it (search daCompare), so a city he publishes in tomorrow
+                // gets a chip tomorrow. "Other" sorts last because it is not a
+                // place.
+                options: [
+                  { value: "All", label: "All" },
+                  ...[...new Set(combined.map(i => i._city).filter(Boolean))]
+                    .sort((a, b) => (a === "Other") - (b === "Other") || daCompare(a, b))
+                    .map(c => ({ value: c, label: c })),
+                ],
                 test: (i, v) => i._city === v },
               { key: "kind", label: "Type",
                 options: [{ value: "All", label: "All" }, { value: "free", label: "🆓 Free" }, { value: "craft", label: "🎟 Bookable" }],
@@ -15800,7 +15904,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
         .app-root { height: 100vh; }
         .hero-h { height: calc(100vh - 196px); min-height: 340px; }
         /* ── Leaflet, Gemlyx dark theme ── */
-        .gemlyx-tiles { filter: invert(1) hue-rotate(189deg) brightness(0.92) contrast(1.12) saturate(0.35); }
+        /* ── THE TILE FILTER IS NOW PER STYLE ──────────────────────
+           This was a single gemlyx-tiles rule applying the dark inversion to
+           EVERY basemap in the app. The guide chart uses Stamen Watercolor,
+           which is already painted, and inverting painted tiles produces a mess
+           that looks like the tiles are broken rather than like the filter is
+           wrong. So the filter travels with the style it was written for, and
+           the rules are generated from the one table in utils/mapTiles.js
+           rather than restated here.
+
+           NOTE FOR ANYONE EDITING THIS BLOCK: it is a template literal, so a
+           backtick in a comment here closes the string and breaks the build.
+           Found the hard way, thirty seconds after writing this comment with
+           backticks in it. */
+        ${tileCss()}
         .gemlyx-map-label { background: #0A0F1E; color: #D9A441; border: 1px solid #D9A44166; border-radius: 6px; padding: 2px 7px; font-size: 10px; font-weight: 700; font-family: 'Inter', sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
         .gemlyx-map-label::before { border-top-color: #D9A44166 !important; }
         .leaflet-container { background: #0D1526 !important; font-family: 'Inter', sans-serif !important; }
@@ -16654,7 +16771,13 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
       )}
       {guideModal === "choosing" && (
         <div style={{ position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,8,16,0.92)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setGuideModal(null)}>
-          <button onClick={() => setGuideModal(null)} aria-label="Close"
+          {/* stopPropagation, same as the preview's ✕ and for the same reason.
+              This button is a DOM child of the backdrop and both carry the same
+              handler, so one click ran it twice. Harmless HERE, because
+              setGuideModal(null) is idempotent — and that is exactly how the
+              preview's version looked until the day its handler gained a line
+              that was not. The suite scans for this shape now. */}
+          <button onClick={e => { e.stopPropagation(); setGuideModal(null); }} aria-label="Close"
             style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", color: C.light, width: 40, height: 40, borderRadius: "50%", fontSize: 16, cursor: "pointer", zIndex: 951 }}>✕</button>
           <div style={{ maxWidth: 480, width: "100%", textAlign: "center" }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Fraunces', serif", color: C.text, marginBottom: 8 }}>How do you want to see it?</div>

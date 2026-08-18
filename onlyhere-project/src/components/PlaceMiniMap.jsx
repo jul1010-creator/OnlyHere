@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
+import { tileConfig } from "../utils/mapTiles";
 import { C } from "../utils/theme";
 
 // ── "Where is this, actually" ──────────────────────────────────────
@@ -63,10 +64,11 @@ export const PlaceMiniMap = ({ lat, lon, name, color, neighbours, onOpenNeighbou
       dragging: true,
       attributionControl: true,
     }).setView([Number(lat), Number(lon)], 11);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19, className: "gemlyx-tiles",
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+    // The basemap comes from utils/mapTiles.js rather than being written out
+    // here — this was one of three verbatim copies of the same URL, maxZoom and
+    // attribution. Still "dark": a dark panel is the right answer in Studio and
+    // on a place page. The guide's own chart asks for "chart".
+    L.tileLayer(tileConfig().url, tileConfig()).addTo(map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     const pin = L.divIcon({
       className: "gemlyx-place-pin",

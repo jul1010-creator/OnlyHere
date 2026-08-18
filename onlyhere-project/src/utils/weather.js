@@ -111,13 +111,35 @@ export const normalsLine = (n) => {
 
 // What the badge carries, for either source, in one shape so the render site
 // does not branch on which API answered.
-export const weatherBadge = ({ source, forecast, normals, agreement } = {}) => {
+// ── AND IT CARRIES WHAT WAS MEASURED, NOT JUST WHAT WAS DECIDED ─────
+// Added 18 Aug 2026. Oliver: "it shows the weather forecast, but nothing else.
+// Surely it's able to give some warnings+"
+//
+// The reason it could not was here. api/weather.js sends wind_speed_ms,
+// precipitation_mm and a MET symbol code for every day, and this function
+// reduced all three to `risk`, a BOOLEAN meaning "1mm or more". So 1mm of
+// drizzle and 18mm with a gale behind it produced the identical badge, and the
+// most any warning downstream could have said is the "rain likely" that was
+// already there.
+//
+// `measured` is those numbers, passed through untouched in the units they
+// arrived in. Nothing in this file interprets them — utils/weatherWarn.js does
+// that, against Beaufort boundaries and a bridge operator's published table —
+// and nothing in this file may invent one: an absent measurement stays absent,
+// because null coerces to a confident zero and this project has been bitten by
+// that four times.
+export const weatherBadge = ({ source, forecast, normals, agreement, measured } = {}) => {
   if (source === FORECAST && forecast) {
     return {
       source: FORECAST,
       icon: forecast.icon,
       temp: forecast.temp,
       risk: forecast.risk,
+      // The three MET measurements the warnings are built from. Undefined
+      // rather than 0 when the API did not send one.
+      windMs: measured?.windMs,
+      rainMm: measured?.rainMm,
+      symbol: measured?.symbol,
       // Shown on the badge itself. He could not tell before whether a number
       // was measured or assumed, and neither could a traveler.
       label: "forecast",
@@ -143,6 +165,19 @@ export const weatherBadge = ({ source, forecast, normals, agreement } = {}) => {
       // state what the badge states rather than re-deriving it wrongly.
       lowC: lo,
       highC: hi,
+      // Carried for the same reason as the forecast measurements above:
+      // normalsWarnings states "about N days in ten see rain" and has to cite
+      // the share it read rather than re-deriving it from the risk boolean,
+      // which has already thrown the number away.
+      // The null check comes FIRST and it is not paranoia: api/weather.js ends
+      // its normals with `wet_day_share: wets.length ? mean/days : null`, so a
+      // place with no wet-day record sends a real null — and Number(null) is 0,
+      // which is finite, and 0 is a share meaning IT NEVER RAINS THERE. Written
+      // the coercion-last way this would have reported "rain is rare then"
+      // about every town whose archive had no precipitation rows. Fifth time
+      // this trap has come up in this codebase, second time in this file.
+      wetShare: (normals.wet_day_share === null || normals.wet_day_share === undefined || normals.wet_day_share === ""
+        || !Number.isFinite(Number(normals.wet_day_share))) ? undefined : Number(normals.wet_day_share),
       years: normals.years,
     };
   }
@@ -333,6 +368,29 @@ export const dayWeather = async ({ point, date, daysOut, fetchJson }) => {
   }
   const data = await fetchJson(`/api/weather?lat=${point.lat}&lon=${point.lon}`);
   if (!data) return null;
+  // ── THE MEASUREMENTS COME OFF MET, WHICHEVER PATH SETS THE TEMPERATURE ──
+  // Read BEFORE the merge branch, on purpose, and this is the whole reason the
+  // warnings can exist at all.
+  //
+  // `data.sources` reduces all three providers to { date, temp_c, wet }, because
+  // that is the shape the merge needs to compare them. Wind and millimetres are
+  // NOT in it and cannot be: OpenWeatherMap and WeatherAPI report different
+  // quantities differently, and a median across three definitions of "wind"
+  // would be measuring the definitions. MET's own `data.forecast` carries
+  // wind_speed_ms, precipitation_mm and the symbol code, so that is where they
+  // come from on both paths.
+  //
+  // So: temperature and agreement from the merge, because three opinions beat
+  // one. Physical measurements from MET, because it is the only one that sent
+  // them. Nothing is averaged that should not be, and nothing is invented when
+  // MET has no bucket for that date — the slot is simply absent and every
+  // warning that would have cited it is not produced.
+  const slot = (data.forecast || []).find(f => f.date === iso);
+  const measured = slot ? {
+    windMs: slot.wind_speed_ms,
+    rainMm: slot.precipitation_mm,
+    symbol: slot.condition,
+  } : undefined;
   // Prefer the merge across every source that answered. Fall back to the single
   // MET Norway slot only when `sources` is absent, which is what an older
   // deployed API returns, so a stale function never blanks the badge.
@@ -346,9 +404,9 @@ export const dayWeather = async ({ point, date, daysOut, fetchJson }) => {
         risk: merged.wet ? "high" : "none",
       },
       agreement: agreementNote(merged),
+      measured,
     });
   }
-  const slot = (data.forecast || []).find(f => f.date === iso);
   if (!slot) return null;
   const cond = String(slot.condition || "").toLowerCase();
   return weatherBadge({
@@ -358,5 +416,6 @@ export const dayWeather = async ({ point, date, daysOut, fetchJson }) => {
       temp: Math.round(slot.temperature_c),
       risk: /rain|sleet|thunder|snow/.test(cond) ? "high" : "none",
     },
+    measured,
   });
 };

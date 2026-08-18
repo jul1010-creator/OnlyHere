@@ -103,7 +103,10 @@ writeFileSync(entry, `
   export { CHAT_REPORT_KIND, CHAT_REPORT_VERSION, buildChatReport, chatReportFilename, turnReport, briefTimeline, intakeReport } from ${JSON.stringify(join(root, "src/utils/chatReport.js"))};
   export { RIGHTS_HOLDER, copyrightLine, GUIDE_RIGHTS_SHORT, GUIDE_RIGHTS_FULL, TDM_RESERVATION } from ${JSON.stringify(join(root, "src/utils/rights.js"))};
   export { guideHero, heroCaption } from ${JSON.stringify(join(root, "src/utils/guideHero.js"))};
-  export { outOfBudget, preferAffordable, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
+  export { nameFit, describeNameFit } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
+  export { stayTextProblem, stayTextForReader } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
+  export { offerReason as offerReasonFn } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { outOfBudget, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
   export { MAX_STOPS_ARRIVAL_DAY } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
@@ -144,6 +147,7 @@ writeFileSync(entry, `
   export { OPERATORS, operatorsForLeg, operatorNote, isLongLeg, LONG_LEG_KM, THRESHOLDS_ARE_ORDERED, isRegionCrossing } from ${JSON.stringify(join(root, "src/utils/operators.js"))};
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
+  export { WIND_FRESH, WIND_STRONG, WIND_GALE, WIND_STORM, RAIN_WET, RAIN_HEAVY, COLD_WET_C, FROST_C, HARD_FROST_C, HEAT_C, forecastWarnings, normalsWarnings, beltCrossing, dayCrossings, crossingWarning, dayWarnings, tripWeatherWarning, GREAT_BELT_TRAILER_MS, GREAT_BELT_CLOSED_MS } from ${JSON.stringify(join(root, "src/utils/weatherWarn.js"))};
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
@@ -6065,7 +6069,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   ok("and the stop's own stated town", /townPointFor\(s\.town\)/.test(wxPoint));
   // The geocodes have to be handed IN. They were computed a few lines earlier
   // and thrown away, which is the same shape as the _exactDurations bug.
-  ok("and the geocodes are passed to it", /fetchGuideWeather\(parsed\.days, arrivalDate, freshGeo\)/.test(appSrc));
+  ok("and the geocodes are passed to it", /fetchGuideWeather\(parsed\.days, arrivalDate, freshGeo\b/.test(appSrc));
   ok("the note is told how many days the trip has", /normalsNote\(results, when, days\.length\)/.test(appSrc));
   // GuidePage's refresh-on-open path already resolved the town; asserted so the
   // two paths cannot drift back apart the way the walking estimates did.
@@ -9330,8 +9334,21 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // and nothing runs.
   ok("and the removal is in the run log",
      /\n\s*note\("The measured coordinate was refused", \{/.test(overrideRegion));
+  // ── AND ON THE SCREEN HE IS LOOKING AT ──────────────────────────
+  // This anchored on `ui(setStudioInventedWarning, inventedWarning = ...)`, which
+  // is what the line said and is also two identifiers that do not exist in
+  // publishDraft: both are locals of the DRAFT PIPELINE. So this whole branch —
+  // the one that tells him a map pin was refused during a publish — threw
+  // ReferenceError at the exact moment it was needed. The assertion pinned the
+  // wording of a line that could not run. Found 18 Aug by scope analysis.
+  //
+  // Anchored on the CALL at the start of its line, same rule as the note above:
+  // matching the words alone passes against `if (false) setStudio...(...)`.
   ok("and on the screen he is looking at",
-     /\n\s*ui\(setStudioInventedWarning, inventedWarning = `\$\{inventedWarning[^\n]*THE MAP PIN WAS DROPPED, NOT PUBLISHED WRONG\./.test(overrideRegion));
+     /\n\s*setStudioInventedWarning\(prev => `\$\{prev[^\n]*THE MAP PIN WAS DROPPED, NOT PUBLISHED WRONG\./.test(overrideRegion));
+  // An updater, not a local: two refusals in one publish have to stack, and
+  // appending by reading a variable is how the second overwrites the first.
+  ok("and it appends rather than replacing", /setStudioInventedWarning\(prev => `\$\{prev \? `\$\{prev\}/.test(overrideRegion));
 
   // Wired to the panel too, because the gate cannot reach a row already stored,
   // and those are the ones on the live site right now.
@@ -13488,7 +13505,14 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
      /note\(`Ticket agent: \$\{domainOf\(l\.href\)\}`, \{/.test(appL));
   ok("and treats a blocked agent as the page most worth knowing about",
      /so a failure here is the one page most worth knowing about/.test(appL));
-  ok("an old page's links are not followed", /if \(tier !== "old" && Array\.isArray\(scanData\.tickets\)\)/.test(appL));
+  // `pageTier`, not `tier`, and the rename is the fix rather than a tidy-up: `tier`
+  // is destructured inside `if (scanData.text)` and this line sits outside it, so
+  // every scan whose page returned ticket links threw ReferenceError into the
+  // per-source catch and lost them silently. Found 18 Aug by scope analysis; the
+  // gate at the end of this file now makes that class impossible.
+  ok("an old page's links are not followed", /if \(pageTier !== "old" && Array\.isArray\(scanData\.tickets\)\)/.test(appL));
+  ok("and the tier it reads is hoisted above the block that sets it", /let pageTier = null;/.test(appL));
+  ok("and set from the real classification", /\n\s+pageTier = tier;/.test(appL));
 }
 
 // ── THE AFFILIATE VERIFICATION TAG ─────────────────────────────────
@@ -21948,7 +21972,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // price was in the field.
 {
   const { stopTown, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim,
-          describeDayTripClaim, DAY_TRIP_FRACTION, outOfBudget, preferAffordable,
+          describeDayTripClaim, DAY_TRIP_FRACTION, outOfBudget,
           budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS, priceBand, travellerBudget } = M;
 
   // ── "NOBODY KNOWS THAT IS IN AARHUS" ────────────────────────────
@@ -22069,13 +22093,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("a town is never out of budget", !outOfBudget({ name: "Copenhagen", _src: "town", price: "2,800 DKK" }, "tight"));
   ok("nor is an attraction", !outOfBudget({ name: "ARoS", _src: "free", price: "2,800 DKK" }, "tight"));
 
-  // And the section is never emptied: an honest line beats a blank panel.
-  is("affordable ones win outright when there are enough",
-     preferAffordable([GERANIUM, SHACK], { level: "tight", keepAtLeast: 1 }).map(r => r.name), ["a harbour shack"]);
-  is("and the expensive one tops up when there is nothing else",
-     preferAffordable([GERANIUM], { level: "tight", keepAtLeast: 1 }).map(r => r.name), ["Geranium"]);
-  is("with no stated budget nothing is reordered",
-     preferAffordable([GERANIUM, SHACK], { level: null, keepAtLeast: 2 }).map(r => r.name), ["Geranium", "a harbour shack"]);
+  // preferAffordable was asserted here and is gone with the function: written on
+  // 17 Aug, never called, because holding an over-budget place behind the door
+  // turned out to be a better answer than reordering a section. Its top-up rule
+  // lives on as preferPassing, which the distance filter does use and which is
+  // still asserted above.
+  ok("the ranking helper nobody called is gone", M.preferAffordable === undefined);
   // If it is shown anyway it says so, rather than arriving as tonight's dinner.
   ok("an over budget row carries a warning", !!budgetWarning(GERANIUM, "tight"));
   is("and an affordable one carries none", budgetWarning(SHACK, "tight"), "");
@@ -22587,6 +22610,1010 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the close button stops the click reaching the backdrop",
      /<button onClick=\{e => \{ e\.stopPropagation\(\); closePreview\(\); \}\} aria-label="Close"/.test(prevT));
   ok("and the backdrop still closes on its own click", /\}\} onClick=\{closePreview\}>/.test(prevT));
+}
+
+
+
+// ── WRITTEN, TESTED, AND WIRED TO NOTHING ───────────────────────────
+//
+// Found 18 Aug 2026 by grepping the previous night's own exports for callers.
+// Three of them had none:
+//
+//   dayTripHonest / withoutDayTripClaim   the guide went on printing "day trips
+//                                         from Copenhagen" over a day in Aarhus
+//   _overBudget / budgetWarning           Geranium went behind the door with no
+//                                         line saying why
+//   preferAffordable                      never called at all; deleted
+//
+// The eighth time this codebase has caught a helper written, tested and left
+// unwired. Every assertion in this block is about the CALL, because the arithmetic
+// was already right and already asserted, and being right in a module nobody
+// imports is worth nothing to a reader.
+{
+  const { stayTextProblem, stayTextForReader, offerReasonFn } = M;
+  const gpW = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const ifW = readFileSync(join(root, "src/utils/interestFit.js"), "utf8");
+
+  // ── ONE CALL, THE SHAPE A RENDER CAN USE ────────────────────────
+  const FAR = { text: "Stay in central Copenhagen, with easy day trips from Copenhagen.", mode: "public transport" };
+  const far = stayTextProblem({ ...FAR, kmFromTown: () => 185 });
+  ok("a day trip to Aarhus is a problem", !!far);
+  is("and it names the town", far.town, "Copenhagen");
+  ok("the repaired sentence drops the claim", !/day trip/i.test(far.repaired));
+  ok("and keeps the recommendation", /central Copenhagen/.test(far.repaired));
+  ok("the note carries the numbers", /185 km/.test(far.note));
+  is("a day trip that is really a day trip is left alone",
+     stayTextProblem({ ...FAR, kmFromTown: () => 32 }), null);
+  is("and a sentence with no claim in it is not touched",
+     stayTextProblem({ text: "Stay near Skagen harbour for the dunes.", mode: "bike", kmFromTown: () => 900 }), null);
+  // AN UNMEASURED CLAIM IS STILL REFUSED, which is dayTripHonest's rule reaching
+  // through this one: no resolver, or a town nobody has a coordinate for.
+  ok("an unmeasurable claim is cut rather than waved through",
+     !!stayTextProblem({ ...FAR, kmFromTown: () => null }));
+  ok("and with no resolver at all", !!stayTextProblem({ ...FAR }));
+  // The reader-facing one-liner.
+  is("the reader gets the honest sentence",
+     stayTextForReader({ ...FAR, kmFromTown: () => 185 }), far.repaired);
+  is("and an untouched one when there is no problem",
+     stayTextForReader({ text: "Stay near Skagen harbour.", mode: "bike" }), "Stay near Skagen harbour.");
+
+  // ── AND THE GUIDE CALLS IT ──────────────────────────────────────
+  ok("the stay card asks", /const stayProblem = stayTextProblem\(\{/.test(gpW));
+  ok("with the trip's own mode", /mode: guide\._mode,\s*\n\s*kmFromTown:/.test(gpW));
+  ok("and prints the repaired sentence", /<span style=\{\{ color: C\.light \}\}>\{stayText\}<\/span>/.test(gpW));
+  ok("and no longer the raw one", !/<span style=\{\{ color: C\.light \}\}>\{day\.glance\.accommodation\}<\/span>/.test(gpW));
+  // THE FURTHEST STOP, not the nearest: a day trip has to reach all of them, and
+  // the nearest would let one close stop wave through a day that ends 200 km out.
+  ok("it measures to the furthest stop of the day", /return reach\.length \? Math\.max\(\.\.\.reach\) : null;/.test(gpW));
+  ok("and an unmeasurable day gives null rather than a number", /reach\.length \? Math\.max/.test(gpW));
+  // A card with nothing honest left in it does not render.
+  ok("an emptied sentence removes the card", /if \(!stayText\) return null;/.test(gpW));
+  // The reason is logged, not printed: a page that narrates its own corrections is
+  // the "People will think the draft is incorrect" failure again.
+  ok("the cut is logged for him", /day-trip claim removed from the stay line/.test(gpW));
+  ok("and never shown to a reader", !/\{stayProblem\.note\}/.test(gpW));
+
+  // ── AND THE OVER-BUDGET ROW SAYS WHY ────────────────────────────
+  // previewMatch set `_overBudget` and nothing read it, so an expensive place
+  // appeared under "you did not ask for these" — which is not what happened to it.
+  is("the reason is the budget line when there is one",
+     offerReasonFn({ place: { name: "Geranium", _overBudget: "Above the budget you mentioned", city: "Copenhagen" }, fit: { why: ["food"] } }),
+     "Above the budget you mentioned");
+  ok("and the ordinary reason otherwise",
+     /Gemlyx/.test(offerReasonFn({ place: { name: "ARoS", city: "Aarhus" }, fit: {} })));
+  ok("money is read before the theme, or the card explains the wrong thing",
+     ifW.indexOf("if (place._overBudget) return place._overBudget;") < ifW.indexOf("const named = (fit?.why"));
+}
+
+
+
+// ── AND NO OTHER HANDLER FIRES TWICE PER CLICK ──────────────────────
+//
+// The crash he hit on 18 Aug needed three defects, and the one that STARTED it was
+// a shape, not a value: a ✕ button that is a DOM child of the backdrop, with both
+// carrying onClick, and no stopPropagation between them. One click, two calls.
+//
+// Fixing the one instance fixes one screen. This scans for the shape, because the
+// other two instances in the app were found by looking and there is no reason to
+// think looking will happen again. Both were benign — their handlers were
+// idempotent — and "benign" is precisely what the preview's was until the day its
+// handler gained a line that was not.
+{
+  const files = [
+    "src/App.jsx",
+    ...["GuidePreviewScreen", "WeatherHeaderStrip", "DetailPage", "GuideRouteMap", "HowWeKnow", "StudioAssistant", "JourneyCard", "AskGemlyx", "PhotoCredit", "LeafletMap", "PlaceMiniMap", "InstagramEmbed"]
+      .map(n => `src/components/${n}.jsx`),
+    "src/pages/GuidePage.jsx",
+  ].filter(f => { try { readFileSync(join(root, f)); return true; } catch { return false; } });
+
+  const offenders = [];
+  files.forEach(f => {
+    const lines = readFileSync(join(root, f), "utf8").split("\n");
+    lines.forEach((ln, i) => {
+      // A full-screen backdrop that closes on its own click.
+      const isBackdrop = /position: "fixed", inset: 0|inset: 0, background/.test(ln) && /onClick=\{/.test(ln);
+      if (!isBackdrop) return;
+      // Its first few children. The first one that stops propagation guards
+      // everything nested under it, so the scan ends there.
+      //
+      // COMMENTS AND BLANK LINES ARE SKIPPED, and that is not tidiness. The first
+      // version counted raw lines, so writing a six-line comment between a
+      // backdrop and its ✕ pushed the button out of the window and the scan went
+      // quiet on a real offender — which mutation testing caught immediately,
+      // because the comment I had just written above the fix was the thing hiding
+      // the un-fixed version of it.
+      let seen = 0;
+      let inComment = false;
+      for (let j = i + 1; j < Math.min(i + 24, lines.length) && seen < 2; j++) {
+        const child = lines[j];
+        if (inComment) { if (/\*\/\}?/.test(child)) inComment = false; continue; }
+        if (/^\s*\{?\/\*/.test(child)) { if (!/\*\/\}?/.test(child)) inComment = true; continue; }
+        if (/^\s*(\/\/|$)/.test(child)) continue;
+        if (!/onClick=\{/.test(child)) { if (/<[a-zA-Z]/.test(child)) seen++; continue; }
+        seen++;
+        if (/stopPropagation/.test(child)) break;
+        offenders.push(`${f}:${j + 1}`);
+        break;
+      }
+    });
+  });
+  is(`no click handler fires twice per click${offenders.length ? ` (${offenders.join(", ")})` : ""}`,
+     offenders.join(", "), "");
+
+  // AND THE SCAN HAS TO BE ABLE TO FAIL. A scanner that finds nothing because it
+  // looks for nothing is worse than no scanner: it reads as a guarantee. This runs
+  // the same rule over a sample with the bug in it and requires a hit.
+  const WITH_BUG = [
+    '<div style={{ position: "fixed", inset: 0, zIndex: 950 }} onClick={close}>',
+    '  <button onClick={close} aria-label="Close">x</button>',
+    '  <div onClick={e => e.stopPropagation()}>',
+  ];
+  // The blind spot the first version had: a comment between the backdrop and the
+  // button. Mutation testing found it, on the very comment written to explain the
+  // fix, which is as neat a demonstration as this file has produced.
+  const WITH_BUG_BEHIND_A_COMMENT = [
+    '<div style={{ position: "fixed", inset: 0, zIndex: 950 }} onClick={close}>',
+    '  {/* a comment explaining why this button exists,',
+    '      running over several lines the way they do here,',
+    '      and pushing the button out of a naive window. */}',
+    '  <button onClick={close} aria-label="Close">x</button>',
+    '  <div onClick={e => e.stopPropagation()}>',
+  ];
+  const WITHOUT = [
+    '<div style={{ position: "fixed", inset: 0, zIndex: 950 }} onClick={close}>',
+    '  <button onClick={e => { e.stopPropagation(); close(); }} aria-label="Close">x</button>',
+    '  <div onClick={e => e.stopPropagation()}>',
+  ];
+  // The SAME walk the real scan uses, so the self-test cannot pass on a rule the
+  // real one does not follow.
+  const scan = (lines) => {
+    const hits = [];
+    lines.forEach((ln, i) => {
+      if (!(/position: "fixed", inset: 0|inset: 0, background/.test(ln) && /onClick=\{/.test(ln))) return;
+      let seen = 0, inComment = false;
+      for (let j = i + 1; j < Math.min(i + 24, lines.length) && seen < 2; j++) {
+        const child = lines[j];
+        if (inComment) { if (/\*\/\}?/.test(child)) inComment = false; continue; }
+        if (/^\s*\{?\/\*/.test(child)) { if (!/\*\/\}?/.test(child)) inComment = true; continue; }
+        if (/^\s*(\/\/|$)/.test(child)) continue;
+        if (!/onClick=\{/.test(child)) { if (/<[a-zA-Z]/.test(child)) seen++; continue; }
+        seen++;
+        if (/stopPropagation/.test(child)) break;
+        hits.push(j); break;
+      }
+    });
+    return hits;
+  };
+  is("the scan catches the shape it is looking for", scan(WITH_BUG).length, 1);
+  is("and catches it behind a comment, which the first version did not", scan(WITH_BUG_BEHIND_A_COMMENT).length, 1);
+  is("and clears the fixed version", scan(WITHOUT).length, 0);
+  ok("and it looked at real files", files.length >= 3);
+}
+
+
+
+// ── EVERY IDENTIFIER RESOLVES TO SOMETHING ──────────────────────────
+//
+// Oliver, 18 Aug 2026: "I can't get onto the blogs.. the page crashes", with the
+// console line `ReferenceError: KNOWN_CITIES is not defined`.
+//
+// That was mine, from the filter work two nights earlier: a const declared inside
+// an `if (NIGHTLIFE_TYPES.includes(sType))` block at line 3240, read from the
+// render at line 14241. LEGAL TO PARSE, so Vite built it and this suite passed,
+// and a ReferenceError the instant that page rendered.
+//
+// Which is the whole problem with this class: nothing catches it until a person
+// opens the screen. A grep cannot — `res` and `data` are declared in fifty
+// separate scopes and a text search cannot tell a different variable from an
+// out-of-scope read. It needs real scope analysis, and @babel/parser and
+// @babel/traverse are both already in the tree, so it gets real scope analysis.
+//
+// Run once, it found THIRTEEN MORE, every one a crash waiting on whichever screen
+// executes that line:
+//
+//   craftForm, setCraftForm   never declared anywhere. Six reads. The craft
+//                             booking modal — the one flow meant to earn money —
+//                             threw the moment it opened.
+//   tier                      read after the block that declared it, in the
+//                             research pipeline, so every scan with ticket links
+//                             threw into a catch that logs "keep going". It had
+//                             been losing ticket pages silently.
+//   ui, inventedWarning       locals of the draft pipeline, read in publishDraft.
+//                             The branch that tells him a map pin was refused
+//                             during a publish could never run.
+//   ui (x2)                   same, in the research probe.
+//   draft                     never declared; the dateless-event explanation.
+//
+// A GATE, NOT A REPORT. It fails the suite, because every one of these is a
+// crash, and a list nobody reads is how thirteen of them accumulated.
+{
+  let parse = null, traverse = null;
+  try {
+    parse = (await import("@babel/parser")).parse;
+    // ESM/CJS interop: @babel/traverse is CommonJS, so `default` is sometimes the
+    // function and sometimes the module object holding it. Both shapes are real
+    // depending on the version, and picking one is how this gate breaks on an
+    // upgrade instead of on a bug.
+    const tmod = (await import("@babel/traverse")).default;
+    traverse = typeof tmod === "function" ? tmod : tmod?.default;
+    if (typeof traverse !== "function") throw new Error("traverse is not callable");
+  } catch (e) {
+    // FAILS LOUDLY rather than skipping. A gate that quietly stands down when its
+    // parser moves is worse than no gate: it reads as a guarantee. Both are
+    // declared in package.json devDependencies for exactly this reason.
+    ok(`the scope gate can load its parser (npm i -D @babel/parser @babel/traverse) — ${String(e && e.message).slice(0, 80)}`, false);
+  }
+
+  if (parse && traverse) {
+    // Browser and platform globals. Anything NOT here and not bound in an
+    // enclosing scope is a ReferenceError at runtime.
+    const GLOBALS = new Set([
+      "window", "document", "console", "fetch", "navigator", "location", "localStorage", "sessionStorage",
+      "setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame",
+      "Math", "JSON", "Object", "Array", "String", "Number", "Boolean", "Date", "RegExp", "Error", "TypeError", "Promise",
+      "Map", "Set", "WeakMap", "WeakSet", "Symbol", "Proxy", "Reflect", "BigInt", "Intl", "URL", "URLSearchParams",
+      "Blob", "File", "FileReader", "FormData", "Headers", "Request", "Response", "AbortController", "TextDecoder", "TextEncoder",
+      "isNaN", "isFinite", "parseInt", "parseFloat", "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
+      "structuredClone", "queueMicrotask", "performance", "crypto", "atob", "btoa", "alert", "confirm", "prompt",
+      "IntersectionObserver", "ResizeObserver", "MutationObserver", "PerformanceObserver", "Image", "Audio", "Event", "CustomEvent",
+      "getComputedStyle", "scrollTo", "scrollBy", "matchMedia", "screen", "history", "process", "globalThis",
+      // Edge-runtime globals: middleware.js runs on Vercel's edge, not in a browser.
+      "AbortSignal", "Headers", "ReadableStream", "WritableStream", "TransformStream", "caches", "EdgeRuntime",
+      "undefined", "NaN", "Infinity", "React", "L", "gtag", "dataLayer", "self", "top", "parent", "frames",
+    ]);
+
+    const srcFiles = [];
+    const walkDir = (rel) => {
+      let names = [];
+      try { names = readdirSync(join(root, rel)); } catch { return; }
+      names.forEach(n => {
+        if (/\.(jsx?|mjs)$/.test(n)) srcFiles.push(`${rel}/${n}`);
+        else if (!n.includes(".")) walkDir(`${rel}/${n}`);
+      });
+    };
+    walkDir("src");
+    ["middleware.js"].forEach(f => { try { readFileSync(join(root, f)); srcFiles.push(f); } catch { /* not present */ } });
+    walkDir("api");
+
+    // ── ONE IMPLEMENTATION OF THE RULE ────────────────────────────
+    // The real scan and the self-test below both call THIS. The first version had
+    // the self-test carrying its own copy of the walk, and mutation testing showed
+    // what that costs: neutering the real scan's `GLOBALS.has` or its
+    // `hasBinding` check left the self-test passing on its private copy, so three
+    // mutants of the gate survived. A gate whose self-test does not exercise the
+    // gate is a gate that can be switched off silently.
+    const unresolvedIn = (code, label) => {
+      const out = [];
+      let ast = null;
+      try {
+        ast = parse(code, {
+          sourceType: "module",
+          plugins: ["jsx", "objectRestSpread", "optionalChaining", "nullishCoalescingOperator", "classProperties", "dynamicImport", "topLevelAwait"],
+        });
+      } catch (e) {
+        return [`${label}: does not parse — ${String(e.message).slice(0, 70)}`];
+      }
+      const seen = new Set();
+      traverse(ast, {
+        ReferencedIdentifier(path) {
+          const name = path.node.name;
+          if (GLOBALS.has(name)) return;
+          if (path.scope.hasBinding(name, { noGlobals: true })) return;
+          const line = path.node.loc?.start?.line ?? 0;
+          const key = `${name}@${line}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          out.push(`${label}:${line} ${name}`);
+        },
+      });
+      return out;
+    };
+
+    const unresolved = [];
+    srcFiles.forEach(f => unresolved.push(...unresolvedIn(readFileSync(join(root, f), "utf8"), f)));
+
+    is(`every identifier resolves to a binding or a known global${unresolved.length ? ` — ${unresolved.slice(0, 12).join(", ")}${unresolved.length > 12 ? ` and ${unresolved.length - 12} more` : ""}` : ""}`,
+       unresolved.length, 0);
+    // The gate has to have looked at the real tree, or "zero" means nothing.
+    ok("and it read the whole source tree", srcFiles.length >= 60);
+    ok("including App.jsx", srcFiles.includes("src/App.jsx"));
+    ok("and the components", srcFiles.some(f => f.startsWith("src/components/")));
+    ok("and the pages", srcFiles.some(f => f.startsWith("src/pages/")));
+    ok("and the api handlers", srcFiles.some(f => f.startsWith("api/")));
+
+    // AND IT HAS TO BE ABLE TO FAIL. A scope gate that finds nothing because it
+    // looks for nothing is the worst outcome here, because zero reads as proof.
+    // Run the identical rule over a sample carrying the exact KNOWN_CITIES shape.
+    const SAMPLE_BAD = `
+      const Component = () => {
+        const go = (t) => { if (t) { const KNOWN = ["a"]; return KNOWN.length; } return 0; };
+        return KNOWN.length;
+      };
+    `;
+    const SAMPLE_GOOD = `
+      const KNOWN = ["a"];
+      const Component = () => {
+        const go = (t) => (t ? KNOWN.length : 0);
+        return KNOWN.length;
+      };
+    `;
+    // THE SAME FUNCTION the real scan just used, so switching the real one off
+    // fails here too.
+    ok("the gate catches a const read outside the block that declared it",
+       unresolvedIn(SAMPLE_BAD, "sample").some(x => / KNOWN$/.test(x)));
+    is("and clears the hoisted version", unresolvedIn(SAMPLE_GOOD, "sample").length, 0);
+    // And a name that IS a global is not reported, or the gate would fail on every
+    // file and get switched off within a day.
+    is("a real global is not an offender",
+       unresolvedIn("const f = () => Math.max(1, 2);", "sample").length, 0);
+    ok("but an unknown one is",
+       unresolvedIn("const f = () => Mathf.max(1, 2);", "sample").some(x => / Mathf$/.test(x)));
+    // And the parser is declared, so the gate cannot rot into a skip.
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    ok("the parser is a declared devDependency", !!pkg.devDependencies["@babel/parser"]);
+    ok("and so is traverse", !!pkg.devDependencies["@babel/traverse"]);
+
+    // ── AND THE GATE IS A GATE, ASSERTED ON ITS OWN SOURCE ────────
+    // Two mutants of this block cannot be caught by the suite running itself:
+    // softening the hard comparison to `ok(..., true)`, and turning the
+    // parser-load failure into a skip. Both make the suite PASS, which is exactly
+    // the shape of a gate that has been quietly disabled. So they are asserted the
+    // only way left — by reading this file. Odd, and better than the alternative,
+    // which is four known survivors on the check that found thirteen crashes.
+    const selfSrc = readFileSync(join(root, "tests/run.mjs"), "utf8");
+    ok("the offender count is compared to zero, not merely reported",
+       /is\(`every identifier resolves to a binding or a known global[\s\S]{0,220}?unresolved\.length, 0\);/.test(selfSrc));
+    ok("and a parser that will not load fails rather than skips",
+       /ok\(`the scope gate can load its parser[^`]*`, false\);/.test(selfSrc));
+  }
+}
+
+
+
+// ── "THIS WAS SOMETHING CALLED 'FOLK', WHICH DOESN'T EVEN EXIST" ─────
+//
+// Oliver, 18 Aug 2026, with a festival draft on screen:
+//
+//   "name": "TOV Festival",  "town": "Copenhagen",  "tier": "",
+//   "nearestStation": "Slagelse",
+//
+//   "If the name is wrong, and it doesn't exist, then just delete it."
+//   "the tier part should NEVER be left out."
+//   "the 'Folk' was something Perplexity found via web search btw."
+//
+// That last line is the diagnosis. The model did not invent a name from nothing:
+// the RESEARCH returned a different subject. Perplexity came back with pages about
+// something called Folk, and the draft went out named TOV Festival — a name that
+// appears in none of its own sources.
+{
+  const { nameFit, describeNameFit, sourceFit, auditEntry, shapeForLive, tierOf } = M;
+
+  // ── THE NAME NOTHING CORROBORATES ───────────────────────────────
+  const FOLK_URLS = ["https://folkfestival.dk/", "https://visitdenmark.dk/folk"];
+  const FOLK_SAID = {
+    "https://folkfestival.dk/": "The Folk festival in Slagelse, a music festival with camping and a lineup",
+    "https://visitdenmark.dk/folk": "Folk festival, music, tickets and lineup for the summer",
+  };
+  const tov = nameFit(FOLK_URLS, { name: "TOV Festival", saidByUrl: FOLK_SAID });
+  ok("not one source mentions the name the draft carries", tov.nameUnsourced);
+  is("and it says which word it looked for", tov.words.join(","), "tov");
+  ok("the note tells him to delete rather than to fix the fields",
+     /delete the draft/.test(describeNameFit(tov)));
+
+  // ── AND WHY sourceFit COULD NOT CATCH IT ────────────────────────
+  // The assertion that makes the one above worth having. sourceFit asks whether
+  // the pages are about the TYPE — for a festival, "festival musik lineup" — and
+  // pages about Folk contain every one of those words. So it reports the draft as
+  // properly researched. The type was right. The subject was wrong. Two different
+  // questions, and only one of them was being asked.
+  ok("the type check passes on the very same input",
+     !sourceFit(FOLK_URLS, { type: "festival", saidByUrl: FOLK_SAID }).subjectUnsourced);
+
+  // ── AND A CORRECT DRAFT IS NEVER FLAGGED ────────────────────────
+  ok("a draft named after what was read is fine",
+     !nameFit(FOLK_URLS, { name: "Folk Festival", saidByUrl: FOLK_SAID }).nameUnsourced);
+  // Half the internet writes "Glassalen" for "Restaurant Glassalen".
+  ok("the generic half of a name is not required",
+     !nameFit(["https://a.dk/"], { name: "Restaurant Glassalen", saidByUrl: { "https://a.dk/": "Glassalen in Tivoli reopened this spring" } }).nameUnsourced);
+  // Danish spelling, both ways round. Folding alone handles the diacritics, so the
+  // assertion that actually needs variantsOf is the one where the two spellings are
+  // DIFFERENT WORDS — mutation testing found that dropping variantsOf left the
+  // Møgeltønder case passing, because fold already maps ø to o.
+  ok("Møgeltønder and Mogeltonder are one name",
+     !nameFit(["https://a.dk/"], { name: "Møgeltønder", saidByUrl: { "https://a.dk/": "Mogeltonder is a village in South Jutland" } }).nameUnsourced);
+  // The case that actually needs variantsOf: the name IS the place, and the two
+  // spellings are different words rather than the same word with a diacritic.
+  // "Copenhagen Jazz" does not work as a test — variantsOf does not substitute
+  // inside a longer string, so that one passed on the word "jazz" and proved
+  // nothing, which mutation testing said plainly.
+  ok("a town named Copenhagen is found on a page saying København",
+     !nameFit(["https://a.dk/"], { name: "Copenhagen", saidByUrl: { "https://a.dk/": "København har mange barer" } }).nameUnsourced);
+  ok("and the other way round",
+     !nameFit(["https://a.dk/"], { name: "København", saidByUrl: { "https://a.dk/": "Copenhagen has many bars" } }).nameUnsourced);
+  // NEVER ON SILENCE. Not knowing what a page said is not evidence it said nothing.
+  ok("nothing read means no finding",
+     !nameFit(FOLK_URLS, { name: "TOV Festival", saidByUrl: {} }).nameUnsourced);
+  ok("no sources at all means no finding",
+     !nameFit([], { name: "TOV Festival", saidByUrl: FOLK_SAID }).nameUnsourced);
+  ok("and a name with nothing distinctive in it reports nothing",
+     !nameFit(FOLK_URLS, { name: "The Bar", saidByUrl: FOLK_SAID }).nameUnsourced);
+  // THREE CHARACTERS, NOT FOUR, and this is the whole reason his case is caught:
+  // distinctiveWords requires four, so "TOV Festival" produced no words at all and
+  // the check could not fire on the name that prompted it.
+  is("a three letter name is still a name", nameFit(FOLK_URLS, { name: "TOV", saidByUrl: FOLK_SAID }).words.join(","), "tov");
+  ok("while a whole-word match keeps it safe",
+     !nameFit(["https://a.dk/"], { name: "TOV", saidByUrl: { "https://a.dk/": "the tovshoj district" } }).nameUnsourced === false
+     || nameFit(["https://a.dk/"], { name: "TOV", saidByUrl: { "https://a.dk/": "the tovshoj district" } }).nameUnsourced);
+
+  // ── HIS DRAFT, THROUGH THE REAL PUBLISH SHAPE AND AUDIT ─────────
+  const HIS = {
+    name: "TOV Festival", scale: "", town: "Copenhagen", type: "Music", emoji: "",
+    dateStart: "", dateEnd: "", tier: "", nearestStation: "Slagelse",
+    ticketInfo: "The open rehearsal is free", camping: "", accommodationTip: "",
+  };
+  const shaped = shapeForLive("festival", HIS);
+
+  // ── A TIER IS NEVER SUPPLIED BY A FALLBACK ──────────────────────
+  // Worse than the gap he was pointing at: shapeForLive read
+  // `t.tier || "Worth Considering"`, so an unjudged entry published with GEMLYX'S
+  // OWN EDITORIAL RANK invented by a logical or — in the one field that is purely
+  // this product's opinion — and the publish path could never object, because from
+  // where it stood the tier was always filled.
+  is("an unjudged entry publishes with no rank rather than an invented one", shaped.tier, "");
+  is("and tierOf agrees there is none", tierOf(shaped), null);
+  // stripNonCode, because the comment explaining the removal QUOTES the line it
+  // removed — so a raw source scan found it and failed on correct code. Third time
+  // this exact trap has come up in this file; it is what stripNonCode is for.
+  const sc = stripNonCode(readFileSync(join(root, "src/utils/studioContent.js"), "utf8"));
+  is("the fallback is gone from both types", (sc.match(/tier: t\.tier \|\| "Worth Considering"/g) || []).length, 0);
+  // stripNonCode blanks string CONTENTS too, so `|| ""` reads as `||` followed by
+  // whitespace after stripping. The assertion below is therefore that the fallback
+  // exists and is empty, checked in two halves: the shape survives stripping, and
+  // shapeForLive's own output is the real proof that what it falls back to is "".
+  is("both types still have a fallback there", (sc.match(/tier: t\.tier \|\|/g) || []).length, 2);
+  is("and it is the empty string, measured on the output", shapeForLive("town", { name: "X", tier: "" }).tier, "");
+
+  const findings = auditEntry({ type: "festival", payload: shaped }).findings || [];
+  const worst = findings.filter(f => f.severity === "critical").map(f => f.field);
+  ok("an entry with no tier is blocked", worst.includes("tier"));
+  ok("and so is a station in another town", worst.includes("nearest stop"));
+
+  // ── 82 KM IS NOT THE NEAREST STATION ────────────────────────────
+  // The sentence-shaped check that already existed passes here, because "Slagelse"
+  // is a perfectly well-formed station name. It is just not that entry's station.
+  const stationNote = findings.find(f => f.field === "nearest stop" && f.severity === "critical");
+  ok("the finding measures the distance", /\b8\d km\b/.test(stationNote.detail));
+  ok("and names both places", /Copenhagen/.test(stationNote.detail) && /Slagelse/.test(stationNote.detail));
+  // MEASURED, so it cannot fire on a station it has no coordinate for.
+  const unknownStation = auditEntry({ type: "festival", payload: { ...shaped, nearestStation: "Nørreport" } }).findings || [];
+  ok("a station Gemlyx has no coordinate for reports nothing",
+     !unknownStation.some(f => f.field === "nearest stop" && f.severity === "critical"));
+  const sameTown = auditEntry({ type: "festival", payload: { ...shaped, town: "Slagelse" } }).findings || [];
+  ok("a station in the entry's own town is fine",
+     !sameTown.some(f => f.field === "nearest stop" && f.severity === "critical"));
+  // AND A LEGITIMATE NEXT-TOWN STATION IS NOT FLAGGED, which is why the bar is 25 km
+  // and not zero: Kliplev's nearest station really is in Aabenraa, and Dragør's
+  // really is in Copenhagen, eleven kilometres away. Mutation testing found the
+  // same-town case could not prove this — two identical towns are zero km apart, so
+  // any positive threshold passes it.
+  const nextTown = auditEntry({ type: "festival", payload: { ...shaped, town: "Dragør", nearestStation: "Copenhagen" } }).findings || [];
+  ok("a station in the next town along is a real answer, not a finding",
+     !nextTown.some(f => f.field === "nearest stop" && f.severity === "critical"));
+
+  // ── AND A RANKED ENTRY PASSES ───────────────────────────────────
+  const ranked = auditEntry({ type: "festival", payload: { ...shaped, tier: "Worth Considering", nearestStation: "" } }).findings || [];
+  ok("a judged entry is not scolded for its tier", !ranked.some(f => f.field === "tier"));
+  const nonsense = auditEntry({ type: "festival", payload: { ...shaped, tier: "Pretty good" } }).findings || [];
+  ok("but a tier Gemlyx does not recognise is", nonsense.some(f => f.field === "tier" && f.severity === "critical"));
+  // A type with no tier field at all is not asked for one.
+  const noTierType = auditEntry({ type: "food", payload: { name: "Aro", location: "Aarhus" } }).findings || [];
+  ok("a type that carries no tier is left alone", !noTierType.some(f => f.field === "tier"));
+}
+
+// ── "SURELY IT'S ABLE TO GIVE SOME WARNINGS+" ───────────────────────
+// Oliver, 18 Aug 2026, on a live guide: "I feel like the weather is not properly
+// implemented. It shows the weather forecast, but nothing else."
+//
+// The forecast badge could say exactly one thing beyond a temperature — "rain
+// likely" — because weatherBadge reduced four MET measurements per day to a
+// boolean and dropped the rest. These assertions are about the RULE, not the
+// wording: every warning has to cite the number it came from, and no warning may
+// exist for a quantity nobody measured.
+{
+  const { forecastWarnings, normalsWarnings, dayWarnings, tripWeatherWarning,
+          beltCrossing, dayCrossings, crossingWarning, weatherBadge, dayWeather,
+          WIND_STRONG, WIND_GALE, WIND_STORM, RAIN_WET, RAIN_HEAVY, COLD_WET_C,
+          HEAT_C, GREAT_BELT_TRAILER_MS, GREAT_BELT_CLOSED_MS, FORECAST, NORMALS } = M;
+
+  const fc = (over = {}) => ({ source: FORECAST, temp: 14, risk: "none", ...over });
+
+  // ── THE MEASUREMENTS SURVIVE THE TRIP THROUGH dayWeather ──────────
+  // The actual hole. Asserted end to end through the real function with a canned
+  // API response, because the bug was not in any rule — it was that the numbers
+  // never reached one.
+  const apiReply = {
+    forecast: [{ date: "2026-09-14", temperature_c: 12, wind_speed_ms: 15.4, condition: "lightrain", precipitation_mm: 6.2 }],
+    sources: { met: [{ date: "2026-09-14", temp_c: 12, wet: true }], openweathermap: [{ date: "2026-09-14", temp_c: 13, wet: true }] },
+  };
+  const merged = await dayWeather({ point: { lat: 55.4, lon: 10.4 }, date: "2026-09-14", daysOut: 2, fetchJson: async () => apiReply });
+  is("the merge path carries MET's wind through", merged.windMs, 15.4);
+  is("and its millimetres", merged.rainMm, 6.2);
+  is("and its symbol code", merged.symbol, "lightrain");
+  is("while the temperature still comes from the merge", merged.temp, 13);
+  // THE SINGLE SOURCE PATH TOO. An older deployed api/weather.js sends no
+  // `sources` key at all, and that path was a separate return statement.
+  const single = await dayWeather({ point: { lat: 55.4, lon: 10.4 }, date: "2026-09-14", daysOut: 2, fetchJson: async () => ({ forecast: apiReply.forecast }) });
+  is("the single-source path carries wind too", single.windMs, 15.4);
+  is("and millimetres", single.rainMm, 6.2);
+  // AND A DATE MET HAS NO BUCKET FOR INVENTS NOTHING.
+  // A DATE NOTHING HAS A BUCKET FOR RETURNS NO BADGE AT ALL, which is stronger
+  // than a badge with no wind on it: there is no temperature to show either, and
+  // a card with an empty forecast on it is the "confident icon nobody checked"
+  // this file exists to prevent.
+  const noSlot = await dayWeather({ point: { lat: 55.4, lon: 10.4 }, date: "2026-09-20", daysOut: 6, fetchJson: async () => apiReply });
+  is("a day MET has no bucket for produces no badge", noSlot, null);
+  is("and no warnings", dayWarnings(noSlot).length, 0);
+  // The narrower case that CAN happen: the merge answers for a date MET's own
+  // ten buckets do not cover, so there is a temperature and no wind. The badge
+  // exists, and every wind rule stays silent.
+  const mergeOnly = await dayWeather({
+    point: { lat: 55.4, lon: 10.4 }, date: "2026-09-20", daysOut: 6,
+    fetchJson: async () => ({ forecast: apiReply.forecast, sources: { openweathermap: [{ date: "2026-09-20", temp_c: 11, wet: false }], weatherapi: [{ date: "2026-09-20", temp_c: 11, wet: false }] } }),
+  });
+  is("a merge without MET still gives a temperature", mergeOnly.temp, 11);
+  is("but carries no wind", mergeOnly.windMs, undefined);
+  ok("and no wind warning is invented from it", !dayWarnings(mergeOnly, { mode: "bike" }).some(w => w.id.startsWith("wind")));
+
+  // ── EVERY WARNING CITES ITS OWN NUMBER ────────────────────────────
+  // The rule this file is built on, checked across every branch at once rather
+  // than trusted per rule. A warning with no measurement is the "confident icon
+  // nobody checked" this product exists to not be.
+  const everyWarning = [
+    ...forecastWarnings(fc({ windMs: 21, rainMm: 14, temp: -7, symbol: "heavysnowandthunder" }), { mode: "bike" }),
+    ...forecastWarnings(fc({ windMs: 12, rainMm: 5, temp: 4, symbol: "fog" }), { mode: "bike" }),
+    ...forecastWarnings(fc({ windMs: 3, temp: 30, symbol: "clearsky_day" })),
+    ...forecastWarnings(fc({ windMs: 9, rainMm: 5, temp: 12 }), { mode: "bike" }),
+    ...normalsWarnings({ source: NORMALS, highC: 4, lowC: -2, wetShare: 0.62 }),
+    ...normalsWarnings({ source: NORMALS, highC: 26, lowC: 15 }),
+    crossingWarning({ crossing: "great-belt", windMs: 17, mode: "camper" }),
+    crossingWarning({ crossing: "great-belt", windMs: 27, mode: "car" }),
+    crossingWarning({ crossing: "bornholm-ferry", windMs: 16, mode: "car" }),
+  ].filter(Boolean);
+  ok("there are warnings to check at all", everyWarning.length >= 12);
+  ok("every warning carries a measurement",
+     everyWarning.every(w => w.measured && Object.values(w.measured).some(v => v !== null && v !== undefined)));
+  // AND THE NUMBER IN THE TEXT IS THE NUMBER IT MEASURED. A warning whose
+  // sentence and evidence disagree is worse than no warning: it looks checked.
+  ok("and states that measurement in its own sentence",
+     everyWarning.every(w => Object.values(w.measured)
+       .filter(v => typeof v === "number")
+       .every(v => w.text.includes(String(v)))));
+  ok("and every level is one of the two", everyWarning.every(w => w.level === "warn" || w.level === "watch"));
+
+  // ── A MISSING MEASUREMENT IS NOT A ZERO ───────────────────────────
+  // Number(null) is 0, and 0 is a finite temperature, a finite wind speed and a
+  // finite number of millimetres. Fifth appearance of this trap in this codebase.
+  is("no measurements, no warnings", forecastWarnings(fc({ windMs: null, rainMm: null, temp: null })).length, 0);
+  is("undefined is not calm either", forecastWarnings(fc({ windMs: undefined, rainMm: undefined, temp: undefined })).length, 0);
+  is("and an empty string is not freezing", forecastWarnings(fc({ temp: "" })).length, 0);
+  // A REAL ZERO STILL WORKS, which is the other half and the reason the guard
+  // cannot just be a truthiness check: 0° is genuinely freezing.
+  ok("but a measured 0° is frost", forecastWarnings(fc({ temp: 0 })).some(w => w.id === "frost"));
+
+  // ── WIND IS MODE-AWARE, BECAUSE THE SAME WIND IS A DIFFERENT DAY ──
+  // 12 m/s is a footnote in a car and the character of the day on a bike. This is
+  // the mode-blindness returnLeg was caught in, where 85 km of cycling was called
+  // "a manageable half day".
+  const strongBike = forecastWarnings(fc({ windMs: 12 }), { mode: "bike" });
+  const strongCar = forecastWarnings(fc({ windMs: 12 }), { mode: "car" });
+  ok("force 6 warns a cyclist", strongBike.some(w => w.id === "wind-strong"));
+  is("and says nothing to a driver", strongCar.length, 0);
+  is("force 7 is a warning on a bike",
+     forecastWarnings(fc({ windMs: 15 }), { mode: "bike" }).find(w => w.id === "wind-gale").level, "warn");
+  is("and only a watch in a car",
+     forecastWarnings(fc({ windMs: 15 }), { mode: "car" }).find(w => w.id === "wind-gale").level, "watch");
+  ok("force 8 warns everybody", forecastWarnings(fc({ windMs: 18 })).some(w => w.id === "wind-storm" && w.level === "warn"));
+  // ONE WIND WARNING, NOT FOUR. The branches are exclusive, so a gale does not
+  // also report as strong and as fresh.
+  is("a gale produces exactly one wind warning",
+     forecastWarnings(fc({ windMs: 18, rainMm: 8 }), { mode: "bike" }).filter(w => w.id.startsWith("wind")).length, 1);
+  // AND THE THRESHOLDS ARE BEAUFORT'S, so the boundary is inclusive at the bound
+  // and silent just below it.
+  ok("exactly at force 6 fires", forecastWarnings(fc({ windMs: WIND_STRONG }), { mode: "bike" }).some(w => w.id === "wind-strong"));
+  ok("just under it does not", !forecastWarnings(fc({ windMs: WIND_STRONG - 0.1 }), { mode: "bike" }).some(w => w.id.startsWith("wind")));
+  // ── AND THE BOUNDS ARE THE SCALE'S, NOT WHATEVER THE FILE SAYS ────
+  // The two assertions above read WIND_STRONG on both sides, so moving the
+  // constant moves the test with it and they pass on any number at all. Mutation
+  // testing found exactly that: 10.8 → 12 survived. These are the literal
+  // Beaufort boundaries in m/s, which is the whole reason the file does not use
+  // round numbers, so they are written out rather than referenced.
+  is("force 6 begins at Beaufort's own figure", WIND_STRONG, 10.8);
+  is("and force 7 at its own", WIND_GALE, 13.9);
+  is("and force 8", WIND_STORM, 17.2);
+  ok("11 m/s is force 6 on a bike", forecastWarnings(fc({ windMs: 11 }), { mode: "bike" }).some(w => w.id === "wind-strong"));
+  ok("and 10 m/s is an ordinary Danish day", !forecastWarnings(fc({ windMs: 10 }), { mode: "bike" }).some(w => w.id.startsWith("wind")));
+
+  // ── RAIN IS MILLIMETRES, NOT A BOOLEAN ────────────────────────────
+  // The whole complaint. 1mm and 18mm produced the identical badge.
+  const drizzle = forecastWarnings(fc({ rainMm: 1.2, risk: "high" }));
+  const soaked = forecastWarnings(fc({ rainMm: 14 }));
+  is("1mm is not worth a warning", drizzle.filter(w => w.id.startsWith("rain")).length, 0);
+  is("14mm is", soaked.find(w => w.id === "rain-heavy").level, "warn");
+  is("and 5mm is the quieter one", forecastWarnings(fc({ rainMm: 5 })).find(w => w.id === "rain").level, "watch");
+  ok("the heavy one is not also the light one", !soaked.some(w => w.id === "rain"));
+  // ── AND A GOOD DANISH SUMMER DAY IS NOT AN EMERGENCY ──────────────
+  // HEAT_C was mutated from 28 to 20 and survived, because nothing here asserted
+  // that an ordinary warm day says nothing. Denmark's average July high is around
+  // 22, so a threshold at 20 would fire on most of the summer and the warning
+  // would mean nothing at all — which is worse than not having it.
+  is("the heat bar is where DMI puts it", HEAT_C, 28);
+  is("22° is just a nice day", forecastWarnings(fc({ temp: 22, windMs: 4 })).length, 0);
+  is("and so is 26°", forecastWarnings(fc({ temp: 26, windMs: 4 })).length, 0);
+  ok("29° is not", forecastWarnings(fc({ temp: 29, windMs: 4 })).some(w => w.id === "heat"));
+  // AND IT NEVER CALLS A SIX HOUR WINDOW A DAILY TOTAL. api/weather.js takes
+  // precipitation_amount from next_6_hours at the slot nearest midday, so "14mm
+  // today" would be a claim about a number nobody computed.
+  ok("the rain line says which part of the day it measured",
+     soaked.find(w => w.id === "rain-heavy").text.includes("middle of the day"));
+
+  // ── THE DANISH ONE ────────────────────────────────────────────────
+  // 4° and wet is worse to walk around in than -8° and dry, and it is most of a
+  // Danish November. It needs BOTH numbers or it is just an ordinary cold day.
+  ok("cold and wet together warns", forecastWarnings(fc({ temp: 4, rainMm: 3 })).some(w => w.id === "cold-wet"));
+  ok("cold and dry does not", !forecastWarnings(fc({ temp: 4, rainMm: 0 })).some(w => w.id === "cold-wet"));
+  ok("mild and wet does not", !forecastWarnings(fc({ temp: 15, rainMm: 8 })).some(w => w.id === "cold-wet"));
+  // risk:"high" counts as wet even under 4mm, because the boolean is the only
+  // thing the merge across three sources agrees on.
+  ok("a wet vote counts without a millimetre figure", forecastWarnings(fc({ temp: 3, risk: "high" })).some(w => w.id === "cold-wet"));
+
+  // ── TEN YEAR AVERAGES ARE A DIFFERENT CLAIM ───────────────────────
+  // The distinction weather.js already protects on the badge, held here too: a
+  // normal describes a time of year and must never be given a day's verbs.
+  const seasonal = normalsWarnings({ source: NORMALS, highC: 5, lowC: -1, wetShare: 0.7 });
+  ok("a wet week is worth saying", seasonal.some(w => w.id === "season-wet"));
+  ok("every seasonal line says 'normally'", seasonal.every(w => /normall?y/i.test(w.text)));
+  ok("and none of them says 'expect'", seasonal.every(w => !/\bexpect\b/i.test(w.text)));
+  // NO WIND WARNING ON THIS PATH, EVER. DMI's climate record carries mean daily
+  // max, mean daily min and the count of days over 1mm. There is no wind in it,
+  // so a file whose rule is "cite your measurement" cannot warn about wind here.
+  ok("a normal never warns about wind",
+     !normalsWarnings({ source: NORMALS, highC: 5, lowC: -1, wetShare: 0.7, windMs: 25 }).some(w => w.id.includes("wind")));
+  // And the two paths cannot leak into each other. Each badge below carries the
+  // OTHER path's fields as well as its own, because a badge with only its own
+  // fields proves nothing: every rule on the far side reads a key that is not
+  // there and stays silent whether the guard exists or not. Both of these were
+  // vacuous until mutation testing removed the guards and nothing failed.
+  is("forecast rules ignore a normals badge",
+     forecastWarnings({ source: NORMALS, windMs: 25, temp: -9, rainMm: 20, highC: 4, lowC: -2, wetShare: 0.9 }).length, 0);
+  is("normals rules ignore a forecast badge",
+     normalsWarnings({ source: FORECAST, windMs: 25, temp: -9, rainMm: 20, highC: 4, lowC: -2, wetShare: 0.9 }).length, 0);
+
+  // ── THE CROSSING ──────────────────────────────────────────────────
+  // The one warning that changes a plan rather than a coat. Zealand to Funen has
+  // exactly one fixed road link and its operator publishes what wind does to it.
+  is("Zealand to Funen is the Great Belt", beltCrossing("Zealand", "Funen"), "great-belt");
+  is("and it does not matter which way round", beltCrossing("Funen", "Zealand"), "great-belt");
+  is("Zealand to Jutland crosses it too", beltCrossing("Zealand", "Jutland"), "great-belt");
+  is("Bornholm is a ferry", beltCrossing("Zealand", "Bornholm"), "bornholm-ferry");
+  is("staying put is not a crossing", beltCrossing("Zealand", "Zealand"), "");
+  // THE CASE THAT NEEDS THE GUARD. Zealand-to-Zealand falls out of the pair table
+  // on its own, so it proved nothing; the Bornholm branch matches on EITHER side
+  // alone, so a whole trip spent on Bornholm was reported as crossing to it.
+  // Mutation testing found this: removing `a === b` survived.
+  is("a trip that stays on Bornholm crosses nothing", beltCrossing("Bornholm", "Bornholm"), "");
+  // WHERE NOTHING HAS BEEN CHECKED, NOTHING IS CLAIMED. The Little Belt has two
+  // bridges and no verified table behind it, so generalising the Great Belt's
+  // numbers onto it would be inventing a figure with a citation attached.
+  is("the Little Belt gets no warning", beltCrossing("Funen", "Jutland"), "");
+  is("nor Lolland-Falster", beltCrossing("Zealand", "Lolland-Falster"), "");
+  is("an unplaceable day is not a crossing", beltCrossing(null, "Funen"), "");
+
+  // Their own published table: trailers restricted from 15 m/s, closed above 25.
+  is("the trailer threshold is the operator's", GREAT_BELT_TRAILER_MS, 15);
+  is("and so is the closure", GREAT_BELT_CLOSED_MS, 25);
+  is("under it, nothing is said", crossingWarning({ crossing: "great-belt", windMs: 12, mode: "car" }), null);
+  is("a camper at 16 m/s is warned", crossingWarning({ crossing: "great-belt", windMs: 16, mode: "camper" }).level, "warn");
+  is("a car at 16 m/s is only told", crossingWarning({ crossing: "great-belt", windMs: 16, mode: "car" }).level, "watch");
+  ok("above 25 the bridge is closed to everyone",
+     crossingWarning({ crossing: "great-belt", windMs: 27, mode: "car" }).id === "crossing-closed");
+  // The Bornholm one states no threshold, because none has been checked for those
+  // sailings — only that there is no bridge, which is true without a number.
+  const bh = crossingWarning({ crossing: "bornholm-ferry", windMs: 16, mode: "car" });
+  ok("the ferry warning says there is no bridge", /no bridge/i.test(bh.text));
+  is("and it is quiet in ordinary wind", crossingWarning({ crossing: "bornholm-ferry", windMs: 9, mode: "car" }), null);
+  // A crossing with no wind measured produces nothing rather than a hedge. The
+  // Great Belt case falls out through NaN comparisons whether the guard is there
+  // or not, so it proves nothing; the ferry case is the one that needs it, because
+  // its own test is `wind < WIND_GALE` and NaN fails that comparison too — which
+  // means without the guard it warned about "NaN m/s of wind". Found by mutation.
+  is("no wind figure, no crossing warning", crossingWarning({ crossing: "great-belt", windMs: null, mode: "camper" }), null);
+  is("and none on the ferry either", crossingWarning({ crossing: "bornholm-ferry", windMs: null, mode: "car" }), null);
+  is("nor from an empty string", crossingWarning({ crossing: "bornholm-ferry", windMs: "", mode: "car" }), null);
+
+  // ── WHICH DAY THE CROSSING IS ON ──────────────────────────────────
+  // The END of day N, not the morning of N+1: the same rule overnightMove uses
+  // for where somebody sleeps.
+  is("the move belongs to the day it happens on",
+     dayCrossings(["Zealand", "Funen", "Funen"]), { 0: "great-belt" });
+  is("two crossings are both found",
+     dayCrossings(["Zealand", "Funen", "Zealand"]), { 0: "great-belt", 1: "great-belt" });
+  is("a hole in the middle is not guessed through",
+     dayCrossings(["Zealand", null, "Funen"]), {});
+  is("one day cannot cross anything", dayCrossings(["Zealand"]), {});
+  is("and neither can no days", dayCrossings(null), {});
+
+  // ── ORDERING, SO A UI SHOWING ONE SHOWS THE RIGHT ONE ─────────────
+  const mixed = dayWarnings(fc({ windMs: 12, rainMm: 14, temp: 12, symbol: "fog" }), { mode: "bike" });
+  ok("there is more than one to order", mixed.length >= 3);
+  const firstWatch = mixed.findIndex(w => w.level === "watch");
+  ok("every warn comes before every watch",
+     firstWatch === -1 || mixed.slice(firstWatch).every(w => w.level === "watch"));
+  is("nothing at all when nothing crossed a threshold", dayWarnings(fc({ windMs: 4, rainMm: 0, temp: 17, symbol: "partlycloudy_day" })).length, 0);
+  is("and a null day is not a crash", dayWarnings(null).length, 0);
+  // The crossing rides on the forecast path only: a ten year average cannot say
+  // what the wind will do on the bridge that day.
+  // A ten year average may not warn about a bridge on a specific day. The badge
+  // below carries a wind figure it would never have today, on purpose: that is
+  // the shape that exists the moment somebody adds a wind normal, and it is the
+  // only shape that can prove the guard rather than the missing field. Without
+  // it the mutant survived.
+  is("a normals day gets no crossing warning",
+     dayWarnings({ source: NORMALS, highC: 5, lowC: 0, wetShare: 0.6, windMs: 18 }, { crossing: "great-belt", mode: "camper" })
+       .filter(w => w.id.startsWith("crossing")).length, 0);
+
+  // ── ONE LINE FOR THE WHOLE TRIP ───────────────────────────────────
+  // Five rainy days is one fact and five chips is a wall. Deduplicated by rule,
+  // and it names the days, because "rain at some point" is unpackable.
+  const trip = [fc({ rainMm: 14 }), fc({ windMs: 4, temp: 16 }), fc({ rainMm: 12 })];
+  const line = tripWeatherWarning(trip, { mode: "walk" });
+  ok("the trip line names both wet days", /Days 1 and 3/.test(line));
+  is("and says the rule once", (line.match(/around the middle of the day/g) || []).length, 1);
+  is("nothing worth saying is an empty string, not a filler sentence",
+     tripWeatherWarning([fc({ temp: 17, windMs: 3 })], { mode: "walk" }), "");
+  ok("watch-level warnings stay off the trip line",
+     tripWeatherWarning([fc({ rainMm: 5 })], { mode: "walk" }) === "");
+  // ── A NORMALS-ONLY TRIP CARRIES NO WARNING LINE, AND THAT IS RIGHT ──
+  // Every seasonal rule is a "watch", so none of them reaches this line. That
+  // used to be hidden behind a branch suppressing day numbers on seasonal
+  // warnings, which mutation testing showed was unreachable — deleted, and the
+  // real behaviour asserted instead. Nothing is lost: weather.js's normalsNote
+  // carries the trip-level sentence for a distant trip, and the seasonal facts
+  // render as watch chips on the day cards.
+  const seasonTrip = tripWeatherWarning([{ source: NORMALS, highC: 4, lowC: -3, wetShare: 0.8 }], {});
+  is("a trip beyond the forecast has no warning line of its own", seasonTrip, "");
+  ok("and if one is ever promoted it cannot carry a day number", !/Day \d/.test(seasonTrip));
+  is("and there is no crash on a ragged array", tripWeatherWarning([null, undefined, fc({ temp: 18 })], {}), "");
+
+  // ── AND THE BADGE STILL DOES ITS OLD JOB ──────────────────────────
+  // weatherBadge gained three fields. The regression worth guarding is that it
+  // did not lose any: a normal with no wet-day record must not report "rain is
+  // rare then", which is what Number(null) === 0 would have made it say.
+  const noShare = weatherBadge({ source: NORMALS, normals: { high_c: 9, low_c: 3, wet_day_share: null, years: 10, available: true } });
+  is("an unrecorded wet share stays unknown", noShare.wetShare, undefined);
+  is("and produces no seasonal rain claim", normalsWarnings({ ...noShare }).filter(w => w.id === "season-wet").length, 0);
+  const realShare = weatherBadge({ source: NORMALS, normals: { high_c: 9, low_c: 3, wet_day_share: 0, years: 10, available: true } });
+  is("a measured zero share is kept as zero", realShare.wetShare, 0);
+
+  // ── THE API'S OWN THRESHOLD IS THE SAME ONE ───────────────────────
+  // api/weather.js warns about the current hour for the Studio strip and cannot
+  // import this module — it would drag the route and geography tables into a
+  // serverless function. So the two halves are held together by this assertion
+  // instead, the same arrangement FORECAST_HORIZON_DAYS has with the ten-bucket
+  // slice. It was 14, a round number that agreed with nothing.
+  const apiWeather = readFileSync(join(root, "api/weather.js"), "utf8");
+  ok("the API's wind threshold is the shared force 7 bound",
+     new RegExp(`details\\.wind_speed >= ${WIND_GALE}\\b`).test(apiWeather));
+  // AND IT NO LONGER CALLS THE MEAN A GUST. locationforecast/compact carries no
+  // gust figure, so "Vindstød omkring X m/s" over details.wind_speed named a
+  // quantity nobody had measured, and overstated it.
+  ok("it does not claim a gust it never measured", !/vindst/i.test(apiWeather.split("export default")[0].replace(/\/\/[^\n]*/g, "")));
+  ok("and the reader-facing text is not in Danish",
+     !/detaljer:/.test(apiWeather) && !/Kraftig (vind|nedbør)/.test(apiWeather));
+  const strip = readFileSync(join(root, "src/components/WeatherStrip.jsx"), "utf8");
+  ok("and the component reads the key the API actually sends", /w\.detail\b/.test(strip) && !/w\.detaljer/.test(strip));
+
+  // ── WIRED, NOT JUST WRITTEN ───────────────────────────────────────
+  // Four things in this codebase have been built, tested and then never called:
+  // preferAffordable, dayTripClaim, the budget gate and the arrival resolver at
+  // two of its three call sites. This is the check that stops the fifth.
+  const guidePage = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const gp = stripNonCode(guidePage);
+  ok("the guide page computes the day's warnings", /dayWarnings\(/.test(gp));
+  // BOTH HALVES. `/wxWarnings\.map\(/` alone passed with the whole block behind
+  // `{false && (`, which is a rendered feature that renders nothing. Found by
+  // mutation, and it is the same shape as the four things in this codebase that
+  // were built, tested and never called.
+  ok("and renders them", /wxWarnings\.map\(/.test(gp));
+  ok("behind a real condition rather than a dead one", /\{wxWarnings\.length > 0 && \(/.test(gp));
+  ok("and knows which day crosses a belt", /dayCrossings\(/.test(gp));
+  ok("and hands the warnings the traveller's own mode", /mode:\s*tripMode/.test(gp));
+  const appSrc = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
+  // ── COMPUTED IS NOT THE SAME AS USED ──────────────────────────────
+  // `/tripWeatherWarning\(/` alone passed with the call still there and its
+  // result thrown away — mutation testing replaced the return with the old
+  // rain-only sentence and nothing failed. Four things in this codebase have
+  // been built, tested and never called, and one of them was a value computed
+  // into a local and then dropped on the floor exactly like this.
+  //
+  // The variable name is READ OUT OF THE SOURCE rather than written here, so a
+  // rename does not turn the check into a lie and the assertion is about the
+  // dataflow rather than about a spelling.
+  ok("the build path puts them in the trip note", /tripWeatherWarning\(/.test(appSrc));
+  const wxFn = functionBody(appSrc, "const fetchGuideWeather");
+  ok("the weather pass is findable", !!wxFn && wxFn.length > 200);
+  if (wxFn) {
+    const holds = (wxFn.match(/const (\w+) = tripWeatherWarning\(/) || [])[1];
+    ok("the trip warning is assigned to something", !!holds);
+    ok("and that value is returned rather than computed and dropped",
+       !!holds && new RegExp(`return [^;]*\\b${holds}\\b`).test(wxFn));
+  }
+  ok("and passes the mode into the weather pass", /fetchGuideWeather\(parsed\.days, arrivalDate, freshGeo, travelMode\)/.test(appSrc));
+  // THE HOISTED BADGE. Ten copies of `(freshWeather?.[dayIdx] || day.weather)`
+  // hid a real crash: one of them read `day.weather.years` instead of the
+  // resolved badge's, so a day whose refresh produced a normals badge while the
+  // saved guide had none hit null.years and took the page down on render.
+  is("the day's badge is read once, not ten times",
+     (gp.match(/freshWeather\?\.\[dayIdx\] \|\| day\.weather/g) || []).length, 1);
+  ok("and nothing reaches through it to the stale one", !/day\.weather\.years/.test(gp));
+}
+
+// ── EVERY MODEL THE SOURCE SENDS IS PRICED ──────────────────────────
+//
+// Found 18 Aug 2026, answering Oliver's question about whether non-subscribers
+// should get fewer features. That question needs a cost per guide, and the meter
+// built to report one could not, for a reason nothing anywhere pointed at:
+//
+//   askClaude's `model` argument is "claude-opus-4-8" at three call sites, and
+//   they are the three most expensive calls the product makes — the main guide
+//   writer, its retry, and one per DAY of the trip inside enrichGuideDays.
+//   PRICES.models had no entry for it. So priceTokens returned null, all three
+//   recorded as `unpriced`, and EVERY guide run ever measured reported
+//   complete:false with its biggest lines missing from the total.
+//
+// The all-or-nothing rule did its job — the figure said "at least" rather than
+// lying — but a meter that can only ever say "at least" is not a meter, and the
+// cause was one absent line in one object.
+//
+// ── WHY THIS IS AST AND NOT A GREP ──────────────────────────────────
+// A string search for /"claude-[a-z0-9-]+"/ would have found this one, and it
+// would also fire on a model name in a comment, in a prompt, in a UI label, or
+// in one of this file's own explanations — which is how the last grep-based
+// check in this suite produced 309 false positives and got replaced by real
+// analysis. What matters is not that a model name appears somewhere. It is that
+// a model name is PASSED AS THE MODEL, which is a position in a call.
+//
+// The hard part is the one the earlier version of this comment got wrong: a
+// literal is checkable and a variable is not. A dynamic model name defeats the
+// gate entirely, so it fails rather than being skipped.
+{
+  const { PRICES, startRun, endRun, recordModelCall, recordRequestCall, summarise, __reset } = M;
+  let parse = null;
+  try { parse = (await import("@babel/parser")).parse; }
+  catch (e) { ok(`the price gate can load its parser — ${String(e && e.message).slice(0, 80)}`, false); }
+
+  if (parse) {
+    const files = [
+      "src/App.jsx", "src/utils/aiClient.js", "src/pages/GuidePage.jsx",
+      ...readdirSync(join(root, "src/utils")).filter(f => f.endsWith(".js")).map(f => "src/utils/" + f),
+    ];
+    const sent = new Set();
+    const dynamic = [];
+    // Where a model name is a model name: the third argument of askClaude, and
+    // the second of recordModelCall, which is the function that actually reaches
+    // the price table.
+    const MODEL_ARG = { askClaude: 2, recordModelCall: 1 };
+    for (const rel of [...new Set(files)]) {
+      const code = readFileSync(join(root, rel), "utf8");
+      let ast;
+      try { ast = parse(code, { sourceType: "module", plugins: ["jsx"], errorRecovery: true }); }
+      catch { ok(`the price gate can parse ${rel}`, false); continue; }
+      // A plain walk rather than traverse: this only needs CallExpression nodes
+      // and their arguments, with no scope question to answer.
+      const seen = new Set();
+      const walk = (node) => {
+        if (!node || typeof node !== "object" || seen.has(node)) return;
+        seen.add(node);
+        if (node.type === "CallExpression") {
+          const name = node.callee?.type === "Identifier" ? node.callee.name
+            : node.callee?.type === "MemberExpression" && node.callee.property?.type === "Identifier" ? node.callee.property.name
+            : "";
+          const at = MODEL_ARG[name];
+          if (at !== undefined) {
+            const arg = node.arguments?.[at];
+            if (arg && arg.type === "StringLiteral") sent.add(arg.value);
+            // ── WHERE A NON-LITERAL IS A BUG, AND WHERE IT IS THE DESIGN ──
+            // At an askClaude CALL SITE a runtime model name defeats this gate
+            // completely: nothing here can know what string arrives, so the run
+            // could be un-priced again with no test failing. That is reported.
+            //
+            // At recordModelCall it is the opposite. aiClient.js line 34 is
+            // `recordModelCall("claude", model, data?.usage)`, where `model` is
+            // askClaude's own parameter — the sink receiving exactly the values
+            // this gate already checks at the source. Flagging it would be
+            // demanding a literal in the one place a literal would be wrong, and
+            // the gate would have to be switched off to satisfy it.
+            //
+            // So the set of names that can reach the price table is: every
+            // askClaude call-site literal, askClaude's default, and askOpenAI's
+            // hardcoded model. All three are collected. The forwarding is
+            // asserted separately below, so a future edit that sends something
+            // else entirely into the sink still fails.
+            else if (arg && name === "askClaude" && (arg.type === "Identifier" || arg.type === "TemplateLiteral" || arg.type === "ConditionalExpression" || arg.type === "MemberExpression" || arg.type === "LogicalExpression")) {
+              dynamic.push(`${rel}:${arg.loc?.start?.line} ${name}`);
+            }
+          }
+        }
+        for (const k of Object.keys(node)) {
+          const v = node[k];
+          if (Array.isArray(v)) v.forEach(walk);
+          else if (v && typeof v === "object" && typeof v.type === "string") walk(v);
+        }
+      };
+      walk(ast.program);
+    }
+
+    // askClaude's own default lives in its signature, so it never appears as an
+    // argument at any call site and would be the one name this gate could miss.
+    // It is the model most of the app runs on.
+    const defaulted = (readFileSync(join(root, "src/utils/aiClient.js"), "utf8")
+      .match(/askClaude = async \([^)]*model = "([^"]+)"/) || [])[1];
+    ok("askClaude's default model is readable", !!defaulted);
+    if (defaulted) sent.add(defaulted);
+    // askOpenAI hardcodes its model in the request body rather than taking it as
+    // an argument, so it is read the same way.
+    const openai = (readFileSync(join(root, "src/utils/aiClient.js"), "utf8").match(/model: "(gpt-[^"]+)"/) || [])[1];
+    ok("askOpenAI's model is readable", !!openai);
+    if (openai) sent.add(openai);
+
+    ok("the gate found the models at all", sent.size >= 3);
+    // THE FORWARDING, asserted so the reasoning above cannot quietly stop being
+    // true: the Claude sink must receive askClaude's own `model` parameter and
+    // not some other value the gate has never seen.
+    // NOT stripNonCode here, and the reason is worth stating because using it was
+    // the first attempt and it silently made both assertions unfalsifiable.
+    // stripNonCode blanks STRING CONTENTS as well as comments — that is the point
+    // of it, so a source-assertion cannot be satisfied by a string that merely
+    // quotes the code — and the thing being checked here IS a string argument.
+    // Every one of these matched nothing and passed as "no violation found".
+    //
+    // So: comment lines dropped by hand, which is all the protection this
+    // particular check needs, and strings left intact.
+    const aiSrc = readFileSync(join(root, "src/utils/aiClient.js"), "utf8")
+      .split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    ok("the Claude sink is handed askClaude's own model argument",
+       /recordModelCall\("claude",\s*model\s*,/.test(aiSrc));
+    ok("and the OpenAI sink its own hardcoded one",
+       /recordModelCall\("openai",\s*"gpt-[^"]+"\s*,/.test(aiSrc));
+    // THE GATE. Every model name the source actually sends has a rate, both
+    // halves of it, or the run it appears in cannot be costed.
+    const unpriced = [...sent].filter(m => PRICES.models[m]?.in == null || PRICES.models[m]?.out == null);
+    is(`every model the source sends is priced${unpriced.length ? " — missing: " + unpriced.join(", ") : ""}`, unpriced.length, 0);
+    is(`and no call site picks its model at runtime${dynamic.length ? " — " + dynamic.slice(0, 4).join(", ") : ""}`, dynamic.length, 0);
+    // AND THE ONE THAT WAS MISSING IS NAMED, so this cannot pass by the model
+    // being renamed out of the source rather than priced.
+    ok("the guide writer's model is among them", sent.has("claude-opus-4-8"));
+    ok("and it costs what its own published page says", PRICES.models["claude-opus-4-8"].in === 5 && PRICES.models["claude-opus-4-8"].out === 25);
+
+    // ── AND THE METER NOW COMPLETES A GUIDE-SHAPED RUN ────────────────
+    // The whole point, checked on the real functions rather than on the table:
+    // the three calls that were unpriced now report a complete run.
+    __reset();
+    startRun("guide");
+    recordModelCall("claude", "claude-opus-4-8", { input_tokens: 12000, output_tokens: 4000 });
+    recordModelCall("claude", "claude-sonnet-5", { input_tokens: 2000, output_tokens: 500 });
+    recordModelCall("openai", "gpt-5.6-sol", { input_tokens: 3000, output_tokens: 900 });
+    recordRequestCall("tavily");
+    recordRequestCall("weather");
+    recordRequestCall("directions");
+    const run = summarise(endRun());
+    is("a guide-shaped run has no unpriced calls", run.unpriced, 0);
+    ok("so it reports a real total rather than a floor", run.complete === true);
+    // 12000 in and 4000 out at $5/$25 per million is $0.06 + $0.10. The
+    // arithmetic is asserted because a rate in the wrong column reads as
+    // plausible and would understate every opus line by a factor of five.
+    ok("and the opus line is costed both ways round",
+       Math.abs(run.byService.claude.cost - (0.06 + 0.10 + 0.004 + 0.005)) < 1e-9);
+  }
 }
 
 

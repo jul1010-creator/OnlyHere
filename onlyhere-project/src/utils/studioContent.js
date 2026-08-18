@@ -83,7 +83,7 @@ export const bulletsBlock = (heading, raw) => {
 // allow-list does not reach the database. Adding a field to a prompt is not
 // shipping it. This function is the only insert path into gemlyx_content.
 const shapeForLiveFields = (type, t) => {
-  if (type === "town") return { name: t.name, photo: `/towns/${slugify(t.name)}.jpg`, region: t.region || "", emoji: t.emoji || "📍", tag: t.tag || "", desc: t.characterAndFit, highlight: t.highlight || "", travelTime: t.travelTime || "", mapHint: t.mapHint || `${t.name}, Denmark`, nomiPotential: t.nomiPotential || "Medium", tier: t.tier || "Worth Considering", __lat: Number(t.lat) || null, __lon: Number(t.lon) || null,
+  if (type === "town") return { name: t.name, photo: `/towns/${slugify(t.name)}.jpg`, region: t.region || "", emoji: t.emoji || "📍", tag: t.tag || "", desc: t.characterAndFit, highlight: t.highlight || "", travelTime: t.travelTime || "", mapHint: t.mapHint || `${t.name}, Denmark`, nomiPotential: t.nomiPotential || "Medium", tier: t.tier || "", __lat: Number(t.lat) || null, __lon: Number(t.lon) || null,
     // THIS IS AN ALLOW-LIST, and a field missing from it does not reach the
     // database. placeKind/partOf/dayTripFrom were added to the drafting prompt,
     // the publish codegen, the towns page and the detail page on 8 Aug and to
@@ -117,7 +117,7 @@ const shapeForLiveFields = (type, t) => {
   // it folds the old spellings ("available", "selling_fast") onto the one
   // vocabulary so the badge and the booking advice finally read the same field
   // the same way. See utils/tickets.js.
-  if (type === "festival") return { name: t.name, tier: t.tier || "Worth Considering", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", camping: t.camping || "", accommodationTip: t.accommodationTip || "", travelTime: t.travelTime || "", ticketStatus: normaliseTicketStatus(t.ticketStatus), town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", website: t.website || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", gemlyxFind: t.gemlyxFind || "",
+  if (type === "festival") return { name: t.name, tier: t.tier || "", nearestStation: t.nearestStation || "", ticketInfo: t.ticketInfo || "", camping: t.camping || "", accommodationTip: t.accommodationTip || "", travelTime: t.travelTime || "", ticketStatus: normaliseTicketStatus(t.ticketStatus), town: t.town || "", type: t.type || "Festival", emoji: t.emoji || "🎪", date: t.dateStart || "", dateEnd: t.dateEnd || "", photo: `/events/${slugify(t.name)}.jpg`, desc: t.desc, mapHint: t.mapHint || "", website: t.website || "", color: t.color || "#8E24AA", tags: Array.isArray(t.tags) ? t.tags.slice(0, 3) : [], __scale: (t.scale || "").toLowerCase().startsWith("major") ? "Major" : "Local", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]]),
     ] };
@@ -212,6 +212,27 @@ const shapeForLiveFields = (type, t) => {
 export const PUBLISHER_NOTE = /^(?:STOP, DO NOT PUBLISH|CHECK BEFORE PUBLISHING|PIPELINE CONTRADICTION|FIX BEFORE PUBLISHING)|Coordinates could not be verified by geocoding/;
 export const isPublisherNote = (u) => PUBLISHER_NOTE.test(String(u || "").trim());
 
+// ── AND A TIER IS NEVER SUPPLIED BY A FALLBACK ───────────────────────
+//
+// Oliver, 18 Aug 2026, on a draft whose tier was an empty string: "the tier part
+// should NEVER be left out."
+//
+// He is right, and the bug is worse than the gap he was looking at. This file read
+// `tier: t.tier || "Worth Considering"` for both towns and festivals — so an
+// unjudged entry did not publish blank, it published with GEMLYX'S OWN EDITORIAL
+// RANK invented by a logical or. A card then showed a rank nobody had decided, in
+// the one field that is purely this product's judgement, and the publish path could
+// never object because from where it stood the tier was always filled.
+//
+// Now it stays empty and the audit blocks the publish instead (search "tier" in
+// entryAudit.js). tierOf already returns null for an empty string and every card
+// already handles that by showing no rank, which is the honest state for an entry
+// nobody has ranked.
+//
+// WORTH KNOWING: rows published before today may carry "Worth Considering" from
+// this fallback, and there is no way to tell those apart from genuinely judged ones
+// now. If that matters, the ones with no other editorial field filled are the
+// likely candidates.
 export const shapeForLive = (type, t) => {
   const shaped = shapeForLiveFields(type, t);
   if (!shaped) return shaped;

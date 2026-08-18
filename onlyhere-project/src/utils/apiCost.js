@@ -72,6 +72,33 @@ export const PRICES = {
     // platform.claude.com/docs/en/about-claude/pricing, 15 Aug 2026
     "claude-sonnet-5": { in: 2, out: 10 },
     "claude-opus-5": { in: 5, out: 25 },
+    // ── THE MISSING RATE THAT MADE THIS METER SAY "AT LEAST" ──────────
+    // Added 18 Aug 2026, and it is the most important line in the table
+    // because it was absent. askClaude's `model` argument is "claude-opus-4-8"
+    // at exactly three call sites, and they are the three most expensive calls
+    // the product makes: the main guide writer (App.jsx), its retry, and one
+    // per DAY of the trip inside enrichGuideDays. Every one of them reached
+    // priceTokens, found no rate, returned null, and was recorded `unpriced`.
+    //
+    // So every guide run this meter has ever produced reported complete:false
+    // with its three biggest lines missing from `measured`, and the panel built
+    // to answer "what does one guide cost" could not answer it. The
+    // all-or-nothing rule above did its job — the figure said "at least"
+    // instead of lying — but the reason it said "at least" was a typo-sized
+    // hole in this object and nothing anywhere pointed at it.
+    //
+    // Oliver, 18 Aug 2026, asking whether non-subscribers should get fewer
+    // features. That question is unanswerable without this line.
+    //
+    // The rate is not a guess: Opus 4.8 is $5 in / $25 out per million,
+    // identical to Opus 5, off the same published page as its neighbours
+    // (platform.claude.com/docs/en/about-claude/pricing, read 18 Aug 2026).
+    //
+    // AND THE HOLE IS NOW A TEST. tests/run.mjs parses every askClaude call
+    // site and every recordModelCall in the source and fails if a model name
+    // that reaches this table has no rate, so the next model swap cannot
+    // silently un-price the run. See "every model the source sends is priced".
+    "claude-opus-4-8": { in: 5, out: 25 },
     // developers.openai.com/api/docs/models/gpt-5.6-sol, 15 Aug 2026
     "gpt-5.6-sol": { in: 5, out: 30 },
     // docs.perplexity.ai/docs/getting-started/pricing, 15 Aug 2026. api/perplexity.js

@@ -475,3 +475,46 @@ export const describeDayTripClaim = ({ town, kmFromBase, mode } = {}) => {
   }
   return `The stay line called this a day trip from ${town}, which is ${Math.round(km)} km away. A day trip by ${how} is about ${radius} km each way, so the claim was removed.`;
 };
+
+// ── AND THE ONE FUNCTION THE GUIDE ACTUALLY CALLS ────────────────────
+//
+// Everything above this line was written on 17 Aug, tested, and wired to NOTHING.
+// Found the next morning by grepping for its own exports: `dayTripHonest`,
+// `withoutDayTripClaim` and `describeDayTripClaim` appeared in this file and in
+// the suite and in no component. So the guide went on printing "day trips from
+// Copenhagen" over a day in Aarhus, and the arithmetic that knew better sat in a
+// module nobody imported.
+//
+// That is the eighth time this codebase has caught a helper written, tested and
+// left unwired, and the fix is not a comment about being careful. It is this: ONE
+// function that answers the whole question in the shape a render can use, so the
+// caller is a single call instead of five, and the suite can assert that the page
+// makes it.
+//
+// GEOGRAPHY STAYS OUT. `kmFromTown` is injected, because this file has no library
+// and no geocoder, and building one here would be a second source of truth about
+// where places are. The caller measures; this decides.
+export const stayTextProblem = ({ text = "", mode = null, kmFromTown = null } = {}) => {
+  const town = dayTripClaim(text);
+  if (!town) return null;
+  const km = typeof kmFromTown === "function" ? kmFromTown(town) : null;
+  if (dayTripHonest({ kmFromBase: km, mode })) return null;
+  return {
+    town,
+    kmFromBase: km,
+    mode: travelModeKey(mode),
+    // The cut sentence, which is what a reader gets. Never a rewrite: see
+    // withoutDayTripClaim for why a shorter honest sentence beats a longer
+    // plausible one.
+    repaired: withoutDayTripClaim(text),
+    // And the line that says a cut happened, for Studio rather than for a reader.
+    note: describeDayTripClaim({ town, kmFromBase: km, mode }),
+  };
+};
+
+// What the card should actually show, in one call, empty when the whole sentence
+// was the false claim and there is nothing honest left to print.
+export const stayTextForReader = ({ text = "", mode = null, kmFromTown = null } = {}) => {
+  const problem = stayTextProblem({ text, mode, kmFromTown });
+  return problem ? problem.repaired : String(text || "");
+};

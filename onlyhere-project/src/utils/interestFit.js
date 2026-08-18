@@ -325,6 +325,15 @@ export const rankOffers = (rows, { want = null, profile = null, limit = OFFER_LI
 export const offerReason = (entry) => {
   const { place, fit } = entry || {};
   if (!place) return "";
+  // ── MONEY FIRST, BECAUSE IT IS WHY THIS ONE IS HERE ────────────────
+  // Oliver, 17 Aug 2026: "geranium is NOT mid-range.. so remember to make food
+  // places include in budget." previewMatch holds an over-budget place behind the
+  // door rather than deleting it — a tight budget in Copenhagen still wants to
+  // know Geranium exists — and it set `_overBudget` on the row so the card could
+  // say why. Nothing read it, so the row appeared among "places you did not ask
+  // for", which is not what happened to it: they did ask, and it costs more than
+  // they said they had. That is a different sentence and the honest one.
+  if (place._overBudget) return place._overBudget;
   const named = (fit?.why || []).map(t => THEME_LABEL[t]).filter(Boolean);
   if (named.length) {
     const list = named.length === 1 ? named[0].toLowerCase() : `${named.slice(0, -1).map(s => s.toLowerCase()).join(", ")} and ${named[named.length - 1].toLowerCase()}`;

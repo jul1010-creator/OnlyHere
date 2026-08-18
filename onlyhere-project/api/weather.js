@@ -371,12 +371,49 @@ export default async function handler(req, res) {
     const next1h = now.data.next_1_hours?.summary?.symbol_code || null;
     const precipNow = now.data.next_1_hours?.details?.precipitation_amount ?? null;
 
+    // ── RIGHT NOW, AT THIS COORDINATE. NOT THE TRIP ─────────────────
+    // Read this before assuming these are the guide's weather warnings, because
+    // for two weeks they looked like they were and they never could have been.
+    //
+    // These describe timeseries[0]: the CURRENT HOUR. A guide covers a trip two
+    // to twenty six weeks out, so the one hour this describes is the one hour
+    // nobody on that trip is travelling in. The only component that renders
+    // them is WeatherStrip, which is Studio-side and pinned to fixed city
+    // coordinates, and for that — "what is it doing in Aarhus right now" — the
+    // current hour is exactly the right question.
+    //
+    // THE TRIP'S WARNINGS LIVE IN src/utils/weatherWarn.js and are built per
+    // day from the `forecast` array below, which carries wind_speed_ms,
+    // precipitation_mm and the symbol code for every day. Oliver, 18 Aug 2026:
+    // "it shows the weather forecast, but nothing else. Surely it's able to give
+    // some warnings+" — it was, and the numbers were already in this response.
+    //
+    // TWO THINGS FIXED HERE, 18 Aug 2026:
+    //
+    //   The text was in Danish, keyed `type` and `detaljer`, inside a product
+    //   whose every other reader-facing string is English. WeatherStrip rendered
+    //   it verbatim.
+    //
+    //   It said "Vindstød omkring X m/s" — GUSTS of about X — while reading
+    //   `details.wind_speed`, which is MET Norway's ten minute MEAN at 10
+    //   metres. Gusts run well above the mean, so it named a quantity nobody had
+    //   measured and overstated it. The compact endpoint this calls does not
+    //   carry a gust figure at all, so the honest fix is to say mean wind.
+    //
+    // AND THE THRESHOLD IS NOT A SECOND OPINION. 13.9 m/s is the lower bound of
+    // Beaufort force 7, the same constant WIND_GALE in src/utils/weatherWarn.js,
+    // which is where the reader-facing rules live. It cannot be imported here —
+    // that module pulls in the route and geography tables, which have no
+    // business in a serverless function — so tests/run.mjs asserts the two
+    // numbers are equal instead. Same arrangement as FORECAST_HORIZON_DAYS and
+    // the ten-bucket slice below: one decision, two halves, held together by a
+    // test rather than by hoping.
     const warnings = [];
-    if (details.wind_speed >= 14) {
-      warnings.push({ type: "Kraftig vind", detaljer: `Vindstød omkring ${details.wind_speed} m/s. Kør forsigtigt, særligt på broer som Storebælt.` });
+    if (details.wind_speed >= 13.9) {
+      warnings.push({ type: "Strong wind", detail: `Mean wind around ${details.wind_speed} m/s right now. Gusts run higher. The exposed bridges restrict trailers and caravans at this strength.` });
     }
     if (precipNow !== null && precipNow >= 5) {
-      warnings.push({ type: "Kraftig nedbør", detaljer: `Forventet nedbør omkring ${precipNow} mm den kommende time.` });
+      warnings.push({ type: "Heavy rain", detail: `Around ${precipNow} mm expected in the coming hour.` });
     }
 
     const byDay = {};

@@ -15,11 +15,12 @@ import { foodSpots } from "../data/food";
 import { nightlifeSpots } from "../data/nightlife";
 import { craftItemsFallback } from "../data/craft";
 import { events, majorEvents } from "../data/events";
-import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar, stopTown } from "../utils/guideEnrichment";
+import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, townPointFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar, stopTown } from "../utils/guideEnrichment";
 import { operatorsForLeg, operatorNote } from "../utils/operators";
 import { partOfCountry } from "../utils/geography";
 import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
+import { dayWarnings, dayCrossings, tripWeatherWarning } from "../utils/weatherWarn";
 import { askClaude } from "../utils/aiClient";
 import { testTravelerLine, isFerryText, daysUntil } from "../utils/helpers";
 import { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from "../utils/guideReading";
@@ -28,6 +29,7 @@ import { tiqetsBrowseUrl, partnerDisclosure } from "../utils/affiliates";
 import { dayStart, dayKey, dayPlus } from "../utils/calendarDay";
 import { shareMessage, shareTitle } from "../utils/share";
 import { returnLeg, describeReturn, REACH_FAR, overnightMove, describeOvernightMove } from "../utils/routeOrder";
+import { stayTextProblem } from "../utils/accommodation";
 import { GUIDE_RIGHTS_SHORT, copyrightLine } from "../utils/rights";
 import { guideHero, heroCaption } from "../utils/guideHero";
 import { PhotoCredit } from "../components/PhotoCredit";
@@ -566,6 +568,30 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
   // just the stop cards, photos, click-through, accommodation, and weather.
   const lightMode = !!guide._lightMode;
   const shape = tripShape(guide, legDistanceKm);
+
+  // ── WHICH DAY CROSSES WHICH BELT ────────────────────────────────
+  // Computed once for the whole page rather than per day, because a crossing is
+  // a fact about a PAIR of days and asking day 3 about it means also resolving
+  // day 4. See utils/weatherWarn.js for why only the Great Belt and the
+  // Bornholm ferry produce a warning and the other crossings deliberately
+  // produce nothing.
+  //
+  // partOfCountry answers off the kommune map, which is why it is trusted here:
+  // it is the same function the towns page filters on, and it returns null
+  // rather than guessing when a coordinate cannot be placed. A null breaks the
+  // chain in dayCrossings instead of being guessed through.
+  const dayParts = days.map(d => {
+    const c = (d.stops || [])
+      .map(st => resolveStopCoords(st.name, guide._geo || {}, stopTown(st, lookupRealPlace(st.name))))
+      .find(Boolean);
+    return c ? partOfCountry({ __lat: c.lat, __lon: c.lon }) : null;
+  });
+  const crossings = dayCrossings(dayParts);
+  // The traveller's own stated mode, which decides whether 12 m/s is a footnote
+  // or the whole character of the day. Same field returnLeg and overnightMove
+  // read, so a bike trip cannot get a driver's wind line on one card and a
+  // cyclist's on the next.
+  const tripMode = guide._mode || null;
 
   // ── ONE MAP, NOT SIX ────────────────────────────────────────────
   // Oliver, 7 Aug 2026: "damn, it looks so overwhelming. Let's make the leaflet
@@ -1157,6 +1183,24 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
           // block alone, which was fine while it had one reader. See
           // tripDayDate in utils/guideReading.js for why it is not inline.
           const dayDate = tripDayDate(guide._arrivalDate, day.day || dayIdx + 1);
+          // ── ONE BADGE, READ ONCE ──────────────────────────────────
+          // This was `(freshWeather?.[dayIdx] || day.weather)` written out TEN
+          // times across the badge below, and the repetition was not just
+          // noise, it was hiding a crash. One of the ten read
+          // `day.weather.years` instead of the resolved badge's — so a day whose
+          // refresh-on-open produced a normals badge while the SAVED guide had
+          // none (a guide saved before weather worked, or a day whose stop had
+          // no coordinate at build time and resolves now) hit
+          // `null.years` and took the whole page down on render.
+          //
+          // Hoisting it makes that impossible to write again, and it is what
+          // the warnings below need anyway.
+          const wx = freshWeather?.[dayIdx] || day.weather || null;
+          // Measured warnings for this day: wind, rain in millimetres, the
+          // cold-and-wet pair, frost, heat, what the sky is doing, and the belt
+          // crossing if this is the day it happens on. Every one of them cites
+          // the number it came from. See utils/weatherWarn.js.
+          const wxWarnings = dayWarnings(wx, { mode: tripMode, crossing: crossings[dayIdx] || "" });
           // LINK PARITY FIX (Oliver: "Public transport says 19 minutes... you
           // then check maps, and it's 27"): the in-app duration was fetched
           // with real resolved COORDINATES, but this Google Maps link was built
@@ -1478,25 +1522,57 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   The old title attribute said "Forecast assumes the trip
                   starts today", which stopped being true the moment arrival
                   dates became real. */}
-              {(freshWeather?.[dayIdx] || day.weather) && (
-                <div title={(freshWeather?.[dayIdx] || day.weather).source === "normals"
-                  ? `Ten year average for this place and this week${(freshWeather?.[dayIdx] || day.weather).years ? `, from ${day.weather.years} years of records` : ""}. Not a forecast.`
+              {wx && (
+                <div title={wx.source === "normals"
+                  ? `Ten year average for this place and this week${wx.years ? `, from ${wx.years} years of records` : ""}. Not a forecast.`
                   : "Real forecast for this date"}
-                  style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${(freshWeather?.[dayIdx] || day.weather).risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 14, padding: "7px 13px", fontSize: 11 }}>
-                  <span style={{ fontSize: 22, lineHeight: 1 }}>{(freshWeather?.[dayIdx] || day.weather).icon}</span>
+                  style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${wx.risk === "high" ? "#FFB34766" : C.border}`, borderRadius: 14, padding: "7px 13px", fontSize: 11 }}>
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{wx.icon}</span>
                   <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                     <span style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-                      <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{(freshWeather?.[dayIdx] || day.weather).temp}°</span>
-                      <span style={{ color: C.muted, fontWeight: 700, fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase" }}>{(freshWeather?.[dayIdx] || day.weather).label || "forecast"}</span>
+                      <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>{wx.temp}°</span>
+                      <span style={{ color: C.muted, fontWeight: 700, fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase" }}>{wx.label || "forecast"}</span>
                     </span>
-                    {(freshWeather?.[dayIdx] || day.weather).source === "normals" && (freshWeather?.[dayIdx] || day.weather).detail && (
-                      <span style={{ color: C.muted, fontSize: 10, lineHeight: 1.35 }}>{(freshWeather?.[dayIdx] || day.weather).detail}</span>
+                    {wx.source === "normals" && wx.detail && (
+                      <span style={{ color: C.muted, fontSize: 10, lineHeight: 1.35 }}>{wx.detail}</span>
                     )}
                   </span>
-                  {(freshWeather?.[dayIdx] || day.weather).source !== "normals" && (freshWeather?.[dayIdx] || day.weather).risk === "high" && <span style={{ color: "#FFB347", fontWeight: 700 }}>· rain likely</span>}
+                  {/* The bare "rain likely" chip stays ONLY when nothing better
+                      was measured. Where wind, millimetres or a symbol code came
+                      through, the warnings below say the actual number and this
+                      would be a vaguer duplicate of the same fact. */}
+                  {wx.source !== "normals" && wx.risk === "high" && !wxWarnings.length && <span style={{ color: "#FFB347", fontWeight: 700 }}>· rain likely</span>}
                 </div>
               )}
             </div>
+            {/* ── THE WARNINGS ─────────────────────────────────────
+                Oliver, 18 Aug 2026: "it shows the weather forecast, but nothing
+                else. Surely it's able to give some warnings+"
+
+                Under the header rather than inside the badge, because they are
+                sentences and the badge is a glance. "warn" is gold and bordered
+                — it changes what somebody does today. "watch" is quiet — it
+                changes what they pack. Nothing renders at all when nothing
+                crossed a threshold, which is most days: an "all clear" chip on
+                every ordinary day would train people to stop reading the row
+                that matters. */}
+            {wxWarnings.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                {wxWarnings.map(w => (
+                  <div key={w.id} style={{
+                    display: "flex", alignItems: "flex-start", gap: 8,
+                    background: w.level === "warn" ? "#3D2A0A" : C.surface,
+                    border: `1px solid ${w.level === "warn" ? "#FFB34766" : C.border}`,
+                    borderRadius: 10, padding: "7px 11px",
+                    fontSize: 11.5, lineHeight: 1.5,
+                    color: w.level === "warn" ? "#FFB347" : C.muted,
+                  }}>
+                    <span style={{ flexShrink: 0, fontWeight: 700 }}>{w.level === "warn" ? "◷" : "·"}</span>
+                    <span>{w.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ height: 1, background: C.border, margin: "10px 0 18px" }} />
             {/* If today only has one stop, the real journey worth showing is the leg
                 connecting it to yesterday's last stop, not nothing at all.
@@ -1665,6 +1741,44 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
               })}
             </div>
             {day.glance?.accommodation && (() => {
+              // ── "IT'S NOT EXACTLY A 'DAY-TRIP' FROM COPENHAGEN" ───
+              // Oliver, 17 Aug 2026. The arithmetic for this was written that
+              // night and wired to nothing, which the next morning's grep found:
+              // the guide went on printing the claim while the module that knew
+              // better sat unimported. This is the call that closes it.
+              //
+              // The measurement is the FURTHEST stop of the day, not the nearest
+              // — a day trip has to reach all of them, and the nearest one would
+              // let a single close stop wave through a day that ends 200 km out.
+              // See stayTextProblem in utils/accommodation.js.
+              const stayProblem = stayTextProblem({
+                text: day.glance.accommodation,
+                mode: guide._mode,
+                kmFromTown: (town) => {
+                  const base = townPointFor(town);
+                  if (!base) return null;
+                  const reach = (day.stops || [])
+                    .filter(st => st?.name)
+                    .map(st => resolveStopCoords(st.name, geo, stopTown(st, lookupRealPlace(st.name))))
+                    .filter(Boolean)
+                    .map(pt => kmBetween(base, pt))
+                    .filter(n => Number.isFinite(n));
+                  // No measurable stop means no measurement, and dayTripHonest
+                  // refuses an unmeasured claim rather than waving it through.
+                  return reach.length ? Math.max(...reach) : null;
+                },
+              });
+              const stayText = stayProblem ? stayProblem.repaired : day.glance.accommodation;
+              // Logged, not printed. A READER should just get the honest
+              // sentence — a page that narrates its own corrections is the
+              // "People will think the draft is incorrect" failure again. The
+              // reason a cut happened belongs where a founder looks, so it goes
+              // to the console with the numbers behind it, same as the withheld
+              // ready marker in App.jsx.
+              if (stayProblem) console.warn("Gemlyx guide: day-trip claim removed from the stay line.", stayProblem.note);
+              // The whole sentence was the false claim. A card with nothing
+              // honest left in it is worse than no card.
+              if (!stayText) return null;
               // dayDate is this day of the trip, computed once at the top of the
               // day render and shared with the stop cards. Checkout is the next
               // morning, through the same tested primitive rather than a second
@@ -1711,7 +1825,8 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   <span style={{ fontSize: 14, flexShrink: 0 }}>🏡</span>
                   <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
                     <span style={{ color: C.muted, fontWeight: 700 }}>Where to stay: </span>
-                    <span style={{ color: C.light }}>{day.glance.accommodation}</span>
+                    <span style={{ color: C.light }}>{stayText}</span>
+
                     {day.glance.recommendedStay && (
                       <div style={{ marginTop: 3 }}><span style={{ color: C.gold, fontWeight: 700 }}>{day.glance.recommendedStay}</span></div>
                     )}
