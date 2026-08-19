@@ -51,7 +51,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -25527,6 +25527,70 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // Severity: this is worth fixing and it is not a falsehood, so it must not sit
   // in the same tier as a wrong coordinate or an unconfirmed venue.
   is("it is a medium, not a critical", thin[0].severity, "medium");
+}
+
+// ── FINDING THE NEXT EDITION ON THE OPERATOR'S OWN PAGE ────────────
+// Oliver, 19 Aug 2026: "You need to make it Deeply try to find the event date of
+// unconfirmed dates. I refuse to have distortion.. one of the most popular
+// festivals of Denmark, being shown as unknown date.. my product will not sell."
+// Then the method: "Find a reliant source for the events like distortions own
+// website and then stick to that on every update." And why it matters twice:
+// "Then I won't get charged extremes amount of money for updating.."
+{
+  const { nextEdition, dateRangesInText, isoDay } = M;
+  const TODAY = new Date(2026, 7, 19);
+  const range = (t) => { const r = nextEdition(t, TODAY); return r ? [isoDay(r.start), isoDay(r.end)] : null; };
+
+  // ── THE FORM HIS OWN TICKET PAGE USES ──────────────────────────
+  // Rock Under Broen states "11.06.27-12.06.27" with no month name anywhere, so
+  // nothing in this repo could read it. dd.mm.yy, never mm.dd.yy: read the
+  // American way that is the 6th of November, a real date in the right year and
+  // therefore the kind of wrong nobody catches.
+  is("the Danish numeric range on a ticket page", range("Vælg din billet herunder 11.06.27-12.06.27 PARTOUT"), ["2027-06-11", "2027-06-12"]);
+  is("and it is the 11th of June, not the 6th of November", range("11.06.27"), ["2027-06-11", "2027-06-11"]);
+  is("a four digit year works the same", range("11.06.2027-12.06.2027"), ["2027-06-11", "2027-06-12"]);
+
+  // Prose, both languages, because a festival writes it either way.
+  is("a Danish prose range", range("Distortion afholdes 3.-7. juni 2027 i København"), ["2027-06-03", "2027-06-07"]);
+  is("an English one", range("The festival runs 27-28 June 2027 in Aarhus"), ["2027-06-27", "2027-06-28"]);
+  is("and a single date", range("Next edition: 8 June 2027"), ["2027-06-08", "2027-06-08"]);
+
+  // ── THE PAGE CARRIES ITS OWN HISTORY ───────────────────────────
+  // A festival site has last year's recap above this year's tickets. Only one of
+  // those is a date somebody can go to, and taking the first one found would
+  // publish a date that has already happened.
+  is("last year's recap is not the next edition",
+     range("Recap of 05.06.25-06.06.25. Next: 11.06.27-12.06.27"), ["2027-06-11", "2027-06-12"]);
+  is("and a page with nothing but past editions answers nothing",
+     range("Photos from 05.06.24-06.06.24"), null);
+  // The EARLIEST future one, not the latest: a site announcing 2027 and 2028 is
+  // telling you about the next one and the one after.
+  is("the nearest future edition wins",
+     range("2028: 09.06.28-10.06.28. Next up 11.06.27-12.06.27"), ["2027-06-11", "2027-06-12"]);
+
+  // Two dates far apart on a page are two facts, not one range.
+  {
+    const far = dateRangesInText("Doors 11.06.27" + " ".repeat(40) + "Refunds close 20.06.27");
+    ok("distant dates are not paired into one range", far.every(r => isoDay(r.start) === isoDay(r.end)));
+  }
+  is("junk yields nothing", range("no dates here at all"), null);
+  is("and an impossible month is refused", range("11.13.27"), null);
+
+  // ── THE WIRING, WHICH IS WHERE THE MONEY IS SAVED ──────────────
+  const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the update reads the event's own website first", /scan-source\?url=\$\{encodeURIComponent\(ev\.website\)\}/.test(appN));
+  ok("and asks it when the next edition is", /nextEdition\(d\.text, checkFrom\)/.test(appN));
+  // The saving: a site that agrees costs nothing and never reaches the model.
+  ok("a site that agrees ends the check with no paid call", /if \(fromSite\) continue;/.test(appN));
+  ok("and an answer from the site skips it too", /if \(fromSite && fromSite\.start !== ev\.date\)/.test(appN));
+  // Still guarded. A page's own history could otherwise walk a date backwards,
+  // which is the Rock under broen failure arriving by a different route.
+  ok("a date read off a page goes through the same backwards guard",
+     /datePropositionProblem\(isoDay\(found\.start\), ev\.date, checkFrom\)/.test(appN));
+  // The broken rows first, so a cap can never again spend itself on rows that
+  // were already right.
+  ok("undated rows are checked before correct ones", /const brokenFirst = \[\.\.\.allUpcoming\]\.sort/.test(appN));
+  ok("and the cap covers his library", /UPDATE_EVENTS_BATCH_CAP = 60;/.test(appN));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

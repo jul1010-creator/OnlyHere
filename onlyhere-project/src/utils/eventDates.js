@@ -461,3 +461,91 @@ export const splitFinishedCandidates = (candidates, today) => {
   }
   return { kept, dropped };
 };
+
+// ── FINDING AN EDITION IN A PAGE, WHICH IS THE OTHER HALF ───────────
+//
+// Oliver, 19 Aug 2026: "You need to make it Deeply try to find the event date of
+// unconfirmed dates. I refuse to have distortion.. one of the most popular
+// festivals of Denmark, being shown as unknown date.. my product will not sell."
+//
+// He is right, and the reason it never found one is not that the search was
+// shallow. It is that the check asked the wrong question. For an event with no
+// date on file the prompt said "Currently on file: date unknown" and then asked
+// "has the date actually CHANGED from what's on file". Nothing changed, because
+// there was nothing to change from, so the honest answer was an empty field and
+// the row stayed unknown forever. "Did it move" and "when is it" are different
+// questions and only the first was ever asked.
+//
+// This is the reading half: given the text of a page, what edition does it name.
+// It runs over the operator's own site and the ticket page, which is where the
+// answer actually is, rather than over a model's summary of them.
+//
+// ── THE FORM DANISH TICKET PAGES ACTUALLY USE ───────────────────────
+// Rock Under Broen's own ticket page states its dates as "11.06.27-12.06.27".
+// No month name anywhere, so MONTH_RE and lastDateInText below cannot see it,
+// and neither could anything else in this repo. That format is everywhere on
+// Danish ticketing and it is dd.mm.yy, never mm.dd.yy: 11.06.27 is the 11th of
+// June, and reading it the American way gives the 6th of November, which is a
+// real date in the right year and therefore the kind of wrong nobody catches.
+const DK_NUMERIC = /\b(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2}|\d{4})\b/g;
+const fullYear = (y) => { const n = Number(y); return n >= 100 ? n : 2000 + n; };
+
+// A day range against one month name: "11.-12. juni 2027", "27-28 June 2026".
+const DAY_RANGE = new RegExp(`\\b(\\d{1,2})\\s*[.]?\\s*[-\u2013til]{1,3}\\s*(\\d{1,2})\\s*[.]?\\s*(?:${MONTH_WORDS.map(a => a).join("|")})\\b[^0-9]{0,12}((?:19|20)\\d{2})`, "i");
+
+export const dateRangesInText = (text) => {
+  const t = String(text || "");
+  const out = [];
+  // 1. The numeric pairs, taken two at a time when they sit next to each other.
+  const nums = [...t.matchAll(DK_NUMERIC)].map(m => ({
+    at: m.index,
+    d: Number(m[1]), mo: Number(m[2]), y: fullYear(m[3]),
+    raw: m[0],
+  })).filter(x => x.d >= 1 && x.d <= 31 && x.mo >= 1 && x.mo <= 12);
+  for (let i = 0; i < nums.length; i++) {
+    const a = nums[i], b = nums[i + 1];
+    const start = new Date(a.y, a.mo - 1, a.d);
+    // A second numeric date within a few characters is the other end of a range.
+    // Further away it is a different fact on the page and not this event's end.
+    const near = b && b.at - (a.at + a.raw.length) <= 3;
+    const end = near ? new Date(b.y, b.mo - 1, b.d) : null;
+    if (end && end.getTime() >= start.getTime()) { out.push({ start, end, via: "numeric" }); i++; }
+    else out.push({ start, end: start, via: "numeric" });
+  }
+  // 2. A day range against a month name, which is how a festival writes it in prose.
+  const m = t.match(DAY_RANGE);
+  if (m) {
+    const monthIdx = MONTH_RE.findIndex(([re]) => re.test(m[0]));
+    if (monthIdx >= 0) {
+      const y = Number(m[3]);
+      const d1 = Number(m[1]), d2 = Number(m[2]);
+      if (d1 >= 1 && d1 <= 31 && d2 >= 1 && d2 <= 31) {
+        out.push({ start: new Date(y, monthIdx, Math.min(d1, d2)), end: new Date(y, monthIdx, Math.max(d1, d2)), via: "month-name" });
+      }
+    }
+  }
+  // 3. And the single date lastDateInText already knows how to read, which
+  //    covers "8 June 2026" and the bare-month case. Reused rather than
+  //    re-parsed: a seventh date parser in this repo is how they disagree.
+  const single = lastDateInText(t);
+  if (single) out.push({ start: single, end: single, via: "single" });
+  return out;
+};
+
+// THE NEXT ONE, not the first one found. A festival's page carries its history:
+// last year's recap, the year before's photos, and the edition being sold. Only
+// one of those is a date a traveller can go to, and it is the earliest that has
+// not already finished.
+export const nextEdition = (text, today) => {
+  const now = parseEventDate(today) || (today instanceof Date ? today : null);
+  const floor = now ? new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() : -Infinity;
+  const future = dateRangesInText(text)
+    .filter(r => r.end.getTime() >= floor)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  return future[0] || null;
+};
+
+// ISO, because that is what the rest of the pipeline stores and compares.
+export const isoDay = (d) => d instanceof Date && !isNaN(d)
+  ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  : "";

@@ -101,7 +101,7 @@ import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, 
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { languageBlock, readerLanguage } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
@@ -6909,7 +6909,18 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // discovery (the opposite job from Discover above, so the opposite engine).
   // Meant to be clicked periodically (Oliver said weekly) rather than on every
   // visit — capped per run so a click doesn't silently burn a huge API bill.
-  const UPDATE_EVENTS_BATCH_CAP = 20;
+  // ── THE CAP WAS HALF HIS LIBRARY ────────────────────────────────
+  // Oliver, 19 Aug 2026: "And why does it only go through 20? There is almost 40
+  // events". Twenty was chosen when a run meant twenty Perplexity calls and the
+  // cap was the only thing standing between him and a surprise bill.
+  //
+  // The read below changed that arithmetic. An event pinned to its own website
+  // is answered by a plain fetch, which costs nothing, and only a walled page or
+  // a missing website reaches a paid call. So the cap can cover the whole library
+  // and the spend still tracks how many events are hard rather than how many
+  // exist. His words, in the same breath: "Then I won't get charged extremes
+  // amount of money for updating.."
+  const UPDATE_EVENTS_BATCH_CAP = 60;
 
   // ── BACKFILL THE MISSING COORDINATES ───────────────────────────────
   // Storing coordinates for every content type (see publishDraft) only helps
@@ -7462,12 +7473,74 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       const allUpcoming = [...events, ...majorEvents, ...vikingEvents].filter(e =>
         isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date)
         || isUndated(e.date) || isPastDate(e.date, checkFrom));
-      const batch = allUpcoming.slice(0, UPDATE_EVENTS_BATCH_CAP);
+      // ── THE BROKEN ONES FIRST ───────────────────────────────────
+      // If a cap ever bites again, it must spend on the rows that are wrong.
+      // An undated row is the one showing "Dates not confirmed" to a reader; an
+      // upcoming row with a good date is already correct and is only being
+      // re-checked in case it moved.
+      const brokenFirst = [...allUpcoming].sort((a, b) => {
+        const rank = (e) => isUndated(e.date) ? 0 : isPastDate(e.date, checkFrom) ? 1 : 2;
+        return rank(a) - rank(b);
+      });
+      const batch = brokenFirst.slice(0, UPDATE_EVENTS_BATCH_CAP);
       const skipped = allUpcoming.length - batch.length;
       const changed = [];
       for (let i = 0; i < batch.length; i++) {
         const ev = batch[i];
         setUpdateEventsProgress(`${i + 1} / ${batch.length}`);
+        // ── THE OPERATOR'S OWN PAGE FIRST, AND EVERY TIME ───────
+        //
+        // Oliver, 19 Aug 2026: "Find a reliant source for the events like
+        // distortions own website and then stick to that on every update." Then
+        // the reason it matters twice over: "Then I won't get charged extremes
+        // amount of money for updating.."
+        //
+        // Both halves are right and they point the same way. The festival's own
+        // site is the authority on its own dates, and reading it is a plain
+        // fetch: free, repeatable, and the same source every run rather than
+        // whatever a search happened to surface that day. A model summarising
+        // the web is the fallback, not the method.
+        //
+        // This goes through /api/scan-source, which is the one door every source
+        // read in this app already uses: plain fetch, address variants, and only
+        // a Firecrawl credit if the page is genuinely walled.
+        //
+        // WHAT IT LOOKS FOR IS THE NEXT EDITION, not a difference. That is the
+        // bug underneath all of this: for an event with no date on file the old
+        // prompt said "Currently on file: date unknown" and asked "has the date
+        // CHANGED", so the honest answer was "no" and Distortion stayed unknown
+        // forever. nextEdition reads the page and answers "when is it", which is
+        // the question that was never asked.
+        let fromSite = null;
+        if (ev.website) {
+          try {
+            const r = await fetch(`/api/scan-source?url=${encodeURIComponent(ev.website)}`, { headers: routeAuth() });
+            const d = await r.json();
+            if (r.ok && !d.error && !d.blocked && d.text) {
+              const found = nextEdition(d.text, checkFrom);
+              // The same guard the model's answers go through. A page carries its
+              // own history, so "the edition named on this page" still has to be
+              // one that has not already happened and is not earlier than what we
+              // hold.
+              if (found && !datePropositionProblem(isoDay(found.start), ev.date, checkFrom)) {
+                fromSite = { start: isoDay(found.start), end: isoDay(found.end), via: d.via || "fetch", host: domainOf(ev.website) };
+              }
+            }
+          } catch { /* the paid path below is the fallback, so a failed read is not fatal */ }
+        }
+        // Answered by the operator, so nothing is spent and nothing is guessed.
+        if (fromSite && fromSite.start !== ev.date) {
+          changed.push({
+            name: ev.name, town: ev.town, currentDate: ev.date,
+            dateChanged: fromSite.start, dateEndChanged: fromSite.end,
+            ticketStatusChanged: "", stillHappening: true,
+            source: fromSite.host, readVia: fromSite.via,
+            notes: `Read off ${fromSite.host}, the event's own site, which states ${fromSite.start}${fromSite.end && fromSite.end !== fromSite.start ? ` to ${fromSite.end}` : ""}.`,
+          });
+          continue;
+        }
+        if (fromSite) continue;   // its own site agrees with what we hold: nothing to report, nothing spent
+
         const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
         try {
           const result = await askPerplexity(prompt);
