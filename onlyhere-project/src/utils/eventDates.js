@@ -491,7 +491,13 @@ const DK_NUMERIC = /\b(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2}|\d{4})\b/g;
 const fullYear = (y) => { const n = Number(y); return n >= 100 ? n : 2000 + n; };
 
 // A day range against one month name: "11.-12. juni 2027", "27-28 June 2026".
-const DAY_RANGE = new RegExp(`\\b(\\d{1,2})\\s*[.]?\\s*[-\u2013til]{1,3}\\s*(\\d{1,2})\\s*[.]?\\s*(?:${MONTH_WORDS.map(a => a).join("|")})\\b[^0-9]{0,12}((?:19|20)\\d{2})`, "i");
+// EVERY DASH A DESIGNER MIGHT USE. Distortion's own poster reads "2-6 JUNE
+// 2027" with an EN dash, Rock Under Broen uses a hyphen, and an em dash turns up
+// in copy written in Word. The first version of this listed the hyphen and the
+// en dash and silently read an em-dashed range as a single date, which is the
+// end of the festival presented as the whole of it.
+const DASHES = "\\u002d\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015";
+const DAY_RANGE = new RegExp(`\\b(\\d{1,2})\\s*[.]?\\s*(?:[${DASHES}]|til|to)\\s*(\\d{1,2})\\s*[.]?\\s*(?:${MONTH_WORDS.map(a => a).join("|")})\\b[^0-9]{0,12}((?:19|20)\\d{2})`, "i");
 
 export const dateRangesInText = (text) => {
   const t = String(text || "");

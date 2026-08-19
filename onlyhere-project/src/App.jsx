@@ -7511,19 +7511,51 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         // CHANGED", so the honest answer was "no" and Distortion stayed unknown
         // forever. nextEdition reads the page and answers "when is it", which is
         // the question that was never asked.
+        // ── AND IF THE FRONT PAGE DOES NOT SAY, FOLLOW ITS TICKET LINK ──
+        //
+        // Oliver, 19 Aug 2026: "You got the primary source on the event. So why
+        // can you not just take directly from that primary website? It's
+        // literally sourced on the event."
+        //
+        // It does, and for Distortion it read cphdistortion.dk and found nothing,
+        // which is not a failure of the read. A festival FRONT PAGE is a poster:
+        // the dates are in the artwork, or behind a script, or simply not written
+        // as text anywhere on it. The dates live one click away, on the ticket
+        // page, because that is the page that has to be unambiguous about what
+        // you are buying. Rock Under Broen is the proof: its front page says
+        // nothing a parser can read and its ticket page says 11.06.27-12.06.27.
+        //
+        // scan-source already returns `tickets`, the outbound ticket links it
+        // found, best first. That list has been built on every source read since
+        // 12 August and nothing had ever followed it for a date. One extra free
+        // fetch, at the one page most likely to hold the answer.
+        const readForEdition = async (url) => {
+          const r = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`, { headers: routeAuth() });
+          const d = await r.json();
+          if (!r.ok || d.error || !d.text) return { found: null, data: d, ok: false };
+          const found = nextEdition(d.text, checkFrom);
+          // The same guard the model's answers go through. A festival page carries
+          // its own history, so the edition named on it still has to be one that
+          // has not already happened and is not earlier than what we hold.
+          const usable = found && !datePropositionProblem(isoDay(found.start), ev.date, checkFrom) ? found : null;
+          return { found: usable, data: d, ok: true };
+        };
         let fromSite = null;
         if (ev.website) {
           try {
-            const r = await fetch(`/api/scan-source?url=${encodeURIComponent(ev.website)}`, { headers: routeAuth() });
-            const d = await r.json();
-            if (r.ok && !d.error && !d.blocked && d.text) {
-              const found = nextEdition(d.text, checkFrom);
-              // The same guard the model's answers go through. A page carries its
-              // own history, so "the edition named on this page" still has to be
-              // one that has not already happened and is not earlier than what we
-              // hold.
-              if (found && !datePropositionProblem(isoDay(found.start), ev.date, checkFrom)) {
-                fromSite = { start: isoDay(found.start), end: isoDay(found.end), via: d.via || "fetch", host: domainOf(ev.website) };
+            const first = await readForEdition(ev.website);
+            if (first.found) {
+              fromSite = { start: isoDay(first.found.start), end: isoDay(first.found.end), via: first.data.via || "fetch", host: domainOf(ev.website) };
+            } else if (first.ok) {
+              // The ticket page, best first, and only one of them. Two would be
+              // paying attention to a maybe; the top-ranked link is the button
+              // that says "buy", and that page states the dates or nothing does.
+              const ticket = (first.data.tickets || [])[0];
+              if (ticket?.href) {
+                const second = await readForEdition(ticket.href);
+                if (second.found) {
+                  fromSite = { start: isoDay(second.found.start), end: isoDay(second.found.end), via: second.data.via || "fetch", host: domainOf(ticket.href) };
+                }
               }
             }
           } catch { /* the paid path below is the fallback, so a failed read is not fatal */ }

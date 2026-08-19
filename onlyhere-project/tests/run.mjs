@@ -24755,10 +24755,29 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   })();
   is("the panel's paragraph still has two branches", hwkBranches.length, 2);
   hwkBranches.forEach((b, i) => {
-    ok(`branch ${i + 1} says we have not been anywhere in person`,
-       /not been anywhere in person/i.test(b));
+    // ── WHAT THE HONESTY ACTUALLY IS, 19 AUG 2026 ────────────────
+    // These asserted the sentence "we have not been anywhere in person". Oliver:
+    // "sounds a little brutal. Makes it sound like we've never been there and
+    // are ignorant. Admitting we've written this from sources is fine. But
+    // putting on source on and then say 'we have never been there' after writing
+    // a whole section about it is wild."
+    //
+    // He is right that the confession was not the honest part. The honest part
+    // is the narrow claim, and it is what these now assert: the entry is written
+    // from PRIMARY SOURCES, and what could not be stood up is LISTED rather than
+    // smoothed over. Both of those are checkable statements about the work. "We
+    // have not been anywhere in person" is editorialising about our own
+    // diligence, and the comment above this ternary in the component already
+    // draws that exact line.
+    ok(`branch ${i + 1} says the entry is written from primary sources`,
+       /primary sources/i.test(b));
     ok(`branch ${i + 1} says what it could not stand up`,
        /could not stand up/i.test(b));
+    // AND STILL DOES NOT CLAIM A VISIT. The sentence went; the standard did not.
+    // A branch that started saying somebody had been there would be a different
+    // and much worse problem than the wording being blunt.
+    ok(`branch ${i + 1} claims no visit`,
+       !/\b(?:we visited|our visit|when we were there|we have been there|in person)\b/i.test(b));
     ok(`branch ${i + 1} does not say fact-check`, !/fact.?check/i.test(b));
     // Both branches carry a reader-facing sentence rather than one having been
     // emptied: a branch reduced to nothing would pass every negative assertion.
@@ -25566,6 +25585,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // Prose, both languages, because a festival writes it either way.
   is("a Danish prose range", range("Distortion afholdes 3.-7. juni 2027 i København"), ["2027-06-03", "2027-06-07"]);
+  // ── EVERY DASH A DESIGNER MIGHT USE ────────────────────────────
+  // Distortion's own front page reads "2–6 JUNE 2027" with an EN dash. The first
+  // version of this listed the hyphen and the en dash and read an em-dashed range
+  // as a single date, which prints the END of a festival as the whole of it.
+  is("Distortion's own poster, en dash and all", range("STREET LIFE & NEW DANCE MUSIC 2\u20136 JUNE 2027 COPENHAGEN"), ["2027-06-02", "2027-06-06"]);
+  ["\u002d", "\u2010", "\u2012", "\u2013", "\u2014", "\u2015"].forEach(d =>
+    is(`a range joined by U+${d.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`, range(`2${d}6 JUNE 2027`), ["2027-06-02", "2027-06-06"]));
+  is("and the Danish word for it", range("2 til 6 juni 2027"), ["2027-06-02", "2027-06-06"]);
   is("an English one", range("The festival runs 27-28 June 2027 in Aarhus"), ["2027-06-27", "2027-06-28"]);
   is("and a single date", range("Next edition: 8 June 2027"), ["2027-06-08", "2027-06-08"]);
 
@@ -25592,7 +25619,14 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── THE WIRING, WHICH IS WHERE THE MONEY IS SAVED ──────────────
   const appN = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the update reads the event's own website first", /scan-source\?url=\$\{encodeURIComponent\(ev\.website\)\}/.test(appN));
+  ok("the update reads the event's own website first", /readForEdition\(ev\.website\)/.test(appN));
+  // ── AND FOLLOWS ITS TICKET LINK IF THE FRONT PAGE DOES NOT SAY ──
+  // A festival front page is a poster: the dates are in the artwork or behind a
+  // script. The ticket page has to be unambiguous about what you are buying, so
+  // that is where the dates are written as text. scan-source has returned that
+  // link list on every source read since 12 August and nothing had followed it.
+  ok("and follows the ticket link when it does not", /const ticket = \(first\.data\.tickets \|\| \[\]\)\[0\]/.test(appN));
+  ok("one link, not a crawl", !/tickets\.slice\(0, [2-9]\)/.test(appN));
   ok("and asks it when the next edition is", /nextEdition\(d\.text, checkFrom\)/.test(appN));
   // The saving: a site that agrees costs nothing and never reaches the model.
   ok("a site that agrees ends the check with no paid call", /if \(fromSite\) continue;/.test(appN));
@@ -25605,6 +25639,40 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // were already right.
   ok("undated rows are checked before correct ones", /const brokenFirst = \[\.\.\.allUpcoming\]\.sort/.test(appN));
   ok("and the cap covers his library", /UPDATE_EVENTS_BATCH_CAP = 60;/.test(appN));
+}
+
+// ── THE THIN-PAGE THRESHOLD, MEASURED RATHER THAN GUESSED ──────────
+// MIN_USEFUL_CHARS carried a note saying it was "a starting number, and it is
+// meant to be tuned once the log has real domains in it". These are the first
+// two real domains, both read in a browser on 19 Aug 2026:
+//
+//   cphdistortion.dk          285 chars. Nav, social links, a footer credit and
+//                             one stale line. A shell.
+//   cphdistortion.dk/tickets  761 chars, stating "Dates: 2-6 June 2027", which
+//                             is the exact fact the event checker looks for.
+//
+// At 800 the tickets page was unreadable: it paid a Firecrawl credit to render a
+// page a free fetch had already read, and if Firecrawl returned the same text the
+// verdict refused it a second time. The fact was thrown away twice and the panel
+// said "nothing changed".
+{
+  const { pageReadVerdict, MIN_USEFUL_CHARS, worthDeepRead } = M;
+  const shell = "Buy tickets Tickets Artists Programme FAQ Nabo Info Visit our Instagram page Visit our Facebook page Visit our TikTok page Website developed and hosted by MULD Digital Distortion 3-7 June 2026 All over Copenhagen".padEnd(285, " ");
+  const ticketsPage = "Tickets Distortion O takes place Friday 4 and Saturday 5 June 2027. Festival Pass is valid from 2-6 June 2027. Dates: 2-6 June 2027.".padEnd(761, " ");
+
+  is("a 285 character nav shell is still not a readable page", pageReadVerdict(200, shell).reason, "almost-no-text");
+  ok("and is still worth paying to render", worthDeepRead(pageReadVerdict(200, shell)));
+  // THE ONE THAT WAS BROKEN.
+  ok("a 761 character page stating the dates is readable", pageReadVerdict(200, ticketsPage).usable);
+  ok("so it costs no credit", !worthDeepRead(pageReadVerdict(200, ticketsPage)));
+
+  // The threshold sits between the two, with room on both sides, so neither
+  // measurement is on a boundary where a few characters either way flips it.
+  ok("the threshold is above the shell", MIN_USEFUL_CHARS > 285 + 50);
+  ok("and below the real page", MIN_USEFUL_CHARS < 761 - 50);
+  // A range assertion with the reason attached, so a later change has to argue
+  // with the measurement rather than just move the number.
+  ok("and stays in the band those two measurements define", MIN_USEFUL_CHARS >= 350 && MIN_USEFUL_CHARS <= 700);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

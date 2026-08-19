@@ -67,7 +67,32 @@ export const CHALLENGE_MARKERS = [
 // honestly. Too low means we go back to feeding nav bars to the writer as
 // official content, which is the bug. Missing a block is the expensive mistake
 // here, not over-reporting one.
-export const MIN_USEFUL_CHARS = 800;
+//
+// ── TUNED 19 AUG 2026, AGAINST TWO MEASURED PAGES ───────────────────
+// The note above says this is a starting number meant to be tuned once the log
+// has real domains in it. Here are the first two real domains, both from
+// cphdistortion.dk, read in a browser rather than estimated:
+//
+//   the front page   285 characters of body text. Nav, social links, a footer
+//                    credit, and one stale line reading "Distortion 3-7 June
+//                    2026". A shell, correctly called one.
+//   /tickets         761 characters, and it states "Dates: 2-6 June 2027" in
+//                    plain text, which is the exact fact the event checker
+//                    exists to find.
+//
+// At 800 the tickets page was UNREADABLE. It escalated to Firecrawl, which
+// spends a credit to render a page that was already perfectly readable, and if
+// Firecrawl returned the same text the verdict ran a second time and refused it
+// again, so the fact was thrown away twice and the answer was "nothing changed".
+//
+// 400 sits between the two measurements with room on both sides. It still calls
+// a 285-character nav shell unreadable, which is the bug this constant exists to
+// prevent, and it stops calling a thin but real content page a wall.
+//
+// AND IT SAVES MONEY RATHER THAN COSTING IT, which is the opposite of what the
+// note above assumed. Every page between 400 and 800 characters was paying a
+// Firecrawl credit to be told what a free fetch had already read.
+export const MIN_USEFUL_CHARS = 400;
 
 // Keeps the payload sane, and plenty for a listing page. Was inline in
 // api/scan-source.js.

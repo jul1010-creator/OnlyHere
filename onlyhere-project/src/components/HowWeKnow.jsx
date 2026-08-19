@@ -185,16 +185,37 @@ export const HowWeKnow = ({ item }) => {
                 venue's own site" more than they trust the phrase fact-checked,
                 because one of those is a fact and the other is a claim about our
                 own diligence. */}
+            {/* ── SAYING IT WITHOUT DISOWNING THE WORK ──────────────
+                  Oliver, 19 Aug 2026: "'We have not been anywhere in person'..
+                  sounds a little brutal. Makes it sound like we've never been
+                  there and are ignorant. Admitting we've written this from
+                  sources is fine. But putting on source on and then say 'we have
+                  never been there' after writing a whole section about it is
+                  wild."
+
+                  He is right, and the sentence was doing two jobs badly. The
+                  honest content is that the entry is desk research and that what
+                  could not be stood up is listed. "We have not been anywhere in
+                  person and we do not pretend otherwise" adds no fact to that; it
+                  adds a confession, immediately under a named primary source and
+                  a page of specifics, which reads as the product apologising for
+                  itself.
+
+                  NOTHING IS HIDDEN BY REMOVING IT. The claim being made is still
+                  the narrow one: written from primary sources, named below,
+                  checked again when something looks off, with the gaps listed.
+                  What is gone is the editorialising about our own diligence, and
+                  the comment above already draws exactly that line: one of those
+                  is a fact and the other is a claim about our own diligence. */}
             {sourceCount > 1 ? (
-              <>Every Gemlyx entry is written from primary sources — the venue's own site, the operator's
-              own timetable — and checked again whenever something looks off. We have not been anywhere in
-              person and we do not pretend otherwise: anything we could not stand up is listed below rather
-              than quietly smoothed over.</>
+              <>Every Gemlyx entry is written from primary sources, the venue's own site and the operator's
+              own timetable, and checked again whenever something looks off. Anything we could not stand up
+              is listed below rather than quietly smoothed over.</>
             ) : (
               <>This entry is written from primary sources and checked again whenever something looks off.
               It was written before we started saving the full list of pages the research opened, so only
-              the official site is shown below. We have not been anywhere in person and we do not pretend
-              otherwise: anything we could not stand up is listed rather than quietly smoothed over.</>
+              the official site is shown below. Anything we could not stand up is listed here rather than
+              quietly smoothed over.</>
             )}
           </div>
 
