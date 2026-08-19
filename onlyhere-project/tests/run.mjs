@@ -71,6 +71,7 @@ writeFileSync(entry, `
   export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
+  export { withoutNonModes } from ${JSON.stringify(join(root, "src/utils/routeOrder.js"))};
   export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
@@ -107,7 +108,7 @@ writeFileSync(entry, `
   export { stayTextProblem, stayTextForReader } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { offerReason as offerReasonFn } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { outOfBudget, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
-  export { MAX_STOPS_ARRIVAL_DAY } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { MAX_STOPS_ARRIVAL_DAY, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
   export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
@@ -1064,6 +1065,42 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("a town ending in -borg is not a castle", M.titlePromises("Castles of the North", ["Aalborg gamle by"], ["Aalborg"]), ["castle"]);
   is("an island promise is kept by a real island", M.titlePromises("Island Hopping in the South", ["Ærøskøbing havn"], ["Ærøskøbing"]), []);
   is("and broken by a place that is not one", M.titlePromises("Island Hopping", ["Nyhavn"], ["Copenhagen"]), ["island"]);
+
+  // ── AND THE DELIVERY SIDE WAS PLAIN SUBSTRING MATCHING ───────────
+  // The comment above DK_ISLANDS reasons at length about tokens being too short,
+  // and then every one of them was matched with `haystack.includes(w)`, so the
+  // reasoning stopped at the list and never reached the matcher. Three-letter
+  // island names sit inside ordinary mainland ones.
+  //
+  // THIS IS THE FAILURE titlePromises EXISTS TO PREVENT, produced by
+  // titlePromises: the guide ships under a headline naming an island it does not
+  // visit, and the retitle never runs because the gate says the promise was kept.
+  is("a Jutland limestone mine does not deliver Møn",
+     M.titlePromises("Island Air and Chalk Cliffs", ["Mønsted Kalkgruber"], ["Viborg"]), ["cliff", "island"]);
+  is("nor does Halsnæs deliver Als", M.titlePromises("Island Hopping", ["Halsnæs"], ["Halsnæs"]), ["island"]);
+  is("nor Furesø deliver Fur", M.titlePromises("Island Hopping", ["Furesø"], ["Furesø"]), ["island"]);
+  // The honest cases, which a plain word-boundary test would have broken. Both
+  // directions are asserted because fixing one by breaking the other is not a fix.
+  is("Møns Klint still delivers Møn, genitive s and all",
+     M.titlePromises("Island Hopping", ["Møns Klint"], ["Stege"]), []);
+  is("Fur Havn still delivers Fur", M.titlePromises("Island Hopping", ["Fur Havn"], ["Fur"]), []);
+  is("and Samsø delivers itself", M.titlePromises("Island Hopping", ["Samsø Distillery"], ["Tranebjerg"]), []);
+  // The compound allowance, and it is granted by DATA rather than by spelling:
+  // Ærø is a whole kommune, so a town name opening with it is on it. Møn is in
+  // Vordingborg Kommune, so "Mønsted" gets no such allowance. That one fact is
+  // what separates the two cases above, and there is no rule about letters that
+  // could.
+  ok("the compound allowance is limited to the islands that are a kommune",
+     M.ISLAND_KOMMUNE_NAMES.includes("ærø") && !M.ISLAND_KOMMUNE_NAMES.includes("møn"));
+  // ONE LIST, TWO FILES. planGate cannot import geography without pulling the map
+  // shapes into the planner, so the names are repeated. This is the assertion
+  // that stops them drifting, which is the fault behind six bugs in this repo.
+  is("and it says the same thing as the kommune table it mirrors",
+     [...M.ISLAND_KOMMUNE_NAMES].sort(),
+     Object.values(M.ISLAND_BY_KOMMUNE).map(v => v.toLowerCase()).sort());
+  // namedIn on its own, so a failure points at the matcher rather than the gate.
+  ok("a token must start a word wherever it appears", !M.namedIn("halsnæs", "als"));
+  ok("even for an island that owns its compounds", !M.namedIn("nyfanø", "fanø"));
 }
 
 // ── the dash ban, enforced instead of requested ────────────────────
@@ -9439,7 +9476,23 @@ is("missing licence does not require credit", creditIsRequired({}), false);
 
   // The override fills a gap now. His edited value wins, because he is the one
   // who can open a map and look at it.
-  ok("the frozen coordinate only fills a gap", /if \(!editedCoord && frozenCoord\) \{/.test(code2));
+  ok("the frozen coordinate only fills a gap", /if \(!editedCoord && frozenCoord && !studioFrozenGeo\.fromTownCentre\) \{/.test(code2));
+  // ── AND A TOWN CENTRE IS NOT A COORDINATE FOR THIS PLACE, 19 AUG ──
+  // generateArea sets fromTownCentre when no lookup found the venue and it fell
+  // back to the middle of the town. The flag was written in two places and read
+  // in NONE, so the town's centre point published as the entry's own coordinate.
+  // A stored __lat is the top of the resolution chain, so from then on it was
+  // marked precise, drawn as a solid pin with no dashed ring, trusted for
+  // distances and sent to Google as a bare pair.
+  //
+  // The gate below cannot catch it: blockingCoordProblems asks whether the
+  // coordinate is near the town the entry names, and a town centre is zero
+  // kilometres from its own town. It is the one wrong coordinate that passes
+  // every check we have.
+  ok("a town-centre fallback is not stored as this entry's pin",
+     /fromTownCentre/.test(code2));
+  ok("and not storing it is recorded rather than silent",
+     /The town centre was not stored as this entry's coordinate/.test(appSrc2));
   ok("reading his edit through the same helper", /const editedCoord = placeCoords\(shaped\);/.test(code2));
   // And a frozen coordinate that fails the check is dropped rather than dead-ending
   // the publish, which is the outcome the gate's own message already offers.
@@ -15959,19 +16012,175 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // His rule, verbatim. `_dateWasStripped` was written onto the draft and read
   // by nothing in the whole repo: the pipeline recorded that it had deleted the
   // dates and published anyway.
+  // ── A NEGATED MODE IS NOT A MODE, 19 AUG 2026 ────────────────────
+  // generateGuide derived the travel mode with four raw regexes over the
+  // conversation, so "we have no car" matched \bcar\b and the whole guide was
+  // built as a driving trip: the writer was told the primary mode was CAR, every
+  // unspecified leg was routed as driving, and the day cards printed car chips
+  // with driving Maps links. routeOrder exports withoutNonModes for exactly this
+  // text and its own comment says "this one already shipped an inversion once".
+  // This was the second.
+  //
+  // Meanwhile gateMode, 330 lines above in the same function, ran the SAME text
+  // through travelModeKey, which strips negations. Two answers to one question on
+  // one build.
+  //
+  // The rule is asserted on the HELPER, because mentionedModes is a local of a
+  // closure a thousand lines long that nothing can import; the wiring is asserted
+  // on the source. Both, because either alone passes while the other is broken.
+  {
+    const w = M.withoutNonModes;
+    ok("a car that is not had is not a car", !/\bcar\b/.test(w("we don't have a car, we'll be on trains")));
+    ok("nor one written without an apostrophe", !/\bcar\b/.test(w("we dont have a car")));
+    ok("nor 'without a car'", !/\bcar\b/.test(w("travelling without a car")));
+    // The other direction, which is what makes it a filter rather than a delete.
+    ok("a car they do have survives", /\bcar\b/.test(w("we are renting a car in Aarhus")));
+    // NOT_TRAVEL closes the walking half at the same time. onlyWalking sets the
+    // walking cap to Infinity, so a five kilometre leg was measured as an hour's
+    // walk and then thrown away by the renderer's plausibility cap, and the reader
+    // got "Too far to walk" in place of the journey that had been paid for.
+    ok("walking distance is not a way of travelling", !/\bwalk/.test(w("the hotel is within walking distance")));
+    ok("nor is a walking tour", !/\bwalk/.test(w("we like walking tours")));
+    ok("but walking is", /\bwalk/.test(w("we want to be walking most of the time")));
+  }
+  ok("the guide build strips negations before reading the mode",
+     /const modeText = withoutNonModes\(lc\);/.test(appK));
+  ok("and every mention test reads the stripped text",
+     !/\.test\(lc\);/.test(appK.slice(appK.indexOf("const modeText = withoutNonModes(lc);"),
+                                        appK.indexOf("const mentionedModes = ["))));
+  // ONE ANSWER FOR "WHICH MODE", shared with the plan gate rather than decided by
+  // the order the array literal happens to be typed in.
+  ok("and the primary mode agrees with the gate's when it can",
+     /const primaryKey = travelModeKey\(convoText\);/.test(appK)
+     && /mentionedModes\.includes\(primaryKey\) \? primaryKey/.test(appK));
+
+  // ── 3. AND A BLANK TIER, WHICH NOTHING GATED UNTIL 19 AUG 2026 ───
+  // studioContent.js removed the `t.tier || "Worth Considering"` default with the
+  // sentence "Now it stays empty and the audit blocks the publish instead". The
+  // audit does raise it as critical. But auditEntry is imported by exactly two
+  // files, StudioAssistant.jsx and factSweep.js, and neither is the publish path,
+  // so the default was removed and the block that replaced it was never built. A
+  // town or festival with an empty tier published with tier: "" and every card
+  // showed no rank, which is what Oliver asked to never happen: "the tier part
+  // should NEVER be left out."
+  //
+  // Asserted at the GATE, not by the presence of the word tier, and asserted
+  // through tierOf so an unrecognised value is refused as well as an empty one.
+  // ── TWO KINDS OF REFUSAL, ONE OF WHICH HAD NO `missing`, 19 AUG ──
+  // mergeGlance pushes { field, value, untranslated } for a value still in Danish
+  // and { field, value, missing } for a figure not in the research. describeGlance
+  // read `x.missing.join(", ")` for both, so one Danish value anywhere in the
+  // batch threw a TypeError out of the function whose only job is to describe
+  // what happened.
+  //
+  // AND THE THROW WAS INVISIBLE. The caller wraps the stage in `catch { }`, and
+  // by then the patched fields are already written. So the draft kept its new
+  // values, the run log recorded no stage at all, and the reconciliation that
+  // clears a stale "we could not find a price" uncertainty never ran: the row
+  // published a filled priceNote AND an uncertainty saying the price was never
+  // found. The contradiction the stage exists to prevent, caused by a crash in
+  // the sentence describing it.
+  {
+    const danish = { rejected: [{ field: "ticketInfo", value: "Dagsbillet 395,- DKK", untranslated: ["dagsbillet"] }] };
+    const untraced = { rejected: [{ field: "price", value: "180 DKK", missing: ["180"] }] };
+    const both = { rejected: [...danish.rejected, ...untraced.rejected] };
+    // It RETURNS rather than throwing, which is the whole finding.
+    ["danish", "untraced", "both"].forEach((n, i) => {
+      const r = [danish, untraced, both][i];
+      let out = null, threw = false;
+      try { out = M.describeGlance(r); } catch { threw = true; }
+      ok(`describing a ${n} refusal does not throw`, !threw);
+      ok(`and says something about it`, typeof out === "string" && out.length > 10);
+    });
+    // And the two are described differently, because "refused because a figure is
+    // not in the research" is the wrong sentence for a value refused for being in
+    // Danish. A single catch-all wording would pass the no-throw test above while
+    // telling him the wrong thing.
+    ok("a Danish value is named as Danish", /still in Danish/.test(M.describeGlance(danish)));
+    ok("and an untraceable figure as untraceable", /appears nowhere in the research/.test(M.describeGlance(untraced)));
+    ok("neither wording leaks into the other",
+       !/appears nowhere/.test(M.describeGlance(danish)) && !/still in Danish/.test(M.describeGlance(untraced)));
+  }
+  // The identical unguarded read in App.jsx, which is the one that actually ran
+  // during a draft.
+  ok("and the draft pipeline guards the same two shapes",
+     /Array\.isArray\(x\.missing\) && x\.missing\.length/.test(appK)
+     && /which is still in Danish/.test(appK));
+
+  ok("publishing an entry with no usable tier is refused",
+     /if \("tier" in shaped && !tierOf\(shaped\)\) \{/.test(appK));
+  ok("and the refusal lists the tiers it will accept",
+     /Set "tier" in the draft above to one of: \$\{TIERS\.map/.test(appK));
+  // THE POINT OF THE RULE, which a source grep cannot see. Both failing shapes
+  // and one passing one, so a gate that refused everything would fail here too.
+  {
+    const t = (v) => M.tierOf({ tier: v });
+    ok("an empty tier has no rank", !t(""));
+    ok("nor does one Gemlyx does not recognise", !t("Pretty Good"));
+    ok("and a real one does", !!t(M.TIERS[0].label));
+  }
+  // ── AND THE PASTE-READY CODEGEN INVENTED THE SAME FOUR VALUES ────
+  // studioContent.js deleted `tier`, `popularityTag`, `ticketStatus` and `price`
+  // defaults by name, each with its own paragraph saying why: a rank nobody
+  // decided, a "Hidden Gem" nobody judged, a green "Tickets on sale" chip for an
+  // event nobody checked, and the Café Broløs "See website" price. The codegen
+  // panel next to the publish button still wrote all four, so the two paths
+  // answered the same question differently depending on which button was used.
+  // SCOPED TO THE CODEGEN STRINGS, not to the whole file. A bare search for the
+  // words also matches the comments explaining the removal and the attractions
+  // card's own display fallback, neither of which publishes anything: the first
+  // version of this assertion failed on both and was measuring the wrong thing.
+  {
+    // ANCHORED ON THE ONE STRING EVERY CODEGEN CONTAINS, and sliced to the end
+    // of its template literal rather than to "blogBody: [". The first version
+    // anchored on `code = \`// 1) Ctrl+F`, which the FESTIVAL codegen does not
+    // start with (it opens with a "This reads as a MAJOR festival" note), and it
+    // cut each block at blogBody, which sits BEFORE ticketStatus in that same
+    // block. So the one codegen carrying ticketStatus was outside every slice,
+    // and a mutation restoring `|| "on_sale"` survived the assertion written to
+    // catch it.
+    const gens = [];
+    for (let at = appK.indexOf("1) Ctrl+F for"); at > 0; at = appK.indexOf("1) Ctrl+F for", at + 1)) {
+      gens.push(appK.slice(at, appK.indexOf("`;", at)));
+    }
+    ok("the codegen blocks were found", gens.length >= 4);
+    ok("and the festival one is among them", gens.some(g => /ticketStatus:/.test(g)));
+    ["Worth Considering", "Hidden Gem", "on_sale", "See website"].forEach(v =>
+      is(`the codegen no longer invents ${v}`, gens.filter(g => g.includes(`|| "${v}"`)), []));
+    // The positive half: they still write the fields, they just no longer fill
+    // them in. An assertion that passed because the codegen stopped emitting the
+    // key at all would be hiding a different bug.
+    ok("and still writes the fields themselves", gens.some(g => /tier: \$\{J\(t\.tier\)\}/.test(g)));
+  }
+
   ok("publishing a dateless festival is refused",
     /if \(studioType === "festival" && !String\(shaped\.date \|\| ""\)\.trim\(\)\) \{/.test(appK));
-  ok("and the refusal names the field to fill", /Fill "dateStart" in the draft above/.test(appK));
+  ok("and the refusal names the field to fill", /Fill "\$\{editingId !== null \? "date" : "dateStart"\}" in the draft above/.test(appK));
   // It blocks an EDIT too, unlike the coordinate gate, and the reason is in the
   // comment: a wrong pin on a live row is a thing you are stuck with, an empty
   // date is one field away from fixed.
-  const gate = (appK.match(/if \(studioType === "festival" && !String\(shaped\.date[\s\S]{0,1400}?\n      \}/) || [""])[0];
+  const gate = (appK.match(/if \(studioType === "festival" && !String\(shaped\.date[\s\S]{0,3000}?\n      \}/) || [""])[0];
   ok("the date gate is findable", gate.length > 100);
   ok("and it does not exempt an edit the way the coordinate gate does", !/isEditing/.test(gate));
   // A stripped draft is told a different thing from one that never had a date,
   // because those are different problems with different fixes.
   ok("a stripped draft is told its date was removed", /This draft HAD a date and the past-date check removed it/.test(gate));
   ok("and one that never had a date is told where to look", /The operator's own site and the ticket listings are the two places worth looking/.test(gate));
+  // ── THE KEY IT NAMES IS THE KEY IT READS, 19 AUG 2026 ────────────
+  // The message said `dateStart` and the gate reads `shaped.date`. On a fresh
+  // draft that survives, because shapeForLive renames dateStart to date. On an
+  // EDIT it does not: editItem loads the already-shaped payload, shapeForLive is
+  // skipped, and that payload has `date` and has never had `dateStart`. So the
+  // founder added the field he was told to add, was refused by the same
+  // sentence, and had to guess the real key. The coordinate gate twenty lines
+  // above says why that matters: "A gate whose instructions cannot be followed
+  // is not a gate, it is a wall."
+  ok("an edit is told to fill the key its own payload uses",
+     /editingId !== null \? "date" : "dateStart"/.test(gate));
+  // Both halves asserted, because naming `date` unconditionally would break the
+  // fresh-draft path in the other direction.
+  ok("and a fresh draft is still told dateStart, which is what shapeForLive reads",
+     /: "dateStart"/.test(gate));
 
   // ── 3. THE LOOP THAT PRINTED THE ANSWER AND THREW IT AWAY ────────
   // The run log said: match weak, "there is no date on file to confirm this is
@@ -16013,7 +16222,26 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   // And the caller only ever fills an empty field, and stamps where it came from.
   ok("the offer is only taken on an empty field",
     /if \(!String\(t\.dateStart \|\| ""\)\.trim\(\) && match\?\.dateOffer\?\.start\)/.test(appK));
-  ok("and the row records that the date is a vendor's", /__dateSource = \{ source: "ticketmaster"/.test(appK));
+  // ── WRITTEN IN THE SHAPE ITS READERS KEY ON, 19 AUG 2026 ─────────
+  // This wrote { source, listings, name, at } and nothing anywhere reads
+  // `source`. shapeForLive's allow-list carries a date source only when
+  // `ds?.by && Array.isArray(ds.dates)`, provenance renders only `if (dates?.by)`,
+  // and the staleness re-check tests `by === "official-site"`. So the stamp the
+  // code's own comment promises, that the founder can see the date came from a
+  // ticket vendor rather than the operator, was dropped at publish and the date
+  // shipped untraceable.
+  //
+  // Asserted THROUGH the reader, not on the literal, because a second writer
+  // agreeing with itself is what produced the bug.
+  ok("and the row records that the date is a vendor's", /__dateSource = \{\s*by: "ticketmaster"/.test(appK));
+  ok("with the dates the reader needs beside it", /dates: \[off\.start, off\.end\]\.filter\(Boolean\)/.test(appK));
+  {
+    const stamped = { __dateSource: { by: "ticketmaster", dates: ["2026-08-16"], at: "2026-08-19T00:00:00.000Z" } };
+    const shapedEvent = M.shapeForLive("festival", { name: "Kaløvig Havnefestival", date: "2026-08-16", ...stamped });
+    ok("and the allow-list carries it to the published row", !!shapedEvent.__dateSource?.by);
+    is("naming the vendor", shapedEvent.__dateSource.by, "ticketmaster");
+    ok("and provenance can render it", M.fieldProvenance(shapedEvent).some(f => f.field === "dates" && f.by === "ticketmaster"));
+  }
 
   // ── 4. WHY SOME OF IT WAS IN DANISH ──────────────────────────────
   // ticketInfo read "Dagsbillet 395.00,- DKK; Partoutbillet 695.00,- DKK.
@@ -18802,7 +19030,25 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // The build path has to attach where they landed, or the card can never fire.
   const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
-  ok("the build bakes the arrival point onto the guide", /_arrivalPoint: arrivalPoint\(convoText\)/.test(appR));
+  // ── AND HANDS IT THE RESOLVER, 19 AUG 2026 ───────────────────────
+  // arrival.js guards its whole Danish-town branch with `if (typeof townPoint ===
+  // "function")`, and says why: the file keeps no library of its own so it cannot
+  // drift from the one the app uses. previewMatch passes townPointFor. The guide
+  // build did not, so "we are taking the ferry into Aalborg", the sentence that
+  // branch exists for, produced null: returnLeg returned null, describeReturn
+  // returned "", and the "Getting back" card rendered nothing on a guide ending
+  // 100 km away. The preview screen for the same conversation did anchor on
+  // Aalborg, so the two screens disagreed about whether the trip had a start.
+  //
+  // Airport arrivals were unaffected, which is why nothing looked broken.
+  ok("the build bakes the arrival point onto the guide",
+     /_arrivalPoint: arrivalPoint\(convoText, \{ townPoint: townPointFor \}\)/.test(appR));
+  // Both callers, one rule. Asserted together so a fix to one is not mistaken
+  // for a fix to the pair.
+  {
+    const pm = readFileSync(join(root, "src/utils/previewMatch.js"), "utf8");
+    ok("and the preview passes the same resolver", /arrivalPoint\(convoText, \{ townPoint: townPointFor \}\)/.test(pm));
+  }
   // ── AND THE LOCAL SAVE NOW CARRIES IT ───────────────────────────
   // These two assertions used to say the opposite, and they were right at the
   // time: the save shape deliberately did not store _arrivalPoint, because

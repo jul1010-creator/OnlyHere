@@ -124,7 +124,9 @@ export const FEATURE_WORDS = {
   cathedral: { claim: ["domkirke", "cathedral", "katedral"] },
   church: { claim: ["kirke", "church", "kloster", "abbey", "monastery"] },
   beach: { claim: ["strand", "beach", "beaches", "dune", "klit"] },
-  island: { claim: ["island", "islands", "øen", "øer"], deliver: ["island", "islands", "øen", "øer", ...DK_ISLANDS] },
+  // ISLAND NAMES ARE MATCHED WHOLE, THE FEATURE WORDS ARE NOT. See namedIn
+  // below for why they had to be split apart.
+  island: { claim: ["island", "islands", "øen", "øer"], deliver: ["island", "islands", "øen", "øer"], named: DK_ISLANDS },
   ferry: { claim: ["færge", "ferry", "harbour", "harbor"], deliver: ["færge", "ferry", "harbour", "harbor", "havn"] },
   viking: { claim: ["viking", "vikinge"] },
   museum: { claim: ["museum", "museet", "gallery", "kunst"] },
@@ -135,9 +137,81 @@ export const FEATURE_WORDS = {
   garden: { claim: ["haven", "garden", "gardens", "botanisk"] },
 };
 
+// ── A PLACE NAME IS MATCHED WHOLE, A FEATURE WORD IS NOT ────────────
+//
+// The comment on DK_ISLANDS above reasons carefully about tokens being too
+// short, and then the delivery side matched all of them with plain `includes`,
+// so the reasoning stopped at the list and never reached the matcher. Every
+// three-letter island in it is inside an ordinary mainland name:
+//
+//   "møn" is inside Mønsted Kalkgruber, a limestone mine in Jutland
+//   "als" is inside Halsnæs, Halskov and Halsted
+//   "fur" is inside Furesø
+//
+// So a Jutland trip through Mønsted satisfied an island promise, the retitle
+// never ran, and the guide shipped under a headline naming an island it does not
+// visit. That is the exact failure titlePromises exists to catch, produced by
+// titlePromises.
+//
+// AND THE OBVIOUS FIX WOULD HAVE BROKEN THE HONEST CASE. A plain word-boundary
+// test refuses "Møns Klint", which really is on Møn, because Danish forms the
+// genitive by adding s with no apostrophe. So one trailing s is allowed, and
+// nothing else.
+//
+// ── AND A COMPOUND IS DECIDED BY DATA, NOT BY LETTER COUNT ──────────
+// A bounded test alone refuses "Ærøskøbing", which is the main town ON Ærø. A
+// Danish compound closes the gap between its parts, so the island name sits
+// inside the town name with no boundary on either side, and by letters alone
+// that is indistinguishable from "Mønsted": both are an island token followed by
+// more letters. Trading one error for the other is no good here, because
+// Ærøskøbing is a place this site covers and Mønsted is not.
+//
+// THE DISCRIMINATOR IS WHICH ISLANDS ARE THEIR OWN KOMMUNE, and that is checked
+// data sitting in data/kommuner.js rather than a rule about spelling. Ærø, Samsø,
+// Fanø, Læsø, Langeland, Bornholm and Mors are each a whole kommune, so a town
+// whose name opens with one of those names is on that island: Ærøskøbing,
+// Fanøfærgen, Samsøvej. Møn is in Vordingborg Kommune, Als is in Sønderborg, Fur
+// is in Skive and Fyn is several, so none of those names owns the compounds it
+// appears in, and those are exactly the four tokens that collided with mainland
+// names in the first place.
+//
+// So the rule splits the list by a fact rather than by length, and every case
+// lands right: Ærøskøbing yes, Mønsted no, Møns Klint yes (genitive), Halsnæs no,
+// Fur Havn yes, Furesø no.
+//
+// Duplicated deliberately rather than imported from utils/geography.js: planGate
+// is imported by the planner and geography pulls in the map shapes and the whole
+// kommune table with it. The suite asserts the two lists say the same thing, so
+// they cannot drift.
+//
+// The feature words keep plain substring matching on purpose: "cliffs" has to
+// match "cliff", and those are English and Danish common nouns rather than place
+// names, which is why they were never the problem.
+const isLetter = (ch) => !!ch && /[a-zæøåäöüéèA-ZÆØÅ]/.test(ch);
+// The islands that are a whole kommune, so the island's name owns any town name
+// that opens with it. Mirrors ISLAND_BY_KOMMUNE in utils/geography.js.
+export const ISLAND_KOMMUNE_NAMES = ["ærø", "samsø", "fanø", "læsø", "langeland", "bornholm", "mors"];
+
+export const namedIn = (haystack, token) => {
+  const t = norm(token);
+  const hay = norm(haystack);
+  if (!t || !hay) return false;
+  const ownsCompounds = ISLAND_KOMMUNE_NAMES.includes(t);
+  for (let from = 0; ; from += 1) {
+    const i = hay.indexOf(t, from);
+    if (i < 0) return false;
+    let end = i + t.length;
+    if (hay[end] === "s") end += 1;              // Møns Klint, Samsøs færge
+    // The token must start a word either way. "Halsnæs" contains "als" in the
+    // middle and is not on Als, whichever list the token is in.
+    const startsWord = !isLetter(hay[i - 1]);
+    if (startsWord && (ownsCompounds || !isLetter(hay[end]))) return true;
+    from = i;
+  }
+};
+
 // A feature counts as delivered if any stop or town name carries one of its
-// words. Substring matching is fine at these lengths, and "cliffs" has to match
-// "cliff", but see DK_ISLANDS above for what happens when a token is too short.
+// words.
 export const titlePromises = (title, stopNames = [], townNames = []) => {
   const t = norm(title);
   const haystack = [...(stopNames || []), ...(townNames || [])].map(norm).join(" | ");
@@ -147,7 +221,9 @@ export const titlePromises = (title, stopNames = [], townNames = []) => {
     const deliver = words.deliver || words.claim;
     // A title naming the very thing it promises delivers it: "Nyborg Slot" in
     // the title AND on the itinerary is one castle, not a broken promise.
-    if (!deliver.some(w => haystack.includes(w))) missing.push(feature);
+    if (deliver.some(w => haystack.includes(w))) continue;
+    if ((words.named || []).some(w => namedIn(haystack, w))) continue;
+    missing.push(feature);
   }
   return missing;
 };

@@ -325,6 +325,32 @@ export const describeGlance = (r) => {
   // Said out loud rather than swallowed. A refused extraction means a figure
   // was composed rather than found, and that is the single most useful thing
   // this stage can report about itself.
-  if (r.rejected?.length) parts.push(`${r.rejected.length} refused, because ${r.rejected.length === 1 ? "a figure in it is" : "figures in them are"} not in the research at all: ${r.rejected.map(x => `${x.field} (${x.missing.join(", ")})`).join(", ")}`);
+  // ── TWO KINDS OF REFUSAL, AND ONLY ONE OF THEM HAS `missing` ─────
+  // mergeGlance pushes two shapes into this array and they do not share a key:
+  // the untranslated branch above writes { field, value, untranslated } and the
+  // untraceable-number branch writes { field, value, missing }. This line read
+  // `x.missing.join(", ")` for both, so ONE Danish value anywhere in the batch
+  // threw a TypeError out of a function whose only job is to describe what
+  // happened.
+  //
+  // AND THE THROW WAS INVISIBLE, which is what makes it worth this comment. The
+  // caller in App.jsx wraps the whole At a Glance stage in `catch { /* the draft
+  // is worth more than this stage */ }`, and by the time describeGlance runs the
+  // patched fields have already been written. So the draft kept its new values,
+  // the run log recorded no stage at all, and the reconciliation that clears a
+  // stale "we could not find a price" uncertainty never ran. The row then
+  // published with a filled priceNote AND an uncertainty saying the price was
+  // never found: the exact contradiction this stage exists to prevent, brought
+  // back by a crash in the sentence describing it.
+  //
+  // Each kind now says what it actually is, because "refused because a figure is
+  // not in the research" is the wrong sentence for a value refused for being in
+  // Danish.
+  const why = (x) => Array.isArray(x?.missing) && x.missing.length
+    ? `${x.field} (${x.missing.join(", ")} appears nowhere in the research)`
+    : Array.isArray(x?.untranslated) && x.untranslated.length
+      ? `${x.field} (still in Danish: ${x.untranslated.join(", ")})`
+      : `${x?.field || "a field"} (refused)`;
+  if (r.rejected?.length) parts.push(`${r.rejected.length} refused: ${r.rejected.map(why).join(", ")}`);
   return parts.join(". ") || "nothing to change";
 };

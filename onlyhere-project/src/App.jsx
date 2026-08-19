@@ -88,7 +88,7 @@ import { listingMatchesSubject, describeListingRefusal } from "./utils/placeChoi
 import { cityFromLocation } from "./utils/guideEnrichment";
 import { readBrief, briefBlock, nextAsks } from "./utils/tripBrief";
 import { matchedPlaces, previewPools, wantedCategories } from "./utils/previewMatch";
-import { travelModeKey } from "./utils/routeOrder";
+import { travelModeKey, withoutNonModes } from "./utils/routeOrder";
 import { buildChatReport, chatReportFilename } from "./utils/chatReport";
 import { openingThread, withTestBrief, withoutTestBrief } from "./utils/chatThread";
 import { downloadReport } from "./utils/previewReport";
@@ -4686,19 +4686,19 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
       let code = "";
       if (sType === "town") {
         const nextId = Math.max(0, ...towns.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier || "Worth Considering")}, placeKind: ${J(t.placeKind || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number.isFinite(Number(t.lat)) ? Number(t.lat).toFixed(3) : "??"}, ${Number.isFinite(Number(t.lon)) ? Number(t.lon).toFixed(3) : "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
+        code = `// 1) Ctrl+F for \`const towns = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, photo: "/towns/${slug}.jpg", region: ${J(t.region)}, emoji: ${J(t.emoji || "📍")}, tag: ${J(t.tag)}, desc: ${J(t.characterAndFit)}, highlight: ${J(t.highlight)}, travelTime: ${J(t.travelTime)}, mapHint: ${J(t.mapHint || t.name + ", Denmark")}, nomiPotential: ${J(t.nomiPotential || "Medium")}, tier: ${J(t.tier)}, placeKind: ${J(t.placeKind || "")}, partOf: ${J(t.partOf || "")}, dayTripFrom: ${J(t.dayTripFrom || "")}, recommendedStayGlance: ${J(t.recommendedStayGlance)}, bestTimeGlance: ${J(t.bestTimeGlance)}, accommodationGlance: ${J(t.accommodationGlance)}, typicalCosts: ${J(t.typicalCosts)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([[`What to Do in ${t.name}`, t.whatToDo], ["The Reality Check", t.gettingThereReality]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Ctrl+F for \`const TOWN_COORDS\` and paste right after the { :\n${J(t.name)}: [${Number.isFinite(Number(t.lat)) ? Number(t.lat).toFixed(3) : "??"}, ${Number.isFinite(Number(t.lon)) ? Number(t.lon).toFixed(3) : "??"}],\n\n// 3) Add a photo at public/towns/${slug}.jpg\n// 4) VERIFY every fact before committing — especially highlight, travelTime, dates and coordinates.`;
       } else if (sType === "festival") {
         const isMajor = (t.scale || "").toLowerCase().startsWith("major");
         const targetArr = isMajor ? majorEvents : events;
         const targetName = isMajor ? "majorEvents" : "events";
         const nextId = Math.max(0, ...targetArr.map(x => x.id)) + 1;
-        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
+        code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier)}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus)}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (sType === "free") {
         const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
+        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag)}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
       } else if (sType === "booking") {
         const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
+        code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price)}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
       } else if (sType === "nightStreet") {
         const nextId = Math.max(0, ...nightlifeStreets.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const nightlifeStreets = [\` in src/data/nightlifeStreets.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isStreet: true, town: ${J(t.town)}, location: ${J(t.location)}, emoji: ${J(t.emoji || "🍻")}, category: ${J(t.category || "Bar street")}, crowd: ${J(t.crowd)}, priceNote: ${J(t.priceNote)}, photo: "/nightlife-streets/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-streets/${slug}.jpg (or remove the photo field)\n// 3) The bars ON this street are NOT listed here. They are matched from their own published rows by town + street name, so publishing one more bar needs no edit to this entry.`;
@@ -4707,14 +4707,14 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// 1) Ctrl+F for \`const nightlifeTowns = [\` in src/data/nightlifeTowns.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🌃")}, photo: "/nightlife-towns/${slug}.jpg",\n  desc: ${J(t.desc)},\n  color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["After Dark", t.afterDark], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-towns/${slug}.jpg (or remove the photo field)\n// 3) VERIFY this matches the town's actual nightlife character before committing.`;
       } else if (sType === "food") {
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, emoji: ${J(t.emoji || "🍽")}, category: ${J(t.category)}, location: ${J(t.location)}, price: ${J(t.price)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.`;
       } else if (sType === "foodStreet") {
         // Lands in the SAME foodSpots array as regular Food entries — Food Street is a
         // distinct Studio category to WRITE (its own tailored research/prompt), but the
         // live site's Food page filters restaurants vs. food streets by isFoodStreet on
         // one shared list, not a separate array — see the "Food Streets" tab on /food.
         const nextId = Math.max(0, ...foodSpots.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
+        code = `// 1) Ctrl+F for \`const foodSpots = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isFoodStreet: true, emoji: ${J(t.emoji || "🍜")}, category: ${J(t.category || "Food market")}, location: ${J(t.location)}, price: ${J(t.price)}, photo: "/food/${slug}.jpg",\n  desc: ${J(t.vibeLocation)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#D9A441")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["How It's Made", t.howItsMade], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/food/${slug}.jpg (or remove the photo field)\n// 3) VERIFY prices, address and that it still exists before committing.\n// 4) This is a Food Street/market — isFoodStreet: true is what puts it in the "Food Streets" tab on the live Food page instead of "Restaurants".`;
       } else if (sType === "essential") {
         const nextId = Math.max(0, ...essentials.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`export const essentials = [\` in src/data/essentials.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, category: ${J(t.category || "Transport")}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, howTo: ${J(t.howTo)}, price: ${J(t.price)}, link: ${t.link ? J(t.link) : "null"}${t.linkAndroid ? `, linkAndroid: ${J(t.linkAndroid)}` : ""}, tip: ${J(t.tip)}${t.visitorNote ? `, visitorNote: ${J(t.visitorNote)}` : ""}, verified: ${J(stamp)} },\n\n// 2) VERIFY the price and that the system still works this way before committing. This is the type that goes stale fastest.`;
@@ -5005,7 +5005,12 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
                 // A refused value is the one thing here worth interrupting for:
                 // the extractor composed a figure instead of finding one.
                 merged.rejected.length
-                  ? `REFUSED, a figure not in the research at all: ${merged.rejected.map(x => `${x.field} said "${x.value}" and ${x.missing.join(", ")} appears nowhere`).join("; ")}`
+                  // Same two shapes as describeGlance, same TypeError, same
+                  // silent loss of the whole stage. See the note in
+                  // utils/glanceExtract.js.
+                  ? `REFUSED: ${merged.rejected.map(x => Array.isArray(x.missing) && x.missing.length
+                      ? `${x.field} said "${x.value}" and ${x.missing.join(", ")} appears nowhere in the research`
+                      : `${x.field} said "${x.value}", which is still in Danish`).join("; ")}`
                   : "",
               ].filter(Boolean).join(". ").slice(0, 400),
               used: merged.changed.length > 0,
@@ -5561,7 +5566,36 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
           const off = match.dateOffer;
           t.dateStart = off.start;
           if (off.end) t.dateEnd = off.end;
-          t.__dateSource = { source: "ticketmaster", listings: off.listings, name: match.event?.name || "", at: new Date().toISOString() };
+          // ── THE SHAPE EVERY READER ACTUALLY KEYS ON ────────────
+          // This wrote { source, listings, name, at } and nothing anywhere reads
+          // `source`. The sibling branch thirty lines up writes { by, dates, at },
+          // and that is the shape shapeForLive's allow-list carries
+          // (`ds?.by && Array.isArray(ds.dates)`), the shape provenance.js renders
+          // (`if (dates?.by)`), and the shape the staleness re-check tests
+          // (`t.__dateSource?.by === "official-site"`).
+          //
+          // So the stamp the comment above promises, "where it came from is
+          // stamped on the row so the founder can see the date is a ticket
+          // vendor's rather than the operator's", was dropped at publish. The
+          // date shipped with NO source at all, indistinguishable from one
+          // nobody traced, on the one branch that exists to say a date came from
+          // a vendor rather than the venue.
+          //
+          // studioContent.js's own comment predicted this: "this allow-list has
+          // eaten a feature four times, so a new __field gets added to it in the
+          // same edit that creates it". This is the fifth, and the cause is the
+          // same one written down there: two writers, one reader, and only one of
+          // them was checked against it.
+          t.__dateSource = {
+            by: "ticketmaster",
+            dates: [off.start, off.end].filter(Boolean).map(String),
+            at: new Date().toISOString(),
+            // Kept for the run log, which reads the draft object before publish.
+            // The allow-list drops them, which is correct: a reader needs to know
+            // a ticket vendor said it, not how many listings agreed.
+            listings: off.listings,
+            name: match.event?.name || "",
+          };
           decide("dateStart", {
             winner: `Ticketmaster's own listing${off.listings > 1 ? `s (${off.listings} of them)` : ""}`,
             loser: "an empty date field",
@@ -7709,7 +7743,48 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         const editedCoord = placeCoords(shaped);
         const frozenCoord = Number.isFinite(studioFrozenGeo.lat) && Number.isFinite(studioFrozenGeo.lon)
           ? { lat: studioFrozenGeo.lat, lon: studioFrozenGeo.lon } : null;
-        if (!editedCoord && frozenCoord) {
+        // ── AND A TOWN CENTRE IS NOT THIS PLACE'S COORDINATE ───────
+        //
+        // generateArea already knows when it gave up: the fallback branch sets
+        // `precise = false` with the reason "centre of ${draftTown}, because no
+        // lookup found the place itself", and carries it here as
+        // `studioFrozenGeo.fromTownCentre`. That field was written in two places
+        // and READ NOWHERE. So the flag was computed, threaded through the whole
+        // pipeline, and dropped at the one line that decides what gets stored.
+        //
+        // The consequence is the worst version of it, because a stored __lat is
+        // the TOP of the resolution chain since 10 August. A venue nobody could
+        // geocode published the town's centre point as its own coordinate, and
+        // from then on it was marked precise, drawn as a solid pin with no dashed
+        // ring, trusted by legDistanceKm, allowed to skip geocoding entirely, and
+        // sent to Google Directions as a bare pair with no name attached. The
+        // guide measured a journey to the middle of a town and printed it as the
+        // journey to the restaurant.
+        //
+        // AND THE GATE BELOW CANNOT CATCH IT, which is why this needed its own
+        // line rather than a stricter check. blockingCoordProblems asks whether
+        // the coordinate is near the town the entry names. A town centre is zero
+        // kilometres from the town it is the centre of. It is the one wrong
+        // coordinate that passes every test we have.
+        //
+        // Two entries in the same town both hitting the fallback also land on the
+        // exact same point, which coordCheck.js's sharedCoords then reports as an
+        // error nobody can explain. coordCheck names this in its own words: "both
+        // fell back to the same town centre and that fallback was then stored as
+        // though it were measured".
+        //
+        // NOTHING IS LOST BY NOT STORING IT. The town centre is already what the
+        // renderer falls back to when there is no coordinate, and on that path it
+        // is drawn as a dashed hollow ring labelled "(somewhere in <town>)". The
+        // page ends up saying the true thing instead of the confident one.
+        if (!editedCoord && frozenCoord && studioFrozenGeo.fromTownCentre) {
+          note("The town centre was not stored as this entry's coordinate", {
+            provider: "fetch", detail: "no lookup found the place itself, so the frozen coordinate is the middle of the town",
+            outcome: "empty", used: false,
+            why: "Storing it would mark it precise: solid pin, no dashed ring, trusted for distances and sent to Google as a bare pair. The page falls back to the town centre by itself and says so, which is the same point and an honest label.",
+          });
+        }
+        if (!editedCoord && frozenCoord && !studioFrozenGeo.fromTownCentre) {
           shaped.__lat = frozenCoord.lat;
           shaped.__lon = frozenCoord.lon;
           // Measured from a coordinate this entry is not going to keep? Then it is
@@ -7800,10 +7875,63 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // makes it worse. An empty date is not that: the fix IS the date, it is
       // one field in the JSON above, and saving an edit that leaves it empty is
       // publishing a dateless event by another door.
+      // ── 3. AND A TIER IS GEMLYX'S OWN JUDGEMENT, SO IT CANNOT BE BLANK ──
+      //
+      // Oliver, 18 Aug 2026, on a draft whose tier was an empty string: "the tier
+      // part should NEVER be left out."
+      //
+      // studioContent.js removed the `t.tier || "Worth Considering"` default on
+      // the strength of one sentence: "Now it stays empty and the audit blocks
+      // the publish instead (search 'tier' in entryAudit.js)." entryAudit does
+      // raise it, as critical, in those words. But auditEntry is imported by
+      // exactly two files, StudioAssistant.jsx and factSweep.js, and NEITHER of
+      // them is the publish path. publishDraft has only ever had two gates, the
+      // coordinate one and the date one above.
+      //
+      // So the default was removed and the block that was supposed to replace it
+      // was never built. A town or festival whose writer left the tier empty
+      // published with tier: "" and every card, the region picker and the preview
+      // showed no rank at all: the exact state he asked to never happen, reached
+      // by the fix for it.
+      //
+      // This is the same shape as the coordinate finding on 11 August, written
+      // down in this file eighty lines below: "auditEntry has carried coordinate
+      // checks since 6 Aug and gated NOTHING, being called only from
+      // StudioAssistant to build prompt text." A checker that reports is not a
+      // gate, and a comment saying it gates does not make it one.
+      //
+      // ASKED OF THE VALUE, not of a list of type names, exactly as entryAudit
+      // asks it: a shape that carries a tier must fill it, and one that never
+      // carries it is not scolded for a field it does not have. And an EDIT is
+      // gated too, for the same reason the date is: saving a blank tier onto a
+      // published row is publishing an unranked entry by another door.
+      if ("tier" in shaped && !tierOf(shaped)) {
+        setPublishStatus(null);
+        const said = String(shaped.tier ?? "").trim();
+        setDraftEditError(
+          `Not published. ${said
+            ? `The tier reads "${said.slice(0, 40)}", which is not one Gemlyx recognises, so every card would show no rank at all.`
+            : "There is no tier, and that is Gemlyx's own judgement about whether the place is worth planning around."} `
+          + `It is what the cards, the region picker and the preview all rank on. Set "tier" in the draft above to one of: ${TIERS.map(t => t.label).join(", ")}.`
+        );
+        return;
+      }
       if (studioType === "festival" && !String(shaped.date || "").trim()) {
         setPublishStatus(null);
         setDraftEditError(
-          `Not published, because an event with no date is not an event. Fill "dateStart" in the draft above${shaped.dateEnd ? "" : ` (and "dateEnd" if it runs more than one day)`} and publish again.` +
+          // ── THE KEY IT NAMES IS THE KEY IT READS ────────────────
+          // This said `dateStart` and the gate two lines up reads `shaped.date`.
+          // On a FRESH draft that is survivable, because shapeForLive turns the
+          // writer's dateStart into date. On an EDIT it is not: editItem loads the
+          // already-shaped payload, shapeForLive is skipped, and that payload has
+          // `date` and has never had `dateStart`. So the founder followed the
+          // instruction exactly, added "dateStart", was refused again by the same
+          // sentence, and the only way through was to guess the real key.
+          //
+          // Twenty lines above this, the coordinate gate's own comment says why
+          // that is not a small thing: "A gate whose instructions cannot be
+          // followed is not a gate, it is a wall."
+          `Not published, because an event with no date is not an event. Fill "${editingId !== null ? "date" : "dateStart"}" in the draft above${shaped.dateEnd ? "" : ` (and "dateEnd" if it runs more than one day)`} and publish again.` +
           ((editedDraft?._dateWasStripped || studioDraft?._dateWasStripped)
             ? ` This draft HAD a date and the past-date check removed it, which it does when the run has already finished. If the festival is still to come, the date the writer found was wrong; if it is running now, put the real dates in and it will publish.`
             : ` Nothing in the research stated one. The operator's own site and the ticket listings are the two places worth looking.`)
@@ -9560,11 +9688,34 @@ If the conversation only covers a single day or a few stops with no explicit day
       // reported by Oliver on 8 Aug, the SECOND crash of exactly this shape in
       // this project after the front page one. tests/run.mjs now scans this
       // function for use-before-declaration so there is not a third.
+      // ── A NEGATED MODE IS NOT A MODE ────────────────────────────
+      // These four regexes ran over the RAW conversation, so "we have no car"
+      // matched \bcar\b and put car in the list. routeOrder.js exports
+      // withoutNonModes for exactly this text and says why in its own comment:
+      // "this one already shipped an inversion once". This was the second.
+      //
+      // The failure was not subtle. "We don't have a car, we'll be on trains"
+      // produced ["car", "public transport"], travelMode became "car", and the
+      // whole guide was built as a driving trip: the enrich prompt told the
+      // writer the primary mode was CAR, every unspecified leg was routed as
+      // driving, and the day cards printed car chips with driving Maps links.
+      // Meanwhile gateMode, 330 lines above, ran the SAME text through
+      // travelModeKey, which strips negations, and judged the plan against a
+      // different mode entirely. Two answers to one question on one build.
+      //
+      // NOT_TRAVEL is in there too, which fixes the other direction at the same
+      // time: "the hotel is within walking distance" and the interest "walking
+      // tours" both used to set onlyWalking, and onlyWalking sets the walking cap
+      // to Infinity, so a five kilometre leg was measured as a sixty minute walk
+      // and then thrown away by the renderer's own plausibility cap. The reader
+      // got "Too far to walk, check the route" in place of the journey that had
+      // already been paid for.
       const lc = convoText.toLowerCase();
-      const mentionsTransit = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(lc);
-      const mentionsCar = /\b(car|driving|drive|bil|camper ?van|rv\b)\b/.test(lc);
-      const mentionsBike = /\b(bike|cykel|cycling|cycle|bicycl)\b/.test(lc);
-      const mentionsWalking = /\bwalk(ing)?\b/.test(lc);
+      const modeText = withoutNonModes(lc);
+      const mentionsTransit = /public transport|by train|by bus|trains? and buses?|offentlig transport|\btog\b/.test(modeText);
+      const mentionsCar = /\b(car|driving|drive|bil|camper ?van|rv\b)\b/.test(modeText);
+      const mentionsBike = /\b(bike|cykel|cycling|cycle|bicycl)\b/.test(modeText);
+      const mentionsWalking = /\bwalk(ing)?\b/.test(modeText);
       const mentionedModes = [mentionsBike && "bike", mentionsCar && "car", mentionsTransit && "public transport"].filter(Boolean);
       // Only relax the 30-minute walking cap when walking is genuinely the traveler's
       // ONLY selected mode — if anything else is mixed in too, that's the signal they
@@ -9574,7 +9725,17 @@ If the conversation only covers a single day or a few stops with no explicit day
       // "bike some days, train for the long stretches") — travelMode stays the single
       // best default for legs the plan doesn't specify, but mixedModes carries the full
       // set through to the per-day prompt so it stops treating one mode as dominant.
-      const travelMode = mentionedModes[0] || null;
+      // ── AND WHICH OF THEM IS THE PRIMARY ONE, ANSWERED ONCE ─────
+      // mentionedModes is in array order, which is bike then car then transit for
+      // no reason beyond how the line was typed. travelModeKey answers the same
+      // question deliberately, slowest first, and its comment records the bug that
+      // ordering fixed: "mostly walking, might rent bikes one day" planned at 60 km
+      // a day instead of 15. The plan gate already uses it. This now agrees with it
+      // whenever it can, and keeps the old answer for the modes travelModeKey can
+      // return that this list has never carried (walk, tent, camper), so nothing
+      // downstream meets a mode string it has not seen before.
+      const primaryKey = travelModeKey(convoText);
+      const travelMode = mentionedModes.includes(primaryKey) ? primaryKey : (mentionedModes[0] || null);
       const mixedModes = mentionedModes.length > 1 ? mentionedModes : null;
 
       buildStage("Working out where to stay and how you get around", 90);
@@ -9728,7 +9889,7 @@ If the conversation only covers a single day or a few stops with no explicit day
       const testProfile = randomTestProfileRef.current && convoText.includes(randomTestProfileRef.current.brief) ? randomTestProfileRef.current : null;
       endRun();
       endLog();
-      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(convoText), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
+      setGuideModal({ _gid: gid, _mode: travelMode, _onlyWalking: onlyWalking, _lightMode: mode === "plain", _travelers: travelersMatch ? travelersMatch[1].trim() : "", _grounded: !!guideGrounding, _convoText: convoText, _arrivalDate: dayKey(arrivalDate), _arrivalPoint: arrivalPoint(convoText, { townPoint: townPointFor }), _geo: freshGeo, _weatherFetchedAt: new Date().toISOString(), _exactDurations: exactFound, _noRouteFound: routeFailed, _testProfile: testProfile, _testPlan: testProfile ? plannerSkeleton : null, _planProblems: planProblems.length ? planProblems : null, title: parsed.title || "Your Custom Route", essentials: finalEssentials, days: parsed.days });
     } catch (err) {
       // A build that failed halfway still spent everything it spent up to that
       // point, and a meter that only counts successes reports a cost per guide
