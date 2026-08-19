@@ -72,7 +72,7 @@ import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
 import { GuidePage } from "./pages/GuidePage";
-import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI } from "./utils/aiClient";
+import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
 import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow } from "./utils/liveContent";
@@ -101,7 +101,7 @@ import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, 
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, isoDay, stepWords, STEP_LABELS, unresolvedTraces } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { languageBlock, readerLanguage } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
@@ -6922,6 +6922,29 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // amount of money for updating.."
   const UPDATE_EVENTS_BATCH_CAP = 60;
 
+  // ── AND WHAT THE POSTER TIER IS ALLOWED TO COST ────────────────────
+  //
+  // Oliver, 19 Aug 2026: "Then I won't get charged extremes amount of money for
+  // updating.." Two ceilings rather than one, because they bound different
+  // mistakes.
+  //
+  // PER EVENT: a front page carries one poster and perhaps an early-bird
+  // banner. A third picture is a photograph of a crowd, and reading it costs the
+  // same as reading the poster. Stops at the first date found.
+  //
+  // PER RUN: a batch of 60 events with two pictures each is 120 image calls
+  // triggered by one click, and a per-event cap alone cannot see that. The run
+  // ceiling is what makes the worst case a number he can look at rather than a
+  // number he finds out afterwards.
+  //
+  // The tier is reached only by an event that is UNDATED OR PAST, only after a
+  // free read of the operator's own site and its ticket page both came back with
+  // no readable date, and only when that page actually had a picture on it. His
+  // condition, verbatim: "it would obviously only be used if there was a banner
+  // to scan."
+  const MAX_POSTER_READS_PER_EVENT = 2;
+  const UPDATE_EVENTS_IMAGE_CAP = 30;
+
   // ── BACKFILL THE MISSING COORDINATES ───────────────────────────────
   // Storing coordinates for every content type (see publishDraft) only helps
   // entries published AFTER it. Everything already live still has none, so the
@@ -7485,9 +7508,27 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       const batch = brokenFirst.slice(0, UPDATE_EVENTS_BATCH_CAP);
       const skipped = allUpcoming.length - batch.length;
       const changed = [];
+      // ── WHAT IT TRIED, PER EVENT ────────────────────────────────
+      //
+      // Oliver has now been told "Nothing changed. Everything checked still
+      // matches what is on file." three times, on a run where the thing he was
+      // watching for, Distortion, was one of the events checked and came out
+      // still saying "Dates not confirmed". That sentence is true and it is
+      // useless: it reports the outcome of a chain of four steps without saying
+      // which step ended it, so there is no way to tell a site that had no date
+      // on it from a site that could not be reached from a date that was found
+      // and refused for being in the past.
+      //
+      // Every event in the batch records its steps. The panel shows the ones
+      // that finished with no usable date, because those are the rows still
+      // rendering "Dates not confirmed" to a reader and they are the only rows
+      // where the question "why not" has an answer worth reading.
+      const traces = [];
+      let imagesRead = 0;
       for (let i = 0; i < batch.length; i++) {
         const ev = batch[i];
         setUpdateEventsProgress(`${i + 1} / ${batch.length}`);
+        const trace = [];
         // ── THE OPERATOR'S OWN PAGE FIRST, AND EVERY TIME ───────
         //
         // Oliver, 19 Aug 2026: "Find a reliant source for the events like
@@ -7529,23 +7570,54 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         // found, best first. That list has been built on every source read since
         // 12 August and nothing had ever followed it for a date. One extra free
         // fetch, at the one page most likely to hold the answer.
+        // ── ONE PARSER, WHOEVER READ THE WORDS ──────────────────
+        // Text off a page and characters off a poster go through the SAME
+        // nextEdition and the SAME refusal guard. Two readers with two sets of
+        // rules is the bug shape this codebase has now found six times, and a
+        // date that arrived as pixels is not more trustworthy for having been
+        // harder to get.
+        const editionFrom = (text) => {
+          const found = nextEdition(text, checkFrom);
+          if (!found) return { found: null, why: "no-date-in-text" };
+          const problem = datePropositionProblem(isoDay(found.start), ev.date, checkFrom);
+          // A festival page carries its own history, so the edition named on it
+          // still has to be one that has not already happened and is not earlier
+          // than what we hold. Refusals are NAMED rather than dropped: "the page
+          // said 3 June 2026 and that is in the past" is the sentence that would
+          // have explained Distortion the first time he asked.
+          if (problem) return { found: null, why: `refused-${problem}`, refused: isoDay(found.start) };
+          return { found, why: "" };
+        };
         const readForEdition = async (url) => {
           const r = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`, { headers: routeAuth() });
           const d = await r.json();
-          if (!r.ok || d.error || !d.text) return { found: null, data: d, ok: false };
-          const found = nextEdition(d.text, checkFrom);
-          // The same guard the model's answers go through. A festival page carries
-          // its own history, so the edition named on it still has to be one that
-          // has not already happened and is not earlier than what we hold.
-          const usable = found && !datePropositionProblem(isoDay(found.start), ev.date, checkFrom) ? found : null;
-          return { found: usable, data: d, ok: true };
+          // banners come back on the blocked path too, which is deliberate: a
+          // festival front page that strips to almost no text is exactly the
+          // page whose announcement is artwork. See api/scan-source.js.
+          const banners = Array.isArray(d.banners) ? d.banners : [];
+          if (!r.ok || d.error || !d.text) {
+            return { found: null, data: d, banners, ok: false, why: d.read || (d.error ? "unreadable" : "no-text") };
+          }
+          const e = editionFrom(d.text);
+          return { found: e.found, refused: e.refused, why: e.why, data: d, banners, ok: true };
         };
         let fromSite = null;
+        // Collected as we go so the poster tier can look at the front page's
+        // pictures AND the ticket page's, without either read having to know
+        // that a later step exists.
+        const seenBanners = [];
+        const collect = (list, host) => {
+          for (const b of list || []) {
+            if (b?.url && !seenBanners.some(x => x.url === b.url)) seenBanners.push({ ...b, host });
+          }
+        };
         if (ev.website) {
           try {
             const first = await readForEdition(ev.website);
+            collect(first.banners, domainOf(ev.website));
+            trace.push({ step: "site", host: domainOf(ev.website), ok: first.ok, why: first.why, refused: first.refused, via: first.data?.via || "", chars: (first.data?.text || "").length, images: (first.banners || []).length, found: first.found ? isoDay(first.found.start) : "" });
             if (first.found) {
-              fromSite = { start: isoDay(first.found.start), end: isoDay(first.found.end), via: first.data.via || "fetch", host: domainOf(ev.website) };
+              fromSite = { start: isoDay(first.found.start), end: isoDay(first.found.end), via: first.data.via || "fetch", host: domainOf(ev.website), how: "text" };
             } else if (first.ok) {
               // The ticket page, best first, and only one of them. Two would be
               // paying attention to a maybe; the top-ranked link is the button
@@ -7553,25 +7625,84 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
               const ticket = (first.data.tickets || [])[0];
               if (ticket?.href) {
                 const second = await readForEdition(ticket.href);
+                collect(second.banners, domainOf(ticket.href));
+                trace.push({ step: "ticket", host: domainOf(ticket.href), ok: second.ok, why: second.why, refused: second.refused, via: second.data?.via || "", chars: (second.data?.text || "").length, images: (second.banners || []).length, found: second.found ? isoDay(second.found.start) : "" });
                 if (second.found) {
-                  fromSite = { start: isoDay(second.found.start), end: isoDay(second.found.end), via: second.data.via || "fetch", host: domainOf(ticket.href) };
+                  fromSite = { start: isoDay(second.found.start), end: isoDay(second.found.end), via: second.data.via || "fetch", host: domainOf(ticket.href), how: "text" };
                 }
+              } else {
+                trace.push({ step: "ticket", why: "no-ticket-link" });
               }
             }
           } catch { /* the paid path below is the fallback, so a failed read is not fatal */ }
+        } else {
+          trace.push({ step: "site", why: "no-website-on-file" });
+        }
+
+        // ── AND IF THE DATE IS IN THE ARTWORK ───────────────────
+        //
+        // Oliver, 19 Aug 2026: "Is there no way we can install an
+        // 'image'-reader? Because you'll find alot of announcements on banners
+        // like that... it would obviously only be used if there was a banner to
+        // scan."
+        //
+        // Measured rather than assumed. cphdistortion.dk's front page strips to
+        // 285 characters, the only date in them is 3-7 June 2026 which has
+        // already passed and which the guard above correctly refuses, and the
+        // real answer, 2 to 6 JUNE 2027, is printed in the poster and exists
+        // nowhere on that page as text. Every text tier we have, free or paid,
+        // was reading a page that does not contain the answer.
+        //
+        // Four conditions, all of them his: only for a row that is actually
+        // broken, only after the free reads found nothing, only when the page
+        // had a picture, and only up to a ceiling he can see.
+        const needsDate = isUndated(ev.date) || isPastDate(ev.date, checkFrom);
+        if (!fromSite && needsDate && seenBanners.length && imagesRead < UPDATE_EVENTS_IMAGE_CAP) {
+          const room = Math.min(MAX_POSTER_READS_PER_EVENT, UPDATE_EVENTS_IMAGE_CAP - imagesRead);
+          for (const banner of seenBanners.slice(0, room)) {
+            imagesRead += 1;
+            const shot = await readDatesFromImage(banner.url, ev.name);
+            if (shot.error) { trace.push({ step: "poster", host: banner.host || "", why: `image-${shot.error}` }); continue; }
+            if (shot.none || !shot.text) { trace.push({ step: "poster", host: banner.host || "", why: "no-date-printed" }); continue; }
+            const e = editionFrom(shot.text);
+            trace.push({ step: "poster", host: banner.host || "", why: e.why, refused: e.refused, printed: shot.text.slice(0, 60), found: e.found ? isoDay(e.found.start) : "" });
+            if (e.found) {
+              fromSite = { start: isoDay(e.found.start), end: isoDay(e.found.end), via: "poster", host: banner.host || domainOf(banner.url), how: "poster", printed: shot.text.slice(0, 60) };
+              break;
+            }
+          }
+        } else if (!fromSite && needsDate && !seenBanners.length) {
+          trace.push({ step: "poster", why: "no-banner-to-scan" });
+        } else if (!fromSite && needsDate && imagesRead >= UPDATE_EVENTS_IMAGE_CAP) {
+          trace.push({ step: "poster", why: "image-cap-reached" });
         }
         // Answered by the operator, so nothing is spent and nothing is guessed.
         if (fromSite && fromSite.start !== ev.date) {
+          const span = `${fromSite.start}${fromSite.end && fromSite.end !== fromSite.start ? ` to ${fromSite.end}` : ""}`;
           changed.push({
             name: ev.name, town: ev.town, currentDate: ev.date,
             dateChanged: fromSite.start, dateEndChanged: fromSite.end,
             ticketStatusChanged: "", stillHappening: true,
             source: fromSite.host, readVia: fromSite.via,
-            notes: `Read off ${fromSite.host}, the event's own site, which states ${fromSite.start}${fromSite.end && fromSite.end !== fromSite.start ? ` to ${fromSite.end}` : ""}.`,
+            // A date read off a picture SAYS it was read off a picture, and
+            // quotes the characters it read. That is the only way he can check
+            // one without opening the site himself, and a poster read is the one
+            // tier in this chain where being wrong looks identical to being
+            // right.
+            notes: fromSite.how === "poster"
+              ? `Read off the poster on ${fromSite.host}, which prints "${fromSite.printed}", so ${span}.`
+              : `Read off ${fromSite.host}, the event's own site, which states ${span}.`,
           });
+          traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: fromSite.start });
           continue;
         }
-        if (fromSite) continue;   // its own site agrees with what we hold: nothing to report, nothing spent
+        if (fromSite) {
+          // Its own site agrees with what we hold: nothing to report, nothing
+          // spent. Still traced, because "we read the operator's page and it
+          // matched" is the answer to a different question he will ask.
+          traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: fromSite.start });
+          continue;
+        }
 
         // ── TWO DIFFERENT QUESTIONS, AND ONLY ONE WAS EVER ASKED ──
         //
@@ -7605,7 +7736,7 @@ ${researchRules("festival", ev)}`
           : `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
         try {
           const result = await askPerplexity(prompt);
-          if (result.error) continue;
+          if (result.error) { trace.push({ step: "search", why: "search-failed" }); traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: "" }); continue; }
           const cleaned = result.text.replace(/^```json\s*|\s*```$/g, "").trim();
           const parsed = JSON.parse(cleaned);
           // ── A CHANGE IS A DIFFERENCE, NOT AN ANSWER ─────────────
@@ -7639,9 +7770,17 @@ ${researchRules("festival", ev)}`
           if (hasChange) {
             changed.push({ name: ev.name, town: ev.town, currentDate: ev.date, ...parsed });
           }
-        } catch { /* one event's check failing shouldn't kill the whole batch — skip it */ }
+          trace.push({ step: "search", why: parsed.dateChanged ? "" : parsed.ignoredDate ? `refused-${parsed.ignoredWhy || "backwards"}` : "search-found-nothing", refused: parsed.ignoredDate || "", found: parsed.dateChanged || "" });
+          traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: parsed.dateChanged || "" });
+        } catch {
+          // one event's check failing shouldn't kill the whole batch, but it
+          // must not vanish either: a row that threw is a row he was told was
+          // checked.
+          trace.push({ step: "search", why: "search-unreadable" });
+          traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: "" });
+        }
       }
-      setUpdateEventsResults({ changed, checked: batch.length, skipped });
+      setUpdateEventsResults({ changed, checked: batch.length, skipped, traces, imagesRead });
     } catch (err) {
       setUpdateEventsError("Couldn't run the update check — try again.");
     }
@@ -13628,7 +13767,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         {updateEventsResults && (
                           <div>
                             <div style={{ fontSize: 11, color: C.muted, marginBottom: updateEventsResults.changed.length ? 8 : 0 }}>
-                              Checked {updateEventsResults.checked} upcoming event{updateEventsResults.checked === 1 ? "" : "s"}{updateEventsResults.skipped > 0 ? ` (${updateEventsResults.skipped} more upcoming not checked this run — click again to continue)` : ""}.
+                              Checked {updateEventsResults.checked} upcoming event{updateEventsResults.checked === 1 ? "" : "s"}{updateEventsResults.skipped > 0 ? ` (${updateEventsResults.skipped} more upcoming not checked this run, click again to continue)` : ""}.{updateEventsResults.imagesRead > 0 ? ` ${updateEventsResults.imagesRead} poster${updateEventsResults.imagesRead === 1 ? " was" : "s were"} read as a picture.` : ""}
                             </div>
                             {updateEventsResults.changed.length === 0 ? (
                               <div style={{ fontSize: 12, color: C.light }}>Nothing changed. Everything checked still matches what is on file.</div>
@@ -13652,6 +13791,46 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 ))}
                               </div>
                             )}
+                            {/* ── WHAT IT TRIED, ON THE ROWS THAT ARE STILL WRONG ──
+                                Oliver has read "Nothing changed. Everything checked still
+                                matches what is on file." three times on runs where the event
+                                he was watching came out still saying "Dates not confirmed".
+                                The sentence is true and it is useless: it reports the outcome
+                                of a four tier chain without naming the tier that ended it, so
+                                a page with no date on it, a page that could not be reached,
+                                and a date that was found and refused for being in the past all
+                                read as nothing.
+                                Only the rows that finished with no usable date are listed,
+                                because those are the ones still showing a reader "Dates not
+                                confirmed" and the only ones where "why not" has an answer. */}
+                            {(() => {
+                              const stuck = unresolvedTraces(updateEventsResults.traces, new Date());
+                              if (!stuck.length) return null;
+                              return (
+                                <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                                  <div style={{ fontSize: 11.5, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+                                    Still without a usable date: {stuck.length}
+                                  </div>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                    {stuck.slice(0, 25).map((t, i) => (
+                                      <div key={i} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px" }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{t.name}{t.town ? `, ${t.town}` : ""}</div>
+                                        {(t.steps || []).map((st, j) => (
+                                          <div key={j} style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                                            {STEP_LABELS[st.step] || st.step}{st.host ? ` (${st.host})` : ""}: {stepWords(st)}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {stuck.length > 25 && (
+                                    <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6 }}>
+                                      {stuck.length - 25} more not listed here.
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>

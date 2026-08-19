@@ -287,3 +287,78 @@ export const geocodeOne = async (name, town) => {
   } catch { /* leave unresolved — same graceful degradation as everywhere else */ }
   return null;
 };
+
+// ── READING A POSTER ────────────────────────────────────────────────
+//
+// Oliver, 19 Aug 2026: "Is there no way we can install an 'image'-reader?
+// Because you'll find alot of announcements on banners like that... it would
+// obviously only be used if there was a banner to scan."
+//
+// The measurement behind it is in pageScan.js beside bannerImages. Short
+// version: cphdistortion.dk's front page contains 285 characters of text, the
+// only date in them has already passed, and the real one exists on that page
+// only as pixels. No text reader at any price can find it.
+//
+// THIS IS A TRANSCRIBER, NOT A RESEARCHER, and the prompt is written to keep it
+// one. It is given a picture and asked what is printed on it. It is told, in as
+// many words, not to use anything it knows about the event, because a model
+// asked when a famous festival is will happily answer from memory and the answer
+// will look exactly like a reading. That failure would be undetectable: a
+// confident wrong date, sourced to the operator's own poster.
+//
+// The reply is deliberately NOT JSON and NOT a parsed date. It is the printed
+// characters, handed to nextEdition in eventDates.js, which is the same parser
+// every text path uses and which has the same guards over it: not in the past,
+// not earlier than what we hold. One parser, one set of rules, whether the words
+// arrived as text or as pixels. That is the rule this codebase has now had to
+// relearn six times.
+export const NO_DATE_ON_IMAGE = "NONE";
+
+export const readDatesFromImage = async (imageUrl, eventName, { model = "claude-sonnet-5", maxTokens = 200 } = {}) => {
+  const url = String(imageUrl || "").trim();
+  // Anthropic fetches this address itself, so anything it cannot fetch is a
+  // wasted call rather than a failed read. Checked here rather than at the call
+  // site because there is now more than one call site coming.
+  if (!/^https?:\/\//i.test(url)) return { text: "", error: "not-an-image-url" };
+  const prompt = `This is an image from the website of the Danish event "${String(eventName || "").slice(0, 120)}".
+
+Your ONLY job is to transcribe dates that are PRINTED IN THE IMAGE. Read the picture. Do not use anything you know or believe about this event, do not work out what year it probably is, and do not correct anything that looks wrong to you. If the poster says something you think is out of date, transcribe it anyway.
+
+If one or more dates are printed in the image, reply with just those printed characters, exactly as they appear, including the year if a year is shown. If several dates are printed, reply with the one that reads as the event's own dates rather than a ticket release or a deadline.
+
+If NO date is printed in the image, reply with exactly ${NO_DATE_ON_IMAGE} and nothing else. Replying ${NO_DATE_ON_IMAGE} is a correct and useful answer. Guessing is not.
+
+Reply with the date text only, or ${NO_DATE_ON_IMAGE}. No explanation, no sentence around it.`;
+  try {
+    const res = await fetch("/api/anthropic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "url", url } },
+            { type: "text", text: prompt },
+          ],
+        }],
+      }),
+    });
+    const data = await res.json();
+    // Recorded before the ok check, same as askClaude: a call that failed after
+    // the model had already read the image still costs money.
+    recordModelCall("claude", model, data?.usage);
+    if (!res.ok) return { text: "", error: data?.error?.message || `Image read failed (${res.status})` };
+    const said = String(data.content?.filter(b => b.type === "text").map(b => b.text).join("") || "").trim();
+    if (!said) return { text: "", error: "empty" };
+    // NONE is the answer this is designed to make easy to give, so it is
+    // recognised rather than parsed: a caller must be able to tell "there was no
+    // date on the poster" from "the read failed", because only one of those is
+    // worth looking at another picture over.
+    if (new RegExp(`^${NO_DATE_ON_IMAGE}\\b`, "i").test(said)) return { text: "", error: "", none: true };
+    return { text: said.slice(0, 200), error: "" };
+  } catch {
+    return { text: "", error: "unreachable" };
+  }
+};

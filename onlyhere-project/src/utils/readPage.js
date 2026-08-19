@@ -17,6 +17,7 @@
 // which is the split api/tickets.js documents.
 import {
   stripToText, ticketLinks, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, FIRECRAWL_URL,
+  bannerImages, bannerImagesFromMarkdown, MAX_BANNERS,
 } from "./pageScan.js";
 
 const UA = "Mozilla/5.0 (compatible; GemlyxContentScan/1.0)";
@@ -31,9 +32,14 @@ export const readPlain = async (url, f = fetch) => {
     // an operator's "Køb billetter" button to the agent that actually sells
     // them. See ticketLinks in pageScan.js.
     const html = await r.text();
-    return { status: r.status, text: stripToText(html), tickets: ticketLinks(html, url).slice(0, 6), err: "" };
+    // banners: the same HTML asked a third question, and for the same reason as
+    // the second. stripToText deletes every src and every alt, so a poster is
+    // unreachable one line later. See bannerImages in pageScan.js, and the
+    // Distortion measurement written up there: a front page whose text says a
+    // date that has already passed while the real one exists only as pixels.
+    return { status: r.status, text: stripToText(html), tickets: ticketLinks(html, url).slice(0, 6), banners: bannerImages(html, url).slice(0, MAX_BANNERS), err: "" };
   } catch (err) {
-    return { status: 0, text: "", tickets: [], err: String(err) };
+    return { status: 0, text: "", tickets: [], banners: [], err: String(err) };
   }
 };
 
@@ -109,18 +115,26 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
       const again = await readPlain(alt, fetchImpl);
       const verdict = pageReadVerdict(again.status, again.text, again.err);
       if (verdict.usable) {
-        return { text: again.text, via: "fetch", read: verdict.reason, blocked: false, credits: 0, sample: "", tickets: again.tickets, reachedAt: alt, firstTry: first.reason };
+        return { text: again.text, via: "fetch", read: verdict.reason, blocked: false, credits: 0, sample: "", tickets: again.tickets, banners: again.banners || [], reachedAt: alt, firstTry: first.reason };
       }
     }
   }
   if (first.usable) {
-    return { text: plain.text, via: "fetch", read: first.reason, blocked: false, credits: 0, sample: "", tickets: plain.tickets };
+    return { text: plain.text, via: "fetch", read: first.reason, blocked: false, credits: 0, sample: "", tickets: plain.tickets, banners: plain.banners || [] };
   }
   if (!key || !worthDeepRead(first)) {
     return {
       text: "", via: "fetch", read: first.reason, blocked: true, credits: 0,
       sample: plain.text.slice(0, 200), status: plain.status, detail: first.detail || "",
       escalated: false,
+      // ── A BLOCKED PAGE CAN STILL HAND OVER ITS POSTER ─────────
+      // The banners survive a verdict of unusable ON PURPOSE, and this is the
+      // case the whole feature exists for. "almost-no-text" is precisely what a
+      // festival front page looks like when the announcement is artwork: the
+      // read failed and the answer was on the page the whole time. Throwing the
+      // image addresses away here because the TEXT was thin would rebuild the
+      // exact wall this is meant to get past.
+      banners: plain.banners || [],
     };
   }
   const deep = await readFirecrawl(url, key, fetchImpl);
@@ -129,7 +143,7 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
     // Firecrawl returns markdown rather than HTML, so no hrefs come back on this
     // path. Empty rather than absent, so a caller never has to check which read
     // it got, and stated here rather than discovered later.
-    return { text: deep.text, via: "firecrawl", read: second.reason, blocked: false, credits: 1, firstTry: first.reason, escalated: true, tickets: [] };
+    return { text: deep.text, via: "firecrawl", read: second.reason, blocked: false, credits: 1, firstTry: first.reason, escalated: true, tickets: [], banners: bannerImagesFromMarkdown(deep.text, url).slice(0, MAX_BANNERS) };
   }
   // Paid for and still nothing. Both halves are reported, because "the wall
   // won" and "the scraper is misconfigured" need different actions from a human.
@@ -137,5 +151,9 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
     text: "", via: "firecrawl", read: deep.ok ? second.reason : deep.reason, blocked: true,
     credits: deep.ok ? 1 : 0, firstTry: first.reason, detail: deep.detail || "",
     sample: plain.text.slice(0, 200), status: plain.status, escalated: true,
+    // The plain read's pictures, not Firecrawl's: this branch is the one where
+    // Firecrawl returned nothing, so there is no markdown to look in. The first
+    // fetch usually did return HTML, and that HTML is where the poster is.
+    banners: plain.banners || [],
   };
 };

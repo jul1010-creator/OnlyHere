@@ -755,3 +755,194 @@ export const factAge = (text, nowMs) => {
   if (year < nowYear) return { ageMonths: (nowYear - year) * 12, perishableOk: false, dated: false, why: `the newest year on this page is ${year}, so nothing on it can be inside ${MAX_FACT_AGE_MONTHS} months` };
   return { ageMonths: null, perishableOk: true, dated: false, why: `the page carries ${year} but states no day, so its exact age is unknown` };
 };
+
+// ── THE DATE IS IN THE POSTER, NOT IN THE TEXT ──────────────────────
+//
+// Oliver, 19 Aug 2026: "Is there no way we can install an 'image'-reader?
+// Because you'll find alot of announcements on banners like that... it would
+// obviously only be used if there was a banner to scan."
+//
+// He is describing the exact case that beat every tier we had. Measured in a
+// browser rather than guessed at: cphdistortion.dk's front page strips down to
+// 285 characters of text, and what little it says is "Distortion 3-7 June
+// 2026", a date that has already passed and that the backwards-date guard
+// correctly refuses. The string "2027" appears once in 238KB of HTML, inside a
+// query string. The real answer, 2 to 6 JUNE 2027, exists on that page only as
+// pixels in the poster.
+//
+// So no text reader of any price could ever have found it. Not the plain fetch,
+// not the address variants, not Firecrawl: all three return text, and the text
+// does not contain the answer. A festival front page IS a poster, and a poster
+// is a picture of words.
+//
+// This does not go looking for pictures. It collects the few that a page is
+// telling us are the announcement, and the caller reads them only when every
+// free text path has already come back with nothing. That is his condition
+// verbatim: "it would obviously only be used if there was a banner to scan."
+
+// Three. A festival front page carries one poster and perhaps a second for the
+// early-bird, and past that we are paying to read a photograph of a crowd. The
+// number lives here beside the picker rather than as a bare 3 in a loop, for the
+// same reason MAX_TICKET_PAGES does: it is a money question.
+export const MAX_BANNERS = 3;
+
+// Never worth a look, however prominently placed. Matched against the URL and
+// against the alt text, because a page will tell you in one or the other.
+//
+// The svg rule is the load-bearing one: a hand-drawn poster is a photograph or a
+// render, never a vector, while almost every logo, icon and social glyph on a
+// Danish festival site is an inline or linked svg. Same for the data: URI, which
+// at banner size would be a page nobody could load and in practice is always a
+// tracking pixel or a placeholder.
+export const IMAGE_JUNK = /(?:^|[^a-z0-9])(?:logo|logotype|wordmark|icon|favicon|sprite|avatar|profile[-_]?pic|badge|award|seal|flag|arrow|chevron|bullet|divider|spacer|pixel|tracker|beacon|placeholder|loader|spinner|facebook|instagram|twitter|tiktok|youtube|linkedin|snapchat|app[-_]?store|google[-_]?play|trustpilot|cookie|payment|visa|mastercard|mobilepay|dankort|klarna)(?:[^a-z0-9]|$)/i;
+
+// A page states its own headline picture in a meta tag, and it is right far more
+// often than anything we could rank ourselves: og:image is what the operator
+// chose to have appear when the festival is shared, which on a festival site is
+// the poster with the dates on it. Read first and trusted most.
+const META_IMAGE = /<meta\b[^>]*\b(?:property|name)\s*=\s*["'](?:og:image(?::url|:secure_url)?|twitter:image(?::src)?)["'][^>]*>/gi;
+const META_CONTENT = /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s">]+))/i;
+
+const IMG_TAG = /<img\b[^>]*>/gi;
+
+// ── \b IS THE WRONG BOUNDARY FOR AN ATTRIBUTE NAME ─────────────────
+// Found by a mutation that should have failed and did not. `\bsrc\s*=` matches
+// INSIDE `data-src=`, because a hyphen is a non-word character and JavaScript
+// puts a word boundary there. So asking a tag for its `src` handed back its
+// `data-src` whenever that attribute came first, and the lazy-load ordering this
+// function documents was doing nothing: it was right by accident on the tags
+// where data-src happens to be written first and wrong on the ones where it is
+// not.
+//
+// An attribute name is preceded by whitespace inside a tag, always, so that is
+// the boundary. Same trap as the unbounded substring matching this codebase has
+// now fixed six times, wearing a regex costume.
+const ATTR = (tag, name) => {
+  const m = new RegExp(`[\\s]${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s">]+))`, "i").exec(tag);
+  return m ? String(m[1] ?? m[2] ?? m[3] ?? "").trim() : "";
+};
+
+// A responsive image lists every size it has and the src is often the smallest
+// or a blur placeholder. The widest candidate is the one worth sending, because
+// a model reading a poster is reading small print.
+const widestFromSrcset = (srcset) => {
+  let best = "", bestW = -1;
+  for (const part of String(srcset || "").split(",")) {
+    const bits = part.trim().split(/\s+/);
+    if (!bits[0]) continue;
+    const w = /^(\d+)w$/.exec(bits[1] || "");
+    const width = w ? Number(w[1]) : 0;
+    if (width > bestW) { bestW = width; best = bits[0]; }
+  }
+  return best;
+};
+
+// Words a page uses when the picture IS the announcement, in both languages,
+// because a Danish festival site says plakat and forside and program.
+const POSTER_WORDS = /(?:poster|plakat|banner|hero|header|billboard|lineup|line-up|program|programme|festival|forside|forsidebillede|cover|flyer|artwork|key-?visual|kampagne|announce)/i;
+
+// Ranked, not filtered by rank: the caller takes the first MAX_BANNERS, so the
+// order is the whole decision. A page whose og:image is a stock photo still
+// gets its poster looked at second.
+const scoreImage = (url, alt, cls, fromMeta, index) =>
+  (fromMeta ? 100 : 0)
+  + (POSTER_WORDS.test(url) ? 8 : 0)
+  + (POSTER_WORDS.test(alt) ? 6 : 0)
+  + (POSTER_WORDS.test(cls) ? 4 : 0)
+  // Earlier on the page is more likely to be the announcement, but only as a
+  // tiebreak, and it must never outweigh a page naming its own poster.
+  + Math.max(0, 3 - index);
+
+const RASTER = /\.(?:jpe?g|png|webp|avif)(?:$|[?#])/i;
+
+// `usable` is not a judgement about the picture, only about the address: a
+// model cannot be handed a data: URI, a relative path we could not resolve, or
+// an svg. Kept as a named reason so a trace can say why a page with pictures on
+// it produced no banners, which is the difference between "nothing to scan" and
+// "we could not address what was there".
+const bannerUrl = (raw, baseUrl) => {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  let abs = s;
+  if (baseUrl) { try { abs = new URL(s, baseUrl).toString(); } catch { return ""; } }
+  if (!/^https?:\/\//i.test(abs)) return "";
+  if (/\.svg(?:$|[?#])/i.test(abs)) return "";
+  return abs.split("#")[0];
+};
+
+// ── HTML ────────────────────────────────────────────────────────────
+// Runs on the raw HTML, before stripToText, for the same reason ticketLinks
+// does: every attribute in this function is deleted by that strip. A banner
+// reader added downstream of it would find nothing and would look like a
+// working feature, which is this codebase's signature failure.
+export const bannerImages = (html, baseUrl = "") => {
+  const src = String(html || "");
+  const out = [];
+  const seen = new Set();
+  const add = (raw, alt, cls, fromMeta, index) => {
+    const url = bannerUrl(raw, baseUrl);
+    if (!url) return;
+    if (seen.has(url)) return;
+    // The extension test is deliberately not required: plenty of Danish sites
+    // serve a poster from /media/12345 with no extension at all. It only has to
+    // NOT be something we know is junk.
+    if (IMAGE_JUNK.test(url) || (alt && IMAGE_JUNK.test(alt))) return;
+    seen.add(url);
+    out.push({ url, alt: String(alt || "").slice(0, 120), fromMeta, score: scoreImage(url, alt || "", cls || "", fromMeta, index) });
+  };
+
+  META_IMAGE.lastIndex = 0;
+  let m, metaIndex = 0;
+  while ((m = META_IMAGE.exec(src)) !== null) {
+    const c = META_CONTENT.exec(m[0]);
+    if (c) add(c[1] ?? c[2] ?? c[3] ?? "", "", "", true, metaIndex++);
+    if (metaIndex > 8) break;
+  }
+
+  IMG_TAG.lastIndex = 0;
+  let t, i = 0;
+  while ((t = IMG_TAG.exec(src)) !== null) {
+    const tag = t[0];
+    const wide = widestFromSrcset(ATTR(tag, "srcset") || ATTR(tag, "data-srcset"));
+    // data-src before src, because a lazy-loaded poster puts a 1px placeholder
+    // in src and the real address in data-src. Reading src first would collect
+    // the placeholder and call it the banner.
+    const raw = wide || ATTR(tag, "data-src") || ATTR(tag, "data-original") || ATTR(tag, "src");
+    add(raw, ATTR(tag, "alt"), `${ATTR(tag, "class")} ${ATTR(tag, "id")}`, false, i);
+    i += 1;
+    if (i > 200) break;   // a gallery is not an announcement
+  }
+
+  out.sort((a, b) => b.score - a.score);
+  return out;
+};
+
+// ── FIRECRAWL'S MARKDOWN ────────────────────────────────────────────
+// The paid path returns markdown, not HTML, so none of the above can run on it.
+// That gap is worth closing rather than documenting: the pages that need
+// Firecrawl are the JavaScript-rendered ones, and a JavaScript-rendered festival
+// front page is the single most likely place for the dates to be in the artwork.
+//
+// Markdown carries the alt text and the address and nothing else, so there is no
+// srcset, no class and no meta tag here. Same junk rule, same cap, same shape
+// out, so a caller never has to know which read it got.
+const MD_IMAGE = /!\[([^\]]*)\]\(\s*<?([^\s)>]+)>?[^)]*\)/g;
+
+export const bannerImagesFromMarkdown = (md, baseUrl = "") => {
+  const out = [];
+  const seen = new Set();
+  MD_IMAGE.lastIndex = 0;
+  let m, i = 0;
+  while ((m = MD_IMAGE.exec(String(md || ""))) !== null) {
+    const alt = String(m[1] || "");
+    const url = bannerUrl(m[2], baseUrl);
+    i += 1;
+    if (i > 200) break;
+    if (!url || seen.has(url)) continue;
+    if (IMAGE_JUNK.test(url) || (alt && IMAGE_JUNK.test(alt))) continue;
+    seen.add(url);
+    out.push({ url, alt: alt.slice(0, 120), fromMeta: false, score: scoreImage(url, alt, "", false, i - 1) });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out;
+};

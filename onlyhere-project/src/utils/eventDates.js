@@ -555,3 +555,64 @@ export const nextEdition = (text, today) => {
 export const isoDay = (d) => d instanceof Date && !isNaN(d)
   ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
   : "";
+
+// ── SAYING WHICH STEP ENDED THE CHAIN ───────────────────────────────
+//
+// The date check now has four tiers: the operator's own page, its ticket page,
+// the poster on either of them, and a web search. It reports one sentence for
+// all four, "Nothing changed. Everything checked still matches what is on
+// file.", and Oliver has read that sentence three times on runs where the event
+// he was watching came out still saying "Dates not confirmed".
+//
+// That sentence is true and it is useless. It reports the OUTCOME of a chain
+// without naming the step that ended it, so a page with no date on it, a page
+// that could not be reached, and a date that was found and refused for being in
+// the past are all reported identically: as nothing.
+//
+// Pure and here rather than inline in the panel, because it is the wording of a
+// claim about what was checked, and this codebase has already been bitten by a
+// sentence that said more than the code had measured.
+export const CHECK_STEP_WORDS = {
+  "no-website-on-file": "no website is stored on this entry, so there was nothing of its own to read",
+  "no-ticket-link": "its page carried no ticket link to follow",
+  "no-date-in-text": "the page was read and states no date a parser can see",
+  "no-text": "the page returned almost no readable text",
+  "unreadable": "the page could not be read",
+  "challenge-page": "the site answered with a bot wall rather than the page",
+  "almost-no-text": "the page returned almost no readable text, which on a festival front page usually means the dates are in the artwork",
+  "no-banner-to-scan": "there was no banner or poster on the page to scan",
+  "no-date-printed": "the poster was read and has no date printed on it",
+  "image-cap-reached": "the poster reader had already used its budget for this run",
+  "image-empty": "the poster reader came back with nothing",
+  "image-unreachable": "the poster reader could not be reached",
+  "image-not-an-image-url": "the picture had no address that could be opened",
+  "search-found-nothing": "a web search found no date it could stand behind",
+  "search-failed": "the web search itself failed",
+  "search-unreadable": "the web search answered in a shape that could not be read",
+};
+
+// A refusal is not a miss and must not read as one. "refused-in-the-past" is the
+// tool doing its job on a page that names last year's edition, and it is the
+// single most useful line in the whole trace: it says the page WAS read, a date
+// WAS found, and here is why it was not used.
+export const stepWords = (step) => {
+  if (!step || typeof step !== "object") return "";
+  const why = String(step.why || "");
+  if (step.found) return `found ${step.found}`;
+  if (why.startsWith("refused-")) {
+    const key = why.slice("refused-".length);
+    const because = DATE_PROPOSITION_WHY[key] || key;
+    return step.refused ? `found ${step.refused} and refused it, because ${because}` : `found a date and refused it, because ${because}`;
+  }
+  if (why.startsWith("http-")) return `the page answered ${why.replace("http-", "")}`;
+  if (why.startsWith("firecrawl-")) return "the paid reader could not get the page either";
+  return CHECK_STEP_WORDS[why] || (why ? why : "nothing came back");
+};
+
+export const STEP_LABELS = { site: "Its own site", ticket: "Ticket page", poster: "Poster", search: "Web search" };
+
+// The rows worth showing. An event that came out of the run with a date is not
+// a question anybody has; an event still undated or still in the past is the row
+// rendering "Dates not confirmed" to a reader right now.
+export const unresolvedTraces = (traces, today) =>
+  (Array.isArray(traces) ? traces : []).filter(t => !t?.resolved && (isUndated(t?.date) || isPastDate(t?.date, today)));

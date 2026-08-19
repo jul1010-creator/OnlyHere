@@ -51,8 +51,8 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery, toggleFacetValue, isOptionOn, selectedValues } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
@@ -8006,7 +8006,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // Ended on BOTH paths, or a failed build leaves the meter open and its calls
   // land in whatever runs next.
   ok("and both the success and failure paths close it", (app.match(/endRun\(\)/g) || []).length >= 3);
-  ok("every model call is recorded with its real usage", (ai.match(/recordModelCall\(/g) || []).length === 3);
+  // Four now, not three: readDatesFromImage is a model call with a picture in it
+  // and it costs like one. A vision call left out of the meter would be the one
+  // kind of spend that is invisible in both the bill and the panel.
+  ok("every model call is recorded with its real usage", (ai.match(/recordModelCall\(/g) || []).length === 4);
+  ok("including the poster reader", /readDatesFromImage[\s\S]*?recordModelCall\("claude", model, data\?\.usage\)/.test(ai));
+  // Recorded BEFORE the ok check, same as askClaude: a call that failed after the
+  // model had already read the image still cost money.
+  ok("and it records before it checks whether the call succeeded",
+     ai.indexOf('recordModelCall("claude", model, data?.usage);', ai.indexOf("readDatesFromImage"))
+     < ai.indexOf("if (!res.ok) return { text: \"\", error: data?.error?.message", ai.indexOf("readDatesFromImage")));
   ok("including the one that failed, since it was still charged", /recordModelCall\("claude", model, data\?\.usage\);\n      if \(!res\.ok\)/.test(ai));
 
   // The interceptor is the reason this cannot rot. Recording twenty call sites
@@ -13800,7 +13809,13 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   const rp = readFileSync(join(root, "src/utils/readPage.js"), "utf8");
   const api = readFileSync(join(root, "api/scan-source.js"), "utf8");
   ok("the links are taken out BEFORE the tags are stripped",
-     /const html = await r\.text\(\);\s*\n\s*return \{ status: r\.status, text: stripToText\(html\), tickets: ticketLinks\(html, url\)/.test(rp));
+     /return \{ status: r\.status, text: stripToText\(html\), tickets: ticketLinks\(html, url\)/.test(rp));
+  // ── AND SO ARE THE PICTURES, FOR THE SAME REASON ─────────────────
+  // stripToText deletes every src and every alt alongside the hrefs. A banner
+  // reader wired downstream of it would find nothing on every page forever and
+  // would look exactly like a working feature.
+  ok("and so are the banner images, off the same HTML",
+     /text: stripToText\(html\), tickets: ticketLinks\(html, url\)\.slice\(0, 6\), banners: bannerImages\(html, url\)/.test(rp));
   ok("and the endpoint returns them", /tickets: r\.tickets \|\| \[\]/.test(api));
   // THE GUARD IS PART OF THE ASSERTION. Matching only the push let a mutation
   // that replaced the condition with `if (false)` stay green: the unreachable
@@ -25627,9 +25642,21 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // link list on every source read since 12 August and nothing had followed it.
   ok("and follows the ticket link when it does not", /const ticket = \(first\.data\.tickets \|\| \[\]\)\[0\]/.test(appN));
   ok("one link, not a crawl", !/tickets\.slice\(0, [2-9]\)/.test(appN));
-  ok("and asks it when the next edition is", /nextEdition\(d\.text, checkFrom\)/.test(appN));
+  ok("and asks it when the next edition is", /const e = editionFrom\(d\.text\);/.test(appN));
+  ok("through the one parser", /const editionFrom = \(text\) => \{\s*\n\s*const found = nextEdition\(text, checkFrom\);/.test(appN));
   // The saving: a site that agrees costs nothing and never reaches the model.
-  ok("a site that agrees ends the check with no paid call", /if \(fromSite\) continue;/.test(appN));
+  ok("a site that agrees ends the check with no paid call",
+     /if \(fromSite\) \{[\s\S]{0,700}?continue;\s*\n\s*\}/.test(appN));
+  // The saving only exists if the paid call is genuinely downstream of it.
+  ok("and the search really is downstream of that exit", (() => {
+    // Anchored inside updateCurrentEvents: askPerplexity(prompt) appears earlier
+    // in App.jsx for an unrelated feature, and an unanchored indexOf would have
+    // compared this exit against that one and passed for the wrong reason.
+    const from = appN.indexOf("const updateCurrentEvents = async () => {");
+    const exit = appN.indexOf("if (fromSite) {", from);
+    const paid = appN.indexOf("const result = await askPerplexity(prompt);", from);
+    return from !== -1 && exit !== -1 && paid !== -1 && exit < paid;
+  })());
   ok("and an answer from the site skips it too", /if \(fromSite && fromSite\.start !== ev\.date\)/.test(appN));
   // Still guarded. A page's own history could otherwise walk a date backwards,
   // which is the Rock under broen failure arriving by a different route.
@@ -25673,6 +25700,267 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // A range assertion with the reason attached, so a later change has to argue
   // with the measurement rather than just move the number.
   ok("and stays in the band those two measurements define", MIN_USEFUL_CHARS >= 350 && MIN_USEFUL_CHARS <= 700);
+}
+
+// ── THE POSTER READER ───────────────────────────────────────────────
+//
+// Oliver, 19 Aug 2026: "Is there no way we can install an 'image'-reader?
+// Because you'll find alot of announcements on banners like that... it would
+// obviously only be used if there was a banner to scan."
+//
+// The measurement that forced it, taken in a browser rather than assumed:
+// cphdistortion.dk's front page strips to 285 characters, the only date in them
+// is 3-7 June 2026 which has already passed, "2027" appears once in 238KB of
+// HTML inside a query string, and the real answer, 2 to 6 JUNE 2027, exists on
+// that page only as pixels in the poster. No text reader at any price could
+// have found it.
+{
+  const { bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, nextEdition, isoDay } = M;
+
+  const front = `<html><head>
+    <meta property="og:image" content="/media/distortion-plakat-2027.jpg">
+    <meta name="twitter:image" content="https://cdn.cphdistortion.dk/social-logo.png">
+    </head><body>
+    <img src="/img/logo.png" alt="Distortion">
+    <img src="/img/hero-artwork.svg" alt="Festival artwork">
+    <img src="data:image/gif;base64,R0lGODlhAQ" alt="spacer">
+    <img data-src="/uploads/poster.jpg" src="/img/tiny.png" alt="Distortion 2027 plakat" class="hero">
+    <img srcset="/img/crowd-400.jpg 400w, /img/crowd-1600.jpg 1600w" alt="Crowd on the street">
+    <img src="/img/facebook-icon.png" alt="Follow us on Facebook">
+    <img src="/img/app-store-badge.png" alt="Download">
+    </body></html>`;
+  const got = bannerImages(front, "https://cphdistortion.dk/");
+  const urls = got.map(b => b.url);
+
+  ok("the page's own headline picture is found", urls.includes("https://cphdistortion.dk/media/distortion-plakat-2027.jpg"));
+  is("and it is ranked first, because og:image is the operator choosing the picture",
+     urls[0], "https://cphdistortion.dk/media/distortion-plakat-2027.jpg");
+  ok("the poster in the body is found too", urls.includes("https://cphdistortion.dk/uploads/poster.jpg"));
+
+  // ── THE JUNK, WHICH IS MOST OF WHAT IS ON THE PAGE ──────────────
+  // Each of these costs a model call to learn it says nothing, and a festival
+  // front page carries more of them than it carries posters.
+  ok("a logo is not an announcement", !urls.some(u => /logo/.test(u)));
+  ok("nor is a social icon", !urls.some(u => /facebook/.test(u)));
+  ok("nor an app store badge", !urls.some(u => /app-store/.test(u)));
+  // NAMED SO THE RULE IS THE ONLY THING THAT CAN EXCLUDE IT. An earlier version
+  // of this fixture used logo.svg, so the junk rule caught it on the word "logo"
+  // and a mutation deleting the svg rule outright survived. hero-artwork.svg is
+  // junk-clean and scores HIGH on the poster words, so nothing but the svg rule
+  // keeps it out.
+  ok("an svg is never a poster, however poster-shaped its name", !urls.some(u => /\.svg/.test(u)));
+  ok("and a data URI cannot be handed to a model at all", !urls.some(u => /^data:/.test(u)));
+
+  // ── THE LAZY LOAD TRAP ──────────────────────────────────────────
+  // A lazy-loaded poster puts a 1px blur in src and the real address in
+  // data-src. Reading src first collects the placeholder, sends it to a model,
+  // and is told there is no date on it: a paid call that could never succeed.
+  // Same lesson: the old fixture called it blur-placeholder.png, which the junk
+  // rule caught on the word "placeholder", so a mutation reading src first
+  // survived. tiny.png is junk-clean, so only the read order can exclude it.
+  ok("data-src wins over the lazy-load stand-in in src", !urls.includes("https://cphdistortion.dk/img/tiny.png"));
+  // ── AND THE ORDER INSIDE THE TAG MUST NOT DECIDE IT ─────────────
+  // A mutation swapping the read order survived this block, which is how the
+  // real bug underneath was found: the attribute reader used \b, and \bsrc= 
+  // matches inside data-src=, so asking for src returned data-src whenever that
+  // came first. The rule was right by accident on tags written one way and wrong
+  // on tags written the other. This fixture writes src FIRST, so only a correct
+  // boundary can produce the right answer.
+  const srcFirst = bannerImages(`<img src="/img/tiny.png" data-src="/uploads/real-poster.jpg" alt="Plakat">`, "https://x.dk/").map(b => b.url);
+  is("the real address wins even when src is written first", srcFirst, ["https://x.dk/uploads/real-poster.jpg"]);
+  // The reverse, so the reader is not simply preferring whatever is second.
+  const dataFirst = bannerImages(`<img data-src="/uploads/real-poster.jpg" src="/img/tiny.png" alt="Plakat">`, "https://x.dk/").map(b => b.url);
+  is("and when it is written second", dataFirst, ["https://x.dk/uploads/real-poster.jpg"]);
+  // A plain tag with only a src still reads it, which is the control that stops
+  // a boundary fix from excluding the ordinary case.
+  is("an ordinary image with only a src still reads",
+     bannerImages(`<img src="/uploads/plakat.jpg" alt="Plakat">`, "https://x.dk/").map(b => b.url), ["https://x.dk/uploads/plakat.jpg"]);
+  // The boundary bug in the place where it does real damage. Asking a tag for
+  // its `alt` with a word boundary reaches inside `data-alt`, so an unrelated
+  // attribute saying "logo" gets the poster thrown away by the junk rule. The
+  // picture is fine, the page is fine, and the tier finds nothing.
+  is("an unrelated data- attribute cannot condemn a poster",
+     bannerImages(`<img src="/uploads/plakat.jpg" data-alt="logo" alt="Plakat">`, "https://x.dk/").map(b => b.url),
+     ["https://x.dk/uploads/plakat.jpg"]);
+  // ── AND AN ADDRESS A MODEL CANNOT OPEN IS NOT A BANNER ──────────
+  // The vision call hands Anthropic a URL and Anthropic fetches it, so a
+  // relative path or a data URI is a call that cannot succeed. Tested with NO
+  // base URL, because with one every path resolves and the guard is unreachable.
+  is("a relative path with nothing to resolve it against is dropped",
+     bannerImages(`<img src="/uploads/plakat.jpg" alt="Plakat">`).length, 0);
+  is("and so is a data URI", bannerImages(`<img src="data:image/png;base64,iVBORw0" alt="Plakat">`).length, 0);
+  is("markdown obeys the same rule", bannerImagesFromMarkdown(`![Plakat](/uploads/plakat.jpg)`).length, 0);
+  // ── AND THE RESPONSIVE ONE ──────────────────────────────────────
+  // Small print on a poster is unreadable at 400px wide. The widest listed size
+  // is the one worth paying to look at.
+  ok("the widest size in a srcset is the one taken", urls.includes("https://cphdistortion.dk/img/crowd-1600.jpg"));
+  ok("and not the small one", !urls.includes("https://cphdistortion.dk/img/crowd-400.jpg"));
+
+  // Relative addresses are resolved against the page, or a model is handed a
+  // path it cannot open and the whole tier silently returns nothing.
+  ok("every address is absolute", got.every(b => /^https:\/\//.test(b.url)));
+
+  // ── THE CAP IS A MONEY QUESTION ─────────────────────────────────
+  is("three pictures per page, no more", MAX_BANNERS, 3);
+  const gallery = Array.from({ length: 40 }, (_, i) => `<img src="/g/${i}.jpg" alt="photo ${i}">`).join("");
+  ok("a gallery does not become forty model calls", bannerImages(gallery, "https://x.dk/").slice(0, MAX_BANNERS).length === 3);
+  // A POSITIVE CONTROL on the junk rule: it must exclude things, and it must not
+  // exclude everything. A regex that matched every URL would pass every
+  // assertion above and break the feature completely.
+  ok("an ordinary photograph is not junk", !IMAGE_JUNK.test("https://x.dk/uploads/poster-2027.jpg"));
+  ok("and the junk rule genuinely fires", IMAGE_JUNK.test("https://x.dk/assets/logo.png"));
+  ok("a page of nothing but junk yields nothing to scan",
+     bannerImages(`<img src="/i/logo.png"><img src="/i/instagram.png">`, "https://x.dk/").length === 0);
+
+  // ── THE PAID PATH RETURNS MARKDOWN, NOT HTML ────────────────────
+  // Which is the path that matters most: the pages needing Firecrawl are the
+  // JavaScript-rendered ones, and a JavaScript-rendered festival front page is
+  // the likeliest place of all for the dates to be in the artwork.
+  const md = `# Distortion\n\n![Distortion plakat 2027](/media/poster.jpg)\n![logo](/img/logo.png)\n![](https://cdn.x.dk/hero.jpg)`;
+  const fromMd = bannerImagesFromMarkdown(md, "https://cphdistortion.dk/");
+  ok("markdown images are found on the paid path", fromMd.some(b => b.url === "https://cphdistortion.dk/media/poster.jpg"));
+  ok("with the same junk rule", !fromMd.some(b => /logo/.test(b.url)));
+  ok("and the same absolute addresses", fromMd.every(b => /^https:\/\//.test(b.url)));
+  is("both readers return the same shape, so a caller never asks which it got",
+     Object.keys(fromMd[0]).sort().join(","), Object.keys(got[0]).sort().join(","));
+
+  // ── ONE PARSER, WHOEVER READ THE WORDS ──────────────────────────
+  // The characters transcribed off a poster go through the SAME nextEdition as
+  // the text off a page. A second date parser for pixels would be the seventh
+  // duplicated instrument in this codebase.
+  const printed = "2-6 JUNE 2027";
+  const read = nextEdition(printed, new Date(2026, 7, 19));
+  is("a date printed on a poster parses exactly like one written on a page",
+     isoDay(read?.start), "2027-06-02");
+  is("including its end", isoDay(read?.end), "2027-06-06");
+}
+
+// ── AND THE PANEL HAS TO SAY WHICH STEP ENDED THE CHAIN ─────────────
+//
+// Oliver has now read "Nothing changed. Everything checked still matches what is
+// on file." three times, on runs where the event he was watching came out still
+// saying "Dates not confirmed". True, and useless: it reports the outcome of a
+// four tier chain without naming the tier that ended it.
+{
+  const { stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS, DATE_PROPOSITION_WHY } = M;
+  const today = new Date(2026, 7, 19);
+
+  // THE DISTINCTION THE OLD SENTENCE COULD NOT MAKE. All four of these were
+  // reported identically, as nothing.
+  ok("a page with no date on it says so", /states no date/.test(stepWords({ step: "site", why: "no-date-in-text" })));
+  ok("a page that could not be read says something different",
+     stepWords({ step: "site", why: "challenge-page" }) !== stepWords({ step: "site", why: "no-date-in-text" }));
+  ok("a page with no banner on it says that", /no banner or poster/.test(stepWords({ step: "poster", why: "no-banner-to-scan" })));
+  ok("and an entry with no website stored says THAT", /no website is stored/.test(stepWords({ step: "site", why: "no-website-on-file" })));
+
+  // ── A REFUSAL IS NOT A MISS ─────────────────────────────────────
+  // This is the Distortion line, and it is the most useful sentence in the
+  // whole trace: the page WAS read, a date WAS found, and here is why it was
+  // not used. Reported as "nothing found" it reads as a broken tool.
+  const refused = stepWords({ step: "site", why: "refused-in-the-past", refused: "2026-06-03" });
+  ok("a refused date names the date it refused", /2026-06-03/.test(refused));
+  ok("and says why in the same words the rest of the app uses", refused.includes(DATE_PROPOSITION_WHY["in-the-past"]));
+  ok("a found date is stated plainly", stepWords({ step: "poster", found: "2027-06-02" }) === "found 2027-06-02");
+
+  // Never blank. A trace line with no words in it is the same failure as the
+  // sentence it replaces.
+  ok("every reason this code can emit has words for it",
+     Object.keys(CHECK_STEP_WORDS).every(k => !!stepWords({ why: k })));
+  ok("and an unknown reason still says something", !!stepWords({ why: "something-nobody-wrote-yet" }));
+  ok("a step with nothing in it does not render a blank line", !!stepWords({ step: "site" }));
+  ok("but a non-step is not dressed up as one", stepWords(null) === "");
+  ok("every step this code emits has a label", ["site", "ticket", "poster", "search"].every(k => !!STEP_LABELS[k]));
+
+  // ── WHICH ROWS ARE WORTH SHOWING ────────────────────────────────
+  // The ones still rendering "Dates not confirmed" to a reader. An event that
+  // came out of the run with a date is not a question anybody has, and a list
+  // where the answered rows outnumber the broken ones is a list nobody finishes.
+  const traces = [
+    { name: "Distortion", date: "", resolved: "", steps: [] },
+    { name: "Rock under broen", date: "2027-06-11", resolved: "", steps: [] },
+    { name: "Solved", date: "", resolved: "2027-06-02", steps: [] },
+    { name: "Last year's", date: "2026-06-03", resolved: "", steps: [] },
+  ];
+  const stuck = unresolvedTraces(traces, today).map(t => t.name);
+  ok("an undated row is listed", stuck.includes("Distortion"));
+  ok("a row whose stored date has already passed is listed too", stuck.includes("Last year's"));
+  ok("a row the run resolved is not", !stuck.includes("Solved"));
+  ok("and neither is a healthy upcoming row", !stuck.includes("Rock under broen"));
+  is("nothing else creeps in", stuck.length, 2);
+  is("a missing trace list is not a crash", unresolvedTraces(undefined, today).length, 0);
+}
+
+// ── THE WIRING OF THE POSTER TIER ───────────────────────────────────
+// Every condition here is one Oliver stated. A tier that runs when he did not
+// ask for it is money, and this is the one feature in the app whose cost he
+// named in the same breath as the request.
+{
+  const appP = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const rpP = readFileSync(join(root, "src/utils/readPage.js"), "utf8");
+  const apiP = readFileSync(join(root, "api/scan-source.js"), "utf8");
+  const aiP = readFileSync(join(root, "src/utils/aiClient.js"), "utf8");
+
+  ok("the endpoint returns the pictures it found", /banners: r\.banners \|\| \[\]/.test(apiP));
+  // ── ON THE BLOCKED PATH TOO, WHICH IS THE POINT ─────────────────
+  // A festival front page that strips to 285 characters IS blocked by every
+  // measure this app has, and the announcement is on it. Returning no pictures
+  // there rebuilds the exact wall this tier exists to get past.
+  is("on both the readable and the unreadable answer", (apiP.match(/banners: r\.banners \|\| \[\]/g) || []).length, 2);
+  ok("and the read keeps them when the text was thin", /escalated: false,[\s\S]{0,900}?banners: plain\.banners \|\| \[\]/.test(rpP));
+  ok("the paid path reads them out of its markdown", /banners: bannerImagesFromMarkdown\(deep\.text, url\)/.test(rpP));
+
+  // ── ONLY IF THERE WAS A BANNER TO SCAN ──────────────────────────
+  // His condition, verbatim. Written out in full rather than matched on the
+  // call alone, because a mutation replacing the guard with `true` leaves the
+  // call there to match. That trap is documented in this file and has caught
+  // an assertion here before.
+  ok("the poster tier runs only on a row that is actually broken, after the free reads, and only when there is a picture",
+     /if \(!fromSite && needsDate && seenBanners\.length && imagesRead < UPDATE_EVENTS_IMAGE_CAP\) \{/.test(appP));
+  ok("and 'broken' means undated or already past",
+     /const needsDate = isUndated\(ev\.date\) \|\| isPastDate\(ev\.date, checkFrom\);/.test(appP));
+  ok("a page with no banner says so rather than going quiet",
+     /trace\.push\(\{ step: "poster", why: "no-banner-to-scan" \}\)/.test(appP));
+
+  // ── AND ONLY UP TO A CEILING HE CAN SEE ─────────────────────────
+  // "Then I won't get charged extremes amount of money for updating.."
+  ok("there is a per event ceiling", /const MAX_POSTER_READS_PER_EVENT = \d+;/.test(appP));
+  ok("and a per run ceiling, because sixty events with two each is not two",
+     /const UPDATE_EVENTS_IMAGE_CAP = \d+;/.test(appP));
+  ok("the run ceiling is actually counted against", /imagesRead \+= 1;/.test(appP));
+  // Both ceilings have to reach the loop, or the smaller of them is decoration.
+  // A mutation dropping the slice left every assertion above green while the
+  // per event cap did nothing at all.
+  ok("and the loop walks a list bounded by both of them",
+     /const room = Math\.min\(MAX_POSTER_READS_PER_EVENT, UPDATE_EVENTS_IMAGE_CAP - imagesRead\);/.test(appP)
+     && /for \(const banner of seenBanners\.slice\(0, room\)\)/.test(appP));
+  ok("and the loop stops at the first date found", /fromSite = \{ start: isoDay\(e\.found\.start\)[\s\S]{0,300}?break;/.test(appP));
+
+  // ── A POSTER READ SAYS IT WAS A POSTER READ ─────────────────────
+  // This is the one tier where being wrong looks identical to being right, so
+  // the panel quotes the characters the model claims to have read.
+  ok("the note names the poster and quotes what was printed on it",
+     /Read off the poster on \$\{fromSite\.host\}, which prints "\$\{fromSite\.printed\}"/.test(appP));
+  ok("and the run reports how many pictures it paid to look at", /imagesRead > 0 \? ` \$\{updateEventsResults\.imagesRead\} poster/.test(appP));
+
+  // ── THE TRANSCRIBER MUST NOT BECOME A RESEARCHER ────────────────
+  // A model asked when a famous festival is will answer from memory, and that
+  // answer would look exactly like a reading: a confident wrong date, sourced
+  // to the operator's own poster, undetectable.
+  ok("the image prompt forbids working from what the model knows",
+     /Do not use anything you know or believe about this event/.test(aiP));
+  ok("and makes 'no date on it' an easy answer to give",
+     /Replying \$\{NO_DATE_ON_IMAGE\} is a correct and useful answer\. Guessing is not\./.test(aiP));
+  ok("saying nothing is distinguishable from failing", /return \{ text: "", error: "", none: true \};/.test(aiP));
+  ok("and the caller tells those two apart",
+     /if \(shot\.none \|\| !shot\.text\) \{ trace\.push\(\{ step: "poster", host: banner\.host \|\| "", why: "no-date-printed" \}\)/.test(appP));
+
+  // ── THE TRACE IS RENDERED, NOT JUST COLLECTED ───────────────────
+  // An unwired helper is this codebase's signature defect and the reason
+  // libraryContext.js is deliberately still uncommitted.
+  ok("the panel renders the trace", /unresolvedTraces\(updateEventsResults\.traces, new Date\(\)\)/.test(appP));
+  ok("using the shared wording rather than a second copy of it", /\{stepWords\(st\)\}/.test(appP));
+  ok("and every event in the batch records one",
+     (appP.match(/traces\.push\(\{ name: ev\.name/g) || []).length >= 4);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

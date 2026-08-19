@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     // tickets: the outbound ticket links this page carries, best first. The draft
     // pipeline follows the top one or two to reach the agent that actually sells
     // them, which is where the buyable price lives. See ticketLinks in pageScan.
-    return res.status(200).json({ text: r.text, via: r.via, read: r.read, credits: r.credits, tickets: r.tickets || [], ...(r.firstTry ? { firstTry: r.firstTry } : {}) });
+    return res.status(200).json({ text: r.text, via: r.via, read: r.read, credits: r.credits, tickets: r.tickets || [], banners: r.banners || [], ...(r.firstTry ? { firstTry: r.firstTry } : {}) });
   }
 
   // ── NOTHING READABLE ──────────────────────────────────────────────
@@ -83,6 +83,12 @@ export default async function handler(req, res) {
     read: r.read,
     credits: r.credits,
     sample: r.sample,
+    // banners: returned on the BLOCKED path too, and that is the point of them.
+    // A festival front page that strips to 285 characters is "almost no readable
+    // text" by every measure this file has, and the announcement is sitting in
+    // the artwork on that same page. Handing back an empty text and no pictures
+    // would be reporting a dead end that is not one. See bannerImages.
+    banners: r.banners || [],
     ...(r.firstTry ? { firstTry: r.firstTry } : {}),
     error: errorFor(url, r),
     ...(key ? {} : { hint: "No FIRECRAWL_API_KEY is set, so there is no second attempt for pages like this." }),
