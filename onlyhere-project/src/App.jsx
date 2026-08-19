@@ -21,7 +21,7 @@ import { groupRows, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER, filt
 import { reconcileHours, hoursForPrompt } from "./utils/openingHours";
 import { matchEvent, reconcileTickets, ticketsForPrompt, ticketBadge, priceText, normaliseTicketStatus, stampTicketSource, ticketProvenance, isMeasured, TICKET_HUNT_PROMPT, ticketHuntUrls } from "./utils/tickets";
 import { readFactCheck, describeFactCheck, withRoots, datesConfirmedBy, readInventedCheck, researchForCheck, INVENTED_CHECK_FORMAT, correctionLanded, describeCorrection } from "./utils/factCheckRead";
-import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit } from "./utils/entryAudit";
+import { tracePrices, describePriceTrace, readerText, glanceProblems, repairGlance, curatedFindProblems, selfContradictions, priceSource, priceMisses, findTicketPrice, ticketPriceOn, evidenceStanding, describeEvidence, statesAPrice, unpricedLine, describeUnpriced, PRICE_UNCHECKED, sourceFit, describeSourceFit, VENUE_KINDS, UNCONFIRMED_IDENTITY, UNVERIFIED_PROSE } from "./utils/entryAudit";
 import { townPointFor, isSameTownWalk, legDistanceKm, resolveLegMode, lookupRealPlace, placeCoords, directionsEndpoint, collapsedRoute, WALK_MAX_MINUTES, WALK_MAX_KM, townKeyFor, coordFitsTown, MAX_TOWN_KM, upgradeWorthIt, onFootMinutes } from "./utils/guideEnrichment";
 import { checkPlan, planProblemsForPrompt, titlePromises } from "./utils/planGate";
 import { stayProblems, travellerBudget, budgetTierMismatch } from "./utils/accommodation";
@@ -101,7 +101,7 @@ import { showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, 
 import { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING } from "./utils/studioErrors";
 import { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from "./utils/placeEdit";
 import { editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict } from "./utils/bodyEdit";
-import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, isUndated, UNDATED, parseEventDate } from "./utils/eventDates";
+import { eventDateIssues, nextEditionYear, splitFinishedCandidates, isPastDate, byEventDate, eventMonthShort, eventMonths, isUndated, UNDATED, parseEventDate, datePropositionProblem, DATE_PROPOSITION_WHY } from "./utils/eventDates";
 import { languageBarrier } from "./utils/languageBarrier";
 import { languageBlock, readerLanguage } from "./utils/readerLanguage";
 import { echoInDraft, describeEcho, ECHO_RUN } from "./utils/echoCheck";
@@ -7444,7 +7444,24 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // Same pair as the reader-facing grid: an event that is running RIGHT NOW
       // is the one whose ticket status and hours are most worth refreshing, and
       // isUpcoming alone excluded exactly those.
-      const allUpcoming = [...events, ...majorEvents, ...vikingEvents].filter(e => isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date));
+      // ── AND THE STALE ONES, WHICH IS THE WHOLE POINT ─────────────
+      // Oliver, 19 Aug 2026: "do events even recreate the date anymore? So many
+      // have turned into 'not confirmed'." Then, about this button: "Not even
+      // sure if it helped..."
+      //
+      // It could not have helped, by construction. The filter was
+      // `isCurrentlyLive || isUpcoming`, and an event whose stored date has gone
+      // past is neither. So THE EVENTS THAT MOST NEED A NEW DATE WERE EXACTLY THE
+      // ONES THIS CHECK SKIPPED: he ran it, it reported nothing, and the stale
+      // rows carried on rendering "Dates not confirmed" on the front page.
+      //
+      // A past or unreadable date is the strongest signal a row needs
+      // re-checking: it is an annual event whose next edition nobody has written
+      // down yet. UPDATE_EVENTS_BATCH_CAP still bounds the spend.
+      const checkFrom = new Date();
+      const allUpcoming = [...events, ...majorEvents, ...vikingEvents].filter(e =>
+        isCurrentlyLive(e.date, e.dateEnd) || isUpcoming(e.date)
+        || isUndated(e.date) || isPastDate(e.date, checkFrom));
       const batch = allUpcoming.slice(0, UPDATE_EVENTS_BATCH_CAP);
       const skipped = allUpcoming.length - batch.length;
       const changed = [];
@@ -7457,7 +7474,34 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           if (result.error) continue;
           const cleaned = result.text.replace(/^```json\s*|\s*```$/g, "").trim();
           const parsed = JSON.parse(cleaned);
-          const hasChange = parsed.stillHappening === false || parsed.dateChanged || parsed.ticketStatusChanged;
+          // ── A CHANGE IS A DIFFERENCE, NOT AN ANSWER ─────────────
+          // Oliver, 19 Aug 2026, reading the panel: one row said "Date on file:
+          // 2026-09-19 → possibly now: 2026-09-19". The model was asked to leave
+          // dateChanged empty when nothing changed and it filled it with the
+          // date it had just been given, which is a normal thing for a model to
+          // do and exactly why the answer has to be checked rather than trusted.
+          //
+          // Reported as a change, it costs him the most expensive thing this
+          // panel has: attention. A list of twenty rows where several are not
+          // changes at all is a list nobody finishes reading, and the real one
+          // hides in it.
+          const sameDay = (a, b) => {
+            const pa = parseEventDate(a), pb = parseEventDate(b);
+            return !!pa && !!pb && pa.getTime() === pb.getTime();
+          };
+          // ── AND IT MUST NOT GO BACKWARDS ────────────────────────
+          // See datePropositionProblem in utils/eventDates.js: the check offered
+          // to move Rock under broen from a correct 2027 to a 2026 date that has
+          // already passed. Refused, and the reason is kept so the panel can say
+          // it was refused rather than dropping it in silence.
+          const badProposal = parsed.dateChanged ? datePropositionProblem(parsed.dateChanged, ev.date, new Date()) : "";
+          if (badProposal) { parsed.ignoredDate = parsed.dateChanged; parsed.ignoredWhy = DATE_PROPOSITION_WHY[badProposal] || badProposal; parsed.dateChanged = ""; }
+          const dateReallyChanged = parsed.dateChanged && !sameDay(parsed.dateChanged, ev.date);
+          const statusReallyChanged = parsed.ticketStatusChanged
+            && normaliseTicketStatus(parsed.ticketStatusChanged) !== normaliseTicketStatus(ev.ticketStatus);
+          if (parsed.dateChanged && !dateReallyChanged) parsed.dateChanged = "";
+          if (parsed.ticketStatusChanged && !statusReallyChanged) parsed.ticketStatusChanged = "";
+          const hasChange = parsed.stillHappening === false || parsed.dateChanged || parsed.ticketStatusChanged || parsed.ignoredDate;
           if (hasChange) {
             changed.push({ name: ev.name, town: ev.town, currentDate: ev.date, ...parsed });
           }
@@ -7875,6 +7919,45 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
       // makes it worse. An empty date is not that: the fix IS the date, it is
       // one field in the JSON above, and saving an edit that leaves it empty is
       // publishing a dateless event by another door.
+      // ── 3. A VENUE NOBODY COULD CONFIRM IS NOT AN ENTRY ──────────
+      //
+      // Oliver, 19 Aug 2026, on a published nightlife page called Folk: "clicking
+      // 'Folk' with a first glance saying 'unverified...' I mean.. I'll probably
+      // delete that blog." And on its origin: "'Folk' was a websearch by
+      // perplexity (I think). Apparently, the place turned out to not exist
+      // according to Google Gemini, saying it was an event and called something
+      // else."
+      //
+      // THE PIPELINE SAID SO ITSELF AND NOTHING LISTENED. That entry's own
+      // opening paragraph reads "no confirmed hours, no drinks list, no solid
+      // word on who shows up or when. This entry exists to flag that gap
+      // honestly", and its At a Glance box says "Type: Unconfirmed venue type".
+      // The draft reported in writing that it had established nothing, and this
+      // function had gates for the date, the coordinate and the tier and none
+      // for the one thing the page is supposed to be about.
+      //
+      // Every other gate here refuses a WRONG value. This one refuses an ABSENT
+      // subject, which is why it reads differently: there is no field to correct,
+      // because the problem is that nobody could confirm the place is a place.
+      //
+      // ONLY FOR VENUES. A forest, a beach or a viewpoint is not a business and
+      // its absence from a listing proves nothing about it. A bar, a restaurant,
+      // a club or a bookable workshop is a trading business, and an entry that
+      // cannot say which of those it is has no subject left.
+      if (VENUE_KINDS.includes(studioType)) {
+        const identity = String(shaped.category ?? shaped.type ?? "");
+        const admits = UNCONFIRMED_IDENTITY.test(identity) || UNVERIFIED_PROSE.test(String(shaped.desc || ""));
+        if (admits) {
+          setPublishStatus(null);
+          setDraftEditError(
+            `Not published. This draft says it could not establish what this place is${UNCONFIRMED_IDENTITY.test(identity) ? ` (the type reads "${identity.slice(0, 50)}")` : " in its own opening paragraph"}. `
+            + `An entry whose subject is unconfirmed has nothing for the rest of the page to be about, and the reader meets that admission first. `
+            + `Either confirm what it is and say so in the type and the opening, or drop this one: a place nobody could confirm is not an entry.`
+          );
+          return;
+        }
+      }
+
       // ── 3. AND A TIER IS GEMLYX'S OWN JUDGEMENT, SO IT CANNOT BE BLANK ──
       //
       // Oliver, 18 Aug 2026, on a draft whose tier was an empty string: "the tier
@@ -11632,9 +11715,25 @@ ${languageBlock()}`;
             {(() => {
               const b = ticketBadge(event.ticketStatus);
               if (!b.label) return null;
-              const tone = b.tone === "bad" ? { color: "#FF6B6B", background: "rgba(255,107,107,0.12)" }
+              // ── SOLD OUT IS THE ONE THAT CHANGES A DECISION ───────
+              // Oliver, 19 Aug 2026, with "Sold out" written across a card in
+              // red: "So the 'Sold out' is clear and large."
+              //
+              // He is right that it does not belong in the same weight as the
+              // rest. Every other badge here is colour on a trip somebody is
+              // still choosing; this one ends the choice. It was rendering at
+              // 10px in a row of chips, after the travel time, so the reader
+              // most likely to miss it is the one already sold on going.
+              //
+              // Only sold_out and cancelled. Making all six large would put the
+              // emphasis back where it was, which is nowhere: a page where
+              // everything shouts says nothing, and "Tickets on sale" does not
+              // need to interrupt anybody.
+              const stops = b.tone === "bad";
+              const tone = b.tone === "bad" ? { color: "#FF6B6B", background: "rgba(255,107,107,0.14)", border: "1px solid rgba(255,107,107,0.45)" }
                 : b.tone === "warn" ? { color: "#FFB347", background: "#FFB34722" }
                 : { color: "#6ECF97", background: "rgba(110,207,151,0.12)" };
+              const size = stops ? { fontSize: 13, fontWeight: 800, padding: "6px 14px", letterSpacing: 0.4, textTransform: "uppercase" } : {};
               // ── MEASURED AND WRITTEN CANNOT LOOK THE SAME ─────────
               // Oliver, 11 Aug: "some events are ticketmaster.com and some
               // aren't, how do we differentiate that?" A status checked against
@@ -11645,7 +11744,7 @@ ${languageBlock()}`;
               const measured = isMeasured(event.__ticket?.source);
               return (
                 <span title={ticketProvenance(event)}
-                  style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 100, ...tone, opacity: measured ? 1 : 0.72 }}>
+                  style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 100, ...tone, ...size, opacity: measured ? 1 : 0.72 }}>
                   {measured ? "✓ " : ""}{b.label}
                 </span>
               );
@@ -11715,11 +11814,32 @@ ${languageBlock()}`;
   // finding rather than a permanent empty option. Those rows should not exist
   // (publishDraft blocks a dateless event), so seeing the chip at all is the
   // signal that some predate the gate.
+  // ── EVERY MONTH THE EVENT RUNS IN, NOT JUST THE FIRST ────────
+  // Oliver, 19 Aug 2026: "please.. expand event dates for all dates. You got
+  // several dates missing." Both of these read eventMonthShort(e.date), which is
+  // the first day and nothing else, so a festival running 30 Jul to 2 Aug was in
+  // Jul alone and invisible to a reader filtering August. dateEnd was on the
+  // shape the whole time. See eventMonths in utils/eventDates.js.
+  // ── EVERY MONTH, ALWAYS ─────────────────────────────────────
+  // Oliver, 19 Aug 2026: "AND ADD ALL DATES!!!!" His Date list read May, Jun,
+  // Aug, Oct, Nov and Undated, and a reader has no way to tell whether July is
+  // absent because nothing is on or because the filter forgot it. A calendar
+  // with holes in it reads as broken.
+  //
+  // Showing the empty ones costs nothing and is what the rest of this machinery
+  // already does: facetCounts gives each option its real number, and an option
+  // counting zero renders DISABLED rather than hidden. listControls.js wrote the
+  // reason down when the counts were built: "A zero here is a true statement" and
+  // "an option that vanishes and reappears as you tap makes the sheet jump under
+  // your thumb." The month list was the one place still hiding them.
+  //
+  // Calendar order, because MONTHS is in calendar order and a reader reads it as
+  // a year rather than as a ranking.
   const eventMonthOptions = [
-    ...MONTHS.filter(m => upcomingInTab.some(e => eventMonthShort(e.date) === m)),
+    ...MONTHS,
     ...(upcomingInTab.some(e => isUndated(e.date)) ? [UNDATED] : []),
   ];
-  const inEventMonth = (e, m) => (m === UNDATED ? isUndated(e.date) : eventMonthShort(e.date) === m);
+  const inEventMonth = (e, m) => (m === UNDATED ? isUndated(e.date) : eventMonths(e).includes(m));
   // ── SIX PILLS FOR FOUR IDEAS, TWO STARTING WITH "MUSIC" ──────
   // This row read `[...new Set(upcomingInTab.map(e => e.type))]` off a free-text
   // field, so the live table's eight different spellings became eight pills:
@@ -13351,7 +13471,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       )}
                     </div>
 
-                    {studioType === "festival" && (
+                    {/* UN-GATED 19 Aug 2026. Oliver: "And I can't see the button anymore" / "The
+                        'update events' button there was. To update the dates."
+                        It read `studioType === "festival"`, and studioType is what he has
+                        picked in the DRAFT panel as the thing he is about to write NEXT,
+                        so a maintenance action over his whole published event library
+                        vanished the moment he switched the picker to Food. Nothing about
+                        re-checking existing events depends on what he is drafting. */}
+                    {(
                       <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "14px", marginBottom: 14 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: updateEventsResults || updateEventsError ? 10 : 0 }}>
                           <div>
@@ -13377,8 +13504,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                   <div key={i} style={{ background: C.bg, border: "1px solid #FFB34755", borderRadius: 10, padding: "10px 12px" }}>
                                     <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 3 }}>{c.name}{c.town ? ` — ${c.town}` : ""}</div>
                                     {c.stillHappening === false && <div style={{ fontSize: 11.5, color: "#FFB347" }}>⚠ May no longer be happening as scheduled — verify before your next guide references it.</div>}
-                                    {c.dateChanged && <div style={{ fontSize: 11.5, color: "#FFB347" }}>Date on file: {c.currentDate} → possibly now: {c.dateChanged}</div>}
+                                    {/* "Date on file:  → possibly now: ..." with nothing on the
+                                        left is a row whose date was never stored, and a bare arrow
+                                        does not say that. */}
+                                    {c.dateChanged && <div style={{ fontSize: 11.5, color: "#FFB347" }}>Date on file: {c.currentDate || "none"} → possibly now: {c.dateChanged}</div>}
                                     {c.ticketStatusChanged && <div style={{ fontSize: 11.5, color: "#FFB347" }}>Ticket status may now be: {c.ticketStatusChanged}</div>}
+                                    {/* Said out loud. A refusal nobody can see is
+                                        indistinguishable from a check that found nothing. */}
+                                    {c.ignoredDate && <div style={{ fontSize: 11.5, color: C.muted }}>Ignored a suggested date of {c.ignoredDate}, because {c.ignoredWhy}.</div>}
                                     {c.notes && <div style={{ fontSize: 11.5, color: C.light, marginTop: 3 }}>{c.notes}</div>}
                                     <div style={{ fontSize: 10.5, color: C.muted, marginTop: 4 }}>This only flags it — update the real entry in your events data file by hand once you've verified.</div>
                                   </div>
@@ -14489,7 +14622,17 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   .filter(x => seasonFit(x, month).fit !== "poor");
                 const lenses = [
                   { key: "gems", title: "Hidden gems this week", sub: "Places most visitors never reach",
-                    pick: (x) => x.popularityTag === "Hidden Gem" || x.tier === "Worth Considering" },
+                    // ── tierOf, NOT AN EXACT STRING ────────────────────
+                    // This read `x.tier === "Worth Considering"`. Three lines
+                    // below, its sibling lens carries the comment explaining why
+                    // that is wrong: "a festival stores 'Can't miss out' and a
+                    // town stores 'Can't Miss Out', and an exact match here
+                    // silently hid every festival from this whole section of the
+                    // front page." The fix was applied to the other lens and not
+                    // to this one, so the same trap sat here in the same object.
+                    // tierOf folds and is tested; nothing else should be asking
+                    // this question by hand.
+                    pick: (x) => x.popularityTag === "Hidden Gem" || tierOf(x)?.id === "worth" },
                   { key: "trend", title: "Worth the trip right now", sub: "The ones we would go out of our way for",
                     // Loose, for the same reason as the badge above: a
                     // festival stores "Can't miss out" and a town stores
@@ -14514,9 +14657,49 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                   // resizing the window never reshuffles what is on show.
                   return { ...lens, items: dealt(ranked, rowCards, week * 31 + li) };
                 }).filter(r => r.items.length > 0);
-                // A category with nothing to show says so, rather than the whole
-                // section vanishing and leaving the chips looking broken.
-                if (rows.length === 0) {
+                // ── HALF THE LIBRARY COULD NEVER APPEAR HERE AT ALL ────────
+                //
+                // Oliver, 19 Aug 2026, with a screenshot of the Food chip
+                // selected and the line below reading "Nothing published in that
+                // category yet": "Food, Nightlife, and workshops".
+                //
+                // Both lenses above ask for a RANK: popularityTag, tier or
+                // nomiPotential. Checked against studioContent.js, those three
+                // fields exist on exactly these shapes:
+                //
+                //   tier            town, festival
+                //   popularityTag   free, booking
+                //   nomiPotential   town
+                //
+                // Food and nightlife carry NONE of them. Not one. So no food spot
+                // and no bar could ever match either lens, however many he
+                // published, and the front page told him he had published none.
+                // He has 23 food entries and 7 nightlife. Workshops can appear,
+                // but only when popularityTag happens to be set, and the prompt
+                // asks for it "if genuinely under-the-radar, else empty string",
+                // so most are blank.
+                //
+                // THE MESSAGE WAS THE WORST PART. "Nothing published in that
+                // category yet" is a statement about his library, and it was
+                // false. The pool is already filtered to the chosen category by
+                // this point, so it can tell the two apart exactly: an empty pool
+                // means nothing is published, a full pool with no rows means
+                // nothing in it carries a rank.
+                //
+                // AND THE FALLBACK CLAIMS NOTHING. It does not call them hidden
+                // gems or worth the trip, because nobody decided that: inventing
+                // a rank is precisely what studioContent.js removed the
+                // `tier || "Worth Considering"` default to stop. It says what it
+                // can honestly say, which is that these are the entries in that
+                // category.
+                const ranked = rows.length > 0;
+                const fallback = !ranked && pool.length > 0
+                  ? [{ key: "any", title: `From our ${(({ town: "town", free: "attraction", food: "food", nightlife: "nightlife", craft: "workshop" })[pickCategory] || "")} entries`,
+                       sub: "Everything published here, newest first",
+                       items: dealt([...pool.filter(withPhoto), ...pool.filter(x => !withPhoto(x))], rowCards, week * 31) }]
+                  : [];
+                const shown = ranked ? rows : fallback;
+                if (shown.length === 0) {
                   return (
                     <div style={{ padding: "22px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
                       <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>
@@ -14527,7 +14710,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 }
                 return (
                   <div style={{ padding: "22px 16px 8px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
-                    {rows.map(row => (
+                    {shown.map(row => (
                       <div key={row.key} style={{ marginBottom: 22 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: 2, textTransform: "uppercase" }}>{row.title}</div>
                         <div style={{ fontSize: 12, color: C.muted, margin: "3px 0 12px" }}>{row.sub}</div>
@@ -14773,26 +14956,20 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     .map(v => ({ value: v, label: ISLAND_LABEL[v] || v })),
                 ],
                 test: (i, v) => i._island === v },
-              // ── AND THE THREE THAT KEEP WORKING, OFF THE ROW ─────
-              { key: "city", label: "City",
-                // DERIVED FROM THE ROWS, not a hardcoded list. A ten-name array
-                // stood here until 18 Aug and an attraction published in Skagen
-                // or Ribe got no chip at all, which is the same "a filter that
-                // quietly does not cover half the list" fault as the craft test
-                // above. "Other" sorts last because it is not a place.
-                options: [
-                  { value: "All", label: "All" },
-                  ...[...new Set(combined.map(i => i._city).filter(Boolean))]
-                    .sort((a, b) => (a === "Other") - (b === "Other") || daCompare(a, b))
-                    .map(c => ({ value: c, label: c })),
-                ],
-                test: (i, v) => i._city === v },
-              { key: "gem", label: "Popularity",
-                options: [{ value: "All", label: "All" }, { value: "gem", label: "◆ Hidden Gem" }],
-                test: (i) => i.popularityTag === "Hidden Gem" },
-              { key: "booking", label: "Booking",
-                options: [{ value: "All", label: "All" }, { value: "online", label: "⚡ Bookable online" }],
-                test: (i) => i.bookingType === "online" },
+              // ── AND NOTHING ELSE, WHICH IS THE POINT ─────────────
+              // City, Popularity and Booking were here, off the row and reachable
+              // through the Filter sheet. The sheet is gone at his request and he
+              // has now said twice what he wants instead: "We got too many blogs
+              // for you to make 10.000 different things to click. Make it
+              // simpler", then "As long as there aren't 10.000 buttons and it is
+              // all filtered easily into drop-down."
+              //
+              // So the list is his three sections and stops: Order lives on the
+              // line below as the sort, and Type and Island are these two. City is
+              // the one worth naming as a deliberate loss rather than an
+              // oversight: the search box above already finds a town by name, and
+              // it does it through the Danish folding, so typing "aeroskobing"
+              // works where a chip never would.
             ];
 
             // Search runs BEFORE the facets, so the counts beside each option
@@ -16792,7 +16969,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
 
         {/* Search results */}
         {search.length > 1 && searchResults.length > 0 && (
-          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: C.surface, borderBottom: `1px solid ${C.border}`, zIndex: 200, maxHeight: 240, overflowY: "auto" }}>
+          <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 16, left: "auto", width: "min(420px, calc(100vw - 32px))", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: "0 18px 50px rgba(0,0,0,0.55)", zIndex: 200, maxHeight: 320, overflowY: "auto", overflowX: "hidden" }}>
             {searchResults.map(p => (
               <div key={`${p._src}-${p.id}`} onClick={() => { openStopDetail(p); setSearch(""); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>

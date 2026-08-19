@@ -154,9 +154,7 @@ export const FilterBar = ({
   onSort = () => {},
 }) => {
   const [openKey, setOpenKey] = useState(null);
-  const [sheet, setSheet] = useState(false);
   const sortRef = useCloseOnOutside(openKey === "__sort", () => setOpenKey(null));
-  const sheetRef = useCloseOnOutside(sheet, () => setSheet(false));
   const active = activeFacetCount(facets, state);
   const chips = appliedChips(facets, state);
   const sortLabel = (sortOptions.find(o => o.value === sort) || sortOptions[0] || {}).label || "";
@@ -167,100 +165,31 @@ export const FilterBar = ({
         {/* The dark solid button, first, exactly as on Magasin. It carries the
             active count so a filtered list explains itself from the one control
             that is always on screen. */}
-        {/* No facets means nothing to open. A page short enough not to need
-            filters should not carry a button that opens an empty sheet. */}
-        {facets.length > 0 && (
-        <div ref={sheetRef} style={{ position: "relative" }}>
-          <button onClick={() => { setSheet(v => !v); setOpenKey(null); }}
-            aria-expanded={sheet}
-            style={{ ...btn, padding: "10px 15px", background: C.text, color: C.bg, border: `1px solid ${C.text}`, fontWeight: 700 }}>
-            <span style={{ fontSize: 13 }}>⚙</span> Filter
-            {active > 0 && (
-              <span style={{ background: C.bg, color: C.text, borderRadius: 100, padding: "1px 7px", fontSize: 10.5, fontWeight: 800 }}>{active}</span>
-            )}
-          </button>
-          {sheet && (
-            <Panel width={280}>
-              {/* ── SECTION ONE IS THE SORT ──────────────────────
-                  Oliver, 19 Aug 2026: "section 1: Most recommended/Alphabet/
-                  closest to me. Section 2 (be able to choose more): type...
-                  Section 3: Island."
+        {/* ── ONE CONTROL PER FACET, AND NO FILTER BUTTON ──────────
+            Oliver, 19 Aug 2026, with the panel open over the row: "it makes no
+            sense. you made it on multiple. Just remove the white filter thing
+            and keep the two other sections."
 
-                  It is still not a filter, and the line under the row still
-                  keeps it away from the filters for the reason written there: a
-                  sort changes the ORDER and never the contents. But inside the
-                  panel, where somebody has deliberately opened the controls, the
-                  order of the list is the first thing most people want to set,
-                  and having to shut the panel to reach it is the annoyance.
-                  So it is here AND there, one state, and the heading says which
-                  kind of thing it is rather than leaving it to be assumed. */}
-              {sortOptions.length > 1 && (
-                <div style={{ marginBottom: 6 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", padding: "8px 11px 4px" }}>
-                    Order <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>· changes the order, never what is in the list</span>
-                  </div>
-                  {sortOptions.map(o => (
-                    <OptionRow key={o.value} label={o.label} count="" active={o.value === sort}
-                      onClick={() => onSort(o.value)} />
-                  ))}
-                </div>
-              )}
-              {facets.map(f => {
-                const counts = facetCounts(items, facets, state, f.key);
-                return (
-                  <div key={f.key} style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase", padding: "8px 11px 4px" }}>{f.label}</div>
-                    {(f.options || []).map(o => (
-                      <OptionRow key={o.value} label={o.label} count={counts[o.value] ?? 0}
-                        multi={!!f.multi && o.value !== "All"}
-                        active={isOptionOn(state, f, o.value)}
-                        disabled={o.value !== "All" && (counts[o.value] ?? 0) === 0}
-                        onClick={() => onChange(o.value === "All" ? clearFacet(state, f.key) : toggleFacetValue(state, f, o.value))} />
-                    ))}
-                  </div>
-                );
-              })}
-              {/* Says the number it is about to show. Baymard's practice and the
-                  one that makes an apply button worth pressing. */}
-              <button onClick={() => setSheet(false)}
-                style={{ ...btn, width: "100%", justifyContent: "center", marginTop: 4, padding: "11px", background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`, border: "none", color: "#1A1206", fontWeight: 700 }}>
-                Show {shown} {shown === 1 ? noun.replace(/s$/, "") : noun}
-              </button>
-            </Panel>
-          )}
-        </div>
-        )}
+            He is right and this is my second attempt at the same complaint. The
+            first version put the sections INSIDE the Filter button and left the
+            per-facet dropdowns on the row, so Date existed twice on one screen
+            and tapping either moved the other. I then removed the dropdowns and
+            kept the button, which is the other way of having one of each, and it
+            buried Date and Type behind a tap for no gain.
 
-        {/* ── ONLY THE PRIMARY FACETS GET THEIR OWN BUTTON ─────────
-            Oliver, 19 Aug 2026: "We got too many blogs for you to make 10.000
-            different things to click. Make it simpler."
+            This is the version he asked for: Date and Type are the controls, on
+            the row, where a tap opens the thing it is labelled with. The Filter
+            button and its sheet are gone entirely, and with them the duplicated
+            Order section, since the sort already lives on the line below and is
+            not a filter.
 
-            Events has two dropdowns beside the Filter button and he called that
-            layout "somewhat good". Attractions had five facets, and one of them
-            is City, which is derived from the published rows and grows every
-            time he publishes somewhere new — so the row was going to keep
-            getting longer on its own, without anybody deciding it should.
-
-            A facet marked `primary: true` gets a button on the row. Everything
-            else is still there, one tap away, in the sheet below, which already
-            renders every facet under its own heading. Nothing is removed and
-            nothing is hidden: the shelf is just shorter.
-
-            The DEFAULT when no facet declares itself primary is the first two,
-            not all of them. A new page that forgets to mark anything gets the
-            short row rather than the long one, because the long row is the
-            thing being fixed and a default should not reintroduce it. */}
+            AND THE ROW STAYS SHORT. Oliver, in the same breath: "As long as
+            there aren't 10.000 buttons and it is all filtered easily into
+            drop-down." So a page declares which facets earn a control, with
+            `primary`, and a page that declares none gets the first two rather
+            than all of them: the long row is the thing being fixed, and a
+            default should not quietly reintroduce it. */}
         {(facets.some(f => f.primary) ? facets.filter(f => f.primary) : facets.slice(0, 2)).map(f => (
-          <Dropdown key={f.key} facet={f} items={items} facets={facets} state={state}
-            onChange={onChange} openKey={openKey} setOpenKey={setOpenKey} />
-        ))}
-        {/* AND THE ONES THAT ARE APPLIED BUT HAVE NO BUTTON. A facet set from
-            the sheet and then invisible on the row is the state where the list
-            is short and the reason is off screen. It gets a button for as long
-            as it is on, which is when the button is worth the space. */}
-        {facets.filter(f => !(facets.some(x => x.primary) ? f.primary : facets.indexOf(f) < 2))
-               .filter(f => state[f.key] && state[f.key] !== "All")
-               .map(f => (
           <Dropdown key={f.key} facet={f} items={items} facets={facets} state={state}
             onChange={onChange} openKey={openKey} setOpenKey={setOpenKey} />
         ))}

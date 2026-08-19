@@ -126,6 +126,54 @@ export const briefThemes = (text, interests = []) => {
 // fallback stops mattering the moment it happens.
 const WORD_FIELDS = ["desc", "type", "highlight", "tag", "what", "name"];
 
+// ── HOW YOU GET THERE IS NOT WHAT THE PLACE IS ──────────────────────
+//
+// Oliver, 19 Aug 2026, on a card reading "Hooked Kødbyen — Closest thing here to
+// the nature you mentioned": "Doesn't sound like 'the best for the nature he
+// mentioned'."
+//
+// Two real rows from his own run report, both offered to a traveller who asked
+// for nature:
+//
+//   Hive, a VIP nightclub on Skindergade. Its description opens "sits about five
+//   minutes' WALK from Rådhuspladsen station". `walk` is in the nature list.
+//   Hooked Kødbyen, a seafood place in the meatpacking district. "right next to
+//   Halmtorvet's GREEN area". `green` is in the nature list.
+//
+// Neither sentence is about nature. The first is a logistics clause, and "five
+// minutes' walk from the station" is close to the most common sentence in travel
+// copy; the second is a passing mention of a lawn next to a concrete yard. So the
+// nightclub and the fish restaurant became the two things in the library closest
+// to nature, and the card said so in Gemlyx's own voice.
+//
+// ── THE CAUSE IS ONE LIST DOING TWO JOBS ────────────────────────────
+// THEME_WORDS is read against the TRAVELLER's own sentence, to work out what
+// they like, and against a ROW, to work out what a place is about. Those want
+// different vocabularies and the difference is not cosmetic:
+//
+//   "we like cycling"        the traveller saying what they enjoy       KEEP
+//   "a short cycle from the  the row saying how far it is               DROP
+//    station"
+//
+// Same word, opposite meaning, decided by which side of the match it is on. So
+// the traveller side keeps the full list and the row side drops the words that
+// describe ACCESS rather than subject. Nothing is removed from THEME_WORDS
+// itself, because that would stop "we like cycling" being read as a nature
+// interest at all, which is the opposite mistake and a worse one.
+//
+// `park` deliberately STAYS: a deer park and a castle park are what those places
+// are, and "car park" is two words in which the first is the qualifier. `green`
+// goes, because a green door, a green area next door and Grøn Koncert are all
+// incidental, and no row is ABOUT being green.
+export const ARRIVAL_WORDS = new Set([
+  "walk", "walks", "walking", "bike", "bikes", "biking", "cycle", "cycling", "green",
+]);
+
+// The words that may decide a ROW carries a theme. One derivation, so a word
+// added to THEME_WORDS tomorrow is filtered here without anybody remembering to.
+export const rowThemeWords = (theme) =>
+  (THEME_WORDS[theme] || []).filter(w => !ARRIVAL_WORDS.has(w));
+
 const rowWords = (place) => {
   const bits = [];
   for (const f of WORD_FIELDS) {
@@ -153,7 +201,10 @@ export const fitsBrief = (place, want) => {
     return { fits: why.length > 0, why, via: why.length ? FIT_STRONG : FIT_NONE };
   }
   const hay = rowWords(place);
-  const why = [...want].filter(t => (THEME_WORDS[t] || []).some(w => saysWord(hay, w)));
+  // rowThemeWords, not THEME_WORDS. See ARRIVAL_WORDS above: this is the row
+  // side, where "five minutes' walk from the station" is a bus timetable and not
+  // a country ramble.
+  const why = [...want].filter(t => rowThemeWords(t).some(w => saysWord(hay, w)));
   return { fits: why.length > 0, why, via: why.length ? FIT_WEAK : FIT_NONE };
 };
 
@@ -260,7 +311,7 @@ export const essentialsForTrip = (rows, { convoText = "", interests = [], limit 
     // tip are where the useful specifics live: "80-plus venues", "49 DKK".
     const hay = fold([r.name, r.desc, r.howTo, r.tip, r.category, r.price].filter(Boolean).join(" "));
     if (!hay.trim()) continue;
-    const themes = [...want].filter(t => (THEME_WORDS[t] || []).some(w => saysWord(hay, w)));
+    const themes = [...want].filter(t => rowThemeWords(t).some(w => saysWord(hay, w)));
     if (themes.length) hit.push({ row: r, themes });
   }
   // Most themes matched first, so a row answering two of the traveller's stated

@@ -134,6 +134,109 @@ export const eventMonthShort = (v) => {
   return d ? d.toLocaleString("en", { month: "short" }) : "";
 };
 
+// ── AN EVENT IS IN EVERY MONTH IT RUNS IN ───────────────────────────
+//
+// Oliver, 19 Aug 2026, looking at the Date filter on the Events page: "please..
+// expand event dates for all dates. You got several dates missing."
+//
+// The month facet bucketed an event by eventMonthShort(e.date), which reads the
+// FIRST DAY and nothing else. So a festival running 30 July to 2 August was
+// filed under Jul alone, and a reader filtering August did not see it, on the
+// days it was actually running. The end date has been on the shape the whole
+// time and the facet never read it.
+//
+// This is the same fault as the month buckets he reported on 15 August, where
+// five events were in no bucket at all: a filter whose parts do not sum to its
+// whole tells the reader the list is smaller than it is. That one was about rows
+// falling out; this one is about rows appearing in one place when they belong in
+// two.
+//
+// THE CAP IS NOT DEFENSIVE PADDING. Both ends come from stored content, and a
+// dateEnd earlier than date, or a typo putting the year in 2126, would spin this
+// loop until the tab died. Twelve months is longer than any real festival and
+// the wrong answer is one bucket, not a hung page. An end before the start is
+// treated as no end at all, which is what a single bad field should cost.
+export const MAX_EVENT_MONTHS = 12;
+
+export const eventMonthsShort = (start, end) => {
+  const a = parseEventDate(start);
+  if (!a) return [];
+  const b = parseEventDate(end);
+  const first = a.toLocaleString("en", { month: "short" });
+  if (!b || b.getTime() < a.getTime()) return [first];
+  const out = [];
+  const cur = new Date(a.getFullYear(), a.getMonth(), 1);
+  const last = new Date(b.getFullYear(), b.getMonth(), 1);
+  while (cur.getTime() <= last.getTime() && out.length < MAX_EVENT_MONTHS) {
+    out.push(cur.toLocaleString("en", { month: "short" }));
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  // NOT DEDUPED, AND THAT IS NOT AN OVERSIGHT. The first version ended
+  // `[...new Set(out)]` against a January-to-January event listing Jan twice.
+  // Mutation testing then killed the cap and the dedupe with the same stone: at
+  // twelve months the loop cannot reach a repeat, so the Set removed nothing and
+  // the cap made it unreachable. Two guards for one hazard, each hiding whether
+  // the other worked. The cap stays because it bounds the loop on a typo'd year;
+  // the Set is gone because it could not fire.
+  return out;
+};
+
+// Reads the row rather than two loose arguments, so a caller cannot pass the
+// start and forget the end, which is exactly how the facet came to read one
+// field. Both spellings of the end field, because the published shape uses
+// dateEnd and the raw draft uses the same, but a town row carries neither.
+export const eventMonths = (e) => eventMonthsShort(e?.date ?? e?.dateStart, e?.dateEnd);
+
+// ── A PROPOSED DATE THAT GOES BACKWARDS IS NOT A CORRECTION ─────────
+//
+// Oliver, 19 Aug 2026, running the event check and then searching the festival
+// himself. The panel said:
+//
+//   Rock under broen, Middelfart
+//   Date on file: 2027-06-11  ->  possibly now: 2026-06-12
+//
+// The operator's own site is titled "Rock Under Broen 2027". The date on file
+// was RIGHT, and the check proposed replacing it with a date in the past.
+//
+// That is the most expensive kind of wrong this panel can be. A checker that
+// misses a change costs an out-of-date row; a checker that proposes a wrong
+// change costs the row that was correct, and it spends his attention arguing
+// with him about a fact he had already got right. His own standing rule covers
+// it: before correcting one of his facts, verify it is actually wrong.
+//
+// TWO REFUSALS, AND NEITHER NEEDS A MODEL TO ADJUDICATE.
+//
+//   In the past.   An event checker exists to find the NEXT edition. A proposal
+//                  earlier than today is not one, whatever the page it came from
+//                  said, and the most likely explanation is that the model read
+//                  last year's listing, which is exactly what EXISTENCE_RULE
+//                  warns about in the drafting prompt and nothing enforced here.
+//   Backwards.     An annual event's next edition is later than the one on file
+//                  or the same. A proposal that moves it earlier is reading an
+//                  older page than the one already believed.
+//
+// Returns a REASON rather than a boolean, so the panel can say why it ignored
+// something instead of quietly dropping it. A silent refusal here would be the
+// same fault as the silent slice on the review screen: he would have no way to
+// tell a checked event from an unchecked one.
+export const datePropositionProblem = (proposed, onFile, today) => {
+  const next = parseEventDate(proposed);
+  if (!next) return "unreadable";
+  const now = parseEventDate(today) || (today instanceof Date ? today : null);
+  if (now && next.getTime() < new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) {
+    return "in-the-past";
+  }
+  const have = parseEventDate(onFile);
+  if (have && next.getTime() < have.getTime()) return "earlier-than-the-one-on-file";
+  return "";
+};
+
+export const DATE_PROPOSITION_WHY = {
+  "unreadable": "the suggested date could not be read as a date",
+  "in-the-past": "the suggested date is in the past, so it is not the next edition",
+  "earlier-than-the-one-on-file": "the suggested date is earlier than the one already on file, which means it came from an older page",
+};
+
 export const isUndated = (v) => parseEventDate(v) === null;
 
 // `today` is always passed in. A date helper that reads the clock cannot be

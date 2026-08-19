@@ -342,8 +342,39 @@ export const tripEvents = (candidates, { window: win = null, interests = [], nam
 
 // One line for the screen, so the limit is stated before anybody wonders why a
 // checkbox stopped responding.
-export const describePicks = (limit, picked) => {
+//
+// ── AND ROOM IS NOT THE SAME THING AS SUPPLY ────────────────────────
+//
+// Oliver, 19 Aug 2026, with the line circled: "And it says 1 of 2 is added.. yet
+// you can't add one more."
+//
+// Both halves were true and the sentence was still wrong. A six day trip has
+// room for two events, `eventPickLimit` says so, and one was added. What the
+// line did not know is that only ONE event in the whole library was running
+// during his dates, so there was no second one to tick. "A trip this long has
+// room for 2" reads as an instruction to go and add another, and the only thing
+// to do with it is hunt for a checkbox that does not exist.
+//
+// The fix is to say which constraint is actually binding. When the trip has room
+// the traveller cannot use, the limit is not the interesting number and the
+// supply is: what is on while they are here. `tickable` is the count of rows
+// that CAN be added, which the caller already has, and passing it is what lets
+// this sentence tell the difference between "you may add another" and "there
+// isn't another".
+//
+// Defaults to Infinity so an older caller that passes two arguments keeps its
+// old behaviour rather than silently claiming nothing is available.
+export const describePicks = (limit, picked, tickable = Infinity) => {
   const n = Number(picked) || 0;
+  const avail = Number.isFinite(Number(tickable)) ? Number(tickable) : Infinity;
+  // Nothing left to add, whatever the room. Said first, because it is the
+  // sentence that answers the question the traveller is actually about to ask.
+  if (avail <= n) {
+    if (n === 0) return "Nothing in Gemlyx is running while you are here.";
+    return n === 1
+      ? "One event added, and it is the only one running while you are here."
+      : `${n} added, which is everything running while you are here.`;
+  }
   if (limit <= 1) return n >= 1 ? "One event added. Untick it to choose a different one." : "Pick one event to build the trip around.";
   return n >= limit
     ? `${n} of ${limit} added, which is the most this trip has room for.`

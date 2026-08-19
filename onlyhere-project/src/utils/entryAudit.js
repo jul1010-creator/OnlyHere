@@ -356,6 +356,79 @@ export const auditEntry = (row) => {
 
   const all = textOf(p);
 
+  // ── A VENUE NOBODY COULD CONFIRM IS NOT AN ENTRY ────────────────
+  //
+  // Oliver, 19 Aug 2026, on a published nightlife page called Folk: "clicking
+  // 'Folk' with a first glance saying 'unverified...' I mean.. I'll probably
+  // delete that blog." Then, on where it came from: "'Folk' was a websearch by
+  // perplexity (I think). Apparently, the place turned out to not exist
+  // according to Google Gemini, saying it was an event and called something
+  // else."
+  //
+  // THE PIPELINE WAS HONEST AND NOTHING READ IT. The entry says so itself, in
+  // its own opening paragraph: "no confirmed hours, no drinks list, no solid
+  // word on who shows up or when. This entry exists to flag that gap honestly."
+  // At a Glance says "Type: Unconfirmed venue type". The draft reported, in
+  // writing, that it had confirmed nothing, and publishDraft had gates for the
+  // date, the coordinate and the tier and none for this.
+  //
+  // ── WHY IT IS DIFFERENT FROM A MISSING PRICE ────────────────────
+  // An entry with no price is an entry with a gap. An entry that cannot say
+  // WHAT THE PLACE IS has no subject: there is nothing left for the rest of the
+  // page to be about, and every honest sentence in it is a sentence about the
+  // research rather than about Denmark. That is why this is critical and a
+  // missing price is not.
+  //
+  // PRICE_UNCHECKED is the precedent. This codebase already names the
+  // placeholder that stands in for an unchecked price, precisely so it can be
+  // recognised later rather than read as content. Identity had no such name, so
+  // "Unconfirmed venue type" travelled all the way to a reader's screen as
+  // though it were the venue's type.
+  //
+  // Deliberately matched on the ADMISSION, not on emptiness. An empty type field
+  // is a gap somebody can fill; a type field that says it could not be confirmed
+  // is a draft reporting that the place could not be established at all.
+  const identity = String(p.category ?? p.type ?? "");
+  if (UNCONFIRMED_IDENTITY.test(identity)) {
+    add("critical", "type", `The venue type reads "${identity.slice(0, 60)}", which is the draft saying it could not establish what this place is. An entry whose subject is unconfirmed has nothing for the rest of the page to be about. Confirm what it is, or delete the entry.`);
+  }
+  // And the same admission made in prose, which is where it did the most damage:
+  // the opening paragraph a reader meets first.
+  if (VENUE_KINDS.includes(type) && UNVERIFIED_PROSE.test(String(p.desc || ""))) {
+    add("critical", "desc", "The opening paragraph tells the reader this is not a verified guide. Saying so is better than hiding it, but a page that opens by disclaiming itself should not have been published: put what could not be confirmed in uncertainties, or delete the entry.");
+  }
+
+  // ── AN AT A GLANCE BOX WITH ONE ROW IN IT ───────────────────────
+  //
+  // Oliver, 19 Aug 2026, on the Rock under broen page: "But the at a glance
+  // very lame.." then "We can't have at a glance with so few information".
+  //
+  // That card renders every row whose value is non-empty and silently drops the
+  // rest, so a festival with only accommodationTip filled shows a box headed AT
+  // A GLANCE containing one line about booking a hotel. Nothing is broken and
+  // nothing is wrong on the page; it just reads as "this is everything worth
+  // knowing about this festival", which is not what it means. It means we hold
+  // one of the five things.
+  //
+  // Same shape as the two he reported earlier today: the review panel slicing to
+  // six without saying so, and the front page reporting "nothing published in
+  // that category" when the category was full. A display that under-reports
+  // without admitting it is the recurring fault in this product, and the fix is
+  // always the same one, which is to say the number.
+  //
+  // FLAGGED HERE RATHER THAN HIDDEN ON THE PAGE, because the real fix is to fill
+  // the fields, and only he can do that. The reader-facing half is a separate
+  // decision: a one-row card could say what it does not have, or not render at
+  // all, and which of those is right depends on how much he wants a thin entry
+  // to admit its thinness.
+  const glanceFilled = GLANCE_FIELDS.filter(f => String(p[f] ?? "").trim()).length;
+  if (glanceFilled > 0 && glanceFilled < MIN_GLANCE_ROWS) {
+    const missing = GLANCE_FIELDS.filter(f => !String(p[f] ?? "").trim() && LIKELY_GLANCE[type]?.includes(f));
+    add("medium", "at a glance",
+      `Only ${glanceFilled} At a Glance ${glanceFilled === 1 ? "row has" : "rows have"} a value, so the box renders as though that is everything worth knowing about this entry.`
+      + (missing.length ? ` The ones a reader of a ${type} entry expects and this row does not have: ${missing.join(", ")}.` : ""));
+  }
+
   // ── critical: actively misleading ──────────────────────────────
   if (NO_TRANSPORT.test(all)) {
     add("critical", "getting there", "Claims no public transport route exists. This has been wrong every time it was checked, and it tells travelers without a car to skip the place entirely.");
@@ -1166,6 +1239,43 @@ export const PRICE_NOT_PUBLISHED = "Not published";
 // behaviour. Saying "Not published" here would assert something about a café
 // nobody has checked.
 export const PRICE_UNKNOWN = "Price unknown";
+
+// ── AND THE SAME IDEA FOR IDENTITY, WHICH HAD NO NAME ───────────────
+// See the venue check in auditEntry. A placeholder standing in for an unchecked
+// PRICE has been named here since 17 Aug so it can be recognised rather than
+// read as content. The equivalent for "what is this place" was unnamed, so
+// "Unconfirmed venue type" reached a reader's At a Glance box as though it were
+// the answer.
+//
+// The types where absence is evidence. A forest, a beach or a viewpoint is not a
+// business listing and its absence from anywhere proves nothing. A bar, a
+// restaurant, a club or a bookable workshop is a trading business, and nobody
+// being able to establish what it is means it very likely is not one.
+export const VENUE_KINDS = ["food", "foodStreet", "night", "nightStreet", "booking"];
+
+// Two is the point at which the box stops being a summary and starts being a
+// single fact wearing a heading. Not three: a genuinely simple entry, a free
+// viewpoint with a station and nothing else to say, is honestly summarised by
+// two rows and should not be nagged about.
+export const MIN_GLANCE_ROWS = 2;
+// What a reader of each type actually scans this box for, so the finding can
+// name the gap instead of listing every field that exists. Derived per type
+// because a festival with no camping line and a restaurant with no camping line
+// are not the same omission.
+export const LIKELY_GLANCE = {
+  festival: ["nearestStation", "ticketInfo", "camping", "travelTime", "accommodationTip"],
+  free: ["nearestStation", "ticketsGlance", "accessibility", "extraCosts"],
+  town: ["nearestStation", "travelTime", "accommodationGlance", "recommendedStayGlance"],
+  booking: ["nearestStation", "price", "priceNote", "travelTime"],
+  food: ["price", "location"],
+  night: ["crowd", "priceNote", "location"],
+};
+export const UNCONFIRMED_IDENTITY = /\b(?:unconfirmed|unverified|unknown)\b[^.]{0,20}\b(?:venue|type|kind|place)\b|\b(?:venue|type)\b[^.]{0,20}\b(?:unconfirmed|unverified)\b/i;
+// The prose admission, matched on the shapes a draft actually uses when it is
+// being honest about having failed. Deliberately narrow: "not a verified guide"
+// is a disclaimer about the whole page, while "we could not confirm the price"
+// is a normal, useful sentence about one field and must not trip this.
+export const UNVERIFIED_PROSE = /not a verified guide|treat what follows as a starting point|exists to flag that gap|no solid word on who|nothing about it could be confirmed/i;
 
 // A price field states a price when it contains a digit. Deliberately the same
 // test priceBand applies, so a row can never be both banded and unpriced.

@@ -694,7 +694,9 @@ export const GuidePreviewScreen = ({
             <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 }}>Events</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
               {eventPlan.dated
-                ? describePicks(eventPlan.limit, picked.length)
+                // The third argument is what stops "room for 2" being said when
+                // only one event is running. See describePicks.
+                ? describePicks(eventPlan.limit, picked.length, eventPlan.rows.filter(r => r.tickable).length)
                 : "Add an event and the plan is built around its dates. Tell Gemlyx your travel dates in chat and it can check what else is on that week."}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

@@ -51,7 +51,7 @@ writeFileSync(entry, `
   export { supabaseFailure, studioErrorMessage, EXPIRED, REFUSED, MISSING, OTHER } from ${JSON.stringify(join(root, "src/utils/studioErrors.js"))};
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { byEventDate, eventTime, eventMonthShort, isUndated, UNDATED } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
+  export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
@@ -106,7 +106,7 @@ writeFileSync(entry, `
   export { guideHero, heroCaption } from ${JSON.stringify(join(root, "src/utils/guideHero.js"))};
   export { nameFit, describeNameFit } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
   export { stayTextProblem, stayTextForReader } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { offerReason as offerReasonFn } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
+  export { offerReason as offerReasonFn, rowThemeWords, ARRIVAL_WORDS } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { outOfBudget, budgetWarning, BUDGET_RULES_OUT, PRICED_KINDS } from ${JSON.stringify(join(root, "src/utils/budgetFit.js"))};
   export { MAX_STOPS_ARRIVAL_DAY, namedIn, ISLAND_KOMMUNE_NAMES } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
@@ -25189,22 +25189,344 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 
   // ── THE ROW IS SHORT, AND NOTHING WAS DELETED TO SHORTEN IT ────
   const fb2 = readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8");
-  ok("only the primary facets get a button", /facets\.some\(f => f\.primary\) \? facets\.filter\(f => f\.primary\)/.test(fb2));
-  // A facet set from the sheet and then invisible on the row is the state where
-  // the list is short and the reason is off screen.
-  ok("an applied facet gets one anyway", /\.filter\(f => state\[f\.key\] && state\[f\.key\] !== "All"\)/.test(fb2));
-  // Section 1. It is in the panel now AND still on the line below, one state.
-  ok("the sort is the first section in the panel", fb2.indexOf("Order <span") < fb2.indexOf("{facets.map(f => {"));
-  ok("and still says it is not a filter", /changes the order, never what is in the list/.test(fb2));
+  // ── ONE SURFACE, NOT TWO, 19 AUG 2026 ────────────────────────────
+  // The sections went into the panel and the per-facet dropdowns stayed on the
+  // row beside it, so Date appeared twice on one screen and tapping either
+  // changed the other. Oliver: "Either make it all into the filter button or
+  // make the 3 sections." Both of his options land in the same place.
+  //
+  // Asserted as an ABSENCE with a positive control beside it, because "no
+  // dropdowns on the row" also passes on a file that renders nothing at all.
+  // The chips carry what is applied, so a filter set and then scrolled past is
+  // still readable. Baymard's ninth mobile practice, and the one 66% of sites miss.
+  ok("what is applied is still readable on the row", /\{chips\.map\(c => \(/.test(fb2));
+  // ── THE PANEL IS GONE, 19 AUG 2026 ───────────────────────────────
+  // Oliver: "it makes no sense. you made it on multiple. Just remove the white
+  // filter thing and keep the two other sections." Two attempts at one
+  // complaint: first the sections went into the Filter button and the dropdowns
+  // stayed beside it, so Date existed twice; then the dropdowns went and the
+  // button stayed, which buried the two controls people use. This is the third
+  // and the one he asked for: the facets are the controls, and the sort keeps
+  // its own place on the line below because it is not a filter.
+  ok("there is no filter sheet left", !/setSheet|const \[sheet\]|Panel width=\{280\}/.test(fb2));
+  ok("and no dead state behind it", !/sheetRef/.test(fb2));
+  ok("the facets are the controls", /<Dropdown key=\{f\.key\}/.test(fb2));
+  ok("and the sort still says it is not a filter", /changes the ORDER of\n {10}what you are looking at and never the contents|changes the order, never/i.test(fb2));
+  // ── HALF THE LIBRARY COULD NEVER REACH THE FRONT PAGE ────────────
+  // Oliver, 19 Aug 2026, with the Food chip selected and the page reading
+  // "Nothing published in that category yet": "Food, Nightlife, and workshops".
+  //
+  // Both picks asked for a RANK, and checked against studioContent.js those
+  // fields exist on: tier (town, festival), popularityTag (free, booking),
+  // nomiPotential (town). Food and nightlife carry NONE of the three, so no food
+  // spot and no bar could ever match either lens however many he published, and
+  // the page told him his library was empty when it holds 23 food entries.
+  {
+    const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+    // tierOf, not an exact string. Its sibling lens carries the comment saying
+    // an exact match "silently hid every festival from this whole section", and
+    // the fix had been applied to one of the two.
+    ok("the gems lens folds the tier instead of matching a literal",
+       /pick: \(x\) => x\.popularityTag === "Hidden Gem" \|\| tierOf\(x\)\?\.id === "worth"/.test(appF));
+    ok("and no lens compares a tier string by hand", !/x\.tier === "Worth Considering"/.test(stripNonCode(appF)));
+    // The fallback, and that it is REACHED. A grep for the fallback alone passes
+    // while nothing renders it, which is the mutant that survived first time.
+    ok("a category with entries but no ranks still shows them",
+       /const fallback = !ranked && pool\.length > 0/.test(appF));
+    ok("and the render reads the fallback, not just the ranked rows",
+       /const shown = ranked \? rows : fallback;/.test(appF) && /\{shown\.map\(row => \(/.test(appF));
+    // THE MESSAGE IS A CLAIM ABOUT HIS LIBRARY and it was false. It may only
+    // appear when the pool for that category is genuinely empty.
+    ok("and 'nothing published' is only said when nothing is",
+       appF.indexOf("if (shown.length === 0) {") < appF.indexOf("Nothing published in that category yet"));
+    // The fallback claims no rank of its own. Inventing one is exactly what
+    // studioContent removed the `tier || \"Worth Considering\"` default to stop.
+    ok("the fallback promises nothing about quality",
+       /title: `From our /.test(appF));
+  }
+
   const app19 = readFileSync(join(root, "src/App.jsx"), "utf8");
   const facetBlock = app19.slice(app19.indexOf("const ATTRACTION_FACETS = ["), app19.indexOf("const searched = combined.filter"));
   ok("attractions has a multi type section", /key: "type", label: "Type", primary: true, multi: true/.test(facetBlock));
   ok("and an island section", /key: "island", label: "Island", primary: true/.test(facetBlock));
-  // THE ONES THAT WERE NOT ASKED ABOUT ARE STILL THERE. "Make it simpler" is not
-  // "remove three filters"; these moved off the row into the sheet.
+  // HIS THREE SECTIONS AND NOTHING ELSE. City, Popularity and Booking lived off
+  // the row in the Filter sheet; the sheet is gone at his request and he said
+  // twice what he wanted instead, so they are gone with it rather than left as
+  // config nothing renders. The search box already finds a town by name, through
+  // the Danish folding, which a City chip never did.
   ["city", "gem", "booking"].forEach(k =>
-    ok(`${k} still exists, off the row`, new RegExp(`key: "${k}"`).test(facetBlock)));
-  ok("and only two of them are primary", (facetBlock.match(/primary: true/g) || []).length === 2);
+    ok(`${k} is no longer a facet`, !new RegExp(`key: "${k}"`).test(facetBlock)));
+  is("exactly two facets, both of them controls", (facetBlock.match(/primary: true/g) || []).length, 2);
+  is("and no facet without a control", (facetBlock.match(/\{ key: "/g) || []).length, 2);
+}
+
+// ── AN EVENT IS IN EVERY MONTH IT RUNS IN ──────────────────────────
+// Oliver, 19 Aug 2026: "please.. expand event dates for all dates. You got
+// several dates missing." The Date facet read eventMonthShort(e.date), the first
+// day and nothing else, so a festival crossing a month boundary was in one
+// bucket and missing from the other, on the days it was actually running.
+{
+  const { eventMonths, eventMonthsShort, MAX_EVENT_MONTHS } = M;
+
+  is("a one day event is in its own month", eventMonthsShort("2026-08-19", ""), ["Aug"]);
+  is("and so is one whose run stays inside the month", eventMonthsShort("2026-08-23", "2026-08-29"), ["Aug"]);
+  // THE BUG, in one assertion.
+  is("an event crossing a boundary is in both months", eventMonthsShort("2026-07-30", "2026-08-02"), ["Jul", "Aug"]);
+  is("and a long one is in all of them", eventMonthsShort("2026-06-15", "2026-09-02"), ["Jun", "Jul", "Aug", "Sep"]);
+  // Calendar order, not the order they were found, because the option row is
+  // built by filtering MONTHS and a reader reads it as a calendar.
+  is("in calendar order", eventMonthsShort("2026-11-20", "2027-01-06"), ["Nov", "Dec", "Jan"]);
+  // A full year stops at twelve rather than coming back round to January, and
+  // that is the CAP doing it, not a dedupe. Both were here at first and mutation
+  // testing showed they were guarding the same hazard: at twelve months the loop
+  // cannot reach a repeat, so the Set removed nothing and the cap made it
+  // unreachable. The Set is gone.
+  {
+    const year = eventMonthsShort("2026-01-05", "2027-01-05");
+    is("a full year stops at twelve months", year.length, 12);
+    ok("with no month listed twice", new Set(year).size === year.length);
+    is("starting where the event does", year[0], "Jan");
+  }
+
+  // ── BAD DATA COSTS ONE BUCKET, NOT A HUNG PAGE ─────────────────
+  // Both ends come from stored content. An end before the start, or a typo in
+  // the year, would otherwise spin the loop until the tab died.
+  // ACROSS A MONTH BOUNDARY, because a reversed pair inside one month gives the
+  // same answer with or without the guard: both ends land on the same bucket and
+  // the loop runs once either way. The first version of this assertion used
+  // 19 Aug to 1 Aug and a mutation deleting the guard survived it.
+  is("an end before the start is treated as no end", eventMonthsShort("2026-08-19", "2026-07-01"), ["Aug"]);
+  is("even within one month", eventMonthsShort("2026-08-19", "2026-08-01"), ["Aug"]);
+  is("an unparseable end is treated as no end", eventMonthsShort("2026-08-19", "whenever"), ["Aug"]);
+  is("no start means no months", eventMonthsShort("", "2026-08-19"), []);
+  is("nor does an unparseable one", eventMonthsShort("sometime in summer", ""), []);
+  {
+    const runaway = eventMonthsShort("2026-01-01", "2126-01-01");
+    is("a hundred year typo yields twelve months, not twelve hundred", runaway.length, MAX_EVENT_MONTHS);
+    ok("and the cap is a real number", MAX_EVENT_MONTHS >= 12 && MAX_EVENT_MONTHS <= 24);
+  }
+
+  // eventMonths reads the ROW, so a caller cannot pass the start and forget the
+  // end. That omission is exactly how the facet came to read one field.
+  is("it reads both fields off the row", eventMonths({ date: "2026-07-30", dateEnd: "2026-08-02" }), ["Jul", "Aug"]);
+  is("and the draft spelling of the start", eventMonths({ dateStart: "2026-07-30", dateEnd: "2026-08-02" }), ["Jul", "Aug"]);
+  is("a row with no dates is in no month", eventMonths({ name: "Somewhere" }), []);
+
+  // And the facet uses it at both sites. Testing the helper proves nothing while
+  // the option list and the test still read the old one: that split is what let
+  // the month buckets drift apart on 15 August, which this file already records.
+  const appE = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const facetRegion = appE.slice(appE.indexOf("const eventMonthOptions = ["), appE.indexOf("const eventTypeOptions = ["));
+  // ── AND THE OPTION LIST IS NOW EVERY MONTH, 19 AUG 2026 ────────
+  // Oliver: "AND ADD ALL DATES!!!!" The list read May, Jun, Aug, Oct, Nov, and a
+  // reader cannot tell whether July is absent because nothing is on or because
+  // the filter forgot it. A calendar with holes reads as broken. The counts
+  // already handle an empty month: facetCounts gives it zero and a zero option
+  // renders disabled rather than hidden, which is the rule listControls wrote
+  // down when the counts were built.
+  ok("every month is offered, not only the ones with something in them",
+     /const eventMonthOptions = \[\s*\.\.\.MONTHS,/.test(facetRegion));
+  ok("with Undated only when there is one", /isUndated\(e\.date\)\) \? \[UNDATED\]/.test(facetRegion));
+  // The FILTER still has to read every month an event runs in, which is the
+  // separate fix: an event crossing a boundary belongs in both buckets.
+  ok("and the filter still counts every month an event runs in", /eventMonths\(e\)\.includes\(m\)/.test(facetRegion));
+  ok("rather than only its first day", !/eventMonthShort\(e\.date\)/.test(facetRegion));
+}
+
+// ── HOW YOU GET THERE IS NOT WHAT THE PLACE IS ─────────────────────
+// Oliver, 19 Aug 2026, on a card reading "Hooked Kødbyen — Closest thing here to
+// the nature you mentioned": "Doesn't sound like 'the best for the nature he
+// mentioned'."
+//
+// Every description below is REAL, lifted from the run report he attached, which
+// is why this block is worth more than invented strings: these are the sentences
+// his own pipeline wrote and matched.
+{
+  const { fitsBrief, rowThemeWords, THEME_WORDS, ARRIVAL_WORDS } = M;
+  const want = new Set(["art", "food", "history", "market", "nature"]);
+  const why = (row) => fitsBrief(row, want).why.sort();
+
+  // ── THE TWO HE SAW ─────────────────────────────────────────────
+  // A VIP nightclub on Skindergade, offered as the closest thing to nature
+  // because its description opens with how far it is on foot.
+  const hive = { name: "Hive", desc: "Skindergade 45 sits about five minutes' walk from Rådhuspladsen station, behind a door that decides fast whether you're getting in." };
+  is("a nightclub is not nature because you walk there", why(hive), []);
+  // A seafood place in the meatpacking district, offered as nature because of a
+  // lawn next door.
+  const kodbyen = { name: "Hooked Kødbyen", type: "Seafood", desc: "Hooked Kødbyen sits at the heart of Kødbyen, right next to Halmtorvet's green area. Locals in Copenhagen come here for unfussy seafood and a lively crowd before jumping into Vesterbro nightlife." };
+  ok("nor is a fish restaurant, because a green area is next door", !why(kodbyen).includes("nature"));
+  is("and it is still food", why(kodbyen), ["food"]);
+  // A pre-drinks bar "a short walk from Enghaveparken".
+  const jojo = { name: "JOJO", desc: "JOJO sits on Sundevedsgade in outer Vesterbro, a short walk from Enghaveparken. People stop in here before heading further into town for the night." };
+  ok("nor a bar near a park you walk to", !why(jojo).includes("nature"));
+
+  // ── AND THE PLACES THAT REALLY ARE NATURE STILL ARE ────────────
+  // This is the half that matters. Deleting words until the false positives stop
+  // is easy and it takes the true positives with it, which is the more expensive
+  // direction: a traveller who asked for nature stops being shown the deer park.
+  const dyrehave = { name: "Marselisborg Dyrehave", type: "Deer park", desc: "Sika and fallow deer roam free across 22 hectares of woodland just south of Aarhus, close enough to hear them chewing grass a few metres off the path." };
+  ok("a deer park is still nature", why(dyrehave).includes("nature"));
+  const slotpark = { name: "Marselisborg Slotpark", type: "Palace garden", desc: "Marselisborg Slotpark's lawns, ponds and rose garden spread out freely and openly around the royal family's Aarhus residence, no ticket needed for any of it." };
+  ok("and a palace garden is", why(slotpark).includes("nature"));
+  ok("and a forest is", why({ name: "Rold Skov", desc: "Denmark's largest forest, with marked trails and wildlife." }).includes("nature"));
+
+  // ── ONE LIST, TWO JOBS, AND ONLY ONE OF THEM IS FILTERED ───────
+  // The traveller side keeps every word. Removing "cycling" from THEME_WORDS to
+  // fix the row side would stop "we like cycling" being read as a nature
+  // interest at all, which is the opposite mistake and a worse one: it breaks
+  // the input rather than the ranking.
+  ok("the traveller can still say they like cycling", THEME_WORDS.nature.includes("cycling"));
+  ok("and walking", THEME_WORDS.nature.includes("walking"));
+  ok("but a row is not nature for saying either", !rowThemeWords("nature").includes("cycling") && !rowThemeWords("nature").includes("walking"));
+  // DERIVED, not a second hand-written list. A word added to THEME_WORDS
+  // tomorrow is filtered here without anybody remembering to, which is the
+  // failure mode this repo has catalogued six times.
+  ok("the row list is derived from the traveller list",
+     rowThemeWords("nature").every(w => THEME_WORDS.nature.includes(w)));
+  is("and differs from it by exactly the arrival words",
+     THEME_WORDS.nature.filter(w => !rowThemeWords("nature").includes(w)).sort(),
+     THEME_WORDS.nature.filter(w => ARRIVAL_WORDS.has(w)).sort());
+  // park STAYS. A deer park and a castle park are what those places are, and
+  // "car park" is two words in which the first is the qualifier.
+  ok("park is not treated as an arrival word", rowThemeWords("nature").includes("park"));
+  // And every other theme is untouched: this was a nature problem and a fix that
+  // quietly narrowed history or food would be a second bug wearing the first
+  // one's clothes.
+  ["history", "food", "art", "market"].forEach(t =>
+    is(`${t} is unchanged`, rowThemeWords(t), THEME_WORDS[t]));
+
+  // Both row-side call sites use it. Testing the helper proves nothing while a
+  // caller still reads the unfiltered list, which is how the fit and the offer
+  // reason could disagree about the same row.
+  const ifSrc = stripNonCode(readFileSync(join(root, "src/utils/interestFit.js"), "utf8"));
+  is("no row-side matcher reads the traveller list",
+     (ifSrc.match(/\[\.\.\.want\]\.filter\(t => \(THEME_WORDS\[t\] \|\| \[\]\)/g) || []).length, 0);
+  is("and both of them read the row list",
+     (ifSrc.match(/rowThemeWords\(t\)\.some\(w => saysWord\(hay, w\)\)/g) || []).length, 2);
+  // The brief reader is deliberately NOT filtered.
+  ok("the brief reader still reads the full list",
+     /for \(const \[theme, words\] of Object\.entries\(THEME_WORDS\)\)/.test(ifSrc));
+}
+
+// ── ROOM IS NOT SUPPLY ─────────────────────────────────────────────
+// Oliver, 19 Aug 2026, with the line circled on a six day trip: "And it says
+// 1 of 2 is added.. yet you can't add one more."
+//
+// Both halves were true. eventPickLimit(6) is 2, and one was added. What the
+// sentence did not know is that only one event in the library was running during
+// his dates, so "A trip this long has room for 2" was an instruction to go and
+// find a checkbox that does not exist.
+{
+  const { describePicks, eventPickLimit } = M;
+  is("a six day trip has room for two", eventPickLimit(6), 2);
+
+  // THE BUG, in one line: room for two, one added, and only one to add.
+  const oneOnly = describePicks(2, 1, 1);
+  ok("with nothing left to add it does not offer a second", !/room for 2/.test(oneOnly));
+  ok("and says why instead", /only one running while you are here/.test(oneOnly));
+  // Two of two available: the old sentence is still right and still said.
+  ok("when there IS another it still says so", /room for 2/.test(describePicks(2, 1, 2)));
+  ok("and when the room is used up it says that", /the most this trip has room for/.test(describePicks(2, 2, 5)));
+  // Nothing at all is its own sentence: "0 of 2 added" invites a hunt too.
+  ok("nothing running is stated plainly", /Nothing in Gemlyx is running/.test(describePicks(2, 0, 0)));
+  is("and several, all taken, reads naturally", describePicks(4, 3, 3), "3 added, which is everything running while you are here.");
+
+  // A caller that does not pass the count keeps the old behaviour rather than
+  // claiming nothing is available, which would be a worse wrong answer than the
+  // one being fixed.
+  ok("an older two argument call is unchanged", /room for 2/.test(describePicks(2, 1)));
+
+  // And the screen passes it. The helper alone proves nothing while the caller
+  // still sends two arguments, which is the shape of half the findings in this
+  // file.
+  const gps = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("the preview counts what can be ticked",
+     /describePicks\(eventPlan\.limit, picked\.length, eventPlan\.rows\.filter\(r => r\.tickable\)\.length\)/.test(gps));
+}
+
+// ── A PROPOSED DATE THAT GOES BACKWARDS IS NOT A CORRECTION ────────
+// Oliver, 19 Aug 2026, ran the event check and it offered him this:
+//
+//   Rock under broen, Middelfart
+//   Date on file: 2027-06-11  ->  possibly now: 2026-06-12
+//
+// He then opened the festival's own ticket page, which reads "11.06.27 -
+// 12.06.27" under a logo saying ROCK UNDER BROEN 2027. The date on file was
+// RIGHT, and the check offered to replace it with a date that had already passed.
+//
+// A checker that misses a change costs one stale row. A checker that proposes a
+// WRONG change costs a row that was correct, and spends his attention arguing
+// about a fact he had already got right. Both refusals below are pure logic and
+// need no model to adjudicate.
+{
+  const { datePropositionProblem, DATE_PROPOSITION_WHY } = M;
+  const TODAY = new Date(2026, 7, 19);   // 19 Aug 2026, the day he saw it
+
+  // THE REAL CASE, both ways it is wrong at once.
+  ok("a date in the past is not the next edition",
+     datePropositionProblem("2026-06-12", "2027-06-11", TODAY) === "in-the-past");
+  // And with the past ruled out, the ordering rule still catches it on its own:
+  // an annual event's next edition is never earlier than the one on file.
+  is("nor is one earlier than the date already on file",
+     datePropositionProblem("2027-06-11", "2028-06-09", TODAY), "earlier-than-the-one-on-file");
+  is("junk is refused too", datePropositionProblem("summer", "2027-06-11", TODAY), "unreadable");
+
+  // ── AND THE REAL CORRECTIONS STILL GET THROUGH ─────────────────
+  // The half that matters: a rule that refuses everything is not a fix, it is
+  // the feature turned off.
+  is("a genuine move later in the same year is accepted",
+     datePropositionProblem("2026-09-20", "2026-09-19", TODAY), "");
+  is("so is next year's edition", datePropositionProblem("2027-06-11", "2026-06-12", TODAY), "");
+  is("and a first date for a row that had none", datePropositionProblem("2026-09-20", "", TODAY), "");
+  // Today itself is not the past: an event starting this morning is still on.
+  is("a date of today is not in the past", datePropositionProblem("2026-08-19", "", TODAY), "");
+
+  // Every refusal has words, because a refusal nobody can read is
+  // indistinguishable from a check that found nothing.
+  ["unreadable", "in-the-past", "earlier-than-the-one-on-file"].forEach(k =>
+    ok(`${k} has a sentence`, typeof DATE_PROPOSITION_WHY[k] === "string" && DATE_PROPOSITION_WHY[k].length > 20));
+
+  // And the checker uses it, and says when it ignored something.
+  const appD = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("the event check refuses a backwards proposal", /datePropositionProblem\(parsed\.dateChanged, ev\.date, new Date\(\)\)/.test(appD));
+  ok("and says so rather than dropping it in silence", /Ignored a suggested date of/.test(appD));
+  // ── AND A NON-CHANGE IS NOT A CHANGE ───────────────────────────
+  // One row read "Date on file: 2026-09-19 -> possibly now: 2026-09-19". The
+  // model filled the field with the date it had just been handed, which is a
+  // normal thing for a model to do and exactly why the answer is checked.
+  ok("a date identical to the one on file is not reported", /const dateReallyChanged = parsed\.dateChanged && !sameDay/.test(appD));
+  ok("nor an unchanged ticket status", /normaliseTicketStatus\(parsed\.ticketStatusChanged\) !== normaliseTicketStatus\(ev\.ticketStatus\)/.test(appD));
+}
+
+// ── AN AT A GLANCE BOX WITH ONE ROW IN IT ──────────────────────────
+// Oliver, 19 Aug 2026, on the Rock under broen page: "But the at a glance very
+// lame.." then "We can't have at a glance with so few information". The card
+// drops every empty row silently, so a festival with only accommodationTip
+// filled renders a box headed AT A GLANCE containing one line about hotels,
+// which reads as "this is everything worth knowing".
+{
+  const audit = (type, payload) => M.auditEntry({ id: 1, type, payload });
+  const findings = (type, payload) => audit(type, payload).findings.filter(f => f.field === "at a glance");
+
+  // The real row, reduced to what it had.
+  const thin = findings("festival", { name: "Rock under broen", town: "Middelfart", date: "2027-06-11",
+    accommodationTip: "Middelfart is small and this is a well-loved local weekend, so book a room in town early." });
+  is("a festival with one glance row is flagged", thin.length, 1);
+  ok("and the finding says how many it has", /Only 1 At a Glance row has a value/.test(thin[0].detail));
+  // NAMES THE GAP for that type, so it is actionable rather than a scolding.
+  ok("and names what a festival reader expects", /nearestStation/.test(thin[0].detail) && /ticketInfo/.test(thin[0].detail));
+
+  // ── AND THE TWO CASES IT MUST NOT FIRE ON ──────────────────────
+  // A genuinely simple entry, honestly summarised by two rows, is not a problem
+  // and nagging about it teaches him to ignore the audit.
+  is("two rows is enough", findings("festival", { name: "X", nearestStation: "Y St.", ticketInfo: "Free entry" }).length, 0);
+  // An entry with NOTHING in the box renders no box at all, so there is no
+  // misleading display to complain about. Different problem, different rule.
+  is("an entry with no glance box at all is not this finding",
+     findings("festival", { name: "X", town: "Y" }).length, 0);
+  // Severity: this is worth fixing and it is not a falsehood, so it must not sit
+  // in the same tier as a wrong coordinate or an unconfirmed venue.
+  is("it is a medium, not a critical", thin[0].severity, "medium");
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
