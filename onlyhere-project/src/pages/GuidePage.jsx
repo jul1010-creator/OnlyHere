@@ -16,7 +16,7 @@ import { nightlifeSpots } from "../data/nightlife";
 import { craftItemsFallback } from "../data/craft";
 import { events, majorEvents } from "../data/events";
 import { lookupRealPlace, placeCoords, resolveStopCoords, resolveStopCoordsDetailed, townKeyFor, townFallbackFor, townPointFor, resolveLegMode, kmBetween, estimateDurationText, isSameTownWalk, legDistanceKm, isSameSpot, WALK_MAX_MINUTES, walkEstimateTooFar, stopTown } from "../utils/guideEnrichment";
-import { operatorsForLeg, operatorNote } from "../utils/operators";
+import { operatorsForLeg, operatorNote, OPERATORS } from "../utils/operators";
 import { partOfCountry } from "../utils/geography";
 import { journeyFromStored, legSteps, worthShowingLegs, journeyAgencies, JOURNEY_SOURCE } from "../utils/journey";
 import { dayWeather, weatherIsStale, weatherChanges } from "../utils/weather";
@@ -1344,11 +1344,37 @@ export const GuidePage = ({ guide: guideProp, onBack, liveGuide }) => {
                   </a>
                 );
               }
+              // ── TWO THINGS WRONG WITH WHAT THIS USED TO SAY ─────────
+              // Oliver, 19 Aug 2026, on a live guide: "for some reason there are
+              // far more things in the actual guide... it suddenly mentions
+              // rome2rio or whatever it is called."
+              //
+              // FIRST, IT NAMED A COMPETITOR. Rome2Rio is a booking aggregator.
+              // Sending a reader off Gemlyx to one, in gold, on the guide they
+              // just paid for, is the last link this page should carry. The
+              // national journey planner covers every Danish operator at once —
+              // trains, buses, the metro and the ferries — which is exactly why
+              // operators.js already keeps it as the answer for a crossing where
+              // naming one company would be a guess.
+              //
+              // SECOND, AND WORSE, IT STATED SOMETHING NOBODY CHECKED. "No
+              // direct route" is a claim about the world. What actually happened
+              // is that Google returned no itinerary for the mode we asked about
+              // — and App.jsx's own prompt rules say, in as many words, that this
+              // means UNCONFIRMED and NOT "no route exists", because rural Danish
+              // bus links and island ferries are frequently missing from the
+              // transit feed. The screenshot proves it: this chip sat on
+              // Helsingør to Hillerød, a scheduled train the guide's own text
+              // describes as "roughly 30-40 minutes with a change".
+              //
+              // So it says what is true — that this leg needs looking up — and
+              // sends them to the authority for it.
               return (
-                <a href={`https://www.rome2rio.com/map/${encodeURIComponent(originName)}/${encodeURIComponent(destName)}`} target="_blank" rel="noreferrer"
+                <a href={OPERATORS.rejseplanen.url} target="_blank" rel="noreferrer"
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", background: C.bg, border: `1px solid ${C.gold}44`, borderRadius: 100, padding: "6px 12px" }}>
-                  <span style={{ fontSize: 12 }}>⛴</span>
-                  <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>No direct route, check Rome2Rio</span>
+                  <span style={{ fontSize: 12 }}>🚆</span>
+                  <span style={{ fontSize: 11, color: C.gold, fontWeight: 600 }}>Check times on Rejseplanen</span>
+                  <span style={{ fontSize: 9.5, color: C.light, fontWeight: 700 }}>↗</span>
                 </a>
               );
             }

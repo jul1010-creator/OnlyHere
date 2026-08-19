@@ -1,3 +1,6 @@
+import { haversineKm as sharedHaversineKm } from "./helpers";
+import { straightLineHours } from "./guideEnrichment";
+
 // ── "THE ROUTE DOESN'T BECOME SILLY" ─────────────────────────────────
 //
 // Oliver, 15 Aug 2026, on a preview for a family landing at Billund: "Am I
@@ -39,21 +42,28 @@
 // Mixing those would mean a nearer town outranking a better one, which is the
 // opposite mistake and just as easy to make.
 
-const R = 6371;
-const rad = (d) => (d * Math.PI) / 180;
-
 // Straight line, not road distance. Deliberate: /api/directions gives real
 // driving times and costs money and latency per pair, and ordering four towns
 // would be twelve calls on a screen whose whole promise is that it is instant.
 // A great circle is within a few percent of road distance across Denmark, which
 // is flat and well connected, and it is exactly good enough to answer "does
 // this order make sense". The finished guide measures the real legs.
+//
+// ── AND THE FORMULA IS THE ONE IN helpers, NOT A SECOND COPY ────────
+// This file carried its own haversine, byte-for-byte the same maths with the same
+// earth radius as helpers.js, differing only in taking [lat, lon] pairs and in
+// rounding. Two copies of a distance formula is how DetailPage came to be
+// measuring with `* 62.06` while everything else used a great circle.
+//
+// The array signature and the rounding are kept, because both are this file's
+// own decisions: pairs are what coordsOf produces, and a whole number of
+// kilometres is deliberate — "a straight line quoted to the minute is a false
+// precision and this is not a timetable".
 export const haversineKm = (a, b) => {
   const [la1, lo1] = a || [], [la2, lo2] = b || [];
   if (![la1, lo1, la2, lo2].every(n => Number.isFinite(Number(n)))) return null;
-  const dLa = rad(la2 - la1), dLo = rad(lo2 - lo1);
-  const h = Math.sin(dLa / 2) ** 2 + Math.cos(rad(la1)) * Math.cos(rad(la2)) * Math.sin(dLo / 2) ** 2;
-  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+  const exact = sharedHaversineKm({ lat: Number(la1), lon: Number(lo1) }, { lat: Number(la2), lon: Number(lo2) });
+  return Number.isFinite(exact) ? Math.round(exact) : null;
 };
 
 // Towns store their coordinate as __lat/__lon (shapeForLive writes it, and
@@ -394,9 +404,8 @@ export const describeReturn = (leg) => {
   // that nobody measured. When the mode is known the hours are computed from it,
   // the same table describeOvernightMove uses; when it is not, the old sentence
   // stands unchanged.
-  const kmh = leg.mode ? MODE_KMH[leg.mode] : null;
-  if (kmh) {
-    const hours = leg.km / kmh;
+  const hours = straightLineHours(leg.km, leg.mode);
+  if (hours != null) {
     const spoken = hours < 1.5 ? "under an hour and a half" : `${Math.round(hours)} hours`;
     const how = leg.mode === "public transport" ? "by train and bus" : leg.mode === "bike" ? "on a bike" : `by ${leg.mode}`;
     const weight = hours >= 5
@@ -465,20 +474,25 @@ export const overnightMove = ({ from = null, to = null, fromName = "", toName = 
 // Hours, at the mode's own pace, and rounded the way somebody planning a morning
 // rounds. Never minutes: a straight line quoted to the minute is a false precision
 // and this is not a timetable.
-const MODE_KMH = { walk: 4.5, bike: 15, "public transport": 60, car: 70, camper: 65, tent: 4.5 };
+//
+// ── THE PACE IS NOT DECIDED HERE ────────────────────────────────────
+// There was a MODE_KMH table on this line and every row of it disagreed with
+// guideEnrichment's, which is the file that owns the question and has the measured
+// history behind its transit number. Worst case was this leg, on a bike: 6 hours
+// here against 8.9 there. straightLineHours applies the circuity factor too, which
+// this never did while dividing a great-circle distance.
 
 export const describeOvernightMove = (move) => {
   if (!move || !move.km) return "";
   const where = move.toName ? `to ${move.toName}` : "to the next day's first stop";
   const head = `About ${move.km} km ${where}`;
   const key = move.mode;
-  const kmh = key ? MODE_KMH[key] : null;
-  if (!kmh) {
+  const hours = straightLineHours(move.km, key);
+  if (hours == null) {
     // No mode stated, so no duration is invented. The distance alone is still the
     // thing the page was missing.
     return `${head}. Worth planning the morning around, and worth knowing before you book anything.`;
   }
-  const hours = move.km / kmh;
   const spoken = hours < 1.5 ? "under an hour and a half" : `${Math.round(hours)} hours`;
   const how = key === "public transport" ? "by train and bus" : key === "bike" ? "on a bike" : `by ${key}`;
   if (move.eatsTheDay) {

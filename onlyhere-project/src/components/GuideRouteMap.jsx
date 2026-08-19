@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
-import { tileConfig } from "../utils/mapTiles";
+import { addTileLayer } from "../utils/mapTiles";
 import { C } from "../utils/theme";
 import { departureParam } from "../utils/helpers";
 
@@ -114,7 +114,7 @@ export const GuideRouteMap = ({ points, legs, nearby = [], onSelect = null, sele
       //
       // "chart" on the guide, because this is the map a traveller keeps. The
       // Studio map and the little map on a place page stay dark.
-      L.tileLayer(tileConfig("chart").url, tileConfig("chart")).addTo(map);
+      addTileLayer(L, map, "chart");
       L.control.zoom({ position: "bottomleft" }).addTo(map);
       mapRef.current = map;
       // BUG FIX (Oliver: "leaflet maps look bad, too zoomed in and poor

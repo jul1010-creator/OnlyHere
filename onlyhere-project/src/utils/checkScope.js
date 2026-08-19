@@ -73,7 +73,9 @@ export const CHARACTERISATION_FIELDS = [
   "whoFor", "whoItsFor", "realityCheck", "tip", "gemlyxFind", "highlight",
   // When to turn up. A recommendation, not a timetable: the timetable is
   // `openingHours`, which stays a report field.
-  "bestTime", "timeNeeded", "recommendedStay",
+  // timeNeeded left this list on 19 Aug 2026 with the field itself. A reader
+  // cannot ask for a correction to a row nothing renders.
+  "bestTime", "recommendedStay",
   // Bullets that characterise rather than state. thingsToKnow is asked to
   // include "at least one real downside", which is a judgement by definition.
   "thingsToKnow", "tags",

@@ -141,7 +141,23 @@ export const RESOLVED_SHAPE_INDEXES = LANDMASSES.map(m => m.shapeIndex);
 // that quietly removes an entry from every view is the blank-page failure this
 // page already shipped once.
 export const partOfCountry = (entry) => {
-  const lat = Number(entry?.__lat), lon = Number(entry?.__lon);
+  // ── __lat FIRST, THEN lat. ONE INSTRUMENT, NOT TWO. ───────────────
+  // Oliver, 19 Aug 2026: "it keeps saying I don't have any content in South
+  // Jutland.. while I clearly have some."
+  //
+  // This read `__lat` and nothing else, while its sibling regionOf in regions.js
+  // has always read `entry?.__lat ?? entry?.lat`. So the two functions that answer
+  // "where is this row" disagreed about any row carrying a plain `lat`, and
+  // coverageByTarget — which asks THIS one — counted those rows as nowhere. A
+  // region with entries in it reported zero, and the Studio chip then told him to
+  // go and write content he already had.
+  //
+  // Measured: a Ribe row with { lat, lon } counts 0 in south-jutland and the same
+  // row with { __lat, __lon } counts 1. Same place, same numbers, different key.
+  //
+  // `__lat` still wins where both exist, because that is the stored, frozen,
+  // coordinate-checked one and `lat` may be the model's original guess.
+  const lat = Number(entry?.__lat ?? entry?.lat), lon = Number(entry?.__lon ?? entry?.lon);
   // A fast path and a plain statement of intent. It cannot be isolated by a
   // mutation and that is stated rather than hidden: a NaN falls through every
   // comparison below and a null coordinate reads as (0, 0), which is in the Gulf
@@ -222,3 +238,46 @@ export const matchesSearch = (entry, query) => {
   // widening the way a single OR match would.
   return q.split(" ").every(w => hay.includes(w));
 };
+
+// ── WHICH ISLAND, WHICH IS NOT THE SAME QUESTION AS WHICH PART ──────
+// Oliver, 19 Aug 2026: "Section 3: Island."
+//
+// PARTS is the wrong answer to that question on its own, and the difference
+// matters on a site whose whole subject is the small islands. partOfCountry
+// answers "which of the five landmasses is this nearest", so Ærø comes back
+// "Funen", Fanø comes back "Jutland" and Samsø comes back "Jutland". A filter
+// labelled Island offering those five would tell a reader that Ærøskøbing is on
+// Funen, which is not true and is the kind of quiet wrongness this project keeps
+// digging out.
+//
+// THE KOMMUNE ALREADY KNOWS. Every Danish island belongs to a kommune, regions.js
+// says so in its own words, and for the islands that ARE their own kommune the
+// kommune's name IS the island's name. That is data he already has, checked, in
+// data/kommuner.js — not a list I would be inventing here. So an entry in Ærø
+// Kommune is on Ærø, full stop, and nothing has to be guessed.
+//
+// AND JUTLAND STAYS IN THE LIST, labelled for what it is. It is a peninsula, not
+// an island, but a reader filtering by island still has to be able to say "the
+// mainland" — leaving it out would make every Jutland entry unreachable from this
+// control. Naming it "Jutland (mainland)" is the honest way to include it.
+//
+// WHAT THIS DOES NOT DO: islands that share a kommune with the mainland or with
+// another island are not resolved. Møn is in Vordingborg Kommune, Langeland is
+// its own kommune but Strynø beside it is not, Anholt is in Norddjurs. Those come
+// back as their part of the country, which is true but coarser. Inventing
+// per-island polygons to fix it would be inventing borders, which is exactly what
+// data/kommuner.js exists to avoid.
+// Kommune name in, island name out. A TABLE and not a list plus a special case:
+// the first version was a list containing "Morsø" followed by an `if (k ===
+// "Morsø") return "Mors"`, and the list matched first, so the rename was
+// unreachable and Mors would have been filed under the kommune's name instead of
+// the island's. Morsø Kommune is the island of Mors; the kommune carries the
+// genitive and the island does not.
+export const ISLAND_BY_KOMMUNE = {
+  "Ærø": "Ærø", "Samsø": "Samsø", "Fanø": "Fanø", "Læsø": "Læsø",
+  "Langeland": "Langeland", "Bornholm": "Bornholm", "Morsø": "Mors",
+};
+export const ISLAND_LABEL = { Jutland: "Jutland (mainland)" };
+
+export const islandOf = (entry, kommuneName) =>
+  ISLAND_BY_KOMMUNE[(kommuneName || "").trim()] || partOfCountry(entry) || "";

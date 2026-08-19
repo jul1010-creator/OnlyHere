@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
-import { tileConfig } from "../utils/mapTiles";
+import { addTileLayer } from "../utils/mapTiles";
 import { C } from "../utils/theme";
 
 export const LeafletMap = ({ center, zoom, overlayLabel }) => {
@@ -13,7 +13,7 @@ export const LeafletMap = ({ center, zoom, overlayLabel }) => {
     // here — this was one of three verbatim copies of the same URL, maxZoom and
     // attribution. Still "dark": a dark panel is the right answer in Studio and
     // on a place page. The guide's own chart asks for "chart".
-    L.tileLayer(tileConfig().url, tileConfig()).addTo(map);
+    addTileLayer(L, map);
     L.control.zoom({ position: "bottomleft" }).addTo(map);
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };

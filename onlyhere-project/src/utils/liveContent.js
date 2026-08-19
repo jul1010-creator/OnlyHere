@@ -52,7 +52,40 @@ import { foodSpots } from "../data/food";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config";
 import { essentials } from "../data/essentials";
 import { craftItemsFallback } from "../data/craft";
-import { stripDashesDeep } from "./helpers";
+import { stripDashesDeep, isInDenmark } from "./helpers";
+import { placeCoords } from "./guideEnrichment";
+
+// ── THE REFERENCE FRAME GETS CHECKED BEFORE IT REPLACES ANYTHING ────
+//
+// TOWN_COORDS is not one pin. coordCheck.js's own note says it: a town's
+// coordinate is the frame every other entry in that town is measured against, so
+// one wrong town coordinate does not misplace one dot, it moves the reference
+// point for every unplaced stop in that town, silently, on every page load.
+//
+// This read `item.__lat` alone, which is the fault that reported no content in
+// South Jutland on 19 Aug, sitting in the most load-bearing place in the
+// coordinate system: a town row carrying a plain `lat` never entered the table at
+// all, so its whole town had no frame and every stop in it fell through to no
+// pin. placeCoords is the one resolver — `__lat ?? lat`, Number.isFinite rather
+// than truthiness — and it returns COERCED numbers, so a payload holding the
+// string "55.68" stops entering a table whose values are compared with
+// Number.isFinite elsewhere.
+//
+// AND IT IS RANGE-CHECKED, which nothing here did. publishDraft has blocked a
+// bad coordinate on a fresh publish since 11 Aug, but every row published before
+// that gate is still trusted, and this is where a pre-gate row does the most
+// damage. A refusal leaves the hardcoded coordinate in data/towns.js standing —
+// a human wrote that one — and a town with neither gets no pin, which is the
+// honest answer. Never a silently vaguer map.
+//
+// Refusals are collected and warned once, following the duplicate-row warning
+// below: a row quietly dropped is a row nobody fixes.
+// Exported for the suite: this is the gate on the reference frame, so it is
+// tested directly rather than inferred from the two call sites.
+export const townFrame = (item) => {
+  const c = placeCoords(item);
+  return c && isInDenmark(c) ? c : null;
+};
 
 const mergedIds = new Set();      // Supabase row ids already folded in
 const mergedKeys = new Set();     // type + normalised name, second net (see below)
@@ -82,6 +115,10 @@ const doLoad = async () => {
     if (!Array.isArray(rows)) { console.warn("gemlyx_content fetch did not return an array:", rows); return; }
     if (rows.length === 0) return;
     const dupeNames = [];
+    // Town rows carrying a coordinate this refused. Not "rows with no
+    // coordinate" — that is a known backlog with its own Studio button, and
+    // warning about it every load would bury the ones that are actually wrong.
+    const badFrames = [];
     rows.forEach(row => {
       if (mergedIds.has(row.id)) return; // already merged this exact row
       // ── THE DASH BAN FINALLY REACHES PUBLISHED CONTENT ────────────
@@ -111,7 +148,10 @@ const doLoad = async () => {
       const id = 100000 + row.id; // offset keeps live IDs clear of hardcoded ones
       if (row.type === "town") {
         towns.push({ id, ...item });
-        if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
+        const frame = townFrame(item);
+        if (frame) TOWN_COORDS[item.name] = [frame.lat, frame.lon];
+        else if (item.__lat != null || item.__lon != null || item.lat != null || item.lon != null)
+          badFrames.push(`${item.name} (row id ${row.id})`);
       } else if (row.type === "festival") (item.__scale === "Major" ? majorEvents : events).push({ id, ...item });
       else if (row.type === "free") freeEntrance.push({ id, ...item });
       else if (row.type === "food" || row.type === "foodStreet") foodSpots.push({ id, ...item });
@@ -144,6 +184,9 @@ const doLoad = async () => {
       // project's signature bug shape. It says so now.
       else console.warn(`gemlyx_content: published row ${row.id} has type "${row.type}", which nothing in liveContent.js merges. It is in the database and will render nowhere.`);
     });
+    if (badFrames.length > 0) {
+      console.warn(`gemlyx_content: ${badFrames.length} published town row(s) carry a coordinate outside Denmark and were refused as the town's reference point, fix them in Studio: ${badFrames.join(", ")}`);
+    }
     if (dupeNames.length > 0) {
       console.warn(`gemlyx_content: skipped ${dupeNames.length} duplicate published row(s), delete them in Studio: ${dupeNames.join(", ")}`);
     }
@@ -262,7 +305,11 @@ export const applyEditedRow = (rowId, type, payload) => {
   // too or the map keeps the old point until the next full load.
   if (type === "town") {
     if (oldName && oldName !== item.name) delete TOWN_COORDS[oldName];
-    if (Number(item.__lat) && Number(item.__lon)) TOWN_COORDS[item.name] = [item.__lat, item.__lon];
+    // Same gate as the loader, deliberately: an edit is the most likely moment a
+    // wrong coordinate arrives, and a Studio save must not be the one path into
+    // this table that skips the check.
+    const frame = townFrame(item);
+    if (frame) TOWN_COORDS[item.name] = [frame.lat, frame.lon];
   }
   return true;
 };

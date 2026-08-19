@@ -53,19 +53,56 @@ export const walkMinutes = (km) => {
   return Math.max(1, Math.round((n / WALK_KMH) * 60));
 };
 
+// ── HOW FAR IS "WORTH THE SAME TRIP" ────────────────────────────────
+// A second radius, for a second question, and the two are not interchangeable.
+// NEAR_KM answers "can I walk to it from this pin". This one answers "is there
+// anything else around here at all", which is what the map on an entry's page is
+// for: orientation, not routing. 30 km is about a day's realistic detour by car
+// or regional train in Denmark and still narrow enough that it does not mean "in
+// the region".
+//
+// It lives here rather than in DetailPage.jsx because that is where the copy of
+// this whole function used to live. See the note on nearbyEntries below.
+export const SAME_VISIT_KM = 30;
+// Five. The map's job is orientation; a dozen pins is a different feature.
+export const SAME_VISIT_LIMIT = 5;
+
 // ── THE LIBRARY, FLATTENED ──────────────────────────────────────────
 // Only rows that carry a real coordinate, because a row without one cannot be
-// said to be near anything. A town row is excluded on purpose: "close to
-// Copenhagen" is not a fact worth printing on a pin that is already in Copenhagen.
-export const placedLibrary = (pools = {}) => {
+// said to be near anything.
+//
+// ── AND THERE WAS A SECOND COPY OF ALL OF THIS ──────────────────────
+// DetailPage.jsx had its own `nearbyEntries`: same question, own flat-earth
+// distance formula, own radius, own limit, own self-exclusion rule, and NO TESTS.
+// It read `__lat` and nothing else, so every row in his library carrying a plain
+// `lat` was invisible to it — the identical fault that made partOfCountry report
+// no content in South Jutland on 19 Aug, in a function nobody had connected to
+// that bug. A published entry could get a map with the pin on it and not one
+// neighbour, and the page would say "the pale dots are other Gemlyx entries
+// nearby" over an empty map.
+//
+// Worse than the blindness: the pin and the dots resolved the place DIFFERENTLY.
+// The pin fell back to the town centre when a coordinate was missing, this did
+// not. Two instruments, one question, disagreeing — which is the habit that has
+// already cost this codebase two walking-time estimates and four coordinate
+// lookups. So there is now one, it is this one, and it is under test.
+//
+// A TOWN ROW IS EXCLUDED BY DEFAULT and included on request. For the guide-map
+// card, "close to Copenhagen" is not a fact worth printing on a pin already in
+// Copenhagen. For the mini-map on an entry's page, a nearby town is the single
+// most useful dot on it. Same data, opposite answers, so the caller says which.
+export const placedLibrary = (pools = {}, { includeTowns = false } = {}) => {
   const out = [];
   Object.entries(pools).forEach(([kind, rows]) => {
-    if (kind === "town" || !Array.isArray(rows)) return;
+    if ((kind === "town" && !includeTowns) || !Array.isArray(rows)) return;
     rows.forEach(r => {
       const c = placeCoords(r);
       const name = clean(r?.name);
       if (!c || !name) return;
-      out.push({ name, kind, lat: c.lat, lon: c.lon, id: r?.id ?? null, type: clean(r?.type || r?.category || "") });
+      // `row` carries the original through, so a caller that opens a neighbour
+      // opens the real entry rather than this flattened shadow of it. Nothing
+      // reads it here; DetailPage's tap handler needs it.
+      out.push({ name, kind, lat: c.lat, lon: c.lon, id: r?.id ?? null, type: clean(r?.type || r?.category || ""), row: r });
     });
   });
   return out;

@@ -628,7 +628,7 @@ export const isSameTownWalk = (mode, originTown, destTown, how) =>
 // waiting, stops, or transfers — systematically optimistic versus what Google
 // Maps then shows for the real door-to-door journey. 35 km/h straight-line is
 // a much better real-world average for Danish regional transit door to door.
-const AVG_SPEED_KMH = { walking: 4.5, bicycling: 14, driving: 70, transit: 35 };
+export const AVG_SPEED_KMH = { walking: 4.5, bicycling: 14, driving: 70, transit: 35 };
 
 // ── "MAPS STILL SEEM TO GET THINGS WRONG" ───────────────────────────
 // Oliver, 9 Aug 2026, with two legs off one guide and Google Maps open beside
@@ -662,6 +662,64 @@ const AVG_SPEED_KMH = { walking: 4.5, bicycling: 14, driving: 70, transit: 35 };
 // minutes too many arrives early. A traveler given twenty too few is standing
 // on the wrong side of a body of water watching a booking time pass.
 export const ROUTE_FACTOR = { walking: 1.35, bicycling: 1.35, driving: 1.25, transit: 1 };
+
+// ── AND THERE WAS A SECOND SPEED TABLE, WHICH DISAGREED ─────────────
+//
+// claimCheck.js has a test headed "ONE SET OF SPEEDS, NOT TWO" that forbids one,
+// and it checks claimCheck.js. routeOrder.js had one anyway:
+//
+//               here (effective, after circuity)   routeOrder's MODE_KMH
+//   walking     4.5 / 1.35 = 3.3 km/h              4.5 km/h
+//   bike        14  / 1.35 = 10.4                  15
+//   transit     35  / 1     = 35                   60
+//   car         70  / 1.25 = 56                    70
+//
+// Every row disagrees and the transit row is the one that matters, because the 35
+// above is not a guess: it was 55 until Oliver measured it — "Public transport
+// says 19 minutes... you then check maps, and it's 27" — and 55 was already too
+// optimistic. routeOrder was quoting 60.
+//
+// It compounds, because MODE_KMH divided a GREAT-CIRCLE distance with no circuity
+// factor at all. On the leg Oliver actually complained about, Aalborg to Skagen,
+// 92 km on a bike: routeOrder said "6 hours", this model says 8.9. Two numbers for
+// one journey, on two screens of the same guide.
+//
+// So there is one answer now and this is it. A gate over every file in src/ keeps
+// it that way — the old one was scoped to the file the bug was found in rather
+// than to the rule.
+//
+// The two vocabularies are the reason it happened. routeOrder speaks the app's own
+// mode words (travelModeKey produces walk / bike / public transport / car / camper
+// / tent) and this file speaks Google's, so neither table could read the other.
+// Both are mapped here rather than either being renamed, because the Google words
+// are what the Directions API returns and the app's words are what a traveller
+// typed.
+export const GOOGLE_MODE = {
+  walk: "walking",
+  // A tent trip is walked. That is what routeOrder's `tent: 4.5` meant.
+  tent: "walking",
+  bike: "bicycling",
+  "public transport": "transit",
+  car: "driving",
+  // A camper is slower than a car, and 65 against 70 is well inside the precision
+  // of a straight-line estimate. Mapping it to driving is honest; a fifth number
+  // pretending to know the difference is not.
+  camper: "driving",
+  // Google's own words pass through, so a caller holding either vocabulary works.
+  walking: "walking", bicycling: "bicycling", transit: "transit", driving: "driving",
+};
+
+// Hours for a STRAIGHT-LINE distance at a mode's real-world pace, circuity
+// included. Returns null rather than 0 for a mode nobody stated, because "no
+// duration" and "no time at all" are different claims and only one of them is
+// safe to print.
+export const straightLineHours = (km, mode) => {
+  const d = Number(km);
+  const g = GOOGLE_MODE[String(mode || "").trim().toLowerCase()];
+  const kmh = g ? AVG_SPEED_KMH[g] : null;
+  if (!Number.isFinite(d) || d < 0 || !kmh) return null;
+  return (d * (ROUTE_FACTOR[g] ?? 1)) / kmh;
+};
 
 // Transit keeps a factor of 1 on purpose and is NOT missing one: its 35 km/h is
 // already a door-to-door figure covering the walk to the stop, the wait, and

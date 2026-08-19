@@ -17,8 +17,10 @@ import { events, majorEvents, vikingEvents } from "../data/events";
 import { freeEntrance } from "../data/freeEntrance";
 import { foodSpots } from "../data/food";
 import { nightlifeSpots } from "../data/nightlife";
-import { towns } from "../data/towns";
-import { TOWN_COORDS } from "../data/towns";
+import { towns, TOWN_COORDS } from "../data/towns";
+import { haversineKm } from "../utils/helpers";
+import { placeCoords, townPointFor } from "../utils/guideEnrichment";
+import { placedLibrary, nearbyPublished, SAME_VISIT_KM, SAME_VISIT_LIMIT } from "../utils/nearbyPlaces";
 
 // ── WHERE THE PICTURES GO (Oliver, 7 Aug: "I would appreciate if the
 // pictures were put at the sides.. it looks odd") ────────────────────
@@ -106,12 +108,17 @@ const inThisTown = (e, key) => {
 // missing. NULL IS THE POINT: it means "we do not know", and an unknown distance
 // must never become a displayed number. Same discipline as legDistanceKm in the
 // guide code, for the same reason it had to be added there.
+//
+// haversineKm, not a fourth hand-rolled flat-earth formula. This one carried
+// `* 62.06` for a longitude degree with "shorter at Denmark's latitude" beside
+// it, which is cos(56.1 N) worked out once and then frozen — right in the middle
+// of the country and wrong at both ends of it. haversineKm is exact everywhere,
+// is already imported by four other files, and is tested.
 const kmBetweenTowns = (a, b) => {
   const A = TOWN_COORDS[a], B = TOWN_COORDS[b];
   if (!Array.isArray(A) || !Array.isArray(B)) return null;
-  const dLat = (A[0] - B[0]) * 111.32;
-  const dLon = (A[1] - B[1]) * 62.06; // longitude degrees are shorter at Denmark's latitude
-  return Math.sqrt(dLat * dLat + dLon * dLon);
+  const km = haversineKm({ lat: A[0], lon: A[1] }, { lat: B[0], lon: B[1] });
+  return Number.isFinite(km) ? km : null;
 };
 
 // A festival in a DIFFERENT town, close enough to matter, with a real measured
@@ -154,43 +161,44 @@ const eventsForTown = (townName) => {
 };
 
 // ── WHAT ELSE IS NEAR THIS ─────────────────────────────────────────
-// Straight-line kilometres, which is honest for orientation and would not be
-// for routing: this answers "is there anything else around here", not "how do I
-// get there", and Get Directions already owns the second question.
+// There used to be a `nearbyEntries` here: thirty lines answering the same
+// question nearbyPlaces.js already answered, with its own flat-earth distance
+// formula, its own radius, its own limit, and no tests. It read `__lat` alone,
+// so every row carrying a plain `lat` was invisible to it — the same fault that
+// reported no content in South Jutland — and it resolved the place differently
+// from the pin beside it. The reasoning is written out at placedLibrary.
 //
-// PUBLISHED ENTRIES ONLY, and only ones carrying real coordinates. Both halves
-// matter. A dot that opens nothing is a dead end, and a dot placed from a guess
-// is a confident wrong answer in the most believable possible format.
-const KM_PER_DEG_LAT = 111.32;
-const NEAR_RADIUS_KM = 30;   // a realistic same-visit radius, not "in the region"
-const NEAR_MAX = 5;          // the map's job is orientation. A dozen pins is a different feature.
+// One resolution now feeds both the pin and the dots, computed once below.
 
-export const nearbyEntries = (item, pools) => {
-  const lat = Number(item?.__lat), lon = Number(item?.__lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
-  // Longitude degrees shrink towards the poles. At Danish latitudes that is a
-  // factor of about 0.56, and ignoring it would stretch every east-west
-  // distance by nearly double.
-  const lonScale = Math.cos((lat * Math.PI) / 180) * KM_PER_DEG_LAT;
-  const out = [];
-  for (const { rows, src } of pools) {
-    for (const r of rows || []) {
-      if (!r || r.name === item.name) continue;
-      const rl = Number(r.__lat), ro = Number(r.__lon);
-      if (!Number.isFinite(rl) || !Number.isFinite(ro)) continue;
-      const dy = (rl - lat) * KM_PER_DEG_LAT;
-      const dx = (ro - lon) * lonScale;
-      const km = Math.sqrt(dx * dx + dy * dy);
-      if (km > NEAR_RADIUS_KM || km < 0.01) continue;   // 0.01 drops an entry sitting on itself under another name
-      out.push({ name: r.name, lat: rl, lon: ro, km, src, item: r });
-    }
-  }
-  return out.sort((a, b) => a.km - b.km).slice(0, NEAR_MAX);
-};
+// ── WHERE THIS ENTRY IS ────────────────────────────────────────────
+// placeCoords is the resolver the rest of the app uses: `__lat ?? lat`, and
+// Number.isFinite rather than truthiness, so a missing coordinate is missing
+// instead of becoming a point in the Gulf of Guinea.
+//
+// THE TOWN FALLBACK ONLY APPLIES TO A TOWN. A town's stored coordinate IS its
+// centre, so falling back to TOWN_COORDS costs nothing there. Doing it for an
+// attraction would plot it at the middle of whatever town its name contains —
+// "Ribe VikingeCenter" lands on Ribe, three kilometres out — which is a guess
+// printed as a pin. townPointFor rather than a raw TOWN_COORDS lookup because it
+// tries the Danish spelling too, so a town filed as København still resolves.
+export const detailPoint = (item, kind) =>
+  placeCoords(item) || (kind === "town" ? townPointFor(item?.name) : null);
 
 export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, checkLiveInfo, userCoords, isSaved, onToggleSave, onOpenEvent, onOpenNearby }) => {
   if (!item) return null;
   const color = item.color || C.accent;
+  // ── ONE POINT, TWO USES ───────────────────────────────────────────
+  // The pin and the dots come from the same resolution, so the map cannot show a
+  // pin with no neighbours because the two halves disagreed about where it is.
+  // The pools are keyed by the same strings openStopDetail dispatches on.
+  const here = detailPoint(item, kind);
+  const near = here ? nearbyPublished(here, placedLibrary({
+    town: towns,
+    event: [...events, ...majorEvents, ...vikingEvents],
+    free: freeEntrance,
+    food: foodSpots,
+    nightlife: nightlifeSpots,
+  }, { includeTowns: true }), { maxKm: SAME_VISIT_KM, limit: SAME_VISIT_LIMIT, exclude: item.name }) : [];
   const townEvents = kind === "town" ? eventsForTown(item.name).slice(0, 4) : [];
   const townNearby = kind === "town"
     ? nearbyEvents(item.name, String(item.name || "").trim().toLowerCase())
@@ -548,7 +556,25 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
         {(kind === "free" || kind === "attraction") && (
           <AtAGlanceCard rows={[
             { icon: "🎟️", label: "Tickets", value: item.ticketsGlance },
-            { icon: "⏱️", label: "Time Needed", value: item.timeNeeded },
+            /* ── AND NOW NOT ON ATTRACTIONS EITHER ────────────────────
+               Oliver, 19 Aug 2026: "I think we should get rid of
+               'time-needed'."
+
+               This is the food decision of 17 August finishing its job. The
+               reason given there applied to every type and was only acted on
+               for one: the number never came from research. Whatever the writer
+               estimated was overwritten at publish by stayDurationForCategory,
+               which returned ONE OF THREE CONSTANTS chosen by a regex over a
+               category word — "2 to 3 hours" for anything matching museum or
+               castle, "30 to 45 mins" for anything matching park or square,
+               "1 to 2 hours" for everything else. So a deer park the size of a
+               suburb and a bandstand both read 30 to 45 mins, and neither figure
+               was measured, sourced or checked by anybody.
+
+               On a product whose entire claim is that nothing is printed that
+               nobody checked, a row wearing a clock icon and stating a duration
+               is the most confident-looking unsourced thing on the card.
+               It is gone at the reader, at the writer and at the schema. */
             { icon: "💰", label: "Extra Costs", value: item.extraCosts },
             { icon: "♿", label: "Accessibility", value: item.accessibility },
             arrivalRow(item.nearestStation),
@@ -672,20 +698,15 @@ export const DetailPage = ({ item, onClose, kind, liveInfo, liveInfoLoading, che
             onward get a map too, and older ones once the Studio backfill has
             been run. */}
         <PlaceMiniMap
-          lat={item.__lat ?? TOWN_COORDS[item.name]?.[0]}
-          lon={item.__lon ?? TOWN_COORDS[item.name]?.[1]}
+          lat={here?.lat}
+          lon={here?.lon}
           name={item.name}
           color={color}
-          neighbours={nearbyEntries(item, [
-            { rows: towns, src: "town" },
-            { rows: [...events, ...majorEvents, ...vikingEvents], src: "event" },
-            { rows: freeEntrance, src: "free" },
-            { rows: foodSpots, src: "food" },
-            { rows: nightlifeSpots, src: "nightlife" },
-          ])}
+          neighbours={near}
           // openStopDetail dispatches on _src, so the neighbour is handed
-          // over carrying the pool it came from.
-          onOpenNeighbour={(n) => onOpenNearby?.({ ...n.item, _src: n.src })}
+          // over carrying the pool it came from. `row` is the original entry;
+          // the rest of the neighbour object is the flattened copy the map draws.
+          onOpenNeighbour={(n) => onOpenNearby?.({ ...n.row, _src: n.kind })}
         />
 
         {kind === "town" && item.highlight && (

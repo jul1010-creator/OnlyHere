@@ -55,7 +55,7 @@ writeFileSync(entry, `
   export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
-  export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
+  export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery, toggleFacetValue, isOptionOn, selectedValues } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
   export { EVENT_TYPES, EVENT_TYPE_LABEL, eventTypesOf, hasEventType, eventTypesPresent, eventTypeCounts, untypedEvents, UNINFORMATIVE } from ${JSON.stringify(join(root, "src/utils/eventTypes.js"))};
   export { TIERS } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { REGION_NAMES, REGION_PART, canonicalRegion, isRegion, regionPart, kommunerIn, kommuneAt, kommuneNameAt, regionAt, regionOf, kommuneOf, sameRegion, regionsPresent, describeRegion, danishAddressIn } from ${JSON.stringify(join(root, "src/utils/regions.js"))};
@@ -68,10 +68,10 @@ writeFileSync(entry, `
   export { essentials as ESSENTIALS_FOR_TEST } from ${JSON.stringify(join(root, "src/data/essentials.js"))};
   export { EDITABLE_TYPES, typeOf, isEditable, blockText, withBlockText, editableBlocks, applyBodyEdits, bodyChanged, changedIndexes, bodyEditProblems, stampEdit, bodyConflict, MAX_EDIT_LOG } from ${JSON.stringify(join(root, "src/utils/bodyEdit.js"))};
   export { scopeTier, parseTypes, serialiseTypes, typeMatches, overflowSourceSearch, discoverSourceSearch, discoverSourceNote, MAX_INCLUDE_DOMAINS } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
-  export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
+  export { PARTS, PART_ANCHORS, RESOLVED_PARTS, RESOLVED_SHAPE_INDEXES, partOfCountry, partsPresent, unplaced, matchesSearch, fold, pointInPoly, MAX_OFFSHORE_KM, islandOf, ISLAND_BY_KOMMUNE, ISLAND_LABEL } from ${JSON.stringify(join(root, "src/utils/geography.js"))};
   export { PLACE_THEMES, THEME_LABEL, THEME_EMOJI, cleanThemes, themesOf, hasTheme, themesPresent, tierOf, tierLabel, MAX_THEMES } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
   export { tierBadge, TIER_TONE } from ${JSON.stringify(join(root, "src/utils/placeThemes.js"))};
-  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, stayDurationForCategory, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
+  export { travelLabel, isAtTravelOrigin, dotJoin, isFullPlanText, isReadyToBuild, getEventDate, hasFinished, externalHref, isUpcoming, isCurrentlyLive, daysUntil, priceBand, priceBandLabel, PRICE_BANDS, storeKindOf } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fillerWordCounts, FILLER_WORDS, FILLER_REPEAT, AI_TELL_PHRASES } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { arrivalRow, transitDepartureAnchor, departureParam, scanForAITells } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { auditEntry, auditAll } from ${JSON.stringify(join(root, "src/utils/entryAudit.js"))};
@@ -110,18 +110,19 @@ writeFileSync(entry, `
   export { MAX_STOPS_ARRIVAL_DAY } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
   export { isSameSpot, SAME_SPOT_KM, cityFromLocation, stopTown } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { travellerBudget, budgetTierMismatch, dayTripClaim, dayTripHonest, dayTripRadiusKm, withoutDayTripClaim, describeDayTripClaim, DAY_TRIP_FRACTION } from ${JSON.stringify(join(root, "src/utils/accommodation.js"))};
-  export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
+  export { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, nearbyLabel, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } from ${JSON.stringify(join(root, "src/utils/nearbyPlaces.js"))};
   export { TICKET_STATUS, TICKET_BADGE, ticketBadge, normaliseTicketStatus, statusFromCode, readTicketmasterEvent, nameTokens, nameOverlap, daysApart, matchEvent, reconcileTickets, ticketsForPrompt, priceText, SAME_EDITION_DAYS, MIN_NAME_OVERLAP, stampTicketSource, ticketProvenance, isMeasured, TICKET_SOURCES, TICKET_SOURCE_LABEL, isAncillaryListing } from ${JSON.stringify(join(root, "src/utils/tickets.js"))};
   export { shouldOfferAccount, shouldAskProfile, noteDismiss, nudgeCopy, readNudge, EMPTY_NUDGE, MIN_SAVES, COOLDOWN_DAYS, MAX_ASKS, NUDGE_KEY, PROFILE_NUDGE_KEY } from ${JSON.stringify(join(root, "src/utils/accountNudge.js"))};
   export { groupRows, groupLabel, describeGroups, emptyTypes, initiallyOpen, GROUP_ORDER } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
   export { filterRows, rowMatchesQuery, rowHaystack } from ${JSON.stringify(join(root, "src/utils/manageGroups.js"))};
-  export { applyEditedRow, LIVE_ID_OFFSET } from ${JSON.stringify(join(root, "src/utils/liveContent.js"))};
+  export { applyEditedRow, LIVE_ID_OFFSET, townFrame } from ${JSON.stringify(join(root, "src/utils/liveContent.js"))};
   export { freeEntrance } from ${JSON.stringify(join(root, "src/data/freeEntrance.js"))};
   export { towns } from ${JSON.stringify(join(root, "src/data/towns.js"))};
+  export { DRAFT_STORE_KEY, STORE_VERSION, DRAFT_TTL_MS, MAX_RESULTS, MAX_QUEUE, MAX_BYTES, STORE_PROBLEMS, packResult, packEditor, packQueueItem, capResults, packStore, isEmptyStore, readStore, storedKeys, FORBIDDEN_KEYS, writeStore, ageWords, restoreNote, problemNote, doneKeysFrom } from ${JSON.stringify(join(root, "src/utils/studioDraftStore.js"))};
   export { events, majorEvents } from ${JSON.stringify(join(root, "src/data/events.js"))};
   export { coordProblems, blockingCoordProblems, claimedTown, distanceFromClaimedTown, storedCoord, sharedCoords, coordAudit, describeCoordAudit, MAX_TOWN_KM, ODD_TOWN_KM, SCHEMA_EXAMPLE } from ${JSON.stringify(join(root, "src/utils/coordCheck.js"))};
   export { TOWN_COORDS } from ${JSON.stringify(join(root, "src/data/towns.js"))};
-  export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
+  export { estimateMinutes, estimateDurationText, walkEstimateTooFar, ROUTE_FACTOR, WALK_MAX_MINUTES, WALK_MAX_KM, AVG_SPEED_KMH, GOOGLE_MODE, straightLineHours } from ${JSON.stringify(join(root, "src/utils/guideEnrichment.js"))};
   export { shuffledOrder, identityOrder, advancePos, factAt, seededRandom, orderFor, nextSeed } from ${JSON.stringify(join(root, "src/utils/factRotation.js"))};
   export { claimConflicts, implausibleWalks, checkable, durationsIn, distancesIn, TOLERANCE, MIN_GAP_MINUTES } from ${JSON.stringify(join(root, "src/utils/claimCheck.js"))};
   export { placeSlug, townPath, findBySlug, slugCollisions, sitemapXml, COUNTRY, ENTRY_KINDS, segForType, kindForSeg, typesForSeg, entryUrlPath, parseEntryUrl, isEntryUrl } from ${JSON.stringify(join(root, "src/utils/placeUrl.js"))};
@@ -148,9 +149,11 @@ writeFileSync(entry, `
   export { FORECAST_HORIZON_DAYS, FORECAST, NORMALS, weatherSourceFor, wetDayWords, normalsIcon, normalsLine, weatherBadge, normalsNote } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { mergeForecasts, agreementNote, SPREAD_DISAGREES_C, weatherIsStale, weatherChanges, WEATHER_STALE_HOURS, dayWeather } from ${JSON.stringify(join(root, "src/utils/weather.js"))};
   export { WIND_FRESH, WIND_STRONG, WIND_GALE, WIND_STORM, RAIN_WET, RAIN_HEAVY, COLD_WET_C, FROST_C, HARD_FROST_C, HEAT_C, forecastWarnings, normalsWarnings, beltCrossing, dayCrossings, crossingWarning, dayWarnings, tripWeatherWarning, GREAT_BELT_TRAILER_MS, GREAT_BELT_CLOSED_MS } from ${JSON.stringify(join(root, "src/utils/weatherWarn.js"))};
+  export { TILE_STYLES, tileConfig, tileCss, DEFAULT_TILE_STYLE, addTileLayer, styleRefused, __resetRefusedStyles, TILE_ERROR_LIMIT, readRefusedMemo, writeRefusedMemo, REFUSED_TTL_MS } from ${JSON.stringify(join(root, "src/utils/mapTiles.js"))};
   export { coverageByPart, thinnestParts, coverageSummary, discoveryFraming, isAlreadyCovered, splitAlreadyCovered } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
   export { DISCOVERY_TARGETS, targetById, coverageByTarget, framingForTarget, placeFromText, candidateFitsTarget, splitOffTarget, describeOffTarget, DISCOVERY_MONTHS, monthById, yearForMonth, framingForMonth, splitOffMonth, describeOffMonth } from ${JSON.stringify(join(root, "src/utils/discovery.js"))};
-  export { checkPlan, titlePromises, MAX_DAY_KM } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { checkPlan, titlePromises, MAX_DAY_KM, dayCeilingKm } from ${JSON.stringify(join(root, "src/utils/planGate.js"))};
+  export { isOwnSiteFor, urlNames, isKommuneHost, isTourismHost, KOMMUNE_HOSTS } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { detectLegMode as detectLegModeX, isFerryText } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { fold as foldName } from ${JSON.stringify(join(root, "src/utils/danishNames.js"))};
   export { stopKind, tripScaleLine, tripCharacter, bookingActions, tripDayDate, stopEventWhen } from ${JSON.stringify(join(root, "src/utils/guideReading.js"))};
@@ -942,6 +945,113 @@ is("missing licence does not require credit", creditIsRequired({}), false);
     !M.checkPlan(FAR, { X: { lat: 55.68, lon: 12.59 } }).problems.some(p => p.code === "TOO_MUCH_TRAVEL"));
   ok("and a short day is left alone",
     !M.checkPlan(FAR, { X: { lat: 55.68, lon: 12.59 }, Y: { lat: 55.7, lon: 12.61 } }).problems.some(p => p.code === "TOO_MUCH_TRAVEL"));
+
+  // ── BUT "COULD NOT CHECK" MUST NOT LOOK LIKE "CHECKED" ────
+  // The rule above is right to stay silent on a half-measured day. It never said
+  // so, and an unjudged day came out of this function indistinguishable from one
+  // that passed — on the product whose promise is that nothing is asserted that
+  // nobody measured.
+  const halfKnown = M.checkPlan(FAR, { X: { lat: 55.68, lon: 12.59 } });
+  is("an unjudged day is reported as unjudged", halfKnown.unjudged.length, 1);
+  is("with how much of it did resolve", [halfKnown.unjudged[0].measured, halfKnown.unjudged[0].legs], [0, 1]);
+  is("and the count of days actually judged", halfKnown.stats.judgedDays, 0);
+  // A fully measured day is not in that list, or the signal means nothing.
+  const known = M.checkPlan(FAR, { X: { lat: 55.68, lon: 12.59 }, Y: { lat: 55.7, lon: 12.61 } });
+  is("a measured day is not called unjudged", known.unjudged.length, 0);
+  is("and counts as judged", known.stats.judgedDays, 1);
+  // It is NEVER a blocking problem: the planner cannot supply a coordinate Gemlyx
+  // does not hold, and asking it to is asking it to invent a town.
+  ok("and an unjudged day does not by itself fail the plan",
+     !halfKnown.problems.some(p => /unjudged|UNJUDGED/i.test(p.code)));
+
+  // ── AND A PARTIAL TOTAL IS NEVER JUDGED ───────────────────────
+  // FAR above has one leg, so "measured > 0" and "every leg measured" cannot be
+  // told apart on it and a mutant swapping them survived. This day has TWO legs,
+  // the first of them 222 km — already over every ceiling — and the second
+  // unmeasurable. The understated total exceeds the limit and the day must still
+  // go unjudged, because a total built from the legs that happened to resolve is
+  // not this day's distance and acting on it is acting on a number nobody has.
+  const PARTIAL = [{ day: 1, stops: [{ name: "CPH" }, { name: "AAL" }, { name: "Unknown" }] }];
+  const PARTIAL_GEO = { CPH: { lat: 55.6761, lon: 12.5683 }, AAL: { lat: 57.048, lon: 9.919 } };
+  const partial = M.checkPlan(PARTIAL, PARTIAL_GEO, { mode: "bike" });
+  ok("a day with one huge measured leg and one unmeasurable leg is not flagged",
+     !partial.problems.some(p => p.code === "TOO_MUCH_TRAVEL"));
+  is("it is reported as unjudged instead", partial.unjudged.length, 1);
+  is("with one of its two legs measured", [partial.unjudged[0].measured, partial.unjudged[0].legs], [1, 2]);
+  // And the same day, fully measured, IS flagged — or the assertion above passes
+  // because nothing ever flags anything.
+  const whole = M.checkPlan(PARTIAL, { ...PARTIAL_GEO, Unknown: { lat: 57.05, lon: 9.92 } }, { mode: "bike" });
+  ok("and the same day with every leg known is flagged",
+     whole.problems.some(p => p.code === "TOO_MUCH_TRAVEL"));
+  is("and is not called unjudged", whole.unjudged.length, 0);
+
+  // ── AND 120 KM IS NOT ONE NUMBER ──────────────────────────
+  // Oliver, 19 Aug 2026, with the preview on his phone: three days, parents in
+  // their sixties, "we want to cycle where it makes sense", "budget is not really
+  // the constraint, time is" — and the towns reading 9 km, 222 km, 101 km, 129 km.
+  //
+  // This gate has had a distance rule since 12 Aug and it was a FLAT 120 km
+  // whatever the traveller said they travelled by, while routeOrder.js has carried
+  // MODE_DAY_KM the whole time. So it was wrong in both directions at once.
+  {
+    // 100 km apart, which straddles the bike ceiling of 60 and sits under the flat
+    // 120 and well under the car ceiling of 300.
+    const HUNDRED = [{ day: 1, stops: [{ name: "P" }, { name: "Q" }] }];
+    const PQ = { P: { lat: 57.048, lon: 9.919 }, Q: { lat: 56.1629, lon: 10.2039 } };
+    const tooFar = (mode) => M.checkPlan(HUNDRED, PQ, mode ? { mode } : {}).problems.some(p => p.code === "TOO_MUCH_TRAVEL");
+    ok("a hundred kilometre day is a problem on a bicycle", tooFar("bike"));
+    ok("and on foot", tooFar("walk"));
+    ok("and is not one by car", !tooFar("car"));
+    ok("nor by train", !tooFar("public transport"));
+    // The old behaviour, kept for the case it was written for: nothing stated.
+    ok("an unstated mode still gets judged, at the flat fallback", !tooFar(null));
+    is("and the fallback is the number it always was", M.MAX_DAY_KM, 120);
+    // The ceiling comes from routeOrder's table, not a second copy here.
+    is("a bike day is measured against the bike ceiling", M.dayCeilingKm("bike"), M.MODE_DAY_KM.bike);
+    is("a car day against the car one", M.dayCeilingKm("car"), M.MODE_DAY_KM.car);
+    is("and a mode nobody has a number for falls back", M.dayCeilingKm("hot air balloon"), M.MAX_DAY_KM);
+    is("as does no mode at all", M.dayCeilingKm(null), M.MAX_DAY_KM);
+    // The traveller's own words, not a normalised key: this is handed free text.
+    is("it reads what a traveller actually types", M.dayCeilingKm("we are renting a car"), M.MODE_DAY_KM.car);
+    is("and a chip label", M.dayCeilingKm("🚲 Bike"), M.MODE_DAY_KM.bike);
+    // THE DIRECTION OF EACH CHANGE, because both were wrong and in opposite ways:
+    // a bike trip was waved through at nearly double its real ceiling, and a car
+    // trip was sent back to the planner at well under half of its.
+    ok("the bicycle ceiling is far below the old flat one", M.MODE_DAY_KM.bike < M.MAX_DAY_KM);
+    ok("and the car ceiling far above it", M.MODE_DAY_KM.car > M.MAX_DAY_KM);
+    // The sentence has to carry the number, or the planner satisfies it by moving
+    // one stop and changing nothing.
+    const said = M.checkPlan(HUNDRED, PQ, { mode: "bike" }).problems.find(p => p.code === "TOO_MUCH_TRAVEL").detail;
+    ok("the problem states the distance it measured", /\b1\d\d km\b|\b100 km\b/.test(said));
+    ok("and the ceiling it measured against", new RegExp(`\\b${M.MODE_DAY_KM.bike} km\\b`).test(said));
+    ok("and the mode, so the planner knows why", /bike/.test(said));
+    // Recorded on the verdict too, so a run log can show that a 100 km day passed
+    // because the mode was a car rather than because nobody looked at it.
+    is("the verdict says which ceiling was applied",
+       M.checkPlan(HUNDRED, PQ, { mode: "car" }).stats.ceilingKm, M.MODE_DAY_KM.car);
+    is("and which mode it came from", M.checkPlan(HUNDRED, PQ, { mode: "car" }).stats.mode, "car");
+
+    // ── AND THE MODE ACTUALLY REACHES IT ────────────────────────
+    // A gate nothing calls with a mode is a gate with a flat ceiling. This is the
+    // wiring, asserted on the source because the caller is inside a 1.3 MB React
+    // component this suite cannot execute — and three mutants that cut the mode out
+    // of the call sites survived every behavioural assertion above.
+    const appG = stripNonCode(readFileSync(join(root, "src/App.jsx"), "utf8"));
+    const gateCalls = [...appG.matchAll(/checkPlan\([^)]*\)/g)].map(m => m[0]);
+    ok("the plan gate is called", gateCalls.length >= 2);
+    ok("and every call site passes the mode",
+       gateCalls.every(c => /mode:\s*gateMode/.test(c)));
+    // travelModeKey rather than the mode regexes further down that function: those
+    // are declared hundreds of lines below the gate, which is the TDZ shape that has
+    // already bitten enrichGuideDays in this same file.
+    ok("the mode is read with the folded resolver", /const gateMode = travelModeKey\(convoText\)/.test(appG));
+    // And what could not be judged reaches the run report, or "we could not check"
+    // and "we checked" stay indistinguishable to the only person who can fix it.
+    ok("unjudged days are recorded for him to see", /verdict\.unjudged\?\.length/.test(appG));
+    ok("naming which days and how much of each resolved",
+       /u\.day.*u\.measured.*u\.legs/.test(readFileSync(join(root, "src/App.jsx"), "utf8")));
+    ok("and the gate logs the ceiling it applied", /ceilingKmPerDay/.test(appG));
+  }
 
   // ── the title is the first factual claim a reader meets ───
   is("chalk cliffs with no cliff anywhere", M.titlePromises("Cobbled Streets and Chalk Cliffs", ["Amalienborg Slot", "Faxe Kalkbrud"], ["Copenhagen", "Faxe"]), ["cliff"]);
@@ -4425,7 +4535,16 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // thing it was reading.
   ok("what is applied can be read and removed",
      /\{chips\.length > 0 && \(/.test(fbar) && /\{chips\.map\(c => \(/.test(fbar));
-  ok("and each chip clears only its own facet", /onChange\(clearFacet\(state, c\.key\)\)/.test(fbar));
+  // ── ONE VALUE, NOT THE WHOLE FACET, SINCE 19 AUG 2026 ────────────
+  // A multi facet holds several values, so a chip that called clearFacet would
+  // remove two filters the reader never pointed at. It calls toggleFacetValue
+  // with the chip's own value now, which on a single-value facet does exactly
+  // what clearFacet did.
+  ok("and each chip removes only the value it names",
+     /onChange\(toggleFacetValue\(state, facets\.find\(f => f\.key === c\.key\), c\.value\)\)/.test(fbar));
+  // Keyed by facet AND value, or React collapses three chips from one facet into
+  // one and removing any of them animates the wrong row away.
+  ok("and the chips are keyed by both", /key=\{`\$\{c\.key\}:\$\{c\.value\}`\}/.test(fbar));
   // One chip is not a set to clear, so the button only appears when there are
   // two. A "clear all" next to a single chip is a second button doing the same
   // thing as the first.
@@ -4529,8 +4648,20 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   const app7 = readFileSync(join(root, "src/App.jsx"), "utf8");
   ok("the attractions page asks before drawing controls", /showFilters\(/.test(app7));
   ok("and it is handed the unfiltered total", /showFilters\(combined\.length\)/.test(app7));
-  ok("applied filters come back as removable chips", /appliedChips\(/.test(app7));
-  ok("with counts that exclude their own facet", /facetCounts\(/.test(app7));
+  // ── THESE MOVED WITH THE CONTROLS THEMSELVES, 19 AUG 2026 ──────
+  // The attractions page had its own filter UI: its own sheet, its own chips,
+  // its own counts, about 110 lines of it, beside the FilterBar that Events
+  // uses. Oliver: "the events is somewhat good. But the others need to be
+  // sorted." So the page now renders FilterBar, and these two rules are about
+  // FilterBar, which is where they are now checked. Checking App.jsx for them
+  // after the move would have failed loudly, which is exactly what it did.
+  const fb = readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8");
+  ok("applied filters come back as removable chips", /appliedChips\(/.test(fb));
+  ok("with counts that exclude their own facet", /facetCounts\(/.test(fb));
+  ok("and the attractions page renders that one component", /<FilterBar/.test(app7));
+  // THE OLD SHEET IS GONE, not left behind unreachable. Two filter
+  // implementations in one file is how they drift apart in the first place.
+  ok("and no longer carries a second filter sheet of its own", !/attractionSheet/.test(app7));
 }
 
 // ── "WHY IS MY NIGHTLIFE TOWN NOT PUBLISHED IN NIGHTLIFE?" ────────
@@ -10766,8 +10897,8 @@ rmSync(dir, { recursive: true, force: true });
 // the stay-duration override, which exists precisely BECAUSE a model cannot be
 // trusted to answer it.
 {
-  const { getEventDate, stayDurationForCategory } = M;
-  const BANNED = /[–—−―]/;
+  const { getEventDate } = M;
+  const BANNED = /[\u2013\u2014\u2212\u2015]/;
 
   // A FIXED `today`, added 12 Aug. These three read the clock through
   // getEventDate's default and would have started failing on 1 Jan 2027, when
@@ -10780,93 +10911,96 @@ rmSync(dir, { recursive: true, force: true });
   is("and reads as a range in words", getEventDate("2026-06-23", "2026-06-26", IN_2026), "23 Jun to 26 Jun");
   ok("a single-day event is unaffected", !BANNED.test(getEventDate("2026-06-23", "", IN_2026)));
 
-  // Every branch, because the one that shipped was not the first one.
-  const stays = [
-    stayDurationForCategory("free", "castle"),
-    stayDurationForCategory("free", "square"),
-    stayDurationForCategory("free", "anything else"),
-  ];
-  is("no stay duration carries one either", stays.filter(s => BANNED.test(String(s))), []);
-  ok("and they still say something", stays.every(s => !s || /\d/.test(String(s))));
-
-  // ── FOOD HAS NO TIME NEEDED, 17 AUG 2026 ────────────────────────
-  // Oliver: "At food, let's get rid of the 'time needed' section.. it's stupid
-  // tbh." The figure was never researched. The writer's estimate was asked for,
-  // paid for, and overwritten by one of four constants chosen by matching a word
-  // in the category, and the foodStreet branch did not read the category at all,
-  // so every market in Denmark showed the same number.
+  // ── TIME NEEDED IS GONE ENTIRELY, 19 AUG 2026 ───────────────────
+  // Oliver: "I think we should get rid of 'time-needed'." This finishes the
+  // removal begun for food on 17 August, and the reason is the one recorded
+  // then: the number was never researched. stayDurationForCategory returned one
+  // of three hardcoded strings chosen by a regex over a category word, and
+  // publishDraft wrote its answer over whatever the writer had estimated. A deer
+  // park and a bandstand both read "30 to 45 mins".
   //
-  // Asserted at every site, because this field was written in five places and a
-  // removal that misses one leaves the prompt paying for a value nothing renders.
-  is("a restaurant gets no stay duration at all", stayDurationForCategory("food", "restaurant"), null);
-  is("nor a hot dog stand", stayDurationForCategory("food", "hot dog stand"), null);
-  is("nor a bakery", stayDurationForCategory("food", "bakery"), null);
-  is("nor a food street", stayDurationForCategory("foodStreet", ""), null);
-  // And the one that stays, because a castle really does take longer than a
-  // square and that is a fact about the place rather than about the visitor.
-  // Asserted as three DIFFERENT answers, not as three truthy ones: with the castle
-  // branch disabled every attraction still gets the generic "1 to 2 hours", so a
-  // truthiness check passes on a function that has stopped distinguishing anything.
-  const castle = stayDurationForCategory("free", "castle");
-  const square = stayDurationForCategory("free", "square");
-  const generic = stayDurationForCategory("free", "anything else");
-  ok("an attraction keeps its mapping", !!castle);
-  is("and the three answers are still three answers", new Set([castle, square, generic]).size, 3);
+  // Asserted at EVERY site, because this field was written in eight places, and a
+  // removal that misses one leaves the prompt paying for a value nothing renders
+  // or a card rendering a value nothing sets. The 17 August pass is the evidence
+  // that partial removals happen: it took the field out of two renderers and left
+  // it in five other places, which is why this block exists at all.
+  const helpers = readFileSync(join(root, "src/utils/helpers.js"), "utf8");
+  // THE HELPER IS DELETED, not merely unwired. An orphaned exported helper is
+  // the shape this project has now catalogued five times, each one harmless
+  // until the day something called it by mistake.
+  ok("stayDurationForCategory no longer exists", !/export const stayDurationForCategory/.test(helpers));
+  const app15 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  // CODE ONLY. Both files now carry comments explaining the removal, and those
+  // comments name the helper and the field. Reading raw source here is the exact
+  // comment trap this suite has been caught by twice.
+  const appCode = stripNonCode(app15);
+  ok("and nothing imports it", !/stayDurationForCategory/.test(appCode));
 
-  // The other four sites. A removal that misses one leaves the prompt paying for
-  // a value nothing renders, or the card rendering a value nothing sets.
-  const foodBase = { name: "Gasoline Grill", vibeLocation: "x", timeNeeded: "60 to 90 mins" };
-  ok("shapeForLive drops it from a restaurant", !("timeNeeded" in M.shapeForLive("food", foodBase)));
-  ok("and from a food street", !("timeNeeded" in M.shapeForLive("foodStreet", foodBase)));
-  ok("an attraction still carries it", "timeNeeded" in M.shapeForLive("free", { name: "Rundetaarn", desc: "x", timeNeeded: "2 to 3 hours" }));
-  // Sliced from the START of each JSON spec, not from the category key: a
-  // reinstated "timeNeeded" sits between {"name"} and "category", so a region
-  // beginning at the category never contained the thing being looked for and the
-  // assertion passed against a prompt that was asking for it again.
+  // shapeForLive, every type it ever wrote the field for. Testing the two food
+  // ones alone is what let it survive on attractions for two days.
+  const base = { name: "Rundetaarn", desc: "x", vibeLocation: "x", timeNeeded: "2 to 3 hours" };
+  ["food", "foodStreet", "free", "booking"].forEach(t =>
+    ok(`shapeForLive drops it from ${t}`, !("timeNeeded" in M.shapeForLive(t, base))));
+
+  // The prompts. Whole file, not a sliced region: slicing is how the earlier
+  // version of this assertion looked at a span that never contained the key.
   const prompts = readFileSync(join(root, "src/utils/studioPrompts.js"), "utf8");
-  const promptFor = (marker) => {
-    const at = prompts.indexOf(marker);
-    if (at < 0) return "";
-    const from = prompts.lastIndexOf("Respond with ONLY strict JSON", at);
-    return prompts.slice(from < 0 ? at : from, prompts.indexOf("uncertainties", at));
-  };
-  const restaurantSpec = promptFor('"category": "e.g. Bakery');
-  const marketSpec = promptFor(`"category": "e.g. 'Food market'`);
-  ok("the restaurant spec was found", /"vibeLocation"/.test(restaurantSpec));
-  ok("the market spec was found", /"vibeLocation"/.test(marketSpec));
-  ok("the restaurant prompt stops asking for it", !/timeNeeded/.test(restaurantSpec));
-  ok("and the market prompt too", !/timeNeeded/.test(marketSpec));
+  ok("no prompt asks for it any more", !/timeNeeded/.test(prompts));
+  // The positive half, so this cannot pass against an empty or renamed file.
+  ok("and the prompts are still there to check", /"accessibility"/.test(prompts) && prompts.length > 10000);
+
   // ── AND THIS ONE WAS A REGEX THAT COULD NEVER MATCH ─────────────
   // It read /const foodSpots = \[[^]]*?timeNeeded/. In JavaScript `[^]]` is not
   // "any character except ]": the parser reads `[^]` as "any character at all" and
   // then a literal `]`, so the pattern demanded a `]` immediately before
   // timeNeeded and could never fire. The assertion was green against a codegen
   // that wrote the field. Sliced by index instead, which cannot be misread.
-  const app15 = readFileSync(join(root, "src/App.jsx"), "utf8");
-  const foodCodegens = [];
-  for (let at = app15.indexOf("const foodSpots = ["); at > 0; at = app15.indexOf("const foodSpots = [", at + 1)) {
-    foodCodegens.push(app15.slice(at, app15.indexOf("blogBody: [", at)));
-  }
-  is("both food codegens were found", foodCodegens.length, 2);
-  is("and neither writes it", foodCodegens.filter(c => /timeNeeded/.test(c)), []);
-  // The card. Sliced FROM the JSX guard, deliberately: the comment above it
-  // explains the removal and contains the words "Time Needed", which is the
-  // comment trap this suite has been caught by before.
-  // And anchored on the At a Glance card itself, not on the type guard: there are
-  // TWO `kind === "food"` blocks and the first is the chips row of category and
-  // price. The first version of this assertion sliced from that one, ran forward
-  // into the event card, and reported no Time Needed row from a region that never
-  // contained the food card at all. The "is a real region" line below is what
-  // caught it, which is the only reason it is written.
+  const codegens = [];
+  ["const foodSpots = [", "const freeEntrance = [", "const craftItemsFallback = ["].forEach(marker => {
+    for (let at = app15.indexOf(marker); at > 0; at = app15.indexOf(marker, at + 1)) {
+      codegens.push(app15.slice(at, app15.indexOf("blogBody: [", at)));
+    }
+  });
+  ok("the codegens were found", codegens.length >= 4);
+  is("and none of them writes it", codegens.filter(c => /timeNeeded/.test(c)), []);
+
+  // The cards. Read across the WHOLE file rather than a sliced region: with the
+  // row gone from every type there is no region left where it may appear, which
+  // is a stronger and simpler statement than three separate slices.
   const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
-  const cardAt = dp.search(/\{kind === "food" && \(\s*<AtAGlanceCard/);
-  const foodCard = dp.slice(cardAt, dp.indexOf("]} />", cardAt));
-  ok("the food card is a real region", foodCard.length > 80 && /label: "Price"/.test(foodCard));
-  ok("and has no Time Needed row", !/Time Needed/.test(foodCard));
-  ok("nor reads the field at all", !/item\.timeNeeded/.test(foodCard));
-  // Still there for attractions, which is the row he did not ask about.
-  const freeAt = dp.indexOf('{(kind === "free" || kind === "attraction") && (');
-  ok("an attraction still shows one", /Time Needed/.test(dp.slice(freeAt, dp.indexOf("]} />", freeAt))));
+  ok("the detail page is a real file", /AtAGlanceCard/.test(dp) && dp.length > 20000);
+  // ── AND THESE ARE WRITTEN AGAINST RAW SOURCE, DELIBERATELY ─────
+  // The first version read stripNonCode(dp) to dodge the comments that explain
+  // the removal. A mutation putting the row back SURVIVED it: whatever
+  // stripNonCode does to a JSX attribute holding an array of object literals, it
+  // does not leave `item.timeNeeded` where a regex can see it. So the assertion
+  // could not fail, which is worse than not having one, because it reads as
+  // coverage on the exact thing being removed.
+  //
+  // Matched on the FULL PROPERTY instead — `label: "Time Needed"` and
+  // `value: item.timeNeeded`, not the bare words. That is precise enough to run
+  // against raw source: every comment in both files talks about "Time Needed"
+  // and none of them writes it as a property, so the comment trap is closed by
+  // being specific rather than by blanking half the file.
+  const LABEL_ROW = /label: "Time Needed"/;
+  const VALUE_ROW = /value: item\.timeNeeded/;
+  // A POSITIVE CONTROL, because that is the whole lesson here. If these regexes
+  // stop matching the thing they exist to catch, every assertion under them goes
+  // quietly green while the row is back on the card.
+  ok("the label pattern can still match the row it guards against",
+     LABEL_ROW.test('{ icon: "T", label: "Time Needed", value: item.timeNeeded },'));
+  ok("and so can the value pattern",
+     VALUE_ROW.test('{ icon: "T", label: "Time Needed", value: item.timeNeeded },'));
+  ok("no detail card reads the field", !VALUE_ROW.test(dp));
+  ok("and no card renders the label", !LABEL_ROW.test(dp));
+  ok("nor does the craft card in App", !/value: craftDetail\.timeNeeded/.test(app15));
+  ok("nor its label", !LABEL_ROW.test(app15));
+
+  // The two field lists. A field nothing renders should not be generating audit
+  // findings asking him to reword text no reader can see.
+  ok("the glance audit has let it go", !/"timeNeeded"/.test(readFileSync(join(root, "src/utils/entryAudit.js"), "utf8")));
+  ok("and a reader cannot request a correction to it",
+     !/"timeNeeded"/.test(readFileSync(join(root, "src/utils/checkScope.js"), "utf8")));
 
   // ── THE DURABLE HALF ────────────────────────────────────────────
   // Behaviour above covers the eight that were there. This covers the ninth,
@@ -11934,13 +12068,129 @@ rmSync(dir, { recursive: true, force: true });
   // URL slug is the 2022 headline word for word. It outranked oplev.esbjerg.dk,
   // the actual organiser. It qualified because any scraped non-listing page was
   // pushed, and a page reaches the scrape queue by merely MENTIONING the place.
-  ok("only a host that names the place, or Google's own registered site, is official",
-     /if \(hostNames\(url\) \|\| \(placesWebsite && domainOf\(url\) === domainOf\(placesWebsite\)\)\) \{\s*if \(!officialHosts\.includes\(domainOf\(url\)\)\) officialHosts\.push/.test(codeR));
+  ok("only a host this run judged the place's own becomes official",
+     /if \(hostNames\(url\)\) \{\s*if \(!officialHosts\.includes\(domainOf\(url\)\)\) officialHosts\.push/.test(codeR));
+  // The judgement itself moved out of this file on 19 Aug and is tested for real
+  // below rather than grepped for here. The Google-registered-URL half used to be
+  // spelled out at this call site AND inside hostNames; isOwnSiteFor owns both.
+  ok("and that judgement is the tested one, not a hostname split here",
+     /const hostNames = \(u\) => isOwnSiteFor\(u, nameWords, \{ placesWebsite \}\);/.test(codeR));
+  ok("no hostname-splitting survives in this file's official test",
+     !/hostname\.replace\(\/\^www\\\.\/, ""\)\.split\("\."\)\[0\]/.test(codeR));
   ok("so a page that merely mentions it cannot become the operator",
      !/scrapedSiteText \+= ` \$\{scanData\.text\}`;\s*if \(!officialHosts\.includes/.test(codeR));
   ok("the order goes in front of the research, not after it",
      /const rawResearch = \(orderBlock \? `\$\{orderBlock\}/.test(codeR));
   ok("and the run log records what outranked what", /note\("Source order"/.test(appR));
+
+  // ── A PUBLIC PLACE'S OWN SITE IS OFTEN ITS MUNICIPALITY'S ────────
+  // Oliver, 19 Aug 2026: "It happens multiple times that the pipeline gives up on
+  // website (because it doesn't exist), when in reality, it actually is part of the
+  // city's official website."
+  //
+  // hostNames read the FIRST LABEL OF THE HOSTNAME and nothing else, so
+  // aarhus.dk/dyrehave could not be Marselisborg Dyrehave's own page: the label is
+  // "aarhus", the name words are marselisborg and dyrehave, and no comparison can
+  // match. The website field came back blank, and rankSource then filed the
+  // municipality's own page as a BLOG — under a ticket calendar, under Wikipedia.
+  //
+  // In Denmark the kommune is the authority for parks, forests, beaches, harbours
+  // and libraries, and almost none of those will ever have a domain of their own.
+  {
+    const { isOwnSiteFor, urlNames, isKommuneHost, isTourismHost, KOMMUNE_HOSTS } = M;
+    const DEER = ["marselisborg", "dyrehave"];
+    // The case he sent.
+    ok("a kommune page naming the place is the place's own site",
+       isOwnSiteFor("https://www.aarhus.dk/dyrehave", DEER));
+    ok("and so is a deeper path", isOwnSiteFor("https://aarhus.dk/borger/natur/marselisborg-dyrehave/", DEER));
+    // A hyphen is a gap rather than a letter, which containsName's own `spaced`
+    // already handles: it turns every run of non-alphanumerics into a space, which
+    // is what lets "Reffen, Copenhagen" contain "Reffen".
+    ok("a hyphenated slug matches as words", urlNames("https://aarhus.dk/marselisborg-dyrehave", DEER));
+    ok("and an underscored one", urlNames("https://aarhus.dk/marselisborg_dyrehave", DEER));
+    // ── THE HOST IS STILL READ, NOT ONLY THE PATH ─────────────────
+    // A mutant deleting the hostname from the parts list survived, because every
+    // positive case above was a kommune path and the one venue-domain case went
+    // through the Google-registered branch. A place WITH its own domain is the
+    // ordinary case and nothing was asserting it.
+    ok("a venue's own domain is its own site", isOwnSiteFor("https://marselisborgdyrehave.dk/", DEER));
+    ok("on a subdomain too", isOwnSiteFor("https://www.dyrehave.aarhus.dk/aabningstider", DEER));
+    // ── AND THE MATCHING IS BOUNDED ───────────────────────────────
+    // `hay.includes(w)` instead of containsName survived, because no fixture
+    // discriminated. This one does: unbounded, "ribers gaard" contains "ribe".
+    // That is the exact false positive that made lookupRealPlace answer "Vejle" for
+    // Vejlebrovej, and it has now been fixed five times in this codebase.
+    ok("Ribe is not named by Ribers Gaard", !isOwnSiteFor("https://ribers-gaard.dk/", ["ribe"]));
+    ok("but it is by its own domain", isOwnSiteFor("https://ribe-vikingecenter.dk/", ["ribe"]));
+    // ── AND A DANISH DOMAIN IS A COMPOUND WITH NO GAPS ────────────
+    // marselisborgdyrehave.dk genuinely is that park's domain and no bounded test
+    // can see it: a hostname cannot hold a space, so the separators the bounded rule
+    // needs are exactly what a domain drops. Danish makes that the normal shape.
+    ok("a compound domain naming the place counts",
+       isOwnSiteFor("https://naturhistoriskmuseum.dk/", ["naturhistorisk", "museum"]));
+    // EQUALITY, not containment, is the whole safety of that second rule.
+    ok("a label that merely contains the name does not",
+       !isOwnSiteFor("https://ribersgaard.dk/", ["ribe"]));
+    ok("and neither does a tourism board spelled as one word",
+       !isOwnSiteFor("https://visitaarhusregion.dk/dyrehaven", ["aarhus"]));
+    // THE KOMMUNE FRONT PAGE NAMES NOTHING and must not qualify, or every page on
+    // aarhus.dk becomes the operator for everything in Aarhus.
+    ok("a kommune front page is not any particular place's site",
+       !isOwnSiteFor("https://aarhus.dk/", DEER));
+    ok("nor is an unrelated page on it", !isOwnSiteFor("https://aarhus.dk/affald", DEER));
+
+    // ── AND THE SAME LINE WAS WRONG THE OTHER WAY ──────────────────
+    // `host.includes(w) || w.includes(host)` was unbounded in both directions, the
+    // trap this codebase has fixed five times. "visitaarhus" contains "aarhus", so
+    // a tourism board was promoted to "the place's own website" and its text
+    // entered the string the run log calls the official site.
+    ok("a tourism board is never the operator",
+       !isOwnSiteFor("https://www.visitaarhus.com/aarhus/marselisborg-dyrehave", DEER));
+    ok("even on a .dk", !isOwnSiteFor("https://visitaarhus.dk/dyrehave", DEER));
+    ok("and that is what isTourismHost is for", isTourismHost("https://visitsonderjylland.dk/x"));
+    ok("oplev counts too", isTourismHost("https://oplev.esbjerg.dk/x"));
+    ok("an ordinary site does not", !isTourismHost("https://aarhus.dk/x"));
+    // A ticket calendar and an encyclopedia are refused for the same reason: they
+    // write about places they do not run.
+    // A URL that DOES name the place, so the listing exclusion is what refuses it
+    // rather than the name test. The first version of this fixture named nothing, so
+    // a mutant deleting isListingHost survived it.
+    ok("a ticket calendar is not the operator even when it names the place",
+       !isOwnSiteFor("https://kultunaut.dk/perl/arr/marselisborg-dyrehave", DEER));
+    ok("nor is a ticket agent", !isOwnSiteFor("https://billetto.dk/e/marselisborg-dyrehave-tur", DEER));
+    ok("nor is Wikipedia", !isOwnSiteFor("https://en.wikipedia.org/wiki/Marselisborg_Dyrehave", DEER));
+
+    // Google's registered URL is not a guess about whose site this is: it is the
+    // URL the owner put on their own listing. It wins outright, name or no name.
+    ok("Google's registered site wins whatever the path says",
+       isOwnSiteFor("https://some-venue.dk/en/visit", ["nothing", "matching"], { placesWebsite: "https://some-venue.dk" }));
+    ok("including a subdomain of it",
+       isOwnSiteFor("https://booking.some-venue.dk/x", ["nope"], { placesWebsite: "https://www.some-venue.dk/" }));
+
+    // The volunteer centre that started the ORIGINAL version of this rule must
+    // still lose: its slug is the 2022 press-release headline, not the place name.
+    ok("a page whose slug is somebody else's headline is not the operator",
+       !isOwnSiteFor("https://vindrosen-huset.dk/nyheder/stort-arrangement-i-esbjerg", DEER));
+
+    // The kommune list is derived from the kommune table rather than typed out, so
+    // Danish letters have to reach a hostname the way DNS spells them.
+    ok("the kommune hosts are derived, not a hundredth hand-typed list", KOMMUNE_HOSTS.size > 100);
+    ok("Aarhus is one", isKommuneHost("https://aarhus.dk/x"));
+    ok("and Copenhagen, whose domain no rule would produce", isKommuneHost("https://kk.dk/x"));
+    ok("a folded Danish name reaches its real domain", isKommuneHost("https://aeroe.dk/x") || isKommuneHost("https://aerokommune.dk/x"));
+    ok("anything ending in kommune.dk counts without being listed", isKommuneHost("https://halsnaes-kommune.example.kommune.dk/x"));
+    ok("and a random .dk does not", !isKommuneHost("https://tivoli.dk/x"));
+
+    // Empty and malformed input is refused rather than throwing, because this runs
+    // over whatever a search engine returned.
+    is("no name words means no answer", urlNames("https://aarhus.dk/dyrehave", []), false);
+    is("and neither does junk", urlNames("not a url", DEER), false);
+    is("nor an empty url", isOwnSiteFor("", DEER), false);
+    // The query string is deliberately not read: a search page naming the place in
+    // a parameter is a search result, not a document about it.
+    ok("a search result is not the place's own page",
+       !isOwnSiteFor("https://aarhus.dk/soeg?q=marselisborg+dyrehave", DEER));
+  }
 
   // ── AND NOTHING FOR HIM GOES INTO A SAVED GUIDE ──────────────────
   //
@@ -13839,7 +14089,7 @@ Kontakt: Havnepladsen, 4230 Skælskør.`;
   ["tag", "highlight", "crowd", "gemlyxFind"].forEach(f =>
     ok(`${f} is the entry's voice and stays with the writer`, !EXTRACTABLE_GLANCE.includes(f)));
   // And the middle tier is not empty, which a filter bug could quietly make it.
-  ["ticketInfo", "price", "timeNeeded", "accessibility", "camping", "typicalCosts"].forEach(f =>
+  ["ticketInfo", "price", "accessibility", "camping", "typicalCosts"].forEach(f =>
     ok(`${f} is a value on a page, so it is extracted`, EXTRACTABLE_GLANCE.includes(f)));
   // ── AND A THIRD KIND, MISSED ON THE FIRST PASS ──────────────────
   // A closed vocabulary filled from free text stops being closed, and nothing
@@ -18522,7 +18772,12 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     const byCar = M.returnLeg({ ordered: SKAGEN_HOME, from: AAL, days: 7, mode: "car" });
     ok("85 km home on a bicycle is not called a manageable half day",
        !/manageable half day/.test(M.describeReturn(byBike)));
-    ok("it is six hours on a bike, and says so", /6 hours on a bike/.test(M.describeReturn(byBike)));
+    // EIGHT, not six. This said six until 19 Aug, because this file had its own
+    // speed table: bike 15 km/h against a great-circle distance with no circuity
+    // factor. The one model in guideEnrichment says 14 km/h over 1.35x the straight
+    // line, which is 115 km of road for this leg — about what Aalborg to Skagen
+    // actually is by bicycle. The old answer was two and a half hours short.
+    ok("it is eight hours on a bike, and says so", /8 hours on a bike/.test(M.describeReturn(byBike)));
     ok("and that that is the last day", /full day of travelling/.test(M.describeReturn(byBike)));
     ok("the same distance by car is not the day", !/full day of travelling/.test(M.describeReturn(byCar)));
     ok("and is timed as a car", /by car/.test(M.describeReturn(byCar)));
@@ -21137,7 +21392,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
 // map is the surface a reader trusts most and "close to King's Garden" is a claim
 // about the world.
 {
-  const { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, NEAR_KM, WALK_KMH } = M;
+  const { placedLibrary, nearbyPublished, describeLocation, distanceWords, walkMinutes, NEAR_KM, WALK_KMH, SAME_VISIT_KM, SAME_VISIT_LIMIT } = M;
 
   // Real Copenhagen coordinates, so the distances below are checkable by hand.
   const AMALIENBORG = { lat: 55.6840, lon: 12.5936 };
@@ -21172,8 +21427,127 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   is("a pin is not near itself", nearbyPublished(AMALIENBORG, withSelf, { exclude: "Amalienborg" }).length, 0);
   is("nor is a row at the identical point under another name",
      nearbyPublished(AMALIENBORG, placedLibrary({ free: [{ name: "Something Else", __lat: AMALIENBORG.lat, __lon: AMALIENBORG.lon }] })).length, 0);
+  // AND THE EXCLUSION IS CASE-FOLDED. A mutant dropping the fold survived the
+  // assertion above, because that row sits at the identical point and the 20 m
+  // guard excluded it anyway — the name test was never reached. This row is 600 m
+  // away, so only the name can keep it out. A stop titled "Amalienborg" opening a
+  // page for an entry filed as "amalienborg" is a real shape in his library:
+  // Studio does not case-normalise a name.
+  const selfOffset = placedLibrary({ free: [{ name: "Amalienborg", __lat: 55.6894, __lon: 12.5936 }] });
+  ok("the row is far enough out that only the name can exclude it",
+     nearbyPublished(AMALIENBORG, selfOffset).length === 1);
+  is("and the exclusion ignores case",
+     nearbyPublished(AMALIENBORG, selfOffset, { exclude: "AMALIENBORG" }).length, 0);
+  is("in both directions",
+     nearbyPublished(AMALIENBORG, placedLibrary({ free: [{ name: "AMALIENBORG", __lat: 55.6894, __lon: 12.5936 }] }),
+       { exclude: "amalienborg" }).length, 0);
   is("nothing at all is safe", nearbyPublished(null, lib), []);
   is("and a library of nothing is too", nearbyPublished(AMALIENBORG, null), []);
+
+  // ── AND THE SIXTH COPY OF THE SOUTH JUTLAND BUG ──────────────────
+  // DetailPage.jsx had its own nearbyEntries reading `__lat` alone, so a row
+  // carrying a plain `lat` was invisible to the map on an entry's page exactly as
+  // it was invisible to partOfCountry. Same fault, different file, no test. That
+  // function is deleted and this is the one that answers now, so the read is
+  // asserted here rather than in the file that used to get it wrong.
+  const plainLat = placedLibrary({ free: [{ name: "Plain Lat Row", lat: 55.6857, lon: 12.5789, id: 9 }] });
+  is("a row carrying a plain lat/lon is placed", plainLat.length, 1);
+  ok("and is found near a pin beside it",
+     nearbyPublished(AMALIENBORG, plainLat).some(r => r.name === "Plain Lat Row"));
+  // __lat still wins where both exist, because placeCoords says so and this is
+  // the only place that decides it.
+  const both = placedLibrary({ free: [{ name: "Disagreeing Row", __lat: 55.6857, __lon: 12.5789, lat: 56.1567, lon: 10.1966 }] });
+  is("the stored coordinate wins over the model's guess", Math.round(both[0].lat * 1e4), 556857);
+
+  // ── A TOWN IS A DOT OR IT IS NOT, AND THE CALLER SAYS WHICH ──────
+  // Two callers, two right answers. The guide-map card must not print "close to
+  // Copenhagen" on a pin already in Copenhagen; the mini-map on an entry's page
+  // wants the nearby town more than anything else it can draw.
+  const withTowns = placedLibrary(POOLS, { includeTowns: true });
+  ok("towns can be asked for", withTowns.some(r => r.name === "Copenhagen"));
+  is("and asking for them adds exactly the town", withTowns.length, lib.length + 1);
+  ok("the default is still without them", !placedLibrary(POOLS).some(r => r.kind === "town"));
+
+  // ── THE NEIGHBOUR CARRIES THE REAL ENTRY ─────────────────────────
+  // DetailPage opens a neighbour by spreading it back into the detail page, so a
+  // flattened copy holding only name/lat/lon would open a page with no photo, no
+  // description and no sources. The original row travels with it.
+  ok("every placed row carries the entry it came from",
+     withTowns.every(r => r.row && r.row.name === r.name));
+  is("and the id survives the flattening", lib.find(r => r.name === "Rundetaarn").id, 2);
+
+  // ── TWO RADII, TWO QUESTIONS, AND THEY MUST NOT BE ONE NUMBER ────
+  // NEAR_KM answers "can I walk to it". SAME_VISIT_KM answers "is there anything
+  // around here at all". Collapsing them would either put a 30 km drive in a
+  // sentence that says "close to" or hide every neighbour on a map whose job is
+  // orientation.
+  ok("the same-visit radius is much wider than the walking one", SAME_VISIT_KM > NEAR_KM * 10);
+  ok("and the mini-map still caps how many dots it draws", SAME_VISIT_LIMIT >= 3 && SAME_VISIT_LIMIT <= 8);
+  // Aarhus is 155 km from Copenhagen: wide as the radius is, it is not "in the
+  // region", which is the failure the number is chosen to avoid.
+  ok("a city across the country is not the same visit",
+     !nearbyPublished(AMALIENBORG, lib, { maxKm: SAME_VISIT_KM }).some(r => r.name === "Den Gamle By"));
+  // The boundary, measured, in both directions — otherwise the radius could be
+  // wider than anything ever tested against it and nothing would say so.
+  // Dragør is 11.3 km from Amalienborg and Roskilde Domkirke is 32.5 km, so the
+  // pair straddles 30 by a few kilometres rather than by a hundred.
+  const dragor = placedLibrary({ free: [{ name: "Dragør", __lat: 55.5930, __lon: 12.6730 }] });
+  const roskilde = placedLibrary({ free: [{ name: "Roskilde Domkirke", __lat: 55.6415, __lon: 12.0803 }] });
+  is("Dragør, 11 km out, is the same visit",
+     nearbyPublished(AMALIENBORG, dragor, { maxKm: SAME_VISIT_KM }).length, 1);
+  is("Roskilde, 33 km out, is not",
+     nearbyPublished(AMALIENBORG, roskilde, { maxKm: SAME_VISIT_KM }).length, 0);
+  // And it is a radius, not a bounding box: 33 km measured, so a wider radius
+  // finds it. This is what makes the assertion above a fact about the number
+  // rather than a fact about the data.
+  is("and a wider radius does find it",
+     nearbyPublished(AMALIENBORG, roskilde, { maxKm: 40 }).length, 1);
+
+  // ── AND THE DUPLICATE IS ACTUALLY GONE ───────────────────────────
+  // Deleting the second copy is the fix. A test that only checks this file would
+  // pass with both copies live and the broken one still on the page.
+  const dp = readFileSync(join(root, "src/components/DetailPage.jsx"), "utf8");
+  const dpCode = stripNonCode(dp);
+  ok("DetailPage no longer has its own nearby function", !/nearbyEntries/.test(dpCode));
+  ok("and no longer hand-rolls a longitude degree", !/62\.06/.test(dpCode));
+  ok("it asks the tested one instead", /nearbyPublished\(/.test(dpCode) && /placedLibrary\(/.test(dpCode));
+  // THE PIN AND THE DOTS FROM ONE RESOLUTION. This is the invariant that stops a
+  // map appearing with a pin on it and a caption promising dots that are not
+  // there: both props read the same resolved point.
+  ok("the pin comes from the resolved point", /lat=\{here\?\.lat\}/.test(dpCode));
+  ok("and the dots come from the list built off it", /neighbours=\{near\}/.test(dpCode));
+  ok("which is only built when there is a point", /here \? nearbyPublished\(here,/.test(dpCode));
+  // The three options the page has to pass, asserted on the source because this
+  // screen is a React component and this suite has no DOM. Each one is a way for
+  // the map to be quietly wrong rather than broken: the wrong radius, the entry
+  // listed as its own neighbour, or the nearby town silently dropped.
+  ok("it asks at the same-visit radius", /maxKm: SAME_VISIT_KM/.test(dpCode));
+  ok("and caps the dots", /limit: SAME_VISIT_LIMIT/.test(dpCode));
+  ok("and excludes the entry from its own neighbours", /exclude: item\.name/.test(dpCode));
+  ok("and asks for the nearby town, which is the most useful dot on this map",
+     /includeTowns: true/.test(dpCode));
+  // ── TAPPING A DOT OPENS THE REAL ENTRY ───────────────────────────
+  // A mutant spreading the neighbour itself rather than `n.row` survived: the
+  // flattened object carries name/lat/lon/kind and NOTHING ELSE, so the page would
+  // open with no photo, no description, no sources and no ticket link — a blank
+  // detail page that looks like the entry was lost. The flattened copy is for
+  // drawing; `row` is the entry.
+  ok("tapping a neighbour opens the entry it came from, not the map's copy",
+     /\.\.\.n\.row,/.test(dpCode));
+  ok("and hands over the pool it came from, which is what the dispatch reads",
+     /_src: n\.kind/.test(dpCode));
+  // The town fallback must stay gated on the row being a town: townKeyFor is a
+  // longest-match, so "Ribe VikingeCenter" resolves to Ribe and an attraction
+  // would be pinned three kilometres from where it is.
+  // On the source with comments removed rather than on stripNonCode's output:
+  // stripNonCode blanks the INSIDE of every string, so `kind === "town"` comes
+  // back as `kind === "    "` and the test would fail on a correct file. Wrong
+  // instrument for a claim about a string literal.
+  const dpNoComments = dp
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  ok("the town-centre fallback only applies to towns",
+     /kind === "town" \? townPointFor/.test(dpNoComments));
 
   // ── THE NUMBERS A READER ACTS ON ────────────────────────────────
   is("under a kilometre reads in metres", distanceWords(0.42), "400 m");
@@ -22182,11 +22556,72 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("and where they are going", /Skagen/.test(said));
   ok("and how long on a bike", /on a bike/.test(said));
   // THE DURATION ITSELF, or the pace table can be replaced with a car's speed and
-  // nothing notices: 85 km is six hours of cycling, not one.
-  ok("and the hours are a bicycle's hours", /roughly 6 hours/.test(said));
-  ok("a car covers the same ground in a fraction of that",
-     /roughly 1 hour|under an hour and a half/.test(
-       describeOvernightMove(overnightMove({ from: AALBORG, to: SKAGEN, toName: "Skagen", days: 2, mode: "car" }))));
+  // nothing notices.
+  //
+  // EIGHT, not six. Until 19 Aug this file divided the great-circle km by its own
+  // MODE_KMH table at 15 km/h for a bike, with no circuity factor, while
+  // guideEnrichment's model said 14 km/h over 1.35x the straight line. Same 85 km
+  // leg, two screens, six hours against eight. There is one model now.
+  ok("and the hours are a bicycle's hours", /roughly 8 hours/.test(said));
+  const byCarSaid = describeOvernightMove(overnightMove({ from: AALBORG, to: SKAGEN, toName: "Skagen", days: 2, mode: "car" }));
+  ok("a car covers the same ground in a fraction of that", /roughly 2 hours/.test(byCarSaid));
+  // AND THE RELATIONSHIP, not only the two numbers. A literal pins today's answer;
+  // this pins the thing that must stay true whatever the speeds become, which is
+  // what would catch a car's pace being pasted into the bicycle row.
+  {
+    const { straightLineHours } = M;
+    const bikeH = straightLineHours(92, "bike"), carH = straightLineHours(92, "car");
+    const transitH = straightLineHours(92, "public transport"), walkH = straightLineHours(92, "walk");
+    ok("a bike is far slower than a car over the same ground", bikeH > carH * 3);
+    ok("walking is slower again", walkH > bikeH * 2);
+    ok("and transit sits between the car and the bike", transitH > carH && transitH < bikeH);
+    // Transit is the row with a measurement behind it: it was 55 km/h until Oliver
+    // checked one against Google — "Public transport says 19 minutes... you then
+    // check maps, and it's 27" — and 55 was already optimistic. Anything faster
+    // than 55 effective is a regression past a number he personally disproved.
+    ok("transit is not quoted faster than the pace he measured", 92 / transitH <= 55);
+    // A camper is driven and a tent is walked. Stated, because a fifth speed
+    // pretending to know the difference is what this fix removed.
+    is("a camper is timed as driving", straightLineHours(92, "camper"), carH);
+    is("and a tent as walking", straightLineHours(92, "tent"), walkH);
+    // Google's own words work too, since the Directions API returns those.
+    is("Google's mode words resolve to the same answer", straightLineHours(92, "bicycling"), bikeH);
+    // No mode is no duration, never zero: "no duration" and "no time at all" are
+    // different claims and only one is safe to print.
+    is("an unstated mode gets no duration", straightLineHours(92, null), null);
+    is("nor does a mode nobody has a pace for", straightLineHours(92, "hot air balloon"), null);
+    is("nor a distance that is not a number", straightLineHours("abc", "bike"), null);
+    // ── AND THERE IS ONE TABLE, ACROSS EVERY FILE ─────────────────
+    // claimCheck.js has carried a test headed "ONE SET OF SPEEDS, NOT TWO" for
+    // days, and it checked claimCheck.js. routeOrder.js had a second table anyway,
+    // disagreeing on every row. A gate scoped to the file a bug was found in is
+    // not a gate on the rule.
+    const owner = "src/utils/guideEnrichment.js";
+    const offenders = [];
+    for (const d of ["src/utils", "src/components", "src/pages"]) {
+      for (const f of readdirSync(join(root, d))) {
+        const rel = d + "/" + f;
+        if (!/\.(js|jsx)$/.test(f) || rel === owner) continue;
+        const code = stripNonCode(readFileSync(join(root, rel), "utf8"));
+        // A table of speeds keyed by mode, which is the shape that drifts. Not a
+        // bare 4.5 anywhere: that matches padding, opacity and a hundred honest
+        // numbers, and a gate that cries wolf gets switched off.
+        if (/\b(?:MODE_KMH|AVG_SPEED_KMH|SPEED_KMH|KMH_BY_MODE)\s*=\s*\{/.test(code)) offenders.push(rel);
+      }
+    }
+    ok(`only one file declares a speed table${offenders.length ? " — also in: " + offenders.join(", ") : ""}`,
+       offenders.length === 0);
+    ok("and it is the file with the measured history behind it",
+       /AVG_SPEED_KMH\s*=\s*\{/.test(readFileSync(join(root, owner), "utf8")));
+    // The distance formula, same rule. routeOrder carried a second haversine with
+    // the same maths and the same earth radius; DetailPage carried a flat-earth
+    // approximation. One formula, and the others delegate to it.
+    const ro = stripNonCode(readFileSync(join(root, "src/utils/routeOrder.js"), "utf8"));
+    ok("routeOrder no longer rolls its own great circle", !/Math\.asin\(Math\.sqrt/.test(ro));
+    ok("it asks the shared one", /sharedHaversineKm\(/.test(ro));
+    // And still rounds, which is its own decision and not an accident.
+    is("while keeping whole kilometres", M.haversineKm([57.048, 9.919], [57.7211, 10.5836]), 85);
+  }
   ok("and that it is the day rather than a transfer inside it", /most of a day/.test(said));
   ok("no fake precision to the minute", !/\bminutes?\b/.test(said));
 
@@ -22474,7 +22909,7 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   const SK = [{ name: "Skagen", lat: 57.7211, lon: 10.5836 }];
   const AAL = { lat: 57.048, lon: 9.919, name: "Aalborg" };
   ok("the ride home is timed as a ride",
-     /6 hours on a bike/.test(describeReturn(returnLeg({ ordered: SK, from: AAL, days: 7, mode: "bike" }))));
+     /8 hours on a bike/.test(describeReturn(returnLeg({ ordered: SK, from: AAL, days: 7, mode: "bike" }))));
   ok("and never called a manageable half day",
      !/manageable half day/.test(describeReturn(returnLeg({ ordered: SK, from: AAL, days: 7, mode: "bike" }))));
   ok("the same distance by car is not the whole day",
@@ -23616,6 +24051,915 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   }
 }
 
+// ── THE LIVE BUGS OF 19 AUG 2026 ────────────────────────────────────
+// Four things he found on the deployed site in one message. Every one of them is
+// a rule now, because every one of them was invisible from the code and obvious
+// from the screen.
+{
+  const { partOfCountry, coverageByTarget, DISCOVERY_TARGETS,
+          previewCoverage, describeCoverage, COVERAGE_THIN,
+          TILE_STYLES, tileConfig, DEFAULT_TILE_STYLE,
+          addTileLayer, styleRefused, __resetRefusedStyles, TILE_ERROR_LIMIT,
+          readRefusedMemo, writeRefusedMemo, REFUSED_TTL_MS } = M;
+
+  // ── "I DON'T HAVE ANY CONTENT IN SOUTH JUTLAND".. WHILE I CLEARLY DO ──
+  // partOfCountry read `__lat` and nothing else while regionOf in regions.js has
+  // always read `__lat ?? lat`. Two functions answering "where is this row",
+  // disagreeing about any row carrying a plain lat, and coverageByTarget asks the
+  // one that could not see it.
+  const ribe = { name: "Ribe", lat: 55.3288, lon: 8.7660 };
+  const ribeStored = { name: "Ribe", __lat: 55.3288, __lon: 8.7660 };
+  is("a plain lat/lon row is placed", partOfCountry(ribe), "Jutland");
+  is("and so is a stored one", partOfCountry(ribeStored), "Jutland");
+  // __lat WINS where both exist, because it is the frozen coordinate-checked one
+  // and `lat` may still be the model's original guess.
+  //
+  // ── AND THE PAIR IS CHOSEN SO EACH AXIS IS TESTED ALONE ───────────
+  // This was Ribe's stored coordinate against a Copenhagen guess, and a mutant
+  // flipping the LATITUDE half alone to `lat ?? __lat` survived it: Copenhagen's
+  // 55.68 N with Ribe's 8.77 E is still Jutland, so the wrong precedence returned
+  // the right answer. One read, two halves, and the case only exercised them
+  // together — the longitude carried the assertion on its own.
+  //
+  // Sønderborg stored against an Odense guess discriminates on both halves: swap
+  // either axis alone and the row leaves Jutland.
+  const sonderborg = { name: "Sønderborg", __lat: 54.9139, __lon: 9.7920, lat: 55.3959, lon: 10.3883 };
+  is("__lat and __lon beat lat and lon when they disagree", partOfCountry(sonderborg), "Jutland");
+  // The two assertions that keep the one above honest. A coarse-outline or kommune
+  // change could make either mix land in Jutland anyway, at which point the case
+  // above stops discriminating and passes for the wrong reason with nothing saying
+  // so. These fail instead.
+  is("the latitude alone decides it", partOfCountry({ __lat: 55.3959, __lon: 9.7920 }), "Funen");
+  is("and so does the longitude alone", partOfCountry({ __lat: 54.9139, __lon: 10.3883 }), "Funen");
+  is("no coordinate at all is still nowhere", partOfCountry({ name: "Somewhere" }), null);
+
+  // The count is what he actually saw, so it is asserted on the count.
+  is("a plain lat/lon row counts in its region", coverageByTarget([ribe])["south-jutland"], 1);
+  is("and a stored one counts the same", coverageByTarget([ribeStored])["south-jutland"], 1);
+  is("and so does one inside a payload wrapper",
+     coverageByTarget([{ payload: ribe }])["south-jutland"], 1);
+  // AND THE BAND STILL BITES. The fallback must not accidentally place a north
+  // Jutland row in the south: both halves of the filter read the same field.
+  is("Skagen is not South Jutland",
+     coverageByTarget([{ name: "Skagen", lat: 57.72, lon: 10.59 }])["south-jutland"], 0);
+  is("Skagen is North Jutland",
+     coverageByTarget([{ name: "Skagen", lat: 57.72, lon: 10.59 }])["north-jutland"], 1);
+  // The two instruments must agree. This is the assertion that would have caught
+  // the original bug: same row, both functions, same answer.
+  ok("every target's part test agrees with partOfCountry",
+     DISCOVERY_TARGETS.filter(t => t.part).every(t =>
+       coverageByTarget([ribe])[t.id] === (partOfCountry(ribe) === t.part && (!t.lat || t.lat(55.3288)) ? 1 : 0)));
+
+  // ── AND THE SENTENCE MUST NOT INVENT A CONTENT GAP ────────────────
+  // Telling him to go and research a region he has already covered is the worst
+  // advice this panel can give, and it is what it gave: a row with no usable
+  // coordinate is invisible to every geography filter, so "nothing published
+  // there" was a claim about the filter dressed up as a claim about the library.
+  const convo = "flying into Billund and heading down to Ribe for a few days";
+  const brief = { matched: [], convoText: convo, themes: new Set(["market"]), days: 4, wanted: null };
+  const placeable = [{ name: "Skagen", __lat: 57.72, __lon: 10.59 }];
+  const clean = previewCoverage({ ...brief, library: placeable });
+  is("an honestly empty region is a content gap", clean.verdict, COVERAGE_THIN);
+  is("and nothing is unplaceable", clean.unplaced, 0);
+  ok("so it says so", /content gap/.test(describeCoverage(clean)));
+
+  const blind = previewCoverage({ ...brief, library: [...placeable, { name: "Tønder" }, { name: "Rømø" }] });
+  is("rows with no coordinate are counted", blind.unplaced, 2);
+  ok("and the sentence stops calling it a content gap", !/content gap/.test(describeCoverage(blind)));
+  ok("and names the real problem", /no usable coordinate/.test(describeCoverage(blind)));
+  ok("and says what to do about it", /Add missing coordinates/.test(describeCoverage(blind)));
+
+  // ── THE 401 TILES ─────────────────────────────────────────────────
+  // Stadia's own style page says a key is "not strictly required for tile access".
+  // The deployed map said 401 Invalid Authentication across the whole of Denmark.
+  // The live response is the authority; the docs sentence is not.
+  // ── AND THE FIX FOR IT WAS WRONG TOO ──────────────────────────────
+  // I fixed the 401 by reading the key from VITE_STADIA_KEY. Oliver, at once:
+  // "Why VITE stadia key?? So others can use my key too..?"
+  //
+  // Yes. Vite inlines every VITE_-prefixed variable into the bundle at build
+  // time — it is a find-and-replace, not a secret store — so the key would have
+  // sat in a public JS file and in the query string of every tile request, and
+  // Stadia's own docs say not to do it: "We recommend only using API keys in
+  // cases where it is not likely to be leaked to an end user."
+  //
+  // Domain-based auth needs no key at all, so the first assertion is that there
+  // is no key anywhere in this file. A leaked credential is not the kind of thing
+  // to leave to whether somebody remembers.
+  const mapTilesSrc = readFileSync(join(root, "src/utils/mapTiles.js"), "utf8");
+  ok("no tile url carries an api_key", !/api_key/.test(tileConfig("chart").url) && !/api_key/.test(tileConfig().url));
+  ok("and nothing in the file reads a key out of the bundle",
+     !/import\.meta\.env/.test(mapTilesSrc) && !/STADIA_KEY/.test(stripNonCode(mapTilesSrc)));
+  // The chart is handed out by default now. Whether it WORKS is Stadia's answer to
+  // a real request, which nothing here can know — see the fallback assertions below.
+  is("the chart is offered rather than pre-refused", tileConfig("chart").style, "chart");
+  is("and an unknown style still lands on the basemap that works", tileConfig("nonsense").style, DEFAULT_TILE_STYLE);
+  is("and says which style it actually resolved", tileConfig("chart").className.includes("chart"), true);
+
+  // ── THE REFUSAL IS LEARNED FROM THE SERVER, NOT FROM CONFIG ───────
+  // Two wrong answers in two days came from deciding this at build time: a docs
+  // sentence, then an env var. A domain either is registered with Stadia or it is
+  // not, and Vercel previews get a random *.vercel.app hostname nobody will ever
+  // register — so a build-time flag is wrong on every preview while being right in
+  // production. The tile response is the only thing that knows.
+  {
+    __resetRefusedStyles();
+    // A fake L, because the real path needs a 401 from an unregistered domain.
+    const made = [];
+    const removed = [];
+    const fakeL = { tileLayer: (url, opts) => {
+      const layer = { url, opts, handlers: {},
+        addTo() { made.push(this); return this; },
+        on(ev, fn) { this.handlers[ev] = fn; return this; } };
+      return layer;
+    } };
+    const fakeMap = { removeLayer: (l) => removed.push(l) };
+    const layer = addTileLayer(fakeL, fakeMap, "chart");
+    is("the chart layer goes on the map", made.length, 1);
+    ok("with the chart url", /stamen_watercolor/.test(made[0].url));
+    // ── ABSOLUTE NUMBERS, NOT TILE_ERROR_LIMIT - 1 ─────────────────
+    // The first version of this drove the handler TILE_ERROR_LIMIT - 1 times, and
+    // mutations setting the limit to 1 and to 400 both survived it: a test written
+    // relative to a constant moves with the constant and cannot catch it being
+    // wrong. This suite has that trap written down from 13 Aug and I walked into it
+    // again. So the range is asserted in absolute terms with the reason attached,
+    // and the handler is driven with literals.
+    ok("one stray tile error is not enough to drop a basemap", TILE_ERROR_LIMIT >= 2);
+    ok("and the limit still fires inside one viewport, which holds about a dozen tiles",
+       TILE_ERROR_LIMIT <= 8);
+    // Two errors: a hole, not a refusal. Nothing moves.
+    layer.handlers.tileerror();
+    layer.handlers.tileerror();
+    is("a couple of missing tiles change nothing", made.length, 1);
+    ok("and the style is not refused yet", !styleRefused("chart"));
+    // The third: every tile in the viewport is failing, so it is the domain.
+    layer.handlers.tileerror();
+    ok("a refused style is recorded", styleRefused("chart"));
+    is("the failing layer is taken off the map", removed.length, 1);
+    is("and the basemap that works replaces it", made.length, 2);
+    ok("which is the OpenStreetMap one", /openstreetmap/i.test(made[1].url));
+    ok("carrying the dark inversion class", made[1].opts.className.includes(DEFAULT_TILE_STYLE));
+    // AND EVERY MAP OPENED AFTERWARDS ALREADY KNOWS. The answer is about the
+    // domain, so a second map must not repeat the 401s.
+    is("a later map does not ask again", tileConfig("chart").style, DEFAULT_TILE_STYLE);
+    const second = addTileLayer(fakeL, fakeMap, "chart");
+    ok("it goes straight to the working basemap", /openstreetmap/i.test(made[2].url));
+    // A layer already on the fallback gets no handler, because removing it would
+    // leave a map with no tiles at all.
+    //
+    // typeof, NOT the value. `is` compares with JSON.stringify, and
+    // JSON.stringify(aFunction) and JSON.stringify(undefined) are BOTH the JS
+    // value undefined — so `is(..., second.handlers.tileerror, undefined)` passed
+    // whether or not a handler was attached, and the mutation removing the guard
+    // survived it. An assertion that cannot fail is worse than no assertion,
+    // because it reads as coverage.
+    is("and gets no fallback handler of its own", typeof second.handlers.tileerror, "undefined");
+    ok("while the chart layer did get one", typeof layer.handlers.tileerror === "function");
+    __resetRefusedStyles();
+    ok("the chart is offered again once the refusal is cleared", !styleRefused("chart"));
+
+    // ── AND THE MEMO, WHICH HAD NO TEST AT ALL ─────────────────────
+    // Learning from the server costs three refused tiles, which render for a
+    // moment before the swap. Once a session is tolerable; once a page load, on a
+    // guide somebody paid for, is not. So the answer is remembered — and the
+    // remembering was written with localStorage captured at module load, which
+    // under plain Node is dead code no assertion could reach. A mutation deleting
+    // the whole expiry survived, which is how that was found.
+    //
+    // globalThis is read at CALL time now, so a fake store makes the path real.
+    const cells = {};
+    const fake = {
+      getItem: (k) => (k in cells ? cells[k] : null),
+      setItem: (k, v) => { cells[k] = String(v); },
+      removeItem: (k) => { delete cells[k]; },
+    };
+    const hadStore = "localStorage" in globalThis;
+    const prevStore = globalThis.localStorage;
+    globalThis.localStorage = fake;
+    try {
+      // A refusal is written down.
+      __resetRefusedStyles();
+      const l3 = addTileLayer(fakeL, fakeMap, "chart");
+      l3.handlers.tileerror(); l3.handlers.tileerror(); l3.handlers.tileerror();
+      ok("a refusal is written to storage", !!cells.gemlyx_tiles_refused);
+      ok("naming the style that failed", /chart/.test(cells.gemlyx_tiles_refused));
+      // And read back, so a reload does not repeat the 401s.
+      __resetRefusedStyles();
+      cells.gemlyx_tiles_refused = JSON.stringify({ chart: Date.now() });
+      readRefusedMemo();
+      ok("a fresh memo is believed on the next load", styleRefused("chart"));
+      // ── THE EXPIRY IS THE WHOLE POINT ────────────────────────────
+      // Without it the first browser to see a 401 keeps the plain basemap forever,
+      // including after the domain is registered and the chart starts working —
+      // the same failure shape as deciding at build time, just slower to notice.
+      // The stamp is absolute, so this is a real elapsed-time test rather than one
+      // written relative to REFUSED_TTL_MS.
+      __resetRefusedStyles();
+      cells.gemlyx_tiles_refused = JSON.stringify({ chart: Date.now() - (25 * 60 * 60 * 1000) });
+      readRefusedMemo();
+      ok("a memo from yesterday is not", !styleRefused("chart"));
+      ok("so the chart gets another chance once the domain is registered",
+         tileConfig("chart").style === "chart");
+      // A day, in absolute terms: long enough that a broken domain flashes at most
+      // once a day, short enough that a fix is picked up within a day.
+      ok("the memo expires within a day", REFUSED_TTL_MS <= 24 * 60 * 60 * 1000);
+      ok("and is not so short that it flashes every page load", REFUSED_TTL_MS >= 60 * 60 * 1000);
+      // Junk in storage must not take the maps down with it.
+      __resetRefusedStyles();
+      cells.gemlyx_tiles_refused = "{not json";
+      readRefusedMemo();
+      ok("junk in storage is ignored rather than thrown", !styleRefused("chart"));
+      __resetRefusedStyles();
+      cells.gemlyx_tiles_refused = JSON.stringify({ chart: "yesterday" });
+      readRefusedMemo();
+      ok("and so is a stamp that is not a number", !styleRefused("chart"));
+      // ── A STAMP IN THE FUTURE NEVER EXPIRES ──────────────────────
+      // Found by mutation: removing the isFinite guard changed nothing, because
+      // NaN already fails the comparison. An equivalent mutant means the guard is
+      // not guarding what it looks like — and the real hole was the other
+      // direction. A negative age is always under the TTL, so one stamp from a
+      // clock that has since been set back would turn the chart off indefinitely.
+      __resetRefusedStyles();
+      cells.gemlyx_tiles_refused = JSON.stringify({ chart: Date.now() + (365 * 24 * 60 * 60 * 1000) });
+      readRefusedMemo();
+      ok("a stamp from the future is refused rather than trusted forever", !styleRefused("chart"));
+      // A storage that throws on every call is the privacy-mode case. It must
+      // degrade to learning once a session, not fail the map.
+      __resetRefusedStyles();
+      globalThis.localStorage = { getItem() { throw new Error("blocked"); },
+                                 setItem() { throw new Error("blocked"); },
+                                 removeItem() { throw new Error("blocked"); } };
+      readRefusedMemo();
+      writeRefusedMemo();
+      ok("a blocked storage does not throw", true);
+      const l4 = addTileLayer(fakeL, fakeMap, "chart");
+      l4.handlers.tileerror(); l4.handlers.tileerror(); l4.handlers.tileerror();
+      ok("and the in-session fallback still works without storage", styleRefused("chart"));
+    } finally {
+      __resetRefusedStyles();
+      if (hadStore) globalThis.localStorage = prevStore; else delete globalThis.localStorage;
+    }
+    ok("the chart is offered again with storage restored", !styleRefused("chart"));
+  }
+  // Every component goes through it, or the recovery only exists on the maps that
+  // remembered to ask for it.
+  for (const f of ["PlaceMiniMap.jsx", "GuideRouteMap.jsx", "LeafletMap.jsx"]) {
+    const src = stripNonCode(readFileSync(join(root, "src/components/" + f), "utf8"));
+    ok(`${f} adds its tiles through the one wiring`, /addTileLayer\(L, map/.test(src));
+    ok(`${f} does not build its own tile layer`, !/L\.tileLayer\(/.test(src));
+  }
+  // The painted style must never inherit the dark inversion, whichever way it
+  // resolves. This is the one that makes Watercolor look broken rather than absent.
+  is("the chart carries no filter", TILE_STYLES.chart.filter, "");
+  ok("the dark style still carries its inversion", /invert\(1\)/.test(TILE_STYLES.dark.filter));
+  is("Watercolor stops at the zoom its tileset actually reaches", TILE_STYLES.chart.maxZoom, 16);
+  ok("and credits all three parties Stadia require",
+     ["Stadia Maps", "Stamen Design", "OpenStreetMap"].every(n => TILE_STYLES.chart.attribution.includes(n)));
+
+  // ── AND NO READER-FACING SCREEN NAMES A COMPETITOR ────────────────
+  // A leg chip read "No direct route, check Rome2Rio", in gold, on the guide he
+  // just paid for. Two failures in six words: it sent the reader to a booking
+  // aggregator, and it stated something nobody checked — App.jsx's own prompt
+  // rules say a missing Google itinerary means UNCONFIRMED and NOT "no route
+  // exists", because Danish rural buses and island ferries are often absent from
+  // the transit feed. It fired on Helsingør to Hillerød, a scheduled train.
+  const gp = readFileSync(join(root, "src/pages/GuidePage.jsx"), "utf8");
+  const gpCode = stripNonCode(gp);
+  ok("the guide page no longer links Rome2Rio", !/rome2rio/i.test(gpCode));
+  ok("and no longer claims a route does not exist", !/No direct route/i.test(gp.replace(/\/\/[^\n]*/g, "")));
+  ok("it points at the national journey planner instead", /OPERATORS\.rejseplanen\.url/.test(gpCode));
+
+  // ── THE REVIEW HAS TO REPORT WHAT IT CUT ──────────────────────────
+  // "For some reason there are far more things in the actual guide, than in the
+  // review." MAX_PER_SECTION is 6 and items was sliced to it silently, so a
+  // section holding eleven matching rows showed six and said nothing — on the
+  // screen he approves the guide from.
+  const prev = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  const prevCode = stripNonCode(prev);
+  // ── AND NO CONTENT TYPE CAN VANISH FROM THE REVIEW ────────────────
+  // The cap was one half of "far more things in the guide than in the review".
+  // The other half would be worse and is not visible from any screen: a row whose
+  // _src has no section renders NOWHERE, at any count, while the guide is written
+  // from the whole conversation and uses it. The review would not be
+  // under-reporting, it would be omitting.
+  //
+  // Nothing is wrong today — town, free, food, nightlife each have a section,
+  // craft is grouped onto free, and event is drawn by the event path — but that is
+  // exactly the state a seventh type breaks silently. This codebase has already
+  // paid for it once: "adding a content type already means registering it at
+  // about a dozen sites, and a thirteenth that fails silently is exactly how
+  // booking ended up missing from the type picker."
+  {
+    const { groupKeyOf } = M;
+    // Every _src literal anywhere in src/, from the source rather than a list kept
+    // here — a list here would be the thirteenth site.
+    const srcFiles = [
+      ...readdirSync(join(root, "src/utils")).map(f => "src/utils/" + f),
+      ...readdirSync(join(root, "src/components")).map(f => "src/components/" + f),
+      ...readdirSync(join(root, "src/pages")).map(f => "src/pages/" + f),
+      "src/App.jsx",
+    ].filter(f => /\.(js|jsx)$/.test(f));
+    const types = new Set();
+    for (const rel of srcFiles) {
+      // NOT stripNonCode: it blanks the inside of every string, so the literal
+      // this is looking for would come back as `_src: "    "`. Comments are
+      // stripped by line, which is all that is needed. Both patterns are read:
+      // the write (`_src: "food"`) and the read (`_src === "food"`).
+      const raw = readFileSync(join(root, rel), "utf8")
+        .split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      for (const m of raw.matchAll(/_src:\s*"([a-z]+)"/g)) types.add(m[1]);
+      for (const m of raw.matchAll(/_src\s*===\s*"([a-z]+)"/g)) types.add(m[1]);
+    }
+    ok("there are content types to check", types.size >= 5);
+    // The sections the review actually renders, read out of CATEGORY_SECTIONS.
+    const sectionBlock = prev.slice(prev.indexOf("const CATEGORY_SECTIONS"), prev.indexOf("const groupKey"));
+    const sectionSrcs = new Set([...sectionBlock.matchAll(/\{\s*src:\s*"([a-z]+)"/g)].map(m => m[1]));
+    ok("and sections to check them against", sectionSrcs.size >= 4);
+    // "event" is drawn by eventPlan rather than by a category section, which is a
+    // real design decision and is named here rather than left as a hole in the
+    // gate. Anything else must have a section.
+    const DRAWN_ELSEWHERE = new Set(["event"]);
+    const orphans = [...types].filter(t => !DRAWN_ELSEWHERE.has(t) && !sectionSrcs.has(groupKeyOf({ _src: t })));
+    ok(`every content type reaches the review${orphans.length ? " — orphaned: " + orphans.join(", ") : ""}`,
+       orphans.length === 0);
+    // And the event path is really there, so DRAWN_ELSEWHERE is an exemption
+    // rather than an excuse.
+    ok("and the events the exemption points at are actually drawn", /eventPlan\.rows/.test(prevCode));
+  }
+
+  ok("the preview keeps the real count", /itemsTotal:/.test(prevCode));
+  ok("and shows it when the cap cut something", /cat\.itemsTotal > cat\.items\.length/.test(prevCode));
+
+  // ── AND THE COUNT HAS TO BE THE COUNT ─────────────────────────────
+  // `/itemsTotal:/` tests that the word is present, which is not the same claim.
+  // A mutant setting `itemsTotal: 0` passed both assertions above and put the bug
+  // straight back: 0 > 6 is false, so the sentence never renders and the cap is
+  // silent again — with two green tests over it.
+  //
+  // The invariant is that the total is the length of THE ARRAY THE SHOWN ITEMS
+  // WERE CUT FROM. That is what makes "showing 6 of 11" a fact rather than
+  // decoration, and it is a shape in the source rather than a spelling, so it is
+  // asserted on the tree. This screen cannot be rendered here — it is a React
+  // component and this suite has no DOM — so the tree is the honest instrument.
+  {
+    let parseP = null;
+    try { parseP = (await import("@babel/parser")).parse; }
+    catch (e) { ok(`the cap gate can load its parser — ${String(e && e.message).slice(0, 80)}`, false); }
+    if (parseP) {
+      let past = null;
+      try { past = parseP(prev, { sourceType: "module", plugins: ["jsx"], errorRecovery: true }); }
+      catch (e) { ok(`the cap gate can parse GuidePreviewScreen.jsx — ${String(e && e.message).slice(0, 80)}`, false); }
+      // Every object literal carrying both keys, and what each key is built from.
+      const pairs = [];
+      const seenN = new Set();
+      const walkP = (node) => {
+        if (!node || typeof node !== "object" || seenN.has(node)) return;
+        seenN.add(node);
+        if (node.type === "ObjectExpression") {
+          const prop = (k) => node.properties.find(pr =>
+            pr.type === "ObjectProperty" && pr.key?.type === "Identifier" && pr.key.name === k);
+          const items = prop("items"), total = prop("itemsTotal");
+          if (items && total) {
+            // `items: X.slice(0, MAX_PER_SECTION)` → the base is X.
+            const iv = items.value;
+            const slicedFrom = iv?.type === "CallExpression"
+              && iv.callee?.type === "MemberExpression"
+              && iv.callee.property?.name === "slice"
+              && iv.callee.object?.type === "Identifier" ? iv.callee.object.name : null;
+            // `itemsTotal: X.length` → the base is X.
+            const tv = total.value;
+            const countedFrom = tv?.type === "MemberExpression"
+              && tv.property?.type === "Identifier" && tv.property.name === "length"
+              && tv.object?.type === "Identifier" ? tv.object.name : null;
+            pairs.push({ slicedFrom, countedFrom });
+          }
+        }
+        for (const k of Object.keys(node)) {
+          const v = node[k];
+          if (Array.isArray(v)) v.forEach(walkP);
+          else if (v && typeof v === "object" && typeof v.type === "string") walkP(v);
+        }
+      };
+      if (past) walkP(past.program);
+      is("the section object carries both the shown items and the total", pairs.length, 1);
+      // Not "is it a number" — WHICH array it counts. `mine.length` would be wrong
+      // too: it counts rows the traveller never asked for, so the sentence would
+      // promise more than the guide can use.
+      ok("the total counts the array the shown items were sliced from",
+         pairs.length === 1 && !!pairs[0].slicedFrom && pairs[0].slicedFrom === pairs[0].countedFrom);
+      // And the slice is what caps it, so total >= shown holds by construction
+      // rather than by hoping the two happen to agree.
+      ok("and the cap is the slice on that same array",
+         /matching\.slice\(0, MAX_PER_SECTION\)/.test(prevCode));
+    }
+  }
+
+  // ── AND THE PROGRESS BAR STOPS SOUNDING UNSURE ────────────────────
+  // "Too academic, and too much acting like we don't know." Every other stage in
+  // the build already names the work: gathering, researching, verifying, polishing,
+  // checking the forecast. Only the two fact-check labels named the doubt.
+  const appSrc2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const stages = [...appSrc2.matchAll(/buildStage\("([^"]+)"/g)].map(m => m[1]);
+  ok("there are build stages to check", stages.length >= 10);
+  ok("no stage shown to a traveller says fact-check",
+     stages.every(s => !/fact.?check/i.test(s)));
+  const howWeKnow = readFileSync(join(root, "src/components/HowWeKnow.jsx"), "utf8");
+  // stripNonCode, not a hand-rolled JSX-comment regex. The first version stripped
+  // {/* */} blocks only and then failed on a plain // comment near the top of the
+  // file that has said "fact-checked" since the file was written — a comment
+  // explaining the standing rule, which is not a string any reader ever sees.
+  // stripNonCode removes comments AND string contents, so it is the wrong tool for
+  // finding a string; the right test is on the JSX TEXT, which is what is left once
+  // comments go.
+  const hwkNoComments = howWeKnow
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .split("\n").filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+  ok("and neither does the panel under an entry", !/fact.?check/i.test(hwkNoComments));
+  // ── THE HONESTY, IN BOTH BRANCHES, NOT EITHER ─────────────────────
+  // This was two file-wide regexes, and a mutant that deleted the admission from
+  // the sourceCount > 1 branch — the branch nearly every reader gets — survived
+  // both: the single-source branch still carried the words, so the file still
+  // matched. A test on the file cannot tell which paragraph a reader sees.
+  //
+  // So the ternary is split and each branch is asserted on its own. The count is
+  // asserted too, because a third branch added later would otherwise be unchecked
+  // by a loop that never visits it.
+  const hwkBranches = (() => {
+    const from = hwkNoComments.indexOf("{sourceCount > 1 ? (");
+    if (from < 0) return [];
+    const to = hwkNoComments.indexOf("</div>", from);
+    return hwkNoComments.slice(from, to < 0 ? undefined : to)
+      .split(/\)\s*:\s*\(/)
+      .map(b => b.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+  })();
+  is("the panel's paragraph still has two branches", hwkBranches.length, 2);
+  hwkBranches.forEach((b, i) => {
+    ok(`branch ${i + 1} says we have not been anywhere in person`,
+       /not been anywhere in person/i.test(b));
+    ok(`branch ${i + 1} says what it could not stand up`,
+       /could not stand up/i.test(b));
+    ok(`branch ${i + 1} does not say fact-check`, !/fact.?check/i.test(b));
+    // Both branches carry a reader-facing sentence rather than one having been
+    // emptied: a branch reduced to nothing would pass every negative assertion.
+    ok(`branch ${i + 1} is a real paragraph`, b.length > 120);
+  });
+
+  // ── THE REFERENCE FRAME, WHICH IS THE WORST PLACE FOR THIS BUG ─────
+  // TOWN_COORDS is not one pin. coordCheck.js says it in its own words: a town's
+  // coordinate is the frame every other entry in that town is measured against,
+  // so one wrong town coordinate moves the reference point for every unplaced
+  // stop in that town, silently, on every page load.
+  //
+  // liveContent.js wrote into it from `item.__lat` alone — the South Jutland
+  // fault, in the most load-bearing place in the coordinate system. A town row
+  // carrying a plain `lat` never entered the table, so its whole town had no
+  // frame and every unplaced stop in it fell through to no pin at all.
+  {
+    const { townFrame } = M;
+    const RIBE = { lat: 55.3288, lon: 8.7660 };
+    // Both keys, one answer. This is the assertion the original write could not
+    // have passed.
+    is("a town published with __lat gets a frame",
+       Math.round(townFrame({ name: "Ribe", __lat: RIBE.lat, __lon: RIBE.lon }).lat * 1e4), 553288);
+    is("and one published with a plain lat gets the same frame",
+       Math.round(townFrame({ name: "Ribe", lat: RIBE.lat, lon: RIBE.lon }).lat * 1e4), 553288);
+    is("the stored coordinate still wins where both exist",
+       Math.round(townFrame({ name: "Ribe", __lat: RIBE.lat, __lon: RIBE.lon, lat: 57.72, lon: 10.59 }).lat * 1e4), 553288);
+    // ── AND IT IS RANGE-CHECKED, WHICH NOTHING HERE DID ─────────────
+    // publishDraft has blocked a bad coordinate on a fresh publish since 11 Aug,
+    // but every row published before that gate is still trusted, and this is
+    // where a pre-gate row does the most damage. A swapped lat/lon pair is the
+    // shape that survives a glance.
+    is("a coordinate outside Denmark is refused as a frame",
+       townFrame({ name: "Somewhere", __lat: 48.8584, __lon: 2.2945 }), null);
+    is("and so is a swapped lat/lon pair, which reads as plausible",
+       townFrame({ name: "Ribe", __lat: RIBE.lon, __lon: RIBE.lat }), null);
+    is("no coordinate at all is refused rather than becoming (0, 0)",
+       townFrame({ name: "Nowhere" }), null);
+    // Number.isFinite, not truthiness: Number(null) is 0, 0 is finite, and (0, 0)
+    // is in the Gulf of Guinea. Both guards are asserted, because either one alone
+    // lets a different shape through.
+    is("a null coordinate does not become the Gulf of Guinea",
+       townFrame({ name: "Nowhere", __lat: null, __lon: null }), null);
+    // COERCED, because the values in this table are read with Number.isFinite
+    // elsewhere and Number.isFinite("55.68") is false. A string arriving here
+    // would poison the frame in a way that looks like a missing coordinate.
+    const fromStrings = townFrame({ name: "Ribe", __lat: "55.3288", __lon: "8.7660" });
+    ok("a string coordinate is coerced rather than stored as text",
+       !!fromStrings && typeof fromStrings.lat === "number" && Number.isFinite(fromStrings.lat));
+    // And both write sites go through it. Testing the gate proves nothing if the
+    // loader still writes past it, and the loader is what runs on every page load.
+    const lc = readFileSync(join(root, "src/utils/liveContent.js"), "utf8");
+    const lcCode = stripNonCode(lc);
+    is("every write to the town table goes through the gate",
+       (lcCode.match(/TOWN_COORDS\[item\.name\] = /g) || []).length,
+       (lcCode.match(/const frame = townFrame\(item\);/g) || []).length);
+    ok("there are writes to check", /TOWN_COORDS\[item\.name\] = /.test(lcCode));
+    ok("and none of them reads __lat directly any more",
+       !/TOWN_COORDS\[item\.name\] = \[item\.__lat/.test(lcCode));
+    ok("a refused row is warned about rather than dropped in silence",
+       /outside Denmark and were refused/.test(lc));
+  }
+}
+
+
+// ── DRAFTS THAT SURVIVE CLOSING THE TAB ────────────────────────────
+// Oliver, 19 Aug 2026: "I'd actually like if we could make it possible for my
+// drafts not to disappear when I close the site. It's wasted money when my page
+// just resets."
+//
+// The money is the point, so the assertions below are mostly about what must
+// NOT be quietly lost or quietly gained on the way through storage.
+{
+  const S = M;
+  const NOW = 1_760_000_000_000;
+
+  const geo = { lat: 56.1234, lon: 10.2, station: "Kongevejen/Oddervej", stopKind: "bus" };
+  const full = {
+    name: "Marselisborg Dyrehave", type: "free",
+    draft: { name: "Marselisborg Dyrehave", town: "Aarhus", lat: 56.1234, lon: 10.2 },
+    code: "// run log",
+    frozenGeo: geo,
+    identityWarning: "Two places share this name in Aarhus.",
+    inventedWarning: "The correction pass rewrote the ticket line.",
+    opened: false,
+  };
+
+  // ── THE ONE THAT MATTERS MOST ──────────────────────────────────
+  // A draft is flagged for a reason. If a warning is dropped in transit, what
+  // comes back is a flagged draft wearing a clean face, and he has no reason to
+  // look at it twice. Asserted through a REAL round trip (pack, stringify,
+  // parse, read) rather than on packResult alone, because JSON.stringify is
+  // where a value can vanish without anybody writing a line that drops it.
+  {
+    const { store } = S.packStore({ results: [full], queue: [], editor: null }, NOW);
+    const back = S.readStore(JSON.stringify(store), NOW + 1000);
+    is("a round trip keeps the identity warning",
+       back.store.results[0].identityWarning, full.identityWarning);
+    is("a round trip keeps the invented warning",
+       back.store.results[0].inventedWarning, full.inventedWarning);
+    // publishDraft force-overrides the published coordinates and station with
+    // this. Lose it and the row publishes against today's live lookup, which is
+    // a different place from the one that was drafted and reviewed.
+    is("a round trip keeps the frozen geo publishDraft overrides with",
+       back.store.results[0].frozenGeo, geo);
+    is("and the draft itself", back.store.results[0].draft, full.draft);
+  }
+
+  // Each field asserted on its own. A single "the whole object survives" check
+  // passes while any one of them is being defaulted back in by the reader, which
+  // is the same trap as asserting a findings list by `kind` instead of through
+  // the blocking list.
+  {
+    const noWarn = S.packResult({ ...full, identityWarning: undefined, inventedWarning: undefined });
+    is("an absent warning stores as null, not as a missing key", noWarn.identityWarning, null);
+    ok("the key is present either way", "inventedWarning" in noWarn);
+  }
+
+  // ── AND NOTHING GAINED EITHER ──────────────────────────────────
+  // editingId turns publishDraft from an INSERT into a PATCH of one published
+  // row. Restored across a session it points at a row that may have been edited
+  // elsewhere, deleted, or renumbered, and the failure is a silent overwrite of
+  // live content. Asserted on the SERIALISED TEXT, not on the pack function: a
+  // spread three levels down passes a check of declared fields and still lands
+  // in the string.
+  {
+    const { store } = S.packStore({
+      results: [{ ...full, editingId: 412, access_token: "eyJhbGciOi", password: "hunter2" }],
+      queue: [{ name: "Ribe", type: "town", editingId: 9 }],
+      editor: { ...full, editingId: 77, text: "{}", access_token: "eyJ" },
+    }, NOW);
+    const body = JSON.stringify(store);
+    S.FORBIDDEN_KEYS.forEach(k => {
+      ok(`${k} is never written to storage`, !body.includes(`"${k}"`));
+    });
+    // The positive half. Testing only the forbidden list would pass on a store
+    // that wrote nothing at all, and a store that writes nothing is the bug.
+    // draft and frozenGeo are opaque payloads: their inner keys are content, not
+    // envelope, and the envelope is what this is checking.
+    const allowed = new Set([...S.storedKeys(), ...Object.keys(full.draft), ...Object.keys(geo)]);
+    const seen = [...body.matchAll(/"([A-Za-z_]+)":/g)].map(m => m[1]);
+    const strays = [...new Set(seen)].filter(k => !allowed.has(k));
+    is("no key outside the declared list reaches storage", strays, []);
+    ok("and there is something in there to check", seen.length > 10);
+  }
+
+  // ── EXPIRY ─────────────────────────────────────────────────────
+  // A draft is a snapshot of hours, prices and dates on the day it was
+  // researched. Restoring a month-old one silently is this product's own promise
+  // broken by the storage layer.
+  {
+    const { store } = S.packStore({ results: [full], queue: [], editor: null }, NOW);
+    const raw = JSON.stringify(store);
+    // ABSOLUTE, not TTL-relative. Driving a boundary with the constant itself
+    // lets a mutant setting the constant to anything at all survive: written
+    // down on 13 Aug, walked into again on 19 Aug with TILE_ERROR_LIMIT.
+    is("a draft from thirteen days ago is restored",
+       S.readStore(raw, NOW + 13 * 86400000).problem, null);
+    is("a draft from fifteen days ago is refused",
+       S.readStore(raw, NOW + 15 * 86400000).problem, S.STORE_PROBLEMS.EXPIRED);
+    is("and a draft from three months ago",
+       S.readStore(raw, NOW + 90 * 86400000).problem, S.STORE_PROBLEMS.EXPIRED);
+    // Range assertion with the reason attached: two weeks is short enough that
+    // prices and opening hours are still plausibly current, long enough to cover
+    // a holiday. A one-day TTL would throw away work he means to keep.
+    ok("the window is between a week and a month",
+       S.DRAFT_TTL_MS >= 7 * 86400000 && S.DRAFT_TTL_MS <= 31 * 86400000);
+    // A stamp in the FUTURE is a clock that moved, not a fresh draft. Without
+    // this it never expires at all, which is the hole found behind the dead
+    // Number.isFinite guard on 19 Aug.
+    is("a stamp in the future is refused rather than treated as fresh",
+       S.readStore(raw, NOW - 86400000).problem, S.STORE_PROBLEMS.EXPIRED);
+  }
+
+  // ── REFUSALS ARE NAMED, NEVER A BARE NULL ──────────────────────
+  // "nothing was saved" and "your work was dropped and here is why" need
+  // different words on screen. A null cannot tell them apart.
+  {
+    is("nothing stored", S.readStore("", NOW).problem, S.STORE_PROBLEMS.EMPTY);
+    is("corrupt text", S.readStore("{not json", NOW).problem, S.STORE_PROBLEMS.UNREADABLE);
+    is("an array is not a store", S.readStore("[1,2]", NOW).problem, S.STORE_PROBLEMS.UNREADABLE);
+    is("an older shape", S.readStore(JSON.stringify({ v: 0, at: NOW, results: [] }), NOW).problem,
+       S.STORE_PROBLEMS.WRONG_VERSION);
+    // ── THE VERSION NUMBER IS PINNED, NOT JUST COMPARED ───────────
+    // Every other assertion here round-trips through packStore and readStore,
+    // which both read STORE_VERSION, so bumping the constant is invisible to all
+    // of them. A mutation changing 1 to 2 survived the whole suite. It is not a
+    // harmless change: the reader refuses anything whose version does not match,
+    // so a bump silently throws away every draft already saved in his browser —
+    // which is the exact loss this module exists to prevent, arriving through the
+    // fix instead of through the bug.
+    //
+    // So the ON-DISK number is written out as a literal. Changing it now fails
+    // here, and the failure is the reminder that it discards saved work.
+    const onDisk = `{"v":1,"at":${NOW},"queue":[],"results":[${JSON.stringify(S.packResult(full))}],"editor":null}`;
+    is("a store written as version 1 is still readable", S.readStore(onDisk, NOW + 1000).problem, null);
+    is("and its draft comes back", S.readStore(onDisk, NOW + 1000).store.results[0].name, full.name);
+    is("a missing stamp", S.readStore(JSON.stringify({ v: S.STORE_VERSION, results: [] }), NOW).problem,
+       S.STORE_PROBLEMS.UNREADABLE);
+    // Every problem has words. A named problem nothing can say out loud is the
+    // same as a silent one.
+    Object.values(S.STORE_PROBLEMS).filter(p => p !== S.STORE_PROBLEMS.EMPTY).forEach(p => {
+      ok(`${p} has a sentence for the panel`, typeof S.problemNote(p) === "string" && S.problemNote(p).length > 20);
+    });
+    is("and 'nothing saved' says nothing, because it is normal", S.problemNote(S.STORE_PROBLEMS.EMPTY), null);
+  }
+
+  // ── WHAT IS WORTH STORING ──────────────────────────────────────
+  {
+    is("a queue item that failed has no draft and is not stored",
+       S.packResult({ name: "Broken", type: "town", draft: null }), null);
+    is("nor one with no name", S.packResult({ name: "  ", type: "town", draft: {} }), null);
+    is("nor one with no type", S.packResult({ name: "Ribe", type: "", draft: {} }), null);
+    is("a bare name in the queue costs nothing and is kept",
+       S.packQueueItem({ name: " Ribe ", type: "town" }), { name: "Ribe", type: "town" });
+  }
+
+  // ── THE CAP SAYS WHAT IT DROPPED ───────────────────────────────
+  // A cap that trims in silence reads as "everything was saved". Same fault as
+  // the review panel slicing to MAX_PER_SECTION without a word, which is one of
+  // the five he reported on 19 Aug.
+  {
+    const many = Array.from({ length: 45 }, (_, i) => ({ ...full, name: `Place ${i}` }));
+    const capped = S.capResults(many);
+    is("the cap holds", capped.results.length, S.MAX_RESULTS);
+    is("and the overflow is counted, not swallowed", capped.dropped, 5);
+    // The NEWEST survive: the queue appends, so the tail is what just finished.
+    is("the oldest go first", capped.results[capped.results.length - 1].name, "Place 44");
+    is("under the cap nothing is dropped", S.capResults([full]).dropped, 0);
+  }
+
+  // ── A FULL BROWSER IS A WARNING, NOT A SILENCE ─────────────────
+  // The only notice he will get before the next crash costs him a batch.
+  {
+    const store = S.packStore({ results: [full, { ...full, name: "Two" }], queue: [], editor: null }, NOW).store;
+    const mem = { data: {}, setItem(k, v) { this.data[k] = v; }, removeItem(k) { delete this.data[k]; } };
+    is("a normal write succeeds", S.writeStore(mem, store).ok, true);
+    ok("and something landed", typeof mem.data[S.DRAFT_STORE_KEY] === "string");
+
+    const full_up = { setItem() { const e = new Error("QuotaExceededError"); throw e; }, removeItem() {} };
+    const res = S.writeStore(full_up, store);
+    is("a full browser reports quota rather than failing silently", res.problem, S.STORE_PROBLEMS.QUOTA);
+    is("and does not claim success", res.ok, false);
+
+    // Sheds rather than giving up: one enormous blogBody should not mean nothing
+    // at all is saved.
+    const big = Array.from({ length: 8 }, (_, i) => ({ ...full, name: `Big ${i}`, draft: { ...full.draft, blogBody: "x".repeat(4000) } }));
+    const bigStore = S.packStore({ results: big, queue: [], editor: null }, NOW).store;
+    const shed = S.writeStore(mem, bigStore, { maxBytes: 12000 });
+    is("over budget it still saves something", shed.ok, true);
+    ok("and says how much it let go", shed.dropped > 0);
+    const kept = JSON.parse(mem.data[S.DRAFT_STORE_KEY]);
+    ok("keeping the newest", kept.results[kept.results.length - 1].name === "Big 7");
+    ok("and it actually fits", mem.data[S.DRAFT_STORE_KEY].length <= 12000);
+
+    // An emptied queue clears the key rather than leaving a husk that reads as a
+    // saved session on the next load.
+    const cleared = S.writeStore(mem, { v: S.STORE_VERSION, at: NOW, queue: [], results: [], editor: null });
+    is("clearing everything removes the key", cleared.cleared, true);
+    is("and the key is gone", mem.data[S.DRAFT_STORE_KEY], undefined);
+    // And a browser that refuses even the delete says so. Without this the
+    // clear path could report success on a storage that never cleared, leaving
+    // last session's drafts to reappear on the next load looking current.
+    const noDelete = { setItem() {}, removeItem() { throw new Error("SecurityError"); } };
+    const failedClear = S.writeStore(noDelete, { v: S.STORE_VERSION, at: NOW, queue: [], results: [], editor: null });
+    is("a browser that refuses the delete reports it", failedClear.problem, S.STORE_PROBLEMS.QUOTA);
+    is("and does not claim it cleared", failedClear.ok, false);
+  }
+
+  // ── THE RESTORE IS ANNOUNCED, NEVER SILENT ─────────────────────
+  // A draft restored without a word is one he can publish believing it was
+  // researched minutes ago.
+  {
+    const { store } = S.packStore({ results: [full, { ...full, name: "Two" }], queue: [{ name: "Ribe", type: "town" }], editor: { ...full, text: "{}" } }, NOW);
+    const note = S.restoreNote(store, 3 * 3600000);
+    ok("the note counts the finished drafts", /2 finished drafts/.test(note));
+    ok("names the open one", /the draft you had open/.test(note));
+    ok("counts what is still queued", /1 name still queued/.test(note));
+    ok("and says how old it is, which is the reason for saying anything", /3 hours ago/.test(note));
+    // Said out loud because it changes what Publish does.
+    ok("a restored editor is described as a fresh draft, not an edit",
+       /fresh draft, not as an edit/.test(note));
+    ok("with no editor it does not claim one", !/the draft you had open/.test(S.restoreNote({ results: [full], queue: [] }, 1000)));
+    is("and nothing restored says nothing", S.restoreNote({ results: [], queue: [], editor: null }, 1000), null);
+
+    is("singular reads properly", /1 finished draft\b/.test(S.restoreNote({ results: [full], queue: [] }, 1000)), true);
+    is("just now", S.ageWords(30000), "just now");
+    is("an hour", S.ageWords(3600000), "an hour ago");
+    is("yesterday", S.ageWords(26 * 3600000), "yesterday");
+    is("days", S.ageWords(3 * 86400000), "3 days ago");
+    is("a negative age is not dressed up as fresh", S.ageWords(-5), "an unknown time ago");
+  }
+
+  // ── NEVER PAY TWICE ────────────────────────────────────────────
+  // Without seeding the runner's done set from what came back, pressing Start
+  // re-researches a draft already sitting finished on the screen. That is the
+  // exact spend this whole module exists to prevent, and he has reported the
+  // same shape twice already about the Open button.
+  {
+    const keys = S.doneKeysFrom([full, { name: "Ribe", type: "town", draft: {} }]);
+    ok("the restored draft is already marked done", keys.includes("free::marselisborg dyrehave"));
+    is("keyed by type and name, the same way the runner keys it", keys.length, 2);
+    is("junk in the list does not become a key", S.doneKeysFrom([null, {}, { name: "x" }]), []);
+  }
+
+  // ── AND THE WIRING, WHICH IS WHAT ACTUALLY SAVES ANYTHING ──────
+  // Every rule above is inert if App.jsx never calls it. Asserted against the
+  // real file for the same reason the town-frame gate is: testing a gate proves
+  // nothing while a caller still writes past it.
+  {
+    const app = readFileSync(join(root, "src/App.jsx"), "utf8");
+    const code = stripNonCode(app);
+    ok("App imports the store", /from "\.\/utils\/studioDraftStore"/.test(app));
+    ok("something reads it back on load", /readStore\(/.test(code));
+    ok("and something writes it", /writeStore\(/.test(code));
+    ok("the runner's done set is seeded from what came back", /doneKeysFrom\(/.test(code));
+    ok("the restore is announced", /restoreNote\(/.test(code));
+    // ── THREE THAT A GREP FOR THE FUNCTION NAME CANNOT COVER ──────
+    // Each of these was a surviving mutant. A grep for `problemNote(` passes
+    // while the SAVE half is deleted, because the RESTORE half calls it too;
+    // a grep for `readStore(` passes while the finished drafts are seeded from
+    // an empty array. So each one is asserted at its own call site.
+    //
+    // The finished-draft list is the money: seed it from `[]` and every paid
+    // draft is still gone on reload, with the banner still cheerfully saying
+    // something was restored.
+    ok("the finished drafts are seeded from the store, not from empty",
+       /useState\(\(\) =>\s*\(restoredStudioDrafts\(\)\.store\?\.results \|\| \[\]\)\.map\(/.test(code));
+    // A save that fails silently is the only warning he gets before the next
+    // reload costs him a batch.
+    ok("a failed save reaches the screen", /setDraftSaveProblem\(res\.ok \? null : problemNote\(res\.problem\)\)/.test(code));
+    // loadQueueResult rebuilds the editor text FROM the draft object, so without
+    // this line every restore silently reverts his typing to the last version
+    // that parsed — which is the opposite of the point on a half-finished edit.
+    ok("the editor's own text is restored, not rebuilt from the object",
+       /setStudioDraftText\(saved\.text\)/.test(code));
+    // The key is declared in one place. A second literal is how the reader and
+    // the writer end up on different keys, which looks exactly like "it did not
+    // save" and is unfindable.
+    is("nothing hardcodes the storage key a second time",
+       (app.match(/gemlyx_studio_drafts/g) || []).length, 0);
+  }
+}
+
+
+// ── FILTER SECTIONS AND PICKING MORE THAN ONE ──────────────────────
+// Oliver, 19 Aug 2026: "Fix filters on the blogs please... We got too many blogs
+// for you to make 10.000 different things to click. Make it simpler." Then:
+// "section 1: Most recommended/Alphabet/closest to me. Section 2 (be able to
+// choose more): type... Section 3: Island."
+{
+  const { applyFacets, facetCounts, appliedChips, activeFacetCount, toggleFacetValue, isOptionOn, islandOf, ISLAND_LABEL } = M;
+  const F = [
+    { key: "type", label: "Type", multi: true, primary: true,
+      options: [{ value: "All", label: "All" }, { value: "harbour", label: "Harbour" }, { value: "village", label: "Village" }, { value: "city", label: "Major city" }],
+      test: (i, v) => i.kind === v },
+    { key: "island", label: "Island", primary: true,
+      options: [{ value: "All", label: "All" }, { value: "Ærø", label: "Ærø" }, { value: "Funen", label: "Funen" }],
+      test: (i, v) => i.island === v },
+  ];
+  const rows = [
+    { name: "Ærøskøbing", kind: "harbour", island: "Ærø" },
+    { name: "Marstal", kind: "harbour", island: "Ærø" },
+    { name: "Bregninge", kind: "village", island: "Ærø" },
+    { name: "Odense", kind: "city", island: "Funen" },
+  ];
+
+  // ── OR WITHIN A FACET ──────────────────────────────────────────
+  // The classic faceted-search mistake is ANDing inside one facet: a town cannot
+  // be both a harbour and a village, so two ticks would always return nothing and
+  // the filter would look broken rather than empty.
+  is("one value behaves exactly as it did before",
+     applyFacets(rows, F, { type: "harbour" }).map(r => r.name), ["Ærøskøbing", "Marstal"]);
+  is("two values mean either, not both",
+     applyFacets(rows, F, { type: ["harbour", "village"] }).map(r => r.name), ["Ærøskøbing", "Marstal", "Bregninge"]);
+  is("and three", applyFacets(rows, F, { type: ["harbour", "village", "city"] }).length, 4);
+  // AND ACROSS FACETS, which is the other half and the one a single test of
+  // multi-select on its own would miss: picking two types and one island must
+  // narrow, not widen.
+  is("but two different questions still narrow each other",
+     applyFacets(rows, F, { type: ["harbour", "city"], island: "Funen" }).map(r => r.name), ["Odense"]);
+  // An empty array is not a filter. Without this a facet ticked and unticked
+  // leaves [] behind and every row fails `some`, emptying the page with nothing
+  // on screen explaining why.
+  is("an emptied selection filters nothing", applyFacets(rows, F, { type: [] }).length, 4);
+
+  // ── TOGGLING ───────────────────────────────────────────────────
+  is("ticking adds", toggleFacetValue({}, F[0], "harbour"), { type: ["harbour"] });
+  is("ticking a second keeps the first", toggleFacetValue({ type: ["harbour"] }, F[0], "village"), { type: ["harbour", "village"] });
+  is("unticking removes just that one", toggleFacetValue({ type: ["harbour", "village"] }, F[0], "harbour"), { type: ["village"] });
+  // The key is DELETED, not left as []. isSet, the chips and the active count
+  // then all agree without each needing its own rule for an empty array.
+  is("unticking the last one drops the facet entirely", toggleFacetValue({ type: ["harbour"] }, F[0], "harbour"), {});
+  is("a single-value facet still replaces", toggleFacetValue({ island: "Ærø" }, F[1], "Funen"), { island: "Funen" });
+  is("and tapping the one that is on clears it", toggleFacetValue({ island: "Ærø" }, F[1], "Ærø"), {});
+  is("All clears whatever was there", toggleFacetValue({ type: ["harbour", "village"] }, F[0], "All"), {});
+
+  // ── WHAT THE PANEL DRAWS ───────────────────────────────────────
+  ok("a ticked value reads as on", isOptionOn({ type: ["harbour", "village"] }, F[0], "village"));
+  ok("an unticked one does not", !isOptionOn({ type: ["harbour"] }, F[0], "village"));
+  ok("All is on when nothing is", isOptionOn({}, F[0], "All"));
+  ok("and off the moment something is", !isOptionOn({ type: ["harbour"] }, F[0], "All"));
+
+  // ── ONE CHIP PER VALUE ─────────────────────────────────────────
+  // Three ticked types under a single chip reading "Type" cannot be undone one at
+  // a time, and the count beside the Filter button would say 1 while three things
+  // are filtered out.
+  is("three ticks are three chips",
+     appliedChips(F, { type: ["harbour", "village", "city"] }).map(c => c.label), ["Harbour", "Village", "Major city"]);
+  is("each carrying the value it removes",
+     appliedChips(F, { type: ["harbour", "village"] }).map(c => c.value), ["harbour", "village"]);
+  is("and the count agrees with them", activeFacetCount(F, { type: ["harbour", "village"], island: "Ærø" }), 3);
+
+  // Counts still exclude their own facet, which is the rule multi-select is most
+  // likely to break: with Harbour ticked, Village must still report 1 rather
+  // than 0, or the panel reads as "we have no villages".
+  const counts = facetCounts(rows, F, { type: ["harbour"] }, "type");
+  is("village still counts while harbour is ticked", counts.village, 1);
+  is("and the island facet is measured through the type filter", facetCounts(rows, F, { type: ["city"] }, "island")["Ærø"], 0);
+
+  // ── WHICH ISLAND IS NOT WHICH PART OF THE COUNTRY ──────────────
+  // partOfCountry answers "nearest of the five landmasses", so on its own it
+  // files Ærøskøbing under Funen and Sønderho under Jutland. On a site whose
+  // subject is the small islands, a control labelled Island saying that is wrong.
+  const aeroe = { __lat: 54.8869, __lon: 10.4103 };   // Ærøskøbing
+  is("the part of the country still says Funen, which is what it means",
+     M.partOfCountry(aeroe), "Funen");
+  is("but the island filter says Ærø", islandOf(aeroe, "Ærø"), "Ærø");
+  is("Fanø is not Jutland", islandOf({ __lat: 55.3897, __lon: 8.4083 }, "Fanø"), "Fanø");
+  // Morsø Kommune is the island of Mors. The first version of this table was a
+  // list plus a rename that sat AFTER it, so the list matched first and the
+  // rename could never run.
+  is("Morsø kommune is the island of Mors", islandOf({ __lat: 56.7, __lon: 8.7 }, "Morsø"), "Mors");
+  // The fallback, which is most of the country and has to keep working.
+  is("a mainland kommune falls back to its part", islandOf({ __lat: 56.1629, __lon: 10.2039 }, "Aarhus"), "Jutland");
+  is("and an unknown kommune does too", islandOf({ __lat: 56.1629, __lon: 10.2039 }, ""), "Jutland");
+  // NAMED FOR WHAT IT IS. Jutland is a peninsula; a reader still needs to be able
+  // to pick the mainland, so it is in the list and labelled honestly rather than
+  // left out or quietly called an island.
+  is("Jutland is labelled as the mainland", ISLAND_LABEL.Jutland, "Jutland (mainland)");
+  is("and the islands are not relabelled", ISLAND_LABEL["Ærø"], undefined);
+
+  // ── THE ROW IS SHORT, AND NOTHING WAS DELETED TO SHORTEN IT ────
+  const fb2 = readFileSync(join(root, "src/components/FilterBar.jsx"), "utf8");
+  ok("only the primary facets get a button", /facets\.some\(f => f\.primary\) \? facets\.filter\(f => f\.primary\)/.test(fb2));
+  // A facet set from the sheet and then invisible on the row is the state where
+  // the list is short and the reason is off screen.
+  ok("an applied facet gets one anyway", /\.filter\(f => state\[f\.key\] && state\[f\.key\] !== "All"\)/.test(fb2));
+  // Section 1. It is in the panel now AND still on the line below, one state.
+  ok("the sort is the first section in the panel", fb2.indexOf("Order <span") < fb2.indexOf("{facets.map(f => {"));
+  ok("and still says it is not a filter", /changes the order, never what is in the list/.test(fb2));
+  const app19 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  const facetBlock = app19.slice(app19.indexOf("const ATTRACTION_FACETS = ["), app19.indexOf("const searched = combined.filter"));
+  ok("attractions has a multi type section", /key: "type", label: "Type", primary: true, multi: true/.test(facetBlock));
+  ok("and an island section", /key: "island", label: "Island", primary: true/.test(facetBlock));
+  // THE ONES THAT WERE NOT ASKED ABOUT ARE STILL THERE. "Make it simpler" is not
+  // "remove three filters"; these moved off the row into the sheet.
+  ["city", "gem", "booking"].forEach(k =>
+    ok(`${k} still exists, off the row`, new RegExp(`key: "${k}"`).test(facetBlock)));
+  ok("and only two of them are primary", (facetBlock.match(/primary: true/g) || []).length === 2);
+}
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed) { fails.forEach(f => console.log("  FAIL " + f + "\n")); process.exit(1); }

@@ -1,7 +1,8 @@
 import { MONTHS } from "./factCheckRead";
 // fold, because a Danish ticket button says "Køb billetter" and JavaScript's \b
 // cannot sit beside ø. See ticketLinks.
-import { fold } from "./danishNames";
+import { fold, containsName } from "./danishNames";
+import { KOMMUNER, K } from "../data/kommuner";
 
 // ── WAS THAT A PAGE, OR A WALL? ─────────────────────────────────────
 //
@@ -417,6 +418,140 @@ export const ticketLinks = (html, baseUrl = "") => {
   // members-only rate, madbillet.dk carried the real table.
   scored.sort((a, b) => b.score - a.score || (b.offsite ? 1 : 0) - (a.offsite ? 1 : 0));
   return scored;
+};
+
+// ── A PUBLIC PLACE'S OWN SITE IS OFTEN ITS MUNICIPALITY'S ───────────
+//
+// Oliver, 19 Aug 2026, on a Marselisborg Dyrehave draft: "It happens multiple
+// times that the pipeline gives up on website (because it doesn't exist), when in
+// reality, it actually is part of the city's official website."
+//
+// He is describing a real hole and it is one line of App.jsx:
+//
+//     const host = new URL(u).hostname.replace(/^www\./, "").split(".")[0];
+//     return nameWords.some(w => host.includes(w) || w.includes(host));
+//
+// THE NAME IS TESTED AGAINST THE HOSTNAME AND NOTHING ELSE. For a deer park whose
+// authoritative page is aarhus.dk/dyrehave, the first host label is "aarhus" and
+// the name words are marselisborg and dyrehave, so no comparison can match. The
+// website field comes back blank and, worse, rankSource then files the
+// municipality's own page as a BLOG — beneath a ticket calendar, beneath
+// Wikipedia.
+//
+// That is not an edge case in Denmark. A kommune hosts the authoritative page for
+// its parks, forests, beaches, harbours, libraries, museums and swimming halls.
+// Very few of those have a domain of their own, and the ones that matter most to a
+// guide (a free public park) are exactly the ones that never will.
+//
+// ── AND THE SAME LINE WAS WRONG IN THE OTHER DIRECTION ──────────────
+// `host.includes(w) || w.includes(host)` is unbounded substring matching, both
+// ways, which is the trap this codebase has now fixed five times. "visitaarhus"
+// contains "aarhus", so VisitAarhus — a tourism board, not the operator — was
+// promoted to "the place's own website" for anything named Aarhus-something.
+// Its text then entered the string the run log calls the official site.
+//
+// So: bounded matching, against the host AND the path, and a tourism board is
+// never an operator however much of the name is in its domain.
+
+// The kommune domains, derived from the kommune table rather than typed out: 99
+// names already in the codebase, and a list here would be a hundredth place for a
+// Danish place name to be spelled differently.
+//
+// Two shapes cover almost all of them, `<name>.dk` and `<name>kommune.dk`, and
+// anything ending in kommune.dk is unambiguous whether or not it is in the table.
+// The irregulars are named: København's is kk.dk, which no rule would produce.
+export const KOMMUNE_HOSTS = new Set([
+  "kk.dk",
+  ...KOMMUNER.flatMap(row => {
+    // fold, so Æ Ø Å reach a hostname the way DNS actually spells them. This is
+    // the same fold that had to be added to normaliseDomain for
+    // visitsonderjylland.dk, for the same reason.
+    const slug = fold(String(row[K.name] || "")).replace(/[^a-z0-9]/g, "");
+    return slug ? [`${slug}.dk`, `${slug}kommune.dk`] : [];
+  }),
+]);
+
+export const isKommuneHost = (url) => {
+  const host = hostOf(url);
+  if (!host) return false;
+  if (/(?:^|\.)kommune\.dk$/.test(host)) return true;
+  return [...KOMMUNE_HOSTS].some(d => host === d || host.endsWith(`.${d}`));
+};
+
+// A tourism board is a good source and is NOT the operator. It writes about
+// places it does not run, so its opening hours are a copy of somebody else's and
+// its "official" ranking would outvote the venue itself.
+const TOURISM_HOST = /^(?:visit|oplev|besog|besoeg)/;
+export const isTourismHost = (url) => {
+  const host = hostOf(url);
+  return TOURISM_HOST.test(host) || host === "visitdenmark.com" || host === "dansk-kyst-og-naturturisme.dk";
+};
+
+// ── IS THIS URL NAMING THIS PLACE ───────────────────────────────────
+// Every part of a URL a human would read as naming something: the host labels and
+// the path segments. Bounded through containsName rather than raw includes, so
+// "Ribe" does not match "Ribers" and "aarhus" does not make VisitAarhus official.
+//
+// The query string is deliberately excluded. A search page at aarhus.dk/soeg?q=
+// dyrehave names the place in a parameter and is a search result, not a document
+// about it.
+export const urlNames = (url, nameWords = []) => {
+  const words = (Array.isArray(nameWords) ? nameWords : []).map(w => String(w || "").trim()).filter(Boolean);
+  if (!words.length) return false;
+  let u;
+  try { u = new URL(String(url)); } catch { return false; }
+  // Hyphens and underscores need no handling here: containsName's own `spaced`
+  // already turns every run of non-alphanumerics into a gap, which is what lets
+  // "Reffen, Copenhagen" contain "Reffen". A replace here looked like the thing
+  // making /marselisborg-dyrehave work and was doing nothing — a mutation removing
+  // it changed no answer, which is the signature of a guard that is not guarding.
+  const hostLabels = u.hostname.replace(/^www\./, "").split(".").filter(Boolean);
+  const pathParts = decodeURIComponent(u.pathname).split("/").filter(Boolean);
+  const hay = [...hostLabels, ...pathParts].join(" ");
+  // The ordinary case: the name stands as its own words somewhere in the URL.
+  // Bounded, so "Ribe" is not named by ribers-gaard.dk and "Vejle" is not named
+  // by /vejlebrovej.
+  if (words.some(w => containsName(hay, w))) return true;
+  // ── AND A DANISH DOMAIN IS A COMPOUND WITH NO GAPS ────────────────
+  // marselisborgdyrehave.dk genuinely IS that park's own domain, and no bounded
+  // test can see it: a hostname cannot contain a space, so the separators the
+  // bounded rule needs are exactly what a domain drops. Danish compounds make this
+  // the normal shape rather than the exception (naturhistoriskmuseum,
+  // vikingeskibsmuseet, tivolifriheden).
+  //
+  // EQUALITY, NOT CONTAINMENT, and that is the whole safety of it. `label.includes`
+  // would put "ribe" inside ribersgaard and "aarhus" inside visitaarhus, which is
+  // the unbounded trap this rule exists to avoid. A label that IS the name, with the
+  // gaps closed up, is a statement of ownership; a label that merely contains it is
+  // a coincidence.
+  const squash = (t) => fold(String(t || "")).replace(/[^a-z0-9]/g, "");
+  const whole = squash(words.join(""));
+  return hostLabels.some(l => {
+    const label = squash(l);
+    if (!label) return false;
+    return (whole && label === whole) || words.some(w => label === squash(w));
+  });
+};
+
+// ── AND WHO OWNS THE PAGE ───────────────────────────────────────────
+// One answer for "is this the place's own site", so App.jsx stops deciding it
+// with a hostname split. Ordered, because the exclusions have to win: a tourism
+// board that happens to carry the name in its domain is not the operator, and
+// neither is a ticket calendar.
+export const isOwnSiteFor = (url, nameWords = [], { placesWebsite = "" } = {}) => {
+  const host = hostOf(url);
+  if (!host) return false;
+  // Google's registered URL is not a guess about which site belongs to this
+  // place: it is the URL the owner put on their own listing. It wins outright.
+  const registered = hostOf(placesWebsite);
+  if (registered && (host === registered || host.endsWith(`.${registered}`))) return true;
+  if (isTourismHost(url) || isListingHost(url) || isReferenceHost(url)) return false;
+  if (!urlNames(url, nameWords)) return false;
+  // A kommune page naming the place IS the authority for it. Stated separately
+  // from the general case because it is the one this was written for, and because
+  // a kommune's front page must not qualify: aarhus.dk alone names no place, and
+  // urlNames above is what stops it.
+  return true;
 };
 
 // officialHosts is what the pipeline has already decided is the operator's own

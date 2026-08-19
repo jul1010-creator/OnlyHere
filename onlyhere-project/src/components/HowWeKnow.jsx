@@ -149,7 +149,17 @@ export const HowWeKnow = ({ item }) => {
         </svg>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: C.text }}>
-            How we know this{lastCheck ? <span style={{ color: C.muted, fontWeight: 600 }}> · checked {lastCheck}</span> : null}
+            {/* ── "Change 'How we know this' to 'Sources:'" ──────────
+                Oliver, 19 Aug 2026. His words, and the shorter label is the
+                better one: the panel's contents are a list of pages with what
+                each one was read for, so the heading now names what is inside
+                it rather than making a claim about it.
+
+                The date keeps its place and loses the middot, which read as an
+                unfinished sentence after a colon. "last checked" also says the
+                thing plainly: it is when these sources were last read, not when
+                the entry was written. */}
+            Sources:{lastCheck ? <span style={{ color: C.muted, fontWeight: 600 }}> last checked {lastCheck}</span> : null}
           </span>
           {summary && <span style={{ display: "block", fontSize: 11, color: C.muted, marginTop: 2 }}>{summary}</span>}
         </span>
@@ -163,15 +173,28 @@ export const HowWeKnow = ({ item }) => {
               lie, so the sentence changes with the evidence rather than
               standing there as a fixed boast. */}
           <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.65, margin: "12px 0 16px" }}>
+            {/* ── SAYS WHAT WE DID, NOT THAT WE DOUBTED IT ──────────────
+                Oliver, 19 Aug 2026: the fact-check language is "too academic, and
+                too much acting like we don't know."
+
+                The honesty is the brand and none of it is dropped: both branches
+                still say we have not been anywhere in person and still list what
+                we could not stand up. What changes is that each sentence leads
+                with the METHOD rather than with the doubt, and names the sources
+                instead of the abstraction "primary sources". A reader trusts "the
+                venue's own site" more than they trust the phrase fact-checked,
+                because one of those is a fact and the other is a claim about our
+                own diligence. */}
             {sourceCount > 1 ? (
-              <>Gemlyx entries are researched and fact-checked against primary sources, then re-checked when
-              something looks wrong. We do not claim to have been anywhere in person, and anything we could
-              not stand up is listed below rather than quietly smoothed over.</>
+              <>Every Gemlyx entry is written from primary sources — the venue's own site, the operator's
+              own timetable — and checked again whenever something looks off. We have not been anywhere in
+              person and we do not pretend otherwise: anything we could not stand up is listed below rather
+              than quietly smoothed over.</>
             ) : (
-              <>Gemlyx entries are researched against primary sources and re-checked when something looks
-              wrong. This one was written before we started saving the full list of pages the research
-              opened, so only the official site is shown below. We do not claim to have been anywhere in
-              person, and anything we could not stand up is listed rather than quietly smoothed over.</>
+              <>This entry is written from primary sources and checked again whenever something looks off.
+              It was written before we started saving the full list of pages the research opened, so only
+              the official site is shown below. We have not been anywhere in person and we do not pretend
+              otherwise: anything we could not stand up is listed rather than quietly smoothed over.</>
             )}
           </div>
 

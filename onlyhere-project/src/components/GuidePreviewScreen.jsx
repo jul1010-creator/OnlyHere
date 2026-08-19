@@ -297,9 +297,26 @@ export const GuidePreviewScreen = ({
       // that render. Nothing is hidden that the line above it does not admit
       // to.
       const offered = mine.filter(p => p._notAsked);
+      // ── THE CAP HAS TO ADMIT TO ITSELF ────────────────────────────
+      // Oliver, 19 Aug 2026: "for some reason there are far more things in the
+      // actual guide, than in the review."
+      //
+      // Here is the reason. MAX_PER_SECTION is 6 and `items` was sliced to it
+      // with nothing saying so — so a section holding eleven matching rows showed
+      // six, silently, and then the guide was written from the whole conversation
+      // and contained all eleven. The review is the screen he APPROVES from, and
+      // it was under-reporting the thing he was approving.
+      //
+      // The section below already says how many non-matching rows are being held
+      // back. It never said how many MATCHING ones were cut, which is the worse
+      // of the two omissions: those are rows the traveller asked for.
+      const matching = mine.filter(p => !p._notAsked);
       return {
         ...cat,
-        items: mine.filter(p => !p._notAsked).slice(0, MAX_PER_SECTION),
+        items: matching.slice(0, MAX_PER_SECTION),
+        // The real number, so the line under the section can be honest about the
+        // difference rather than the reader discovering it in the finished guide.
+        itemsTotal: matching.length,
         offered,
         picks: rankOffers(offered, { want: themes, profile: userProfile, limit: OFFER_LIMIT })
           .map(entry => ({ ...entry, reason: offerReason(entry) })),
@@ -486,7 +503,19 @@ export const GuidePreviewScreen = ({
         <div style={{ marginBottom: 18 }} />
         {sections.map(cat => (
           <div key={cat.label} style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>{cat.label}</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1.2, textTransform: "uppercase" }}>{cat.label}</span>
+              {/* Only when it actually cut something. A count on every section
+                  would be noise; a count on the sections that hid a row is the
+                  difference between a review and a sample. */}
+              {cat.itemsTotal > cat.items.length && (
+                <span style={{ fontSize: 10.5, color: C.muted }}>
+                  {/* No em dash: tests/run.mjs bans them in reader-facing strings,
+                      and it caught this one on the first run. */}
+                  showing {cat.items.length} of {cat.itemsTotal}, and the guide can use all of them
+                </span>
+              )}
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {cat.items.map(place => (
                 <div key={`${place._src}-${place.id}`} style={{ display: "flex", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, alignItems: "center" }}>

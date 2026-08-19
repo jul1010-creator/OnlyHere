@@ -216,7 +216,10 @@ export const coverageByTarget = (rows) => {
       const p = r?.payload || r;
       if (partOfCountry(p) !== t.part) return false;
       if (!t.lat) return true;
-      const lat = Number(p?.__lat);
+      // Same fallback as partOfCountry above it, and it has to be the same or the
+      // two halves of this one filter disagree: the part would resolve off `lat`
+      // and the latitude band would then read `undefined` and reject the row.
+      const lat = Number(p?.__lat ?? p?.lat);
       return Number.isFinite(lat) && t.lat(lat);
     }).length;
   }

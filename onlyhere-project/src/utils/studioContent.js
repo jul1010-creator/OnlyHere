@@ -128,7 +128,7 @@ const shapeForLiveFields = (type, t) => {
   // about the world made by a fallback, and it is the claim this whole app is
   // built on. The booking branch already uses "" for the same field.
   if (type === "free") return { name: t.name, popularityTag: t.popularityTag || "", city: t.city || "", type: t.type || "", emoji: t.emoji || "✨", desc: t.desc, website: t.website || "", color: t.color || "#2E7D32",
-    ticketsGlance: t.ticketsGlance || "", timeNeeded: t.timeNeeded || "", extraCosts: t.extraCosts || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
+    ticketsGlance: t.ticketsGlance || "", extraCosts: t.extraCosts || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]]),
       ...bulletsBlock("Things to Know", t.thingsToKnow),
@@ -163,7 +163,7 @@ const shapeForLiveFields = (type, t) => {
       ...bulletsBlock("What to Be Aware Of", t.thingsToKnow),
     ] };
   if (type === "booking") return { name: t.name, type: t.type || "Local", what: Array.isArray(t.what) ? t.what : [t.what].filter(Boolean), rating: t.rating ? Number(t.rating) : null, location: t.location || "", price: t.price || PRICE_UNKNOWN, priceNote: t.priceNote || "", travelTime: t.travelTime || "", bookingType: t.bookingType || "contact", popularityTag: t.popularityTag || "", transportWarning: !!t.transportWarning, emoji: t.emoji || "🔨", photo: `/craft/${slugify(t.name)}.jpg`, color: t.color || "#8E6B1F", desc: t.desc,
-    timeNeeded: t.timeNeeded || "", accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
+    accessibility: t.accessibility || "", nearestStation: t.nearestStation || "", gemlyxFind: t.gemlyxFind || "",
     blogBody: [
       ...bbData([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]]),
       ...bulletsBlock("Things to Know", t.thingsToKnow),

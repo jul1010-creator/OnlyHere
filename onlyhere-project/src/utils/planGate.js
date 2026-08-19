@@ -26,6 +26,7 @@
 // Studio can see it, rather than quietly disappearing.
 
 import { haversineKm } from "./helpers";
+import { MODE_DAY_KM, travelModeKey } from "./routeOrder";
 
 export const MIN_STOPS_MIDDLE_DAY = 2;
 
@@ -52,7 +53,39 @@ export const MAX_STOPS_ARRIVAL_DAY = 2;
 // Straight-line, so this is deliberately generous: real roads are longer, and a
 // ferry makes the gap between the number and the day even bigger. 120 km as the
 // crow flies is already most of a day once you have parked, waited and walked.
+//
+// ── AND IT IS ONLY THE FALLBACK NOW, BECAUSE 120 KM IS NOT ONE NUMBER ──
+// Oliver, 19 Aug 2026, with a preview on his phone: three days, parents in their
+// sixties, "we want to cycle where it makes sense", "budget is not really the
+// constraint, time is" — and the towns reading 9 km, 222 km, 101 km, 129 km. Four
+// hundred and fifty kilometres of hops in three days, under a summary paragraph
+// promising "an easy pace between hotels without wasting your limited time".
+//
+// This gate has had a distance rule since 12 Aug and it is a FLAT 120 KM, the same
+// number whatever the traveller said they were travelling by. routeOrder.js has
+// carried MODE_DAY_KM for days: walk 15, bike 60, transit 250, car 300. So the gate
+// was wrong in both directions at once —
+//
+//   on a bike trip   a 100 km day PASSES at 120 while the real ceiling is 60
+//   on a car trip    a 150 km day FAILS at 120 while the real ceiling is 300
+//
+// and the planner was made to retry perfectly normal driving days while waving
+// through days nobody could ride. The right table already existed, in the file
+// next door, which is the third time in one night that this codebase has paid for
+// keeping one decision in two places.
+//
+// 120 stays for the case it was actually written for: no mode stated at all. It is
+// roughly transit-and-car shaped, which is what an unstated mode most often turns
+// out to be, and it is a number rather than a refusal to judge.
 export const MAX_DAY_KM = 120;
+
+// How far a day may move, by the mode the traveller actually named. One table,
+// owned by routeOrder, read here.
+export const dayCeilingKm = (mode) => {
+  const key = mode ? travelModeKey(mode) : null;
+  const perMode = key ? MODE_DAY_KM[key] : null;
+  return Number.isFinite(perMode) ? perMode : MAX_DAY_KM;
+};
 
 const norm = (s) => String(s || "").trim().toLowerCase();
 
@@ -124,7 +157,12 @@ export const titlePromises = (title, stopNames = [], townNames = []) => {
 // distance rule simply does not run, rather than guessing. Never conclude a
 // fact from a missing lookup.
 export const checkPlan = (days, coords = {}, opts = {}) => {
+  // opts.mode is the traveller's own words ("bike", "we are renting a car", a chip
+  // label) and is folded by travelModeKey. Absent, the flat fallback applies and
+  // the trip is still judged rather than waved through.
+  const ceilingKm = dayCeilingKm(opts.mode);
   const problems = [];
+  const unjudged = [];
   const list = Array.isArray(days) ? days : [];
   if (list.length === 0) return { ok: false, problems: [{ code: "NO_DAYS", detail: "The plan has no days in it." }] };
 
@@ -206,11 +244,29 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
     // Only speak when every leg of the day was measurable. A total built from
     // the legs that happened to resolve understates the day, and understating
     // is exactly the direction that lets a bad plan through.
-    if (measured > 0 && measured === chain.length - 1 && km > MAX_DAY_KM) {
+    const legs = chain.length - 1;
+    const fullyMeasured = legs > 0 && measured === legs;
+    if (fullyMeasured && km > ceilingKm) {
       problems.push({
         code: "TOO_MUCH_TRAVEL", day: dayNo,
-        detail: `Day ${dayNo} covers about ${Math.round(km)} km in a straight line, which is most of the day in transit before you have parked or waited for anything. Break it up or move a stop.`,
+        // The ceiling is named, because "too much" without a number is the kind of
+        // instruction a planner satisfies by moving one stop and changing nothing.
+        detail: `Day ${dayNo} covers about ${Math.round(km)} km in a straight line${opts.mode ? ` by ${opts.mode}` : ""}, over the ${ceilingKm} km a day can hold that way, and that is before you have parked or waited for anything. Break it up or move a stop.`,
       });
+    }
+    // ── AND "WE COULD NOT CHECK" MUST NOT LOOK LIKE "WE CHECKED" ────
+    // The comment above is right that a partial total understates the day, so the
+    // rule correctly stays silent. What it did NOT do is say it stayed silent, and
+    // an unjudged day came out of this function looking exactly like a day that
+    // passed. On the whole product whose promise is that nothing is asserted that
+    // nobody measured, that is the wrong silence.
+    //
+    // Never a blocking problem: the planner cannot fix a coordinate Gemlyx does not
+    // hold, and asking it to would produce an invented town. It is recorded so it
+    // is countable, and so "3 days, all judged" and "3 days, none judged" stop
+    // reading the same.
+    if (legs > 0 && !fullyMeasured) {
+      unjudged.push({ day: dayNo, legs, measured });
     }
   });
 
@@ -226,7 +282,17 @@ export const checkPlan = (days, coords = {}, opts = {}) => {
   return {
     ok: problems.length === 0,
     problems,
-    stats: { days: list.length, stops: allStops.length, distinct: distinct.size, matched },
+    // The days whose distance could not be judged, and how much of each resolved.
+    // A caller that wants to surface "two of three days went unchecked" has the
+    // numbers; nothing here forces it to.
+    unjudged,
+    stats: {
+      days: list.length, stops: allStops.length, distinct: distinct.size, matched,
+      // Which ceiling was applied and why, so a run log can show that a 100 km day
+      // passed because the mode was a car rather than because nobody looked.
+      ceilingKm, mode: opts.mode || null,
+      judgedDays: list.length - unjudged.length,
+    },
   };
 };
 

@@ -635,15 +635,13 @@ export const nextWeekdayTimestamp = (dayOfWeek, hour) => {
 // Gone from the prompt, from shapeForLive, from the codegen, from the card, and
 // these two branches with it. `free` keeps its mapping, because a castle really
 // does take longer than a public square and that is a fact about the place.
-export const stayDurationForCategory = (studioType, category) => {
-  const c = (category || "").toLowerCase();
-  if (studioType === "free") {
-    if (/palace|slot|castle|museum|exhibition/.test(c)) return "2 to 3 hours"; // historic interiors, real exhibitions
-    if (/square|plaza|torv|park|garden|viewpoint/.test(c)) return "30 to 45 mins"; // outdoor public spaces, a look-around not a tour
-    return "1 to 2 hours";
-  }
-  return null; // no confident category mapping for this type — leave the AI's own judgment
-};
+// stayDurationForCategory lived here until 19 Aug 2026. It answered "how long
+// does this take" with one of three hardcoded strings chosen by a regex over a
+// category word, and publishDraft wrote its answer over whatever the writer had
+// estimated. Oliver: "I think we should get rid of 'time-needed'." Deleted
+// rather than left unwired: this codebase has found five duplicated or
+// never-wired helpers in two weeks, and every one of them looked harmless the
+// day before it was used by mistake.
 
 export const parsePrice = (str) => {
   if (!str) return 0;

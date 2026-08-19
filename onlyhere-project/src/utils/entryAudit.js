@@ -1434,7 +1434,9 @@ export const describeEvidence = (standing, { untracedPrices = 0 } = {}) => {
 // and uncertainties.
 export const GLANCE_FIELDS = [
   "nearestStation", "ticketInfo", "camping", "accommodationTip", "travelTime",
-  "typicalCosts", "price", "priceNote", "extraCosts", "timeNeeded",
+  // timeNeeded removed 19 Aug 2026 with the field. Auditing it would have gone
+  // on asking him to fix wording no reader can see, on legacy payloads only.
+  "typicalCosts", "price", "priceNote", "extraCosts",
   "ticketsGlance", "accessibility", "recommendedStayGlance", "bestTimeGlance",
   "accommodationGlance", "highlight", "tag", "location", "crowd", "bookingType",
 ];

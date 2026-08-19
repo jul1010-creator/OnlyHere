@@ -34,6 +34,10 @@
 // "how many rows are in Sønderjylland", it is "do I write code or do I go and
 // research".
 import { DISCOVERY_TARGETS, coverageByTarget } from "./discovery";
+// unplaced, not a local count: geography.js already owns the question "which rows
+// can nothing place", and a second implementation here would be the two-instruments
+// problem that caused this bug in the first place.
+import { unplaced } from "./geography";
 import { arrivalPoint } from "./arrival";
 import { fitsBrief } from "./interestFit";
 import { THEME_LABEL } from "./placeThemes";
@@ -180,6 +184,23 @@ export const previewCoverage = ({ matched = [], library = [], convoText = "", th
   // does, so content is reported first. If there IS content there, the matcher
   // is the one that failed and saying "go research South Jutland" would send
   // him to write eleven entries he already has.
+  // ── AND "NOTHING PUBLISHED THERE" HAS TO BE TRUE ──────────────────
+  // Oliver, 19 Aug 2026: "it keeps saying I don't have any content in South
+  // Jutland.. while I clearly have some."
+  //
+  // Half of that was partOfCountry reading only `__lat` (fixed in geography.js).
+  // The other half is this sentence, which cannot tell two different situations
+  // apart and states the more damaging one:
+  //
+  //   nothing published there            → a real content gap, go and research
+  //   published but not PLACEABLE        → the rows exist and carry no usable
+  //                                        coordinate, so no filter can see them
+  //
+  // A row with no coordinate is invisible to every geography filter in the app,
+  // which is why geography.js already exports `unplaced` and why Studio has an
+  // "Add missing coordinates" action. Telling him to go and write entries he
+  // already has is the worst possible advice, and it is what this said.
+  const cannotPlace = unplaced(library).length;
   let verdict = COVERAGE_NOTHING_SAID;
   if (target && published === 0) verdict = COVERAGE_THIN;
   else if (target && published > 0) verdict = COVERAGE_MATCHER;
@@ -189,6 +210,10 @@ export const previewCoverage = ({ matched = [], library = [], convoText = "", th
     arrival,
     target: target ? { id: target.id, label: target.label, danish: target.danish } : null,
     published,
+    // How many rows nothing could place at all. Carried so the sentence can say
+    // "nothing I can place there" rather than "nothing published there", which
+    // are different claims and only one of them is checked.
+    unplaced: cannotPlace,
     themes: themes ? [...themes].sort() : [],
     days: Number.isFinite(Number(days)) ? Number(days) : null,
     total: (Array.isArray(library) ? library : []).length,
@@ -226,7 +251,12 @@ export const describeCoverage = (f) => {
     return `${f.shown} rows matched${where}, and not one of them answers what they asked for. ${said}${trip}, and nothing published satisfies ${listOf(f.unanswered, "or")}. The screen looks full and answers nothing they said.`;
   }
   if (f.verdict === COVERAGE_THIN) {
-    return `Nothing to show, and it is a content gap. ${said}${trip}, landing at ${f.arrival.name}, and you have nothing published in ${f.target.label}. Discovery target: ${f.target.label}${f.target.danish ? ` (${f.target.danish})` : ""}.`;
+    // The hedge is only added when there IS something unplaceable, so an honest
+    // empty region still reads as an honest empty region.
+    const blind = f.unplaced
+      ? ` One caveat before you go and write anything: ${f.unplaced} published ${f.unplaced === 1 ? "entry has" : "entries have"} no usable coordinate, so no geography filter can see ${f.unplaced === 1 ? "it" : "them"} and ${f.unplaced === 1 ? "it" : "some"} could already be there. Run "Add missing coordinates" first.`
+      : "";
+    return `Nothing to show${f.unplaced ? "" : ", and it is a content gap"}. ${said}${trip}, landing at ${f.arrival.name}, and nothing placeable is published in ${f.target.label}.${blind} Discovery target: ${f.target.label}${f.target.danish ? ` (${f.target.danish})` : ""}.`;
   }
   if (f.verdict === COVERAGE_MATCHER) {
     return `Nothing to show, and it is NOT a content gap. ${said}${trip}, landing at ${f.arrival.name}, and you have ${f.published} published in ${f.target.label} that the preview could not reach, because the matcher only finds places the traveller names.`;

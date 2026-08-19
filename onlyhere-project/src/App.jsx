@@ -30,7 +30,7 @@ import { swipeAxis, dragOffset, swipeTarget } from "./utils/swipe";
 import { placeSlug, townPath, findBySlug, COUNTRY, kindForSeg, entryUrlPath, isEntryUrl } from "./utils/placeUrl";
 import { startRun, endRun, summarise, averageFor, describe, describeAverage, recentRuns, installFetchMeter } from "./utils/apiCost";
 import { startLog, endLog, note, decide, recentLogs, summariseLog, formatLog } from "./utils/runLog";
-import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES } from "./utils/pageScan";
+import { domainOf, isListingHost, scrapeTier, STALE_BEFORE_YEAR, MAX_FACT_AGE_MONTHS, rankSources, sourceOrderBlock, perishableSentence, EXISTENCE_RULE, PERISHABLE, MAX_TICKET_PAGES, isOwnSiteFor, urlNames, isKommuneHost } from "./utils/pageScan";
 import { weatherSourceFor, weatherBadge, normalsNote, dayWeather, FORECAST, NORMALS } from "./utils/weather";
 import { foodSpots } from "./data/food";
 import { essentials } from "./data/essentials";
@@ -42,7 +42,7 @@ import { SUPABASE_URL, SUPABASE_KEY, APP_VERSION } from "./config";
 import {
   getSeason, getEventDate, isUpcoming, isCurrentlyLive, hasFinished, externalHref, weatherIcon,
   isInDenmark, travelLabel, dotJoin, isFullPlanText, isReadyToBuild, stripReadyMarker, stripMarkdown, daysUntil, detectLegMode, haversineKm, scanForAITells, priceBand, PRICE_BANDS,
-  getEnclosingJSONStringBounds, nextWeekdayTimestamp, stayDurationForCategory,
+  getEnclosingJSONStringBounds, nextWeekdayTimestamp,
   getDistance, getDistanceRaw, tiltMove, tiltLeave, arrivalRow, hasArrivalField, departureParam, transitDepartureAnchor,
   daCompare, byName, seasonFit, isConfirmedUpcoming,
   hostMatchesName, officialSiteFromCandidates, stripDashes, stripDashesDeep, storeKindOf } from "./utils/helpers";
@@ -112,7 +112,7 @@ import { ProfileSheet } from "./components/ProfileSheet";
 import { AskGemlyx } from "./components/AskGemlyx";
 import { C, THEMES, THEME_ORDER, applyTheme, storedTheme } from "./utils/theme";
 import { StudioAssistant } from "./components/StudioAssistant";
-import { partOfCountry, partsPresent, matchesSearch } from "./utils/geography";
+import { partOfCountry, partsPresent, matchesSearch, islandOf, ISLAND_LABEL } from "./utils/geography";
 import { tileCss } from "./utils/mapTiles";
 import { dayCrossings, tripWeatherWarning } from "./utils/weatherWarn";
 import { THEME_LABEL, THEME_EMOJI, themesOf, hasTheme, themesPresent, tierLabel, tierBadge, TIERS, tierOf } from "./utils/placeThemes";
@@ -124,8 +124,36 @@ import { fetchCloudSaves, pushCloudSaves, mergeSaves, savedGuideRow, guideFromSa
 import { loadImageCredits, allImageCredits, licenseUrl, creditIsRequired } from "./utils/imageCredits";
 import { PhotoCredit } from "./components/PhotoCredit";
 import { placeKindOf, kindLabel, isArea, PLACE_KINDS, KIND_LABEL } from "./utils/placeKind";
+import { DRAFT_STORE_KEY, readStore, writeStore, packStore, restoreNote, problemNote, doneKeysFrom } from "./utils/studioDraftStore";
 
 import "leaflet/dist/leaflet.css";
+
+// ── THE SAVED DRAFTS, READ ONCE ────────────────────────────────────
+// Oliver, 19 Aug 2026: "I'd actually like if we could make it possible for my
+// drafts not to disappear when I close the site. It's wasted money when my page
+// just resets."
+//
+// READ ONCE, AT MODULE SCOPE, and memoised. Four separate hook initialisers
+// below need the restored session (the queue ref, its state mirror, the results
+// list and the runner's never-pay-twice set) and they must all see the SAME
+// object. Four independent reads would be four parses of the same blob, and any
+// re-render between them could hand two of them different answers, which is the
+// shape where the results list and the done set disagree and a finished draft is
+// researched a second time.
+//
+// localStorage access is wrapped because it THROWS rather than returning null in
+// Safari private browsing and wherever cookies are blocked for the origin. An
+// unguarded read here would take the whole app down on the first render, so the
+// fallback is "no saved drafts", which is exactly true from the app's point of view.
+let studioDraftsOnce;
+const restoredStudioDrafts = () => {
+  if (studioDraftsOnce === undefined) {
+    let raw = null;
+    try { raw = window.localStorage.getItem(DRAFT_STORE_KEY); } catch { raw = null; }
+    studioDraftsOnce = readStore(raw, Date.now());
+  }
+  return studioDraftsOnce;
+};
 
 // RESEARCH_SOURCE_RULES — the standing source-quality rule for every real
 // research/fact-check call (Studio drafting AND guide-building alike), restored
@@ -645,7 +673,6 @@ function GemlyxApp() {
   // One object means the chips, the counts and the clear are all derivable.
   const [attractionFacets, setAttractionFacets] = useState({});
   const [attractionQuery, setAttractionQuery] = useState("");
-  const [attractionSheet, setAttractionSheet] = useState(false);
   // "🍬 Handmade" used to be a pill in the CITY row, which is why the panel
   // changed shape when you tapped it: it is not a city and not a filter, it
   // swaps the page for a different view entirely. It gets to say so now.
@@ -1700,12 +1727,39 @@ function GemlyxApp() {
   // into the normal review/publish flow. Refs are the source of truth for the
   // runner loop (state mirrors are for rendering only) — same stale-closure
   // discipline as studioLoadingRef above.
-  const draftQueueRef = useRef([]);
-  const [draftQueue, setDraftQueue] = useState([]);
+  // ── SEEDED FROM STORAGE, NOT FROM EMPTY ─────────────────────────
+  // See restoredStudioDrafts at the top of this file. Every finished draft in
+  // this list is the output of the full pipeline and was paid for in OpenAI,
+  // Tavily, Perplexity, Firecrawl, Places and Directions calls, so losing the
+  // list to a closed tab is losing money, not losing convenience.
+  const draftQueueRef = useRef([...(restoredStudioDrafts().store?.queue || [])]);
+  const [draftQueue, setDraftQueue] = useState(() => [...(restoredStudioDrafts().store?.queue || [])]);
   const [queueDrafting, setQueueDrafting] = useState(null); // the name the queue is researching right now
-  const [queueResults, setQueueResults] = useState([]);
+  // ok: true is safe to assert here and is not an assumption: packResult refuses
+  // to store a result that has no draft, so a FAILED queue item never reaches
+  // storage. Re-listing a failure after a reload would invite a second paid
+  // attempt at a name that already did not work.
+  const [queueResults, setQueueResults] = useState(() =>
+    (restoredStudioDrafts().store?.results || []).map(r => ({ ...r, ok: true, error: null })));
   const queueBusyRef = useRef(false);
-  const doneRef = useRef(new Set());   // type::name already drafted this session, never drafted twice
+  // SEEDED TOO, and this is the line that stops the restore costing money.
+  // Without it a restored draft is absent from the done set, so pressing Start
+  // researches something already sitting finished on the screen. That is the
+  // exact spend this whole feature exists to prevent.
+  const doneRef = useRef(new Set(doneKeysFrom(restoredStudioDrafts().store?.results)));   // type::name already drafted, never drafted twice
+  // What to say about it. A restore is announced rather than silent: a draft
+  // that reappears with no word is one he can publish believing it was
+  // researched minutes ago, when its prices and hours are from whenever the tab
+  // was last open. problemNote covers the other half, where drafts existed and
+  // were deliberately NOT restored, which needs different words from "nothing
+  // was saved" and is the case where he has actually lost work.
+  const [draftRestore, setDraftRestore] = useState(() => {
+    const { store, problem, age } = restoredStudioDrafts();
+    if (store) return { lost: false, text: restoreNote(store, age) };
+    const note = problemNote(problem);
+    return note ? { lost: true, text: note } : null;
+  });
+  const [draftSaveProblem, setDraftSaveProblem] = useState(null);
   // DRAFT PROGRESS (Oliver: "when I click 'draft it' I wanna see the progress
   // of research like the loading screen"): generateArea sets a real stage
   // label + percent at each pipeline step, rendered as a progress panel under
@@ -3886,12 +3940,25 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // containsName, not includes: it needs the name to stand as its own
         // words, so "Ribe" does not match "Ribers Gaard" and a page about Ribe
         // Metalfestival does not pass as Ribelund Festival.
-        const hostNames = (u) => {
-          try {
-            const host = new URL(u).hostname.replace(/^www\./, "").split(".")[0].toLowerCase();
-            return nameWords.some(w => host.includes(w) || w.includes(host));
-          } catch { return false; }
-        };
+        // ── THE HOSTNAME IS NOT THE ONLY PLACE A NAME LIVES ────────
+        // Oliver, 19 Aug 2026: "It happens multiple times that the pipeline gives
+        // up on website (because it doesn't exist), when in reality, it actually is
+        // part of the city's official website."
+        //
+        // This read the FIRST LABEL OF THE HOSTNAME and nothing else, so
+        // aarhus.dk/dyrehave could not be Marselisborg Dyrehave's own page: the
+        // label is "aarhus" and the name words are marselisborg and dyrehave. The
+        // website field came back blank and rankSource filed the municipality's own
+        // page as a blog, beneath a ticket calendar and beneath Wikipedia. In
+        // Denmark the kommune IS the authority for parks, forests, beaches,
+        // harbours and libraries, and almost none of those have a domain.
+        //
+        // It was also unbounded both ways — `host.includes(w) || w.includes(host)`
+        // — so "visitaarhus" contained "aarhus" and a tourism board was promoted to
+        // the operator's own site. Both directions are fixed in one place now:
+        // isOwnSiteFor reads the host AND the path with bounded matching, and
+        // refuses a tourism board, a ticket calendar and an encyclopedia outright.
+        const hostNames = (u) => isOwnSiteFor(u, nameWords, { placesWebsite });
         const pageNames = (u) => containsName(urlText[u] || "", name);
         const nameMatched = usable.filter(u => hostNames(u) || pageNames(u));
         // A venue keeps the strict single name-matched site. A town or festival
@@ -4010,7 +4077,12 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
                 // A host is the operator's when the HOST says so, or when
                 // Google's business listing registered it. A headline is not a
                 // domain.
-                if (hostNames(url) || (placesWebsite && domainOf(url) === domainOf(placesWebsite))) {
+                // One test, not two. The Google-registered-URL half used to be
+                // spelled out here as well as inside hostNames; isOwnSiteFor owns
+                // both halves now, and a guard that restates what the function it
+                // guards already does is the kind of dead belt-and-braces this
+                // codebase keeps finding.
+                if (hostNames(url)) {
                   if (!officialHosts.includes(domainOf(url))) officialHosts.push(domainOf(url));
                 }
               }
@@ -4623,10 +4695,10 @@ ${googleFindings}\n\n` : "") + (context || "No search context found — use only
         code = `// This reads as a ${isMajor ? "MAJOR, well-known" : "LOCAL/smaller-scale"} festival — targeting the ${targetName} array. If that feels wrong, move the block below to the other array yourself.\n// 1) Ctrl+F for \`const ${targetName} = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, tier: ${J(t.tier || "Worth Considering")}, nearestStation: ${J(t.nearestStation)}, ticketInfo: ${J(t.ticketInfo)}, camping: ${J(t.camping)}, accommodationTip: ${J(t.accommodationTip)}, travelTime: ${J(t.travelTime)}, ticketStatus: ${J(t.ticketStatus || "on_sale")}, town: ${J(t.town)}, type: ${J(t.type || "Festival")}, emoji: ${J(t.emoji || "🎪")}, date: ${J(t.dateStart)}, dateEnd: ${J(t.dateEnd)}, photo: "/events/${slug}.jpg", desc: ${J(t.desc)}, mapHint: ${J(t.mapHint)}, website: ${J(t.website)}, verified: ${J(stamp)}, color: ${J(t.color || "#8E24AA")}, tags: ${JSON.stringify(Array.isArray(t.tags) ? t.tags.slice(0, 3) : [])}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Atmosphere", t.atmosphere], ["Who It's For", t.whoItsFor], ["The Reality Check", t.realityCheck]])}\n  ] },\n\n// 2) Add a photo at public/events/${slug}.jpg\n// 3) VERIFY dates, station, town/region and ticket info before committing. Empty date fields mean the research couldn't confirm them.`;
       } else if (sType === "free") {
         const nextId = Math.max(0, ...freeEntrance.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, timeNeeded: ${J(t.timeNeeded)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
+        code = `// 1) Ctrl+F for \`const freeEntrance = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, popularityTag: ${J(t.popularityTag || "Hidden Gem")}, city: ${J(t.city)}, type: ${J(t.type)}, emoji: ${J(t.emoji || "✨")}, desc: ${J(t.desc)}, website: ${J(t.website)}, color: ${J(t.color || "#2E7D32")}, ticketsGlance: ${J(t.ticketsGlance)}, extraCosts: ${J(t.extraCosts)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) VERIFY the website URL and that entry is genuinely free before committing.`;
       } else if (sType === "booking") {
         const nextId = Math.max(0, ...craftItems.map(x => x.id)) + 1;
-        code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, timeNeeded: ${J(t.timeNeeded)}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
+        code = `// 1) Ctrl+F for \`const craftItemsFallback = [\` and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, type: ${J(t.type || "Local")}, what: ${JSON.stringify(Array.isArray(t.what) ? t.what : [t.what].filter(Boolean))}, rating: ${t.rating ? Number(t.rating).toFixed(1) : "null"}, location: ${J(t.location)}, price: ${J(t.price || "See website")}, priceNote: ${J(t.priceNote)}, travelTime: ${J(t.travelTime)}, bookingType: ${J(t.bookingType || "contact")}, popularityTag: ${J(t.popularityTag || "")}, transportWarning: ${t.transportWarning ? "true" : "false"}, emoji: ${J(t.emoji || "🔨")}, photo: "/craft/${slug}.jpg", color: ${J(t.color || "#8E6B1F")}, accessibility: ${J(t.accessibility)}, nearestStation: ${J(t.nearestStation)}, gemlyxFind: ${J(t.gemlyxFind)},\n  desc: ${J(t.desc)},\n  blogBody: [\n${bb([["Being There", t.special], ["Who It's For", t.whoFor], ["The Reality Check", t.realityCheck]])}\n${bbBullets("Things to Know", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/craft/${slug}.jpg (or remove the photo field)\n// 3) rating is left null unless the research found a real one — leave it as null rather than inventing a number.\n// 4) VERIFY price, booking method, and that it still operates before committing.`;
       } else if (sType === "nightStreet") {
         const nextId = Math.max(0, ...nightlifeStreets.map(x => x.id)) + 1;
         code = `// 1) Ctrl+F for \`const nightlifeStreets = [\` in src/data/nightlifeStreets.js and paste right after the [ :\n{ id: ${nextId}, name: ${J(t.name)}, isStreet: true, town: ${J(t.town)}, location: ${J(t.location)}, emoji: ${J(t.emoji || "🍻")}, category: ${J(t.category || "Bar street")}, crowd: ${J(t.crowd)}, priceNote: ${J(t.priceNote)}, photo: "/nightlife-streets/${slug}.jpg",\n  desc: ${J(t.desc)},\n  mapHint: ${J(t.mapHint)}, color: ${J(t.color || "#5D4037")}, gemlyxFind: ${J(t.gemlyxFind)},\n  blogBody: [\n${bb([["Who It's For", t.whoFor], ["Best Nights", t.bestNights], ["Walking It", t.walkIt], ["The Reality Check", t.realityCheck]])}\n${bbBullets("What to Be Aware Of", t.thingsToKnow)}\n  ] },\n\n// 2) Add a photo at public/nightlife-streets/${slug}.jpg (or remove the photo field)\n// 3) The bars ON this street are NOT listed here. They are matched from their own published rows by town + street name, so publishing one more bar needs no edit to this entry.`;
@@ -6480,6 +6552,82 @@ Do NOT pick any of these already-used subjects: ${used || "none"}. Avoid the mos
     setStudioIdentityWarning(r.identityWarning || null);
   };
 
+  // ── THE OPEN EDITOR COMES BACK THROUGH THE SAME DOOR ────────────
+  // Deliberately loadQueueResult and not a second setter cascade. That function
+  // already knows the seven things a draft carries into the editor, including
+  // the two warnings and the frozen geo publishDraft force-overrides with, and
+  // it has been corrected four separate times for dropping one of them. A
+  // restore path that set its own subset would be a fifth door with its own
+  // subset to get wrong, which is the exact fault clearPreviousEntry was written
+  // to end.
+  //
+  // Placed here rather than beside the other state because loadQueueResult is a
+  // const declared above: referencing it from an effect higher up the file is a
+  // temporal dead zone, which tests/tdz.mjs checks for.
+  const editorRestoredRef = useRef(false);
+  useEffect(() => {
+    if (editorRestoredRef.current) return;
+    editorRestoredRef.current = true;
+    const saved = restoredStudioDrafts().store?.editor;
+    if (!saved) return;
+    loadQueueResult(saved);
+    // The TEXT, after the object. A half-finished edit that does not parse yet
+    // is the state most worth not losing, and it is the one thing loadQueueResult
+    // cannot reconstruct: it rebuilds the editor text from the draft object, so
+    // without this line every restore silently reverts his typing to the last
+    // version that parsed.
+    if (typeof saved.text === "string" && saved.text.trim()) setStudioDraftText(saved.text);
+    if (saved.photoName) setStudioPhotoName(saved.photoName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── AND THE SAVE ────────────────────────────────────────────────
+  // Debounced, because studioDraftText changes on every keystroke and the draft
+  // object behind it is the largest thing in Studio: serialising it per
+  // character would be the slowest thing on the screen for no gain, since the
+  // failure being guarded against is closing the tab, not losing the last word.
+  //
+  // NOTHING IS SAVED WHILE EDITING A PUBLISHED ROW. editingId is what turns
+  // publishDraft from an INSERT into a PATCH of one specific row, and it is
+  // deliberately not stored (see studioDraftStore's header). Saving the editor
+  // during an edit would therefore restore that row's content as a FRESH draft,
+  // and publishing it would insert a duplicate of a row that already exists.
+  // Reopening the row from Manage Published is one click and loses nothing.
+  useEffect(() => {
+    if (!studioSession) return;
+    const t = setTimeout(() => {
+      const editor = (studioDraft && editingId === null) ? {
+        name: studioTown || studioDraft?.name || "",
+        type: studioType,
+        draft: studioDraft,
+        code: studioResult,
+        frozenGeo: studioFrozenGeo,
+        identityWarning: studioIdentityWarning,
+        inventedWarning: studioInventedWarning,
+        text: studioDraftText,
+        photoName: studioPhotoName,
+      } : null;
+      const { store } = packStore({ queue: draftQueue, results: queueResults, editor }, Date.now());
+      let storage = null;
+      try { storage = window.localStorage; } catch { storage = null; }
+      const res = writeStore(storage, store);
+      // A FULL BROWSER IS THE ONE WARNING HE GETS before the next crash costs a
+      // batch, so it goes on screen rather than into the console.
+      setDraftSaveProblem(res.ok ? null : problemNote(res.problem));
+    }, 900);
+    return () => clearTimeout(t);
+  }, [studioSession, draftQueue, queueResults, editingId, studioDraft, studioDraftText,
+      studioType, studioTown, studioResult, studioFrozenGeo, studioIdentityWarning,
+      studioInventedWarning, studioPhotoName]);
+
+  // Dropping the finished list is a deliberate act, so it needs a button. It is
+  // also the only advice problemNote can give when storage is full.
+  const clearFinishedDrafts = () => {
+    setQueueResults([]);
+    setDraftRestore(null);
+    setDraftSaveProblem(null);
+  };
+
   // ── DISCOVER: OpenAI plans search angles → Tavily runs them → OpenAI reads
   // the raw results and pulls out real, specifically-named candidates, filtered
   // against what Gemlyx already has. Tavily (not Perplexity) is deliberately
@@ -7662,18 +7810,21 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         );
         return;
       }
-      // Same enforcement for stay duration — never let the model's guess survive
-      // when a reliable category-based real duration exists. Free-entrance items
-      // never get a shaped.category field (shapeForLive puts their category text
-      // in shaped.type instead — see the "free" branch above), so this used to
-      // always read undefined for every free attraction and silently fall through
-      // to the generic "1–2 hours" default, overwriting genuinely different real
-      // durations (a quick square, a full museum) with the same fallback text.
-      if (!isEditing && "timeNeeded" in shaped) {
-        const categoryText = studioType === "free" ? shaped.type : shaped.category;
-        const realDuration = stayDurationForCategory(studioType, categoryText);
-        if (realDuration) shaped.timeNeeded = realDuration;
-      }
+      // ── THE STAY-DURATION OVERRIDE IS GONE, AND SO IS THE FIELD ──
+      // Oliver, 19 Aug 2026: "I think we should get rid of 'time-needed'."
+      //
+      // What stood here called stayDurationForCategory and wrote its answer over
+      // whatever the writer had estimated. Its comment described that as
+      // "enforcement" against the model's guess, and it was really one guess
+      // replacing another: the function returned one of three hardcoded strings
+      // picked by a regex over a category word. It never read a page, an opening
+      // time or a review. Every park in Denmark got 30 to 45 mins.
+      //
+      // Removing the RENDERER alone would have left this writing a field nobody
+      // reads, which is how a value comes back the day somebody adds a row for it
+      // again. The helper itself is deleted too, for the same reason: an unwired
+      // helper sitting in the file is an invitation, and this project has already
+      // catalogued five of them.
       // Instagram URL is a separate founder-entered field, not something the AI drafts
       // (it shouldn't invent a real post link) — inject it into blogBody here, AFTER
       // shapeForLive has already run, so it's never wiped by the reshaping step above.
@@ -9070,7 +9221,15 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
               if (key) gateCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
             }));
             const isPublished = (n) => !!lookupRealPlace(n);
-            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished });
+            // ── THE MODE REACHES THE GATE ─────────────────────────
+            // Until 19 Aug it did not, so every day was judged against a flat
+            // 120 km whatever the traveller said they travelled by: a 100 km day
+            // passed on a bicycle trip and a 150 km day failed on a driving one.
+            // travelModeKey rather than the regexes further down this function,
+            // because those are declared hundreds of lines below this point and
+            // this is the same TDZ shape that has already bitten enrichGuideDays.
+            const gateMode = travelModeKey(convoText);
+            let verdict = checkPlan(skeleton.days, gateCoords, { isPublished, mode: gateMode });
             let planDays = skeleton.days;
 
             // ONE RETRY, NEVER A REFUSAL. Some trips genuinely are awkward, and
@@ -9098,7 +9257,7 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
                       const key = townKeyFor(st.town || "") || townKeyFor(st.name);
                       if (key) fixedCoords[st.name] = { lat: TOWN_COORDS[key][0], lon: TOWN_COORDS[key][1] };
                     }));
-                    const second = checkPlan(fixed.days, fixedCoords, { isPublished });
+                    const second = checkPlan(fixed.days, fixedCoords, { isPublished, mode: gateMode });
                     // Keep whichever is actually better. A "fix" that trades two
                     // problems for three is not a fix.
                     if (second.problems.length < verdict.problems.length) { verdict = second; planDays = fixed.days; }
@@ -9109,6 +9268,31 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
             // Whatever survives is recorded rather than forgotten, so Studio can
             // see that a published guide was built on a plan that did not pass.
             planProblems = verdict.problems;
+            // ── AND WHAT COULD NOT BE JUDGED IS RECORDED TOO ──────
+            // The distance rule stays silent on a day whose legs did not all
+            // resolve to a coordinate, which is correct — a partial total
+            // understates the day. What it never did was SAY so, and an unjudged
+            // day left this block looking exactly like a day that passed. On the
+            // product whose whole promise is that nothing is asserted that nobody
+            // measured, that is the wrong silence. Not a problem the planner can
+            // fix, so it is a note rather than a retry: asking a model to supply a
+            // coordinate Gemlyx does not hold is asking it to invent a town.
+            if (verdict.unjudged?.length) {
+              const which = verdict.unjudged.map(u => `day ${u.day} (${u.measured} of ${u.legs} legs)`).join(", ");
+              planProblems = [...planProblems, {
+                code: "DISTANCE_UNJUDGED",
+                detail: `Distance was not checked on ${verdict.unjudged.length} of ${verdict.stats.days} days, because not every stop resolved to a coordinate: ${which}. Those days passed unchecked rather than passing. Run "Add missing coordinates" on the towns involved.`,
+              }];
+            }
+            // What the gate was actually measuring against, so a run report can
+            // show that a 100 km day passed because the mode was a car rather than
+            // because nobody looked at it.
+            note("Plan gate", {
+              mode: verdict.stats.mode || "unstated",
+              ceilingKmPerDay: verdict.stats.ceilingKm,
+              daysJudged: `${verdict.stats.judgedDays} of ${verdict.stats.days}`,
+              problems: verdict.problems.length,
+            });
             plannerSkeleton = JSON.stringify({ days: planDays });
             plannerStopNames = planDays.flatMap(d => (d.stops || []).map(s => s?.name)).filter(Boolean);
           }
@@ -9179,7 +9363,21 @@ Rules: ${budgetSays ? `WHAT THEY SAID ABOUT MONEY: ${budgetSays}. Never recommen
       }
       let guideGrounding = "";
       {
-        buildStage("Fact-checking the guide", 42);
+        // ── "TOO ACADEMIC, AND TOO MUCH ACTING LIKE WE DON'T KNOW" ──
+        // Oliver, 19 Aug 2026, on the word fact-checking appearing to a traveller
+        // while their guide builds.
+        //
+        // He is right, and the giveaway is that every other stage in this build
+        // already has the voice he wants: "Gathering real places and facts",
+        // "Researching real details", "Verifying exact locations and routes",
+        // "Checking the forecast". Those describe WORK. "Fact-checking the guide"
+        // describes DOUBT, and it is the one thing a paying reader should not be
+        // watching us have.
+        //
+        // The work is unchanged — this is still the Perplexity pass with live web
+        // search. Only the label is, and it now names what is being checked
+        // instead of announcing that we are unsure.
+        buildStage("Checking hours, prices and dates", 42);
         const preCheck = await askPerplexity(`This is a Denmark trip-planning conversation. Using real, current web search, verify the real place names mentioned actually exist, and find any current opening hours, prices, or dates relevant to the plan. Be concise — short facts only.\n${researchRules()}\n\n${convoText.slice(0, 3000)}`);
         if (!preCheck.error && preCheck.text) guideGrounding = preCheck.text;
       }
@@ -9311,7 +9509,10 @@ If the conversation only covers a single day or a few stops with no explicit day
       // flags something as genuinely wrong, Claude rewrites that one field again
       // to fix it. One corrective pass, not an open-ended loop — same one-shot
       // shape as the poor-writing pass above.
-      buildStage("Final fact-check", 88);
+      // Same reason as the 42% stage above. "Final fact-check" reads as a last
+      // nervous look; this reads as the last pass of a professional job, which is
+      // what it is.
+      buildStage("Last pass on the details", 88);
       try {
         const proseFields2 = collectGuideProseFields(parsed); // re-collect — the polish pass above may have rewritten some
         const stopNames = (parsed.days || []).flatMap(d => (d.stops || []).map(s => `${s.name}${s.town ? ` (${s.town})` : ""}`));
@@ -12636,6 +12837,32 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                       </div>
                     )}
 
+                    {/* ── WHAT HAPPENED TO THE DRAFTS THAT WERE OPEN ──────
+                        Announced rather than silent, and the two cases read
+                        differently on purpose. A RESTORE needs the age in it,
+                        because a draft that reappears without one is a draft he
+                        can publish believing it was researched minutes ago. A
+                        LOSS needs to be visible at all: an empty queue after a
+                        reload is indistinguishable from a queue nobody used, and
+                        the difference is whether work was thrown away. */}
+                    {draftRestore && (
+                      <div style={{ marginBottom: 10, background: C.bg, border: `1px solid ${draftRestore.lost ? "#FFB34755" : `${C.gold}44`}`, borderRadius: 10, padding: "9px 13px", display: "flex", alignItems: "flex-start", gap: 9 }}>
+                        <span style={{ color: draftRestore.lost ? "#FFB347" : C.gold, flexShrink: 0, fontSize: 12 }}>{draftRestore.lost ? "!" : "\u25C6"}</span>
+                        <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: C.muted, lineHeight: 1.55 }}>{draftRestore.text}</div>
+                        <button onClick={() => setDraftRestore(null)} title="Dismiss"
+                          style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, width: 20, height: 20, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                          \u2715
+                        </button>
+                      </div>
+                    )}
+                    {/* NOT DISMISSABLE. This one says the next reload will lose
+                        work, and a dismissed warning about future data loss is a
+                        warning that was never given. */}
+                    {draftSaveProblem && (
+                      <div style={{ marginBottom: 10, background: C.bg, border: "1px solid #FFB34755", borderRadius: 10, padding: "9px 13px", fontSize: 11.5, color: "#FFB347", lineHeight: 1.55 }}>
+                        {draftSaveProblem}
+                      </div>
+                    )}
                     {(draftQueue.length > 0 || queueResults.length > 0) && (
                       <div style={{ marginBottom: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
@@ -12652,6 +12879,12 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                             <button onClick={clearQueued}
                               style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "3px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
                               Cancel all waiting
+                            </button>
+                          )}
+                          {queueResults.length > 0 && (
+                            <button onClick={clearFinishedDrafts} title="Drops the finished drafts from this list and from storage. It does not delete anything published."
+                              style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 100, padding: "3px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
+                              Clear finished ({queueResults.length})
                             </button>
                           )}
                         </div>
@@ -12685,7 +12918,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                         ))}
                         {queueResults.length > 0 && (
                           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
-                            Open loads a finished draft into the editor. It does not start any research.
+                            Open loads a finished draft into the editor. It does not start any research. Finished drafts are kept in this browser for two weeks, so closing the tab no longer throws them away.
                             {queueDrafting ? ` The queue is separately still working on ${queueDrafting}, which is why the progress bar keeps moving. That run stays out of the editor, so opening this now is safe.` : ""}
                             {/* THE REFUSAL BELONGS ON THE SCREEN. It lived in a
                                 title attribute, which needs a hover and never
@@ -14303,9 +14536,14 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // reads the address shape instead of matching a list, so a town nobody
             // remembered to add still gets its own chip.
             const cityOf = (item) => cityFromLocation(item.city || item.location) || "Other";
+            // _island is computed ONCE here rather than inside the facet test.
+            // facetCounts runs every option of every facet over the pool on every
+            // render, so a test that geocoded per call would run kommuneAt
+            // hundreds of times for one open panel.
+            const withIsland = (i) => ({ ...i, _island: islandOf(i, kommuneNameAt(i.__lat ?? i.lat, i.__lon ?? i.lon)) });
             const combined = [
-              ...freeEntrance.map(a => ({ ...a, _kind: "free", _price: "Free", _city: cityOf(a) })),
-              ...craftItems.map(c => ({ ...c, _kind: "craft", _price: c.price || "See website", _city: cityOf(c) })),
+              ...freeEntrance.map(a => withIsland({ ...a, _kind: "free", _price: "Free", _city: cityOf(a) })),
+              ...craftItems.map(c => withIsland({ ...c, _kind: "craft", _price: c.price || "See website", _city: cityOf(c) })),
             ];
             const kindKeys = { Blacksmithing: ["blacksmith"], Ceramics: ["ceramic", "pottery"], Jewellery: ["jewellery"], Leather: ["leather"], Textiles: ["textile", "dyeing", "felting"], Woodwork: ["wood"], Candy: ["candy"] };
 
@@ -14315,28 +14553,72 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // other. The old page had the filter logic in one place and the
             // controls in another, which is how it ended up with two filters
             // that only filtered half the list (see below).
+            // ── THE SECTIONS HE ASKED FOR, IN HIS ORDER ─────────────
+            // Oliver, 19 Aug 2026: "section 1: Most recommended/Alphabet/closest
+            // to me. Section 2 (be able to choose more): type of
+            // food/attraction/town(harbor, village, major city, town). Section 3:
+            // Island."
+            //
+            // Section 1 is the sort and lives in FilterBar, because it belongs to
+            // every page that has one. Sections 2 and 3 are these first two
+            // facets, and they are the only two with a button on the row.
+            //
+            // WHAT CAME BEFORE: five facets, all permanently on the row, one of
+            // them a City list derived from the published rows — so the row grew
+            // by one control every time he published in a town he had not covered
+            // yet. That is the "10.000 different things to click" he is
+            // describing, and it was going to get worse on its own.
+            //
+            // NOTHING WAS DELETED TO SHORTEN IT. City, Popularity and Booking are
+            // all still here and still work; they sit in the sheet under their own
+            // headings instead of on the row. A filter removed is a question the
+            // reader can no longer ask, and he asked for simpler, not for less.
             const ATTRACTION_FACETS = [
+              // ── SECTION 2: TYPE, AND YOU CAN PICK SEVERAL ─────────
+              // "be able to choose more". Two lists used to do this job: Type
+              // (free or bookable) and Craft (seven materials), which meant
+              // somebody after ceramics had to know that ceramics live under
+              // Bookable. One list, OR within it, so ticking Ceramics and
+              // Woodwork shows both rather than nothing.
+              { key: "type", label: "Type", primary: true, multi: true,
+                options: [
+                  { value: "All", label: "All" },
+                  { value: "free", label: "🆓 Free to enter" },
+                  { value: "craft", label: "🎟 Bookable" },
+                  ...Object.keys(kindKeys).map(k => ({ value: k, label: k })),
+                ],
+                // ── A FILTER THAT FILTERED HALF THE LIST ────────────
+                // The old craft test was `i._kind === "craft" && ...`, and the
+                // old kind test was its own facet, so picking Ceramics removed
+                // the wrong workshops and left every free attraction in place. A
+                // filter that quietly does not apply to half the results is worse
+                // than no filter, because the list looks like an answer.
+                test: (i, v) => v === "free" || v === "craft"
+                  ? i._kind === v
+                  : (i.what || []).some(w => (kindKeys[v] || []).some(k => w.toLowerCase().includes(k))) },
+              // ── SECTION 3: ISLAND ────────────────────────────────
+              // See islandOf in utils/geography.js for why this is not simply
+              // partOfCountry: that function answers "nearest of the five
+              // landmasses", so it would have filed Ærøskøbing under Funen. The
+              // island kommuner answer it properly for the islands that are their
+              // own kommune, and the rest fall back to the part of the country,
+              // which is true but coarser. Jutland is labelled as the mainland
+              // because it is a peninsula and saying otherwise would be wrong.
+              { key: "island", label: "Island", primary: true,
+                options: [
+                  { value: "All", label: "All" },
+                  ...[...new Set(combined.map(i => i._island).filter(Boolean))]
+                    .sort(daCompare)
+                    .map(v => ({ value: v, label: ISLAND_LABEL[v] || v })),
+                ],
+                test: (i, v) => i._island === v },
+              // ── AND THE THREE THAT KEEP WORKING, OFF THE ROW ─────
               { key: "city", label: "City",
-                // ── "I CAN'T GET ONTO THE BLOGS.. THE PAGE CRASHES" ──
-                // Oliver, 18 Aug 2026, with the console: `ReferenceError:
-                // KNOWN_CITIES is not defined`.
-                //
-                // Mine, from the filter work the night before. This read a
-                // KNOWN_CITIES array that is declared at line 3240 — inside an
-                // `if (NIGHTLIFE_TYPES.includes(sType))` block, in a different
-                // function entirely. A legal identifier at parse time, so Vite
-                // built it and the suite passed; a ReferenceError the moment this
-                // page rendered, which the ErrorBoundary turned into a white
-                // screen. The one page nobody had opened since.
-                //
-                // AND THE HARDCODED LIST WAS THE WRONG ANSWER ANYWAY. Ten names,
-                // so an attraction published in Skagen or Ribe got no chip at all
-                // — the same "a filter that quietly does not cover half the list"
-                // failure this very block was written to fix. Derived from the
-                // rows instead, exactly as the Food and Nightlife pages already
-                // do it (search daCompare), so a city he publishes in tomorrow
-                // gets a chip tomorrow. "Other" sorts last because it is not a
-                // place.
+                // DERIVED FROM THE ROWS, not a hardcoded list. A ten-name array
+                // stood here until 18 Aug and an attraction published in Skagen
+                // or Ribe got no chip at all, which is the same "a filter that
+                // quietly does not cover half the list" fault as the craft test
+                // above. "Other" sorts last because it is not a place.
                 options: [
                   { value: "All", label: "All" },
                   ...[...new Set(combined.map(i => i._city).filter(Boolean))]
@@ -14344,18 +14626,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                     .map(c => ({ value: c, label: c })),
                 ],
                 test: (i, v) => i._city === v },
-              { key: "kind", label: "Type",
-                options: [{ value: "All", label: "All" }, { value: "free", label: "🆓 Free" }, { value: "craft", label: "🎟 Bookable" }],
-                test: (i, v) => i._kind === v },
-              // ── A FILTER THAT FILTERED HALF THE LIST ──────────────
-              // The old test was `if (craftKind && item._kind === "craft" && !match)`,
-              // so picking Ceramics removed the wrong workshops and left every
-              // free attraction in place. Same shape on bookableOnly. A filter
-              // that quietly does not apply to half the results is worse than no
-              // filter, because the list looks like an answer.
-              { key: "craft", label: "Craft",
-                options: [{ value: "All", label: "All" }, ...Object.keys(kindKeys).map(k => ({ value: k, label: k }))],
-                test: (i, v) => i._kind === "craft" && (i.what || []).some(w => (kindKeys[v] || []).some(k => w.toLowerCase().includes(k))) },
               { key: "gem", label: "Popularity",
                 options: [{ value: "All", label: "All" }, { value: "gem", label: "◆ Hidden Gem" }],
                 test: (i) => i.popularityTag === "Hidden Gem" },
@@ -14368,7 +14638,6 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             // describe the list you are actually looking at rather than the
             // whole catalogue.
             const searched = combined.filter(i => matchesQuery(i, attractionQuery, ["_city", "tag", "desc"]));
-            const attractionChips = appliedChips(ATTRACTION_FACETS, attractionFacets);
             // THE UNFILTERED TOTAL decides, never the visible count: reading the
             // filtered number would hide the controls the moment they worked,
             // leaving a short list nobody can widen again.
@@ -14409,108 +14678,59 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                 </div>
 
                 {attractionView !== "handmade" && (
-                  <>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
-                      {useAttractionFilters && (
-                        <button onClick={() => setAttractionSheet(true)}
-                          style={{ display: "flex", alignItems: "center", gap: 7, background: attractionChips.length ? `${C.gold}18` : C.surface, border: `1px solid ${attractionChips.length ? C.gold : C.border}`, color: attractionChips.length ? C.gold : C.text, borderRadius: 100, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                          Filter{attractionChips.length > 0 ? ` · ${attractionChips.length}` : ""}
-                        </button>
-                      )}
-                      {/* Sort is not a filter. It changes the order, never the
-                          contents, so it stays out of the sheet and out of
-                          "clear all". */}
-                      <select value={craftSort}
-                        onChange={e => { setCraftSort(e.target.value); if (e.target.value === "near" && !isInDenmark(userCoords)) requestLocation(); }}
-                        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 100, padding: "9px 14px", fontSize: 13, fontWeight: 700, color: C.text, cursor: "pointer", outline: "none", fontFamily: "'Inter', sans-serif" }}>
-                        <option value="recommended">★ Recommended</option>
-                        <option value="az">Alphabetical</option>
-                        <option value="near">📍 Closest</option>
-                      </select>
-                    </div>
+                  <div style={{ marginTop: 10 }}>
+                    {/* ── ONE FILTER, THE SAME ONE EVENTS USES ─────────────
+                        Oliver, 19 Aug 2026: "Fix filters on the blogs please...
+                        the events is somewhat good. But the others need to be
+                        sorted. We got too many blogs for you to make 10.000
+                        different things to click. Make it simpler."
 
-                    {/* ── APPLIED FILTERS, WHICH 66% OF MOBILE SITES DO
-                           NOT SHOW (Baymard) ────────────────────────
-                        Without this, somebody who has scrolled past the controls
-                        cannot tell why the list is short. They reopen the panel
-                        just to look, or decide the site has nothing. */}
-                    {attractionChips.length > 0 && (
-                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
-                        {attractionChips.map(chip => (
-                          <button key={chip.key} onClick={() => setAttractionFacets(f => clearFacet(f, chip.key))}
-                            style={{ display: "flex", alignItems: "center", gap: 6, background: `${C.gold}18`, border: `1px solid ${C.gold}44`, color: C.gold, borderRadius: 100, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                            {chip.label} <span style={{ fontSize: 13, opacity: 0.8 }}>✕</span>
-                          </button>
-                        ))}
-                        <button onClick={() => setAttractionFacets(f => clearAllFacets(ATTRACTION_FACETS, f))}
-                          style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", textDecoration: "underline", fontFamily: "'Inter', sans-serif" }}>
-                          Clear all
-                        </button>
-                      </div>
-                    )}
+                        What stood here was a SECOND filter: its own Filter
+                        button, its own bottom sheet, its own chip row, its own
+                        clear-all, its own zero-count rule, about 110 lines of
+                        it, all doing what components/FilterBar.jsx already does
+                        for Events. FilterBar's own header predicted this on 15
+                        August: "a shared component means deciding later costs
+                        one line per tab instead of a second rebuild, and it
+                        means the four cannot drift into four slightly different
+                        filters, which is the shape this codebase repeats more
+                        than any other." They had already drifted. The sheets
+                        opened differently, the chips were styled differently and
+                        the sort was a native select on one page and a menu on
+                        the other.
 
+                        SIMPLER, CONCRETELY, and not just shorter: five facets
+                        used to sit on the row as five permanent controls, one of
+                        them a City list that grows every time he publishes in a
+                        new town. Now the row is Filter, City, Type, and
+                        everything else is one tap into the sheet, which is the
+                        Events layout he called good. The facets themselves are
+                        untouched: nothing was removed to make the row short. */}
+                    <FilterBar
+                      items={searched}
+                      shown={filtered.length}
+                      noun="places"
+                      facets={useAttractionFilters ? ATTRACTION_FACETS : []}
+                      state={attractionFacets}
+                      onChange={next => setAttractionFacets(next)}
+                      sort={craftSort}
+                      sortOptions={[
+                        { value: "recommended", label: "★ Recommended" },
+                        { value: "az", label: "Alphabetical" },
+                        { value: "near", label: "📍 Closest" },
+                      ]}
+                      // The location prompt rides with the sort that needs it,
+                      // exactly as the old select did. Asking for a permission
+                      // nobody's action requires is how a page gets a browser
+                      // prompt it cannot explain.
+                      onSort={v => { setCraftSort(v); if (v === "near" && !isInDenmark(userCoords)) requestLocation(); }}
+                    />
                     {craftSort === "near" && !isInDenmark(userCoords) && (
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Works once you are in Denmark with location on. Showing recommended order for now.</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: -6, marginBottom: 12 }}>Works once you are in Denmark with location on. Showing recommended order for now.</div>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
-
-              {/* ── THE SHEET ──────────────────────────────────────── */}
-              {attractionSheet && (
-                <div onClick={() => setAttractionSheet(false)}
-                  style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 900, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-                  <div onClick={e => e.stopPropagation()}
-                    style={{ background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 560, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}` }}>
-                      <button onClick={() => setAttractionSheet(false)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "'Fraunces', serif" }}>Filter</div>
-                      <button onClick={() => setAttractionFacets(f => clearAllFacets(ATTRACTION_FACETS, f))}
-                        style={{ background: "none", border: "none", color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Clear</button>
-                    </div>
-
-                    <div style={{ overflowY: "auto", padding: "4px 18px 12px", flex: 1 }}>
-                      {ATTRACTION_FACETS.map(facet => {
-                        const counts = facetCounts(searched, ATTRACTION_FACETS, attractionFacets, facet.key);
-                        return (
-                          <div key={facet.key} style={{ padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
-                            <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 9 }}>{facet.label}</div>
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              {facet.options.map(opt => {
-                                const n = counts[opt.value] ?? 0;
-                                // ── ZERO IS DISABLED, NOT HIDDEN ────
-                                // A count of zero here is a true statement,
-                                // because counts exclude their own facet:
-                                // picking this WOULD empty the list. Hiding
-                                // those options instead would make the sheet
-                                // jump under a thumb as it reflows.
-                                const dead = n === 0 && opt.value !== "All";
-                                const on = (attractionFacets[facet.key] || "All") === opt.value;
-                                return (
-                                  <button key={opt.value} disabled={dead}
-                                    onClick={() => setAttractionFacets(f => opt.value === "All" ? clearFacet(f, facet.key) : { ...f, [facet.key]: opt.value })}
-                                    style={{ background: on ? C.gold : C.surface, border: `1px solid ${on ? C.gold : C.border}`, color: on ? "#0A0F1E" : dead ? C.muted : C.text, opacity: dead ? 0.4 : 1, borderRadius: 100, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, cursor: dead ? "default" : "pointer", fontFamily: "'Inter', sans-serif" }}>
-                                    {opt.label} <span style={{ opacity: 0.65, fontWeight: 600 }}>{n}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* The count lives on the button you are about to press, so
-                        nobody applies a filter to find out it emptied the page. */}
-                    <div style={{ padding: "12px 18px 18px", borderTop: `1px solid ${C.border}` }}>
-                      <button onClick={() => setAttractionSheet(false)}
-                        style={{ width: "100%", background: C.gold, border: "none", color: "#0A0F1E", borderRadius: 100, padding: "14px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                        Show {filtered.length} place{filtered.length !== 1 ? "s" : ""}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {attractionView === "handmade" ? (
                 <>
@@ -17241,8 +17461,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
             </div>
 
             <AtAGlanceCard rows={[
-              { icon: "⏱️", label: "Time Needed", value: craftDetail.timeNeeded },
-              { icon: "♿", label: "Accessibility", value: craftDetail.accessibility },
+                { icon: "♿", label: "Accessibility", value: craftDetail.accessibility },
               arrivalRow(craftDetail.nearestStation),
             ]} />
             {craftDetail.gemlyxFind && <GemlyxFindCard text={craftDetail.gemlyxFind} />}
