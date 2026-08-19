@@ -7541,7 +7541,36 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
         }
         if (fromSite) continue;   // its own site agrees with what we hold: nothing to report, nothing spent
 
-        const prompt = `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
+        // ── TWO DIFFERENT QUESTIONS, AND ONLY ONE WAS EVER ASKED ──
+        //
+        // Oliver, 19 Aug 2026, after deploying the site-read path and running it:
+        // 42 events checked, "Nothing's changed". Distortion still unknown.
+        //
+        // My own gap, and the same one I had just written down. I fixed the
+        // question on the path that reads the operator's site and left the
+        // FALLBACK asking the old one. An event with no website on file, or one
+        // whose site could not be read, still got "Currently on file: date
+        // unknown ... has the date actually CHANGED from what's on file", and
+        // the honest answer to that is no. So the events with no site were
+        // exactly the events that stayed unknown, which is the same shape as the
+        // filter bug that started this: the rows that most needed the tool were
+        // the rows it could not help.
+        //
+        // An undated event gets a different question, and a harder one: find the
+        // next edition, name the source, and say so plainly if it is not
+        // announced yet. "Not announced yet" is a real and useful answer here in
+        // a way it never is for a date that already exists.
+        const undated = isUndated(ev.date);
+        const prompt = undated
+          ? `Using real, current web search, find the NEXT edition dates of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. There is NO date on file for it, so this is not a question about whether anything changed: it is a question about when the event next takes place.
+
+Look at the event's OWN website and its official ticket seller first, then the organiser's social pages, then a listing site. Danish festival pages often state dates as "11.06.27-12.06.27", which is day.month.year, or as "3.-7. juni 2027".
+
+BE CAREFUL OF TWO THINGS. A festival page carries its own history, so make sure the dates you report are the NEXT edition and not last year's recap. And if the next edition genuinely has not been announced, say so: that is a real answer and it is far better than a guess, because this date is printed for travellers booking flights.
+
+Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "YYYY-MM-DD or empty", "dateEndChanged": "YYYY-MM-DD or empty", "ticketStatusChanged": "", "notes": "one short sentence naming WHERE the date came from, or saying the next edition is not announced yet"}.
+${researchRules("festival", ev)}`
+          : `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
         try {
           const result = await askPerplexity(prompt);
           if (result.error) continue;
@@ -13570,7 +13599,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                               Checked {updateEventsResults.checked} upcoming event{updateEventsResults.checked === 1 ? "" : "s"}{updateEventsResults.skipped > 0 ? ` (${updateEventsResults.skipped} more upcoming not checked this run — click again to continue)` : ""}.
                             </div>
                             {updateEventsResults.changed.length === 0 ? (
-                              <div style={{ fontSize: 12, color: C.light }}>Nothing's changed — everything checked still matches what's on file.</div>
+                              <div style={{ fontSize: 12, color: C.light }}>Nothing changed. Everything checked still matches what is on file.</div>
                             ) : (
                               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                                 {updateEventsResults.changed.map((c, i) => (

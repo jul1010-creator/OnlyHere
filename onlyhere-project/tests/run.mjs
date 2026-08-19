@@ -3959,14 +3959,28 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   is("an empty list costs nothing", blockCost([], "town", null), { sources: 0, words: 0, perDraft: 0 });
 
   // ── EVERY RESEARCH PROMPT, OR THE LIST IS A LIE ──────────────────
-  // Six of seven would be worse than none: the seventh would quietly research
+  // Seven of eight would be worse than none: the eighth would quietly research
   // differently and nothing anywhere would say so.
+  //
+  // Eight since 19 Aug 2026, when the event check split in two. An event with a
+  // date is asked whether it CHANGED; an event with no date is asked WHEN IT IS,
+  // which is a different question and was the reason Distortion stayed unknown
+  // through every run. Both are research prompts and both take the same rules.
   const app3 = readFileSync(join(root, "src/App.jsx"), "utf8");
   is("no research prompt reads the constant directly any more", (app3.match(/\$\{RESEARCH_SOURCE_RULES\}/g) || []).length, 1);
   // INTERPOLATIONS only. A bare /researchRules\(/ also matched the sentence in a
   // comment that mentions it, which would have let a real call site be removed
   // while the count stayed right.
-  is("and all seven go through researchRules", (app3.match(/\$\{researchRules\(/g) || []).length, 7);
+  is("and all eight go through researchRules", (app3.match(/\$\{researchRules\(/g) || []).length, 8);
+  // THE SPLIT ITSELF, because a count alone passes on any eighth prompt. An
+  // undated event must be asked when it is, not whether it moved.
+  ok("an undated event is asked when the next edition is",
+     /const undated = isUndated\(ev\.date\);/.test(app3)
+     && /find the NEXT edition dates of the Danish event/.test(app3));
+  ok("and is told not announced yet is a real answer",
+     /that is a real answer and it is far better than a guess/.test(app3));
+  ok("while a dated one is still asked whether it changed",
+     /has the date actually changed from what's on file/.test(app3));
   // FIVE of the seven know where the draft is and say so. The other two are the
   // traveller-facing guide pipeline, which covers several towns at once, so it
   // deliberately carries only the national sources.
