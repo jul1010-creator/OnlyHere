@@ -314,21 +314,16 @@ export const geocodeOne = async (name, town) => {
 // relearn six times.
 export const NO_DATE_ON_IMAGE = "NONE";
 
-export const readDatesFromImage = async (imageUrl, eventName, { model = "claude-sonnet-5", maxTokens = 200 } = {}) => {
+// The transport, once. Two callers ask an image two DIFFERENT questions below,
+// and only the questions differ: the fetch, the cost record, the NONE sentinel
+// and the failure shapes are identical and must stay identical. Splitting the
+// prompts while sharing this is the opposite of the duplicated-instrument fault
+// in this codebase: one mechanism, two deliberate questions.
+const askAboutImage = async (imageUrl, prompt, { model = "claude-sonnet-5", maxTokens = 200 } = {}) => {
   const url = String(imageUrl || "").trim();
   // Anthropic fetches this address itself, so anything it cannot fetch is a
-  // wasted call rather than a failed read. Checked here rather than at the call
-  // site because there is now more than one call site coming.
+  // wasted call rather than a failed read.
   if (!/^https?:\/\//i.test(url)) return { text: "", error: "not-an-image-url" };
-  const prompt = `This is an image from the website of the Danish event "${String(eventName || "").slice(0, 120)}".
-
-Your ONLY job is to transcribe dates that are PRINTED IN THE IMAGE. Read the picture. Do not use anything you know or believe about this event, do not work out what year it probably is, and do not correct anything that looks wrong to you. If the poster says something you think is out of date, transcribe it anyway.
-
-If one or more dates are printed in the image, reply with just those printed characters, exactly as they appear, including the year if a year is shown. If several dates are printed, reply with the one that reads as the event's own dates rather than a ticket release or a deadline.
-
-If NO date is printed in the image, reply with exactly ${NO_DATE_ON_IMAGE} and nothing else. Replying ${NO_DATE_ON_IMAGE} is a correct and useful answer. Guessing is not.
-
-Reply with the date text only, or ${NO_DATE_ON_IMAGE}. No explanation, no sentence around it.`;
   try {
     const res = await fetch("/api/anthropic", {
       method: "POST",
@@ -352,13 +347,61 @@ Reply with the date text only, or ${NO_DATE_ON_IMAGE}. No explanation, no senten
     if (!res.ok) return { text: "", error: data?.error?.message || `Image read failed (${res.status})` };
     const said = String(data.content?.filter(b => b.type === "text").map(b => b.text).join("") || "").trim();
     if (!said) return { text: "", error: "empty" };
-    // NONE is the answer this is designed to make easy to give, so it is
-    // recognised rather than parsed: a caller must be able to tell "there was no
-    // date on the poster" from "the read failed", because only one of those is
-    // worth looking at another picture over.
+    // NONE is recognised rather than parsed: a caller must be able to tell
+    // "there was nothing on the picture" from "the read failed", because only
+    // one of those is worth looking at another picture over.
     if (new RegExp(`^${NO_DATE_ON_IMAGE}\\b`, "i").test(said)) return { text: "", error: "", none: true };
-    return { text: said.slice(0, 200), error: "" };
+    return { text: said.slice(0, 4000), error: "" };
   } catch {
     return { text: "", error: "unreachable" };
   }
+};
+
+export const readDatesFromImage = async (imageUrl, eventName, opts = {}) => {
+  const prompt = `This is an image from the website of the Danish event "${String(eventName || "").slice(0, 120)}".
+
+Your ONLY job is to transcribe dates that are PRINTED IN THE IMAGE. Read the picture. Do not use anything you know or believe about this event, do not work out what year it probably is, and do not correct anything that looks wrong to you. If the poster says something you think is out of date, transcribe it anyway.
+
+If one or more dates are printed in the image, reply with just those printed characters, exactly as they appear, including the year if a year is shown. If several dates are printed, reply with the one that reads as the event's own dates rather than a ticket release or a deadline.
+
+If NO date is printed in the image, reply with exactly ${NO_DATE_ON_IMAGE} and nothing else. Replying ${NO_DATE_ON_IMAGE} is a correct and useful answer. Guessing is not.
+
+Reply with the date text only, or ${NO_DATE_ON_IMAGE}. No explanation, no sentence around it.`;
+  const out = await askAboutImage(imageUrl, prompt, { maxTokens: 200, ...opts });
+  return out.text ? { ...out, text: out.text.slice(0, 200) } : out;
+};
+
+// ── AND THE RESEARCH PIPELINE IS BLIND TO POSTERS TOO ───────────────
+//
+// Oliver, 20 Aug 2026: "I want the research pipeline to be able to scan images
+// as well.."
+//
+// Same hole as the event checker had, in the place it costs more. A draft is
+// researched by reading the operator's own page, and a Danish venue, market or
+// workshop routinely puts its opening hours, its season, its prices and its
+// address in the artwork on the front page and nowhere else as text. The scan
+// comes back thin, the draft has no hours and no price, and the fact-check then
+// correctly reports that nothing confirmed them.
+//
+// A DIFFERENT QUESTION FROM readDatesFromImage, on purpose. That one is
+// deliberately narrow, refuses everything that is not a date, and is cheap
+// because of it. This one transcribes the sign. Two questions, one transport,
+// and neither is allowed to answer the other's, because a date reader that also
+// volunteers prices is a date reader nobody can trust.
+//
+// STILL A TRANSCRIBER. The prompt forbids working from what the model knows,
+// for the same reason and with the same force: a confident invention sourced to
+// the operator's own poster is undetectable, and this text goes into a draft
+// under the heading that calls it the most reliable source in the room.
+export const readPosterText = async (imageUrl, subject, opts = {}) => {
+  const prompt = `This is an image from the website of "${String(subject || "").slice(0, 120)}" in Denmark.
+
+Transcribe the text that is PRINTED IN THIS IMAGE, exactly as it appears. Read the picture. Keep Danish words in Danish.
+
+Do not use anything you know or believe about this place. Do not translate, summarise, tidy up, complete a half-hidden word, or add anything that is not printed. Do not describe the picture: a photograph of a harbour with no writing on it is ${NO_DATE_ON_IMAGE}, not "a harbour at sunset".
+
+Opening hours, seasons, dates, prices and addresses are the parts worth having, so transcribe those exactly, including the numbers and the currency.
+
+If there is NO readable text printed in the image, reply with exactly ${NO_DATE_ON_IMAGE} and nothing else. That is a correct and useful answer. Guessing is not.`;
+  return askAboutImage(imageUrl, prompt, { maxTokens: 700, ...opts });
 };

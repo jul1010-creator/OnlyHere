@@ -72,7 +72,7 @@ import { WeatherHeaderStrip } from "./components/WeatherHeaderStrip";
 import { StoreBadge } from "./components/StoreBadge";
 import { DateTimePicker } from "./components/DateTimePicker";
 import { GuidePage } from "./pages/GuidePage";
-import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage } from "./utils/aiClient";
+import { askClaude, parseClaudeJSON, askPerplexity, withRetry, askOpenAI, readDatesFromImage, readPosterText } from "./utils/aiClient";
 import { STUDIO_VOICE, slugify, J, bb, bbBullets, bbData, bulletsBlock, shapeForLive } from "./utils/studioContent";
 import { studioPrompts } from "./utils/studioPrompts";
 import { ensureLiveContentLoaded, refreshLiveContent, applyEditedRow } from "./utils/liveContent";
@@ -4033,6 +4033,11 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // them throttled and lose it silently.
         // Ticket links seen on any page read below, followed after the loop.
         const ticketPages = [];
+        // The poster budget for this whole draft. Two ceilings for the same
+        // reason the event checker has two: a draft reads up to five sources, so
+        // a per-page cap alone cannot see the total, and the total is the number
+        // that turns up on a bill.
+        let postersRead = 0;
         for (const url of toFetch) {
           try {
             const scanRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
@@ -4062,6 +4067,49 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
             // had ticket links found on it, and null !== "old" keeps those, which is
             // the behaviour that collection was written for.
             let pageTier = null;
+            // ── AND IF THE PAGE PUT ITS WORDS IN A PICTURE ──────────
+            //
+            // Oliver, 20 Aug 2026: "I want the research pipeline to be able to
+            // scan images as well.."
+            //
+            // Same hole the event checker had, in the place it costs more. A
+            // Danish venue, market or workshop routinely prints its opening
+            // hours, its season and its prices into the artwork on its front
+            // page and nowhere else as text. The scan comes back thin, the draft
+            // has no hours and no price, and the fact-check then correctly
+            // reports that nothing confirmed them. Everything downstream behaves
+            // properly and the answer was on the page.
+            //
+            // ONLY WHEN THE TEXT READ FOUND NOTHING, which is his own condition
+            // for the event version: "it would obviously only be used if there
+            // was a banner to scan." A page that returned prose is already
+            // answered and paying to look at its photographs would be spending
+            // on every draft to learn nothing.
+            //
+            // Capped per draft as well as per page, because a draft reads up to
+            // five sources and a per-page cap alone cannot see that.
+            if (!scanData.text && (scanData.banners || []).length && postersRead < MAX_POSTER_READS_PER_DRAFT) {
+              for (const banner of (scanData.banners || []).slice(0, Math.min(MAX_POSTER_READS_PER_SOURCE, MAX_POSTER_READS_PER_DRAFT - postersRead))) {
+                postersRead += 1;
+                const shot = await readPosterText(banner.url, name);
+                if (shot.error || shot.none || !shot.text) {
+                  note(`Poster on ${domainOf(url)}: ${shot.none ? "no readable text printed on it" : shot.error || "nothing came back"}`,
+                    { provider: "claude", detail: banner.url.slice(0, 120), outcome: "failed", used: false });
+                  continue;
+                }
+                // Marked in the text itself, not only in the note. This string
+                // travels into the draft prompt beside the operator's own prose,
+                // and a transcription off a picture is a weaker fact than a
+                // sentence off a page: the writer has to be able to see which it
+                // is holding.
+                scanData.text = `${scanData.text || ""}\n[Read off a poster image on ${domainOf(url)}, transcribed rather than quoted from page text]\n${shot.text}`.trim();
+                note(`Poster read on ${domainOf(url)}`, {
+                  provider: "claude", detail: banner.url.slice(0, 120), outcome: "ok",
+                  why: "the page had no readable text, so its banner was transcribed", used: true,
+                });
+                break;   // one poster that answered is enough; the rest are photographs
+              }
+            }
             if (scanData.text) {
               // ── WHICH OF THE THREE STRINGS THIS PAGE IS ALLOWED INTO ──
               // The operator's own words, a calendar or reseller listing, or
@@ -6976,6 +7024,11 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
   // to scan."
   const MAX_POSTER_READS_PER_EVENT = 2;
   const UPDATE_EVENTS_IMAGE_CAP = 30;
+  // And the same two ceilings for the research pipeline, which reads up to five
+  // sources per draft. One picture per source, three per draft: a front page
+  // carries one poster worth reading and the second is a photograph of a crowd.
+  const MAX_POSTER_READS_PER_SOURCE = 1;
+  const MAX_POSTER_READS_PER_DRAFT = 3;
 
   // ── BACKFILL THE MISSING COORDINATES ───────────────────────────────
   // Storing coordinates for every content type (see publishDraft) only helps

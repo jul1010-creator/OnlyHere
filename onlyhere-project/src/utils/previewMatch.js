@@ -485,7 +485,7 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // at all, and every piece of reasoning that starts from where they land — the
   // route order, the reach band, the return leg — quietly stood down. See the
   // Danish-arrival pass in utils/arrival.js.
-  const from = arrivalPoint(convoText, { townPoint: townPointFor });
+  const arrivedAt = arrivalPoint(convoText, { townPoint: townPointFor });
   const text = String(convoText || "");
   const seen = new Set();
   const matched = [];
@@ -516,7 +516,46 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
   // marked `_viaRegion` so the screen can say why they are on it, and capped
   // because Jutland is half the country.
   const wantedRegions = regionsNamed(text);
-  if (wantedRegions.length) {
+  // ── AND "OUT OF THE CITY" NAMES NOWHERE TO GO ─────────────────────
+  //
+  // Oliver, 20 Aug 2026, on this brief: "6 days, arriving 26 December, just me,
+  // We are already in Copenhagen and want to get out of the city, We are renting
+  // a car, We would rather stay in one place and take day trips, into cycling and
+  // craft and workshops and museums."
+  //
+  // The screen came back with ONE card. Copenhagen, badged "Where you start".
+  // His verdict: "This is just wild.."
+  //
+  // Every part of that is a rule working. He said he wants out, so
+  // isDeparturePlace marks Copenhagen `_leaving` and it is correctly not
+  // expanded. He named no other town, so pass one had nothing else to match. He
+  // named no region either, so the region pass never ran. Four correct decisions
+  // and an empty screen, which is the exact failure this file warned about in its
+  // own words while building the departure test: "That is the same emptiness as
+  // the bug, aimed at the opposite traveller."
+  //
+  // A traveller who says where they are LEAVING has told us as much as one who
+  // says where they are going. They have given us an origin, six days and a car.
+  // The machinery to answer that already exists twenty lines below and was
+  // reachable only by naming a region: rank by Gemlyx's own tier, then by whether
+  // it is a sane distance for the days and the mode, then by what is held there,
+  // then by what they said they were into.
+  //
+  // So the region pass gets a second door. Same ranking, same cap, same reach
+  // rule, and it opens only when the traveller named somewhere and is leaving all
+  // of it, which is the one state where the screen would otherwise be empty.
+  const leavingTowns = matched.filter(p => p._src === "town" && p._leaving);
+  const stayingTowns = matched.filter(p => p._src === "town" && !p._leaving);
+  const fillFromReach = !wantedRegions.length && leavingTowns.length > 0 && stayingTowns.length === 0;
+  // ── AND THE TOWN THEY ARE LEAVING IS WHERE THEY ARE ───────────────
+  // arrivalPoint reads "flying into X" and "the ferry into X", which is the
+  // shape of an arrival and not the shape of "we are already in Copenhagen".
+  // Without this the reach ranking has no origin at all on exactly the brief
+  // that needs it most, and every distance band collapses to the same value.
+  // Their own words put them in a town; that town has a coordinate; it is the
+  // most reliable origin on the screen and it was being ignored.
+  const from = arrivedAt || (leavingTowns.length ? townPointFor(leavingTowns[0].name) : null);
+  if (wantedRegions.length || fillFromReach) {
     // ── AND WHICH SIX, WHICH IS THE WHOLE QUESTION ────────────────
     // Oliver's screenshot, 15 Aug 2026. The region pass worked, and for a two
     // day trip out of Copenhagen wanting "quiet walks and history" it returned
@@ -606,8 +645,11 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       if (!p?.name || p._src !== "town") continue;
       const key = fold(p.name);
       if (!key || seen.has(key)) continue;
-      const hit = wantedRegions.find(r => placeIsInRegion(p, r));
-      if (!hit) continue;
+      // With a region named, being IN it is the filter. Without one, reach is,
+      // and reach is already in the score below rather than being a second,
+      // differently-worded opinion about the same distance.
+      const hit = wantedRegions.length ? wantedRegions.find(r => placeIsInRegion(p, r)) : "";
+      if (wantedRegions.length && !hit) continue;
       // Gemlyx's own bottom tier is a statement that this is not worth planning
       // around, so it is never offered to somebody choosing where to go.
       if (tierOf(p)?.id === TOO_WEAK_FOR_A_REGION_PICK) continue;
@@ -665,7 +707,10 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       seen.add(c.key);
       // `_holds` so the card can say what is under it rather than looking like
       // a bare name, and so a screen that is all towns is visibly all towns.
-      matched.push({ ...c.p, _viaRegion: c.hit, _holds: c.held });
+      // Said out loud either way, because the card has to be able to explain
+      // itself: "in Jutland, which you asked about" and "within reach of where
+      // you are" are different claims and only one of them was ever asked for.
+      matched.push({ ...c.p, ...(c.hit ? { _viaRegion: c.hit } : { _viaReach: true }), _holds: c.held });
     }
   }
   // A town they are LEAVING does not get expanded. This is the whole of the

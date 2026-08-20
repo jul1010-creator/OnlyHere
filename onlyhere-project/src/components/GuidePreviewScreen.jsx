@@ -398,6 +398,8 @@ export const GuidePreviewScreen = ({
           {totalShown > 0
             ? (matched.some(p => p._viaRegion)
                 ? "Places you named, and what Gemlyx holds in the part of Denmark you asked about. The route itself comes next."
+                : matched.some(p => p._viaReach)
+                ? "You said you wanted out of the city, so these are the places within reach of where you are. The route itself comes next."
                 : "Places you have already mentioned that Gemlyx has its own page for. The route itself comes next.")
             : "Gemlyx will pick the stops and build your full guide next."}
         </div>
@@ -541,6 +543,15 @@ export const GuidePreviewScreen = ({
                       )}
                       {place._viaRegion && (
                         <span style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "2px 7px" }}>In {place._viaRegion}</span>
+                      )}
+                      {/* A town nobody named, on a screen for somebody who said
+                          they wanted out of the one they are in. It has to say
+                          so: "in Jutland, which you asked about" and "within
+                          reach of where you are" are different claims, and only
+                          one of them was ever asked for. See the second door on
+                          the region pass in previewMatch.js. */}
+                      {place._viaReach && !place._viaRegion && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 0.8, textTransform: "uppercase", border: `1px solid ${C.gold}55`, borderRadius: 100, padding: "2px 7px" }}>Within reach</span>
                       )}
                       {/* WHAT IS UNDER IT. "All it does now is show towns" was
                           six bare town cards, and a card that says what Gemlyx

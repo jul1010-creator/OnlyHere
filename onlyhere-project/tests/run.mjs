@@ -8020,12 +8020,37 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // and it costs like one. A vision call left out of the meter would be the one
   // kind of spend that is invisible in both the bill and the panel.
   ok("every model call is recorded with its real usage", (ai.match(/recordModelCall\(/g) || []).length === 4);
-  ok("including the poster reader", /readDatesFromImage[\s\S]*?recordModelCall\("claude", model, data\?\.usage\)/.test(ai));
+  ok("including the one that reads pictures", /const askAboutImage = async \(imageUrl, prompt,[\s\S]*?recordModelCall\("claude", model, data\?\.usage\)/.test(ai));
   // Recorded BEFORE the ok check, same as askClaude: a call that failed after the
   // model had already read the image still cost money.
   ok("and it records before it checks whether the call succeeded",
-     ai.indexOf('recordModelCall("claude", model, data?.usage);', ai.indexOf("readDatesFromImage"))
-     < ai.indexOf("if (!res.ok) return { text: \"\", error: data?.error?.message", ai.indexOf("readDatesFromImage")));
+     ai.indexOf('recordModelCall("claude", model, data?.usage);', ai.indexOf("const askAboutImage"))
+     < ai.indexOf("if (!res.ok) return { text: \"\", error: data?.error?.message", ai.indexOf("const askAboutImage")));
+  // ── TWO QUESTIONS, ONE TRANSPORT ────────────────────────────────
+  // Oliver, 20 Aug 2026: "I want the research pipeline to be able to scan images
+  // as well.." The date reader is deliberately narrow and cheap because it
+  // refuses everything that is not a date; the research reader transcribes the
+  // sign. Neither may answer the other's question, and neither may grow its own
+  // copy of the fetch, the cost record or the NONE sentinel.
+  ok("both image readers exist", /export const readDatesFromImage/.test(ai) && /export const readPosterText/.test(ai));
+  is("and there is exactly one image request in the file",
+     (ai.match(/type: "image", source: \{ type: "url", url \}/g) || []).length, 1);
+  ok("the date reader still refuses everything that is not a date",
+     /reply with just those printed characters/.test(ai));
+  ok("while the research reader transcribes the sign",
+     /Opening hours, seasons, dates, prices and addresses are the parts worth having/.test(ai));
+  ok("and both forbid working from what the model knows",
+     (ai.match(/Do not use anything you know or believe about this/g) || []).length === 2);
+  ok("and the research one refuses to describe a picture that has no words on it",
+     /a photograph of a harbour with no writing on it is/.test(ai));
+  // AND IT ACTUALLY SENDS THE PROMPT. A mutation stubbing the body out left every
+  // assertion above green, because they all read the prompt string and the prompt
+  // string was still there: an unwired helper is this codebase's signature
+  // defect and it hides behind exactly this shape of test.
+  ok("the research reader really goes through the shared transport",
+     /export const readPosterText = async[\s\S]{0,3000}?return askAboutImage\(imageUrl, prompt, \{ maxTokens: \d+, \.\.\.opts \}\);/.test(ai));
+  ok("and so does the date reader",
+     /export const readDatesFromImage = async[\s\S]{0,3000}?await askAboutImage\(imageUrl, prompt, \{ maxTokens: \d+, \.\.\.opts \}\);/.test(ai));
   ok("including the one that failed, since it was still charged", /recordModelCall\("claude", model, data\?\.usage\);\n      if \(!res\.ok\)/.test(ai));
 
   // The interceptor is the reason this cannot rot. Recording twenty call sites
@@ -26259,6 +26284,133 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("the caller follows the link when the page was blocked but had one",
      /\} else if \(first\.ok \|\| \(first\.banners \|\| \[\]\)\.length \|\| \(first\.data\?\.tickets \|\| \[\]\)\.length\) \{/.test(app2));
   ok("and the old prose-gated version is gone", !/\} else if \(first\.ok\) \{/.test(app2));
+}
+
+// ── "OUT OF THE CITY" NAMES NOWHERE TO GO ───────────────────────────
+//
+// Oliver, 20 Aug 2026, on this brief: "6 days, arriving 26 December, just me, We
+// are already in Copenhagen and want to get out of the city, We are renting a
+// car, We would rather stay in one place and take day trips, into cycling and
+// craft and workshops and museums."
+//
+// The screen came back with ONE card: Copenhagen, badged "Where you start".
+// "This is just wild.."
+//
+// Every part of that was a rule working. He said he wants out, so Copenhagen is
+// marked as a departure and correctly not expanded. He named no other town, so
+// pass one had nothing else. He named no region, so the region pass never ran.
+// Four correct decisions and an empty screen, which is precisely what this file
+// warned about in its own words while the departure test was being written:
+// "That is the same emptiness as the bug, aimed at the opposite traveller."
+{
+  const { matchedPlaces } = M;
+  const BRIEF = "user: I'm planning 6 days in Denmark. It is just me. We are already in Copenhagen and want to get out of the city. We are renting a car. We would rather stay in one place and take day trips. We like cycling and craft and workshops and museums.";
+  const pool = [
+    { name: "Copenhagen", _src: "town", lat: 55.6761, lon: 12.5683, isMajorCity: true, region: "Zealand" },
+    { name: "Roskilde", _src: "town", lat: 55.6415, lon: 12.0803, region: "Zealand" },
+    { name: "Helsingør", _src: "town", lat: 56.0361, lon: 12.6136, region: "Zealand" },
+    { name: "Møn", _src: "town", lat: 54.9833, lon: 12.3167, region: "Zealand" },
+    { name: "Skagen", _src: "town", lat: 57.7241, lon: 10.5836, region: "North Jutland" },
+  ];
+  const rows = matchedPlaces(BRIEF, pool, { days: 6, mode: "car" });
+  const towns = rows.filter(p => p._src === "town");
+  const cph = towns.find(p => /Copenhagen/.test(p.name));
+
+  // The departure rule is untouched. This is not a rollback of it.
+  ok("Copenhagen is still on the screen as where they start", !!cph);
+  ok("and is still marked as a departure", cph?._leaving === true);
+  // THE FIX.
+  ok("but it is no longer the whole screen", towns.length > 1);
+  ok("and the towns that replaced it say why they are there",
+     towns.filter(p => !p._leaving).every(p => p._viaReach === true || !!p._viaRegion));
+  ok("the town they are leaving is never offered back as a destination",
+     towns.filter(p => p._viaReach).every(p => !/Copenhagen/.test(p.name)));
+
+  // ── AND IT ONLY OPENS ON THE EMPTY CASE ─────────────────────────
+  // A traveller who named somewhere to GO must not have the screen filled with
+  // towns they never mentioned. That would be the 15 Aug bug again, in reverse.
+  const NAMED = "user: Four days in Denmark, we are going to Roskilde and Helsingør.";
+  const namedTowns = matchedPlaces(NAMED, pool, { days: 4, mode: "car" }).filter(p => p._src === "town");
+  is("a brief that named towns gets those towns and no others", namedTowns.length, 2);
+  ok("and none of them arrived via reach", namedTowns.every(p => !p._viaReach));
+  // Leaving one town while naming another is not the empty case either.
+  const MIXED = "user: We are already in Copenhagen and want to get out of the city. We are going to Roskilde.";
+  const mixed = matchedPlaces(MIXED, pool, { days: 4, mode: "car" }).filter(p => p._src === "town");
+  is("leaving one town and naming another fills nothing extra", mixed.length, 2);
+  ok("and Roskilde is the one that is not a departure",
+     mixed.find(p => /Roskilde/.test(p.name))?._leaving !== true);
+
+  // ── THE ORIGIN COMES FROM THEIR OWN WORDS ───────────────────────
+  // arrivalPoint reads "flying into X" and "the ferry into X", which is not the
+  // shape of "we are already in Copenhagen". Without the departure town as a
+  // fallback origin, every distance band collapses to one value on exactly the
+  // brief that needs ranking most, and Skagen ranks beside Roskilde.
+  const pm = readFileSync(join(root, "src/utils/previewMatch.js"), "utf8");
+  ok("the departure town is used as the origin when no arrival was stated",
+     /const from = arrivedAt \|\| \(leavingTowns\.length \? townPointFor\(leavingTowns\[0\]\.name\) : null\);/.test(pm));
+  // The gate, written out in full: matching the fill alone would survive a
+  // mutation opening it on every brief, because the fill is still there.
+  ok("and the second door opens only when every named town is one they are leaving",
+     /const fillFromReach = !wantedRegions\.length && leavingTowns\.length > 0 && stayingTowns\.length === 0;/.test(pm));
+  // Reach is ranked in ONE place, not asserted twice in different words.
+  ok("without a region, reach is the only filter", /if \(wantedRegions\.length && !hit\) continue;/.test(pm));
+  // ── AND THE SCREEN HAS TO SHOW IT ───────────────────────────────
+  // An unrendered flag is this codebase's signature defect: the matcher would be
+  // right, the screen would still be one card, and every assertion above would
+  // be green.
+  const gps = readFileSync(join(root, "src/components/GuidePreviewScreen.jsx"), "utf8");
+  ok("a reach town carries a badge saying so", /place\._viaReach && !place\._viaRegion/.test(gps));
+  ok("and the line above the list says why they are there",
+     /You said you wanted out of the city, so these are the places within reach of where you are/.test(gps));
+}
+
+// ── THE RESEARCH PIPELINE SCANS PICTURES TOO ────────────────────────
+//
+// Oliver, 20 Aug 2026: "I want the research pipeline to be able to scan images
+// as well.."
+//
+// Same hole the event checker had, in the place it costs more. A Danish venue,
+// market or workshop routinely prints its opening hours, its season and its
+// prices into the artwork on its front page and nowhere else as text. The scan
+// comes back thin, the draft has no hours and no price, and the fact-check then
+// correctly reports that nothing confirmed them. Everything downstream behaves
+// properly and the answer was on the page the whole time.
+{
+  const appR = readFileSync(join(root, "src/App.jsx"), "utf8");
+
+  // ── ONLY WHEN THE TEXT READ FOUND NOTHING ───────────────────────
+  // His own condition, carried over from the event version: "it would obviously
+  // only be used if there was a banner to scan." A page that returned prose is
+  // already answered, and paying to look at its photographs would be a charge on
+  // every draft to learn nothing. THE WHOLE GUARD is written out, because
+  // matching the call alone survives a mutation that opens it on every page.
+  ok("the draft reads a poster only when the page gave no text and had a banner",
+     /if \(!scanData\.text && \(scanData\.banners \|\| \[\]\)\.length && postersRead < MAX_POSTER_READS_PER_DRAFT\) \{/.test(appR));
+  ok("there is a per source ceiling", /const MAX_POSTER_READS_PER_SOURCE = \d+;/.test(appR));
+  ok("and a per draft one, because a draft reads several sources",
+     /const MAX_POSTER_READS_PER_DRAFT = \d+;/.test(appR));
+  ok("the draft ceiling is counted against", /postersRead \+= 1;/.test(appR));
+  ok("and the loop is bounded by both", /slice\(0, Math\.min\(MAX_POSTER_READS_PER_SOURCE, MAX_POSTER_READS_PER_DRAFT - postersRead\)\)/.test(appR));
+  ok("one poster that answered is enough", /break;\s*\/\/ one poster that answered is enough/.test(appR));
+
+  // ── AND A TRANSCRIPTION IS MARKED AS ONE ────────────────────────
+  // This string travels into the draft prompt beside the operator's own prose,
+  // under a heading that calls that prose the most reliable source in the room.
+  // A transcription off a picture is a weaker fact than a sentence off a page and
+  // the writer has to be able to see which it is holding.
+  ok("the text says out loud that it came off a picture",
+     /\[Read off a poster image on \$\{domainOf\(url\)\}, transcribed rather than quoted from page text\]/.test(appR));
+  // Both outcomes are logged, not just the good one. A run log that speaks only
+  // when something works cannot tell you how often it did not.
+  ok("a poster that answered is recorded", /note\(`Poster read on \$\{domainOf\(url\)\}`/.test(appR));
+  ok("and one that did not is recorded too", /note\(`Poster on \$\{domainOf\(url\)\}: \$\{shot\.none \? "no readable text printed on it"/.test(appR));
+  ok("with 'nothing printed on it' told apart from 'the read failed'",
+     /shot\.none \? "no readable text printed on it" : shot\.error \|\| "nothing came back"/.test(appR));
+
+  // The reader it calls is the research one, not the date one. A date reader
+  // asked for opening hours would answer, and it would answer badly.
+  ok("it calls the transcriber, not the date reader", /const shot = await readPosterText\(banner\.url, name\);/.test(appR));
+  ok("and both readers are imported", /readDatesFromImage, readPosterText \} from "\.\/utils\/aiClient"/.test(appR));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
