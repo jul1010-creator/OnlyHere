@@ -578,6 +578,12 @@ export const CHECK_STEP_WORDS = {
   "no-date-in-text": "the page was read and states no date a parser can see",
   "no-text": "the page returned almost no readable text",
   "unreadable": "the page could not be read",
+  // NOT A PAGE PROBLEM AT ALL. This one is our own endpoint refusing the request
+  // before any site was contacted, and it was being reported as a broken
+  // festival website on forty rows at once. The status and the endpoint's own
+  // words are appended by stepWords, because "403" and "401" point at two
+  // completely different fixes and neither of them is the festival's.
+  "endpoint-refused": "Gemlyx's own reader refused the request, so the site was never contacted",
   "challenge-page": "the site answered with a bot wall rather than the page",
   "almost-no-text": "the page returned almost no readable text, which on a festival front page usually means the dates are in the artwork",
   "no-banner-to-scan": "there was no banner or poster on the page to scan",
@@ -599,6 +605,15 @@ export const stepWords = (step) => {
   if (!step || typeof step !== "object") return "";
   const why = String(step.why || "");
   if (step.found) return `found ${step.found}`;
+  // ── QUOTE THE DOOR THAT REFUSED US ──────────────────────────────
+  // A guard's own sentence is already written for a human and already says what
+  // to do: "Your Studio session has expired. Log out and back in." Paraphrasing
+  // it into "the page could not be read" is how a one click fix spent an evening
+  // looking like forty broken websites.
+  if (step.detail) {
+    const base = CHECK_STEP_WORDS[why] || (why ? why : "nothing came back");
+    return step.status ? `${base} (${step.status}: ${step.detail})` : `${base} (${step.detail})`;
+  }
   if (why.startsWith("refused-")) {
     const key = why.slice("refused-".length);
     const because = DATE_PROPOSITION_WHY[key] || key;

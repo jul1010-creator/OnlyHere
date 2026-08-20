@@ -384,5 +384,29 @@ export const briefBlock = (brief) => {
     lines.push("They named a month but not a date. That is enough to rule out an event in another month and not enough to place a day, so ask for the dates once and never again.");
   }
   lines.push("ASK, DO NOT LECTURE. No preamble, no restating what they told you, no volunteering prices or opening dates nobody asked for. One short paragraph, then the question or questions.");
+  // ── AND DO NOT DECIDE THE THING YOU ARE ABOUT TO ASK ABOUT ────────
+  //
+  // Oliver, 20 Aug 2026, on a Copenhagen nightlife answer. It recommended the
+  // bars, which was the question, and then wrote:
+  //
+  //   "Copenhagen covers your nightlife well on its own, so I wouldn't build a
+  //    second city into the plan just for that side of things."
+  //
+  // and only after that:
+  //
+  //   "One thing before I map out the two bases properly: have you already
+  //    booked anywhere to stay, in Copenhagen or elsewhere? If so I'll build the
+  //    whole route around that instead of picking locations for you."
+  //
+  // His verdict: "I think it would have been better to ask." The answer to the
+  // question asked was fine. Ruling out a second city was a routing decision
+  // taken one sentence before admitting that the answer to the unasked question
+  // would replace it. If they say they have booked a place in Aarhus, the
+  // sentence about not building a second city was wrong when it was written, and
+  // a traveller who reads it and stops there never finds that out.
+  //
+  // So the rule is narrow and it is not "say less": answer what they asked, in
+  // full, and hold the decisions that the missing answer would overturn.
+  lines.push("ANSWER WHAT THEY ASKED, THEN ASK. Do not settle anything that the question you are about to ask would change. Recommending places is answering. Deciding where they sleep, how many bases there are, which towns are in or out, or what the route looks like is not, while any of the above is still missing. If it would be a different plan depending on their answer, ask first and plan after.");
   return lines.join("\n");
 };

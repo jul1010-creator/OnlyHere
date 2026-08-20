@@ -135,8 +135,8 @@ writeFileSync(entry, `
   export { SRC_FOR_TYPE, PLACE_SOURCES, srcForType, ESSENTIAL_CATEGORIES, ESSENTIAL_CATEGORY_NAMES, QUERY_WORDS, DISCOVER_WORDS, sourceIsAboutPlace, nameIsDistinctive, nameCore, isNeverOwnSite, isNeverASource, SOURCE_RULES_NEST } from ${JSON.stringify(join(root, "src/utils/sourcePolicy.js"))};
   export { ARRIVAL_TYPES, hasArrivalField } from ${JSON.stringify(join(root, "src/utils/helpers.js"))};
   export { checkModeOf, splitForCheck, admissible, fieldIn, hasCheckableClaim, CHECK_SCOPE_BLOCK, CHARACTERISATION_FIELDS, REPORT_FIELDS } from ${JSON.stringify(join(root, "src/utils/checkScope.js"))};
-  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
-  export { wantedCategories, groupKeyOf } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { matchedPlaces, previewPools, mentionsPlace, parentTownOf, isDeparturePlace, isRejectedPlace, regionsNamed, placeIsInRegion, REGION_TOWN_CAP, regionPickLimit } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
+  export { wantedCategories, groupKeyOf, foodIsPlanned } from ${JSON.stringify(join(root, "src/utils/previewMatch.js"))};
   export { saysWord, briefThemes, fitsBrief, rankOffers, offerReason, profilePull, THEME_WORDS, THEMES_WITHOUT_WORDS, OFFER_LIMIT, essentialsForTrip, essentialsBlock, ESSENTIALS_IN_GUIDE } from ${JSON.stringify(join(root, "src/utils/interestFit.js"))};
   export { cardLine, cardLineSource, sentencesOf, isOriginSentence, CARD_LINE_MAX } from ${JSON.stringify(join(root, "src/utils/cardLine.js"))};
   export { buildPreviewReport, rowReport, passOf, reportFilename, REPORT_KIND } from ${JSON.stringify(join(root, "src/utils/previewReport.js"))};
@@ -2175,7 +2175,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   }
 
   ok("api/places-hours is fetched from exactly one place",
-     (guideBuildSlice.match(/await fetch\(`\/api\/places-hours/g) || []).length === 1);
+     (guideBuildSlice.match(/await studioFetch\(`\/api\/places-hours/g) || []).length === 1);
   }
 }
 
@@ -6796,7 +6796,17 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // screen has always had and the half that makes the above a rule rather than
   // a blanket narrowing.
   const openRows = matchedPlaces(`${EVENTY} We are going to Copenhagen.`, eventyPools, { wanted: null });
-  ok("an unnarrowed brief holds nothing back", openRows.every(p => !p._notAsked));
+  ok("an unnarrowed brief holds nothing back", openRows.filter(p => p._src !== "food").every(p => !p._notAsked));
+  // ── EXCEPT FOOD, WHICH IS THE ONE CATEGORY SILENCE DOES NARROW ───
+  // Oliver, 20 Aug 2026: "maybe we should get rid of food all together. Unless
+  // it's actually a food trip. Because who knows.. maybe you feel like eating
+  // pizza instead of smørbrød that day." Not mentioning food is what almost
+  // every traveller does, so it cannot be the thing that fills their days with
+  // restaurants. Offered, never deleted.
+  ok("food is still held back on a brief that never mentioned it",
+     openRows.filter(p => p._src === "food").every(p => p._notAsked === true));
+  ok("and it is still ON the screen, behind the door, not dropped",
+     openRows.some(p => p._src === "food"));
 
   // ── AND A PLACE THEY NAMED IS NEVER "NOT ASKED FOR" ─────────────
   // The first pass is somebody typing a name. Whatever category it lands in,
@@ -10029,7 +10039,7 @@ is("missing licence does not require credit", creditIsRequired({}), false);
   // alone survives the whole block being switched off, which has caught this
   // suite five times now.
   ok("festivals, and only festivals, are looked up",
-     /if \(sType === "festival"\) \{[\s\S]{0,400}await fetch\(`\/api\/tickets\?name=/.test(app6));
+     /if \(sType === "festival"\) \{[\s\S]{0,400}await studioFetch\(`\/api\/tickets\?name=/.test(app6));
   ok("the result is re-matched against the model's own date",
      /matchEvent\(\{ name, date: t\.dateStart \|\| hint\?\.dates \|\| "" \}/.test(app6));
   ok("a measured status is a recorded decision", /winner: "Ticketmaster's own listing"/.test(app6));
@@ -21206,11 +21216,40 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("there is a helper for it", /const routeAuth = \(\) => \{/.test(app16));
   ok("which does not throw, because these calls sit inside try blocks that treat a failure as an empty lookup",
      /return tok \? \{ Authorization: `Bearer \$\{tok\}` \} : \{\};/.test(app16));
+
+  // ── AND SENDING IT ONCE IS NOT ENOUGH ────────────────────────────
+  //
+  // A Supabase access token lasts about an hour. refreshStudioSession has
+  // existed for days and publishDraft was the ONLY caller: every one of these
+  // twelve founder-gated calls sent the token once and took the 401 as the
+  // answer. An hour into any Studio session they all start failing, and
+  // publishing keeps working, which is exactly why it never read as a login
+  // problem. The one action that would have said so plainly was the one action
+  // that was immune.
+  //
+  // Oliver's events run of 20 Aug 2026 is what this looks like from outside:
+  // forty rows, four domains, every one saying the festival's website could not
+  // be read.
+  ok("and one fetch that carries it and renews it", /const studioFetch = async \(url, opts = \{\}\) => \{/.test(app16));
+  ok("it attaches the current token", /const withToken = \(tok\) => fetch\(url, \{ \.\.\.opts, headers: \{ \.\.\.\(opts\.headers \|\| \{\}\), \.\.\.\(tok \? \{ Authorization: `Bearer \$\{tok\}` \} : \{\}\) \} \}\);/.test(app16));
+  ok("a 401 is retried once with a fresh one", /if \(res\.status !== 401\) return res;[\s\S]{0,240}?const fresh = await refreshStudioSession\(\);[\s\S]{0,160}?return withToken\(fresh\.access_token\);/.test(app16));
+  // ONE retry, not a loop. A refresh that fails must not re-enter, or an expired
+  // refresh_token turns forty events into forty pairs of doomed calls.
+  ok("and it gives up rather than looping when the refresh fails", /if \(!fresh\) return res;/.test(app16));
+  // The refresh has to be reachable from here, which is the whole reason it
+  // moved: it used to be declared four hundred lines below its first caller.
+  ok("the refresh is declared before the fetch that uses it",
+     app16.indexOf("const refreshStudioSession = async () => {") < app16.indexOf("const studioFetch = async (url, opts = {}) => {"));
+
   STUDIO_ONLY_ENDPOINTS.forEach(name => {
-    const calls = app16.split(`fetch(\`/api/${name}`).slice(1);
+    const calls = app16.split(`studioFetch(\`/api/${name}`).slice(1);
     ok(`${name} is called at least once`, calls.length > 0);
-    const missing = calls.filter(c => !/^[^;]{0,400}routeAuth\(\)/.test(c));
-    is(`every ${name} call carries the session`, missing.length, 0);
+  });
+  // NOT ONE OF THEM MAY GO ROUND IT. A bare fetch to a founder-gated route is
+  // the defect this whole block exists to close, and a thirteenth call site
+  // added later is exactly how it comes back.
+  STUDIO_ONLY_ENDPOINTS.forEach(name => {
+    is(`no bare fetch is left pointing at ${name}`, (app16.match(new RegExp(`fetch\\(\`/api/${name}`, "g")) || []).length, 0);
   });
 }
 
@@ -22760,7 +22799,11 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
     { ...GERANIUM, location: "Copenhagen" },
     { ...SHACK, location: "Copenhagen" },
   ];
-  const out = M.matchedPlaces(TIGHT, pools, { days: 4, budget: "tight" });
+  // `wanted` computed from the brief rather than left null, because food is now
+  // opt-in and this brief opts in: "I want real food places". Passing null would
+  // hold both restaurants behind the food door and this block would be measuring
+  // that instead of the budget rule it is about.
+  const out = M.matchedPlaces(TIGHT, pools, { days: 4, budget: "tight", wanted: M.wantedCategories(TIGHT) });
   const ger = out.find(p => p.name === "Geranium");
   const shack = out.find(p => p.name === "a harbour shack");
   ok("Geranium still reaches the screen, because hiding it tells them less", !!ger);
@@ -25871,6 +25914,28 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   ok("but a non-step is not dressed up as one", stepWords(null) === "");
   ok("every step this code emits has a label", ["site", "ticket", "poster", "search"].every(k => !!STEP_LABELS[k]));
 
+  // ── OUR OWN DOOR IS NOT THE FESTIVAL'S WEBSITE ──────────────────
+  // Oliver's first run of the trace, 20 Aug 2026: forty events, four different
+  // domains, every one reading "the page could not be read" and every one
+  // reading "the web search itself failed". Forty sites do not break at once.
+  // The trace was reporting a refusal from Gemlyx's own endpoint as a broken
+  // festival website, which is the exact class of mistake it exists to end.
+  const refusal = stepWords({ step: "site", why: "endpoint-refused", status: 401, detail: "Your Studio session has expired. Log out and back in." });
+  ok("a refusal from our own endpoint says it was ours", /Gemlyx's own reader refused/.test(refusal));
+  ok("and says the site was never contacted, so nobody blames the festival", /never contacted/.test(refusal));
+  ok("it carries the status, because 401 and 403 need different fixes", /401/.test(refusal));
+  ok("and quotes the endpoint's own words, which already say what to do", /Log out and back in/.test(refusal));
+  // A real page problem must NOT start reading like our own failure, or the
+  // distinction is gone in the other direction.
+  ok("a genuine page problem still reads as one",
+     !/Gemlyx's own reader/.test(stepWords({ step: "site", why: "challenge-page" })));
+  // The search half of the same run.
+  ok("a failed search quotes what the endpoint said",
+     /Request failed \(403\)/.test(stepWords({ step: "search", why: "search-failed", detail: "Request failed (403)" })));
+  // And with nothing to quote it must still say something.
+  ok("a refusal with no message still reads as a refusal",
+     /Gemlyx's own reader refused/.test(stepWords({ step: "site", why: "endpoint-refused" })));
+
   // ── WHICH ROWS ARE WORTH SHOWING ────────────────────────────────
   // The ones still rendering "Dates not confirmed" to a reader. An event that
   // came out of the run with a date is not a question anybody has, and a list
@@ -25958,9 +26023,148 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // An unwired helper is this codebase's signature defect and the reason
   // libraryContext.js is deliberately still uncommitted.
   ok("the panel renders the trace", /unresolvedTraces\(updateEventsResults\.traces, new Date\(\)\)/.test(appP));
+  // ── AND THE READER TELLS THE TWO KINDS OF FAILURE APART ─────────
+  // `read` is what api/scan-source found ON a page. A guard refusing the request
+  // returns `error` and no `read`, because nothing was read. Collapsing those
+  // into one sentence is what made one broken door look like forty broken sites.
+  ok("a refusal with no read field is recognised as our own",
+     /const refusedByUs = !d\.read && !!d\.error;/.test(appP));
+  ok("and the status and message are carried, not dropped",
+     /status: r\.status, detail: refusedByUs \? String\(d\.error\)\.slice\(0, 160\) : ""/.test(appP));
+  ok("the search failure carries its message too",
+     /why: "search-failed", detail: String\(result\.error\)\.slice\(0, 160\)/.test(appP));
   ok("using the shared wording rather than a second copy of it", /\{stepWords\(st\)\}/.test(appP));
   ok("and every event in the batch records one",
      (appP.match(/traces\.push\(\{ name: ev\.name/g) || []).length >= 4);
+}
+
+// ── A NAME SAID IN ORDER TO REJECT IT IS NOT A PICK ─────────────────
+//
+// Oliver, 20 Aug 2026. Gemlyx wrote "I'd steer well clear of Old Irish Pub near
+// Rådhuspladsen, that's stag-do and pub-crawl territory, not what two old
+// friends looking for design and quiet want" and then put a card for Old Irish
+// Pub on the screen beside the two it had recommended. "Adding in Old Irish Pub
+// when it says they shouldn't go there is just a wild bug."
+//
+// The conversation text includes Gemlyx's own reply, so the product reads its
+// own warning back and recommends the thing it warned about. The more carefully
+// the answer explains what to avoid, the more confidently the screen suggests it.
+{
+  const { isRejectedPlace, isDeparturePlace, mentionsPlace, matchedPlaces } = M;
+  const real = `For your kind of trip, I'd steer well clear of Old Irish Pub near Rådhuspladsen, that's stag-do and pub-crawl territory, not what two old friends looking for design and quiet want. Hive in Indre By is the better fit: stylish, a bit older and dressed-up crowd, good cocktails, feels considered rather than loud. Pair that with JOJO in Vesterbro, a proper neighbourhood cocktail bar and eatery.`;
+
+  ok("the name is still found, because it IS in the text", mentionsPlace(real, "Old Irish Pub"));
+  ok("but it is read as a rejection", isRejectedPlace(real, "Old Irish Pub"));
+  // THE CONTROL, and it is the half that matters most: reading a wanted place as
+  // unwanted empties the screen in the other direction, which is exactly the
+  // failure that replaced the first version of the departure test.
+  ok("the two it recommended are not", !isRejectedPlace(real, "Hive"));
+  ok("neither of them", !isRejectedPlace(real, "JOJO"));
+
+  // The shapes an answer actually uses.
+  ok("avoid X", isRejectedPlace("I would avoid Old Irish Pub entirely.", "Old Irish Pub"));
+  ok("skip X", isRejectedPlace("Skip Old Irish Pub and go to Hive.", "Old Irish Pub"));
+  ok("not X but Y", isRejectedPlace("Go to Hive, not Old Irish Pub.", "Old Irish Pub"));
+  ok("X instead of Y", isRejectedPlace("Hive instead of Old Irish Pub.", "Old Irish Pub"));
+  ok("a verdict landing just after the name", isRejectedPlace("Old Irish Pub is a tourist trap.", "Old Irish Pub"));
+  ok("and the one he actually got", isRejectedPlace("clear of Old Irish Pub, that's stag-do territory, not what you want", "Old Irish Pub"));
+
+  // ── AND IT MUST NOT SWING THE OTHER WAY ─────────────────────────
+  ok("a plain recommendation is untouched", !isRejectedPlace("Hive in Indre By is the better fit.", "Hive"));
+  ok("a caveat about a recommended place is not a rejection",
+     !isRejectedPlace("Hive is great, though avoid it on a Saturday when it fills up.", "Hive"));
+  // The same word directly against the name IS a rejection, so the fix above did
+  // not simply switch the signal off.
+  ok("while avoid directly before the name still counts",
+     isRejectedPlace("Avoid Hive, it is not your kind of place.", "Hive"));
+  // ONE RECOMMENDATION OUTWEIGHS ONE WARNING. A place worth a caveat is still a
+  // place being suggested, and dropping it would lose a real pick.
+  ok("mentioned twice, once warmly, is kept",
+     !isRejectedPlace("Skip Hive on a Saturday. Otherwise Hive is the best cocktail bar in town.", "Hive"));
+  ok("a rejection two sentences away does not reach",
+     !isRejectedPlace("Avoid the whole Rådhuspladsen strip. It gets rowdy after midnight and the queues are long and the drinks are weak. Hive is the better fit.", "Hive"));
+  ok("and a place nobody mentioned is not rejected either", !isRejectedPlace(real, "Farfar's bodega"));
+
+  // Rejection and departure are different questions and must not be confused: a
+  // town somebody is leaving still belongs on the screen as their starting point.
+  ok("leaving a town is not rejecting a bar",
+     !isRejectedPlace("We are already in Copenhagen and want to get out of the city.", "Copenhagen"));
+  ok("and that sentence is still read as a departure",
+     isDeparturePlace("We are already in Copenhagen and want to get out of the city.", "Copenhagen"));
+
+  // ── THE WHOLE SCREEN, END TO END ────────────────────────────────
+  const pool = [
+    { name: "Old Irish Pub", _src: "night", city: "Copenhagen" },
+    { name: "Hive", _src: "night", city: "Copenhagen" },
+    { name: "JOJO", _src: "night", city: "Copenhagen" },
+  ];
+  // THE PRECONDITION, WRITTEN DOWN. Without it this whole block passes when the
+  // row simply never matched, which is a green test for a screen that is still
+  // wrong. A mutation deleting the drop survived exactly that way once already.
+  ok("the rejected row genuinely would have matched", mentionsPlace(real, pool[0].name));
+  const picked = matchedPlaces(real, pool).map(p => p.name);
+  ok("the two it recommended reach the screen", picked.includes("Hive") && picked.includes("JOJO"));
+  is("and the one it warned against does not", picked.filter(n => /Old Irish/.test(n)).length, 0);
+}
+
+// ── FOOD IS OFFERED, NOT PLANNED, UNLESS IT IS A FOOD TRIP ──────────
+//
+// Oliver, 20 Aug 2026: "maybe we should get rid of food all together. Unless
+// it's actually a food trip. Because who knows.. maybe you feel like eating
+// pizza instead of smørbrød that day. Let that instead be something Gemlyx has
+// ready for the person."
+{
+  const { foodIsPlanned, wantedCategories, matchedPlaces } = M;
+
+  ok("a brief that said nothing does not plan food", !foodIsPlanned(null));
+  ok("nor one that asked for other things", !foodIsPlanned(wantedCategories("Four days in Copenhagen, we like design and history.")));
+  ok("a food trip does", foodIsPlanned(wantedCategories("We are coming for the food, mostly restaurants and bakeries.")));
+  ok("and so does one word of it, because opting in is a low bar on purpose",
+     foodIsPlanned(wantedCategories("Three days in Aarhus. Big foodie.")));
+  // Silence narrows nothing ANYWHERE ELSE, which is what makes food a rule
+  // rather than a blanket narrowing.
+  ok("silence still does not narrow attractions", wantedCategories("Four days in Copenhagen.") === null);
+
+  const pools = [
+    { name: "Copenhagen", _src: "town", lat: 55.6761, lon: 12.5683, isMajorCity: true, region: "Zealand" },
+    { name: "Hooked Christianshavn", _src: "food", city: "Copenhagen" },
+    { name: "Reffen", _src: "food", city: "Copenhagen" },
+  ];
+  const quiet = "user: Four days in Copenhagen with my partner, we like design and quiet.";
+  const rows = matchedPlaces(quiet, pools, { days: 4, wanted: wantedCategories(quiet) });
+  const food = rows.filter(p => p._src === "food");
+  // NOT DELETED. The section can still say Gemlyx holds two places to eat here,
+  // and they are one click away. That is the difference between a rule and a gap.
+  ok("the food rows still reach the screen", food.length === 2);
+  ok("but none of them are planned", food.every(p => p._notAsked === true));
+
+  const foody = "user: Four days in Copenhagen. Honestly this is a food trip, we want the restaurants.";
+  const planned = matchedPlaces(foody, pools, { days: 4, wanted: wantedCategories(foody) }).filter(p => p._src === "food");
+  ok("on a food trip they are planned", planned.length === 2 && planned.every(p => !p._notAsked));
+
+  // ── AND GEMLYX CANNOT OPT THEM IN ON THEIR BEHALF ────────────────
+  // The interest reader used to be handed the whole transcript, so one reply
+  // containing the word "restaurant" was evidence the traveller asked for food.
+  // tripBrief.js has carried that rule in writing since it was built and the
+  // caller was breaking it.
+  const appF = readFileSync(join(root, "src/App.jsx"), "utf8");
+  ok("interests are read from the traveller's turns only",
+     /const saidByTravellerOnly = aiMessages\.slice\(1\)\.filter\(m => m\.role === "user"\)[\s\S]{0,120}?const wanted = wantedCategories\(saidByTravellerOnly\);/.test(appF));
+  ok("and not from the whole transcript", !/const wanted = wantedCategories\(forMatch\);/.test(appF));
+  // The place matcher still gets BOTH halves, and must: Gemlyx names the places
+  // and the screen has to be able to show the ones it named.
+  ok("while the place matcher still sees both halves", /const forMatch = aiMessages\.slice\(1\)\.map\(m => `\$\{m\.role\}: \$\{m\.text\}`\)/.test(appF));
+
+  // ── AND THE CHAT HOLDS ITS DECISIONS UNTIL IT HAS ASKED ──────────
+  // "One thing before I map out the two bases properly: have you already booked
+  // anywhere to stay" arrived one sentence AFTER it had ruled out a second city.
+  const tb = readFileSync(join(root, "src/utils/tripBrief.js"), "utf8");
+  ok("the brief block tells it to answer first and decide later", /ANSWER WHAT THEY ASKED, THEN ASK\./.test(tb));
+  ok("and names what counts as deciding", /Deciding where they sleep, how many bases there are, which towns are in or out/.test(tb));
+  ok("while keeping recommending allowed, which was the half that was right", /Recommending places is answering\./.test(tb));
+  // The slot it should have asked from has been blocking all along.
+  ok("whether a hotel is booked is a blocking slot",
+     M.BLOCKING_SLOTS.includes("stay"));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

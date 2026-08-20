@@ -1209,6 +1209,56 @@ function GemlyxApp() {
     const tok = studioSession?.access_token;
     return tok ? { Authorization: `Bearer ${tok}` } : {};
   };
+  // Supabase access tokens expire (~1hr). Rather than failing the whole publish,
+  // try trading the refresh_token for a fresh one first: silent, no re-typing
+  // the password.
+  const refreshStudioSession = async () => {
+    if (!studioSession?.refresh_token) return null;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: studioSession.refresh_token }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.access_token) return null;
+      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email };
+      localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
+      setStudioSession(session);
+      return session;
+    } catch { return null; }
+  };
+
+  // ── ONE CALLER KNEW THE TOKEN EXPIRES, AND TWELVE DID NOT ──────────
+  //
+  // refreshStudioSession has existed for days and publishDraft was the only
+  // thing that ever called it. Every other founder-gated route, all twelve of
+  // them, sent `routeAuth()` once and treated the answer as the truth:
+  //
+  //   scan-source (x5)   commons-photo (x4)   places-hours   places-locate   tickets
+  //
+  // A Supabase access token lasts about an hour. So an hour into any Studio
+  // session, every one of those starts answering 401 "Your Studio session has
+  // expired", and NOT ONE of them retries. Publishing keeps working, which is
+  // exactly why this never looked like a login problem: the one action that
+  // would have told him plainly is the one action that was immune.
+  //
+  // The same shape this codebase keeps finding, one turn further on: not two
+  // functions answering a question differently, but one function answering it
+  // correctly while twelve callers never ask.
+  //
+  // Returns the Response, so every call site keeps reading it the way it already
+  // does. The retry happens once and only on a 401: a 403 is a permission
+  // answer and a fresh token will not change it, and re-asking would just spend
+  // the call twice to be told the same thing.
+  const studioFetch = async (url, opts = {}) => {
+    const withToken = (tok) => fetch(url, { ...opts, headers: { ...(opts.headers || {}), ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
+    const res = await withToken(studioSession?.access_token);
+    if (res.status !== 401) return res;
+    const fresh = await refreshStudioSession();
+    if (!fresh) return res;
+    return withToken(fresh.access_token);
+  };
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState(null);
@@ -1530,7 +1580,7 @@ function GemlyxApp() {
   const findCommonsPhotos = async (row, query) => {
     setPhotoFinder({ rowId: row.id, query, results: null, loading: true, error: null });
     try {
-      const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&limit=8`, { headers: routeAuth() });
+      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(query)}&limit=8`);
       const data = await res.json();
       if (data.error) setPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
       // sources/subject/resolved come back so the panel can say WHICH lookup
@@ -1694,24 +1744,6 @@ function GemlyxApp() {
   const studioLogout = () => {
     localStorage.removeItem("gemlyx_studio_session");
     setStudioSession(null);
-  };
-  // Supabase access tokens expire (~1hr). Rather than failing the whole publish,
-  // try trading the refresh_token for a fresh one first — silent, no re-typing password.
-  const refreshStudioSession = async () => {
-    if (!studioSession?.refresh_token) return null;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-        method: "POST",
-        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: studioSession.refresh_token }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.access_token) return null;
-      const session = { access_token: data.access_token, refresh_token: data.refresh_token, email: studioSession.email };
-      localStorage.setItem("gemlyx_studio_session", JSON.stringify(session));
-      setStudioSession(session);
-      return session;
-    } catch { return null; }
   };
   const [studioTown, setStudioTown] = useState("");
   const [studioType, setStudioType] = useState("town");
@@ -1890,7 +1922,7 @@ function GemlyxApp() {
     if (!term) { setDraftPhotoFinder({ query: "", results: [], loading: false, error: "Type what to search Wikimedia for." }); return; }
     setDraftPhotoFinder({ query: term, results: null, loading: true, error: null });
     try {
-      const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(term)}&limit=8`, { headers: routeAuth() });
+      const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(term)}&limit=8`);
       const data = await res.json();
       if (data.error) setDraftPhotoFinder(f => ({ ...f, loading: false, error: data.error }));
       // sources/subject come back so the panel can say WHICH lookup found these,
@@ -2174,7 +2206,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
     if (!url || scanLoading) return;
     setScanLoading(true); setScanError(null); setScanResults(null);
     try {
-      const pageRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`, { headers: routeAuth() });
+      const pageRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
       let pageData;
       try {
         pageData = await pageRes.json();
@@ -2391,7 +2423,7 @@ Say which answer came from which source, so a fact from a vouched page and a fac
       // only time it is worth anything.
       if (!coords) {
         try {
-          const pr = await fetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}`, { headers: routeAuth() });
+          const pr = await studioFetch(`/api/places-locate?name=${encodeURIComponent(draftTown ? `${name}, ${draftTown}` : name)}`);
           const pd = await pr.json();
           if (pr.ok && !pd.error && Number.isFinite(pd.lat) && Number.isFinite(pd.lon)) {
             coords = { lat: pd.lat, lon: pd.lon };
@@ -3690,7 +3722,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       // asking for, so that is what the list says.
       if (PLACES_WITH_A_LISTING.includes(sType)) {
         try {
-          const hoursRes = await fetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`, { headers: routeAuth() });
+          const hoursRes = await studioFetch(`/api/places-hours?name=${encodeURIComponent(name)}${frozenGeo ? `&lat=${frozenGeo.lat}&lon=${frozenGeo.lon}` : ""}`);
           const hoursData = await hoursRes.json();
           // ── AN ERROR BODY IS NOT AN ANSWER ──────────────────────────
           // Overnight audit, 12 Aug. Neither hoursRes.ok nor hoursData.error was
@@ -4003,7 +4035,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         const ticketPages = [];
         for (const url of toFetch) {
           try {
-            const scanRes = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`, { headers: routeAuth() });
+            const scanRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
             const scanData = await scanRes.json();
             // ── THE LIST THAT DECIDES WHETHER FIRECRAWL IS WORTH PAYING FOR ──
             // A read that failed was indistinguishable from one that returned a
@@ -4130,7 +4162,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
         // operator is the reason that distinction is load-bearing.
         for (const l of ticketPages.slice(0, MAX_TICKET_PAGES)) {
           try {
-            const tRes = await fetch(`/api/scan-source?url=${encodeURIComponent(l.href)}`, { headers: routeAuth() });
+            const tRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(l.href)}`);
             const tData = await tRes.json();
             const priced = tData.text ? ticketPriceOn(tData.text) : null;
             note(`Ticket agent: ${domainOf(l.href)}`, {
@@ -4204,7 +4236,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
               for (const u of huntUrls.slice(0, MAX_TICKET_PAGES)) {
                 if (pagesByUrl[u]) continue;                 // already read on this run
                 try {
-                  const hRes = await fetch(`/api/scan-source?url=${encodeURIComponent(u)}`, { headers: routeAuth() });
+                  const hRes = await studioFetch(`/api/scan-source?url=${encodeURIComponent(u)}`);
                   const hData = await hRes.json();
                   const found = hData.text ? ticketPriceOn(hData.text) : null;
                   const real = found && found.kind !== "concession-only";
@@ -4373,7 +4405,7 @@ If you can't find something for a bucket, leave it out rather than guessing. Sho
       let ticketText = "";
       if (sType === "festival") {
         try {
-          const tr = await fetch(`/api/tickets?name=${encodeURIComponent(name)}`, { headers: routeAuth() });
+          const tr = await studioFetch(`/api/tickets?name=${encodeURIComponent(name)}`);
           const td = await tr.json();
           if (td?.error) {
             note("Ticket status from Ticketmaster", {
@@ -7024,7 +7056,7 @@ TODAY'S DATE: ${dayKey(new Date())}\n\nRaw search results:\n${allText.slice(0, 1
         const where = p.town || p.city || p.location || p.region || "";
         const query = `${p.name}${where && !p.name.includes(where) ? ` ${where}` : ""} Denmark`;
         try {
-          const r = await fetch(`/api/commons-photo?q=${encodeURIComponent(query)}&article=${encodeURIComponent(p.name)}&category=${encodeURIComponent(p.name)}&limit=1`, { headers: routeAuth() });
+          const r = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(query)}&article=${encodeURIComponent(p.name)}&category=${encodeURIComponent(p.name)}&limit=1`);
           const d = await r.json();
           const hit = (d.results || [])[0];
           if (!hit || !hit.url) { notFound.push(p.name); }
@@ -7589,14 +7621,38 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           return { found, why: "" };
         };
         const readForEdition = async (url) => {
-          const r = await fetch(`/api/scan-source?url=${encodeURIComponent(url)}`, { headers: routeAuth() });
+          const r = await studioFetch(`/api/scan-source?url=${encodeURIComponent(url)}`);
           const d = await r.json();
           // banners come back on the blocked path too, which is deliberate: a
           // festival front page that strips to almost no text is exactly the
           // page whose announcement is artwork. See api/scan-source.js.
           const banners = Array.isArray(d.banners) ? d.banners : [];
           if (!r.ok || d.error || !d.text) {
-            return { found: null, data: d, banners, ok: false, why: d.read || (d.error ? "unreadable" : "no-text") };
+            // ── OUR OWN DOOR AND THE FESTIVAL'S PAGE ARE DIFFERENT NEWS ──
+            //
+            // Oliver's first run of the trace, 20 Aug 2026: every one of forty
+            // events read "Its own site: the page could not be read", including
+            // four different domains, and every one read "the web search itself
+            // failed". Forty sites do not break at once. That pattern is one
+            // shared cause upstream, and the trace said the sites were at fault.
+            //
+            // The tell is in the shape of the reply. api/scan-source names what
+            // it found on a page in `read`: challenge-page, almost-no-text,
+            // http-404. A guard refusing the request before any page is fetched
+            // returns `error` and NO `read` at all, because nothing was read.
+            // Those two were collapsing into one sentence about the site.
+            //
+            // So a refusal from our own endpoint says so, carries the status,
+            // and quotes the endpoint's own words. "403: This endpoint only
+            // answers requests from the Gemlyx site" and "401: Your Studio
+            // session has expired" are both one glance from a fix, and both were
+            // being reported as a broken festival website.
+            const refusedByUs = !d.read && !!d.error;
+            return {
+              found: null, data: d, banners, ok: false,
+              why: d.read || (refusedByUs ? "endpoint-refused" : "no-text"),
+              status: r.status, detail: refusedByUs ? String(d.error).slice(0, 160) : "",
+            };
           }
           const e = editionFrom(d.text);
           return { found: e.found, refused: e.refused, why: e.why, data: d, banners, ok: true };
@@ -7615,7 +7671,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
           try {
             const first = await readForEdition(ev.website);
             collect(first.banners, domainOf(ev.website));
-            trace.push({ step: "site", host: domainOf(ev.website), ok: first.ok, why: first.why, refused: first.refused, via: first.data?.via || "", chars: (first.data?.text || "").length, images: (first.banners || []).length, found: first.found ? isoDay(first.found.start) : "" });
+            trace.push({ step: "site", host: domainOf(ev.website), ok: first.ok, why: first.why, refused: first.refused, status: first.status, detail: first.detail, via: first.data?.via || "", chars: (first.data?.text || "").length, images: (first.banners || []).length, found: first.found ? isoDay(first.found.start) : "" });
             if (first.found) {
               fromSite = { start: isoDay(first.found.start), end: isoDay(first.found.end), via: first.data.via || "fetch", host: domainOf(ev.website), how: "text" };
             } else if (first.ok) {
@@ -7626,7 +7682,7 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
               if (ticket?.href) {
                 const second = await readForEdition(ticket.href);
                 collect(second.banners, domainOf(ticket.href));
-                trace.push({ step: "ticket", host: domainOf(ticket.href), ok: second.ok, why: second.why, refused: second.refused, via: second.data?.via || "", chars: (second.data?.text || "").length, images: (second.banners || []).length, found: second.found ? isoDay(second.found.start) : "" });
+                trace.push({ step: "ticket", host: domainOf(ticket.href), ok: second.ok, why: second.why, refused: second.refused, status: second.status, detail: second.detail, via: second.data?.via || "", chars: (second.data?.text || "").length, images: (second.banners || []).length, found: second.found ? isoDay(second.found.start) : "" });
                 if (second.found) {
                   fromSite = { start: isoDay(second.found.start), end: isoDay(second.found.end), via: second.data.via || "fetch", host: domainOf(ticket.href), how: "text" };
                 }
@@ -7736,7 +7792,15 @@ ${researchRules("festival", ev)}`
           : `Using real, current web search, check the current real status of the Danish event "${ev.name}"${ev.town ? ` in ${ev.town}` : ""}. Currently on file: date ${ev.date || "unknown"}${ev.ticketInfo ? `, ticket info "${ev.ticketInfo}"` : ""}${ev.ticketStatus ? `, ticket status "${ev.ticketStatus}"` : ""}. Check: (1) is it still genuinely scheduled to happen, or was it cancelled/postponed, (2) has the date actually changed from what's on file, (3) is ticket availability different from what's on file (now sold out, now on sale, now limited). Respond with ONLY strict JSON: {"stillHappening": true, "dateChanged": "", "ticketStatusChanged": "", "notes": ""} — dateChanged is the new real date if it genuinely changed from what's on file, else empty string; ticketStatusChanged is the new real status ONLY if genuinely different from what's on file, else empty string; notes is one short sentence explaining what changed, ONLY if something in this response is non-empty/non-default, else empty string. If nothing has changed, all fields should be empty/true/default and notes empty.\n${researchRules("festival", ev)}`;
         try {
           const result = await askPerplexity(prompt);
-          if (result.error) { trace.push({ step: "search", why: "search-failed" }); traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: "" }); continue; }
+          if (result.error) {
+            // Same distinction as above, and the same run proved it needed:
+            // "the web search itself failed" forty times over is one broken
+            // door, and askPerplexity already knows which. It was being thrown
+            // away here.
+            trace.push({ step: "search", why: "search-failed", detail: String(result.error).slice(0, 160) });
+            traces.push({ name: ev.name, town: ev.town, date: ev.date, steps: trace, resolved: "" });
+            continue;
+          }
           const cleaned = result.text.replace(/^```json\s*|\s*```$/g, "").trim();
           const parsed = JSON.parse(cleaned);
           // ── A CHANGE IS A DIFFERENCE, NOT AN ANSWER ─────────────
@@ -11146,7 +11210,23 @@ If the conversation only covers a single day or a few stops with no explicit day
     // same line-versus-list contradiction this comment claims to have closed.
     const forMatch = aiMessages.slice(1).map(m => `${m.role}: ${m.text}`).join("\n");
     const days = tripWindow({ arrival: intakeArrival, departure: intakeDeparture, convoText: forMatch })?.days ?? null;
-    const wanted = wantedCategories(forMatch);
+    // ── AND WHAT THEY ARE INTO IS READ FROM THEM, NOT FROM US ──────
+    //
+    // `forMatch` is both halves of the conversation, which is right for finding
+    // PLACES: Gemlyx names them and the screen has to show the ones it named.
+    // It is wrong for finding INTERESTS, and tripBrief.js has carried that rule
+    // in writing since it was built: "Never from Gemlyx's replies. The app
+    // suggests things, so one sentence back from it reading 'Copenhagen has
+    // excellent museums' would otherwise become evidence that the traveller
+    // asked for museums."
+    //
+    // This line was reading the whole transcript, so the rule existed in one
+    // file and was broken in the caller. It matters most for food, which is now
+    // planned only when it is explicitly asked for: one Gemlyx sentence with the
+    // word "restaurant" in it would have re-opened the door his new rule closes,
+    // and it would have looked like the traveller's own request.
+    const saidByTravellerOnly = aiMessages.slice(1).filter(m => m.role === "user").map(m => m.text || "").join("\n");
+    const wanted = wantedCategories(saidByTravellerOnly);
     const themes = briefThemes(forMatch, intakeInterest);
     // `mode` too, and for the reason this whole comment block is about: the line
     // and the list have to be describing one trip. The preview screen filters
@@ -13335,7 +13415,7 @@ A note is worth writing: "the operator's own timetable" tells the model when to 
                                 onClick={async () => {
                                   setFactError(null);
                                   try {
-                                    const res = await fetch(`/api/commons-photo?q=${encodeURIComponent(d.subject + " Denmark")}&limit=1`, { headers: routeAuth() });
+                                    const res = await studioFetch(`/api/commons-photo?q=${encodeURIComponent(d.subject + " Denmark")}&limit=1`);
                                     const data = await res.json();
                                     const hit = (data.results || [])[0];
                                     if (!hit) { setFactError(`No freely licensed photo found for "${d.subject}".`); return; }

@@ -127,6 +127,38 @@ const CATEGORY_WORDS = {
 // function itself now lives in interestFit.js and is imported at the top,
 // because that file asks the same question of the same string.
 
+// ── FOOD IS OFFERED, NOT PLANNED, UNLESS IT IS A FOOD TRIP ──────────
+//
+// Oliver, 20 Aug 2026: "maybe we should get rid of food all together. Unless
+// it's actually a food trip. Because who knows.. maybe you feel like eating
+// pizza instead of smørbrød that day. Let that instead be something Gemlyx has
+// ready for the person."
+//
+// He is describing a real difference between food and everything else on this
+// screen, and it is not a matter of taste. A castle is open at a time, an event
+// happens on a date, a town is two hours away: those are constraints, and a plan
+// that ignores them is wrong. Lunch is not a constraint. Nobody knows on Tuesday
+// which of Saturday's meals they will want, and a plan that books Saturday lunch
+// is not being helpful, it is spending a slot on the one decision the traveller
+// is best placed to make on the day and worst placed to make now.
+//
+// So food stops being a thing the plan fills and becomes a thing Gemlyx HOLDS.
+// The machinery for that already exists and is the `_notAsked` door below: those
+// rows still travel to the screen, the section can still say Gemlyx holds nine
+// places to eat in Copenhagen, and they are one click away. Nothing is deleted
+// and nothing is hidden. It stops occupying the itinerary.
+//
+// THE ONE EXCEPTION IS HIS: a trip that is about food. Then the meals ARE the
+// plan, they book up, and holding them behind a door would be the mistake in the
+// other direction.
+//
+// EXPLICIT MEANS EXPLICIT. Everywhere else on this screen, a brief that names
+// nothing narrows nothing, because silence is not a preference. Food is the one
+// category where that reading is wrong: silence about food is the normal state
+// of every traveller who is not on a food trip, so an unstated interest cannot
+// be what puts restaurants in the itinerary.
+export const foodIsPlanned = (wanted) => !!wanted && wanted.has("food");
+
 export const wantedCategories = (convoText, interests = []) => {
   const hay = fold([String(convoText || ""), ...(Array.isArray(interests) ? interests : [])].join(" "));
   if (!hay.trim()) return null;
@@ -275,6 +307,75 @@ export const isDeparturePlace = (convoText, name) => {
   return found > 0 && leaving === found;
 };
 
+// ── AND A NAME SAID IN ORDER TO REJECT IT IS NOT A PICK ─────────────
+//
+// Oliver, 20 Aug 2026, on a Copenhagen nightlife answer. Gemlyx wrote:
+//
+//   "For your kind of trip, I'd steer well clear of Old Irish Pub near
+//    Rådhuspladsen, that's stag-do and pub-crawl territory, not what two old
+//    friends looking for design and quiet want."
+//
+// And then put a card for Old Irish Pub on the screen, in the NIGHTLIFE row,
+// beside the two it had recommended. His words: "adding in Old Irish Pub when it
+// says they shouldn't go there is just a wild bug".
+//
+// He is right and it is the same hole isDeparturePlace was written to plug, one
+// tier down. That function knows "out of Copenhagen" is not a request for
+// Copenhagen. Nothing knew that "steer well clear of X" is not a request for X.
+// The matcher asks only whether the name APPEARS, and a name appears just as
+// plainly in the sentence rejecting it, so the more carefully the answer
+// explains what to avoid, the more confidently the screen recommends it.
+//
+// This is worse than the Copenhagen case in one specific way: the conversation
+// text includes GEMLYX'S OWN REPLY. So the product reads its own advice back,
+// takes the thing it warned against, and shows it as a suggestion. A reader who
+// scrolls past the prose sees three bars and no way to tell which one the answer
+// told them to skip.
+//
+// ── NARROW, AND IT MUST NOT SWING THE OTHER WAY ─────────────────────
+// Same discipline as the departure test, and for the same reason: reading a
+// wanted place as unwanted empties the screen in the opposite direction, which
+// is the failure that replaced the first version of that function. So a
+// rejection has to be stated close to the name, and a name recommended anywhere
+// is kept even if it is also warned about, because "go on a weeknight, avoid it
+// on a Saturday" is advice about a place being recommended.
+const REJECT_BEFORE = /\b(?:steer\s+(?:well\s+)?clear\s+of|stay\s+(?:well\s+)?away\s+from|avoid|skip|skipping|not|no|never|forget|ignore|rather\s+than|instead\s+of|as\s+opposed\s+to|other\s+than|except|apart\s+from|besides|wouldn'?t\s+(?:go|bother|recommend|suggest|send\s+you\s+to)|would\s+not\s+(?:go|bother|recommend|suggest)|do\s*n'?t\s+(?:go|bother|recommend|suggest)?)\s*(?:to\s+|the\s+)?$/i;
+// Or the verdict lands just after the name: "X, that's stag-do territory, not
+// what you want", "X is a tourist trap".
+// ── AND ONLY A VERDICT ON THE PLACE ITSELF ──────────────────────────
+// "avoid it" and "would skip" are NOT here, and that is deliberate. "Hive is
+// great, though avoid it on a Saturday when it fills up" is a caveat about a
+// place being recommended, and reading it as a rejection loses a real pick,
+// which is the failure mode this whole function is written to stay away from.
+// Those words still count in REJECT_BEFORE, where they sit directly against the
+// name and cannot be about a Saturday.
+const REJECT_AFTER = /^[^.!?]{0,80}?\b(?:not\s+(?:what|for|your|really|the)|is\s*n'?t\s+(?:what|for|your|really|the)|tourist\s+trap|overpriced|steer\s+clear|not\s+worth|nothing\s+special|wrong\s+(?:fit|crowd|vibe)|too\s+(?:loud|rowdy|touristy|crowded))\b/i;
+// What actually bounds these is the ANCHOR, not the window: REJECT_BEFORE ends
+// in `$`, so the rejection word has to sit immediately against the name, and
+// REJECT_AFTER's `[^.!?]` cannot cross into the next sentence. The windows are
+// there to keep the regex cheap over a long conversation, and widening either
+// one changes nothing, which is worth knowing before somebody tunes them
+// expecting it to.
+const REJECT_WINDOW_BEFORE = 44;
+const REJECT_WINDOW_AFTER = 90;
+
+export const isRejectedPlace = (convoText, name) => {
+  const text = String(convoText || "");
+  let found = 0, rejected = 0;
+  for (const v of matchVariantsOf(name)) {
+    const { hay, at, len } = foundAt(text, v);
+    for (const i of at) {
+      found++;
+      const before = hay.slice(Math.max(0, i - REJECT_WINDOW_BEFORE), i);
+      const after = hay.slice(i + len, i + len + REJECT_WINDOW_AFTER);
+      if (REJECT_BEFORE.test(before) || REJECT_AFTER.test(after)) rejected++;
+    }
+  }
+  // EVERY mention, not any. One recommendation outweighs one warning, because a
+  // place worth a caveat is still a place being suggested.
+  return found > 0 && rejected === found;
+};
+
 // Every part of the country and every named region, as one list to test the
 // conversation against. REGION_NAMES is the specific tier ("Sønderjylland"),
 // PARTS_OF_COUNTRY the wide one ("Jutland"); both are things a traveller says.
@@ -398,6 +499,13 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
     // the one town in the brief. What it does not get is its contents.
     if (mentionsPlace(text, p.name)) {
       seen.add(key);
+      // ── A REJECTED PLACE IS DROPPED, NOT BADGED ─────────────────
+      // Unlike `_leaving`, which stays on the screen because it is where the
+      // traveller starts and hiding it would look like a miss. A place the
+      // answer told them to avoid has no such claim: showing it at all is the
+      // bug, and a badge saying "we said not to" is a card that still puts the
+      // wrong bar in front of somebody skimming.
+      if (isRejectedPlace(text, p.name)) continue;
       matched.push(isDeparturePlace(text, p.name) ? { ...p, _leaving: true } : p);
     }
   }
@@ -581,7 +689,13 @@ export const matchedPlaces = (convoText, pools, { days = null, wanted = null, th
       // absent and looking like Gemlyx knows nothing there. See
       // wantedCategories: null means the brief named no interests, and then
       // nothing is held back.
-      const askedCategory = !wanted || wanted.has(groupKeyOf(p));
+      // Food asks a different question from everything else, and only food.
+      // See foodIsPlanned above: silence narrows nothing anywhere on this screen
+      // except here, because not mentioning food is what almost every traveller
+      // does and it cannot be the thing that fills their days with restaurants.
+      const askedCategory = groupKeyOf(p) === "food"
+        ? foodIsPlanned(wanted)
+        : (!wanted || wanted.has(groupKeyOf(p)));
       // ── AND THE CATEGORY BEING RIGHT IS NOT THE ROW BEING RIGHT ───
       // Oliver, 15 Aug 2026, on a brief that said markets and modern design and
       // got Amalienborg Slot, Københavns Museum and the Glyptotek: "Don't put
