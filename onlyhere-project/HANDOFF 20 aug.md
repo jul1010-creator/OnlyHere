@@ -1,8 +1,8 @@
 # Gemlyx, 20 August
 
-Everything below is on disk in `onlyhere-project/`. **8127 assertions passing**
+Everything below is on disk in `onlyhere-project/`. **8148 assertions passing**
 across four timezones (UTC, Europe/Copenhagen, Pacific/Kiritimati, Pacific/Niue).
-`npx vite build` clean. 30 mutants run across six rounds, one survivor and it is
+`npx vite build` clean. 36 mutants run across seven rounds, one survivor and it is
 an equivalent mutant, explained in place. **Nothing is committed to git.**
 
 ## Do this first
@@ -76,6 +76,38 @@ instead of a paragraph about a broken festival website.
 
 I tried to read it off your browser directly and the extension did not answer, so
 I stopped rather than keep poking at your machine while you were away.
+
+---
+
+## Distortion, measured rather than argued about
+
+I fetched both pages directly. These are quotes, not recollections.
+
+    cphdistortion.dk          "Distortion 3-7 June 2026"   285 chars of text
+    cphdistortion.dk/tickets  "2-6 June 2027"              plain characters
+
+**The answer was one free fetch away the whole time.** The front page is 285
+characters, so the verdict is "almost-no-text" and the read is BLOCKED, and two
+separate places threw the ticket link away for that reason:
+
+- `readPage` returned `tickets` only on the unblocked branch.
+- The caller followed a ticket link only `else if (first.ok)`, so an unreadable
+  front page ended the chain.
+
+How much PROSE came back and whether the page has an ANCHOR on it are different
+questions, and this is the second field in three days lost to that confusion, the
+first being the poster. Both now survive the verdict about the text. Firecrawl's
+markdown links are read too: that path returned `tickets: []` since it was written
+with a comment claiming markdown carries no hrefs, and `[Tickets](/tickets)`
+carries both halves. One scorer for both formats, not two.
+
+This also saves money. Reading /tickets as text is free and exact; asking a model
+to look at a poster is not, and it now only happens when there is genuinely no
+text anywhere.
+
+**Expect Distortion to resolve to 2027-06-02 to 2027-06-06 on the next run**, off
+the ticket page, as text, with no vision call. If it does not, the trace will now
+name the step that stopped it.
 
 ---
 

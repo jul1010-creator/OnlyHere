@@ -7674,7 +7674,22 @@ This overwrites them whole. Anything changed since, by a redraft, a photo repair
             trace.push({ step: "site", host: domainOf(ev.website), ok: first.ok, why: first.why, refused: first.refused, status: first.status, detail: first.detail, via: first.data?.via || "", chars: (first.data?.text || "").length, images: (first.banners || []).length, found: first.found ? isoDay(first.found.start) : "" });
             if (first.found) {
               fromSite = { start: isoDay(first.found.start), end: isoDay(first.found.end), via: first.data.via || "fetch", host: domainOf(ev.website), how: "text" };
-            } else if (first.ok) {
+            } else if (first.ok || (first.banners || []).length || (first.data?.tickets || []).length) {
+              // ── A BLOCKED FRONT PAGE IS NOT A DEAD END ──────────
+              //
+              // This read `else if (first.ok)`, so a front page that came back
+              // unreadable ended the chain, and that is precisely the shape of
+              // the page this whole feature was built for. Measured 20 Aug 2026:
+              // cphdistortion.dk's front page is 285 characters, which is
+              // "almost-no-text" and therefore blocked, while its /tickets page
+              // states "2-6 June 2027" in plain characters and the link to it is
+              // sitting in the blocked page's own HTML with the word "Tickets" on
+              // it.
+              //
+              // So the one event he has asked about four times had its answer one
+              // free fetch away, behind a gate that was checking whether the
+              // PROSE was readable before deciding whether the LINKS were worth
+              // following. Two different questions.
               // The ticket page, best first, and only one of them. Two would be
               // paying attention to a maybe; the top-ranked link is the button
               // that says "buy", and that page states the dates or nothing does.

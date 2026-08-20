@@ -52,7 +52,7 @@ writeFileSync(entry, `
   export { cleanPlaceKind, cleanRelation, placeIssues, placePatch, hasPlaceChange, duplicateNames } from ${JSON.stringify(join(root, "src/utils/placeEdit.js"))};
   export { parseEventDate, isPastDate, nextEditionYear, eventDateIssues, staleEvents, lastDateInText, looksFinished, splitFinishedCandidates, monthsInText } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
   export { byEventDate, eventTime, eventMonthShort, eventMonths, eventMonthsShort, MAX_EVENT_MONTHS, isUndated, UNDATED, datePropositionProblem, DATE_PROPOSITION_WHY, nextEdition, dateRangesInText, isoDay, stepWords, STEP_LABELS, unresolvedTraces, CHECK_STEP_WORDS } from ${JSON.stringify(join(root, "src/utils/eventDates.js"))};
-  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
+  export { stripToText, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, domainOf, describeRead, CHALLENGE_MARKERS, MIN_USEFUL_CHARS, CHALLENGE_MAX_CHARS, MARKER_WINDOW, TEXT_CAP, FIRECRAWL_URL, FIRECRAWL_CACHE_MS, NOT_WORTH_RETRYING, scrapeTier, isListingHost, rankSource, rankSources, sourceOrderBlock, isReferenceHost, SOURCE_CLASS, REFERENCE_DOMAINS, factAge, newestDateIn, MAX_FACT_AGE_MONTHS, LISTING_DOMAINS, newestYearIn, pageEra, STALE_BEFORE_YEAR, PERISHABLE, perishableSentence, EXISTENCE_RULE, linksIn, ticketLinks, MAX_TICKET_PAGES, bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, IMAGE_JUNK, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } from ${JSON.stringify(join(root, "src/utils/pageScan.js"))};
   export { readPage, readPlain, readFirecrawl } from ${JSON.stringify(join(root, "src/utils/readPage.js"))};
   export { runOnce } from ${JSON.stringify(join(root, "src/utils/inFlight.js"))};
   export { FILTER_THRESHOLD, showFilters, applyFacets, facetCounts, appliedChips, activeFacetCount, clearFacet, clearAllFacets, matchesQuery, toggleFacetValue, isOptionOn, selectedValues } from ${JSON.stringify(join(root, "src/utils/listControls.js"))};
@@ -26165,6 +26165,100 @@ export { hasFinished, isUpcoming, isCurrentlyLive } from ${JSON.stringify(join(r
   // The slot it should have asked from has been blocking all along.
   ok("whether a hotel is booked is a blocking slot",
      M.BLOCKING_SLOTS.includes("stay"));
+}
+
+// ── A BLOCKED FRONT PAGE IS NOT A DEAD END ──────────────────────────
+//
+// Oliver, 20 Aug 2026, for the fourth time, on one event:
+//
+//   Distortion, Copenhagen
+//   Its own site (cphdistortion.dk): the page could not be read
+//   Poster: there was no banner or poster on the page to scan
+//   Web search: the web search itself failed
+//
+// Measured that morning rather than assumed. cphdistortion.dk's front page holds
+// 285 characters of text and says "Distortion 3-7 June 2026", a date that has
+// passed. Its /tickets page says "2-6 June 2027" in plain characters, which is
+// the exact fact the checker is looking for. And the link between them is sitting
+// in the front page's own HTML with the word "Tickets" on it.
+//
+// Two separate places threw that link away, both because the PROSE was thin:
+// readPage dropped `tickets` on the blocked branch, and the caller only followed
+// a ticket link when the front page had been readable. How much text came back
+// and whether the page had an anchor on it are different questions.
+{
+  const { readPage, ticketLinks, linksInMarkdown, ticketLinksFromMarkdown, scoreTicketLinks } = M;
+
+  // The real shape: a nav-only shell, under the readable threshold, carrying the
+  // one link that matters.
+  const shellHtml = `<html><body><nav>
+    <a href="/tickets">Tickets</a><a href="/artists">Artists</a><a href="/faq">FAQ</a>
+    </nav><img src="/media/blind-bird-gen-2027.png" alt="Distortion">
+    <p>Distortion 3-7 June 2026 All over Copenhagen</p></body></html>`;
+  // Real prose, not padding: stripToText collapses whitespace, so a padded string
+  // is still a thin page and the fixture would be measuring the wrong thing.
+  const ticketsHtml = `<html><body><p>Tickets. Distortion O takes place Friday 4 and Saturday 5 June 2027. The Festival Pass is valid from 2-6 June 2027 and covers every street party across the week. Dates: 2-6 June 2027. Tickets are sold in tiers and the price rises as each tier sells out, so the earlier you buy the less you pay. Wristbands are collected in person on the first day with photo identification. Refunds are not offered once a tier has closed, and the pass is transferable up to seven days before the festival opens.</p></body></html>`;
+
+  const fakeFetch = async (url) => ({
+    ok: true, status: 200,
+    text: async () => (String(url).includes("/tickets") ? ticketsHtml : shellHtml),
+    json: async () => ({}),
+  });
+
+  const front = await readPage("https://www.cphdistortion.dk/", { fetchImpl: fakeFetch });
+  // The verdict is unchanged and correct: this is not a readable page.
+  ok("the front page is still judged unreadable", front.blocked === true);
+  is("and for the honest reason", front.read, "almost-no-text");
+  // THE FIX. The link survives the verdict about the prose.
+  ok("but its ticket link survives that verdict", (front.tickets || []).length > 0);
+  is("and it is the right one", front.tickets[0]?.href, "https://www.cphdistortion.dk/tickets");
+  ok("the poster survives too, as it already did", (front.banners || []).length > 0);
+
+  // And the page it points at answers the question, for free, as text.
+  const tix = await readPage("https://www.cphdistortion.dk/tickets", { fetchImpl: fakeFetch });
+  ok("the ticket page reads cleanly", tix.blocked === false);
+  ok("and states the edition in plain characters", /2-6 June 2027/.test(tix.text));
+
+  // ── FIRECRAWL'S MARKDOWN HAS LINKS TOO ──────────────────────────
+  // readPage's paid path returned `tickets: []` since it was written, with a
+  // comment saying markdown carries no hrefs. A markdown link is
+  // `[Tickets](/tickets)` and carries both halves, which are the two strongest
+  // signals the scorer uses.
+  const md = `# Distortion\n\n[Tickets](/tickets) and [Artists](/artists) and [Køb billetter](https://billetto.dk/e/1)`;
+  const mdLinks = linksInMarkdown(md, "https://www.cphdistortion.dk/");
+  is("markdown links are read and made absolute", mdLinks[0]?.href, "https://www.cphdistortion.dk/tickets");
+  is("with their words kept, which is the strongest signal there is", mdLinks[0]?.text, "Tickets");
+  const mdTickets = ticketLinksFromMarkdown(md, "https://www.cphdistortion.dk/");
+  ok("and the ticket ones are picked out", mdTickets.some(l => /\/tickets$/.test(l.href)));
+  ok("with the agent ranked first, exactly as on the HTML path",
+     /billetto/.test(mdTickets[0]?.href || ""));
+  ok("an ordinary page link is not a ticket link", !mdTickets.some(l => /\/artists$/.test(l.href)));
+  // An address is a page or it is not worth following. The HTML reader has always
+  // refused these and the markdown one has to refuse the same set, or the two
+  // readers disagree about what a link is.
+  is("a mailto is not a link to a page",
+     linksInMarkdown(`[Buy tickets](mailto:billet@x.dk)`, "https://x.dk/").length, 0);
+  is("nor a phone number", linksInMarkdown(`[Ring os](tel:+4512345678)`, "https://x.dk/").length, 0);
+  is("nor an anchor on the same page", linksInMarkdown(`[Tickets](#tickets)`, "https://x.dk/").length, 0);
+  // ONE SCORER, NOT TWO. A second opinion about what a ticket link looks like is
+  // the fault this codebase has found six times.
+  ok("both readers score through the same function",
+     ticketLinks(`<a href="/tickets">Tickets</a>`, "https://x.dk/")[0]?.score
+     === ticketLinksFromMarkdown(`[Tickets](/tickets)`, "https://x.dk/")[0]?.score);
+  ok("and the shared scorer is exported rather than copied", typeof scoreTicketLinks === "function");
+
+  // ── THE WIRING ──────────────────────────────────────────────────
+  const rp2 = readFileSync(join(root, "src/utils/readPage.js"), "utf8");
+  const api2 = readFileSync(join(root, "api/scan-source.js"), "utf8");
+  const app2 = readFileSync(join(root, "src/App.jsx"), "utf8");
+  is("the endpoint returns the links on both answers", (api2.match(/tickets: r\.tickets \|\| \[\]/g) || []).length, 2);
+  ok("the paid path stops claiming markdown has no links",
+     /tickets: \(plain\.tickets && plain\.tickets\.length\) \? plain\.tickets : ticketLinksFromMarkdown\(deep\.text, url\)/.test(rp2));
+  // THE GUARD IS THE ASSERTION. Matching the follow alone would survive a
+  // mutation putting the old `first.ok` back, because the follow is still there.
+  ok("the caller follows the link when the page was blocked but had one",
+     /\} else if \(first\.ok \|\| \(first\.banners \|\| \[\]\)\.length \|\| \(first\.data\?\.tickets \|\| \[\]\)\.length\) \{/.test(app2));
+  ok("and the old prose-gated version is gone", !/\} else if \(first\.ok\) \{/.test(app2));
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

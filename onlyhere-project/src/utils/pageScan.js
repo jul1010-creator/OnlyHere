@@ -424,9 +424,14 @@ const NEVER_FOLLOW = /\/(?:cookie|privatliv|privacy|persondata|betingelser|terms
 // a bare 2 buried in a loop where nobody can find it to change.
 export const MAX_TICKET_PAGES = 2;
 
-export const ticketLinks = (html, baseUrl = "") => {
+// The scoring, split out from the HTML reader so the markdown reader can use the
+// SAME rules rather than growing a second opinion about what a ticket link looks
+// like. Two functions answering one question differently is the fault this
+// codebase has now found six times, and adding a second page format is exactly
+// the moment it would have happened again.
+export const scoreTicketLinks = (links, baseUrl = "") => {
   const scored = [];
-  for (const l of linksIn(html, baseUrl)) {
+  for (const l of links) {
     if (NEVER_FOLLOW.test(l.href)) continue;
     const said = TICKET_LINK_TEXT.test(fold(l.text));
     const known = isListingHost(l.href);
@@ -444,6 +449,43 @@ export const ticketLinks = (html, baseUrl = "") => {
   scored.sort((a, b) => b.score - a.score || (b.offsite ? 1 : 0) - (a.offsite ? 1 : 0));
   return scored;
 };
+
+export const ticketLinks = (html, baseUrl = "") => scoreTicketLinks(linksIn(html, baseUrl), baseUrl);
+
+// ── AND FIRECRAWL HANDS BACK MARKDOWN, WHICH HAS LINKS TOO ──────────
+//
+// readPage's paid path has returned `tickets: []` since it was written, with a
+// comment explaining that markdown carries no hrefs. That is not true: a
+// markdown link is `[Tickets](/tickets)` and it carries both halves, the words
+// and the address, which are the two strongest signals ticketLinks uses.
+//
+// It matters for exactly the pages that reach this path. Firecrawl is only ever
+// called on a page a plain fetch could not read, and a JavaScript-rendered
+// festival front page is both the commonest of those and the likeliest to keep
+// its dates one click away on a ticket page.
+const MD_LINK = /\[([^\]]{0,120})\]\(\s*<?([^\s)>]+)>?[^)]*\)/g;
+
+export const linksInMarkdown = (md, baseUrl = "") => {
+  const out = [];
+  const seen = new Set();
+  MD_LINK.lastIndex = 0;
+  let m;
+  while ((m = MD_LINK.exec(String(md || ""))) !== null) {
+    const raw = String(m[2] || "").trim();
+    if (!raw || /^(?:#|mailto:|tel:)/i.test(raw)) continue;
+    let href = raw;
+    if (baseUrl) { try { href = new URL(raw, baseUrl).toString(); } catch { continue; } }
+    if (!/^https?:\/\//i.test(href)) continue;
+    const key = href.split("#")[0];
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ href: key, text: String(m[1] || "").replace(/\s+/g, " ").trim().slice(0, 120) });
+    if (out.length >= 400) break;
+  }
+  return out;
+};
+
+export const ticketLinksFromMarkdown = (md, baseUrl = "") => scoreTicketLinks(linksInMarkdown(md, baseUrl), baseUrl);
 
 // ── A PUBLIC PLACE'S OWN SITE IS OFTEN ITS MUNICIPALITY'S ───────────
 //

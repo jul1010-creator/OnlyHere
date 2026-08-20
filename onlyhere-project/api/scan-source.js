@@ -83,6 +83,11 @@ export default async function handler(req, res) {
     read: r.read,
     credits: r.credits,
     sample: r.sample,
+    // tickets: returned on the BLOCKED path too, and this is the one that fixes
+    // Distortion. Its front page is 285 characters of text, so it is blocked, and
+    // its /tickets page states "2-6 June 2027" in plain characters. The link
+    // between the two was being dropped here because the prose was thin.
+    tickets: r.tickets || [],
     // banners: returned on the BLOCKED path too, and that is the point of them.
     // A festival front page that strips to 285 characters is "almost no readable
     // text" by every measure this file has, and the announcement is sitting in

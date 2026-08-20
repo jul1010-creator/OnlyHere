@@ -17,7 +17,7 @@
 // which is the split api/tickets.js documents.
 import {
   stripToText, ticketLinks, pageReadVerdict, worthDeepRead, firecrawlBody, firecrawlText, FIRECRAWL_URL,
-  bannerImages, bannerImagesFromMarkdown, MAX_BANNERS,
+  bannerImages, bannerImagesFromMarkdown, MAX_BANNERS, ticketLinksFromMarkdown,
 } from "./pageScan.js";
 
 const UA = "Mozilla/5.0 (compatible; GemlyxContentScan/1.0)";
@@ -135,6 +135,22 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
       // image addresses away here because the TEXT was thin would rebuild the
       // exact wall this is meant to get past.
       banners: plain.banners || [],
+      // ── AND ITS LINKS, WHICH IS HOW DISTORTION WAS STILL FAILING ──
+      //
+      // Measured 20 Aug 2026, not assumed. cphdistortion.dk's front page holds
+      // 285 characters of text, so the verdict is "almost-no-text" and the read
+      // is BLOCKED. Its /tickets page states "2-6 June 2027" in plain characters,
+      // which is the exact fact the checker is looking for, and the link to it is
+      // sitting in that same front page's HTML with the word "Tickets" on it.
+      //
+      // The links were being thrown away here for the same reason the pictures
+      // were: because the TEXT was thin. A verdict about how much prose came back
+      // is not a verdict about whether the page had an anchor on it, and this is
+      // the second field in three days to be lost to that confusion.
+      //
+      // It is worth more than the poster tier for this event, and it is free. A
+      // page read costs nothing; asking a model to look at a picture does not.
+      tickets: plain.tickets || [],
     };
   }
   const deep = await readFirecrawl(url, key, fetchImpl);
@@ -143,7 +159,13 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
     // Firecrawl returns markdown rather than HTML, so no hrefs come back on this
     // path. Empty rather than absent, so a caller never has to check which read
     // it got, and stated here rather than discovered later.
-    return { text: deep.text, via: "firecrawl", read: second.reason, blocked: false, credits: 1, firstTry: first.reason, escalated: true, tickets: [], banners: bannerImagesFromMarkdown(deep.text, url).slice(0, MAX_BANNERS) };
+    return { text: deep.text, via: "firecrawl", read: second.reason, blocked: false, credits: 1, firstTry: first.reason, escalated: true,
+      // The plain fetch's links first, because they came off real HTML and this
+      // path only exists because that HTML had too little TEXT, not too few
+      // anchors. Markdown links second, for the page that genuinely returned
+      // nothing until Firecrawl rendered it.
+      tickets: (plain.tickets && plain.tickets.length) ? plain.tickets : ticketLinksFromMarkdown(deep.text, url).slice(0, 6),
+      banners: bannerImagesFromMarkdown(deep.text, url).slice(0, MAX_BANNERS) };
   }
   // Paid for and still nothing. Both halves are reported, because "the wall
   // won" and "the scraper is misconfigured" need different actions from a human.
@@ -151,9 +173,11 @@ export const readPage = async (url, { key = "", fetchImpl = fetch } = {}) => {
     text: "", via: "firecrawl", read: deep.ok ? second.reason : deep.reason, blocked: true,
     credits: deep.ok ? 1 : 0, firstTry: first.reason, detail: deep.detail || "",
     sample: plain.text.slice(0, 200), status: plain.status, escalated: true,
-    // The plain read's pictures, not Firecrawl's: this branch is the one where
-    // Firecrawl returned nothing, so there is no markdown to look in. The first
-    // fetch usually did return HTML, and that HTML is where the poster is.
+    // The plain read's pictures and links, not Firecrawl's: this branch is the
+    // one where Firecrawl returned nothing, so there is no markdown to look in.
+    // The first fetch usually did return HTML, and that HTML is where the poster
+    // and the ticket link both are.
     banners: plain.banners || [],
+    tickets: plain.tickets || [],
   };
 };
